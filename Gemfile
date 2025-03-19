@@ -56,3 +56,5 @@ group :test do
   gem "simplecov", "~> 0.22.0"
   gem "database_cleaner-active_record", "~> 2.2"
 end
+
+gem "simple_form", "~> 5.3"
