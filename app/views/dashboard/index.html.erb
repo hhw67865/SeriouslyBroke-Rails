@@ -1,0 +1,5 @@
+<div>
+  <h1>Welcome to SeriouslyBroke</h1>
+  <p>You are logged in as: <%= current_user.email %></p>
+  <%= button_to "Sign out", destroy_user_session_path, method: :delete %>
+</div>
