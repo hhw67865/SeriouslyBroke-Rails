@@ -11,6 +11,10 @@
   </head>
 
   <body>
+    <% flash.each do |type, message| %>
+      <%= render partial: "shared/flash", locals: { type: type, message: message } %>
+    <% end %>
+
     <main>
       <%= yield %>
     </main>
