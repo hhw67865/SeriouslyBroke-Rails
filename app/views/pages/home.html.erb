@@ -1,0 +1,65 @@
+<div class="min-h-screen bg-[#F9F9F7]">
+  <%= render "shared/landing_nav" %>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6">
+    <%# Hero Section %>
+    <div class="flex flex-col md:flex-row items-center justify-between py-8 sm:py-12 md:py-16 gap-8 md:gap-12">
+      <div class="max-w-xl text-center md:text-left">
+        <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4">Take control of your finances</h1>
+        <p class="text-base sm:text-lg text-gray-600 mb-6 sm:mb-8">SeriouslyBroke helps you track expenses, monitor income, and achieve your financial goals with an intuitive interface that's more powerful than spreadsheets.</p>
+        <%= link_to "Get Started — It's Free", new_user_registration_path, class: "px-6 sm:px-8 py-3 rounded-xl bg-gradient-to-r from-[#C9C78B] to-[#A4A266] text-white hover:shadow-lg transition-all hover:-translate-y-0.5 inline-block" %>
+      </div>
+      <div class="w-full sm:w-[400px] md:w-[500px] h-[300px] sm:h-[400px] bg-gradient-to-br from-[#E3E2C3] to-[#C9C78B] rounded-xl shadow-lg flex items-center justify-center">
+        <div class="text-white text-lg sm:text-xl">Dashboard Preview Coming Soon</div>
+      </div>
+    </div>
+
+    <%# Features Section %>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8 py-12 sm:py-16">
+      <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center hover:shadow-lg transition-shadow">
+        <div class="text-4xl mb-4">📊</div>
+        <h3 class="text-lg sm:text-xl font-semibold mb-2">Expense Tracking</h3>
+        <p class="text-sm sm:text-base text-gray-600">Easily log and categorize your daily expenses</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center hover:shadow-lg transition-shadow">
+        <div class="text-4xl mb-4">💰</div>
+        <h3 class="text-lg sm:text-xl font-semibold mb-2">Income Management</h3>
+        <p class="text-sm sm:text-base text-gray-600">Track multiple income sources and payment schedules</p>
+      </div>
+      <div class="bg-white rounded-xl shadow-sm p-6 sm:p-8 text-center hover:shadow-lg transition-shadow">
+        <div class="text-4xl mb-4">📈</div>
+        <h3 class="text-lg sm:text-xl font-semibold mb-2">Financial Insights</h3>
+        <p class="text-sm sm:text-base text-gray-600">Visualize your spending patterns and trends</p>
+      </div>
+    </div>
+
+    <%# Testimonials Section %>
+    <div class="bg-[#E3E2C3] rounded-xl p-6 sm:p-8 md:p-12 lg:p-16 my-8 sm:my-12 md:my-16">
+      <h2 class="text-2xl sm:text-3xl font-bold text-center mb-8 sm:mb-12">What Our Users Say</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <p class="text-gray-600 mb-6">"SeriouslyBroke helped me understand where my money was going. Now I'm finally saving for my future!"</p>
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-[#A4A266] text-white flex items-center justify-center font-bold">A</div>
+            <div>
+              <h4 class="font-semibold">Alex Chen</h4>
+              <p class="text-sm text-gray-500">Using SeriouslyBroke for 8 months</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <p class="text-gray-600 mb-6">"The best part is how simple it is to use. I can track everything without feeling overwhelmed."</p>
+          <div class="flex items-center gap-4">
+            <div class="w-10 h-10 rounded-full bg-[#A4A266] text-white flex items-center justify-center font-bold">J</div>
+            <div>
+              <h4 class="font-semibold">Jessica Kim</h4>
+              <p class="text-sm text-gray-500">Using SeriouslyBroke for 1 year</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%= render "shared/landing_footer" %>
+</div> 

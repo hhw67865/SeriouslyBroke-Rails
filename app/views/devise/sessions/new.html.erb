@@ -1,26 +1,69 @@
-<%= render layout: "devise/shared/auth_card",
-           locals: { 
-             title: "Welcome back",
-             subtitle: "Sign in to manage your finances",
-             footer: link_to("Create an account", new_registration_path(resource_name),
-                     class: "text-base font-medium text-[#5F741D] hover:text-[#4b5c17] transition duration-200 ease-in-out")
-           } do %>
-  <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name), data: { turbo: false }) do |f| %>
-    <%= f.input :email,
-                required: false,
-                autofocus: true,
-                input_html: { autocomplete: "email" } %>
+<div class="min-h-screen bg-[#F9F9F7] relative">
+  <div class="absolute top-0 left-0 right-0">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <%= link_to root_path, class: "inline-flex items-center py-4 text-gray-600 hover:text-[#A4A266] transition-colors" do %>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 mr-2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+        </svg>
+        Back to Home
+      <% end %>
+    </div>
+  </div>
 
-    <%= f.input :password,
-                required: false,
-                input_html: { autocomplete: "current-password" } %>
+  <div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full bg-white rounded-xl shadow-sm p-8 space-y-8">
+      <% if flash[:alert] %>
+        <div class="rounded-xl bg-red-50 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm font-medium text-red-800"><%= flash[:alert] %></p>
+            </div>
+          </div>
+        </div>
+      <% end %>
 
-    <%= f.input :remember_me,
-                as: :boolean,
-                wrapper: :boolean,
-                input_html: { class: 'form-checkbox' },
-                required: false if devise_mapping.rememberable? %>
+      <div>
+        <h2 class="text-center text-3xl font-bold text-[#A4A266]">
+          Welcome back
+        </h2>
+        <p class="mt-2 text-center text-sm text-gray-600">
+          Sign in to manage your finances
+        </p>
+      </div>
 
-    <%= f.button :submit, "Sign in" %>
-  <% end %>
-<% end %>
+      <%= form_for(resource, as: resource_name, url: session_path(resource_name), html: { class: "mt-8 space-y-6" }) do |f| %>
+        <div class="space-y-4">
+          <div>
+            <%= f.label :email, class: "block text-sm font-medium text-gray-700" %>
+            <%= f.email_field :email, autofocus: true, autocomplete: "email", class: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#C9C78B] focus:border-transparent" %>
+          </div>
+
+          <div>
+            <%= f.label :password, class: "block text-sm font-medium text-gray-700" %>
+            <%= f.password_field :password, autocomplete: "current-password", class: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#C9C78B] focus:border-transparent" %>
+          </div>
+
+          <% if devise_mapping.rememberable? %>
+            <div class="flex items-center">
+              <%= f.check_box :remember_me, class: "h-4 w-4 text-[#C9C78B] focus:ring-[#C9C78B] border-gray-300 rounded" %>
+              <%= f.label :remember_me, class: "ml-2 block text-sm text-gray-600" %>
+            </div>
+          <% end %>
+        </div>
+
+        <%= f.submit "Sign in", class: "w-full flex justify-center py-2 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-gradient-to-r from-[#C9C78B] to-[#A4A266] hover:shadow-lg transition-all hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#C9C78B]" %>
+      <% end %>
+
+      <div class="text-center text-sm">
+        <% if devise_mapping.registerable? %>
+          <%= link_to "Don't have an account? Sign up", new_registration_path(resource_name), class: "text-[#A4A266] hover:text-[#C9C78B] transition-colors" %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>
