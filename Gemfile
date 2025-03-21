@@ -1,61 +1,63 @@
+# frozen_string_literal: true
+
 source "https://rubygems.org"
 
 ruby "3.2.2"
 
 # Core Rails gems
-gem "rails", "~> 7.1.5", ">= 7.1.5.1"
-gem "sprockets-rails"
+gem "bootsnap", require: false
 gem "pg", "~> 1.1"
 gem "puma", ">= 5.0"
-gem "bootsnap", require: false
+gem "rails", "~> 7.1.5", ">= 7.1.5.1"
+gem "sprockets-rails"
 
 # Frontend and Asset Pipeline
 gem "importmap-rails"
-gem "turbo-rails"
 gem "stimulus-rails"
 gem "tailwindcss-rails"
+gem "turbo-rails"
 
 # Authentication
 gem "devise", "~> 4.9"
 
 # Windows compatibility
-gem "tzinfo-data", platforms: %i[ windows jruby ]
+gem "tzinfo-data", platforms: [:windows, :jruby]
 
 group :development, :test do
   # Debugging and Testing
-  gem "debug", platforms: %i[ mri windows ]
+  gem "debug", platforms: [:mri, :windows]
   gem "rspec-rails", "~> 7.1"
-  
+
   # Test Data Generation
   gem "factory_bot_rails", "~> 6.4"
   gem "faker", "~> 3.5"
-  
+
   # Development Tools
   gem "pry-rails", "~> 0.3.11"
 end
 
 group :development do
   # Development Assistance
-  gem "web-console"
   gem "annotate", "~> 3.2"
   gem "bullet", "~> 8.0"
-  
+  gem "web-console"
+
   # Code Quality
   gem "rubocop"
+  gem "rubocop-erb"
+  gem "rubocop-performance"
   gem "rubocop-rails"
   gem "rubocop-rspec"
-  gem "rubocop-performance"
-  gem "rubocop-erb"
 end
 
 group :test do
   # System/Integration Testing
   gem "capybara"
   gem "selenium-webdriver"
-  
+
   # Testing Support
-  gem "shoulda-matchers", "~> 6.4"
   gem "database_cleaner-active_record", "~> 2.2"
+  gem "shoulda-matchers", "~> 6.4"
 end
 
 gem "simple_form", "~> 5.3"
