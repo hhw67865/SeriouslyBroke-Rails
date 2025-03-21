@@ -6,11 +6,6 @@
           <h1 class="text-3xl font-bold text-[#A4A266]">Welcome to SeriouslyBroke</h1>
           <p class="mt-2 text-gray-600">You are logged in as: <%= current_user.email %></p>
         </div>
-        <%= button_to destroy_user_session_path, 
-                      method: :delete, 
-                      class: "px-4 py-2 rounded-xl border-2 border-[#C9C78B] text-[#A4A266] hover:bg-[#C9C78B]/10 transition-colors" do %>
-          Sign out
-        <% end %>
       </div>
 
       <div class="bg-[#F9F9F7] rounded-xl p-6">

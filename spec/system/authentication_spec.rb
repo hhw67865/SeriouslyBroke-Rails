@@ -183,4 +183,35 @@ RSpec.describe "Authentication", type: :system do
       end
     end
   end
+
+  describe "Sign out" do
+    let!(:user) { create(:user, email: "test@example.com", password: "password123") }
+
+    before do
+      # Use a desktop viewport size
+      page.driver.browser.manage.window.resize_to(1200, 800)
+      sign_in user
+      visit authenticated_root_path
+    end
+
+    it "signs out successfully", :aggregate_failures do
+      within("[data-sidebar-target='panel']") do
+        click_button "Sign out"
+      end
+      
+      expect(page).to have_content("Signed out successfully")
+      expect(page).to have_current_path(root_path)
+      expect(page).not_to have_content(user.email)
+    end
+
+    it "redirects to sign in page after signing out when accessing protected pages", :aggregate_failures do
+      within("[data-sidebar-target='panel']") do
+        click_button "Sign out"
+      end
+      visit authenticated_root_path
+
+      expect(page).to have_content("You need to sign in or sign up before continuing")
+      expect(page).to have_current_path(new_user_session_path)
+    end
+  end
 end
