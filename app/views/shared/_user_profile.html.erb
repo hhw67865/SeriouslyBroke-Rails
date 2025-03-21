@@ -1,0 +1,26 @@
+<%# User Profile Section %>
+<div class="p-4 border-t border-light">
+  <%# User Profile %>
+  <div class="p-3 bg-white/5 rounded-md mb-3">
+    <div class="flex items-center">
+      <div class="flex items-center justify-center w-10 h-10 bg-white rounded-md">
+        <span class="text-base font-semibold text-brand-dark">
+          <%= current_user&.name&.split&.map(&:first)&.join&.upcase || current_user&.email&.split&.map(&:first)&.join&.upcase %>
+        </span>
+      </div>
+      <div class="ml-3">
+        <p class="text-base font-medium text-on-dark">
+          <%= current_user&.name || current_user&.email %>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <%# Sign Out Button %>
+  <%= button_to destroy_user_session_path, 
+                method: :delete,
+                class: "w-full flex items-center justify-center px-3 py-2 rounded-md text-sm font-medium bg-white/10 text-on-dark hover:bg-white/20 active:bg-white/15 transition-all duration-200 ease-in-out group" do %>
+    <%= heroicon "arrow-right-on-rectangle", options: { class: "w-4 h-4 mr-2 transition-transform duration-200 ease-in-out group-hover:translate-x-0.5" } %>
+    Sign out
+  <% end %>
+</div> 

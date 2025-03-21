@@ -141,6 +141,8 @@ GEM
       i18n (>= 1.8.11, < 2)
     globalid (1.2.1)
       activesupport (>= 6.1)
+    heroicon (1.0.0)
+      rails (>= 5.2)
     i18n (1.14.7)
       concurrent-ruby (~> 1.0)
     importmap-rails (2.1.0)
@@ -395,6 +397,7 @@ DEPENDENCIES
   devise (~> 4.9)
   factory_bot_rails (~> 6.4)
   faker (~> 3.5)
+  heroicon
   importmap-rails
   pg (~> 1.1)
   pry-rails (~> 0.3.11)

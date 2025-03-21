@@ -1,0 +1,79 @@
+<%# Main Sidebar Container %>
+<div data-controller="sidebar">
+  <%# Mobile Toggle Button %>
+  <div class="fixed inset-0 bg-gray-900/80 backdrop-blur-sm lg:hidden" 
+       aria-hidden="true"
+       data-sidebar-target="overlay"
+       data-action="click->sidebar#close"></div>
+
+  <%# Mobile Header %>
+  <div class="sticky top-0 z-40 flex h-16 items-center gap-x-4 bg-white/95 backdrop-blur-sm px-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] sm:gap-x-6 sm:px-6 lg:hidden">
+    <button type="button" 
+            class="-m-2.5 p-2.5 text-gray-700 hover:text-brand transition-all duration-200 ease-in-out rounded-xl active:scale-95 lg:hidden"
+            data-action="sidebar#toggle">
+      <span class="sr-only">Open sidebar</span>
+      <%= heroicon "bars-3", options: { class: "h-6 w-6" } %>
+    </button>
+
+    <div class="flex-1 text-xl font-bold tracking-tight">
+      <span class="text-[#A4A266]">Seriously</span><span class="text-brand">Broke</span>
+    </div>
+  </div>
+
+  <%# Sidebar for Desktop and Mobile %>
+  <div data-sidebar-target="panel"
+       class="fixed inset-y-0 left-0 z-50 w-full -translate-x-full bg-gradient-to-br from-brand to-brand-dark transition-transform duration-300 ease-in-out lg:w-64 lg:translate-x-0">
+    
+    <%# Sidebar Content %>
+    <div class="flex h-full flex-col">
+      <%# Close button for mobile %>
+      <div class="absolute right-0 top-0 flex pr-2 pt-2 lg:hidden">
+        <button type="button" 
+                class="ml-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all duration-200 ease-in-out active:scale-95 focus:outline-none"
+                data-action="sidebar#close">
+          <span class="sr-only">Close sidebar</span>
+          <%= heroicon "x-mark", options: { class: "h-6 w-6" } %>
+        </button>
+      </div>
+
+      <%= render "shared/brand" %>
+      
+      <div class="flex-1 overflow-y-auto">
+        <nav class="flex flex-1 flex-col">
+          <ul role="list" class="flex flex-1 flex-col gap-y-7">
+            <%# Main Navigation %>
+            <%= render "shared/nav_section", 
+                title: "Main",
+                links: [
+                  { name: "Dashboard", path: "#", icon: "chart-bar" },
+                  { name: "Expenses", path: "#", icon: "arrow-trending-down" },
+                  { name: "Income", path: "#", icon: "arrow-trending-up" }
+                ] 
+            %>
+            
+            <%# Analysis Section %>
+            <%= render "shared/nav_section",
+                title: "Analysis",
+                links: [
+                  { name: "Reports", path: "#", icon: "document-text" },
+                  { name: "Statistics", path: "#", icon: "chart-pie" },
+                  { name: "Calendar", path: "#", icon: "calendar" }
+                ]
+            %>
+            
+            <%# Settings Section %>
+            <%= render "shared/nav_section",
+                title: "Settings",
+                links: [
+                  { name: "Account", path: "#", icon: "user-circle" },
+                  { name: "Preferences", path: "#", icon: "cog-6-tooth" }
+                ]
+            %>
+          </ul>
+        </nav>
+      </div>
+      
+      <%= render "shared/user_profile" %>
+    </div>
+  </div>
+</div> 
