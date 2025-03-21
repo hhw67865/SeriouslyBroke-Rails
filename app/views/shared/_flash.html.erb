@@ -1,5 +1,5 @@
 <%# Flash Messages %>
-<div class="fixed top-4 left-1/2 transform -translate-x-1/2 w-full max-w-sm z-50" data-controller="flash">
+<div class="fixed top-4 left-1/2 transform -translate-x-1/2 w-full max-w-sm z-50" data-controller="shared--flash">
   <% flash.each do |type, message| %>
     <div class="<%= flash_class(type) %> rounded-lg shadow-md p-4 mb-4 flex items-center" 
          data-flash-target="message"
@@ -12,7 +12,7 @@
       </div>
       <button type="button" 
               class="ml-4 inline-flex text-current opacity-75 hover:opacity-100 focus:outline-none" 
-              data-action="flash#dismiss">
+              data-action="shared--flash#dismiss">
         <%= heroicon "x-mark", options: { class: "h-5 w-5" } %>
       </button>
     </div>

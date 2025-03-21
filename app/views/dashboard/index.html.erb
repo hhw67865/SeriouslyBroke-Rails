@@ -1,16 +1,43 @@
-<div class="min-h-screen bg-[#F9F9F7]">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="bg-white rounded-2xl shadow-sm p-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <h1 class="text-3xl font-bold text-[#A4A266]">Welcome to SeriouslyBroke</h1>
-          <p class="mt-2 text-gray-600">You are logged in as: <%= current_user.email %></p>
-        </div>
+<%# Dashboard Container %>
+<div class="min-h-screen bg-gray-50 p-6">
+  <%# Header %>
+  <div class="flex justify-between items-center mb-8 pb-4 border-b border-gray-200">
+    <h1 class="text-2xl font-semibold text-gray-900">Dashboard</h1>
+    <div class="flex items-center gap-4">
+      <div class="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-2 flex items-center gap-2">
+        <span class="text-gray-700 font-medium"><%= Date.current.strftime("%B %Y") %></span>
+        <span class="text-gray-400 text-xs">▼</span>
       </div>
+      <button type="button" class="p-2 text-gray-600 hover:text-brand transition-colors rounded-lg border border-gray-200 bg-white shadow-sm">
+        <%= heroicon "cog-6-tooth", options: { class: "w-5 h-5" } %>
+      </button>
+    </div>
+  </div>
 
-      <div class="bg-[#F9F9F7] rounded-xl p-6">
-        <p class="text-gray-600">Your dashboard content will appear here soon.</p>
-      </div>
+  <%# Dashboard Grid %>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <%# Stats Overview %>
+    <%= render "dashboard/stats/monthly_budget" %>
+    <%= render "dashboard/stats/total_spent" %>
+    <%= render "dashboard/stats/remaining_budget" %>
+    <%= render "dashboard/stats/monthly_income" %>
+
+    <%# Charts Section %>
+    <div class="lg:col-span-2">
+      <%= render "dashboard/charts/spending_trend" %>
+    </div>
+    <div class="lg:col-span-2">
+      <%= render "dashboard/charts/expense_categories" %>
+    </div>
+
+    <%# Recent Transactions %>
+    <div class="lg:col-span-2">
+      <%= render "dashboard/transactions/recent" %>
+    </div>
+
+    <%# Budget Progress %>
+    <div class="lg:col-span-2">
+      <%= render "dashboard/budget/progress" %>
     </div>
   </div>
 </div>

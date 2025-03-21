@@ -1,0 +1,12 @@
+<%# Monthly Income Stat %>
+<%= render "shared/stat_card",
+  icon: "📈",
+  label: "Monthly Income",
+  value: number_to_currency(4200.00),
+  border_color: "border-success",
+  trend: {
+    type: :up,
+    value: 5,
+    label: "vs last month"
+  }
+%> 

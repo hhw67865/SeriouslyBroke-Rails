@@ -1,0 +1,24 @@
+<%# Spending Trend Chart %>
+<div class="bg-white rounded-lg shadow-sm p-6" data-controller="chart--spending-trend">
+  <div class="flex items-center justify-between mb-6">
+    <h3 class="font-semibold text-gray-900">Monthly Spending Trend</h3>
+    <div class="flex bg-gray-100 rounded-lg p-1">
+      <button type="button" 
+              class="px-3 py-1 text-sm font-medium rounded-md"
+              data-chart--spending-trend-target="weekTab">Week</button>
+      <button type="button" 
+              class="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm text-brand"
+              data-chart--spending-trend-target="monthTab">Month</button>
+      <button type="button" 
+              class="px-3 py-1 text-sm font-medium rounded-md"
+              data-chart--spending-trend-target="yearTab">Year</button>
+    </div>
+  </div>
+
+  <div class="h-[250px] relative" data-chart--spending-trend-target="container">
+    <%# Chart will be rendered here by JavaScript %>
+    <div class="absolute inset-0 flex items-center justify-center text-gray-500 font-medium italic">
+      Loading spending trend data...
+    </div>
+  </div>
+</div> 
