@@ -41,9 +41,11 @@ group :development do
   gem "bullet", "~> 8.0"
   
   # Code Quality
-  gem "rubocop", "~> 1.74"
-  gem "rubocop-rails", "~> 2.30"
-  gem "rubocop-rspec", "~> 3.5"
+  gem "rubocop"
+  gem "rubocop-rails"
+  gem "rubocop-rspec"
+  gem "rubocop-performance"
+  gem "rubocop-erb"
 end
 
 group :test do
@@ -53,7 +55,6 @@ group :test do
   
   # Testing Support
   gem "shoulda-matchers", "~> 6.4"
-  gem "simplecov", "~> 0.22.0"
   gem "database_cleaner-active_record", "~> 2.2"
 end
 
