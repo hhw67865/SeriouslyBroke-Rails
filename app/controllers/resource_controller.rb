@@ -1,11 +1,11 @@
 class ResourceController < ApplicationController
   include UserAuthorization
   
-  before_action :set_record, only: [:show, :edit, :update, :destroy]
+  before_action :set_resource, only: [:show, :edit, :update, :destroy]
   
   # GET /resources
   def index
-    @records = current_user_records
+    instance_variable_set("@#{controller_name}", current_user_records)
   end
 
   # GET /resources/1
@@ -14,7 +14,7 @@ class ResourceController < ApplicationController
 
   # GET /resources/new
   def new
-    @record = resource_class.new
+    instance_variable_set("@#{controller_name.singularize}", resource_class.new)
   end
 
   # GET /resources/1/edit
@@ -24,8 +24,8 @@ class ResourceController < ApplicationController
   private
   
   # Use callbacks to share common setup or constraints between actions.
-  def set_record
-    @record = current_user_records.find(params[:id])
+  def set_resource
+    instance_variable_set("@#{controller_name.singularize}", current_user_records.find(params[:id]))
   end
   
   def current_user_records
