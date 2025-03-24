@@ -6,9 +6,11 @@ class Budget < ApplicationRecord
   validates :amount, :period, presence: true
   validate :category_must_be_expense
 
+  delegate :user, to: :category
+
   private
 
   def category_must_be_expense
-    errors.add(:category, "must be an expense category") if category && !category.expense?
+    errors.add(:category, "must be an expense category") unless category&.expense?
   end
 end

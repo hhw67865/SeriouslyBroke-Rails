@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeriouslyBroke - Categories</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        :root {
+            --primary: #C9C78B;             /* Main color as specified */
+            --primary-light: #e2e1c6;
+            --primary-dark: #a9a76b;
+            --primary-bg: #f8f8f3;
+            --white: #ffffff;
+            --light: #f7f7f7;
+            --gray-100: #f2f2f2;
+            --gray-200: #e6e6e6;
+            --gray-300: #d9d9d9;
+            --gray-400: #b3b3b3;
+            --gray-500: #8c8c8c;
+            --gray-600: #666666;
+            --gray-700: #4d4d4d;
+            --gray-800: #333333;
+            --gray-900: #212121;
+            --success: #34c759;
+            --warning: #ff9500;
+            --danger: #ff3b30;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.07);
+            --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+            --radius-sm: 4px;
+            --radius: 6px;
+            --radius-md: 8px;
+        }
+        
+        body {
+            background-color: var(--light);
+            color: var(--gray-800);
+            line-height: 1.5;
+        }
+        
+        /* Layout */
+        .layout {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 260px;
+            background: linear-gradient(145deg, var(--primary), var(--primary-dark));
+            color: var(--gray-900);
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            box-shadow: var(--shadow);
+        }
+        
+        .brand {
+            padding: 28px 24px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .brand-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            background-color: var(--white);
+            border-radius: var(--radius-sm);
+            margin-right: 14px;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--primary-dark);
+        }
+        
+        .brand-name {
+            font-weight: 600;
+            font-size: 20px;
+            color: var(--white);
+            letter-spacing: 0.2px;
+        }
+        
+        .nav-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 0;
+        }
+        
+        .nav-section {
+            margin-bottom: 24px;
+        }
+        
+        .nav-label {
+            text-transform: uppercase;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: rgba(255, 255, 255, 0.6);
+            padding: 0 24px;
+            margin-bottom: 8px;
+        }
+        
+        .nav-menu {
+            list-style: none;
+        }
+        
+        .nav-item {
+            margin-bottom: 2px;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 24px;
+            color: rgba(255, 255, 255, 0.9);
+            text-decoration: none;
+            font-weight: 500;
+            transition: background-color 0.2s;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.08);
+        }
+        
+        .nav-link.active {
+            background-color: var(--white);
+            color: var(--primary-dark);
+            border-left-color: var(--primary-dark);
+        }
+        
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            opacity: 0.85;
+        }
+        
+        .nav-link.active .nav-icon {
+            opacity: 1;
+            color: var(--primary);
+        }
+        
+        .user-container {
+            padding: 16px 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .user-profile {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background-color: rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-sm);
+        }
+        
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            background-color: var(--white);
+            border-radius: var(--radius-sm);
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+        
+        .user-info {
+            flex: 1;
+        }
+        
+        .user-name {
+            font-weight: 600;
+            line-height: 1.3;
+            color: var(--white);
+        }
+        
+        .user-role {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        /* Main Content */
+        .main {
+            flex: 1;
+            margin-left: 260px;
+            padding: 30px;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        
+        .page-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+        
+        .header-controls {
+            display: flex;
+            align-items: center;
+        }
+        
+        .action-btn {
+            width: 36px;
+            height: 36px;
+            background-color: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 10px;
+            box-shadow: var(--shadow-sm);
+            color: var(--gray-600);
+        }
+
+        /* Tabs */
+        .tabs-container {
+            display: flex;
+            border-bottom: 1px solid var(--gray-200);
+            margin-bottom: 24px;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            font-weight: 500;
+            color: var(--gray-600);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .tab.active {
+            color: var(--primary-dark);
+        }
+
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background-color: var(--primary);
+        }
+
+        /* Category Grid */
+        .category-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .category-card {
+            background-color: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .category-title {
+            display: flex;
+            align-items: center;
+        }
+
+        .category-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            font-size: 16px;
+        }
+
+        .food-icon {
+            background-color: rgba(255, 149, 0, 0.1);
+            color: var(--warning);
+        }
+
+        .housing-icon {
+            background-color: rgba(52, 199, 89, 0.1);
+            color: var(--success);
+        }
+
+        .transportation-icon {
+            background-color: rgba(90, 200, 250, 0.1);
+            color: #5ac8fa;
+        }
+
+        .utilities-icon {
+            background-color: rgba(255, 59, 48, 0.1);
+            color: var(--danger);
+        }
+
+        .entertainment-icon {
+            background-color: rgba(175, 82, 222, 0.1);
+            color: #af52de;
+        }
+
+        .shopping-icon {
+            background-color: rgba(255, 204, 0, 0.1);
+            color: #ffcc00;
+        }
+
+        .income-icon {
+            background-color: rgba(52, 199, 89, 0.1);
+            color: var(--success);
+        }
+
+        .category-name {
+            font-weight: 600;
+            color: var(--gray-800);
+        }
+
+        .category-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .category-action {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--gray-100);
+            color: var(--gray-600);
+        }
+
+        .category-action:hover {
+            background-color: var(--gray-200);
+        }
+
+        .category-body {
+            padding: 16px;
+        }
+
+        .category-budget {
+            margin-bottom: 16px;
+        }
+
+        .budget-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .budget-label {
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+
+        .budget-amount {
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        .progress-bar {
+            height: 5px;
+            background-color: var(--gray-200);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .progress-value {
+            height: 100%;
+            border-radius: 2px;
+        }
+
+        .normal-progress {
+            background-color: var(--primary);
+        }
+
+        .warning-progress {
+            background-color: var(--warning);
+        }
+
+        .danger-progress {
+            background-color: var(--danger);
+        }
+
+        .budget-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--gray-600);
+        }
+
+        .category-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 16px;
+            font-size: 13px;
+            color: var(--gray-600);
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-value {
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 4px;
+        }
+
+        .info-label {
+            font-size: 12px;
+        }
+
+        /* Add New Category Card */
+        .add-category-card {
+            background-color: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            border: 2px dashed var(--gray-300);
+            cursor: pointer;
+        }
+
+        .add-category-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: var(--primary-bg);
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        .add-category-text {
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        /* Budget List */
+        .budget-container {
+            background-color: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+
+        .budget-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .budget-title {
+            font-weight: 600;
+            color: var(--gray-800);
+            font-size: 16px;
+        }
+
+        .add-budget-btn {
+            display: flex;
+            align-items: center;
+            color: var(--primary-dark);
+            font-weight: 500;
+            font-size: 13px;
+            gap: 6px;
+        }
+
+        .budget-table {
+            width: 100%;
+        }
+
+        .budget-table th {
+            text-align: left;
+            padding: 14px 20px;
+            font-weight: 500;
+            color: var(--gray-600);
+            font-size: 13px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .budget-table td {
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        /* Add Button */
+        .add-button {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-sm);
+            background-color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-md);
+            color: var(--white);
+            cursor: pointer;
+        }
+        
+        .add-icon {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            display: none;
+        }
+
+        .modal {
+            background-color: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-md);
+            width: 90%;
+            max-width: 500px;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title {
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--gray-900);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--gray-100);
+            color: var(--gray-600);
+            border: none;
+            cursor: pointer;
+        }
+
+        .modal-body {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--gray-800);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--gray-300);
+            background-color: var(--white);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--gray-300);
+            background-color: var(--white);
+        }
+
+        .color-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .color-option {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .color-option.selected {
+            border-color: var(--gray-800);
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn-cancel {
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--gray-300);
+            background-color: var(--white);
+            color: var(--gray-700);
+        }
+
+        .btn-save {
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            border: none;
+            background-color: var(--primary);
+            color: var(--white);
+            font-weight: 500;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .category-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 240px;
+            }
+            
+            .main {
+                margin-left: 240px;
+                padding: 24px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .layout {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                position: relative;
+                width: 100%;
+                height: auto;
+            }
+            
+            .main {
+                margin-left: 0;
+            }
+
+            .category-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-logo">$</div>
+                <div class="brand-name">SeriouslyBroke</div>
+            </div>
+
+            <!-- Add Button -->
+            <div class="add-button">
+                <div class="add-icon">+</div>
+            </div>
+
+            <!-- Add Category Modal -->
+            <div class="modal-backdrop" id="addCategoryModal">
+                <div class="modal">
+                    <div class="modal-header">
+                        <div class="modal-title">Add New Category</div>
+                        <button class="modal-close">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">Category Name</label>
+                            <input type="text" class="form-input" placeholder="Enter category name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Category Type</label>
+                            <select class="form-select">
+                                <option>Expense</option>
+                                <option>Income</option>
+                                <option>Savings</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Budget Amount (Monthly)</label>
+                            <input type="number" class="form-input" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Icon</label>
+                            <select class="form-select">
+                                <option>🍔 Food</option>
+                                <option>🏠 Home</option>
+                                <option>🚗 Transport</option>
+                                <option>💡 Utilities</option>
+                                <option>🎬 Entertainment</option>
+                                <option>🛍️ Shopping</option>
+                                <option>💼 Work</option>
+                                <option>🩺 Health</option>
+                                <option>🎓 Education</option>
+                                <option>📱 Tech</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Color</label>
+                            <div class="color-options">
+                                <div class="color-option selected" style="background-color: #ff9500;"></div>
+                                <div class="color-option" style="background-color: #34c759;"></div>
+                                <div class="color-option" style="background-color: #5ac8fa;"></div>
+                                <div class="color-option" style="background-color: #ff3b30;"></div>
+                                <div class="color-option" style="background-color: #af52de;"></div>
+                                <div class="color-option" style="background-color: #ffcc00;"></div>
+                                <div class="color-option" style="background-color: #ff9500;"></div>
+                                <div class="color-option" style="background-color: #C9C78B;"></div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Description (Optional)</label>
+                            <textarea class="form-input" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-cancel">Cancel</button>
+                        <button class="btn-save">Save Category</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Budget Modal -->
+            <div class="modal-backdrop" id="editBudgetModal">
+                <div class="modal">
+                    <div class="modal-header">
+                        <div class="modal-title">Edit Budget</div>
+                        <button class="modal-close">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label class="form-label">Category</label>
+                            <select class="form-select">
+                                <option>Food</option>
+                                <option>Housing</option>
+                                <option>Transportation</option>
+                                <option>Utilities</option>
+                                <option>Entertainment</option>
+                                <option>Shopping</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Budget Amount</label>
+                            <input type="number" class="form-input" value="500.00">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Period</label>
+                            <select class="form-select">
+                                <option>Weekly</option>
+                                <option selected>Monthly</option>
+                                <option>Quarterly</option>
+                                <option>Yearly</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Notes (Optional)</label>
+                            <textarea class="form-input" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-cancel">Cancel</button>
+                        <button class="btn-save">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Modal functionality
+        const addButton = document.querySelector('.add-button');
+        const addCategoryCard = document.querySelector('.add-category-card');
+        const addBudgetBtn = document.querySelector('.add-budget-btn');
+        const categoryActions = document.querySelectorAll('.category-action');
+        const tableActions = document.querySelectorAll('.action-icon');
+        
+        const addCategoryModal = document.getElementById('addCategoryModal');
+        const editBudgetModal = document.getElementById('editBudgetModal');
+        
+        const modalCloses = document.querySelectorAll('.modal-close');
+        const cancelBtns = document.querySelectorAll('.btn-cancel');
+
+        function openAddCategoryModal() {
+            addCategoryModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function openEditBudgetModal() {
+            editBudgetModal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModals() {
+            addCategoryModal.style.display = 'none';
+            editBudgetModal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        addButton.addEventListener('click', openAddCategoryModal);
+        addCategoryCard.addEventListener('click', openAddCategoryModal);
+        addBudgetBtn.addEventListener('click', openEditBudgetModal);
+        
+        categoryActions.forEach(action => {
+            if (action.textContent === '✏️') {
+                action.addEventListener('click', openAddCategoryModal);
+            }
+        });
+        
+        tableActions.forEach(action => {
+            action.addEventListener('click', openEditBudgetModal);
+        });
+        
+        modalCloses.forEach(close => {
+            close.addEventListener('click', closeModals);
+        });
+        
+        cancelBtns.forEach(btn => {
+            btn.addEventListener('click', closeModals);
+        });
+        
+        // Close modal when clicking outside
+        window.addEventListener('click', function(e) {
+            if (e.target === addCategoryModal || e.target === editBudgetModal) {
+                closeModals();
+            }
+        });
+
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                tabs.forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // Color selection
+        const colorOptions = document.querySelectorAll('.color-option');
+        colorOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                colorOptions.forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+            });
+        });
+    </script>
+</body>
+</html>
+            
+            <div class="nav-wrapper">
+                <div class="nav-section">
+                    <div class="nav-label">Main</div>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Expenses
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Income
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-label">Management</div>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link active">
+                                <div class="nav-icon">▪</div>
+                                Categories
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Budgets
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-label">Analysis</div>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Statistics
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Calendar
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-label">Settings</div>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Account
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link">
+                                <div class="nav-icon">▪</div>
+                                Preferences
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="user-container">
+                <div class="user-profile">
+                    <div class="user-avatar">AJ</div>
+                    <div class="user-info">
+                        <div class="user-name">Alex Johnson</div>
+                        <div class="user-role">Premium User</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Header -->
+            <div class="header">
+                <h1 class="page-title">Categories</h1>
+                <div class="header-controls">
+                    <div class="action-btn">
+                        <span>⚙</span>
+                    </div>
+                    <div class="action-btn">
+                        <span>🔔</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs-container">
+                <div class="tab active">Expense Categories</div>
+                <div class="tab">Income Categories</div>
+                <div class="tab">Savings Pools</div>
+            </div>
+
+            <!-- Category Grid for Expenses -->
+            <div class="category-grid">
+                <!-- Food Category -->
+                <div class="category-card">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <div class="category-icon food-icon">🍔</div>
+                            <div class="category-name">Food</div>
+                        </div>
+                        <div class="category-actions">
+                            <div class="category-action">✏️</div>
+                            <div class="category-action">🗑️</div>
+                        </div>
+                    </div>
+                    <div class="category-body">
+                        <div class="category-budget">
+                            <div class="budget-header">
+                                <div class="budget-label">Monthly Budget</div>
+                                <div class="budget-amount">$500.00</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-value warning-progress" style="width: 90%"></div>
+                            </div>
+                            <div class="budget-info">
+                                <div>$450.38 spent</div>
+                                <div>90% used</div>
+                            </div>
+                        </div>
+                        <div class="category-info">
+                            <div class="info-item">
+                                <div class="info-value">15</div>
+                                <div class="info-label">Transactions</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">$30.03</div>
+                                <div class="info-label">Average</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">+12%</div>
+                                <div class="info-label">vs Last Month</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Housing Category -->
+                <div class="category-card">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <div class="category-icon housing-icon">🏠</div>
+                            <div class="category-name">Housing</div>
+                        </div>
+                        <div class="category-actions">
+                            <div class="category-action">✏️</div>
+                            <div class="category-action">🗑️</div>
+                        </div>
+                    </div>
+                    <div class="category-body">
+                        <div class="category-budget">
+                            <div class="budget-header">
+                                <div class="budget-label">Monthly Budget</div>
+                                <div class="budget-amount">$800.00</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-value danger-progress" style="width: 100%"></div>
+                            </div>
+                            <div class="budget-info">
+                                <div>$800.00 spent</div>
+                                <div>100% used</div>
+                            </div>
+                        </div>
+                        <div class="category-info">
+                            <div class="info-item">
+                                <div class="info-value">1</div>
+                                <div class="info-label">Transactions</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">$800.00</div>
+                                <div class="info-label">Average</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">0%</div>
+                                <div class="info-label">vs Last Month</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transportation Category -->
+                <div class="category-card">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <div class="category-icon transportation-icon">🚗</div>
+                            <div class="category-name">Transportation</div>
+                        </div>
+                        <div class="category-actions">
+                            <div class="category-action">✏️</div>
+                            <div class="category-action">🗑️</div>
+                        </div>
+                    </div>
+                    <div class="category-body">
+                        <div class="category-budget">
+                            <div class="budget-header">
+                                <div class="budget-label">Monthly Budget</div>
+                                <div class="budget-amount">$400.00</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-value normal-progress" style="width: 80%"></div>
+                            </div>
+                            <div class="budget-info">
+                                <div>$320.47 spent</div>
+                                <div>80% used</div>
+                            </div>
+                        </div>
+                        <div class="category-info">
+                            <div class="info-item">
+                                <div class="info-value">12</div>
+                                <div class="info-label">Transactions</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">$26.71</div>
+                                <div class="info-label">Average</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">-5%</div>
+                                <div class="info-label">vs Last Month</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Utilities Category -->
+                <div class="category-card">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <div class="category-icon utilities-icon">💡</div>
+                            <div class="category-name">Utilities</div>
+                        </div>
+                        <div class="category-actions">
+                            <div class="category-action">✏️</div>
+                            <div class="category-action">🗑️</div>
+                        </div>
+                    </div>
+                    <div class="category-body">
+                        <div class="category-budget">
+                            <div class="budget-header">
+                                <div class="budget-label">Monthly Budget</div>
+                                <div class="budget-amount">$200.00</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-value normal-progress" style="width: 71%"></div>
+                            </div>
+                            <div class="budget-info">
+                                <div>$142.68 spent</div>
+                                <div>71% used</div>
+                            </div>
+                        </div>
+                        <div class="category-info">
+                            <div class="info-item">
+                                <div class="info-value">3</div>
+                                <div class="info-label">Transactions</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">$47.56</div>
+                                <div class="info-label">Average</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">+8%</div>
+                                <div class="info-label">vs Last Month</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Entertainment Category -->
+                <div class="category-card">
+                    <div class="category-header">
+                        <div class="category-title">
+                            <div class="category-icon entertainment-icon">🎬</div>
+                            <div class="category-name">Entertainment</div>
+                        </div>
+                        <div class="category-actions">
+                            <div class="category-action">✏️</div>
+                            <div class="category-action">🗑️</div>
+                        </div>
+                    </div>
+                    <div class="category-body">
+                        <div class="category-budget">
+                            <div class="budget-header">
+                                <div class="budget-label">Monthly Budget</div>
+                                <div class="budget-amount">$150.00</div>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-value normal-progress" style="width: 75%"></div>
+                            </div>
+                            <div class="budget-info">
+                                <div>$112.35 spent</div>
+                                <div>75% used</div>
+                            </div>
+                        </div>
+                        <div class="category-info">
+                            <div class="info-item">
+                                <div class="info-value">7</div>
+                                <div class="info-label">Transactions</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">$16.05</div>
+                                <div class="info-label">Average</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-value">-12%</div>
+                                <div class="info-label">vs Last Month</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add New Category Card -->
+                <div class="add-category-card">
+                    <div class="add-category-icon">+</div>
+                    <div class="add-category-text">Add New Category</div>
+                </div>
+            </div>
+
+            <!-- Budget Management -->
+            <div class="budget-container">
+                <div class="budget-header">
+                    <div class="budget-title">Budget Allocations</div>
+                    <div class="add-budget-btn">
+                        <span>+</span>
+                        Adjust Budgets
+                    </div>
+                </div>
+                <table class="budget-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Budget Amount</th>
+                            <th>Period</th>
+                            <th>Current Usage</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>
+                                <div class="expense-item">
+                                    <div class="expense-icon food-icon">🍔</div>
+                                    <div class="expense-details">
+                                        <div class="expense-title">Food</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>$500.00</td>
+                            <td>Monthly</td>
+                            <td>90% ($450.38)</td>
+                            <td>
+                                <span class="expense-category-tag" style="background-color: rgba(255, 149, 0, 0.1); color: var(--warning);">Warning</span>
+                            </td>
+                            <td>
+                                <div class="expense-actions">
+                                    <div class="action-icon">✏️</div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="expense-item">
+                                    <div class="expense-icon housing-icon">🏠</div>
+                                    <div class="expense-details">
+                                        <div class="expense-title">Housing</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>$800.00</td>
+                            <td>Monthly</td>
+                            <td>100% ($800.00)</td>
+                            <td>
+                                <span class="expense-category-tag" style="background-color: rgba(255, 59, 48, 0.1); color: var(--danger);">Exceeded</span>
+                            </td>
+                            <td>
+                                <div class="expense-actions">
+                                    <div class="action-icon">✏️</div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="expense-item">
+                                    <div class="expense-icon transportation-icon">🚗</div>
+                                    <div class="expense-details">
+                                        <div class="expense-title">Transportation</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>$400.00</td>
+                            <td>Monthly</td>
+                            <td>80% ($320.47)</td>
+                            <td>
+                                <span class="expense-category-tag" style="background-color: var(--primary-bg); color: var(--primary-dark);">On Track</span>
+                            </td>
+                            <td>
+                                <div class="expense-actions">
+                                    <div class="action-icon">✏️</div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>

@@ -8,7 +8,6 @@ class Category < ApplicationRecord
   enum category_type: { income: 0, expense: 1, savings: 2 }
 
   validates :name, :category_type, presence: true
-  validates :savings_pool, presence: true, if: :savings?
   validate :budget_only_for_expense
 
   scope :expenses, -> { where(category_type: :expense) }

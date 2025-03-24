@@ -17,7 +17,7 @@ gem "stimulus-rails"
 gem "tailwindcss-rails"
 gem "turbo-rails"
 
-# Authentication
+# Authentication and Authorization
 gem "devise", "~> 4.9"
 
 # Windows compatibility
@@ -34,6 +34,7 @@ group :development, :test do
 
   # Development Tools
   gem "pry-rails", "~> 0.3.11"
+  gem "byebug"
 end
 
 group :development do

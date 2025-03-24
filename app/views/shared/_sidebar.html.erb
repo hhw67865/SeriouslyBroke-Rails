@@ -51,22 +51,22 @@
                 ] 
             %>
             
+            <%# Management Section %>
+            <%= render "shared/nav_section",
+                title: "Management",
+                links: [
+                  { name: "Categories", path: "#", icon: "tag" },
+                  { name: "Budgets", path: "#", icon: "banknotes" },
+                  { name: "Savings Pools", path: "#", icon: "wallet" }
+                ]
+            %>
+            
             <%# Analysis Section %>
             <%= render "shared/nav_section",
                 title: "Analysis",
                 links: [
-                  { name: "Reports", path: "#", icon: "document-text" },
                   { name: "Statistics", path: "#", icon: "chart-pie" },
                   { name: "Calendar", path: "#", icon: "calendar" }
-                ]
-            %>
-            
-            <%# Settings Section %>
-            <%= render "shared/nav_section",
-                title: "Settings",
-                links: [
-                  { name: "Account", path: "#", icon: "user-circle" },
-                  { name: "Preferences", path: "#", icon: "cog-6-tooth" }
                 ]
             %>
           </ul>

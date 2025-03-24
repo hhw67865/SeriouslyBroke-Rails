@@ -1,10 +1,15 @@
 Rails.application.routes.draw do
+
   # Authentication routes
   devise_for :users
 
   # Application routes (protected by authentication)
   authenticated :user do
     root 'dashboard#index', as: :authenticated_root
+    resources :savings_pools
+    resources :entries
+    resources :items
+    resources :categories
   end
 
   # Landing page for non-authenticated users

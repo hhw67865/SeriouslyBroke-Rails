@@ -1,0 +1,42 @@
+<%= form_with(model: category, class: "contents") do |form| %>
+  <% if category.errors.any? %>
+    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
+      <h2><%= pluralize(category.errors.count, "error") %> prohibited this category from being saved:</h2>
+
+      <ul class="list-disc ml-6">
+        <% category.errors.each do |error| %>
+          <li><%= error.full_message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="my-5">
+    <%= form.label :name %>
+    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": category.errors[:name].none?, "border-red-400 focus:outline-red-600": category.errors[:name].any?}] %>
+  </div>
+
+  <div class="my-5">
+    <%= form.label :category_type %>
+    <%= form.number_field :category_type, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": category.errors[:category_type].none?, "border-red-400 focus:outline-red-600": category.errors[:category_type].any?}] %>
+  </div>
+
+  <div class="my-5">
+    <%= form.label :color %>
+    <%= form.text_field :color, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": category.errors[:color].none?, "border-red-400 focus:outline-red-600": category.errors[:color].any?}] %>
+  </div>
+
+  <div class="my-5">
+    <%= form.label :user_id %>
+    <%= form.text_field :user_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": category.errors[:user_id].none?, "border-red-400 focus:outline-red-600": category.errors[:user_id].any?}] %>
+  </div>
+
+  <div class="my-5">
+    <%= form.label :savings_pool_id %>
+    <%= form.text_field :savings_pool_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": category.errors[:savings_pool_id].none?, "border-red-400 focus:outline-red-600": category.errors[:savings_pool_id].any?}] %>
+  </div>
+
+  <div class="inline">
+    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+  </div>
+<% end %>
