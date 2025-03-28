@@ -225,7 +225,15 @@ AllCops:
     - 'db/schema.rb'
     - 'vendor/**/*'
     - 'node_modules/**/*'
-    - 'vendor/**/*'
     - '.git/**/*'
     - './bin/**/*'
     - './config/**/*'
+    - './db/seeds.rb'
+
+# RSpec specific configurations
+RSpec/ExampleLength:
+  Max: 10
+
+# Disable i18n locale texts check as it's not necessary for this application
+Rails/I18nLocaleTexts:
+  Enabled: false
