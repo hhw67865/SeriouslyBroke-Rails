@@ -3,11 +3,11 @@
     <h1 class="text-2xl font-semibold tracking-tight text-gray-900"><%= @type.titleize %> Categories</h1>
     <p class="text-sm text-gray-500 mt-1">
       <% case @type %>
-      <% when 'expense' %>
+      <% when "expense" %>
         Manage your expense categories and track your spending
-      <% when 'income' %>
+      <% when "income" %>
         Track your income sources and monthly earnings
-      <% when 'savings' %>
+      <% when "savings" %>
         Organize your savings goals and track progress
       <% else %>
         Manage your expense, income, and savings categories

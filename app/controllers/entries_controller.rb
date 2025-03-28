@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class EntriesController < ApplicationController
   before_action :set_entry, only: [:show, :edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
@@ -5,12 +7,11 @@ class EntriesController < ApplicationController
   # GET /entries
   def index
     @entries = current_user.entries.includes(item: :category)
-                          .order(date: :desc)
+      .order(date: :desc)
   end
 
   # GET /entries/1
-  def show
-  end
+  def show; end
 
   # GET /entries/new
   def new
@@ -19,15 +20,14 @@ class EntriesController < ApplicationController
   end
 
   # GET /entries/1/edit
-  def edit
-  end
+  def edit; end
 
   # POST /entries
   def create
     @entry = Entry.new(entry_params)
 
     if @entry.save
-      redirect_to entries_path, notice: 'Entry was successfully created.'
+      redirect_to entries_path, notice: "Entry was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -36,7 +36,7 @@ class EntriesController < ApplicationController
   # PATCH/PUT /entries/1
   def update
     if @entry.update(entry_params)
-      redirect_to entries_path, notice: 'Entry was successfully updated.'
+      redirect_to entries_path, notice: "Entry was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -45,7 +45,7 @@ class EntriesController < ApplicationController
   # DELETE /entries/1
   def destroy
     @entry.destroy
-    redirect_to entries_path, notice: 'Entry was successfully deleted.'
+    redirect_to entries_path, notice: "Entry was successfully deleted."
   end
 
   private
@@ -53,7 +53,7 @@ class EntriesController < ApplicationController
   def set_entry
     @entry = current_user.entries.find(params[:id])
   end
-  
+
   def set_item
     @item = current_user.items.find(params[:item_id]) if params[:item_id]
   end

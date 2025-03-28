@@ -1,8 +1,10 @@
+# frozen_string_literal: true
+
 class Item < ApplicationRecord
   belongs_to :category
   has_many :entries, dependent: :destroy
 
-  enum frequency: { one_time: 0, monthly: 1, yearly: 2 }
+  enum :frequency, { one_time: 0, monthly: 1, yearly: 2 }
 
   validates :name, presence: true
 

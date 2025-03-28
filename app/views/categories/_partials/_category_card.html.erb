@@ -2,13 +2,13 @@
   <div class="p-5 flex-grow">
     <div class="flex justify-between items-start mb-4">
       <div class="flex items-center">
-        <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || '#C9C78B' %>;">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
           <% case category.category_type %>
-          <% when 'expense' %>
+          <% when "expense" %>
             <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
-          <% when 'income' %>
+          <% when "income" %>
             <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-          <% when 'savings' %>
+          <% when "savings" %>
             <%= heroicon "piggy-bank", options: { class: "h-5 w-5 text-white" } %>
           <% end %>
         </div>
@@ -45,7 +45,7 @@
           
           <div class="flex justify-between mt-1">
             <p class="text-xs text-gray-500"><%= percentage %>% used</p>
-            <p class="text-xs <%= percentage > 90 ? 'text-status-danger' : (percentage > 75 ? 'text-status-warning' : 'text-gray-500') %>">
+            <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
               <%= budget_status(percentage) %>
             </p>
           </div>
@@ -60,7 +60,7 @@
           
           <div class="flex justify-between mt-2">
             <span class="text-xs text-gray-500">vs last month</span>
-            <span class="text-xs flex items-center gap-1 <%= category.calculator.previous_month_trend == :up ? 'text-status-success' : 'text-status-danger' %>">
+            <span class="text-xs flex items-center gap-1 <%= category.calculator.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
               <%= heroicon category.calculator.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-3 w-3" } %>
               <%= category.calculator.previous_month_change_percentage.abs %>%
             </span>
@@ -90,11 +90,11 @@
               <li class="flex justify-between text-sm">
                 <span class="text-gray-600 truncate max-w-[70%]"><%= item.name %></span>
                 <% case category.category_type %>
-                <% when 'expense' %>
+                <% when "expense" %>
                   <span class="text-status-danger font-medium">-<%= number_to_currency(amount) %></span>
-                <% when 'income' %>
+                <% when "income" %>
                   <span class="text-status-success font-medium">+<%= number_to_currency(amount) %></span>
-                <% when 'savings' %>
+                <% when "savings" %>
                   <span class="text-brand font-medium"><%= number_to_currency(amount) %></span>
                 <% end %>
               </li>

@@ -13,22 +13,22 @@
 
   <div class="my-5">
     <%= form.label :amount %>
-    <%= form.text_field :amount, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": entry.errors[:amount].none?, "border-red-400 focus:outline-red-600": entry.errors[:amount].any?}] %>
+    <%= form.text_field :amount, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:amount].none?, "border-red-400 focus:outline-red-600": entry.errors[:amount].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :date %>
-    <%= form.datetime_field :date, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": entry.errors[:date].none?, "border-red-400 focus:outline-red-600": entry.errors[:date].any?}] %>
+    <%= form.datetime_field :date, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:date].none?, "border-red-400 focus:outline-red-600": entry.errors[:date].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :description %>
-    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": entry.errors[:description].none?, "border-red-400 focus:outline-red-600": entry.errors[:description].any?}] %>
+    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:description].none?, "border-red-400 focus:outline-red-600": entry.errors[:description].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :item_id %>
-    <%= form.text_field :item_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": entry.errors[:item_id].none?, "border-red-400 focus:outline-red-600": entry.errors[:item_id].any?}] %>
+    <%= form.text_field :item_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:item_id].none?, "border-red-400 focus:outline-red-600": entry.errors[:item_id].any? }] %>
   </div>
 
   <div class="inline">

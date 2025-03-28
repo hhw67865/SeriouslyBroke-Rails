@@ -13,22 +13,22 @@
 
   <div class="my-5">
     <%= form.label :name %>
-    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": item.errors[:name].none?, "border-red-400 focus:outline-red-600": item.errors[:name].any?}] %>
+    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:name].none?, "border-red-400 focus:outline-red-600": item.errors[:name].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :description %>
-    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": item.errors[:description].none?, "border-red-400 focus:outline-red-600": item.errors[:description].any?}] %>
+    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:description].none?, "border-red-400 focus:outline-red-600": item.errors[:description].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :frequency %>
-    <%= form.number_field :frequency, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": item.errors[:frequency].none?, "border-red-400 focus:outline-red-600": item.errors[:frequency].any?}] %>
+    <%= form.number_field :frequency, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:frequency].none?, "border-red-400 focus:outline-red-600": item.errors[:frequency].any? }] %>
   </div>
 
   <div class="my-5">
     <%= form.label :category_id %>
-    <%= form.text_field :category_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", {"border-gray-400 focus:outline-blue-600": item.errors[:category_id].none?, "border-red-400 focus:outline-red-600": item.errors[:category_id].any?}] %>
+    <%= form.text_field :category_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:category_id].none?, "border-red-400 focus:outline-red-600": item.errors[:category_id].any? }] %>
   </div>
 
   <div class="inline">

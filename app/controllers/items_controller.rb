@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class ItemsController < ApplicationController
   before_action :set_item, only: [:show, :edit, :update, :destroy]
   before_action :set_category, only: [:new, :create]
@@ -8,8 +10,7 @@ class ItemsController < ApplicationController
   end
 
   # GET /items/1
-  def show
-  end
+  def show; end
 
   # GET /items/new
   def new
@@ -17,15 +18,14 @@ class ItemsController < ApplicationController
   end
 
   # GET /items/1/edit
-  def edit
-  end
+  def edit; end
 
   # POST /items
   def create
     @item = @category.items.new(item_params)
 
     if @item.save
-      redirect_to items_path, notice: 'Item was successfully created.'
+      redirect_to items_path, notice: "Item was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -34,7 +34,7 @@ class ItemsController < ApplicationController
   # PATCH/PUT /items/1
   def update
     if @item.update(item_params)
-      redirect_to items_path, notice: 'Item was successfully updated.'
+      redirect_to items_path, notice: "Item was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -43,7 +43,7 @@ class ItemsController < ApplicationController
   # DELETE /items/1
   def destroy
     @item.destroy
-    redirect_to items_path, notice: 'Item was successfully deleted.'
+    redirect_to items_path, notice: "Item was successfully deleted."
   end
 
   private

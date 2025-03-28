@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class SavingsPoolsController < ApplicationController
   before_action :set_savings_pool, only: [:show, :edit, :update, :destroy]
 
@@ -7,8 +9,7 @@ class SavingsPoolsController < ApplicationController
   end
 
   # GET /savings_pools/1
-  def show
-  end
+  def show; end
 
   # GET /savings_pools/new
   def new
@@ -16,15 +17,14 @@ class SavingsPoolsController < ApplicationController
   end
 
   # GET /savings_pools/1/edit
-  def edit
-  end
+  def edit; end
 
   # POST /savings_pools
   def create
     @savings_pool = current_user.savings_pools.new(savings_pool_params)
 
     if @savings_pool.save
-      redirect_to savings_pools_path, notice: 'Savings pool was successfully created.'
+      redirect_to savings_pools_path, notice: "Savings pool was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -33,7 +33,7 @@ class SavingsPoolsController < ApplicationController
   # PATCH/PUT /savings_pools/1
   def update
     if @savings_pool.update(savings_pool_params)
-      redirect_to savings_pools_path, notice: 'Savings pool was successfully updated.'
+      redirect_to savings_pools_path, notice: "Savings pool was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -42,7 +42,7 @@ class SavingsPoolsController < ApplicationController
   # DELETE /savings_pools/1
   def destroy
     @savings_pool.destroy
-    redirect_to savings_pools_path, notice: 'Savings pool was successfully deleted.'
+    redirect_to savings_pools_path, notice: "Savings pool was successfully deleted."
   end
 
   private

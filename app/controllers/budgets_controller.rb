@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class BudgetsController < ApplicationController
   before_action :set_budget, only: [:show, :edit, :update, :destroy]
   before_action :set_category, only: [:new, :create]
@@ -8,8 +10,7 @@ class BudgetsController < ApplicationController
   end
 
   # GET /budgets/1
-  def show
-  end
+  def show; end
 
   # GET /budgets/new
   def new
@@ -17,15 +18,14 @@ class BudgetsController < ApplicationController
   end
 
   # GET /budgets/1/edit
-  def edit
-  end
+  def edit; end
 
   # POST /budgets
   def create
     @budget = Budget.new(budget_params)
 
     if @budget.save
-      redirect_to budgets_path, notice: 'Budget was successfully created.'
+      redirect_to budgets_path, notice: "Budget was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -34,7 +34,7 @@ class BudgetsController < ApplicationController
   # PATCH/PUT /budgets/1
   def update
     if @budget.update(budget_params)
-      redirect_to budgets_path, notice: 'Budget was successfully updated.'
+      redirect_to budgets_path, notice: "Budget was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -43,7 +43,7 @@ class BudgetsController < ApplicationController
   # DELETE /budgets/1
   def destroy
     @budget.destroy
-    redirect_to budgets_path, notice: 'Budget was successfully deleted.'
+    redirect_to budgets_path, notice: "Budget was successfully deleted."
   end
 
   private
@@ -51,7 +51,7 @@ class BudgetsController < ApplicationController
   def set_budget
     @budget = current_user.budgets.find(params[:id])
   end
-  
+
   def set_category
     @category = current_user.categories.expenses.find(params[:category_id]) if params[:category_id]
   end
@@ -59,4 +59,4 @@ class BudgetsController < ApplicationController
   def budget_params
     params.require(:budget).permit(:amount, :period, :category_id)
   end
-end 
+end

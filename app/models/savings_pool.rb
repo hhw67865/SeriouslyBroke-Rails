@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class SavingsPool < ApplicationRecord
   belongs_to :user
   has_many :categories, dependent: :nullify
@@ -5,7 +7,7 @@ class SavingsPool < ApplicationRecord
   has_many :entries, through: :items
 
   validates :name, :target_amount, presence: true
-  
+
   # Calculator for savings pool metrics
   def calculator
     @calculator ||= SavingsPoolCalculator.new(self)
