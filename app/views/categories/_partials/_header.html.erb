@@ -1,0 +1,38 @@
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-gray-200">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-gray-900"><%= @type.titleize %> Categories</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      <% case @type %>
+      <% when 'expense' %>
+        Manage your expense categories and track your spending
+      <% when 'income' %>
+        Track your income sources and monthly earnings
+      <% when 'savings' %>
+        Organize your savings goals and track progress
+      <% else %>
+        Manage your expense, income, and savings categories
+      <% end %>
+    </p>
+  </div>
+  
+  <div class="mt-4 md:mt-0 flex items-center gap-3">
+    <%= form_with url: categories_path, method: :get, class: "relative" do |f| %>
+      <%= f.hidden_field :type, value: @type %>
+      <div class="relative">
+        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+          <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+        </div>
+        <%= f.text_field :query, 
+                       value: @query,
+                       placeholder: "Search #{@type} categories...", 
+                       class: "pl-10 py-2 pr-3 block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand sm:text-sm sm:leading-6",
+                       onblur: "this.form.submit();" %>
+      </div>
+    <% end %>
+    
+    <%= link_to new_category_path(type: @type), class: "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
+      <%= heroicon "plus", options: { class: "h-4 w-4" } %>
+      <span>New <%= @type.singularize.titleize %> Category</span>
+    <% end %>
+  </div>
+</div> 

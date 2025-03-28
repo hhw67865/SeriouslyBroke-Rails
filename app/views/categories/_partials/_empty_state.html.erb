@@ -1,0 +1,33 @@
+<div class="col-span-full">
+  <div class="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+    <div class="mx-auto h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center">
+      <% case @type %>
+      <% when 'expense' %>
+        <%= heroicon "arrow-trending-down", options: { class: "h-6 w-6 text-gray-400" } %>
+      <% when 'income' %>
+        <%= heroicon "arrow-trending-up", options: { class: "h-6 w-6 text-gray-400" } %>
+      <% when 'savings' %>
+        <%= heroicon "piggy-bank", options: { class: "h-6 w-6 text-gray-400" } %>
+      <% else %>
+        <%= heroicon "tag", options: { class: "h-6 w-6 text-gray-400" } %>
+      <% end %>
+    </div>
+    <h3 class="mt-5 text-base font-semibold text-gray-900">No <%= @type.titleize %> Categories</h3>
+    <p class="mt-2 text-sm text-gray-500">
+      <% case @type %>
+      <% when 'expense' %>
+        Get started by creating your first expense category.
+      <% when 'income' %>
+        Track your income sources by creating income categories.
+      <% when 'savings' %>
+        Start saving by creating a savings category.
+      <% else %>
+        Get started by creating a new category.
+      <% end %>
+    </p>
+    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-x-2 rounded-md bg-brand px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand" do %>
+      <%= heroicon "plus", options: { class: "h-4 w-4" } %>
+      <span>New <%= @type.singularize.titleize %> Category</span>
+    <% end %>
+  </div>
+</div> 

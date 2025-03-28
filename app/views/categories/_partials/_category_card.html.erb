@@ -1,0 +1,119 @@
+<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
+  <div class="p-5 flex-grow">
+    <div class="flex justify-between items-start mb-4">
+      <div class="flex items-center">
+        <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || '#C9C78B' %>;">
+          <% case category.category_type %>
+          <% when 'expense' %>
+            <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
+          <% when 'income' %>
+            <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
+          <% when 'savings' %>
+            <%= heroicon "piggy-bank", options: { class: "h-5 w-5 text-white" } %>
+          <% end %>
+        </div>
+        <div class="ml-3">
+          <h3 class="text-lg font-medium text-gray-900"><%= category.name %></h3>
+          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
+            <%= category.category_type.capitalize %>
+          </span>
+        </div>
+      </div>
+      
+      <div class="dropdown">
+        <button type="button" class="text-gray-400 hover:text-gray-500">
+          <%= heroicon "ellipsis-vertical", options: { class: "h-5 w-5" } %>
+        </button>
+        <!-- Dropdown Menu (would be implemented with JS) -->
+      </div>
+    </div>
+    
+    <div class="mt-2">
+      <% if category.expense? %>
+        <div class="mb-4">
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-500">Monthly Budget</span>
+            <span class="font-medium text-gray-900">
+              <%= number_to_currency(category.calculator.total_amount) %> / <%= number_to_currency(category.budget&.amount || 0) %>
+            </span>
+          </div>
+          
+          <% percentage = category.calculator.budget_percentage %>
+          <div class="h-2 bg-gray-200 rounded overflow-hidden">
+            <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
+          </div>
+          
+          <div class="flex justify-between mt-1">
+            <p class="text-xs text-gray-500"><%= percentage %>% used</p>
+            <p class="text-xs <%= percentage > 90 ? 'text-status-danger' : (percentage > 75 ? 'text-status-warning' : 'text-gray-500') %>">
+              <%= budget_status(percentage) %>
+            </p>
+          </div>
+        </div>
+        
+      <% elsif category.income? %>
+        <div class="mb-4">
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-500">Monthly Income</span>
+            <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.total_amount) %></span>
+          </div>
+          
+          <div class="flex justify-between mt-2">
+            <span class="text-xs text-gray-500">vs last month</span>
+            <span class="text-xs flex items-center gap-1 <%= category.calculator.previous_month_trend == :up ? 'text-status-success' : 'text-status-danger' %>">
+              <%= heroicon category.calculator.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-3 w-3" } %>
+              <%= category.calculator.previous_month_change_percentage.abs %>%
+            </span>
+          </div>
+        </div>
+        
+      <% elsif category.savings? %>
+        <div class="mb-4">
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-500">Monthly Contribution</span>
+            <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.monthly_contribution) %></span>
+          </div>
+          
+          <% if category.savings_pool.present? %>
+            <p class="text-xs text-gray-500 mt-2">
+              Savings Pool: <%= category.savings_pool.name %>
+            </p>
+          <% end %>
+        </div>
+      <% end %>
+      
+      <% if category.items.any? %>
+        <div class="mt-4">
+          <h4 class="text-sm font-medium text-gray-700 mb-2">Top Items</h4>
+          <ul class="space-y-1">
+            <% category.calculator.top_items.each do |item, amount| %>
+              <li class="flex justify-between text-sm">
+                <span class="text-gray-600 truncate max-w-[70%]"><%= item.name %></span>
+                <% case category.category_type %>
+                <% when 'expense' %>
+                  <span class="text-status-danger font-medium">-<%= number_to_currency(amount) %></span>
+                <% when 'income' %>
+                  <span class="text-status-success font-medium">+<%= number_to_currency(amount) %></span>
+                <% when 'savings' %>
+                  <span class="text-brand font-medium"><%= number_to_currency(amount) %></span>
+                <% end %>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      <% else %>
+        <p class="text-sm text-gray-500 italic">No items yet</p>
+      <% end %>
+    </div>
+  </div>
+  
+  <div class="bg-gray-50 px-5 py-3 flex justify-between items-center mt-auto">
+    <%= link_to edit_category_path(category), class: "text-sm font-medium text-brand hover:text-brand-dark" do %>
+      Edit
+    <% end %>
+    
+    <%= link_to category_path(category), class: "text-sm font-medium text-gray-600 hover:text-gray-900" do %>
+      View Details
+    <% end %>
+  </div>
+</div> 
