@@ -7,20 +7,25 @@ FactoryBot.define do
     description { Faker::Lorem.sentence }
     association :item
 
-    trait :january_2024 do
-      date { Date.new(2024, 1, 15) }
+    trait :expense do
+      transient do
+        user { create(:user) }
+      end
+      association :item, factory: [:item, :expense]
     end
 
-    trait :june_2024 do
-      date { Date.new(2024, 6, 15) }
+    trait :income do
+      transient do
+        user { create(:user) }
+      end
+      association :item, factory: [:item, :income]
     end
 
-    trait :december_2023 do
-      date { Date.new(2023, 12, 15) }
-    end
-
-    trait :june_2023 do
-      date { Date.new(2023, 6, 15) }
+    trait :savings do
+      transient do
+        user { create(:user) }
+      end
+      association :item, factory: [:item, :savings]
     end
 
     trait :last_month do

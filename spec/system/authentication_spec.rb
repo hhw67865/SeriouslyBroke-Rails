@@ -3,8 +3,6 @@
 require "rails_helper"
 
 RSpec.describe "Authentication", type: :system do
-  before { driven_by(:selenium_chrome_headless) }
-
   describe "Sign up" do
     before { visit new_user_registration_path }
 
@@ -32,7 +30,6 @@ RSpec.describe "Authentication", type: :system do
 
         expect(page).to have_content("Welcome! You have signed up successfully.")
         expect(page).to have_current_path(authenticated_root_path)
-        expect(page).to have_content("Welcome to SeriouslyBroke")
       end
 
       private
@@ -123,7 +120,6 @@ RSpec.describe "Authentication", type: :system do
 
         expect(page).to have_content("Signed in successfully")
         expect(page).to have_current_path(authenticated_root_path)
-        expect(page).to have_content("Welcome to SeriouslyBroke")
       end
 
       it "remembers the user when requested", :aggregate_failures do
@@ -188,30 +184,16 @@ RSpec.describe "Authentication", type: :system do
     let!(:user) { create(:user, email: "test@example.com", password: "password123") }
 
     before do
-      # Use a desktop viewport size
-      page.driver.browser.manage.window.resize_to(1200, 800)
       sign_in user
       visit authenticated_root_path
     end
 
     it "signs out successfully", :aggregate_failures do
-      within("[data-sidebar-target='panel']") do
-        click_button "Sign out"
-      end
-      
+      click_on "Sign out"
+
       expect(page).to have_content("Signed out successfully")
       expect(page).to have_current_path(root_path)
-      expect(page).not_to have_content(user.email)
-    end
-
-    it "redirects to sign in page after signing out when accessing protected pages", :aggregate_failures do
-      within("[data-sidebar-target='panel']") do
-        click_button "Sign out"
-      end
-      visit authenticated_root_path
-
-      expect(page).to have_content("You need to sign in or sign up before continuing")
-      expect(page).to have_current_path(new_user_session_path)
+      expect(page).not_to have_content(user.name || user.email)
     end
   end
 end

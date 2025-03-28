@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe SavingsPool, type: :model do
-  describe 'associations' do
-    it { should belong_to(:user) }
-    it { should have_many(:categories).dependent(:nullify) }
-    it { should have_many(:items).through(:categories) }
-    it { should have_many(:entries).through(:items) }
+  describe "associations" do
+    it { is_expected.to belong_to(:user) }
+    it { is_expected.to have_many(:categories).dependent(:nullify) }
+    it { is_expected.to have_many(:items).through(:categories) }
+    it { is_expected.to have_many(:entries).through(:items) }
   end
 
-  describe 'validations' do
-    it { should validate_presence_of(:name) }
-    it { should validate_presence_of(:target_amount) }
+  describe "validations" do
+    it { is_expected.to validate_presence_of(:name) }
+    it { is_expected.to validate_presence_of(:target_amount) }
   end
 end
