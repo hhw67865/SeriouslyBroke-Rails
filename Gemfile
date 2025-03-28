@@ -33,8 +33,8 @@ group :development, :test do
   gem "faker", "~> 3.5"
 
   # Development Tools
-  gem "pry-rails", "~> 0.3.11"
   gem "byebug"
+  gem "pry-rails", "~> 0.3.11"
 end
 
 group :development do
@@ -61,5 +61,5 @@ group :test do
   gem "shoulda-matchers", "~> 6.4"
 end
 
-gem "simple_form", "~> 5.3"
 gem "heroicon"
+gem "simple_form", "~> 5.3"
