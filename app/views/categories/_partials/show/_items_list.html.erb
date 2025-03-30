@@ -1,0 +1,63 @@
+<!-- Items List -->
+<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+  <div class="flex justify-between items-center mb-4">
+    <h2 class="text-xl font-semibold">Items This Month</h2>
+  </div>
+  
+  <% current_month_items = category.calculator.current_month_items %>
+  
+  <% if current_month_items.any? %>
+    <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+      <table class="min-w-full divide-y divide-gray-300">
+        <thead class="bg-gray-50">
+          <tr>
+            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Name</th>
+            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Frequency</th>
+            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Last Date</th>
+            <th scope="col" class="px-3 py-3.5 text-right text-sm font-semibold text-gray-900">Entries</th>
+            <th scope="col" class="px-3 py-3.5 text-right text-sm font-semibold text-gray-900">Total Amount</th>
+            <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+              <span class="sr-only">Actions</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200 bg-white">
+          <% current_month_items.each do |item, data| %>
+            <tr>
+              <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                <%= item.name %>
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                <%= item.frequency&.humanize || "One-time" %>
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                <%= data[:latest_entry].date.strftime("%b %d, %Y") %>
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-right text-gray-500">
+                <%= data[:entry_count] %>
+              </td>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-right font-medium 
+                <%= category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>">
+                <%= (category.expense? ? "-" : "+") + number_to_currency(data[:total_amount]) %>
+              </td>
+              <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                <div class="flex justify-end gap-2">
+                  <%= link_to "Edit", edit_item_path(item), class: "text-brand hover:text-brand-dark" %>
+                  <%= link_to "View", item_path(item), class: "text-gray-600 hover:text-gray-900" %>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="bg-gray-50 rounded-lg p-6 text-center">
+      <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
+        <%= heroicon "inbox", options: { class: "h-6 w-6 text-gray-400" } %>
+      </div>
+      <h3 class="text-base font-medium text-gray-900 mb-1">No items for the current month</h3>
+      <p class="text-sm text-gray-500 mb-4">Items will appear here when you add entries for this month</p>
+    </div>
+  <% end %>
+</div> 

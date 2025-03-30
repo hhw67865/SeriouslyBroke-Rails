@@ -1,0 +1,34 @@
+<!-- Recent Activity -->
+<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+  <h2 class="text-xl font-semibold mb-4">Recent Activity</h2>
+  
+  <% if @recent_entries.any? %>
+    <ul class="divide-y divide-gray-200">
+      <% @recent_entries.each do |entry| %>
+        <li class="py-3">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-900"><%= entry.item.name %></p>
+              <p class="text-xs text-gray-500"><%= entry.date.strftime("%b %d, %Y") %></p>
+            </div>
+            <span class="text-sm font-medium <%= category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>">
+              <%= category.expense? ? "-" : "+" %><%= number_to_currency(entry.amount) %>
+            </span>
+          </div>
+          <% if entry.description.present? %>
+            <p class="text-xs text-gray-500 mt-1"><%= entry.description %></p>
+          <% end %>
+        </li>
+      <% end %>
+    </ul>
+    
+    <%= link_to "#", class: "mt-4 w-full inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
+      <span>View All Activity</span>
+      <%= heroicon "arrow-right", options: { class: "h-4 w-4 ml-1.5" } %>
+    <% end %>
+  <% else %>
+    <div class="text-center py-4">
+      <p class="text-sm text-gray-500">No recent activity</p>
+    </div>
+  <% end %>
+</div> 

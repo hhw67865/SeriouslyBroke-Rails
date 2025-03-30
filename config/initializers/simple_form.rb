@@ -13,7 +13,7 @@ SimpleForm.setup do |config|
   # wrapper, change the order or even add your own to the
   # stack. The options given below are used to wrap the
   # whole input.
-  config.wrappers :default, class: 'space-y-2' do |b|
+  config.wrappers :default, class: 'space-y-2 w-full' do |b|
     ## Extensions enabled by default
     # Any of these extensions can be disabled for a
     # given input by passing: `f.input EXTENSION_NAME => false`.
@@ -51,10 +51,9 @@ SimpleForm.setup do |config|
     b.optional :readonly
 
     ## Inputs
-    # b.use :input, class: 'input', error_class: 'is-invalid', valid_class: 'is-valid'
-    b.use :label, class: 'block text-base font-medium text-[#2d3436]'
-    b.use :input, class: 'appearance-none block w-full px-5 py-4 border-2 border-[#e9ecef] rounded-xl text-[#2d3436] placeholder-[#adb5bd] focus:outline-none focus:ring-2 focus:ring-[#5F741D]/20 focus:border-[#5F741D] transition duration-200 ease-in-out text-lg', error_class: 'border-red-500'
-    b.use :hint, wrap_with: { tag: :p, class: 'mt-2 text-sm text-[#6c757d]' }
+    b.use :label, class: 'block text-base font-medium text-gray-700 mb-1'
+    b.use :input, class: 'w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring focus:ring-brand focus:ring-opacity-20 transition-all placeholder:text-gray-400', error_class: 'border-red-500 focus:border-red-500 focus:ring-red-500 focus:ring-opacity-20'
+    b.use :hint, wrap_with: { tag: :p, class: 'mt-1 text-xs text-gray-500' }
     b.use :error, wrap_with: { tag: :p, class: 'mt-2 text-sm text-red-600' }
 
     ## full_messages_for
@@ -64,16 +63,16 @@ SimpleForm.setup do |config|
     # b.use :full_error, wrap_with: { tag: :span, class: :error }
   end
 
-  config.wrappers :boolean, class: 'mt-6' do |b|
+  config.wrappers :vertical_boolean, class: 'mt-6' do |b|
     b.use :html5
     b.optional :readonly
 
     b.wrapper class: 'flex items-center gap-3' do |ba|
-      ba.use :input, class: 'form-checkbox h-5 w-5 rounded border-[#e9ecef] text-[#5F741D] focus:ring-[#5F741D]/20 cursor-pointer transition duration-200 ease-in-out'
-      ba.use :label, class: 'block text-sm font-medium text-[#2d3436] cursor-pointer select-none'
+      ba.use :input, class: 'h-5 w-5 rounded border-gray-300 text-brand focus:ring-brand focus:ring-opacity-20 cursor-pointer transition duration-200 ease-in-out'
+      ba.use :label, class: 'block text-sm font-medium text-gray-700 cursor-pointer select-none'
     end
 
-    b.use :hint, wrap_with: { tag: :p, class: 'mt-1 text-xs text-[#6c757d]' }
+    b.use :hint, wrap_with: { tag: :p, class: 'mt-1 text-xs text-gray-500' }
     b.use :error, wrap_with: { tag: :p, class: 'mt-1 text-xs text-red-600' }
   end
 
@@ -87,7 +86,12 @@ SimpleForm.setup do |config|
   config.boolean_style = :inline
 
   # Default class for buttons
-  config.button_class = 'w-full flex justify-center py-4 px-5 border-0 rounded-xl shadow-sm text-lg font-medium text-white bg-[#5F741D] hover:bg-[#4b5c17] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#5F741D] transition duration-200 ease-in-out'
+  config.button_class = 'rounded-lg px-5 py-3 bg-brand hover:bg-brand-dark text-white font-medium cursor-pointer transition-colors sm:px-5 sm:py-4 w-full sm:w-auto'
+
+  # Default class for secondary buttons (like Cancel)
+  # Note: SimpleForm doesn't have built-in support for secondary button styles
+  # You can add a class on individual buttons using f.button :submit, class: 'secondary-button'
+  # Or create a custom input for it
 
   # Method used to tidy up errors. Specify any Rails Array method.
   # :first lists the first message for each field.
@@ -98,7 +102,7 @@ SimpleForm.setup do |config|
   config.error_notification_tag = :div
 
   # CSS class to add for error notification helper.
-  config.error_notification_class = 'rounded-2xl bg-[#fff5f5] p-6 mb-6'
+  config.error_notification_class = 'bg-status-danger-light text-status-danger px-4 py-3 rounded-lg mb-6 flex items-start'
 
   # Series of attempts to detect a default label method for collection.
   # config.collection_label_methods = [ :to_label, :name, :title, :to_s ]
@@ -107,14 +111,14 @@ SimpleForm.setup do |config|
   # config.collection_value_methods = [ :id, :to_s ]
 
   # You can wrap a collection of radio/check boxes in a pre-defined tag, defaulting to none.
-  # config.collection_wrapper_tag = nil
+  config.collection_wrapper_tag = :div
 
   # You can define the class to use on all collection wrappers. Defaulting to none.
-  # config.collection_wrapper_class = nil
+  config.collection_wrapper_class = 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'
 
   # You can wrap each item in a collection of radio/check boxes with a tag,
   # defaulting to :span.
-  # config.item_wrapper_tag = :span
+  config.item_wrapper_tag = :div
 
   # You can define a class to use in all item wrappers. Defaulting to none.
   # config.item_wrapper_class = nil
@@ -149,7 +153,9 @@ SimpleForm.setup do |config|
 
   # Custom wrappers for input types. This should be a hash containing an input
   # type as key and the wrapper that will be used for all inputs with specified type.
-  # config.wrapper_mappings = { string: :prepend }
+  config.wrapper_mappings = { 
+    boolean: :vertical_boolean
+  }
 
   # Namespaces where SimpleForm should look for custom input classes that
   # override default inputs.
@@ -185,5 +191,5 @@ SimpleForm.setup do |config|
 
   # Defines validation classes to the input_field. By default it's nil.
   # config.input_field_valid_class = 'is-valid'
-  # config.input_field_error_class = 'is-invalid'
+  config.input_field_error_class = 'border-red-500 focus:ring-red-500'
 end

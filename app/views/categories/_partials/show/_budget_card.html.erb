@@ -1,0 +1,42 @@
+<!-- Budget Management for Expense Categories -->
+<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+  <h2 class="text-xl font-semibold mb-4">Budget Management</h2>
+  
+  <% if category.budget.present? %>
+    <dl class="divide-y divide-gray-200 mb-4">
+      <div class="py-3 flex justify-between">
+        <dt class="text-sm font-medium text-gray-500">Budget Amount</dt>
+        <dd class="text-sm text-gray-900"><%= number_to_currency(category.budget.amount) %></dd>
+      </div>
+      
+      <div class="py-3 flex justify-between">
+        <dt class="text-sm font-medium text-gray-500">Period</dt>
+        <dd class="text-sm text-gray-900"><%= category.budget.period.capitalize %></dd>
+      </div>
+      
+      <div class="py-3 flex justify-between">
+        <dt class="text-sm font-medium text-gray-500">Spending Rate</dt>
+        <dd class="text-sm text-gray-900">
+          <%= number_to_currency(category.calculator.total_amount) %> / <%= category.budget.period.capitalize %>
+        </dd>
+      </div>
+    </dl>
+    
+    <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
+      <%= heroicon "pencil-square", options: { class: "h-4 w-4 mr-1.5" } %>
+      <span>Update Budget</span>
+    <% end %>
+  <% else %>
+    <div class="bg-gray-50 rounded-lg p-6 text-center">
+      <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
+        <%= heroicon "calculator", options: { class: "h-6 w-6 text-gray-400" } %>
+      </div>
+      <h3 class="text-base font-medium text-gray-900 mb-1">No budget set</h3>
+      <p class="text-sm text-gray-500 mb-4">Setting a budget helps you track your spending</p>
+      <%= link_to new_budget_path(category_id: category.id), class: "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-brand-dark hover:to-brand-dark transition-all duration-300" do %>
+        <%= heroicon "plus", options: { class: "h-4 w-4" } %>
+        <span>Create Budget</span>
+      <% end %>
+    </div>
+  <% end %>
+</div> 

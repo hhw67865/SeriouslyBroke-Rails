@@ -1,0 +1,117 @@
+<!-- Summary Card -->
+<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+  <h2 class="text-xl font-semibold mb-4">Summary</h2>
+  
+  <% if category.expense? %>
+    <!-- Expense Category Summary -->
+    <div class="space-y-6">
+      <div>
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-gray-500">Monthly Budget</span>
+          <span class="font-medium text-gray-900">
+            <%= number_to_currency(category.calculator.total_amount) %> / <%= number_to_currency(category.budget&.amount || 0) %>
+          </span>
+        </div>
+        
+        <% percentage = category.calculator.budget_percentage %>
+        <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+          <div class="h-3 rounded-full <%= budget_status_color(percentage) %>" style="width: <%= [percentage, 100].min %>%;"></div>
+        </div>
+        
+        <div class="flex justify-between mt-2">
+          <p class="text-sm text-gray-500"><%= percentage %>% used</p>
+          <p class="text-sm <%= budget_status_color(percentage).gsub('bg-', 'text-') %>">
+            <%= budget_status(percentage) %>
+          </p>
+        </div>
+      </div>
+      
+      <div class="border-t border-gray-200 pt-4">
+        <h3 class="text-base font-medium mb-3">Monthly Spending Trend</h3>
+        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
+          <!-- Placeholder for chart -->
+          <p class="text-gray-400">Spending trend visualization will appear here</p>
+        </div>
+      </div>
+    </div>
+    
+  <% elsif category.income? %>
+    <!-- Income Category Summary -->
+    <div class="space-y-6">
+      <div>
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-gray-500">Monthly Income</span>
+          <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.total_amount) %></span>
+        </div>
+        
+        <div class="flex justify-between mt-4">
+          <span class="text-sm text-gray-500">vs last month</span>
+          <span class="text-sm flex items-center gap-1 <%= category.calculator.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
+            <%= heroicon category.calculator.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-4 w-4" } %>
+            <%= category.calculator.previous_month_change_percentage.abs %>%
+          </span>
+        </div>
+      </div>
+      
+      <div class="border-t border-gray-200 pt-4">
+        <h3 class="text-base font-medium mb-3">Income Stability</h3>
+        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
+          <!-- Placeholder for chart -->
+          <p class="text-gray-400">Income stability visualization will appear here</p>
+        </div>
+      </div>
+    </div>
+    
+  <% elsif category.savings? %>
+    <!-- Savings Category Summary -->
+    <div class="space-y-6">
+      <div>
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-gray-500">Monthly Contribution</span>
+          <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.monthly_contribution) %></span>
+        </div>
+        
+        <% if category.savings_pool.present? %>
+          <div class="mt-4 p-4 rounded-lg bg-gray-50 border border-gray-200">
+            <div class="flex justify-between items-start">
+              <div>
+                <h4 class="text-sm font-medium text-gray-700">Savings Pool</h4>
+                <p class="text-base font-medium mt-1"><%= category.savings_pool.name %></p>
+                <p class="text-xs text-gray-500 mt-1">This category contributes to a shared savings pool</p>
+              </div>
+              
+              <div class="text-right">
+                <%= link_to savings_pool_path(category.savings_pool), class: "text-sm text-brand hover:text-brand-dark flex items-center" do %>
+                  <span>View details</span>
+                  <%= heroicon "arrow-right", options: { class: "h-3.5 w-3.5 ml-1" } %>
+                <% end %>
+              </div>
+            </div>
+            
+            <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount > 0 %>
+              <% progress = category.savings_pool.calculator.progress_percentage %>
+              <div class="mt-3">
+                <div class="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>Pool progress</span>
+                  <span><%= number_to_currency(category.savings_pool.calculator.current_balance) %> / <%= number_to_currency(category.savings_pool.target_amount) %></span>
+                </div>
+                <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div class="h-2 bg-brand rounded-full" style="width: <%= progress %>%;"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1"><%= progress %>% of target</p>
+              </div>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+      
+      <div class="border-t border-gray-200 pt-4">
+        <h3 class="text-base font-medium mb-3">Savings Progress</h3>
+        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
+          <!-- Placeholder for chart -->
+          <p class="text-gray-400">Savings progress visualization will appear here</p>
+        </div>
+      </div>
+    </div>
+  <% end %>
+</div> 

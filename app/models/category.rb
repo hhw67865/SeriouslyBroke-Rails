@@ -9,6 +9,7 @@ class Category < ApplicationRecord
 
   validates :name, presence: true
   validates :category_type, presence: true
+  validates :name, uniqueness: { scope: :user_id }
 
   enum :category_type,
        {
@@ -24,7 +25,6 @@ class Category < ApplicationRecord
   scope :incomes, -> { where(category_type: :income) }
   scope :savings, -> { where(category_type: :savings) }
 
-  # Enhanced scopes with includes
   scope :with_type,
         lambda { |type|
           case (type || :expense).to_sym

@@ -52,6 +52,9 @@ class CategoriesController < ApplicationController
 
   def set_category
     @category = current_user.categories.find(params[:id])
+    
+    # Preload entries with their items for the recent activity section
+    @recent_entries = @category.entries.includes(:item).order(date: :desc).limit(5)
   end
 
   def category_params

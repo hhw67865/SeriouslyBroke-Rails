@@ -1,42 +1,122 @@
-<%= form_with(model: category, class: "contents") do |form| %>
-  <% if category.errors.any? %>
-    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
-      <h2><%= pluralize(category.errors.count, "error") %> prohibited this category from being saved:</h2>
+<%= simple_form_for(category) do |f| %>
+  <%= f.error_notification %>
+  <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
 
-      <ul class="list-disc ml-6">
-        <% category.errors.each do |error| %>
-          <li><%= error.full_message %></li>
-        <% end %>
-      </ul>
+  <div data-controller="app--category--form">
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Basic Information</h2>
+        
+        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation Fund" %>
+
+        <div class="space-y-2 mt-5">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <% Category.category_types.keys.each do |type| %>
+              <div>
+                <label class="cursor-pointer flex flex-col">
+                  <div class="relative">
+                    <%= f.radio_button :category_type, type, 
+                                      class: "sr-only", 
+                                      data: { 
+                                        action: "change->app--category--form#selectCategoryType"
+                                      } %>
+                    <div class="w-full border-2 rounded-lg p-4 transition-all flex flex-col items-center category-type-option
+                              <%= f.object.category_type == type ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300' %>"
+                        data-type="<%= type %>"
+                        data-app--category--form-target="categoryTypeOption">
+                      <div class="w-10 h-10 rounded-md flex items-center justify-center mb-2 
+                                <%= f.object.category_type == type ? 'bg-brand' : 'bg-gray-200' %>"
+                           data-app--category--form-target="categoryTypeIcon">
+                        <% case type %>
+                        <% when "expense" %>
+                          <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
+                        <% when "income" %>
+                          <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
+                        <% when "savings" %>
+                          <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
+                        <% end %>
+                      </div>
+                      <span class="text-sm font-medium <%= f.object.category_type == type ? 'text-gray-900' : 'text-gray-700' %>"
+                            data-app--category--form-target="categoryTypeText">
+                        <%= type.capitalize %>
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+          <% if category.errors[:category_type].any? %>
+            <p class="mt-2 text-sm text-red-600"><%= category.errors[:category_type].first %></p>
+          <% end %>
+        </div>
+      </div>
     </div>
-  <% end %>
 
-  <div class="my-5">
-    <%= form.label :name %>
-    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": category.errors[:name].none?, "border-red-400 focus:outline-red-600": category.errors[:name].any? }] %>
-  </div>
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Appearance</h2>
+        
+        <%= f.label :color %>
+        
+        <div class="mb-4 mt-2">
+          <div class="grid grid-cols-8 sm:grid-cols-10 lg:grid-cols-12 gap-3">
+            <% %w[#C9C78B #5F741D #4CAF50 #2EC4B6 #2196F3 #03A9F4 #673AB7 #9C27B0 #F44336 #FF9800 #FFC107 #FDCA40 #455A64 #212121 #E2E1C6 #FDFDFE].each do |color| %>
+              <div>
+                <label class="cursor-pointer">
+                  <%= f.radio_button :color, color, 
+                                    class: "sr-only color-radio", 
+                                    data: { 
+                                      action: "change->app--category--form#selectColor"
+                                    } %>
+                  <div class="h-10 w-10 rounded-md border-2 transition-all
+                            <%= f.object.color == color ? 'ring-2 ring-offset-2 ring-gray-700' : 'hover:opacity-90' %>"
+                       data-color="<%= color %>" 
+                       data-app--category--form-target="colorOption"
+                       style="background-color: <%= color %>;"></div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+          
+          <div class="mt-3 text-center">
+            <span class="inline-flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-700">Selected:</span>
+              <span 
+                class="h-6 w-6 rounded inline-block border"
+                data-app--category--form-target="selectedColorPreview"
+                style="background-color: <%= f.object.color || '#C9C78B' %>;">
+              </span>
+              <code class="text-sm bg-gray-100 px-2 py-1 rounded" data-app--category--form-target="selectedColorCode">
+                <%= f.object.color || "#C9C78B" %>
+              </code>
+            </span>
+          </div>
+        </div>
+        
+        <%= f.input :color, 
+                   label: false, 
+                   placeholder: "#C9C78B", 
+                   hint: "Enter a valid hex color code (e.g. #C9C78B)", 
+                   input_html: { 
+                     data: { 
+                       "app--category--form-target": "colorInput",
+                       action: "input->app--category--form#colorInputChanged"
+                     }
+                   } %>
+      </div>
+    </div>
 
-  <div class="my-5">
-    <%= form.label :category_type %>
-    <%= form.number_field :category_type, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": category.errors[:category_type].none?, "border-red-400 focus:outline-red-600": category.errors[:category_type].any? }] %>
-  </div>
+    <%= f.hidden_field :user_id, value: current_user.id if category.new_record? %>
 
-  <div class="my-5">
-    <%= form.label :color %>
-    <%= form.text_field :color, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": category.errors[:color].none?, "border-red-400 focus:outline-red-600": category.errors[:color].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :user_id %>
-    <%= form.text_field :user_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": category.errors[:user_id].none?, "border-red-400 focus:outline-red-600": category.errors[:user_id].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :savings_pool_id %>
-    <%= form.text_field :savings_pool_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": category.errors[:savings_pool_id].none?, "border-red-400 focus:outline-red-600": category.errors[:savings_pool_id].any? }] %>
-  </div>
-
-  <div class="inline">
-    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+    <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
+      <% if category.persisted? %>
+        <%= link_to "Cancel", category_path(category), class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
+      <% else %>
+        <%= link_to "Cancel", categories_path, class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
+      <% end %>
+      
+      <%= f.button :submit %>
+    </div>
   </div>
 <% end %>

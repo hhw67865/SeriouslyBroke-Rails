@@ -10,6 +10,7 @@ Rails.application.routes.draw do
     resources :entries
     resources :items
     resources :categories
+    resources :budgets
   end
 
   # Landing page for non-authenticated users
