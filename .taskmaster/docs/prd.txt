@@ -22,9 +22,13 @@ SeriouslyBroke is a modern personal finance tracking web application that helps 
 - Category filtering and organization tools
 
 ## Transaction Tracking (Entries)
+- **Entry = Transaction**: The actual financial event (e.g., "spent $15.00 on March 15th")
+- **Item = Specific Place/Thing**: Where the money was spent (e.g., "Chickfila")
+- **Category = Grouping**: For budgeting purposes (e.g., "Food & Dining")
+- **Data Flow**: Entry → Item → Category (so you can track all visits to Chickfila)
 - Easy entry creation for income and expenses
-- Transaction categorization
-- Transaction search and filtering
+- Transaction categorization through items and categories
+- Transaction search and filtering by date, category, or item
 - Transaction history with detailed views
 - Basic transaction editing and deletion
 
@@ -68,13 +72,15 @@ SeriouslyBroke is a modern personal finance tracking web application that helps 
 <PRD>
 # Technical Architecture  
 ## System Components
-- **Frontend**: Ruby on Rails with ERB templates, Stimulus controllers for interactivity
-- **Backend**: Ruby on Rails API with RESTful endpoints
+- **Architecture**: Rails monolith application with ERB templates and Stimulus controllers
+- **Frontend**: ERB templates with Stimulus controllers for interactivity
+- **Backend**: Rails controllers with both HTML and JSON responses
 - **Database**: PostgreSQL with UUID primary keys
 - **Styling**: Tailwind CSS with custom components
 - **Authentication**: Devise gem for user management
 - **Charts**: Chart.js for data visualization
-- **Testing**: RSpec for unit and integration tests
+- **Testing**: Comprehensive RSpec test suite (unit, integration, system tests)
+- **Code Quality**: RuboCop for code style and quality enforcement
 
 ## Data Models
 - **User**: Authentication and profile information
@@ -84,11 +90,13 @@ SeriouslyBroke is a modern personal finance tracking web application that helps 
 - **Budget**: Financial planning and limits
 - **SavingsPool**: Goal-oriented savings tracking
 
-## APIs and Integrations
-- RESTful API endpoints for all CRUD operations
-- JSON responses for AJAX interactions
-- Authentication-secured endpoints
+## Controllers and Responses
+- Rails controllers serving both HTML views and JSON responses
+- RESTful routes for all CRUD operations
+- AJAX interactions with JSON responses where needed
+- Authentication-secured actions using Devise
 - Proper error handling and status codes
+- Form submissions with Rails UJS/Stimulus integration
 
 ## Infrastructure Requirements
 - PostgreSQL database server
@@ -103,8 +111,10 @@ The development focuses on creating a solid, working personal finance tracking a
 ### Foundation & CRUD Operations
 - Solid user authentication and profile management
 - Complete CRUD operations for all core models (Categories, Entries, Budgets, SavingsPools, Items)
+- Rails controllers with both HTML views and JSON responses
 - Proper data validation and error handling
-- Secure API endpoints with authentication
+- Comprehensive RSpec tests for all functionality
+- RuboCop compliance for all code
 
 ### Data Presentation & User Experience
 - Clean, functional dashboard showing key financial metrics
@@ -122,17 +132,19 @@ The development focuses on creating a solid, working personal finance tracking a
 - Comprehensive test coverage
 
 ### Quality & Security
+- Comprehensive RSpec test suite (unit, integration, system tests)
+- 100% RuboCop compliance with custom configuration
 - Security best practices implementation
-- Code quality and maintainability
+- Code quality and maintainability standards
 - Documentation for future development
-- Testing coverage for all features
+- Continuous testing and code quality checks
 
 # Logical Dependency Chain
 ## Foundation Layer (Priority 1)
 1. **User Authentication System**: Must be rock-solid before any other features
 2. **Core Data Models**: User, Category, Entry, Item, Budget, SavingsPool
 3. **Database Schema**: Properly normalized with appropriate indexes
-4. **RESTful API Endpoints**: Complete CRUD operations for all models
+4. **Rails Controllers & Routes**: Complete CRUD operations with HTML views and JSON responses
 
 ## Core Functionality (Priority 2)
 5. **Category Management**: Full CRUD with proper validation and user interface
@@ -147,10 +159,10 @@ The development focuses on creating a solid, working personal finance tracking a
 12. **Responsive Design**: Mobile-friendly interface with Tailwind CSS
 
 ## Quality & Polish (Priority 4)
-13. **Error Handling**: Comprehensive error messages and validation
-14. **Performance Optimization**: Database queries and page load times
-15. **Security Implementation**: Data protection and secure endpoints
-16. **Testing Coverage**: Comprehensive test suite for all features
+13. **RSpec Testing**: Comprehensive test suite for all models, controllers, and features
+14. **RuboCop Compliance**: Code quality and style enforcement across entire codebase
+15. **Error Handling**: Comprehensive error messages and validation
+16. **Performance & Security**: Database optimization and security best practices
 
 # Risks and Mitigations  
 ## Technical Challenges

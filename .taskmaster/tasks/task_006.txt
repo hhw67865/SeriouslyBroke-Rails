@@ -1,0 +1,20 @@
+# Task ID: 6
+# Title: Implement Transaction Tracking System
+# Status: pending
+# Dependencies: 3, 4, 5
+# Priority: medium
+# Description: Build the transaction entry and management functionality for income and expenses.
+# Details:
+1. Create transaction entry form with category selection
+2. Implement transaction listing with filtering and sorting
+3. Add transaction search functionality
+4. Create transaction detail view
+5. Implement transaction categorization and tagging
+6. Create transaction edit and delete functionality
+7. Implement date range filtering
+8. Add transaction history with pagination
+9. Create Stimulus controllers for dynamic form behavior
+10. Implement proper validation and error handling
+
+# Test Strategy:
+Write system tests for transaction creation, editing, deletion. Test filtering, sorting, and search functionality. Verify categorization works correctly and updates related budget calculations.

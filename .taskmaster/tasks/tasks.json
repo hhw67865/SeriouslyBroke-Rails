@@ -41,84 +41,85 @@
       },
       {
         "id": 4,
-        "title": "Implement RESTful API Endpoints",
-        "description": "Create RESTful API endpoints for all CRUD operations on core models.",
+        "title": "Implement Rails Controllers",
+        "description": "Enhance existing Rails controllers to support core features and user workflows, focusing on data relationships and user experience.",
         "status": "pending",
         "dependencies": [
           3
         ],
         "priority": "high",
-        "details": "Implement controllers with RESTful endpoints for:\n1. Users (profile management only)\n2. Categories\n3. Entries (transactions)\n4. Items\n5. Budgets\n6. SavingsPools\n\nEnsure proper JSON responses for AJAX interactions. Implement strong parameters for security. Add pagination for list endpoints. Implement proper error handling and status codes. Document API endpoints for future reference.",
-        "testStrategy": "Write request specs for all API endpoints testing successful operations and error cases. Verify proper JSON structure, status codes, and error messages. Test pagination and filtering functionality.",
+        "details": "Enhance existing Rails controllers to support key features and workflows for:\n1. Categories\n2. Items\n3. Entries (transactions)\n4. Budgets\n5. SavingsPools\n6. Users (profile management only)\n\nFocus on implementing the data relationships correctly (Entries → Items → Categories) and ensuring user workflows are intuitive. Controllers should remain simple with minimal changes, only modifying when needed to support proper features. Ensure views are user-friendly and support the core user workflows.\n\nKey relationships to implement:\n- Entry = Transaction (e.g., spending $15.00 on March 15th)\n- Item = Specific place/thing (e.g., Chickfila)\n- Category = Grouping for budgeting (e.g., Food & Dining)",
+        "testStrategy": "Write RSpec system tests that verify users can actually use the features. Focus on testing user workflows like 'user can create a category', 'user can add an item to a category', 'user can create an entry for an item', etc. Create simple, practical tests that ensure the functionality works from the user's perspective and that data relationships are maintained correctly.",
         "subtasks": [
           {
             "id": 1,
-            "title": "Implement Categories Controller with RESTful Endpoints",
-            "description": "Create a controller for Categories with all CRUD operations (index, show, create, update, destroy) that returns JSON responses.",
+            "title": "Enhance Categories Controller",
+            "description": "Enhance the existing Categories controller to support proper user workflows and data relationships.",
+            "status": "in-progress",
             "dependencies": [],
-            "details": "Generate the Categories controller with `rails g controller Api::V1::Categories`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `category_params` method that permits only allowed attributes. Add authentication checks to ensure users can only access their own categories. Return appropriate HTTP status codes (200 for success, 201 for creation, 204 for deletion, 400/422 for validation errors, 404 for not found).",
-            "status": "pending",
-            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+            "details": "The basic CRUD controller for Categories already exists. Focus on enhancing it to:\n1. Ensure categories are properly associated with the current user\n2. Add any necessary methods to support viewing items within categories\n3. Implement proper validation and error handling\n4. Ensure the controller supports the view of all transactions within a category\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create, view, and manage their categories as the foundation for the budgeting system.",
+            "testStrategy": "Write RSpec system tests that verify users can create categories, view their categories, and see items/transactions within those categories. Test that users can only access their own categories."
           },
           {
             "id": 2,
-            "title": "Implement Entries (Transactions) Controller with RESTful Endpoints",
-            "description": "Create a controller for Entries with all CRUD operations that returns JSON responses with proper pagination.",
+            "title": "Enhance Items Controller",
+            "description": "Enhance the existing Items controller to support proper categorization and transaction tracking.",
+            "status": "pending",
             "dependencies": [
               1
             ],
-            "details": "Generate the Entries controller with `rails g controller Api::V1::Entries`. Implement index with pagination (use Kaminari or will_paginate gem), show, create, update, and destroy actions. Use strong parameters with a private `entry_params` method. Add authentication and authorization to ensure users can only access their own entries. Implement filtering by date range and category in the index action. Return appropriate HTTP status codes and error messages.",
-            "status": "pending",
-            "testStrategy": "Write controller tests for each endpoint including pagination, filtering, and authorization checks."
+            "details": "The basic CRUD controller for Items already exists. Focus on enhancing it to:\n1. Ensure items are properly associated with categories and the current user\n2. Add methods to support viewing all transactions for a specific item (e.g., all Chickfila transactions)\n3. Implement proper validation and error handling\n4. Support easy categorization of items\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create and categorize items, and view all transactions related to a specific item.",
+            "testStrategy": "Write RSpec system tests that verify users can create items, assign them to categories, and view all transactions for a specific item. Test that users can only access their own items."
           },
           {
             "id": 3,
-            "title": "Implement Budgets Controller with RESTful Endpoints",
-            "description": "Create a controller for Budgets with all CRUD operations that returns JSON responses.",
+            "title": "Enhance Entries (Transactions) Controller",
+            "description": "Enhance the existing Entries controller to support proper transaction recording and relationship with items.",
+            "status": "pending",
             "dependencies": [
               2
             ],
-            "details": "Generate the Budgets controller with `rails g controller Api::V1::Budgets`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `budget_params` method. Add authentication checks to ensure users can only access their own budgets. Return appropriate HTTP status codes and error messages. Include related category information in the JSON response where appropriate.",
-            "status": "pending",
-            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+            "details": "The basic CRUD controller for Entries already exists. Focus on enhancing it to:\n1. Ensure entries are properly associated with items and the current user\n2. Add methods to support filtering transactions by date, item, or category\n3. Implement proper validation and error handling\n4. Support the core transaction flow (e.g., spending $15.00 at Chickfila on March 15th)\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily record transactions, associate them with items, and view their transaction history filtered in useful ways.",
+            "testStrategy": "Write RSpec system tests that verify users can create entries with proper item associations, view their transaction history, and filter transactions by date, item, or category. Test that users can only access their own entries."
           },
           {
             "id": 4,
-            "title": "Implement SavingsPools Controller with RESTful Endpoints",
-            "description": "Create a controller for SavingsPools with all CRUD operations that returns JSON responses.",
+            "title": "Enhance Budgets Controller",
+            "description": "Enhance the existing Budgets controller to support proper budget management and category relationships.",
+            "status": "pending",
             "dependencies": [
               3
             ],
-            "details": "Generate the SavingsPools controller with `rails g controller Api::V1::SavingsPools`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `savings_pool_params` method. Add authentication checks to ensure users can only access their own savings pools. Return appropriate HTTP status codes and error messages. Include current amount and target amount in the JSON response.",
-            "status": "pending",
-            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+            "details": "The basic CRUD controller for Budgets already exists. Focus on enhancing it to:\n1. Ensure budgets are properly associated with categories and the current user\n2. Add methods to support viewing budget progress and spending within categories\n3. Implement proper validation and error handling\n4. Support comparing actual spending against budgeted amounts\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create budgets for categories, track their spending against budgets, and get useful insights about their budget performance.",
+            "testStrategy": "Write RSpec system tests that verify users can create budgets for categories, view their budget progress, and see comparisons between actual and budgeted spending. Test that users can only access their own budgets."
           },
           {
             "id": 5,
-            "title": "Implement Items Controller with RESTful Endpoints",
-            "description": "Create a controller for Items with all CRUD operations that returns JSON responses.",
+            "title": "Enhance SavingsPools Controller",
+            "description": "Enhance the existing SavingsPools controller to support proper savings tracking and goal management.",
+            "status": "pending",
             "dependencies": [
               4
             ],
-            "details": "Generate the Items controller with `rails g controller Api::V1::Items`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `item_params` method. Add authentication checks to ensure users can only access their own items. Return appropriate HTTP status codes and error messages. Implement pagination for the index action if the items list could be large.",
-            "status": "pending",
-            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+            "details": "The basic CRUD controller for SavingsPools already exists. Focus on enhancing it to:\n1. Ensure savings pools are properly associated with the current user\n2. Add methods to support tracking progress toward savings goals\n3. Implement proper validation and error handling\n4. Support adding funds to and withdrawing funds from savings pools\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create savings goals, track their progress, and manage their savings effectively.",
+            "testStrategy": "Write RSpec system tests that verify users can create savings pools, add funds to them, withdraw funds, and track progress toward goals. Test that users can only access their own savings pools."
           },
           {
             "id": 6,
-            "title": "Implement Users Profile Management Endpoints",
-            "description": "Create endpoints for user profile management (show, update) that returns JSON responses.",
+            "title": "Enhance User Profile Management",
+            "description": "Enhance the existing user profile management to support user preferences and settings.",
+            "status": "pending",
             "dependencies": [
               5
             ],
-            "details": "Generate the Users controller with `rails g controller Api::V1::Users` or extend existing controller. Implement show and update actions for profile management only. Use strong parameters with a private `user_params` method that permits only profile-related attributes (not authentication fields). Add authentication checks to ensure users can only access their own profile. Return appropriate HTTP status codes and error messages.",
-            "status": "pending",
-            "testStrategy": "Write controller tests for profile endpoints verifying proper JSON responses, status codes, and authentication requirements."
+            "details": "The basic profile management already exists. Focus on enhancing it to:\n1. Support user preferences and settings\n2. Add methods for viewing overall financial summaries\n3. Implement proper validation and error handling\n4. Support customization of the user experience\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily manage their profile, set preferences, and get useful summaries of their financial situation.",
+            "testStrategy": "Write RSpec system tests that verify users can view and edit their profile information, set preferences, and view financial summaries. Test that users cannot access other users' profiles."
           },
           {
             "id": 7,
-            "title": "Implement Error Handling and Response Standardization",
-            "description": "Create a standardized approach to error handling and JSON responses across all controllers.",
+            "title": "Implement Error Handling and User Experience Improvements",
+            "description": "Enhance error handling and user experience across all controllers.",
+            "status": "pending",
             "dependencies": [
               1,
               2,
@@ -127,20 +128,8 @@
               5,
               6
             ],
-            "details": "Create a concerns module (e.g., `Api::V1::ResponseHandler`) that can be included in all API controllers. Implement methods for standardized JSON responses with proper status codes. Handle common errors like record not found, validation errors, and unauthorized access. Create helper methods for pagination metadata. Ensure all controllers use this standardized approach for consistent API behavior.",
-            "status": "pending",
-            "testStrategy": "Write tests for the concerns module and verify it's properly applied across all controllers."
-          },
-          {
-            "id": 8,
-            "title": "Create API Documentation",
-            "description": "Document all API endpoints with examples, required parameters, and response formats.",
-            "dependencies": [
-              7
-            ],
-            "details": "Use a tool like Swagger/OpenAPI, RAML, or create a markdown document that details all endpoints. For each endpoint, document: URL, HTTP method, required parameters, example request, example response, possible error responses, and authentication requirements. Include information about pagination for list endpoints. Store the documentation in the project repository and make it accessible to developers.",
-            "status": "pending",
-            "testStrategy": "Manually verify that all endpoints are properly documented and the documentation matches the actual implementation."
+            "details": "Focus on enhancing the user experience and error handling across all controllers:\n1. Implement consistent error handling and user feedback\n2. Add helpful flash messages and redirects\n3. Ensure all controllers handle edge cases gracefully\n4. Implement proper validation feedback in forms\n5. Keep the controllers simple and focused on supporting the user workflow\n\nMake sure users have a smooth, intuitive experience and receive helpful feedback when errors occur.",
+            "testStrategy": "Write RSpec system tests that verify error handling for common scenarios like record not found, validation errors, and unauthorized access. Test that users receive helpful feedback and can easily recover from errors."
           }
         ]
       },
@@ -316,11 +305,81 @@
         "details": "1. Implement SSL/TLS encryption for all communications\n2. Add secure headers (Content-Security-Policy, X-XSS-Protection)\n3. Implement rate limiting for authentication attempts\n4. Add IP-based blocking for suspicious activity\n5. Create security audit logging\n6. Implement regular security dependency updates\n7. Add database encryption for sensitive data\n8. Create security vulnerability scanning in CI pipeline\n9. Implement two-factor authentication option\n10. Add session timeout and management",
         "testStrategy": "Perform security penetration testing. Verify SSL/TLS configuration. Test rate limiting and blocking functionality. Verify secure headers are properly set. Test two-factor authentication flow.",
         "subtasks": []
+      },
+      {
+        "id": 16,
+        "title": "Implement Comprehensive Testing and Code Quality Framework",
+        "description": "Establish a practical testing and code quality framework that ensures the application works correctly for users and follows Ruby best practices.",
+        "status": "pending",
+        "dependencies": [
+          1,
+          3,
+          4
+        ],
+        "priority": "high",
+        "details": "1. Set up basic RSpec test suite:\n   - Configure model tests with factories using FactoryBot\n   - Create system tests using Capybara for critical user flows\n   - Focus on testing user-facing functionality\n\n2. Configure RuboCop for code style enforcement:\n   - Create custom .rubocop.yml with project-specific rules\n   - Implement pre-commit hooks to prevent non-compliant code\n   - Configure auto-correction for common issues\n\n3. Implement simple test coverage monitoring:\n   - Set up SimpleCov for basic test coverage reporting\n   - Focus on covering critical user paths\n\n4. Create development workflow enforcement:\n   - Implement pull request templates with quality checklists\n   - Configure branch protection rules requiring passing tests\n   - Create documentation for testing standards and practices\n\n5. Implement test data management:\n   - Create focused fixtures and factories\n   - Set up database cleaner for test isolation",
+        "testStrategy": "1. Verify test suite functionality:\n   - Run full test suite and ensure all tests pass\n   - Manually verify that critical models and features have tests\n   - Confirm common user scenarios are tested\n\n2. Validate code quality enforcement:\n   - Run RuboCop against the entire codebase and verify compliance\n   - Test pre-commit hooks by attempting to commit non-compliant code\n   - Check that code style is consistent across the project\n\n3. Test development workflow:\n   - Create a pull request and verify templates and checks work\n   - Attempt to merge failing code and confirm it's prevented\n   - Confirm documentation is accessible and understandable\n\n4. Verify user experience:\n   - Run system tests to confirm critical user flows work correctly\n   - Verify that the application behaves as expected from a user perspective",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Set up RSpec and test configuration",
+            "description": "Configure the testing environment with RSpec, including necessary gems, database cleaner, and test database setup to enable effective testing of the application.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Add RSpec, FactoryBot, and DatabaseCleaner gems to Gemfile\n2. Run `rails generate rspec:install` to set up the RSpec framework\n3. Configure the test database in database.yml\n4. Set up FactoryBot in spec/rails_helper.rb\n5. Configure DatabaseCleaner for test isolation\n6. Create a basic spec_helper.rb with common test configurations\n7. Set up test environment variables in .env.test file",
+            "testStrategy": "Verify the test suite runs successfully with a simple test case to confirm proper configuration."
+          },
+          {
+            "id": 2,
+            "title": "Implement model tests with FactoryBot",
+            "description": "Create focused model tests that verify validations and associations for all models in the application.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Create factories for each model in spec/factories/\n2. Write tests for model validations (presence, uniqueness, format)\n3. Test model associations (belongs_to, has_many relationships)\n4. Test essential custom model methods\n5. Focus on Category, Entry, and User models as priorities",
+            "testStrategy": "Run model tests in isolation to ensure they don't depend on other components. Focus on testing critical functionality."
+          },
+          {
+            "id": 3,
+            "title": "Create system tests for critical user flows",
+            "description": "Implement Capybara-based system tests that verify end-to-end functionality of critical user workflows to ensure features work from the user's perspective.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Set up Capybara and Chrome/Firefox drivers\n2. Create system tests for user registration and authentication\n3. Implement tests for category creation, editing, and deletion\n4. Test entry creation, editing, and deletion workflows\n5. Verify filtering and sorting functionality\n6. Test responsive behavior on different screen sizes\n7. Focus on happy paths first, then add edge cases\n<info added on 2025-07-10T19:49:31.277Z>\n1. Set up Capybara with JavaScript capability\n2. Create system tests for core user workflows:\n   - User registration and login\n   - Creating, editing, and deleting categories\n   - Creating, editing, and deleting entries\n   - Dashboard viewing and navigation\n   - Authorization (users can only access their own data)\n3. Focus on happy path scenarios first\n4. Verify form submissions save data correctly\n5. Keep tests simple and focused on proving features work correctly\n</info added on 2025-07-10T19:49:31.277Z>",
+            "testStrategy": "Record videos of test runs for debugging. Use realistic user scenarios and verify both UI elements and database changes."
+          },
+          {
+            "id": 4,
+            "title": "Configure RuboCop for code style enforcement",
+            "description": "Set up RuboCop to enforce consistent code style across the project and integrate it with the development workflow.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Add RuboCop and related gems to the Gemfile\n2. Create a custom .rubocop.yml configuration file with project-specific rules\n3. Set up Rails-specific cops for Rails best practices\n4. Configure documentation requirements for public methods\n5. Add pre-commit hooks using Husky or pre-commit to prevent non-compliant code\n6. Run RuboCop on the existing codebase and fix critical issues\n7. Document code style guidelines in the project README",
+            "testStrategy": "Verify RuboCop runs successfully on the codebase and that pre-commit hooks prevent non-compliant code from being committed."
+          },
+          {
+            "id": 5,
+            "title": "Set up SimpleCov for basic test coverage",
+            "description": "Configure SimpleCov to provide basic test coverage reporting to help identify untested code paths.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Add SimpleCov gem to the Gemfile\n2. Configure SimpleCov in spec_helper.rb\n3. Set up HTML report generation\n4. Add SimpleCov configuration to ignore unnecessary files\n5. Document how to view and interpret coverage reports",
+            "testStrategy": "Run the test suite and verify that SimpleCov generates a coverage report. Check that the report correctly identifies tested and untested code."
+          },
+          {
+            "id": 6,
+            "title": "Create pull request templates and documentation",
+            "description": "Set up pull request templates and testing documentation to ensure consistent development practices.",
+            "status": "pending",
+            "dependencies": [],
+            "details": "1. Create a .github/PULL_REQUEST_TEMPLATE.md file\n2. Include sections for test coverage, code style compliance, and manual testing\n3. Document testing practices in the project README\n4. Create a TESTING.md file with detailed testing instructions\n5. Document how to run the test suite locally",
+            "testStrategy": "Create a test pull request to verify the template works correctly. Have another developer review the documentation for clarity."
+          }
+        ]
       }
     ],
     "metadata": {
       "created": "2025-07-10T16:06:30.410Z",
-      "updated": "2025-07-10T16:07:17.320Z",
+      "updated": "2025-07-10T19:56:55.556Z",
       "description": "Tasks for master context"
     }
   }
