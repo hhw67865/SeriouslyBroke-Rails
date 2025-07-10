@@ -1,0 +1,327 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Setup Project Repository and Base Architecture",
+        "description": "Initialize the Rails project with the required technical stack and configure the development environment.",
+        "details": "1. Create a new Rails 7.0+ project\n2. Configure PostgreSQL 14.0+ with UUID primary keys\n3. Set up Tailwind CSS 3.0+\n4. Configure Stimulus (Hotwire) for frontend interactivity\n5. Set up RSpec for testing\n6. Configure Docker for consistent environments\n7. Set up GitHub Actions for CI/CD\n8. Configure RuboCop for code quality enforcement\n9. Set up SSL/TLS encryption\n10. Create bin/dev script for local development",
+        "testStrategy": "Verify project initialization with basic smoke tests. Ensure all components (Rails, PostgreSQL, Tailwind, Stimulus) are properly configured and working together. Test Docker container builds and runs successfully.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Implement User Authentication System",
+        "description": "Set up secure user registration, login, and profile management using Devise gem.",
+        "details": "1. Install and configure Devise gem\n2. Create User model with necessary attributes (email, password, profile info)\n3. Implement user registration with email confirmation\n4. Set up login/logout functionality\n5. Implement password reset and account recovery\n6. Create user profile management pages\n7. Configure bcrypt for secure password storage\n8. Implement CSRF protection\n9. Set up session management with Redis\n10. Create basic user dashboard page",
+        "testStrategy": "Write RSpec tests for user registration, login, logout, password reset, and profile update flows. Test security measures including password encryption, CSRF protection, and session management. Verify email confirmation works correctly.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Design and Implement Database Schema",
+        "description": "Create the core data models and database schema with proper relationships and indexes.",
+        "details": "Create the following models with appropriate relationships and validations:\n1. User: Authentication and profile information\n2. Category: name, description, user_id, budget_amount\n3. Entry: amount, date, description, category_id, user_id, entry_type (income/expense)\n4. Item: name, description, price, category_id\n5. Budget: name, amount, period_start, period_end, user_id\n6. SavingsPool: name, target_amount, current_amount, deadline, user_id\n\nEnsure proper indexes on foreign keys and frequently queried columns. Set up UUID primary keys for all models. Create database migrations and seed data for testing.",
+        "testStrategy": "Write unit tests for all models verifying validations, associations, and business logic. Test database performance with benchmark tests for common queries. Verify proper normalization and referential integrity.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "done",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Implement RESTful API Endpoints",
+        "description": "Create RESTful API endpoints for all CRUD operations on core models.",
+        "status": "pending",
+        "dependencies": [
+          3
+        ],
+        "priority": "high",
+        "details": "Implement controllers with RESTful endpoints for:\n1. Users (profile management only)\n2. Categories\n3. Entries (transactions)\n4. Items\n5. Budgets\n6. SavingsPools\n\nEnsure proper JSON responses for AJAX interactions. Implement strong parameters for security. Add pagination for list endpoints. Implement proper error handling and status codes. Document API endpoints for future reference.",
+        "testStrategy": "Write request specs for all API endpoints testing successful operations and error cases. Verify proper JSON structure, status codes, and error messages. Test pagination and filtering functionality.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Categories Controller with RESTful Endpoints",
+            "description": "Create a controller for Categories with all CRUD operations (index, show, create, update, destroy) that returns JSON responses.",
+            "dependencies": [],
+            "details": "Generate the Categories controller with `rails g controller Api::V1::Categories`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `category_params` method that permits only allowed attributes. Add authentication checks to ensure users can only access their own categories. Return appropriate HTTP status codes (200 for success, 201 for creation, 204 for deletion, 400/422 for validation errors, 404 for not found).",
+            "status": "pending",
+            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+          },
+          {
+            "id": 2,
+            "title": "Implement Entries (Transactions) Controller with RESTful Endpoints",
+            "description": "Create a controller for Entries with all CRUD operations that returns JSON responses with proper pagination.",
+            "dependencies": [
+              1
+            ],
+            "details": "Generate the Entries controller with `rails g controller Api::V1::Entries`. Implement index with pagination (use Kaminari or will_paginate gem), show, create, update, and destroy actions. Use strong parameters with a private `entry_params` method. Add authentication and authorization to ensure users can only access their own entries. Implement filtering by date range and category in the index action. Return appropriate HTTP status codes and error messages.",
+            "status": "pending",
+            "testStrategy": "Write controller tests for each endpoint including pagination, filtering, and authorization checks."
+          },
+          {
+            "id": 3,
+            "title": "Implement Budgets Controller with RESTful Endpoints",
+            "description": "Create a controller for Budgets with all CRUD operations that returns JSON responses.",
+            "dependencies": [
+              2
+            ],
+            "details": "Generate the Budgets controller with `rails g controller Api::V1::Budgets`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `budget_params` method. Add authentication checks to ensure users can only access their own budgets. Return appropriate HTTP status codes and error messages. Include related category information in the JSON response where appropriate.",
+            "status": "pending",
+            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+          },
+          {
+            "id": 4,
+            "title": "Implement SavingsPools Controller with RESTful Endpoints",
+            "description": "Create a controller for SavingsPools with all CRUD operations that returns JSON responses.",
+            "dependencies": [
+              3
+            ],
+            "details": "Generate the SavingsPools controller with `rails g controller Api::V1::SavingsPools`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `savings_pool_params` method. Add authentication checks to ensure users can only access their own savings pools. Return appropriate HTTP status codes and error messages. Include current amount and target amount in the JSON response.",
+            "status": "pending",
+            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+          },
+          {
+            "id": 5,
+            "title": "Implement Items Controller with RESTful Endpoints",
+            "description": "Create a controller for Items with all CRUD operations that returns JSON responses.",
+            "dependencies": [
+              4
+            ],
+            "details": "Generate the Items controller with `rails g controller Api::V1::Items`. Implement index, show, create, update, and destroy actions. Use strong parameters with a private `item_params` method. Add authentication checks to ensure users can only access their own items. Return appropriate HTTP status codes and error messages. Implement pagination for the index action if the items list could be large.",
+            "status": "pending",
+            "testStrategy": "Write controller tests for each endpoint verifying proper JSON responses, status codes, and authentication requirements."
+          },
+          {
+            "id": 6,
+            "title": "Implement Users Profile Management Endpoints",
+            "description": "Create endpoints for user profile management (show, update) that returns JSON responses.",
+            "dependencies": [
+              5
+            ],
+            "details": "Generate the Users controller with `rails g controller Api::V1::Users` or extend existing controller. Implement show and update actions for profile management only. Use strong parameters with a private `user_params` method that permits only profile-related attributes (not authentication fields). Add authentication checks to ensure users can only access their own profile. Return appropriate HTTP status codes and error messages.",
+            "status": "pending",
+            "testStrategy": "Write controller tests for profile endpoints verifying proper JSON responses, status codes, and authentication requirements."
+          },
+          {
+            "id": 7,
+            "title": "Implement Error Handling and Response Standardization",
+            "description": "Create a standardized approach to error handling and JSON responses across all controllers.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6
+            ],
+            "details": "Create a concerns module (e.g., `Api::V1::ResponseHandler`) that can be included in all API controllers. Implement methods for standardized JSON responses with proper status codes. Handle common errors like record not found, validation errors, and unauthorized access. Create helper methods for pagination metadata. Ensure all controllers use this standardized approach for consistent API behavior.",
+            "status": "pending",
+            "testStrategy": "Write tests for the concerns module and verify it's properly applied across all controllers."
+          },
+          {
+            "id": 8,
+            "title": "Create API Documentation",
+            "description": "Document all API endpoints with examples, required parameters, and response formats.",
+            "dependencies": [
+              7
+            ],
+            "details": "Use a tool like Swagger/OpenAPI, RAML, or create a markdown document that details all endpoints. For each endpoint, document: URL, HTTP method, required parameters, example request, example response, possible error responses, and authentication requirements. Include information about pagination for list endpoints. Store the documentation in the project repository and make it accessible to developers.",
+            "status": "pending",
+            "testStrategy": "Manually verify that all endpoints are properly documented and the documentation matches the actual implementation."
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Develop Category Management Module",
+        "description": "Create the UI and functionality for managing expense categories with budgets.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          4
+        ],
+        "priority": "medium",
+        "details": "1. Design and implement category listing page with visual category cards\n2. Create category creation/edit forms\n3. Implement category deletion with confirmation\n4. Add category-specific budget allocation\n5. Create visual indicators for category spending vs. budget\n6. Implement category filtering and organization tools\n7. Add category color coding and icons\n8. Create Stimulus controllers for interactive elements\n9. Implement proper validation and error handling\n10. Add responsive design for mobile compatibility",
+        "testStrategy": "Write system tests for category CRUD operations. Test budget allocation functionality. Verify filtering and organization features work correctly. Test responsive design across different screen sizes.",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement Transaction Tracking System",
+        "description": "Build the transaction entry and management functionality for income and expenses.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          4,
+          5
+        ],
+        "priority": "medium",
+        "details": "1. Create transaction entry form with category selection\n2. Implement transaction listing with filtering and sorting\n3. Add transaction search functionality\n4. Create transaction detail view\n5. Implement transaction categorization and tagging\n6. Create transaction edit and delete functionality\n7. Implement date range filtering\n8. Add transaction history with pagination\n9. Create Stimulus controllers for dynamic form behavior\n10. Implement proper validation and error handling",
+        "testStrategy": "Write system tests for transaction creation, editing, deletion. Test filtering, sorting, and search functionality. Verify categorization works correctly and updates related budget calculations.",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Develop Budget Management Module",
+        "description": "Create the budget creation, allocation, and tracking functionality.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          4,
+          5,
+          6
+        ],
+        "priority": "medium",
+        "details": "1. Design budget creation form with period selection\n2. Implement budget allocation across categories\n3. Create budget vs. actual spending comparison views\n4. Add budget progress visualization\n5. Implement budget alerts when approaching limits\n6. Create basic budget performance tracking\n7. Add budget adjustment functionality\n8. Create simple budget reports\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
+        "testStrategy": "Write system tests for budget creation, allocation, and tracking. Test budget alerts and notifications. Verify budget calculations are accurate based on transaction data. Test basic budget reporting features.",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement Savings Goals (Savings Pools)",
+        "description": "Build the savings goal creation, tracking, and management functionality.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          4
+        ],
+        "priority": "medium",
+        "details": "1. Design savings goal creation form with target amounts and deadlines\n2. Implement progress tracking toward savings goals\n3. Create visual progress indicators (progress bars, charts)\n4. Add goal achievement notifications\n5. Implement multiple concurrent savings goals management\n6. Create contribution tracking and history\n7. Add goal adjustment functionality\n8. Create basic goal reports\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
+        "testStrategy": "Write system tests for savings goal creation, tracking, and achievement. Test progress calculations and visual indicators. Verify contribution tracking and history. Test goal adjustment functionality.",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Develop Items Management Module",
+        "description": "Create the detailed item tracking functionality within categories.",
+        "status": "pending",
+        "dependencies": [
+          3,
+          4,
+          5
+        ],
+        "priority": "low",
+        "details": "1. Design item creation and edit forms\n2. Implement item listing with filtering and sorting\n3. Create item detail view with history\n4. Add item-specific budgets and spending limits\n5. Implement basic item reporting\n6. Add custom item attributes and tags\n7. Create item search functionality\n8. Implement item categorization\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
+        "testStrategy": "Write system tests for item CRUD operations. Test item budgeting and spending tracking. Verify basic item reporting. Test custom attributes and tagging functionality.",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Build Financial Dashboard",
+        "description": "Create the main dashboard with financial overview, charts, and quick access to features.",
+        "status": "pending",
+        "dependencies": [
+          5,
+          6,
+          7,
+          8
+        ],
+        "priority": "high",
+        "details": "1. Design dashboard layout with key financial metrics\n2. Implement Chart.js for spending trend visualization\n3. Create monthly budget progress tracking widgets\n4. Add recent transaction history section\n5. Implement quick access buttons for common tasks\n6. Create category spending breakdown charts\n7. Add savings goal progress indicators\n8. Implement date range selectors for dashboard data\n9. Create responsive design for different screen sizes\n10. Add clear data visualization for financial insights",
+        "testStrategy": "Write system tests for dashboard rendering and interactivity. Test chart data accuracy. Verify dashboard updates with new transactions and budget changes. Test responsive design across different screen sizes.",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Implement Basic Data Export",
+        "description": "Create functionality for exporting data and generating simple financial reports.",
+        "status": "pending",
+        "dependencies": [
+          6,
+          7,
+          8,
+          10
+        ],
+        "priority": "low",
+        "details": "1. Implement CSV export for transactions\n2. Create PDF report generation for budgets\n3. Add monthly financial summary reports\n4. Implement category spending reports\n5. Create savings goal progress reports\n6. Add custom date range selection for reports\n7. Create simple data visualization options in reports\n8. Add report templates for basic financial reports\n9. Implement proper error handling for export operations\n10. Add user feedback during export operations",
+        "testStrategy": "Test CSV and PDF export functionality. Verify report data accuracy. Test report generation with different date ranges and filters.",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Enhance UI/UX with Tailwind CSS",
+        "description": "Improve the user interface and experience with Tailwind CSS styling and animations.",
+        "status": "pending",
+        "dependencies": [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "priority": "medium",
+        "details": "1. Create consistent color scheme and typography\n2. Implement responsive design for all pages\n3. Add animations for user interactions\n4. Create custom Tailwind components for common UI elements\n5. Implement dark mode support\n6. Add loading indicators for asynchronous operations\n7. Create toast notifications for user feedback\n8. Implement form validation styling\n9. Add accessibility improvements (ARIA attributes, keyboard navigation)\n10. Create print-friendly styles for reports",
+        "testStrategy": "Test responsive design across different screen sizes. Verify accessibility compliance with automated tools. Test dark mode functionality. Verify animations and transitions work correctly across browsers.",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Implement Basic Performance Optimization",
+        "description": "Optimize application performance for speed and reliability.",
+        "status": "pending",
+        "dependencies": [
+          4,
+          10
+        ],
+        "priority": "medium",
+        "details": "1. Implement database query optimization with proper indexes\n2. Add basic caching for frequently accessed data\n3. Implement fragment caching for view components\n4. Add pagination for large data sets\n5. Optimize JavaScript and CSS assets\n6. Implement lazy loading for images and heavy components\n7. Add N+1 query detection and resolution\n8. Add basic performance monitoring\n9. Optimize database queries for dashboard views\n10. Ensure responsive performance across different data volumes",
+        "testStrategy": "Benchmark page load times before and after optimization. Test database query performance. Verify caching works correctly. Test application with realistic data volumes to ensure it meets performance targets.",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Implement Comprehensive Testing",
+        "description": "Create a comprehensive test suite for all application functionality.",
+        "status": "pending",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "priority": "high",
+        "details": "1. Write model unit tests for all models\n2. Create controller tests for all endpoints\n3. Implement system tests for key user flows\n4. Add integration tests for complex interactions\n5. Create performance tests for critical paths\n6. Implement security tests (XSS, CSRF, SQL injection)\n7. Add accessibility tests\n8. Create test fixtures and factories\n9. Implement continuous integration with GitHub Actions\n10. Add code coverage reporting",
+        "testStrategy": "Ensure test coverage meets or exceeds 80% for all code. Verify all critical user flows are covered by system tests. Test edge cases and error conditions. Ensure tests run in CI pipeline before deployment.",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Implement Security Measures",
+        "description": "Enhance application security with comprehensive security measures.",
+        "status": "pending",
+        "dependencies": [
+          2
+        ],
+        "priority": "high",
+        "details": "1. Implement SSL/TLS encryption for all communications\n2. Add secure headers (Content-Security-Policy, X-XSS-Protection)\n3. Implement rate limiting for authentication attempts\n4. Add IP-based blocking for suspicious activity\n5. Create security audit logging\n6. Implement regular security dependency updates\n7. Add database encryption for sensitive data\n8. Create security vulnerability scanning in CI pipeline\n9. Implement two-factor authentication option\n10. Add session timeout and management",
+        "testStrategy": "Perform security penetration testing. Verify SSL/TLS configuration. Test rate limiting and blocking functionality. Verify secure headers are properly set. Test two-factor authentication flow.",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-10T16:06:30.410Z",
+      "updated": "2025-07-10T16:07:17.320Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

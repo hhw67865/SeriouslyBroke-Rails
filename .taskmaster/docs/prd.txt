@@ -1,0 +1,199 @@
+<context>
+# Overview  
+SeriouslyBroke is a modern personal finance tracking web application that helps users manage their spending, budgets, and savings goals. The application addresses the common problem of financial awareness and control by providing an intuitive interface for tracking expenses, categorizing spending, setting budgets, and monitoring progress toward financial goals. It's designed for individuals who want to take control of their finances without the complexity of traditional accounting software.
+
+# Core Features  
+## User Authentication & Profile Management
+- Secure user registration and login system using Devise
+- User profile management with personalized dashboard
+- Password reset and account recovery functionality
+
+## Financial Dashboard
+- Real-time financial overview showing key metrics
+- Monthly budget progress tracking
+- Spending trend visualization with interactive charts
+- Recent transaction history
+- Quick access to all major features
+
+## Category Management
+- Customizable expense categories (Food, Transportation, Entertainment, etc.)
+- Category-specific budgets and spending limits
+- Visual category cards showing spending vs. budget
+- Category filtering and organization tools
+
+## Transaction Tracking (Entries)
+- Easy entry creation for income and expenses
+- Transaction categorization
+- Transaction search and filtering
+- Transaction history with detailed views
+- Basic transaction editing and deletion
+
+## Budget Management
+- Monthly budget creation
+- Budget allocation across categories
+- Budget vs. actual spending comparison
+- Basic budget tracking and progress display
+
+## Savings Goals (Savings Pools)
+- Goal creation with target amounts and deadlines
+- Progress tracking toward savings goals
+- Visual progress indicators
+- Basic goal management (create, edit, delete)
+
+## Items Management
+- Detailed item tracking within categories
+- Item-specific budgets and spending limits
+- Basic item management and organization
+
+# User Experience  
+## Primary User Personas
+- **Budget-Conscious Individuals**: People who want to track spending and stick to budgets
+- **Goal-Oriented Savers**: Users focused on achieving specific financial goals
+- **Financial Beginners**: Those new to personal finance management
+
+## Key User Flows
+1. **Onboarding Flow**: Sign up → Set up categories → Create first budget → Add initial transactions
+2. **Daily Usage**: Quick expense entry → Category selection → Budget impact review
+3. **Monthly Review**: Dashboard analysis → Budget adjustments → Goal progress check
+4. **Goal Achievement**: Goal creation → Progress tracking → Achievement celebration
+
+## UI/UX Considerations
+- Clean, modern interface using Tailwind CSS
+- Mobile-responsive design for on-the-go usage
+- Intuitive navigation with clear visual hierarchy
+- Quick action buttons for common tasks
+- Visual feedback for user actions
+- Accessibility compliance
+</context>
+<PRD>
+# Technical Architecture  
+## System Components
+- **Frontend**: Ruby on Rails with ERB templates, Stimulus controllers for interactivity
+- **Backend**: Ruby on Rails API with RESTful endpoints
+- **Database**: PostgreSQL with UUID primary keys
+- **Styling**: Tailwind CSS with custom components
+- **Authentication**: Devise gem for user management
+- **Charts**: Chart.js for data visualization
+- **Testing**: RSpec for unit and integration tests
+
+## Data Models
+- **User**: Authentication and profile information
+- **Category**: Expense categorization with budgets
+- **Entry**: Individual transactions (income/expense)
+- **Item**: Detailed items within categories
+- **Budget**: Financial planning and limits
+- **SavingsPool**: Goal-oriented savings tracking
+
+## APIs and Integrations
+- RESTful API endpoints for all CRUD operations
+- JSON responses for AJAX interactions
+- Authentication-secured endpoints
+- Proper error handling and status codes
+
+## Infrastructure Requirements
+- PostgreSQL database server
+- Basic caching with Rails built-in caching
+- SSL/TLS encryption for security
+- Standard Rails deployment stack
+
+# Development Roadmap  
+## Core MVP Focus
+The development focuses on creating a solid, working personal finance tracking application with essential features:
+
+### Foundation & CRUD Operations
+- Solid user authentication and profile management
+- Complete CRUD operations for all core models (Categories, Entries, Budgets, SavingsPools, Items)
+- Proper data validation and error handling
+- Secure API endpoints with authentication
+
+### Data Presentation & User Experience
+- Clean, functional dashboard showing key financial metrics
+- Category management with clear spending vs. budget visualization
+- Transaction entry and management with search/filtering
+- Budget creation and progress tracking
+- Savings goal management with progress indicators
+- Responsive design with Tailwind CSS
+
+### Core Functionality Polish
+- Comprehensive form validation and user feedback
+- Proper error handling throughout the application
+- Performance optimization for database queries
+- Basic data export capabilities
+- Comprehensive test coverage
+
+### Quality & Security
+- Security best practices implementation
+- Code quality and maintainability
+- Documentation for future development
+- Testing coverage for all features
+
+# Logical Dependency Chain
+## Foundation Layer (Priority 1)
+1. **User Authentication System**: Must be rock-solid before any other features
+2. **Core Data Models**: User, Category, Entry, Item, Budget, SavingsPool
+3. **Database Schema**: Properly normalized with appropriate indexes
+4. **RESTful API Endpoints**: Complete CRUD operations for all models
+
+## Core Functionality (Priority 2)
+5. **Category Management**: Full CRUD with proper validation and user interface
+6. **Transaction Entry**: Complete transaction management with categorization
+7. **Budget Management**: Budget creation, allocation, and tracking
+8. **Savings Goals**: Goal creation and progress tracking
+
+## User Experience (Priority 3)
+9. **Financial Dashboard**: Key metrics, charts, and overview
+10. **Data Presentation**: Clear visualization of financial information
+11. **Search and Filtering**: Transaction and category filtering capabilities
+12. **Responsive Design**: Mobile-friendly interface with Tailwind CSS
+
+## Quality & Polish (Priority 4)
+13. **Error Handling**: Comprehensive error messages and validation
+14. **Performance Optimization**: Database queries and page load times
+15. **Security Implementation**: Data protection and secure endpoints
+16. **Testing Coverage**: Comprehensive test suite for all features
+
+# Risks and Mitigations  
+## Technical Challenges
+- **Database Performance**: Mitigate with proper indexing and query optimization
+- **Data Security**: Implement comprehensive security measures and regular audits
+- **Scalability**: Design for growth with proper architecture patterns
+
+## MVP Scope Management
+- **Feature Creep**: Strict adherence to MVP requirements
+- **User Feedback Integration**: Regular user testing and feedback loops
+- **Technical Debt**: Regular refactoring and code quality maintenance
+
+## Resource Constraints
+- **Development Time**: Prioritize core features over nice-to-haves
+- **Testing Coverage**: Automated testing to prevent regression
+- **Documentation**: Maintain clear documentation for future development
+
+# Appendix  
+## Current Technical Stack
+- Ruby 3.2.0+
+- Rails 7.0+
+- PostgreSQL 14.0+
+- Tailwind CSS 3.0+
+- Stimulus (Hotwire)
+- Devise for authentication
+- RSpec for testing
+- Chart.js for visualizations
+
+## Development Environment
+- Local development with bin/dev
+- Docker support for consistent environments
+- Automated testing with GitHub Actions
+- Code quality enforcement with RuboCop
+
+## Performance Targets
+- Page load times under 3 seconds
+- Database queries under 200ms
+- 99% uptime availability
+- Support for moderate user load (hundreds of concurrent users)
+
+## Security Requirements
+- SSL/TLS encryption for all communications
+- Secure password storage with bcrypt
+- CSRF protection on all forms
+- XSS prevention measures
+- Basic security best practices implementation 
