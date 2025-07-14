@@ -3,10 +3,304 @@
     "tasks": [
       {
         "id": 1,
-        "title": "Setup Project Repository and Base Architecture",
-        "description": "Initialize the Rails project with the required technical stack and configure the development environment.",
-        "details": "1. Create a new Rails 7.0+ project\n2. Configure PostgreSQL 14.0+ with UUID primary keys\n3. Set up Tailwind CSS 3.0+\n4. Configure Stimulus (Hotwire) for frontend interactivity\n5. Set up RSpec for testing\n6. Configure Docker for consistent environments\n7. Set up GitHub Actions for CI/CD\n8. Configure RuboCop for code quality enforcement\n9. Set up SSL/TLS encryption\n10. Create bin/dev script for local development",
-        "testStrategy": "Verify project initialization with basic smoke tests. Ensure all components (Rails, PostgreSQL, Tailwind, Stimulus) are properly configured and working together. Test Docker container builds and runs successfully.",
+        "title": "Navigation Consolidation Implementation",
+        "description": "Replace separate 'Expenses' and 'Income' sidebar items with a single 'Entries' navigation item that provides tab-based filtering.",
+        "details": "1. Update the sidebar navigation in `app/views/shared/_sidebar.html.erb`\n2. Remove existing 'Expenses' and 'Income' items\n3. Add new 'Entries' item with appropriate icon (use heroicons)\n4. Create a new controller action in EntriesController to handle the unified view\n5. Implement tab-based filtering using Stimulus.js controller:\n```javascript\n// app/javascript/controllers/tab_controller.js\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static targets = [\"tab\", \"panel\"]\n  \n  connect() {\n    this.showTab(this.tabTargets[0].dataset.tabId || \"all\")\n  }\n  \n  switch(event) {\n    event.preventDefault()\n    this.showTab(event.currentTarget.dataset.tabId)\n  }\n  \n  showTab(id) {\n    this.tabTargets.forEach(tab => {\n      tab.classList.toggle(\"active\", tab.dataset.tabId === id)\n    })\n    \n    this.panelTargets.forEach(panel => {\n      panel.classList.toggle(\"hidden\", panel.dataset.panelId !== id)\n    })\n  }\n}\n```\n6. Style active tab state using brand colors from custom.css\n7. Ensure the active navigation item is highlighted correctly",
+        "testStrategy": "1. Verify sidebar navigation displays single 'Entries' item\n2. Test tab-based filtering for Expenses, Income, and Savings\n3. Confirm active states are styled correctly using brand colors\n4. Test navigation on mobile devices to ensure responsive behavior\n5. Verify correct routes are generated when clicking navigation items",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Entries Management Table Interface",
+        "description": "Create a professional table-based interface for entries management with filtering, sorting, and actions following the Categories items_list pattern.",
+        "details": "1. Create a new entries index view at `app/views/entries/index.html.erb`\n2. Implement responsive table structure following Categories pattern:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Entries</h1>\n    <%= link_to 'New Entry', new_entry_path, class: 'btn-primary' %>\n  </div>\n  \n  <div data-controller=\"tab\" class=\"mb-6\">\n    <div class=\"border-b border-gray-200\">\n      <nav class=\"-mb-px flex space-x-8\">\n        <a href=\"#\" data-tab-target data-tab-id=\"all\" data-action=\"click->tab#switch\" class=\"tab-link\">All</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"expense\" data-action=\"click->tab#switch\" class=\"tab-link\">Expenses</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"income\" data-action=\"click->tab#switch\" class=\"tab-link\">Income</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"savings\" data-action=\"click->tab#switch\" class=\"tab-link\">Savings</a>\n      </nav>\n    </div>\n    \n    <div data-panel-target data-panel-id=\"all\" class=\"mt-4\">\n      <%= render 'entries_table', entries: @entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"expense\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @expense_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"income\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @income_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"savings\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @savings_entries %>\n    </div>\n  </div>\n</div>\n```\n3. Create a partial for the entries table at `app/views/entries/_entries_table.html.erb`\n4. Implement sortable columns using Stimulus.js\n5. Add search functionality with debounced input\n6. Implement pagination using Pagy gem (version 6.0+)\n7. Style table with consistent hover states and spacing\n8. Add edit and delete actions with appropriate styling\n9. Update EntriesController to handle filtering, sorting, and pagination",
+        "testStrategy": "1. Test table rendering with various data sets\n2. Verify filtering works correctly between All, Expenses, Income, and Savings\n3. Test sorting functionality for each column\n4. Verify search functionality works across item names and descriptions\n5. Test pagination with large datasets\n6. Verify edit and delete actions function correctly\n7. Test responsive behavior on mobile devices",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Budgets Index Page Implementation",
+        "description": "Create a card-based layout for the Budgets index page that matches the Categories design pattern, including visual progress indicators.",
+        "details": "1. Create a new budgets index view at `app/views/budgets/index.html.erb`\n2. Implement card-based layout similar to Categories index:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Budgets</h1>\n    <%= link_to 'New Budget', new_budget_path, class: 'btn-primary' %>\n  </div>\n  \n  <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">\n    <% @budgets.each do |budget| %>\n      <div class=\"card\">\n        <div class=\"p-6\">\n          <div class=\"flex justify-between items-start\">\n            <h2 class=\"text-xl font-semibold\"><%= budget.category.name %></h2>\n            <div class=\"dropdown\">\n              <!-- Actions dropdown -->\n            </div>\n          </div>\n          <p class=\"text-gray-600 mb-4\"><%= budget.period %></p>\n          \n          <div class=\"mb-2 flex justify-between\">\n            <span class=\"text-sm text-gray-600\">Progress</span>\n            <span class=\"text-sm font-medium\"><%= number_to_percentage(budget.usage_percentage, precision: 0) %></span>\n          </div>\n          <div class=\"w-full bg-gray-200 rounded-full h-2.5\">\n            <div class=\"h-2.5 rounded-full\" style=\"width: <%= budget.usage_percentage %>%; background-color: var(--color-primary);\"></div>\n          </div>\n          \n          <div class=\"mt-4 flex justify-between\">\n            <div>\n              <p class=\"text-sm text-gray-600\">Spent</p>\n              <p class=\"font-semibold\"><%= number_to_currency(budget.spent_amount) %></p>\n            </div>\n            <div class=\"text-right\">\n              <p class=\"text-sm text-gray-600\">Budget</p>\n              <p class=\"font-semibold\"><%= number_to_currency(budget.amount) %></p>\n            </div>\n          </div>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if @budgets.empty? %>\n      <div class=\"col-span-full\">\n        <%= render 'shared/empty_state', \n          title: 'No budgets yet', \n          description: 'Create your first budget to start tracking your spending.',\n          action_text: 'Create Budget',\n          action_path: new_budget_path %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n3. Create a shared empty state partial at `app/views/shared/_empty_state.html.erb`\n4. Add filtering by category type (only expense categories)\n5. Implement search functionality for budgets by category name\n6. Style progress bars using brand colors from custom.css\n7. Update BudgetsController to handle filtering and search",
+        "testStrategy": "1. Verify card layout matches Categories design pattern\n2. Test progress visualization with various budget usage percentages\n3. Verify empty state displays correctly when no budgets exist\n4. Test filtering by category type\n5. Verify search functionality works correctly\n6. Test responsive behavior on mobile devices\n7. Verify all brand colors are applied correctly from custom.css",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Budget CRUD Operations Implementation",
+        "description": "Implement complete CRUD operations for Budgets with forms that match the design patterns established in the Categories section.",
+        "details": "1. Create new budget form at `app/views/budgets/new.html.erb`\n2. Create edit budget form at `app/views/budgets/edit.html.erb`\n3. Create a shared form partial at `app/views/budgets/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states:\n```erb\n<%= simple_form_for @budget do |f| %>\n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <h2 class=\"text-xl font-semibold mb-4\"><%= form_title %></h2>\n      \n      <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div class=\"col-span-full\">\n          <%= f.association :category, \n            collection: Category.expense, \n            label_method: :name, \n            value_method: :id, \n            include_blank: 'Select a category',\n            input_html: { class: 'form-select' } %>\n        </div>\n        \n        <div>\n          <%= f.input :amount, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :period, \n            collection: Budget.periods.keys.map { |p| [p.humanize, p] },\n            input_html: { class: 'form-select' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.input :notes, \n            input_html: { class: 'form-textarea', rows: 3 },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <div class=\"flex justify-end space-x-4\">\n    <%= link_to 'Cancel', budgets_path, class: 'btn-secondary' %>\n    <%= f.button :submit, class: 'btn-primary' %>\n  </div>\n<% end %>\n```\n5. Create budget show view at `app/views/budgets/show.html.erb`\n6. Implement delete confirmation modal using Stimulus.js\n7. Update BudgetsController with all CRUD actions\n8. Add validations to Budget model\n9. Implement flash messages for successful/failed operations",
+        "testStrategy": "1. Test creating a new budget with valid data\n2. Test validation errors display correctly\n3. Test editing an existing budget\n4. Test deleting a budget with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to expense categories only\n7. Verify flash messages display correctly for all operations",
+        "priority": "medium",
+        "dependencies": [
+          3
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Savings Pools Index Page Implementation",
+        "description": "Create a card-based layout for the Savings Pools index page with progress tracking and visual indicators.",
+        "details": "1. Create a new savings pools index view at `app/views/savings_pools/index.html.erb`\n2. Implement card-based layout similar to Categories and Budgets:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Savings Pools</h1>\n    <%= link_to 'New Savings Pool', new_savings_pool_path, class: 'btn-primary' %>\n  </div>\n  \n  <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">\n    <% @savings_pools.each do |pool| %>\n      <div class=\"card\">\n        <div class=\"p-6\">\n          <div class=\"flex justify-between items-start\">\n            <h2 class=\"text-xl font-semibold\"><%= pool.name %></h2>\n            <div class=\"dropdown\">\n              <!-- Actions dropdown -->\n            </div>\n          </div>\n          \n          <div class=\"mb-2 flex justify-between mt-4\">\n            <span class=\"text-sm text-gray-600\">Progress</span>\n            <span class=\"text-sm font-medium\"><%= number_to_percentage(pool.progress_percentage, precision: 0) %></span>\n          </div>\n          <div class=\"w-full bg-gray-200 rounded-full h-2.5\">\n            <div class=\"h-2.5 rounded-full\" style=\"width: <%= pool.progress_percentage %>%; background-color: var(--color-primary);\"></div>\n          </div>\n          \n          <div class=\"mt-4 flex justify-between\">\n            <div>\n              <p class=\"text-sm text-gray-600\">Current</p>\n              <p class=\"font-semibold\"><%= number_to_currency(pool.current_amount) %></p>\n            </div>\n            <div class=\"text-right\">\n              <p class=\"text-sm text-gray-600\">Target</p>\n              <p class=\"font-semibold\"><%= number_to_currency(pool.target_amount) %></p>\n            </div>\n          </div>\n          \n          <% if pool.categories.any? %>\n            <div class=\"mt-4\">\n              <p class=\"text-sm text-gray-600 mb-2\">Contributing Categories</p>\n              <div class=\"flex flex-wrap gap-2\">\n                <% pool.categories.each do |category| %>\n                  <span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-light text-primary-dark\">\n                    <%= category.name %>\n                  </span>\n                <% end %>\n              </div>\n            </div>\n          <% end %>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if @savings_pools.empty? %>\n      <div class=\"col-span-full\">\n        <%= render 'shared/empty_state', \n          title: 'No savings pools yet', \n          description: 'Create your first savings pool to start tracking your savings goals.',\n          action_text: 'Create Savings Pool',\n          action_path: new_savings_pool_path %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n3. Implement progress bars using brand colors from custom.css\n4. Display associated categories as tags\n5. Update SavingsPoolsController to load all necessary data\n6. Add search functionality for savings pools by name",
+        "testStrategy": "1. Verify card layout matches established design patterns\n2. Test progress visualization with various completion percentages\n3. Verify empty state displays correctly when no savings pools exist\n4. Test category association display\n5. Verify search functionality works correctly\n6. Test responsive behavior on mobile devices\n7. Verify all brand colors are applied correctly from custom.css",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Savings Pools CRUD Operations Implementation",
+        "description": "Implement complete CRUD operations for Savings Pools with forms that match the design patterns established in the Categories section.",
+        "details": "1. Create new savings pool form at `app/views/savings_pools/new.html.erb`\n2. Create edit savings pool form at `app/views/savings_pools/edit.html.erb`\n3. Create a shared form partial at `app/views/savings_pools/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states:\n```erb\n<%= simple_form_for @savings_pool do |f| %>\n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <h2 class=\"text-xl font-semibold mb-4\"><%= form_title %></h2>\n      \n      <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div class=\"col-span-full\">\n          <%= f.input :name, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :target_amount, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :target_date, \n            as: :date, \n            html5: true,\n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.association :categories, \n            collection: Category.savings, \n            label_method: :name, \n            value_method: :id, \n            input_html: { class: 'form-select', multiple: true },\n            hint: 'Select categories that contribute to this savings pool' %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.input :description, \n            input_html: { class: 'form-textarea', rows: 3 },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <div class=\"flex justify-end space-x-4\">\n    <%= link_to 'Cancel', savings_pools_path, class: 'btn-secondary' %>\n    <%= f.button :submit, class: 'btn-primary' %>\n  </div>\n<% end %>\n```\n5. Create savings pool show view at `app/views/savings_pools/show.html.erb`\n6. Implement delete confirmation modal using Stimulus.js\n7. Update SavingsPoolsController with all CRUD actions\n8. Add validations to SavingsPool model\n9. Implement flash messages for successful/failed operations",
+        "testStrategy": "1. Test creating a new savings pool with valid data\n2. Test validation errors display correctly\n3. Test editing an existing savings pool\n4. Test deleting a savings pool with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to savings categories only\n7. Verify flash messages display correctly for all operations\n8. Test multiple category selection functionality",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Item Management Integration in Categories",
+        "description": "Enhance the Categories section with integrated Item management, allowing users to manage items directly from category show pages.",
+        "details": "1. Update the category show view at `app/views/categories/show.html.erb`\n2. Add a section for items management within the category context:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex items-center mb-6\">\n    <nav class=\"text-sm breadcrumbs\">\n      <ol class=\"flex space-x-2\">\n        <li><%= link_to 'Categories', categories_path, class: 'text-gray-500 hover:text-gray-700' %></li>\n        <li class=\"flex items-center\">\n          <svg class=\"h-5 w-5 text-gray-400\" fill=\"currentColor\" viewBox=\"0 0 20 20\">\n            <path fill-rule=\"evenodd\" d=\"M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z\" clip-rule=\"evenodd\"/>\n          </svg>\n          <span class=\"ml-2 text-gray-900\"><%= @category.name %></span>\n        </li>\n      </ol>\n    </nav>\n  </div>\n  \n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <div class=\"flex justify-between items-start\">\n        <h1 class=\"text-2xl font-bold\"><%= @category.name %></h1>\n        <div class=\"dropdown\">\n          <!-- Actions dropdown -->\n        </div>\n      </div>\n      <p class=\"text-gray-600 mt-2\"><%= @category.description %></p>\n      \n      <!-- Category details -->\n    </div>\n  </div>\n  \n  <div class=\"card\">\n    <div class=\"p-6\">\n      <div class=\"flex justify-between items-center mb-4\">\n        <h2 class=\"text-xl font-semibold\">Items</h2>\n        <%= link_to 'Add Item', new_category_item_path(@category), class: 'btn-primary text-sm', data: { turbo_frame: 'new_item_form' } %>\n      </div>\n      \n      <turbo-frame id=\"new_item_form\"></turbo-frame>\n      \n      <div class=\"mt-4\">\n        <turbo-frame id=\"items_list\">\n          <% if @items.any? %>\n            <div class=\"overflow-x-auto\">\n              <table class=\"min-w-full divide-y divide-gray-200\">\n                <thead>\n                  <tr>\n                    <th class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Name</th>\n                    <th class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Description</th>\n                    <th class=\"px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider\">Actions</th>\n                  </tr>\n                </thead>\n                <tbody class=\"bg-white divide-y divide-gray-200\">\n                  <% @items.each do |item| %>\n                    <tr id=\"<%= dom_id(item) %>\" class=\"hover:bg-gray-50\">\n                      <td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900\"><%= item.name %></td>\n                      <td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-500\"><%= item.description %></td>\n                      <td class=\"px-6 py-4 whitespace-nowrap text-right text-sm font-medium\">\n                        <%= link_to 'Edit', edit_category_item_path(@category, item), class: 'text-primary-dark hover:text-primary mr-3', data: { turbo_frame: 'item_form' } %>\n                        <%= link_to 'Delete', category_item_path(@category, item), method: :delete, data: { confirm: 'Are you sure?' }, class: 'text-red-600 hover:text-red-900' %>\n                      </td>\n                    </tr>\n                  <% end %>\n                </tbody>\n              </table>\n            </div>\n          <% else %>\n            <div class=\"text-center py-8\">\n              <p class=\"text-gray-500\">No items in this category yet.</p>\n            </div>\n          <% end %>\n        </turbo-frame>\n      </div>\n    </div>\n  </div>\n</div>\n```\n3. Create new item form at `app/views/items/new.html.erb` with Turbo Frame support\n4. Create edit item form at `app/views/items/edit.html.erb` with Turbo Frame support\n5. Create a shared form partial at `app/views/items/_form.html.erb`\n6. Update ItemsController to handle Turbo Frame requests\n7. Implement inline editing using Turbo Frames\n8. Add proper routes for nested resources (categories/items)",
+        "testStrategy": "1. Test adding a new item to a category directly from the category show page\n2. Test inline editing of items without leaving the category context\n3. Test deleting items with confirmation\n4. Verify Turbo Frame functionality works correctly\n5. Test form validation and error handling\n6. Verify styling matches established patterns\n7. Test responsive behavior on mobile devices",
+        "priority": "medium",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Standardized Page Headers Component",
+        "description": "Create a standardized page header component with breadcrumbs, search, and action buttons that can be reused across all sections.",
+        "details": "1. Create a shared partial at `app/views/shared/_page_header.html.erb`:\n```erb\n<div class=\"flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4\">\n  <div>\n    <% if local_assigns[:breadcrumbs].present? %>\n      <nav class=\"text-sm breadcrumbs mb-2\">\n        <ol class=\"flex flex-wrap space-x-2\">\n          <% breadcrumbs.each_with_index do |crumb, index| %>\n            <li class=\"flex items-center\">\n              <% if index > 0 %>\n                <svg class=\"h-5 w-5 text-gray-400 mx-1\" fill=\"currentColor\" viewBox=\"0 0 20 20\">\n                  <path fill-rule=\"evenodd\" d=\"M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z\" clip-rule=\"evenodd\"/>\n                </svg>\n              <% end %>\n              \n              <% if crumb[:url].present? && index < breadcrumbs.size - 1 %>\n                <%= link_to crumb[:label], crumb[:url], class: 'text-gray-500 hover:text-gray-700' %>\n              <% else %>\n                <span class=\"text-gray-900\"><%= crumb[:label] %></span>\n              <% end %>\n            </li>\n          <% end %>\n        </ol>\n      </nav>\n    <% end %>\n    \n    <h1 class=\"text-2xl font-bold\"><%= title %></h1>\n    <% if local_assigns[:subtitle].present? %>\n      <p class=\"text-gray-600 mt-1\"><%= subtitle %></p>\n    <% end %>\n  </div>\n  \n  <div class=\"flex flex-col sm:flex-row gap-3 mt-4 md:mt-0\">\n    <% if local_assigns[:search].present? && search == true %>\n      <div class=\"relative\">\n        <input type=\"text\" \n               placeholder=\"Search...\"\n               class=\"form-input pl-10\"\n               data-controller=\"search\"\n               data-action=\"input->search#debounce\"\n               data-search-url-value=\"<%= local_assigns[:search_url] %>\">\n        <div class=\"absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none\">\n          <svg class=\"h-5 w-5 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n            <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z\" />\n          </svg>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if local_assigns[:actions].present? %>\n      <div class=\"flex space-x-3\">\n        <% actions.each do |action| %>\n          <%= link_to action[:label], action[:url], class: action[:class] || 'btn-primary' %>\n        <% end %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n2. Create a Stimulus controller for search functionality at `app/javascript/controllers/search_controller.js`:\n```javascript\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static values = { url: String }\n  \n  connect() {\n    this.timeout = null\n  }\n  \n  debounce(event) {\n    clearTimeout(this.timeout)\n    this.timeout = setTimeout(() => {\n      this.performSearch(event.target.value)\n    }, 300)\n  }\n  \n  performSearch(query) {\n    const url = new URL(this.urlValue, window.location.origin)\n    url.searchParams.set('query', query)\n    \n    fetch(url, {\n      headers: {\n        'Accept': 'text/vnd.turbo-stream.html'\n      }\n    })\n    .then(response => response.text())\n    .then(html => {\n      Turbo.renderStreamMessage(html)\n    })\n  }\n}\n```\n3. Update all views to use the standardized page header component\n4. Ensure consistent styling across all sections\n5. Add appropriate breadcrumbs for each section",
+        "testStrategy": "1. Verify page header displays correctly across all sections\n2. Test breadcrumbs navigation functionality\n3. Test search functionality with debounced input\n4. Verify action buttons work correctly\n5. Test responsive behavior on mobile devices\n6. Verify styling is consistent with design patterns",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Standardized Card Component",
+        "description": "Create a standardized card component that can be reused across all sections with consistent styling.",
+        "details": "1. Create a shared partial at `app/views/shared/_card.html.erb`:\n```erb\n<div class=\"bg-white shadow-sm rounded-lg border border-gray-100 <%= local_assigns[:class] %>\">\n  <% if local_assigns[:header].present? %>\n    <div class=\"px-6 py-4 border-b border-gray-100\">\n      <% if local_assigns[:header_content] %>\n        <%= header_content %>\n      <% else %>\n        <div class=\"flex justify-between items-center\">\n          <h2 class=\"text-xl font-semibold\"><%= header %></h2>\n          \n          <% if local_assigns[:actions].present? %>\n            <div class=\"flex space-x-2\">\n              <% actions.each do |action| %>\n                <%= link_to action[:label], action[:url], class: action[:class] || 'btn-sm btn-secondary' %>\n              <% end %>\n            </div>\n          <% end %>\n        </div>\n      <% end %>\n    </div>\n  <% end %>\n  \n  <div class=\"p-6\">\n    <%= content %>\n  </div>\n  \n  <% if local_assigns[:footer].present? %>\n    <div class=\"px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg\">\n      <%= footer %>\n    </div>\n  <% end %>\n</div>\n```\n2. Update CSS to ensure consistent card styling:\n```css\n/* Add to app/assets/stylesheets/custom.css */\n.card {\n  @apply bg-white shadow-sm rounded-lg border border-gray-100;\n}\n\n.card-header {\n  @apply px-6 py-4 border-b border-gray-100;\n}\n\n.card-body {\n  @apply p-6;\n}\n\n.card-footer {\n  @apply px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg;\n}\n```\n3. Update all views to use the standardized card component\n4. Ensure consistent styling across all sections",
+        "testStrategy": "1. Verify card component displays correctly across all sections\n2. Test different card configurations (with/without header, footer)\n3. Verify styling is consistent with design patterns\n4. Test responsive behavior on mobile devices\n5. Verify all brand colors are applied correctly from custom.css",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Standardized Form Components",
+        "description": "Create standardized form components with SimpleForm integration and brand-colored focus states.",
+        "details": "1. Configure SimpleForm to use custom styling:\n```ruby\n# config/initializers/simple_form.rb\nSimpleForm.setup do |config|\n  config.wrappers :default, class: 'form-group' do |b|\n    b.use :html5\n    b.use :placeholder\n    b.use :label, class: 'form-label'\n    b.use :input, class: 'form-input', error_class: 'border-red-500'\n    b.use :error, wrap_with: { tag: :p, class: 'mt-1 text-sm text-red-600' }\n    b.use :hint, wrap_with: { tag: :p, class: 'mt-1 text-sm text-gray-500' }\n  end\nend\n```\n2. Add custom form styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Form styles */\n.form-group {\n  @apply mb-4;\n}\n\n.form-label {\n  @apply block text-sm font-medium text-gray-700 mb-1;\n}\n\n.form-input {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n\n.form-select {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n\n.form-checkbox {\n  @apply rounded border-gray-300 text-primary focus:ring-primary;\n}\n\n.form-radio {\n  @apply border-gray-300 text-primary focus:ring-primary;\n}\n\n.form-textarea {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n```\n3. Create a shared form layout partial at `app/views/shared/_form_layout.html.erb`:\n```erb\n<div class=\"card mb-6\">\n  <div class=\"p-6\">\n    <h2 class=\"text-xl font-semibold mb-4\"><%= title %></h2>\n    <%= form_content %>\n  </div>\n</div>\n\n<div class=\"flex justify-end space-x-4\">\n  <%= link_to 'Cancel', cancel_path, class: 'btn-secondary' %>\n  <%= submit_button %>\n</div>\n```\n4. Update all form views to use the standardized form components\n5. Ensure consistent styling across all forms",
+        "testStrategy": "1. Verify form components display correctly across all sections\n2. Test form validation and error display\n3. Verify focus states use brand colors from custom.css\n4. Test different input types (text, select, checkbox, etc.)\n5. Verify responsive behavior on mobile devices\n6. Test form submission and error handling",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Standardized Table Component",
+        "description": "Create a standardized table component with responsive design, proper spacing, and hover states.",
+        "details": "1. Create a shared partial at `app/views/shared/_table.html.erb`:\n```erb\n<div class=\"overflow-x-auto\">\n  <table class=\"min-w-full divide-y divide-gray-200\">\n    <thead>\n      <tr>\n        <% columns.each do |column| %>\n          <th class=\"<%= column[:class] || 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider' %>\">\n            <% if column[:sortable] %>\n              <%= link_to column[:label], column[:sort_url], class: 'flex items-center group', data: { turbo_action: 'advance' } %>\n              <% if column[:sort_direction] %>\n                <svg class=\"ml-1 h-4 w-4 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n                  <% if column[:sort_direction] == 'asc' %>\n                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 15l7-7 7 7\" />\n                  <% else %>\n                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\" />\n                  <% end %>\n                </svg>\n              <% else %>\n                <svg class=\"ml-1 h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n                  <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 15l7-7 7 7\" />\n                </svg>\n              <% end %>\n            <% else %>\n              <%= column[:label] %>\n            <% end %>\n          </th>\n        <% end %>\n      </tr>\n    </thead>\n    <tbody class=\"bg-white divide-y divide-gray-200\">\n      <% if items.any? %>\n        <% items.each do |item| %>\n          <tr id=\"<%= dom_id(item) if defined?(dom_id) %>\" class=\"hover:bg-gray-50\">\n            <%= yield item %>\n          </tr>\n        <% end %>\n      <% else %>\n        <tr>\n          <td colspan=\"<%= columns.size %>\" class=\"px-6 py-10 text-center text-gray-500\">\n            <%= empty_message || 'No items found' %>\n          </td>\n        </tr>\n      <% end %>\n    </tbody>\n  </table>\n</div>\n\n<% if defined?(pagy) && pagy.pages > 1 %>\n  <div class=\"mt-4 flex justify-between items-center\">\n    <p class=\"text-sm text-gray-700\">\n      Showing <span class=\"font-medium\"><%= pagy.from %></span> to <span class=\"font-medium\"><%= pagy.to %></span> of <span class=\"font-medium\"><%= pagy.count %></span> results\n    </p>\n    <%== pagy_nav(pagy) %>\n  </div>\n<% end %>\n```\n2. Add custom table styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Table styles */\n.table-container {\n  @apply overflow-x-auto;\n}\n\n.table {\n  @apply min-w-full divide-y divide-gray-200;\n}\n\n.table-header {\n  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;\n}\n\n.table-cell {\n  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;\n}\n\n.table-cell-actions {\n  @apply px-6 py-4 whitespace-nowrap text-right text-sm font-medium;\n}\n```\n3. Create a Stimulus controller for sortable tables at `app/javascript/controllers/sortable_table_controller.js`\n4. Update all table views to use the standardized table component\n5. Ensure consistent styling across all tables",
+        "testStrategy": "1. Verify table component displays correctly across all sections\n2. Test sortable columns functionality\n3. Test empty state display\n4. Verify pagination works correctly\n5. Test responsive behavior on mobile devices\n6. Verify hover states work correctly\n7. Test with various data sets to ensure proper rendering",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Standardized Button Components",
+        "description": "Create standardized button components with primary, secondary, and danger variants using brand colors.",
+        "details": "1. Add custom button styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Button styles */\n.btn {\n  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2;\n}\n\n.btn-primary {\n  @apply btn bg-gradient-to-r from-primary to-primary-dark text-white hover:from-primary-dark hover:to-primary-dark focus:ring-primary;\n}\n\n.btn-secondary {\n  @apply btn bg-white border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500;\n}\n\n.btn-danger {\n  @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;\n}\n\n.btn-success {\n  @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;\n}\n\n.btn-sm {\n  @apply px-3 py-1.5 text-xs;\n}\n\n.btn-lg {\n  @apply px-6 py-3 text-base;\n}\n\n.btn-icon {\n  @apply p-2;\n}\n```\n2. Create a shared button component at `app/helpers/button_helper.rb`:\n```ruby\nmodule ButtonHelper\n  def button_tag(content = nil, options = nil, &block)\n    options ||= {}\n    options[:class] = class_names(options[:class], 'btn')\n    \n    if options[:variant].present?\n      options[:class] = class_names(options[:class], \"btn-#{options[:variant]}\")\n      options.delete(:variant)\n    end\n    \n    if options[:size].present?\n      options[:class] = class_names(options[:class], \"btn-#{options[:size]}\")\n      options.delete(:size)\n    end\n    \n    super(content, options, &block)\n  end\n  \n  def link_button_to(name = nil, options = nil, html_options = nil, &block)\n    html_options ||= {}\n    html_options[:class] = class_names(html_options[:class], 'btn')\n    \n    if html_options[:variant].present?\n      html_options[:class] = class_names(html_options[:class], \"btn-#{html_options[:variant]}\")\n      html_options.delete(:variant)\n    end\n    \n    if html_options[:size].present?\n      html_options[:class] = class_names(html_options[:class], \"btn-#{html_options[:size]}\")\n      html_options.delete(:size)\n    end\n    \n    link_to(name, options, html_options, &block)\n  end\nend\n```\n3. Update all views to use the standardized button components\n4. Ensure consistent styling across all buttons",
+        "testStrategy": "1. Verify button components display correctly across all sections\n2. Test different button variants (primary, secondary, danger)\n3. Test different button sizes (default, sm, lg)\n4. Verify hover and focus states work correctly\n5. Test button helpers in various contexts\n6. Verify all brand colors are applied correctly from custom.css",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 13,
+        "title": "Empty State Component Implementation",
+        "description": "Create a standardized empty state component with branded messaging and call-to-action buttons.",
+        "details": "1. Create a shared partial at `app/views/shared/_empty_state.html.erb`:\n```erb\n<div class=\"text-center py-12\">\n  <% if local_assigns[:icon].present? %>\n    <div class=\"mx-auto h-12 w-12 text-gray-400\">\n      <%= icon %>\n    </div>\n  <% else %>\n    <svg class=\"mx-auto h-12 w-12 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n      <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4\" />\n    </svg>\n  <% end %>\n  \n  <h3 class=\"mt-4 text-lg font-medium text-gray-900\"><%= title %></h3>\n  <p class=\"mt-1 text-sm text-gray-500\"><%= description %></p>\n  \n  <% if local_assigns[:action_text].present? && local_assigns[:action_path].present? %>\n    <div class=\"mt-6\">\n      <%= link_to action_text, action_path, class: 'btn-primary' %>\n    </div>\n  <% end %>\n</div>\n```\n2. Create a set of standard empty state icons for different contexts (categories, budgets, entries, etc.)\n3. Update all views to use the standardized empty state component\n4. Ensure consistent styling across all empty states",
+        "testStrategy": "1. Verify empty state component displays correctly across all sections\n2. Test with and without custom icons\n3. Test with and without action buttons\n4. Verify styling is consistent with design patterns\n5. Test responsive behavior on mobile devices",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          12
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 14,
+        "title": "Mobile Responsiveness Implementation",
+        "description": "Ensure all new interfaces work well on mobile devices with appropriate responsive design patterns.",
+        "details": "1. Review all new components and views for mobile responsiveness\n2. Implement responsive design patterns for each component:\n   - **Navigation**: Collapsible sidebar on mobile\n   - **Tables**: Horizontal scrolling on small screens\n   - **Cards**: Single column layout on mobile\n   - **Forms**: Full-width inputs on mobile\n   - **Buttons**: Appropriate sizing and spacing on mobile\n3. Add responsive utility classes to `app/assets/stylesheets/custom.css`:\n```css\n/* Responsive utilities */\n@media (max-width: 640px) {\n  .mobile-full-width {\n    width: 100%;\n  }\n  \n  .mobile-stack {\n    flex-direction: column;\n  }\n  \n  .mobile-hidden {\n    display: none;\n  }\n}\n```\n4. Test all views on various screen sizes and devices\n5. Implement responsive navigation using Stimulus.js:\n```javascript\n// app/javascript/controllers/mobile_nav_controller.js\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static targets = [\"sidebar\"]\n  \n  toggle() {\n    this.sidebarTarget.classList.toggle('hidden')\n  }\n  \n  close() {\n    if (window.innerWidth < 768) {\n      this.sidebarTarget.classList.add('hidden')\n    }\n  }\n  \n  // Close sidebar when clicking outside on mobile\n  clickOutside(event) {\n    if (window.innerWidth < 768 && !this.sidebarTarget.contains(event.target) && !this.element.contains(event.target)) {\n      this.sidebarTarget.classList.add('hidden')\n    }\n  }\n}\n```\n6. Update the layout to use the mobile navigation controller",
+        "testStrategy": "1. Test all views on various screen sizes (mobile, tablet, desktop)\n2. Verify navigation works correctly on mobile devices\n3. Test tables with horizontal scrolling on small screens\n4. Verify forms are usable on mobile devices\n5. Test touch interactions on mobile devices\n6. Verify all components maintain proper spacing and alignment on mobile",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 15,
+        "title": "Performance Optimization Implementation",
+        "description": "Implement performance optimizations for database queries, frontend rendering, and overall application responsiveness.",
+        "details": "1. Optimize database queries:\n   - Add proper indexes to relevant tables\n   - Implement eager loading for associations\n   - Use counter caches for frequently accessed counts\n   - Add database-level scopes for common queries\n\n2. Implement frontend performance optimizations:\n   - Use Turbo Drive for navigation\n   - Implement Turbo Frames for partial page updates\n   - Use Stimulus controllers for interactive elements\n   - Optimize CSS with proper specificity\n\n3. Add pagination for large datasets using Pagy gem:\n```ruby\n# Gemfile\ngem 'pagy', '~> 6.0'\n\n# app/controllers/application_controller.rb\ninclude Pagy::Backend\n\n# app/helpers/application_helper.rb\ninclude Pagy::Frontend\n```\n\n4. Implement controller-level optimizations:\n```ruby\n# Example for EntriesController\ndef index\n  @pagy, @entries = pagy(Entry.includes(:category, :item).order(date: :desc), items: 20)\n  @expense_entries = @entries.select { |e| e.category.expense? }\n  @income_entries = @entries.select { |e| e.category.income? }\n  @savings_entries = @entries.select { |e| e.category.savings? }\n  \n  respond_to do |format|\n    format.html\n    format.turbo_stream if params[:query].present?\n  end\nend\n```\n\n5. Add caching for expensive operations:\n```ruby\n# app/models/category.rb\ndef total_amount\n  Rails.cache.fetch([self, 'total_amount']) do\n    entries.sum(:amount)\n  end\nend\n```\n\n6. Optimize asset loading:\n   - Use Webpacker for JavaScript bundling\n   - Implement proper asset precompilation\n   - Use image optimization for any images\n\n7. Implement debounced search inputs using Stimulus.js",
+        "testStrategy": "1. Measure page load times before and after optimizations\n2. Test database query performance with large datasets\n3. Verify pagination works correctly with large datasets\n4. Test caching effectiveness for expensive operations\n5. Verify Turbo Drive and Turbo Frames work correctly\n6. Test search performance with debounced inputs\n7. Verify mobile performance is acceptable",
+        "priority": "medium",
+        "dependencies": [
+          1,
+          2,
+          3,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Database Query Optimization",
+            "description": "Implement database-level optimizations to improve query performance and reduce load times.",
+            "dependencies": [],
+            "details": "1. Add proper indexes to frequently queried columns in transactions, categories, budgets, and savings_pools tables\n2. Implement eager loading for all model associations to prevent N+1 queries\n3. Add counter caches for frequently accessed counts (e.g., transactions_count on categories)\n4. Create database-level scopes for common queries in models\n5. Optimize JOIN operations in complex queries\n6. Acceptance criteria: Query execution time reduced by at least 50% for common operations",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Frontend Performance Improvements",
+            "description": "Optimize frontend code and implement Hotwire patterns to improve page load and interaction times.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Implement Turbo Drive for all navigation to avoid full page reloads\n2. Add Turbo Frames for partial page updates in high-interaction areas\n3. Create Stimulus controllers for interactive elements (dropdowns, modals, etc.)\n4. Optimize CSS with proper specificity and reduce unused styles\n5. Implement lazy loading for images and heavy components\n6. Acceptance criteria: Time to interactive reduced by 40%, First Contentful Paint under 1.5s",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Pagination Implementation",
+            "description": "Add pagination to all list views to improve performance with large datasets.",
+            "dependencies": [
+              1
+            ],
+            "details": "1. Implement Kaminari or will_paginate for server-side pagination\n2. Add pagination to transactions index, budgets index, and savings pools index\n3. Create custom pagination controls that match the application design\n4. Implement infinite scrolling option using Turbo Streams for transaction history\n5. Add proper page caching to maintain state between navigations\n6. Acceptance criteria: Lists load in under 500ms regardless of total record count, pagination controls are accessible",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Caching Implementation",
+            "description": "Implement multi-level caching to reduce database load and improve response times.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "1. Set up fragment caching for partial views and components\n2. Implement Russian Doll caching for nested resources\n3. Add low-level caching for expensive calculations (e.g., budget progress, savings goals)\n4. Configure Redis as the cache store in production environment\n5. Add cache expiration and automatic busting when records are updated\n6. Acceptance criteria: Cache hit rate above 80% for common operations, dashboard loads under 300ms",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "Asset Optimization",
+            "description": "Optimize static assets to reduce page load times and bandwidth usage.",
+            "dependencies": [
+              2
+            ],
+            "details": "1. Configure proper asset compression and minification in production\n2. Implement HTTP/2 for parallel asset loading\n3. Set up CDN integration for static assets\n4. Optimize and compress all images using WebP format\n5. Implement proper cache headers for static assets\n6. Configure critical CSS path for above-the-fold content\n7. Acceptance criteria: PageSpeed Insights score above 90, total page size reduced by 40%",
+            "status": "pending",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "Performance Testing and Monitoring",
+            "description": "Implement comprehensive performance testing and monitoring to ensure optimizations are effective.",
+            "dependencies": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "details": "1. Set up performance benchmarks using Rails mini-profiler\n2. Create automated performance tests using Lighthouse CI\n3. Implement real user monitoring (RUM) to track actual user experience\n4. Add server-side monitoring for database query performance\n5. Create performance dashboards to track key metrics over time\n6. Document performance bottlenecks and optimization strategies\n7. Acceptance criteria: Complete test suite that verifies all performance targets are met, monitoring in place for all critical paths",
+            "status": "pending",
+            "testStrategy": ""
+          }
+        ]
+      }
+    ],
+    "metadata": {
+      "created": "2025-07-14T21:48:01.158Z",
+      "updated": "2025-07-14T21:51:01.700Z",
+      "description": "Tasks for ui-ux-improvements context"
+    }
+  },
+  "ui-ux-improvements": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Navigation Consolidation Implementation",
+        "description": "Replace separate 'Expenses' and 'Income' sidebar items with a single 'Entries' navigation item that provides tab-based filtering.",
+        "details": "1. Update the sidebar navigation in `app/views/shared/_sidebar.html.erb`\n2. Remove existing 'Expenses' and 'Income' items\n3. Add new 'Entries' item with appropriate icon (use heroicons)\n4. Create a new controller action in EntriesController to handle the unified view\n5. Implement tab-based filtering using Stimulus.js controller:\n```javascript\n// app/javascript/controllers/tab_controller.js\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static targets = [\"tab\", \"panel\"]\n  \n  connect() {\n    this.showTab(this.tabTargets[0].dataset.tabId || \"all\")\n  }\n  \n  switch(event) {\n    event.preventDefault()\n    this.showTab(event.currentTarget.dataset.tabId)\n  }\n  \n  showTab(id) {\n    this.tabTargets.forEach(tab => {\n      tab.classList.toggle(\"active\", tab.dataset.tabId === id)\n    })\n    \n    this.panelTargets.forEach(panel => {\n      panel.classList.toggle(\"hidden\", panel.dataset.panelId !== id)\n    })\n  }\n}\n```\n6. Style active tab state using brand colors from custom.css\n7. Ensure the active navigation item is highlighted correctly",
+        "testStrategy": "1. Verify sidebar navigation displays single 'Entries' item\n2. Test tab-based filtering for Expenses, Income, and Savings\n3. Confirm active states are styled correctly using brand colors\n4. Test navigation on mobile devices to ensure responsive behavior\n5. Verify correct routes are generated when clicking navigation items",
         "priority": "high",
         "dependencies": [],
         "status": "done",
@@ -14,373 +308,213 @@
       },
       {
         "id": 2,
-        "title": "Implement User Authentication System",
-        "description": "Set up secure user registration, login, and profile management using Devise gem.",
-        "details": "1. Install and configure Devise gem\n2. Create User model with necessary attributes (email, password, profile info)\n3. Implement user registration with email confirmation\n4. Set up login/logout functionality\n5. Implement password reset and account recovery\n6. Create user profile management pages\n7. Configure bcrypt for secure password storage\n8. Implement CSRF protection\n9. Set up session management with Redis\n10. Create basic user dashboard page",
-        "testStrategy": "Write RSpec tests for user registration, login, logout, password reset, and profile update flows. Test security measures including password encryption, CSRF protection, and session management. Verify email confirmation works correctly.",
+        "title": "Entries Management Table Interface",
+        "description": "Create a professional table-based interface for entries management with filtering, sorting, and actions following the Categories items_list pattern.",
+        "details": "1. Create a new entries index view at `app/views/entries/index.html.erb`\n2. Implement responsive table structure following Categories pattern:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Entries</h1>\n    <%= link_to 'New Entry', new_entry_path, class: 'btn-primary' %>\n  </div>\n  \n  <div data-controller=\"tab\" class=\"mb-6\">\n    <div class=\"border-b border-gray-200\">\n      <nav class=\"-mb-px flex space-x-8\">\n        <a href=\"#\" data-tab-target data-tab-id=\"all\" data-action=\"click->tab#switch\" class=\"tab-link\">All</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"expense\" data-action=\"click->tab#switch\" class=\"tab-link\">Expenses</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"income\" data-action=\"click->tab#switch\" class=\"tab-link\">Income</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"savings\" data-action=\"click->tab#switch\" class=\"tab-link\">Savings</a>\n      </nav>\n    </div>\n    \n    <div data-panel-target data-panel-id=\"all\" class=\"mt-4\">\n      <%= render 'entries_table', entries: @entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"expense\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @expense_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"income\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @income_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"savings\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @savings_entries %>\n    </div>\n  </div>\n</div>\n```\n3. Create a partial for the entries table at `app/views/entries/_entries_table.html.erb`\n4. Implement sortable columns using Stimulus.js\n5. Add search functionality with debounced input\n6. Implement pagination using Pagy gem (version 6.0+)\n7. Style table with consistent hover states and spacing\n8. Add edit and delete actions with appropriate styling\n9. Update EntriesController to handle filtering, sorting, and pagination",
+        "testStrategy": "1. Test table rendering with various data sets\n2. Verify filtering works correctly between All, Expenses, Income, and Savings\n3. Test sorting functionality for each column\n4. Verify search functionality works across item names and descriptions\n5. Test pagination with large datasets\n6. Verify edit and delete actions function correctly\n7. Test responsive behavior on mobile devices",
         "priority": "high",
         "dependencies": [
           1
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 3,
-        "title": "Design and Implement Database Schema",
-        "description": "Create the core data models and database schema with proper relationships and indexes.",
-        "details": "Create the following models with appropriate relationships and validations:\n1. User: Authentication and profile information\n2. Category: name, description, user_id, budget_amount\n3. Entry: amount, date, description, category_id, user_id, entry_type (income/expense)\n4. Item: name, description, price, category_id\n5. Budget: name, amount, period_start, period_end, user_id\n6. SavingsPool: name, target_amount, current_amount, deadline, user_id\n\nEnsure proper indexes on foreign keys and frequently queried columns. Set up UUID primary keys for all models. Create database migrations and seed data for testing.",
-        "testStrategy": "Write unit tests for all models verifying validations, associations, and business logic. Test database performance with benchmark tests for common queries. Verify proper normalization and referential integrity.",
-        "priority": "high",
+        "title": "Budgets Index Page Implementation",
+        "description": "Create a card-based layout for the Budgets index page that matches the Categories design pattern, including visual progress indicators.",
+        "details": "1. Create a new budgets index view at `app/views/budgets/index.html.erb`\n2. Implement card-based layout similar to Categories index:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Budgets</h1>\n    <%= link_to 'New Budget', new_budget_path, class: 'btn-primary' %>\n  </div>\n  \n  <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">\n    <% @budgets.each do |budget| %>\n      <div class=\"card\">\n        <div class=\"p-6\">\n          <div class=\"flex justify-between items-start\">\n            <h2 class=\"text-xl font-semibold\"><%= budget.category.name %></h2>\n            <div class=\"dropdown\">\n              <!-- Actions dropdown -->\n            </div>\n          </div>\n          <p class=\"text-gray-600 mb-4\"><%= budget.period %></p>\n          \n          <div class=\"mb-2 flex justify-between\">\n            <span class=\"text-sm text-gray-600\">Progress</span>\n            <span class=\"text-sm font-medium\"><%= number_to_percentage(budget.usage_percentage, precision: 0) %></span>\n          </div>\n          <div class=\"w-full bg-gray-200 rounded-full h-2.5\">\n            <div class=\"h-2.5 rounded-full\" style=\"width: <%= budget.usage_percentage %>%; background-color: var(--color-primary);\"></div>\n          </div>\n          \n          <div class=\"mt-4 flex justify-between\">\n            <div>\n              <p class=\"text-sm text-gray-600\">Spent</p>\n              <p class=\"font-semibold\"><%= number_to_currency(budget.spent_amount) %></p>\n            </div>\n            <div class=\"text-right\">\n              <p class=\"text-sm text-gray-600\">Budget</p>\n              <p class=\"font-semibold\"><%= number_to_currency(budget.amount) %></p>\n            </div>\n          </div>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if @budgets.empty? %>\n      <div class=\"col-span-full\">\n        <%= render 'shared/empty_state', \n          title: 'No budgets yet', \n          description: 'Create your first budget to start tracking your spending.',\n          action_text: 'Create Budget',\n          action_path: new_budget_path %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n3. Create a shared empty state partial at `app/views/shared/_empty_state.html.erb`\n4. Add filtering by category type (only expense categories)\n5. Implement search functionality for budgets by category name\n6. Style progress bars using brand colors from custom.css\n7. Update BudgetsController to handle filtering and search",
+        "testStrategy": "1. Verify card layout matches Categories design pattern\n2. Test progress visualization with various budget usage percentages\n3. Verify empty state displays correctly when no budgets exist\n4. Test filtering by category type\n5. Verify search functionality works correctly\n6. Test responsive behavior on mobile devices\n7. Verify all brand colors are applied correctly from custom.css",
+        "priority": "medium",
         "dependencies": [
-          1,
-          2
+          1
         ],
-        "status": "done",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 4,
-        "title": "Implement Rails Controllers",
-        "description": "Enhance existing Rails controllers to support core features and user workflows, focusing on data relationships and user experience.",
-        "status": "pending",
+        "title": "Budget CRUD Operations Implementation",
+        "description": "Implement complete CRUD operations for Budgets with forms that match the design patterns established in the Categories section.",
+        "details": "1. Create new budget form at `app/views/budgets/new.html.erb`\n2. Create edit budget form at `app/views/budgets/edit.html.erb`\n3. Create a shared form partial at `app/views/budgets/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states:\n```erb\n<%= simple_form_for @budget do |f| %>\n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <h2 class=\"text-xl font-semibold mb-4\"><%= form_title %></h2>\n      \n      <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div class=\"col-span-full\">\n          <%= f.association :category, \n            collection: Category.expense, \n            label_method: :name, \n            value_method: :id, \n            include_blank: 'Select a category',\n            input_html: { class: 'form-select' } %>\n        </div>\n        \n        <div>\n          <%= f.input :amount, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :period, \n            collection: Budget.periods.keys.map { |p| [p.humanize, p] },\n            input_html: { class: 'form-select' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.input :notes, \n            input_html: { class: 'form-textarea', rows: 3 },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <div class=\"flex justify-end space-x-4\">\n    <%= link_to 'Cancel', budgets_path, class: 'btn-secondary' %>\n    <%= f.button :submit, class: 'btn-primary' %>\n  </div>\n<% end %>\n```\n5. Create budget show view at `app/views/budgets/show.html.erb`\n6. Implement delete confirmation modal using Stimulus.js\n7. Update BudgetsController with all CRUD actions\n8. Add validations to Budget model\n9. Implement flash messages for successful/failed operations",
+        "testStrategy": "1. Test creating a new budget with valid data\n2. Test validation errors display correctly\n3. Test editing an existing budget\n4. Test deleting a budget with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to expense categories only\n7. Verify flash messages display correctly for all operations",
+        "priority": "medium",
         "dependencies": [
           3
         ],
-        "priority": "high",
-        "details": "Enhance existing Rails controllers to support key features and workflows for:\n1. Categories\n2. Items\n3. Entries (transactions)\n4. Budgets\n5. SavingsPools\n6. Users (profile management only)\n\nFocus on implementing the data relationships correctly (Entries → Items → Categories) and ensuring user workflows are intuitive. Controllers should remain simple with minimal changes, only modifying when needed to support proper features. Ensure views are user-friendly and support the core user workflows.\n\nKey relationships to implement:\n- Entry = Transaction (e.g., spending $15.00 on March 15th)\n- Item = Specific place/thing (e.g., Chickfila)\n- Category = Grouping for budgeting (e.g., Food & Dining)",
-        "testStrategy": "Write RSpec system tests that verify users can actually use the features. Focus on testing user workflows like 'user can create a category', 'user can add an item to a category', 'user can create an entry for an item', etc. Create simple, practical tests that ensure the functionality works from the user's perspective and that data relationships are maintained correctly.",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Enhance Categories Controller",
-            "description": "Enhance the existing Categories controller to support proper user workflows and data relationships.",
-            "status": "in-progress",
-            "dependencies": [],
-            "details": "The basic CRUD controller for Categories already exists. Focus on enhancing it to:\n1. Ensure categories are properly associated with the current user\n2. Add any necessary methods to support viewing items within categories\n3. Implement proper validation and error handling\n4. Ensure the controller supports the view of all transactions within a category\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create, view, and manage their categories as the foundation for the budgeting system.",
-            "testStrategy": "Write RSpec system tests that verify users can create categories, view their categories, and see items/transactions within those categories. Test that users can only access their own categories."
-          },
-          {
-            "id": 2,
-            "title": "Enhance Items Controller",
-            "description": "Enhance the existing Items controller to support proper categorization and transaction tracking.",
-            "status": "pending",
-            "dependencies": [
-              1
-            ],
-            "details": "The basic CRUD controller for Items already exists. Focus on enhancing it to:\n1. Ensure items are properly associated with categories and the current user\n2. Add methods to support viewing all transactions for a specific item (e.g., all Chickfila transactions)\n3. Implement proper validation and error handling\n4. Support easy categorization of items\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create and categorize items, and view all transactions related to a specific item.",
-            "testStrategy": "Write RSpec system tests that verify users can create items, assign them to categories, and view all transactions for a specific item. Test that users can only access their own items."
-          },
-          {
-            "id": 3,
-            "title": "Enhance Entries (Transactions) Controller",
-            "description": "Enhance the existing Entries controller to support proper transaction recording and relationship with items.",
-            "status": "pending",
-            "dependencies": [
-              2
-            ],
-            "details": "The basic CRUD controller for Entries already exists. Focus on enhancing it to:\n1. Ensure entries are properly associated with items and the current user\n2. Add methods to support filtering transactions by date, item, or category\n3. Implement proper validation and error handling\n4. Support the core transaction flow (e.g., spending $15.00 at Chickfila on March 15th)\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily record transactions, associate them with items, and view their transaction history filtered in useful ways.",
-            "testStrategy": "Write RSpec system tests that verify users can create entries with proper item associations, view their transaction history, and filter transactions by date, item, or category. Test that users can only access their own entries."
-          },
-          {
-            "id": 4,
-            "title": "Enhance Budgets Controller",
-            "description": "Enhance the existing Budgets controller to support proper budget management and category relationships.",
-            "status": "pending",
-            "dependencies": [
-              3
-            ],
-            "details": "The basic CRUD controller for Budgets already exists. Focus on enhancing it to:\n1. Ensure budgets are properly associated with categories and the current user\n2. Add methods to support viewing budget progress and spending within categories\n3. Implement proper validation and error handling\n4. Support comparing actual spending against budgeted amounts\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create budgets for categories, track their spending against budgets, and get useful insights about their budget performance.",
-            "testStrategy": "Write RSpec system tests that verify users can create budgets for categories, view their budget progress, and see comparisons between actual and budgeted spending. Test that users can only access their own budgets."
-          },
-          {
-            "id": 5,
-            "title": "Enhance SavingsPools Controller",
-            "description": "Enhance the existing SavingsPools controller to support proper savings tracking and goal management.",
-            "status": "pending",
-            "dependencies": [
-              4
-            ],
-            "details": "The basic CRUD controller for SavingsPools already exists. Focus on enhancing it to:\n1. Ensure savings pools are properly associated with the current user\n2. Add methods to support tracking progress toward savings goals\n3. Implement proper validation and error handling\n4. Support adding funds to and withdrawing funds from savings pools\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily create savings goals, track their progress, and manage their savings effectively.",
-            "testStrategy": "Write RSpec system tests that verify users can create savings pools, add funds to them, withdraw funds, and track progress toward goals. Test that users can only access their own savings pools."
-          },
-          {
-            "id": 6,
-            "title": "Enhance User Profile Management",
-            "description": "Enhance the existing user profile management to support user preferences and settings.",
-            "status": "pending",
-            "dependencies": [
-              5
-            ],
-            "details": "The basic profile management already exists. Focus on enhancing it to:\n1. Support user preferences and settings\n2. Add methods for viewing overall financial summaries\n3. Implement proper validation and error handling\n4. Support customization of the user experience\n5. Keep the controller simple and focused on supporting the user workflow\n\nMake sure users can easily manage their profile, set preferences, and get useful summaries of their financial situation.",
-            "testStrategy": "Write RSpec system tests that verify users can view and edit their profile information, set preferences, and view financial summaries. Test that users cannot access other users' profiles."
-          },
-          {
-            "id": 7,
-            "title": "Implement Error Handling and User Experience Improvements",
-            "description": "Enhance error handling and user experience across all controllers.",
-            "status": "pending",
-            "dependencies": [
-              1,
-              2,
-              3,
-              4,
-              5,
-              6
-            ],
-            "details": "Focus on enhancing the user experience and error handling across all controllers:\n1. Implement consistent error handling and user feedback\n2. Add helpful flash messages and redirects\n3. Ensure all controllers handle edge cases gracefully\n4. Implement proper validation feedback in forms\n5. Keep the controllers simple and focused on supporting the user workflow\n\nMake sure users have a smooth, intuitive experience and receive helpful feedback when errors occur.",
-            "testStrategy": "Write RSpec system tests that verify error handling for common scenarios like record not found, validation errors, and unauthorized access. Test that users receive helpful feedback and can easily recover from errors."
-          }
-        ]
+        "status": "pending",
+        "subtasks": []
       },
       {
         "id": 5,
-        "title": "Develop Category Management Module",
-        "description": "Create the UI and functionality for managing expense categories with budgets.",
-        "status": "pending",
-        "dependencies": [
-          3,
-          4
-        ],
+        "title": "Savings Pools Index Page Implementation",
+        "description": "Create a card-based layout for the Savings Pools index page with progress tracking and visual indicators.",
+        "details": "1. Create a new savings pools index view at `app/views/savings_pools/index.html.erb`\n2. Implement card-based layout similar to Categories and Budgets:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Savings Pools</h1>\n    <%= link_to 'New Savings Pool', new_savings_pool_path, class: 'btn-primary' %>\n  </div>\n  \n  <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">\n    <% @savings_pools.each do |pool| %>\n      <div class=\"card\">\n        <div class=\"p-6\">\n          <div class=\"flex justify-between items-start\">\n            <h2 class=\"text-xl font-semibold\"><%= pool.name %></h2>\n            <div class=\"dropdown\">\n              <!-- Actions dropdown -->\n            </div>\n          </div>\n          \n          <div class=\"mb-2 flex justify-between mt-4\">\n            <span class=\"text-sm text-gray-600\">Progress</span>\n            <span class=\"text-sm font-medium\"><%= number_to_percentage(pool.progress_percentage, precision: 0) %></span>\n          </div>\n          <div class=\"w-full bg-gray-200 rounded-full h-2.5\">\n            <div class=\"h-2.5 rounded-full\" style=\"width: <%= pool.progress_percentage %>%; background-color: var(--color-primary);\"></div>\n          </div>\n          \n          <div class=\"mt-4 flex justify-between\">\n            <div>\n              <p class=\"text-sm text-gray-600\">Current</p>\n              <p class=\"font-semibold\"><%= number_to_currency(pool.current_amount) %></p>\n            </div>\n            <div class=\"text-right\">\n              <p class=\"text-sm text-gray-600\">Target</p>\n              <p class=\"font-semibold\"><%= number_to_currency(pool.target_amount) %></p>\n            </div>\n          </div>\n          \n          <% if pool.categories.any? %>\n            <div class=\"mt-4\">\n              <p class=\"text-sm text-gray-600 mb-2\">Contributing Categories</p>\n              <div class=\"flex flex-wrap gap-2\">\n                <% pool.categories.each do |category| %>\n                  <span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-light text-primary-dark\">\n                    <%= category.name %>\n                  </span>\n                <% end %>\n              </div>\n            </div>\n          <% end %>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if @savings_pools.empty? %>\n      <div class=\"col-span-full\">\n        <%= render 'shared/empty_state', \n          title: 'No savings pools yet', \n          description: 'Create your first savings pool to start tracking your savings goals.',\n          action_text: 'Create Savings Pool',\n          action_path: new_savings_pool_path %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n3. Implement progress bars using brand colors from custom.css\n4. Display associated categories as tags\n5. Update SavingsPoolsController to load all necessary data\n6. Add search functionality for savings pools by name",
+        "testStrategy": "1. Verify card layout matches established design patterns\n2. Test progress visualization with various completion percentages\n3. Verify empty state displays correctly when no savings pools exist\n4. Test category association display\n5. Verify search functionality works correctly\n6. Test responsive behavior on mobile devices\n7. Verify all brand colors are applied correctly from custom.css",
         "priority": "medium",
-        "details": "1. Design and implement category listing page with visual category cards\n2. Create category creation/edit forms\n3. Implement category deletion with confirmation\n4. Add category-specific budget allocation\n5. Create visual indicators for category spending vs. budget\n6. Implement category filtering and organization tools\n7. Add category color coding and icons\n8. Create Stimulus controllers for interactive elements\n9. Implement proper validation and error handling\n10. Add responsive design for mobile compatibility",
-        "testStrategy": "Write system tests for category CRUD operations. Test budget allocation functionality. Verify filtering and organization features work correctly. Test responsive design across different screen sizes.",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 6,
-        "title": "Implement Transaction Tracking System",
-        "description": "Build the transaction entry and management functionality for income and expenses.",
-        "status": "pending",
+        "title": "Savings Pools CRUD Operations Implementation",
+        "description": "Implement complete CRUD operations for Savings Pools with forms that match the design patterns established in the Categories section.",
+        "details": "1. Create new savings pool form at `app/views/savings_pools/new.html.erb`\n2. Create edit savings pool form at `app/views/savings_pools/edit.html.erb`\n3. Create a shared form partial at `app/views/savings_pools/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states:\n```erb\n<%= simple_form_for @savings_pool do |f| %>\n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <h2 class=\"text-xl font-semibold mb-4\"><%= form_title %></h2>\n      \n      <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div class=\"col-span-full\">\n          <%= f.input :name, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :target_amount, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :target_date, \n            as: :date, \n            html5: true,\n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.association :categories, \n            collection: Category.savings, \n            label_method: :name, \n            value_method: :id, \n            input_html: { class: 'form-select', multiple: true },\n            hint: 'Select categories that contribute to this savings pool' %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.input :description, \n            input_html: { class: 'form-textarea', rows: 3 },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <div class=\"flex justify-end space-x-4\">\n    <%= link_to 'Cancel', savings_pools_path, class: 'btn-secondary' %>\n    <%= f.button :submit, class: 'btn-primary' %>\n  </div>\n<% end %>\n```\n5. Create savings pool show view at `app/views/savings_pools/show.html.erb`\n6. Implement delete confirmation modal using Stimulus.js\n7. Update SavingsPoolsController with all CRUD actions\n8. Add validations to SavingsPool model\n9. Implement flash messages for successful/failed operations",
+        "testStrategy": "1. Test creating a new savings pool with valid data\n2. Test validation errors display correctly\n3. Test editing an existing savings pool\n4. Test deleting a savings pool with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to savings categories only\n7. Verify flash messages display correctly for all operations\n8. Test multiple category selection functionality",
+        "priority": "medium",
         "dependencies": [
-          3,
-          4,
           5
         ],
-        "priority": "medium",
-        "details": "1. Create transaction entry form with category selection\n2. Implement transaction listing with filtering and sorting\n3. Add transaction search functionality\n4. Create transaction detail view\n5. Implement transaction categorization and tagging\n6. Create transaction edit and delete functionality\n7. Implement date range filtering\n8. Add transaction history with pagination\n9. Create Stimulus controllers for dynamic form behavior\n10. Implement proper validation and error handling",
-        "testStrategy": "Write system tests for transaction creation, editing, deletion. Test filtering, sorting, and search functionality. Verify categorization works correctly and updates related budget calculations.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 7,
-        "title": "Develop Budget Management Module",
-        "description": "Create the budget creation, allocation, and tracking functionality.",
-        "status": "pending",
-        "dependencies": [
-          3,
-          4,
-          5,
-          6
-        ],
+        "title": "Item Management Integration in Categories",
+        "description": "Enhance the Categories section with integrated Item management, allowing users to manage items directly from category show pages.",
+        "details": "1. Update the category show view at `app/views/categories/show.html.erb`\n2. Add a section for items management within the category context:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex items-center mb-6\">\n    <nav class=\"text-sm breadcrumbs\">\n      <ol class=\"flex space-x-2\">\n        <li><%= link_to 'Categories', categories_path, class: 'text-gray-500 hover:text-gray-700' %></li>\n        <li class=\"flex items-center\">\n          <svg class=\"h-5 w-5 text-gray-400\" fill=\"currentColor\" viewBox=\"0 0 20 20\">\n            <path fill-rule=\"evenodd\" d=\"M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z\" clip-rule=\"evenodd\"/>\n          </svg>\n          <span class=\"ml-2 text-gray-900\"><%= @category.name %></span>\n        </li>\n      </ol>\n    </nav>\n  </div>\n  \n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <div class=\"flex justify-between items-start\">\n        <h1 class=\"text-2xl font-bold\"><%= @category.name %></h1>\n        <div class=\"dropdown\">\n          <!-- Actions dropdown -->\n        </div>\n      </div>\n      <p class=\"text-gray-600 mt-2\"><%= @category.description %></p>\n      \n      <!-- Category details -->\n    </div>\n  </div>\n  \n  <div class=\"card\">\n    <div class=\"p-6\">\n      <div class=\"flex justify-between items-center mb-4\">\n        <h2 class=\"text-xl font-semibold\">Items</h2>\n        <%= link_to 'Add Item', new_category_item_path(@category), class: 'btn-primary text-sm', data: { turbo_frame: 'new_item_form' } %>\n      </div>\n      \n      <turbo-frame id=\"new_item_form\"></turbo-frame>\n      \n      <div class=\"mt-4\">\n        <turbo-frame id=\"items_list\">\n          <% if @items.any? %>\n            <div class=\"overflow-x-auto\">\n              <table class=\"min-w-full divide-y divide-gray-200\">\n                <thead>\n                  <tr>\n                    <th class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Name</th>\n                    <th class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">Description</th>\n                    <th class=\"px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider\">Actions</th>\n                  </tr>\n                </thead>\n                <tbody class=\"bg-white divide-y divide-gray-200\">\n                  <% @items.each do |item| %>\n                    <tr id=\"<%= dom_id(item) %>\" class=\"hover:bg-gray-50\">\n                      <td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900\"><%= item.name %></td>\n                      <td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-500\"><%= item.description %></td>\n                      <td class=\"px-6 py-4 whitespace-nowrap text-right text-sm font-medium\">\n                        <%= link_to 'Edit', edit_category_item_path(@category, item), class: 'text-primary-dark hover:text-primary mr-3', data: { turbo_frame: 'item_form' } %>\n                        <%= link_to 'Delete', category_item_path(@category, item), method: :delete, data: { confirm: 'Are you sure?' }, class: 'text-red-600 hover:text-red-900' %>\n                      </td>\n                    </tr>\n                  <% end %>\n                </tbody>\n              </table>\n            </div>\n          <% else %>\n            <div class=\"text-center py-8\">\n              <p class=\"text-gray-500\">No items in this category yet.</p>\n            </div>\n          <% end %>\n        </turbo-frame>\n      </div>\n    </div>\n  </div>\n</div>\n```\n3. Create new item form at `app/views/items/new.html.erb` with Turbo Frame support\n4. Create edit item form at `app/views/items/edit.html.erb` with Turbo Frame support\n5. Create a shared form partial at `app/views/items/_form.html.erb`\n6. Update ItemsController to handle Turbo Frame requests\n7. Implement inline editing using Turbo Frames\n8. Add proper routes for nested resources (categories/items)",
+        "testStrategy": "1. Test adding a new item to a category directly from the category show page\n2. Test inline editing of items without leaving the category context\n3. Test deleting items with confirmation\n4. Verify Turbo Frame functionality works correctly\n5. Test form validation and error handling\n6. Verify styling matches established patterns\n7. Test responsive behavior on mobile devices",
         "priority": "medium",
-        "details": "1. Design budget creation form with period selection\n2. Implement budget allocation across categories\n3. Create budget vs. actual spending comparison views\n4. Add budget progress visualization\n5. Implement budget alerts when approaching limits\n6. Create basic budget performance tracking\n7. Add budget adjustment functionality\n8. Create simple budget reports\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
-        "testStrategy": "Write system tests for budget creation, allocation, and tracking. Test budget alerts and notifications. Verify budget calculations are accurate based on transaction data. Test basic budget reporting features.",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 8,
-        "title": "Implement Savings Goals (Savings Pools)",
-        "description": "Build the savings goal creation, tracking, and management functionality.",
-        "status": "pending",
+        "title": "Standardized Page Headers Component",
+        "description": "Create a standardized page header component with breadcrumbs, search, and action buttons that can be reused across all sections.",
+        "details": "1. Create a shared partial at `app/views/shared/_page_header.html.erb`:\n```erb\n<div class=\"flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4\">\n  <div>\n    <% if local_assigns[:breadcrumbs].present? %>\n      <nav class=\"text-sm breadcrumbs mb-2\">\n        <ol class=\"flex flex-wrap space-x-2\">\n          <% breadcrumbs.each_with_index do |crumb, index| %>\n            <li class=\"flex items-center\">\n              <% if index > 0 %>\n                <svg class=\"h-5 w-5 text-gray-400 mx-1\" fill=\"currentColor\" viewBox=\"0 0 20 20\">\n                  <path fill-rule=\"evenodd\" d=\"M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z\" clip-rule=\"evenodd\"/>\n                </svg>\n              <% end %>\n              \n              <% if crumb[:url].present? && index < breadcrumbs.size - 1 %>\n                <%= link_to crumb[:label], crumb[:url], class: 'text-gray-500 hover:text-gray-700' %>\n              <% else %>\n                <span class=\"text-gray-900\"><%= crumb[:label] %></span>\n              <% end %>\n            </li>\n          <% end %>\n        </ol>\n      </nav>\n    <% end %>\n    \n    <h1 class=\"text-2xl font-bold\"><%= title %></h1>\n    <% if local_assigns[:subtitle].present? %>\n      <p class=\"text-gray-600 mt-1\"><%= subtitle %></p>\n    <% end %>\n  </div>\n  \n  <div class=\"flex flex-col sm:flex-row gap-3 mt-4 md:mt-0\">\n    <% if local_assigns[:search].present? && search == true %>\n      <div class=\"relative\">\n        <input type=\"text\" \n               placeholder=\"Search...\"\n               class=\"form-input pl-10\"\n               data-controller=\"search\"\n               data-action=\"input->search#debounce\"\n               data-search-url-value=\"<%= local_assigns[:search_url] %>\">\n        <div class=\"absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none\">\n          <svg class=\"h-5 w-5 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n            <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z\" />\n          </svg>\n        </div>\n      </div>\n    <% end %>\n    \n    <% if local_assigns[:actions].present? %>\n      <div class=\"flex space-x-3\">\n        <% actions.each do |action| %>\n          <%= link_to action[:label], action[:url], class: action[:class] || 'btn-primary' %>\n        <% end %>\n      </div>\n    <% end %>\n  </div>\n</div>\n```\n2. Create a Stimulus controller for search functionality at `app/javascript/controllers/search_controller.js`:\n```javascript\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static values = { url: String }\n  \n  connect() {\n    this.timeout = null\n  }\n  \n  debounce(event) {\n    clearTimeout(this.timeout)\n    this.timeout = setTimeout(() => {\n      this.performSearch(event.target.value)\n    }, 300)\n  }\n  \n  performSearch(query) {\n    const url = new URL(this.urlValue, window.location.origin)\n    url.searchParams.set('query', query)\n    \n    fetch(url, {\n      headers: {\n        'Accept': 'text/vnd.turbo-stream.html'\n      }\n    })\n    .then(response => response.text())\n    .then(html => {\n      Turbo.renderStreamMessage(html)\n    })\n  }\n}\n```\n3. Update all views to use the standardized page header component\n4. Ensure consistent styling across all sections\n5. Add appropriate breadcrumbs for each section",
+        "testStrategy": "1. Verify page header displays correctly across all sections\n2. Test breadcrumbs navigation functionality\n3. Test search functionality with debounced input\n4. Verify action buttons work correctly\n5. Test responsive behavior on mobile devices\n6. Verify styling is consistent with design patterns",
+        "priority": "high",
         "dependencies": [
-          3,
-          4
+          1
         ],
-        "priority": "medium",
-        "details": "1. Design savings goal creation form with target amounts and deadlines\n2. Implement progress tracking toward savings goals\n3. Create visual progress indicators (progress bars, charts)\n4. Add goal achievement notifications\n5. Implement multiple concurrent savings goals management\n6. Create contribution tracking and history\n7. Add goal adjustment functionality\n8. Create basic goal reports\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
-        "testStrategy": "Write system tests for savings goal creation, tracking, and achievement. Test progress calculations and visual indicators. Verify contribution tracking and history. Test goal adjustment functionality.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 9,
-        "title": "Develop Items Management Module",
-        "description": "Create the detailed item tracking functionality within categories.",
-        "status": "pending",
+        "title": "Standardized Card Component",
+        "description": "Create a standardized card component that can be reused across all sections with consistent styling.",
+        "details": "1. Create a shared partial at `app/views/shared/_card.html.erb`:\n```erb\n<div class=\"bg-white shadow-sm rounded-lg border border-gray-100 <%= local_assigns[:class] %>\">\n  <% if local_assigns[:header].present? %>\n    <div class=\"px-6 py-4 border-b border-gray-100\">\n      <% if local_assigns[:header_content] %>\n        <%= header_content %>\n      <% else %>\n        <div class=\"flex justify-between items-center\">\n          <h2 class=\"text-xl font-semibold\"><%= header %></h2>\n          \n          <% if local_assigns[:actions].present? %>\n            <div class=\"flex space-x-2\">\n              <% actions.each do |action| %>\n                <%= link_to action[:label], action[:url], class: action[:class] || 'btn-sm btn-secondary' %>\n              <% end %>\n            </div>\n          <% end %>\n        </div>\n      <% end %>\n    </div>\n  <% end %>\n  \n  <div class=\"p-6\">\n    <%= content %>\n  </div>\n  \n  <% if local_assigns[:footer].present? %>\n    <div class=\"px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg\">\n      <%= footer %>\n    </div>\n  <% end %>\n</div>\n```\n2. Update CSS to ensure consistent card styling:\n```css\n/* Add to app/assets/stylesheets/custom.css */\n.card {\n  @apply bg-white shadow-sm rounded-lg border border-gray-100;\n}\n\n.card-header {\n  @apply px-6 py-4 border-b border-gray-100;\n}\n\n.card-body {\n  @apply p-6;\n}\n\n.card-footer {\n  @apply px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg;\n}\n```\n3. Update all views to use the standardized card component\n4. Ensure consistent styling across all sections",
+        "testStrategy": "1. Verify card component displays correctly across all sections\n2. Test different card configurations (with/without header, footer)\n3. Verify styling is consistent with design patterns\n4. Test responsive behavior on mobile devices\n5. Verify all brand colors are applied correctly from custom.css",
+        "priority": "high",
         "dependencies": [
-          3,
-          4,
-          5
+          1
         ],
-        "priority": "low",
-        "details": "1. Design item creation and edit forms\n2. Implement item listing with filtering and sorting\n3. Create item detail view with history\n4. Add item-specific budgets and spending limits\n5. Implement basic item reporting\n6. Add custom item attributes and tags\n7. Create item search functionality\n8. Implement item categorization\n9. Add responsive design for mobile compatibility\n10. Implement proper validation and error handling",
-        "testStrategy": "Write system tests for item CRUD operations. Test item budgeting and spending tracking. Verify basic item reporting. Test custom attributes and tagging functionality.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 10,
-        "title": "Build Financial Dashboard",
-        "description": "Create the main dashboard with financial overview, charts, and quick access to features.",
-        "status": "pending",
-        "dependencies": [
-          5,
-          6,
-          7,
-          8
-        ],
+        "title": "Standardized Form Components",
+        "description": "Create standardized form components with SimpleForm integration and brand-colored focus states.",
+        "details": "1. Configure SimpleForm to use custom styling:\n```ruby\n# config/initializers/simple_form.rb\nSimpleForm.setup do |config|\n  config.wrappers :default, class: 'form-group' do |b|\n    b.use :html5\n    b.use :placeholder\n    b.use :label, class: 'form-label'\n    b.use :input, class: 'form-input', error_class: 'border-red-500'\n    b.use :error, wrap_with: { tag: :p, class: 'mt-1 text-sm text-red-600' }\n    b.use :hint, wrap_with: { tag: :p, class: 'mt-1 text-sm text-gray-500' }\n  end\nend\n```\n2. Add custom form styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Form styles */\n.form-group {\n  @apply mb-4;\n}\n\n.form-label {\n  @apply block text-sm font-medium text-gray-700 mb-1;\n}\n\n.form-input {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n\n.form-select {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n\n.form-checkbox {\n  @apply rounded border-gray-300 text-primary focus:ring-primary;\n}\n\n.form-radio {\n  @apply border-gray-300 text-primary focus:ring-primary;\n}\n\n.form-textarea {\n  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50;\n}\n```\n3. Create a shared form layout partial at `app/views/shared/_form_layout.html.erb`:\n```erb\n<div class=\"card mb-6\">\n  <div class=\"p-6\">\n    <h2 class=\"text-xl font-semibold mb-4\"><%= title %></h2>\n    <%= form_content %>\n  </div>\n</div>\n\n<div class=\"flex justify-end space-x-4\">\n  <%= link_to 'Cancel', cancel_path, class: 'btn-secondary' %>\n  <%= submit_button %>\n</div>\n```\n4. Update all form views to use the standardized form components\n5. Ensure consistent styling across all forms",
+        "testStrategy": "1. Verify form components display correctly across all sections\n2. Test form validation and error display\n3. Verify focus states use brand colors from custom.css\n4. Test different input types (text, select, checkbox, etc.)\n5. Verify responsive behavior on mobile devices\n6. Test form submission and error handling",
         "priority": "high",
-        "details": "1. Design dashboard layout with key financial metrics\n2. Implement Chart.js for spending trend visualization\n3. Create monthly budget progress tracking widgets\n4. Add recent transaction history section\n5. Implement quick access buttons for common tasks\n6. Create category spending breakdown charts\n7. Add savings goal progress indicators\n8. Implement date range selectors for dashboard data\n9. Create responsive design for different screen sizes\n10. Add clear data visualization for financial insights",
-        "testStrategy": "Write system tests for dashboard rendering and interactivity. Test chart data accuracy. Verify dashboard updates with new transactions and budget changes. Test responsive design across different screen sizes.",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 11,
-        "title": "Implement Basic Data Export",
-        "description": "Create functionality for exporting data and generating simple financial reports.",
-        "status": "pending",
+        "title": "Standardized Table Component",
+        "description": "Create a standardized table component with responsive design, proper spacing, and hover states.",
+        "details": "1. Create a shared partial at `app/views/shared/_table.html.erb`:\n```erb\n<div class=\"overflow-x-auto\">\n  <table class=\"min-w-full divide-y divide-gray-200\">\n    <thead>\n      <tr>\n        <% columns.each do |column| %>\n          <th class=\"<%= column[:class] || 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider' %>\">\n            <% if column[:sortable] %>\n              <%= link_to column[:label], column[:sort_url], class: 'flex items-center group', data: { turbo_action: 'advance' } %>\n              <% if column[:sort_direction] %>\n                <svg class=\"ml-1 h-4 w-4 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n                  <% if column[:sort_direction] == 'asc' %>\n                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 15l7-7 7 7\" />\n                  <% else %>\n                    <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\" />\n                  <% end %>\n                </svg>\n              <% else %>\n                <svg class=\"ml-1 h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n                  <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 15l7-7 7 7\" />\n                </svg>\n              <% end %>\n            <% else %>\n              <%= column[:label] %>\n            <% end %>\n          </th>\n        <% end %>\n      </tr>\n    </thead>\n    <tbody class=\"bg-white divide-y divide-gray-200\">\n      <% if items.any? %>\n        <% items.each do |item| %>\n          <tr id=\"<%= dom_id(item) if defined?(dom_id) %>\" class=\"hover:bg-gray-50\">\n            <%= yield item %>\n          </tr>\n        <% end %>\n      <% else %>\n        <tr>\n          <td colspan=\"<%= columns.size %>\" class=\"px-6 py-10 text-center text-gray-500\">\n            <%= empty_message || 'No items found' %>\n          </td>\n        </tr>\n      <% end %>\n    </tbody>\n  </table>\n</div>\n\n<% if defined?(pagy) && pagy.pages > 1 %>\n  <div class=\"mt-4 flex justify-between items-center\">\n    <p class=\"text-sm text-gray-700\">\n      Showing <span class=\"font-medium\"><%= pagy.from %></span> to <span class=\"font-medium\"><%= pagy.to %></span> of <span class=\"font-medium\"><%= pagy.count %></span> results\n    </p>\n    <%== pagy_nav(pagy) %>\n  </div>\n<% end %>\n```\n2. Add custom table styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Table styles */\n.table-container {\n  @apply overflow-x-auto;\n}\n\n.table {\n  @apply min-w-full divide-y divide-gray-200;\n}\n\n.table-header {\n  @apply px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;\n}\n\n.table-cell {\n  @apply px-6 py-4 whitespace-nowrap text-sm text-gray-900;\n}\n\n.table-cell-actions {\n  @apply px-6 py-4 whitespace-nowrap text-right text-sm font-medium;\n}\n```\n3. Create a Stimulus controller for sortable tables at `app/javascript/controllers/sortable_table_controller.js`\n4. Update all table views to use the standardized table component\n5. Ensure consistent styling across all tables",
+        "testStrategy": "1. Verify table component displays correctly across all sections\n2. Test sortable columns functionality\n3. Test empty state display\n4. Verify pagination works correctly\n5. Test responsive behavior on mobile devices\n6. Verify hover states work correctly\n7. Test with various data sets to ensure proper rendering",
+        "priority": "high",
         "dependencies": [
-          6,
-          7,
-          8,
-          10
+          1
         ],
-        "priority": "low",
-        "details": "1. Implement CSV export for transactions\n2. Create PDF report generation for budgets\n3. Add monthly financial summary reports\n4. Implement category spending reports\n5. Create savings goal progress reports\n6. Add custom date range selection for reports\n7. Create simple data visualization options in reports\n8. Add report templates for basic financial reports\n9. Implement proper error handling for export operations\n10. Add user feedback during export operations",
-        "testStrategy": "Test CSV and PDF export functionality. Verify report data accuracy. Test report generation with different date ranges and filters.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 12,
-        "title": "Enhance UI/UX with Tailwind CSS",
-        "description": "Improve the user interface and experience with Tailwind CSS styling and animations.",
-        "status": "pending",
+        "title": "Standardized Button Components",
+        "description": "Create standardized button components with primary, secondary, and danger variants using brand colors.",
+        "details": "1. Add custom button styles to `app/assets/stylesheets/custom.css`:\n```css\n/* Button styles */\n.btn {\n  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2;\n}\n\n.btn-primary {\n  @apply btn bg-gradient-to-r from-primary to-primary-dark text-white hover:from-primary-dark hover:to-primary-dark focus:ring-primary;\n}\n\n.btn-secondary {\n  @apply btn bg-white border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500;\n}\n\n.btn-danger {\n  @apply btn bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;\n}\n\n.btn-success {\n  @apply btn bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;\n}\n\n.btn-sm {\n  @apply px-3 py-1.5 text-xs;\n}\n\n.btn-lg {\n  @apply px-6 py-3 text-base;\n}\n\n.btn-icon {\n  @apply p-2;\n}\n```\n2. Create a shared button component at `app/helpers/button_helper.rb`:\n```ruby\nmodule ButtonHelper\n  def button_tag(content = nil, options = nil, &block)\n    options ||= {}\n    options[:class] = class_names(options[:class], 'btn')\n    \n    if options[:variant].present?\n      options[:class] = class_names(options[:class], \"btn-#{options[:variant]}\")\n      options.delete(:variant)\n    end\n    \n    if options[:size].present?\n      options[:class] = class_names(options[:class], \"btn-#{options[:size]}\")\n      options.delete(:size)\n    end\n    \n    super(content, options, &block)\n  end\n  \n  def link_button_to(name = nil, options = nil, html_options = nil, &block)\n    html_options ||= {}\n    html_options[:class] = class_names(html_options[:class], 'btn')\n    \n    if html_options[:variant].present?\n      html_options[:class] = class_names(html_options[:class], \"btn-#{html_options[:variant]}\")\n      html_options.delete(:variant)\n    end\n    \n    if html_options[:size].present?\n      html_options[:class] = class_names(html_options[:class], \"btn-#{html_options[:size]}\")\n      html_options.delete(:size)\n    end\n    \n    link_to(name, options, html_options, &block)\n  end\nend\n```\n3. Update all views to use the standardized button components\n4. Ensure consistent styling across all buttons",
+        "testStrategy": "1. Verify button components display correctly across all sections\n2. Test different button variants (primary, secondary, danger)\n3. Test different button sizes (default, sm, lg)\n4. Verify hover and focus states work correctly\n5. Test button helpers in various contexts\n6. Verify all brand colors are applied correctly from custom.css",
+        "priority": "high",
         "dependencies": [
-          5,
-          6,
-          7,
-          8,
-          9,
-          10
+          1
         ],
-        "priority": "medium",
-        "details": "1. Create consistent color scheme and typography\n2. Implement responsive design for all pages\n3. Add animations for user interactions\n4. Create custom Tailwind components for common UI elements\n5. Implement dark mode support\n6. Add loading indicators for asynchronous operations\n7. Create toast notifications for user feedback\n8. Implement form validation styling\n9. Add accessibility improvements (ARIA attributes, keyboard navigation)\n10. Create print-friendly styles for reports",
-        "testStrategy": "Test responsive design across different screen sizes. Verify accessibility compliance with automated tools. Test dark mode functionality. Verify animations and transitions work correctly across browsers.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 13,
-        "title": "Implement Basic Performance Optimization",
-        "description": "Optimize application performance for speed and reliability.",
-        "status": "pending",
-        "dependencies": [
-          4,
-          10
-        ],
+        "title": "Empty State Component Implementation",
+        "description": "Create a standardized empty state component with branded messaging and call-to-action buttons.",
+        "details": "1. Create a shared partial at `app/views/shared/_empty_state.html.erb`:\n```erb\n<div class=\"text-center py-12\">\n  <% if local_assigns[:icon].present? %>\n    <div class=\"mx-auto h-12 w-12 text-gray-400\">\n      <%= icon %>\n    </div>\n  <% else %>\n    <svg class=\"mx-auto h-12 w-12 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\">\n      <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4\" />\n    </svg>\n  <% end %>\n  \n  <h3 class=\"mt-4 text-lg font-medium text-gray-900\"><%= title %></h3>\n  <p class=\"mt-1 text-sm text-gray-500\"><%= description %></p>\n  \n  <% if local_assigns[:action_text].present? && local_assigns[:action_path].present? %>\n    <div class=\"mt-6\">\n      <%= link_to action_text, action_path, class: 'btn-primary' %>\n    </div>\n  <% end %>\n</div>\n```\n2. Create a set of standard empty state icons for different contexts (categories, budgets, entries, etc.)\n3. Update all views to use the standardized empty state component\n4. Ensure consistent styling across all empty states",
+        "testStrategy": "1. Verify empty state component displays correctly across all sections\n2. Test with and without custom icons\n3. Test with and without action buttons\n4. Verify styling is consistent with design patterns\n5. Test responsive behavior on mobile devices",
         "priority": "medium",
-        "details": "1. Implement database query optimization with proper indexes\n2. Add basic caching for frequently accessed data\n3. Implement fragment caching for view components\n4. Add pagination for large data sets\n5. Optimize JavaScript and CSS assets\n6. Implement lazy loading for images and heavy components\n7. Add N+1 query detection and resolution\n8. Add basic performance monitoring\n9. Optimize database queries for dashboard views\n10. Ensure responsive performance across different data volumes",
-        "testStrategy": "Benchmark page load times before and after optimization. Test database query performance. Verify caching works correctly. Test application with realistic data volumes to ensure it meets performance targets.",
+        "dependencies": [
+          1,
+          12
+        ],
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 14,
-        "title": "Implement Comprehensive Testing",
-        "description": "Create a comprehensive test suite for all application functionality.",
-        "status": "pending",
+        "title": "Mobile Responsiveness Implementation",
+        "description": "Ensure all new interfaces work well on mobile devices with appropriate responsive design patterns.",
+        "details": "1. Review all new components and views for mobile responsiveness\n2. Implement responsive design patterns for each component:\n   - **Navigation**: Collapsible sidebar on mobile\n   - **Tables**: Horizontal scrolling on small screens\n   - **Cards**: Single column layout on mobile\n   - **Forms**: Full-width inputs on mobile\n   - **Buttons**: Appropriate sizing and spacing on mobile\n3. Add responsive utility classes to `app/assets/stylesheets/custom.css`:\n```css\n/* Responsive utilities */\n@media (max-width: 640px) {\n  .mobile-full-width {\n    width: 100%;\n  }\n  \n  .mobile-stack {\n    flex-direction: column;\n  }\n  \n  .mobile-hidden {\n    display: none;\n  }\n}\n```\n4. Test all views on various screen sizes and devices\n5. Implement responsive navigation using Stimulus.js:\n```javascript\n// app/javascript/controllers/mobile_nav_controller.js\nimport { Controller } from \"@hotwired/stimulus\"\n\nexport default class extends Controller {\n  static targets = [\"sidebar\"]\n  \n  toggle() {\n    this.sidebarTarget.classList.toggle('hidden')\n  }\n  \n  close() {\n    if (window.innerWidth < 768) {\n      this.sidebarTarget.classList.add('hidden')\n    }\n  }\n  \n  // Close sidebar when clicking outside on mobile\n  clickOutside(event) {\n    if (window.innerWidth < 768 && !this.sidebarTarget.contains(event.target) && !this.element.contains(event.target)) {\n      this.sidebarTarget.classList.add('hidden')\n    }\n  }\n}\n```\n6. Update the layout to use the mobile navigation controller",
+        "testStrategy": "1. Test all views on various screen sizes (mobile, tablet, desktop)\n2. Verify navigation works correctly on mobile devices\n3. Test tables with horizontal scrolling on small screens\n4. Verify forms are usable on mobile devices\n5. Test touch interactions on mobile devices\n6. Verify all components maintain proper spacing and alignment on mobile",
+        "priority": "medium",
         "dependencies": [
           1,
           2,
           3,
-          4,
           5,
-          6,
           7,
           8,
           9,
-          10
+          10,
+          11,
+          12,
+          13
         ],
-        "priority": "high",
-        "details": "1. Write model unit tests for all models\n2. Create controller tests for all endpoints\n3. Implement system tests for key user flows\n4. Add integration tests for complex interactions\n5. Create performance tests for critical paths\n6. Implement security tests (XSS, CSRF, SQL injection)\n7. Add accessibility tests\n8. Create test fixtures and factories\n9. Implement continuous integration with GitHub Actions\n10. Add code coverage reporting",
-        "testStrategy": "Ensure test coverage meets or exceeds 80% for all code. Verify all critical user flows are covered by system tests. Test edge cases and error conditions. Ensure tests run in CI pipeline before deployment.",
+        "status": "pending",
         "subtasks": []
       },
       {
         "id": 15,
-        "title": "Implement Security Measures",
-        "description": "Enhance application security with comprehensive security measures.",
-        "status": "pending",
-        "dependencies": [
-          2
-        ],
-        "priority": "high",
-        "details": "1. Implement SSL/TLS encryption for all communications\n2. Add secure headers (Content-Security-Policy, X-XSS-Protection)\n3. Implement rate limiting for authentication attempts\n4. Add IP-based blocking for suspicious activity\n5. Create security audit logging\n6. Implement regular security dependency updates\n7. Add database encryption for sensitive data\n8. Create security vulnerability scanning in CI pipeline\n9. Implement two-factor authentication option\n10. Add session timeout and management",
-        "testStrategy": "Perform security penetration testing. Verify SSL/TLS configuration. Test rate limiting and blocking functionality. Verify secure headers are properly set. Test two-factor authentication flow.",
-        "subtasks": []
-      },
-      {
-        "id": 16,
-        "title": "Implement Comprehensive Testing and Code Quality Framework",
-        "description": "Establish a practical testing and code quality framework that ensures the application works correctly for users and follows Ruby best practices.",
-        "status": "pending",
+        "title": "Performance Optimization Implementation",
+        "description": "Implement performance optimizations for database queries, frontend rendering, and overall application responsiveness.",
+        "details": "1. Optimize database queries:\n   - Add proper indexes to relevant tables\n   - Implement eager loading for associations\n   - Use counter caches for frequently accessed counts\n   - Add database-level scopes for common queries\n\n2. Implement frontend performance optimizations:\n   - Use Turbo Drive for navigation\n   - Implement Turbo Frames for partial page updates\n   - Use Stimulus controllers for interactive elements\n   - Optimize CSS with proper specificity\n\n3. Add pagination for large datasets using Pagy gem:\n```ruby\n# Gemfile\ngem 'pagy', '~> 6.0'\n\n# app/controllers/application_controller.rb\ninclude Pagy::Backend\n\n# app/helpers/application_helper.rb\ninclude Pagy::Frontend\n```\n\n4. Implement controller-level optimizations:\n```ruby\n# Example for EntriesController\ndef index\n  @pagy, @entries = pagy(Entry.includes(:category, :item).order(date: :desc), items: 20)\n  @expense_entries = @entries.select { |e| e.category.expense? }\n  @income_entries = @entries.select { |e| e.category.income? }\n  @savings_entries = @entries.select { |e| e.category.savings? }\n  \n  respond_to do |format|\n    format.html\n    format.turbo_stream if params[:query].present?\n  end\nend\n```\n\n5. Add caching for expensive operations:\n```ruby\n# app/models/category.rb\ndef total_amount\n  Rails.cache.fetch([self, 'total_amount']) do\n    entries.sum(:amount)\n  end\nend\n```\n\n6. Optimize asset loading:\n   - Use Webpacker for JavaScript bundling\n   - Implement proper asset precompilation\n   - Use image optimization for any images\n\n7. Implement debounced search inputs using Stimulus.js",
+        "testStrategy": "1. Measure page load times before and after optimizations\n2. Test database query performance with large datasets\n3. Verify pagination works correctly with large datasets\n4. Test caching effectiveness for expensive operations\n5. Verify Turbo Drive and Turbo Frames work correctly\n6. Test search performance with debounced inputs\n7. Verify mobile performance is acceptable",
+        "priority": "medium",
         "dependencies": [
           1,
+          2,
           3,
-          4
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
         ],
-        "priority": "high",
-        "details": "1. Set up basic RSpec test suite:\n   - Configure model tests with factories using FactoryBot\n   - Create system tests using Capybara for critical user flows\n   - Focus on testing user-facing functionality\n\n2. Configure RuboCop for code style enforcement:\n   - Create custom .rubocop.yml with project-specific rules\n   - Implement pre-commit hooks to prevent non-compliant code\n   - Configure auto-correction for common issues\n\n3. Implement simple test coverage monitoring:\n   - Set up SimpleCov for basic test coverage reporting\n   - Focus on covering critical user paths\n\n4. Create development workflow enforcement:\n   - Implement pull request templates with quality checklists\n   - Configure branch protection rules requiring passing tests\n   - Create documentation for testing standards and practices\n\n5. Implement test data management:\n   - Create focused fixtures and factories\n   - Set up database cleaner for test isolation",
-        "testStrategy": "1. Verify test suite functionality:\n   - Run full test suite and ensure all tests pass\n   - Manually verify that critical models and features have tests\n   - Confirm common user scenarios are tested\n\n2. Validate code quality enforcement:\n   - Run RuboCop against the entire codebase and verify compliance\n   - Test pre-commit hooks by attempting to commit non-compliant code\n   - Check that code style is consistent across the project\n\n3. Test development workflow:\n   - Create a pull request and verify templates and checks work\n   - Attempt to merge failing code and confirm it's prevented\n   - Confirm documentation is accessible and understandable\n\n4. Verify user experience:\n   - Run system tests to confirm critical user flows work correctly\n   - Verify that the application behaves as expected from a user perspective",
-        "subtasks": [
-          {
-            "id": 1,
-            "title": "Set up RSpec and test configuration",
-            "description": "Configure the testing environment with RSpec, including necessary gems, database cleaner, and test database setup to enable effective testing of the application.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Add RSpec, FactoryBot, and DatabaseCleaner gems to Gemfile\n2. Run `rails generate rspec:install` to set up the RSpec framework\n3. Configure the test database in database.yml\n4. Set up FactoryBot in spec/rails_helper.rb\n5. Configure DatabaseCleaner for test isolation\n6. Create a basic spec_helper.rb with common test configurations\n7. Set up test environment variables in .env.test file",
-            "testStrategy": "Verify the test suite runs successfully with a simple test case to confirm proper configuration."
-          },
-          {
-            "id": 2,
-            "title": "Implement model tests with FactoryBot",
-            "description": "Create focused model tests that verify validations and associations for all models in the application.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Create factories for each model in spec/factories/\n2. Write tests for model validations (presence, uniqueness, format)\n3. Test model associations (belongs_to, has_many relationships)\n4. Test essential custom model methods\n5. Focus on Category, Entry, and User models as priorities",
-            "testStrategy": "Run model tests in isolation to ensure they don't depend on other components. Focus on testing critical functionality."
-          },
-          {
-            "id": 3,
-            "title": "Create system tests for critical user flows",
-            "description": "Implement Capybara-based system tests that verify end-to-end functionality of critical user workflows to ensure features work from the user's perspective.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Set up Capybara and Chrome/Firefox drivers\n2. Create system tests for user registration and authentication\n3. Implement tests for category creation, editing, and deletion\n4. Test entry creation, editing, and deletion workflows\n5. Verify filtering and sorting functionality\n6. Test responsive behavior on different screen sizes\n7. Focus on happy paths first, then add edge cases\n<info added on 2025-07-10T19:49:31.277Z>\n1. Set up Capybara with JavaScript capability\n2. Create system tests for core user workflows:\n   - User registration and login\n   - Creating, editing, and deleting categories\n   - Creating, editing, and deleting entries\n   - Dashboard viewing and navigation\n   - Authorization (users can only access their own data)\n3. Focus on happy path scenarios first\n4. Verify form submissions save data correctly\n5. Keep tests simple and focused on proving features work correctly\n</info added on 2025-07-10T19:49:31.277Z>",
-            "testStrategy": "Record videos of test runs for debugging. Use realistic user scenarios and verify both UI elements and database changes."
-          },
-          {
-            "id": 4,
-            "title": "Configure RuboCop for code style enforcement",
-            "description": "Set up RuboCop to enforce consistent code style across the project and integrate it with the development workflow.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Add RuboCop and related gems to the Gemfile\n2. Create a custom .rubocop.yml configuration file with project-specific rules\n3. Set up Rails-specific cops for Rails best practices\n4. Configure documentation requirements for public methods\n5. Add pre-commit hooks using Husky or pre-commit to prevent non-compliant code\n6. Run RuboCop on the existing codebase and fix critical issues\n7. Document code style guidelines in the project README",
-            "testStrategy": "Verify RuboCop runs successfully on the codebase and that pre-commit hooks prevent non-compliant code from being committed."
-          },
-          {
-            "id": 5,
-            "title": "Set up SimpleCov for basic test coverage",
-            "description": "Configure SimpleCov to provide basic test coverage reporting to help identify untested code paths.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Add SimpleCov gem to the Gemfile\n2. Configure SimpleCov in spec_helper.rb\n3. Set up HTML report generation\n4. Add SimpleCov configuration to ignore unnecessary files\n5. Document how to view and interpret coverage reports",
-            "testStrategy": "Run the test suite and verify that SimpleCov generates a coverage report. Check that the report correctly identifies tested and untested code."
-          },
-          {
-            "id": 6,
-            "title": "Create pull request templates and documentation",
-            "description": "Set up pull request templates and testing documentation to ensure consistent development practices.",
-            "status": "pending",
-            "dependencies": [],
-            "details": "1. Create a .github/PULL_REQUEST_TEMPLATE.md file\n2. Include sections for test coverage, code style compliance, and manual testing\n3. Document testing practices in the project README\n4. Create a TESTING.md file with detailed testing instructions\n5. Document how to run the test suite locally",
-            "testStrategy": "Create a test pull request to verify the template works correctly. Have another developer review the documentation for clarity."
-          }
-        ]
+        "status": "pending",
+        "subtasks": []
       }
     ],
     "metadata": {
-      "created": "2025-07-10T16:06:30.410Z",
-      "updated": "2025-07-10T19:56:55.556Z",
-      "description": "Tasks for master context"
+      "created": "2025-07-14T21:48:01.158Z",
+      "updated": "2025-07-14T22:00:16.854Z",
+      "description": "Tasks for ui-ux-improvements context"
     }
   }
 }

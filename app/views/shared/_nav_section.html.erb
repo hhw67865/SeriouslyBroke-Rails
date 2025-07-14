@@ -6,9 +6,10 @@
   <nav class="space-y-1">
     <% links.each do |link| %>
       <% 
-        # Check if we're on an exact page match or a sub-page of categories
+        # Check if we're on an exact page match or a sub-page of categories/entries
         is_active = current_page?(link[:path]) || 
-                   (link[:name] == "Categories" && controller_name == "categories")
+                   (link[:name] == "Categories" && controller_name == "categories") ||
+                   (link[:name] == "Entries" && controller_name == "entries")
       %>
       <%= link_to link[:path], 
           class: class_names(

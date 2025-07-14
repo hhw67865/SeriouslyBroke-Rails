@@ -7,7 +7,19 @@ class EntriesController < ApplicationController
   # GET /entries
   def index
     @entries = current_user.entries.includes(item: :category)
-      .order(date: :desc)
+    
+    # Filter by type using existing scopes
+    case params[:type]
+    when 'expenses'
+      @entries = @entries.expenses
+    when 'income'
+      @entries = @entries.incomes
+    when 'savings'
+      @entries = @entries.savings
+    end
+    
+    @entries = @entries.order(date: :desc)
+    @current_type = params[:type] || 'all'
   end
 
   # GET /entries/1
