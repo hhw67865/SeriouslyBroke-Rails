@@ -310,14 +310,89 @@
         "id": 2,
         "title": "Entries Management Table Interface",
         "description": "Create a professional table-based interface for entries management with filtering, sorting, and actions following the Categories items_list pattern.",
-        "details": "1. Create a new entries index view at `app/views/entries/index.html.erb`\n2. Implement responsive table structure following Categories pattern:\n```erb\n<div class=\"container mx-auto px-4 py-8\">\n  <div class=\"flex justify-between items-center mb-6\">\n    <h1 class=\"text-2xl font-bold\">Entries</h1>\n    <%= link_to 'New Entry', new_entry_path, class: 'btn-primary' %>\n  </div>\n  \n  <div data-controller=\"tab\" class=\"mb-6\">\n    <div class=\"border-b border-gray-200\">\n      <nav class=\"-mb-px flex space-x-8\">\n        <a href=\"#\" data-tab-target data-tab-id=\"all\" data-action=\"click->tab#switch\" class=\"tab-link\">All</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"expense\" data-action=\"click->tab#switch\" class=\"tab-link\">Expenses</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"income\" data-action=\"click->tab#switch\" class=\"tab-link\">Income</a>\n        <a href=\"#\" data-tab-target data-tab-id=\"savings\" data-action=\"click->tab#switch\" class=\"tab-link\">Savings</a>\n      </nav>\n    </div>\n    \n    <div data-panel-target data-panel-id=\"all\" class=\"mt-4\">\n      <%= render 'entries_table', entries: @entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"expense\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @expense_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"income\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @income_entries %>\n    </div>\n    <div data-panel-target data-panel-id=\"savings\" class=\"mt-4 hidden\">\n      <%= render 'entries_table', entries: @savings_entries %>\n    </div>\n  </div>\n</div>\n```\n3. Create a partial for the entries table at `app/views/entries/_entries_table.html.erb`\n4. Implement sortable columns using Stimulus.js\n5. Add search functionality with debounced input\n6. Implement pagination using Pagy gem (version 6.0+)\n7. Style table with consistent hover states and spacing\n8. Add edit and delete actions with appropriate styling\n9. Update EntriesController to handle filtering, sorting, and pagination",
-        "testStrategy": "1. Test table rendering with various data sets\n2. Verify filtering works correctly between All, Expenses, Income, and Savings\n3. Test sorting functionality for each column\n4. Verify search functionality works across item names and descriptions\n5. Test pagination with large datasets\n6. Verify edit and delete actions function correctly\n7. Test responsive behavior on mobile devices",
-        "priority": "high",
+        "status": "done",
         "dependencies": [
           1
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "high",
+        "details": "1. Create a new entries index view at `app/views/entries/index.html.erb` (COMPLETED)\n2. Implement responsive table structure following Categories pattern (COMPLETED)\n3. Create a partial for the entries table at `app/views/entries/_entries_table.html.erb` (COMPLETED)\n4. Implement simplified sorting for amount and date columns only (asc/desc) (COMPLETED)\n5. Add search functionality with dropdown selector (date, item, description, category)\n6. Extract controller logic into methods/concerns for better organization\n7. Create a reusable search concern for multiple controllers/models\n8. Implement pagination using Pagy gem (version 6.0+)\n9. Style table with consistent hover states and spacing\n10. Add edit and delete actions with appropriate styling\n11. Use SimpleForm with onchange submit for search functionality",
+        "testStrategy": "1. Test table rendering with various data sets\n2. Verify filtering works correctly between All, Expenses, Income, and Savings\n3. Test simplified sorting functionality for amount and date columns\n4. Verify search functionality works with dropdown selector for different fields\n5. Test pagination with large datasets\n6. Verify edit and delete actions function correctly\n7. Test responsive behavior on mobile devices\n8. Verify reusable search concern works across different controllers\n9. Test SimpleForm onchange submit behavior",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Basic table interface implementation",
+            "description": "Core table structure and tab-based filtering already implemented during Task 1.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "Extract table partial",
+            "description": "Create `_entries_table.html.erb` partial for better organization and reusability across tab panels.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "Implement sortable columns",
+            "description": "Create a Stimulus.js controller for sorting entries by Date, Amount, Category, and other relevant columns. Add appropriate sort indicators and toggle functionality.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "Implement simplified search with dropdown selector",
+            "description": "Create a search form with a dropdown selector for different fields (date, item, description, category) using SimpleForm with onchange submit behavior.",
+            "status": "done",
+            "dependencies": [],
+            "details": "1. Create a SimpleForm search form in the entries index view\n2. Add a dropdown selector for search field options\n3. Configure the form to submit on change\n4. Style the form to match the overall design",
+            "testStrategy": "1. Test search functionality with each dropdown option\n2. Verify onchange submit behavior works correctly\n3. Test with various search terms and edge cases"
+          },
+          {
+            "id": 5,
+            "title": "Extract controller logic into concerns",
+            "description": "Create a reusable search concern that can be used across multiple controllers and models for consistent search functionality.",
+            "status": "done",
+            "dependencies": [],
+            "details": "1. Create a `Searchable` concern in `app/controllers/concerns/`\n2. Extract search logic from EntriesController into the concern\n3. Make the concern flexible enough to work with different models and search fields\n4. Update EntriesController to include the concern",
+            "testStrategy": "1. Test the concern with EntriesController\n2. Verify search functionality works correctly\n3. Test with different search parameters and edge cases"
+          },
+          {
+            "id": 6,
+            "title": "Implement pagination",
+            "description": "Add Pagy gem for pagination support with large datasets. Update the EntriesController to handle pagination parameters and integrate pagination UI in the view.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "Enhance table styling",
+            "description": "Improve hover states, spacing, and visual consistency of the table. Ensure proper alignment of columns and responsive behavior.",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 8,
+            "title": "Update sorting implementation",
+            "description": "Simplify the existing sorting implementation to only support amount and date columns (asc/desc) based on user feedback.",
+            "status": "done",
+            "dependencies": [
+              3
+            ],
+            "details": "1. Modify the existing sorting controller to only handle amount and date columns\n2. Update the UI to only show sort indicators for these columns\n3. Ensure toggle between ascending and descending works correctly\n4. Remove sorting functionality from other columns",
+            "testStrategy": "1. Test sorting by amount (ascending and descending)\n2. Test sorting by date (ascending and descending)\n3. Verify other columns no longer show sort indicators\n4. Test interaction between sorting and search functionality"
+          }
+        ]
       },
       {
         "id": 3,
@@ -513,7 +588,7 @@
     ],
     "metadata": {
       "created": "2025-07-14T21:48:01.158Z",
-      "updated": "2025-07-14T22:00:16.854Z",
+      "updated": "2025-07-14T23:25:36.693Z",
       "description": "Tasks for ui-ux-improvements context"
     }
   }

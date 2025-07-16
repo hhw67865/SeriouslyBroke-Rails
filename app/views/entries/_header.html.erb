@@ -1,0 +1,93 @@
+<%# Entries Header with Search and Actions %>
+<% type_config = entry_type_config(@current_type) %>
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-gray-200">
+  <div>
+    <h1 class="text-2xl font-semibold tracking-tight text-gray-900">
+      <%= type_config[:title] %>
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      <%= type_config[:description] %>
+    </p>
+  </div>
+  
+  <div class="mt-4 md:mt-0 flex items-center gap-3">
+    <%# Enhanced Search Form - matches categories style with integrated field selector %>
+    <% if show_search_form? %>
+      <%= form_with url: entries_path, method: :get, local: true, html: { 
+        class: "relative",
+        data: { 
+          controller: "shared--search-placeholder",
+          "shared--search-placeholder-placeholders-value": search_placeholders_js
+        }
+      } do |f| %>
+        
+        <%# Integrated Search Bar with Field Selector and Search Input %>
+        <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand">
+          <%# Field Selector Dropdown - left side %>
+          <%= f.select :field, 
+              search_options_with_selection(@search_state[:field]),
+              { include_blank: false },
+              { 
+                class: "py-2 pl-3 pr-8 border-0 bg-transparent text-gray-900 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-l-md min-w-32",
+                data: { 
+                  "shared--search-placeholder-target": "fieldSelector",
+                  action: "change->shared--search-placeholder#fieldChanged"
+                }
+              } %>
+          
+          <%# Separator %>
+          <div class="w-px h-6 bg-gray-300"></div>
+          
+          <%# Search Input - right side %>
+          <div class="relative flex-1">
+            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+            </div>
+            <%= f.text_field :q, 
+                           value: @search_state[:query],
+                           placeholder: search_placeholder(@search_state[:field]), 
+                           class: "pl-10 py-2 pr-3 block w-64 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
+                           autocomplete: "off",
+                           data: { "shared--search-placeholder-target": "searchInput" } %>
+          </div>
+        </div>
+        
+        
+        <%# Clear Search Button (only if searching) %>
+        <% if @search_state[:has_search] %>
+          <%= link_to entries_path(type: @current_type != 'all' ? @current_type : nil), 
+              class: "inline-flex items-center gap-x-1 rounded-md bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors duration-200",
+              title: "Clear search" do %>
+            <%= heroicon "x-mark", options: { class: "h-4 w-4" } %>
+            <span class="hidden sm:inline">Clear</span>
+          <% end %>
+        <% end %>
+        
+        <%# Preserve other parameters %>
+        <% if @current_type != 'all' %>
+          <%= f.hidden_field :type, value: @current_type %>
+        <% end %>
+        <% if @current_sort.present? %>
+          <%= f.hidden_field :sort, value: @current_sort %>
+          <%= f.hidden_field :direction, value: @current_direction %>
+        <% end %>
+        
+      <% end %>
+    <% end %>
+    
+    <%# New Entry Button %>
+    <%= link_to new_entry_path, class: "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
+      <%= heroicon "plus", options: { class: "h-4 w-4" } %>
+      <span>New Entry</span>
+    <% end %>
+  </div>
+</div>
+
+<%# Search Results Info Banner (below header if searching) %>
+<% if @search_state[:has_search] %>
+  <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+    <p class="text-blue-800 text-sm">
+      <%= search_results_text(@entries, @search_state) %>
+    </p>
+  </div>
+<% end %> 

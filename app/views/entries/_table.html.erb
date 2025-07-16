@@ -1,0 +1,39 @@
+<!-- Entries Table -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200">
+  <% if entries.any? %>
+    <div class="overflow-hidden">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Type
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <%= sortable_header(:date, "Date", current_sort: @current_sort, current_direction: @current_direction) %>
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Item & Description
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Category
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <%= sortable_header(:amount, "Amount", current_sort: @current_sort, current_direction: @current_direction) %>
+            </th>
+            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white divide-y divide-gray-200">
+          <%= render partial: "entry", collection: entries %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <div class="text-center py-12">
+      <div class="text-gray-500 text-lg">No entries found</div>
+      <% if defined?(current_type) && current_type != 'all' %>
+        <p class="text-gray-400 text-sm mt-2">Try adjusting your filter or search criteria</p>
+      <% end %>
+    </div>
+  <% end %>
+</div> 
