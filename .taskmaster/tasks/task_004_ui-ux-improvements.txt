@@ -1,0 +1,69 @@
+# Task ID: 4
+# Title: Budget CRUD Operations Implementation
+# Status: pending
+# Dependencies: 3
+# Priority: medium
+# Description: Implement complete CRUD operations for Budgets with forms that match the design patterns established in the Categories section.
+# Details:
+1. Create new budget form at `app/views/budgets/new.html.erb`
+2. Create edit budget form at `app/views/budgets/edit.html.erb`
+3. Create a shared form partial at `app/views/budgets/_form.html.erb`
+4. Implement SimpleForm integration with brand-colored focus states:
+```erb
+<%= simple_form_for @budget do |f| %>
+  <div class="card mb-6">
+    <div class="p-6">
+      <h2 class="text-xl font-semibold mb-4"><%= form_title %></h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="col-span-full">
+          <%= f.association :category, 
+            collection: Category.expense, 
+            label_method: :name, 
+            value_method: :id, 
+            include_blank: 'Select a category',
+            input_html: { class: 'form-select' } %>
+        </div>
+        
+        <div>
+          <%= f.input :amount, 
+            input_html: { class: 'form-input' },
+            wrapper_html: { class: 'mb-4' } %>
+        </div>
+        
+        <div>
+          <%= f.input :period, 
+            collection: Budget.periods.keys.map { |p| [p.humanize, p] },
+            input_html: { class: 'form-select' },
+            wrapper_html: { class: 'mb-4' } %>
+        </div>
+        
+        <div class="col-span-full">
+          <%= f.input :notes, 
+            input_html: { class: 'form-textarea', rows: 3 },
+            wrapper_html: { class: 'mb-4' } %>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="flex justify-end space-x-4">
+    <%= link_to 'Cancel', budgets_path, class: 'btn-secondary' %>
+    <%= f.button :submit, class: 'btn-primary' %>
+  </div>
+<% end %>
+```
+5. Create budget show view at `app/views/budgets/show.html.erb`
+6. Implement delete confirmation modal using Stimulus.js
+7. Update BudgetsController with all CRUD actions
+8. Add validations to Budget model
+9. Implement flash messages for successful/failed operations
+
+# Test Strategy:
+1. Test creating a new budget with valid data
+2. Test validation errors display correctly
+3. Test editing an existing budget
+4. Test deleting a budget with confirmation
+5. Verify form styling matches Categories section
+6. Test category selection is limited to expense categories only
+7. Verify flash messages display correctly for all operations

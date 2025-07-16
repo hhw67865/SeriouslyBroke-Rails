@@ -1,0 +1,72 @@
+# Task ID: 15
+# Title: Performance Optimization Implementation
+# Status: pending
+# Dependencies: 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14
+# Priority: medium
+# Description: Implement performance optimizations for database queries, frontend rendering, and overall application responsiveness.
+# Details:
+1. Optimize database queries:
+   - Add proper indexes to relevant tables
+   - Implement eager loading for associations
+   - Use counter caches for frequently accessed counts
+   - Add database-level scopes for common queries
+
+2. Implement frontend performance optimizations:
+   - Use Turbo Drive for navigation
+   - Implement Turbo Frames for partial page updates
+   - Use Stimulus controllers for interactive elements
+   - Optimize CSS with proper specificity
+
+3. Add pagination for large datasets using Pagy gem:
+```ruby
+# Gemfile
+gem 'pagy', '~> 6.0'
+
+# app/controllers/application_controller.rb
+include Pagy::Backend
+
+# app/helpers/application_helper.rb
+include Pagy::Frontend
+```
+
+4. Implement controller-level optimizations:
+```ruby
+# Example for EntriesController
+def index
+  @pagy, @entries = pagy(Entry.includes(:category, :item).order(date: :desc), items: 20)
+  @expense_entries = @entries.select { |e| e.category.expense? }
+  @income_entries = @entries.select { |e| e.category.income? }
+  @savings_entries = @entries.select { |e| e.category.savings? }
+  
+  respond_to do |format|
+    format.html
+    format.turbo_stream if params[:query].present?
+  end
+end
+```
+
+5. Add caching for expensive operations:
+```ruby
+# app/models/category.rb
+def total_amount
+  Rails.cache.fetch([self, 'total_amount']) do
+    entries.sum(:amount)
+  end
+end
+```
+
+6. Optimize asset loading:
+   - Use Webpacker for JavaScript bundling
+   - Implement proper asset precompilation
+   - Use image optimization for any images
+
+7. Implement debounced search inputs using Stimulus.js
+
+# Test Strategy:
+1. Measure page load times before and after optimizations
+2. Test database query performance with large datasets
+3. Verify pagination works correctly with large datasets
+4. Test caching effectiveness for expensive operations
+5. Verify Turbo Drive and Turbo Frames work correctly
+6. Test search performance with debounced inputs
+7. Verify mobile performance is acceptable

@@ -1,0 +1,69 @@
+# Task ID: 9
+# Title: Standardized Card Component
+# Status: pending
+# Dependencies: 1
+# Priority: high
+# Description: Create a standardized card component that can be reused across all sections with consistent styling.
+# Details:
+1. Create a shared partial at `app/views/shared/_card.html.erb`:
+```erb
+<div class="bg-white shadow-sm rounded-lg border border-gray-100 <%= local_assigns[:class] %>">
+  <% if local_assigns[:header].present? %>
+    <div class="px-6 py-4 border-b border-gray-100">
+      <% if local_assigns[:header_content] %>
+        <%= header_content %>
+      <% else %>
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-semibold"><%= header %></h2>
+          
+          <% if local_assigns[:actions].present? %>
+            <div class="flex space-x-2">
+              <% actions.each do |action| %>
+                <%= link_to action[:label], action[:url], class: action[:class] || 'btn-sm btn-secondary' %>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+  
+  <div class="p-6">
+    <%= content %>
+  </div>
+  
+  <% if local_assigns[:footer].present? %>
+    <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg">
+      <%= footer %>
+    </div>
+  <% end %>
+</div>
+```
+2. Update CSS to ensure consistent card styling:
+```css
+/* Add to app/assets/stylesheets/custom.css */
+.card {
+  @apply bg-white shadow-sm rounded-lg border border-gray-100;
+}
+
+.card-header {
+  @apply px-6 py-4 border-b border-gray-100;
+}
+
+.card-body {
+  @apply p-6;
+}
+
+.card-footer {
+  @apply px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-lg;
+}
+```
+3. Update all views to use the standardized card component
+4. Ensure consistent styling across all sections
+
+# Test Strategy:
+1. Verify card component displays correctly across all sections
+2. Test different card configurations (with/without header, footer)
+3. Verify styling is consistent with design patterns
+4. Test responsive behavior on mobile devices
+5. Verify all brand colors are applied correctly from custom.css

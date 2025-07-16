@@ -1,0 +1,40 @@
+# Task ID: 13
+# Title: Empty State Component Implementation
+# Status: pending
+# Dependencies: 1, 12
+# Priority: medium
+# Description: Create a standardized empty state component with branded messaging and call-to-action buttons.
+# Details:
+1. Create a shared partial at `app/views/shared/_empty_state.html.erb`:
+```erb
+<div class="text-center py-12">
+  <% if local_assigns[:icon].present? %>
+    <div class="mx-auto h-12 w-12 text-gray-400">
+      <%= icon %>
+    </div>
+  <% else %>
+    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+    </svg>
+  <% end %>
+  
+  <h3 class="mt-4 text-lg font-medium text-gray-900"><%= title %></h3>
+  <p class="mt-1 text-sm text-gray-500"><%= description %></p>
+  
+  <% if local_assigns[:action_text].present? && local_assigns[:action_path].present? %>
+    <div class="mt-6">
+      <%= link_to action_text, action_path, class: 'btn-primary' %>
+    </div>
+  <% end %>
+</div>
+```
+2. Create a set of standard empty state icons for different contexts (categories, budgets, entries, etc.)
+3. Update all views to use the standardized empty state component
+4. Ensure consistent styling across all empty states
+
+# Test Strategy:
+1. Verify empty state component displays correctly across all sections
+2. Test with and without custom icons
+3. Test with and without action buttons
+4. Verify styling is consistent with design patterns
+5. Test responsive behavior on mobile devices

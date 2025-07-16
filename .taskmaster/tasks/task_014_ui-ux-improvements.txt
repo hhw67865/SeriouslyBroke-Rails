@@ -1,0 +1,67 @@
+# Task ID: 14
+# Title: Mobile Responsiveness Implementation
+# Status: pending
+# Dependencies: 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13
+# Priority: medium
+# Description: Ensure all new interfaces work well on mobile devices with appropriate responsive design patterns.
+# Details:
+1. Review all new components and views for mobile responsiveness
+2. Implement responsive design patterns for each component:
+   - **Navigation**: Collapsible sidebar on mobile
+   - **Tables**: Horizontal scrolling on small screens
+   - **Cards**: Single column layout on mobile
+   - **Forms**: Full-width inputs on mobile
+   - **Buttons**: Appropriate sizing and spacing on mobile
+3. Add responsive utility classes to `app/assets/stylesheets/custom.css`:
+```css
+/* Responsive utilities */
+@media (max-width: 640px) {
+  .mobile-full-width {
+    width: 100%;
+  }
+  
+  .mobile-stack {
+    flex-direction: column;
+  }
+  
+  .mobile-hidden {
+    display: none;
+  }
+}
+```
+4. Test all views on various screen sizes and devices
+5. Implement responsive navigation using Stimulus.js:
+```javascript
+// app/javascript/controllers/mobile_nav_controller.js
+import { Controller } from "@hotwired/stimulus"
+
+export default class extends Controller {
+  static targets = ["sidebar"]
+  
+  toggle() {
+    this.sidebarTarget.classList.toggle('hidden')
+  }
+  
+  close() {
+    if (window.innerWidth < 768) {
+      this.sidebarTarget.classList.add('hidden')
+    }
+  }
+  
+  // Close sidebar when clicking outside on mobile
+  clickOutside(event) {
+    if (window.innerWidth < 768 && !this.sidebarTarget.contains(event.target) && !this.element.contains(event.target)) {
+      this.sidebarTarget.classList.add('hidden')
+    }
+  }
+}
+```
+6. Update the layout to use the mobile navigation controller
+
+# Test Strategy:
+1. Test all views on various screen sizes (mobile, tablet, desktop)
+2. Verify navigation works correctly on mobile devices
+3. Test tables with horizontal scrolling on small screens
+4. Verify forms are usable on mobile devices
+5. Test touch interactions on mobile devices
+6. Verify all components maintain proper spacing and alignment on mobile

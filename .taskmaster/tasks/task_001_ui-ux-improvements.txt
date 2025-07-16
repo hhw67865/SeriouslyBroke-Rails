@@ -1,0 +1,48 @@
+# Task ID: 1
+# Title: Navigation Consolidation Implementation
+# Status: done
+# Dependencies: None
+# Priority: high
+# Description: Replace separate 'Expenses' and 'Income' sidebar items with a single 'Entries' navigation item that provides tab-based filtering.
+# Details:
+1. Update the sidebar navigation in `app/views/shared/_sidebar.html.erb`
+2. Remove existing 'Expenses' and 'Income' items
+3. Add new 'Entries' item with appropriate icon (use heroicons)
+4. Create a new controller action in EntriesController to handle the unified view
+5. Implement tab-based filtering using Stimulus.js controller:
+```javascript
+// app/javascript/controllers/tab_controller.js
+import { Controller } from "@hotwired/stimulus"
+
+export default class extends Controller {
+  static targets = ["tab", "panel"]
+  
+  connect() {
+    this.showTab(this.tabTargets[0].dataset.tabId || "all")
+  }
+  
+  switch(event) {
+    event.preventDefault()
+    this.showTab(event.currentTarget.dataset.tabId)
+  }
+  
+  showTab(id) {
+    this.tabTargets.forEach(tab => {
+      tab.classList.toggle("active", tab.dataset.tabId === id)
+    })
+    
+    this.panelTargets.forEach(panel => {
+      panel.classList.toggle("hidden", panel.dataset.panelId !== id)
+    })
+  }
+}
+```
+6. Style active tab state using brand colors from custom.css
+7. Ensure the active navigation item is highlighted correctly
+
+# Test Strategy:
+1. Verify sidebar navigation displays single 'Entries' item
+2. Test tab-based filtering for Expenses, Income, and Savings
+3. Confirm active states are styled correctly using brand colors
+4. Test navigation on mobile devices to ensure responsive behavior
+5. Verify correct routes are generated when clicking navigation items

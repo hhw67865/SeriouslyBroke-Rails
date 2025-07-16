@@ -1,0 +1,87 @@
+# Task ID: 5
+# Title: Savings Pools Index Page Implementation
+# Status: pending
+# Dependencies: 1
+# Priority: medium
+# Description: Create a card-based layout for the Savings Pools index page with progress tracking and visual indicators.
+# Details:
+1. Create a new savings pools index view at `app/views/savings_pools/index.html.erb`
+2. Implement card-based layout similar to Categories and Budgets:
+```erb
+<div class="container mx-auto px-4 py-8">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">Savings Pools</h1>
+    <%= link_to 'New Savings Pool', new_savings_pool_path, class: 'btn-primary' %>
+  </div>
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <% @savings_pools.each do |pool| %>
+      <div class="card">
+        <div class="p-6">
+          <div class="flex justify-between items-start">
+            <h2 class="text-xl font-semibold"><%= pool.name %></h2>
+            <div class="dropdown">
+              <!-- Actions dropdown -->
+            </div>
+          </div>
+          
+          <div class="mb-2 flex justify-between mt-4">
+            <span class="text-sm text-gray-600">Progress</span>
+            <span class="text-sm font-medium"><%= number_to_percentage(pool.progress_percentage, precision: 0) %></span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2.5">
+            <div class="h-2.5 rounded-full" style="width: <%= pool.progress_percentage %>%; background-color: var(--color-primary);"></div>
+          </div>
+          
+          <div class="mt-4 flex justify-between">
+            <div>
+              <p class="text-sm text-gray-600">Current</p>
+              <p class="font-semibold"><%= number_to_currency(pool.current_amount) %></p>
+            </div>
+            <div class="text-right">
+              <p class="text-sm text-gray-600">Target</p>
+              <p class="font-semibold"><%= number_to_currency(pool.target_amount) %></p>
+            </div>
+          </div>
+          
+          <% if pool.categories.any? %>
+            <div class="mt-4">
+              <p class="text-sm text-gray-600 mb-2">Contributing Categories</p>
+              <div class="flex flex-wrap gap-2">
+                <% pool.categories.each do |category| %>
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-light text-primary-dark">
+                    <%= category.name %>
+                  </span>
+                <% end %>
+              </div>
+            </div>
+          <% end %>
+        </div>
+      </div>
+    <% end %>
+    
+    <% if @savings_pools.empty? %>
+      <div class="col-span-full">
+        <%= render 'shared/empty_state', 
+          title: 'No savings pools yet', 
+          description: 'Create your first savings pool to start tracking your savings goals.',
+          action_text: 'Create Savings Pool',
+          action_path: new_savings_pool_path %>
+      </div>
+    <% end %>
+  </div>
+</div>
+```
+3. Implement progress bars using brand colors from custom.css
+4. Display associated categories as tags
+5. Update SavingsPoolsController to load all necessary data
+6. Add search functionality for savings pools by name
+
+# Test Strategy:
+1. Verify card layout matches established design patterns
+2. Test progress visualization with various completion percentages
+3. Verify empty state displays correctly when no savings pools exist
+4. Test category association display
+5. Verify search functionality works correctly
+6. Test responsive behavior on mobile devices
+7. Verify all brand colors are applied correctly from custom.css
