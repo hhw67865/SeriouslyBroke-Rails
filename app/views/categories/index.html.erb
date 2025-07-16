@@ -1,5 +1,34 @@
-<%# Header with search and actions %>
-<%= render "categories/_partials/header" %>
+<%# Standardized Page Header with Helper %>
+<%= page_header(
+    title: "#{@type.titleize} Categories",
+    subtitle: case @type
+              when "expense"
+                "Manage your expense categories and track your spending"
+              when "income"
+                "Track your income sources and monthly earnings"
+              when "savings"
+                "Organize your savings goals and track progress"
+              else
+                "Manage your expense, income, and savings categories"
+              end,
+    search: {
+      enabled: true,
+      url: categories_path,
+      query: @query,
+      placeholder: "Search #{@type} categories...",
+      has_results: @query.present?,
+      hidden_fields: {
+        type: @type
+      }
+    },
+    actions: [
+      standard_action_button(
+        label: "New #{@type.singularize.titleize} Category",
+        url: new_category_path(type: @type),
+        icon: "plus"
+      )
+    ]
+) %>
 
 <%# Category type filter tabs %>
 <%= render "categories/_partials/filter_tabs" %>

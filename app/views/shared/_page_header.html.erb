@@ -1,0 +1,158 @@
+<%# Standardized Page Header Component
+    Usage:
+    <%= render 'shared/page_header', 
+        title: "Page Title",
+        subtitle: "Optional description",
+        breadcrumbs: [{ label: "Home", url: root_path }, { label: "Current Page" }],
+        search: { 
+          enabled: true, 
+          url: some_path,
+          placeholder: "Search...",
+          field_selector: { options: [...], selected: "field" },
+          query: @query,
+          has_results: @results.present?,
+          results_text: "Found X results"
+        },
+        actions: [
+          { label: "New Item", url: new_item_path, class: "btn-primary" },
+          { label: "Export", url: export_path, class: "btn-secondary" }
+        ]
+    %>
+
+<div class="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-gray-200">
+  <div>
+    <%# Breadcrumbs Navigation %>
+    <% if local_assigns[:breadcrumbs].present? %>
+      <nav class="text-sm mb-2" aria-label="Breadcrumb">
+        <ol class="flex flex-wrap items-center space-x-2">
+          <% breadcrumbs.each_with_index do |crumb, index| %>
+            <li class="flex items-center">
+              <% if index > 0 %>
+                <%= heroicon "chevron-right", options: { class: "h-4 w-4 text-gray-400 mx-1" } %>
+              <% end %>
+              
+              <% if crumb[:url].present? && index < breadcrumbs.size - 1 %>
+                <%= link_to crumb[:label], crumb[:url], 
+                    class: 'text-gray-500 hover:text-gray-700 transition-colors duration-200' %>
+              <% else %>
+                <span class="text-gray-900 font-medium"><%= crumb[:label] %></span>
+              <% end %>
+            </li>
+          <% end %>
+        </ol>
+      </nav>
+    <% end %>
+    
+    <%# Page Title %>
+    <h1 class="text-2xl font-semibold tracking-tight text-gray-900">
+      <%= title %>
+    </h1>
+    
+    <%# Optional Subtitle %>
+    <% if local_assigns[:subtitle].present? %>
+      <p class="text-sm text-gray-500 mt-1">
+        <%= subtitle %>
+      </p>
+    <% end %>
+  </div>
+  
+  <%# Actions Section (Search + Buttons) %>
+  <div class="mt-4 md:mt-0 flex items-center gap-3">
+    <%# Search Form %>
+    <% if local_assigns[:search].present? && search[:enabled] %>
+      <%= form_with url: search[:url], method: :get, local: true, html: { 
+        class: "relative",
+        data: search[:field_selector].present? ? {
+          controller: "shared--search-placeholder",
+          "shared--search-placeholder-placeholders-value": search[:field_selector][:placeholders] || {}
+        } : {}
+      } do |f| %>
+        
+        <% if search[:field_selector].present? %>
+          <%# Enhanced Search with Field Selector %>
+          <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand">
+            <%# Field Selector Dropdown %>
+            <%= f.select :field, 
+                search[:field_selector][:options],
+                { include_blank: false, selected: search[:field_selector][:selected] },
+                { 
+                  class: "py-2 pl-3 pr-8 border-0 bg-transparent text-gray-900 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-l-md min-w-32",
+                  data: { 
+                    "shared--search-placeholder-target": "fieldSelector",
+                    action: "change->shared--search-placeholder#fieldChanged"
+                  }
+                } %>
+            
+            <%# Separator %>
+            <div class="w-px h-6 bg-gray-300"></div>
+            
+            <%# Search Input %>
+            <div class="relative flex-1">
+              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+              </div>
+              <%= f.text_field :q, 
+                             value: search[:query],
+                             placeholder: search[:placeholder] || "Search...", 
+                             class: "pl-10 py-2 pr-3 block w-64 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
+                             autocomplete: "off",
+                             data: { "shared--search-placeholder-target": "searchInput" } %>
+            </div>
+          </div>
+        <% else %>
+          <%# Simple Search (like categories) %>
+          <div class="relative">
+            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+              <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+            </div>
+            <%= f.text_field :query, 
+                           value: search[:query],
+                           placeholder: search[:placeholder] || "Search...", 
+                           class: "pl-10 py-2 pr-3 block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand sm:text-sm sm:leading-6",
+                           autocomplete: "off" %>
+          </div>
+        <% end %>
+        
+        <%# Clear Search Button %>
+        <% if search[:has_results] %>
+          <% clear_url = search[:clear_url] || search[:url] %>
+          <%= link_to clear_url, 
+              class: "inline-flex items-center gap-x-1 rounded-md bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors duration-200",
+              title: "Clear search" do %>
+            <%= heroicon "x-mark", options: { class: "h-4 w-4" } %>
+            <span class="hidden sm:inline">Clear</span>
+          <% end %>
+        <% end %>
+        
+        <%# Hidden Fields for State Preservation %>
+        <% if search[:hidden_fields].present? %>
+          <% search[:hidden_fields].each do |field, value| %>
+            <%= f.hidden_field field, value: value %>
+          <% end %>
+        <% end %>
+        
+      <% end %>
+    <% end %>
+    
+    <%# Action Buttons %>
+    <% if local_assigns[:actions].present? %>
+      <% actions.each do |action| %>
+        <%= link_to action[:url], class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
+          <% if action[:icon].present? %>
+            <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
+          <% end %>
+          <span><%= action[:label] %></span>
+        <% end %>
+      <% end %>
+    <% end %>
+  </div>
+</div>
+
+<%# Search Results Info Banner %>
+<% if local_assigns[:search].present? && search[:has_results] && search[:results_text].present? %>
+  <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+    <p class="text-blue-800 text-sm">
+      <%= search[:results_text] %>
+    </p>
+  </div>
+<% end %> 

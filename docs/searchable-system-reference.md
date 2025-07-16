@@ -40,14 +40,40 @@ searchable :category, through: [:item, :category], column: :name, label: "Catego
 
 **Usage**: Just `include Searchable` in controller and call `apply_search` in query building.
 
-### 3. View Integration (`app/views/shared/_search_form.html.erb`)
+### 3. View Integration - Standardized Page Header (`app/views/shared/_page_header.html.erb`)
+
+**Modern Implementation**: Search is now integrated into the standardized page header component.
 
 **Features**:
-- Auto-generates dropdown from model configuration
-- Dynamic placeholders based on field type
-- Preserves other URL parameters (type, sorting)
-- Auto-submit on field change
-- Clear search functionality
+- **Unified Header Component**: Combines breadcrumbs, search, and action buttons
+- **Flexible Search Configuration**: Supports both simple search (categories) and advanced search with field selectors (entries)  
+- **Professional UX**: Integrated design with consistent styling across all sections
+- **Dynamic Placeholders**: JavaScript-powered placeholder updates via Stimulus controller
+- **Auto-generates dropdown**: From model configuration via `search_field_options_for_controller`
+- **URL Parameter Preservation**: Maintains type, sorting, and other filters
+- **Responsive Design**: Professional styling that adapts to mobile/desktop
+
+**Usage Pattern**:
+```erb
+<%= render 'shared/page_header',
+    title: "Page Title",
+    subtitle: "Description", 
+    search: {
+      enabled: true,
+      url: entries_path,
+      field_selector: {                    # For advanced search (entries)
+        options: search_options_with_selection(@search_state[:field]),
+        selected: @search_state[:field],
+        placeholders: search_placeholders_js
+      },
+      query: @search_state[:query],        # Current search query
+      placeholder: search_placeholder(@search_state[:field]),
+      has_results: @search_state[:has_search],
+      results_text: search_results_text(@entries, @search_state),
+      hidden_fields: { type: @current_type } # Preserve other params
+    },
+    actions: [{ label: "New Entry", url: new_entry_path }]
+%>
 
 ### 4. Search Helper (`app/helpers/search_helper.rb`)
 
@@ -68,8 +94,8 @@ searchable :category, through: [:item, :category], column: :name, label: "Catego
 **Helper Organization**:
 - Rails automatically includes all helpers in `app/helpers/` for all views
 - SearchHelper is focused solely on search functionality
-- ApplicationHelper remains clean with only general UI helpers (flash messages, icons)
-- Each helper has a single responsibility
+- ApplicationHelper now includes standardized page header helpers (`page_header`, `standard_action_button`, `breadcrumb_trail`)
+- Each helper has a single responsibility with clean separation of concerns
 
 ## Implementation Example: Entry Model
 
@@ -110,33 +136,58 @@ end
 
 ## Helper Usage Examples
 
-### In Views
+### In Views - Modern Standardized Header Pattern
 ```erb
-<!-- Check if search should be shown -->
-<% if show_search_form? %>
-  <%= render 'shared/search_form', 
-      search_options: search_field_options_for_controller,
-      current_search: @search_state %>
-<% end %>
+<!-- Simple Search (Categories Style) -->
+<%= render 'shared/page_header',
+    title: "#{@type.titleize} Categories",
+    subtitle: "Manage your categories and track progress",
+    search: {
+      enabled: true,
+      url: categories_path,
+      query: @query,
+      placeholder: "Search #{@type} categories...",
+      has_results: @query.present?,
+      hidden_fields: { type: @type }
+    },
+    actions: [{ label: "New Category", url: new_category_path }]
+%>
 
-<!-- Show search results count -->
-<% if @search_state[:has_search] %>
-  <p><%= search_results_text(@entries, @search_state) %></p>
-<% end %>
-
-<!-- Dynamic placeholder in forms -->
-<%= f.text_field :q, placeholder: search_placeholder(@search_state[:field]) %>
+<!-- Advanced Search with Field Selector (Entries Style) -->
+<% type_config = entry_type_config(@current_type) %>
+<%= render 'shared/page_header',
+    title: type_config[:title],
+    subtitle: type_config[:description],
+    search: show_search_form? ? {
+      enabled: true,
+      url: entries_path,
+      field_selector: {
+        options: search_options_with_selection(@search_state[:field]),
+        selected: @search_state[:field],
+        placeholders: search_placeholders_js
+      },
+      query: @search_state[:query],
+      placeholder: search_placeholder(@search_state[:field]),
+      has_results: @search_state[:has_search],
+      results_text: search_results_text(@entries, @search_state),
+      hidden_fields: { type: (@current_type != 'all' ? @current_type : nil) }
+    } : nil,
+    actions: [{ label: "New Entry", url: new_entry_path }]
+%>
 ```
 
-### In Search Form Partial
+### Using Helper Methods for Cleaner Code
 ```erb
-<!-- Pre-selected dropdown options -->
-<%= f.select :field, search_options_with_selection(current_search[:field]) %>
+<!-- Using the page_header helper for even cleaner syntax -->
+<%= page_header(
+      title: "Dashboard",
+      search: search_enabled? ? search_config : nil,
+      actions: [standard_action_button(label: "Export", url: export_path, style: :secondary)]
+    ) %>
 
-<!-- Dynamic form styling -->
-<div class="<%= search_form_css_classes(has_results: @entries.any?) %>">
-  <!-- form content -->
-</div>
+<!-- Helper methods in action -->
+<%= standard_action_button(label: "New Item", url: new_item_path, style: :primary) %>
+<%= breadcrumb_trail([{label: "Home", url: root_path}, {label: "Current"}]) %>
 ```
 
 ## Search Flow
@@ -199,14 +250,22 @@ when :custom_type
 ### Core System Files
 - `app/models/concerns/model_searchable.rb` - Model DSL and search engine
 - `app/controllers/concerns/searchable.rb` - Controller integration
-- `app/views/shared/_search_form.html.erb` - Reusable search form
+- `app/views/shared/_page_header.html.erb` - **NEW**: Standardized page header with integrated search
 - `app/helpers/search_helper.rb` - Dedicated search helper methods
+- `app/helpers/application_helper.rb` - **UPDATED**: Added standardized page header helpers
+- `app/javascript/controllers/shared/search_placeholder_controller.js` - **NEW**: Stimulus controller for dynamic placeholders
 
 ### Implementation Files
 - `app/models/entry.rb` - Example model configuration
 - `app/controllers/entries_controller.rb` - Example controller usage
-- `app/views/entries/index.html.erb` - View integration
-- `app/views/entries/_entries_table.html.erb` - Table with search
+- `app/views/entries/index.html.erb` - **UPDATED**: Uses standardized page header
+- `app/views/categories/index.html.erb` - **UPDATED**: Uses standardized page header
+- `app/views/entries/_table.html.erb` - **RENAMED**: From `_entries_table.html.erb`, now uses collection render
+- `app/views/entries/_entry.html.erb` - **NEW**: Individual entry row partial
+
+### Removed Files (Replaced by Standardized Component)
+- `app/views/entries/_header.html.erb` - **DELETED**: Replaced by standardized page header
+- `app/views/categories/_partials/_header.html.erb` - **DELETED**: Replaced by standardized page header
 
 ## Key Benefits
 

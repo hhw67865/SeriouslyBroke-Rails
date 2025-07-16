@@ -1,8 +1,38 @@
 <% content_for :title, "Entries" %>
 
 <div class="w-full">
-  <%# Header with integrated search and actions %>
-  <%= render "entries/header" %>
+  <%# Standardized Page Header with Helper %>
+  <% type_config = entry_type_config(@current_type) %>
+  <%= page_header(
+      title: type_config[:title],
+      subtitle: type_config[:description],
+      search: show_search_form? ? {
+        enabled: true,
+        url: entries_path,
+        field_selector: {
+          options: search_options_with_selection(@search_state[:field]),
+          selected: @search_state[:field],
+          placeholders: search_placeholders_js
+        },
+        query: @search_state[:query],
+        placeholder: search_placeholder(@search_state[:field]),
+        has_results: @search_state[:has_search],
+        results_text: @search_state[:has_search] ? search_results_text(@entries, @search_state) : nil,
+        clear_url: entries_path(type: @current_type != 'all' ? @current_type : nil),
+        hidden_fields: {
+          type: (@current_type != 'all' ? @current_type : nil),
+          sort: @current_sort,
+          direction: @current_direction
+        }.compact
+      } : nil,
+      actions: [
+        standard_action_button(
+          label: "New Entry",
+          url: new_entry_path,
+          icon: "plus"
+        )
+      ]
+  ) %>
 
   <%# Tab Navigation %>
   <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
