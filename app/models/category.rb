@@ -9,7 +9,7 @@ class Category < ApplicationRecord
 
   validates :name, presence: true
   validates :category_type, presence: true
-  validates :name, uniqueness: { scope: :user_id }
+  validates :name, uniqueness: { scope: :user_id, case_sensitive: false }
 
   enum :category_type,
        {

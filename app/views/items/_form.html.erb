@@ -1,37 +1,63 @@
-<%= form_with(model: item, class: "contents") do |form| %>
-  <% if item.errors.any? %>
-    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
-      <h2><%= pluralize(item.errors.count, "error") %> prohibited this item from being saved:</h2>
-
-      <ul class="list-disc ml-6">
-        <% item.errors.each do |error| %>
-          <li><%= error.full_message %></li>
-        <% end %>
-      </ul>
+<%# Item Edit Form - SimpleForm with brand styling %>
+<div class="bg-white shadow-sm rounded-lg border border-gray-100 p-6">
+  <%= simple_form_for item, html: { class: "space-y-6" } do |f| %>
+    <%# Item Name %>
+    <div>
+      <%= f.input :name,
+          label: "Item Name",
+          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+          input_html: { 
+            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+            placeholder: "Enter item name"
+          },
+          hint: "The name of this expense, income, or savings item" %>
     </div>
+
+    <%# Item Description %>
+    <div>
+      <%= f.input :description,
+          label: "Description (Optional)",
+          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+          input_html: { 
+            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+            rows: 3,
+            placeholder: "Add any additional details about this item"
+          },
+          hint: "Optional description to help identify this item" %>
+    </div>
+
+    <%# Frequency Selection %>
+    <div>
+      <%= f.input :frequency,
+          collection: Item.frequencies.keys.map { |freq| [freq.humanize, freq] },
+          label: "Frequency",
+          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+          input_html: { 
+            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
+          },
+          hint: "How often does this item typically occur?" %>
+    </div>
+
+    <%# Category (Read-only for editing) %>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+      <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+        <%= item.category.name %>
+      </div>
+      <p class="text-xs text-gray-500 mt-1">Category cannot be changed after creation</p>
+      <%= f.hidden_field :category_id %>
+    </div>
+
+    <%# Form Actions %>
+    <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+      <%= f.submit "Update Item",
+          class: "inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" %>
+      
+      <%= link_to category_path(item.category), 
+          class: "inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
+        Cancel
+      <% end %>
+    </div>
+    
   <% end %>
-
-  <div class="my-5">
-    <%= form.label :name %>
-    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:name].none?, "border-red-400 focus:outline-red-600": item.errors[:name].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :description %>
-    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:description].none?, "border-red-400 focus:outline-red-600": item.errors[:description].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :frequency %>
-    <%= form.number_field :frequency, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:frequency].none?, "border-red-400 focus:outline-red-600": item.errors[:frequency].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :category_id %>
-    <%= form.text_field :category_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": item.errors[:category_id].none?, "border-red-400 focus:outline-red-600": item.errors[:category_id].any? }] %>
-  </div>
-
-  <div class="inline">
-    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
-  </div>
-<% end %>
+</div> 

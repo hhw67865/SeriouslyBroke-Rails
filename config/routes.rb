@@ -8,9 +8,9 @@ Rails.application.routes.draw do
     root 'dashboard#index', as: :authenticated_root
     resources :savings_pools
     resources :entries
-    resources :items
+    resources :items, only: [:edit, :update, :destroy]
     resources :categories
-    resources :budgets
+    resources :budgets, only: [:new, :create, :edit, :update, :destroy]
   end
 
   # Landing page for non-authenticated users

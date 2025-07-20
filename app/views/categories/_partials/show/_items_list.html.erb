@@ -7,7 +7,7 @@
   <% current_month_items = category.calculator.current_month_items %>
   
   <% if current_month_items.any? %>
-    <div class="overflow-hidden shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+    <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
       <table class="min-w-full divide-y divide-gray-300">
         <thead class="bg-gray-50">
           <tr>
@@ -43,7 +43,7 @@
               <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                 <div class="flex justify-end gap-2">
                   <%= link_to "Edit", edit_item_path(item), class: "text-brand hover:text-brand-dark" %>
-                  <%= link_to "View", item_path(item), class: "text-gray-600 hover:text-gray-900" %>
+                  <%= link_to "View", entries_path(field: "item", q: item.name), class: "text-gray-600 hover:text-gray-900" %>
                 </div>
               </td>
             </tr>

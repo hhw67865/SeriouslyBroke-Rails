@@ -484,14 +484,78 @@
         "id": 4,
         "title": "Budget CRUD Operations Implementation",
         "description": "Implement complete CRUD operations for Budgets with forms that match the design patterns established in the Categories section.",
-        "details": "1. Create new budget form at `app/views/budgets/new.html.erb`\n2. Create edit budget form at `app/views/budgets/edit.html.erb`\n3. Create a shared form partial at `app/views/budgets/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states:\n```erb\n<%= simple_form_for @budget do |f| %>\n  <div class=\"card mb-6\">\n    <div class=\"p-6\">\n      <h2 class=\"text-xl font-semibold mb-4\"><%= form_title %></h2>\n      \n      <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\">\n        <div class=\"col-span-full\">\n          <%= f.association :category, \n            collection: Category.expense, \n            label_method: :name, \n            value_method: :id, \n            include_blank: 'Select a category',\n            input_html: { class: 'form-select' } %>\n        </div>\n        \n        <div>\n          <%= f.input :amount, \n            input_html: { class: 'form-input' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div>\n          <%= f.input :period, \n            collection: Budget.periods.keys.map { |p| [p.humanize, p] },\n            input_html: { class: 'form-select' },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n        \n        <div class=\"col-span-full\">\n          <%= f.input :notes, \n            input_html: { class: 'form-textarea', rows: 3 },\n            wrapper_html: { class: 'mb-4' } %>\n        </div>\n      </div>\n    </div>\n  </div>\n  \n  <div class=\"flex justify-end space-x-4\">\n    <%= link_to 'Cancel', budgets_path, class: 'btn-secondary' %>\n    <%= f.button :submit, class: 'btn-primary' %>\n  </div>\n<% end %>\n```\n5. Create budget show view at `app/views/budgets/show.html.erb`\n6. Implement delete confirmation modal using Stimulus.js\n7. Update BudgetsController with all CRUD actions\n8. Add validations to Budget model\n9. Implement flash messages for successful/failed operations",
-        "testStrategy": "1. Test creating a new budget with valid data\n2. Test validation errors display correctly\n3. Test editing an existing budget\n4. Test deleting a budget with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to expense categories only\n7. Verify flash messages display correctly for all operations",
-        "priority": "medium",
+        "status": "done",
         "dependencies": [
           3
         ],
-        "status": "pending",
-        "subtasks": []
+        "priority": "medium",
+        "details": "1. Create new budget form at `app/views/budgets/new.html.erb`\n2. Create edit budget form at `app/views/budgets/edit.html.erb`\n3. Create a shared form partial at `app/views/budgets/_form.html.erb`\n4. Implement SimpleForm integration with brand-colored focus states for budget forms\n5. Update BudgetsController with new, create, edit, update, and destroy actions only\n6. Implement delete confirmation modal using Stimulus.js\n7. Add validations to Budget model\n8. Implement flash messages for successful/failed operations\n9. Note: No separate index or show pages are needed since budgets are managed through the category system",
+        "testStrategy": "1. Test creating a new budget with valid data\n2. Test validation errors display correctly\n3. Test editing an existing budget\n4. Test deleting a budget with confirmation\n5. Verify form styling matches Categories section\n6. Test category selection is limited to expense categories only\n7. Verify flash messages display correctly for all operations\n8. Verify budget management works correctly through the category system",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "",
+            "description": "Create shared form partial at `app/views/budgets/_form.html.erb`",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 2,
+            "title": "",
+            "description": "Create new budget form at `app/views/budgets/new.html.erb`",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 3,
+            "title": "",
+            "description": "Create edit budget form at `app/views/budgets/edit.html.erb`",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 4,
+            "title": "",
+            "description": "Update BudgetsController with new, create, edit, update, and destroy actions",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 5,
+            "title": "",
+            "description": "Implement delete confirmation modal using Stimulus.js",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 6,
+            "title": "",
+            "description": "Add validations to Budget model",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          },
+          {
+            "id": 7,
+            "title": "",
+            "description": "Implement flash messages for successful/failed operations",
+            "status": "done",
+            "dependencies": [],
+            "details": "",
+            "testStrategy": ""
+          }
+        ]
       },
       {
         "id": 5,
@@ -529,7 +593,7 @@
         "dependencies": [
           1
         ],
-        "status": "pending",
+        "status": "done",
         "subtasks": []
       },
       {
@@ -661,7 +725,7 @@
     ],
     "metadata": {
       "created": "2025-07-14T21:48:01.158Z",
-      "updated": "2025-07-20T21:17:43.581Z",
+      "updated": "2025-07-20T22:17:03.842Z",
       "description": "Tasks for ui-ux-improvements context"
     }
   }

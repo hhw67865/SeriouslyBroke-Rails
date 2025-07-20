@@ -1,16 +1,8 @@
 # frozen_string_literal: true
 
 class BudgetsController < ApplicationController
-  before_action :set_budget, only: [:show, :edit, :update, :destroy]
+  before_action :set_budget, only: [:edit, :update, :destroy]
   before_action :set_category, only: [:new, :create]
-
-  # GET /budgets
-  def index
-    @budgets = current_user.budgets.includes(:category)
-  end
-
-  # GET /budgets/1
-  def show; end
 
   # GET /budgets/new
   def new
@@ -25,7 +17,7 @@ class BudgetsController < ApplicationController
     @budget = Budget.new(budget_params)
 
     if @budget.save
-      redirect_to budgets_path, notice: "Budget was successfully created."
+      redirect_to category_path(@budget.category), notice: "Budget was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -34,7 +26,7 @@ class BudgetsController < ApplicationController
   # PATCH/PUT /budgets/1
   def update
     if @budget.update(budget_params)
-      redirect_to budgets_path, notice: "Budget was successfully updated."
+      redirect_to category_path(@budget.category), notice: "Budget was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -42,8 +34,9 @@ class BudgetsController < ApplicationController
 
   # DELETE /budgets/1
   def destroy
+    category = @budget.category
     @budget.destroy
-    redirect_to budgets_path, notice: "Budget was successfully deleted."
+    redirect_to category_path(category), notice: "Budget was successfully deleted."
   end
 
   private
