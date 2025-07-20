@@ -22,7 +22,7 @@
       </div>
     </dl>
     
-    <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
+    <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex justify-center items-center rounded-md px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
       <%= heroicon "pencil-square", options: { class: "h-4 w-4 mr-1.5" } %>
       <span>Update Budget</span>
     <% end %>
@@ -33,8 +33,8 @@
       </div>
       <h3 class="text-base font-medium text-gray-900 mb-1">No budget set</h3>
       <p class="text-sm text-gray-500 mb-4">Setting a budget helps you track your spending</p>
-      <%= link_to new_budget_path(category_id: category.id), class: "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-brand-dark hover:to-brand-dark transition-all duration-300" do %>
-        <%= heroicon "plus", options: { class: "h-4 w-4" } %>
+      <%= link_to new_budget_path(category_id: category.id), class: "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
+        <%= heroicon "plus", options: { class: "h-4 w-4 mr-1.5" } %>
         <span>Create Budget</span>
       <% end %>
     </div>

@@ -34,21 +34,33 @@
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Budget</span>
             <span class="font-medium text-gray-900">
-              <%= number_to_currency(category.calculator.total_amount) %> / <%= number_to_currency(category.budget&.amount || 0) %>
+              <%= number_to_currency(category.calculator.total_amount) %> / 
+              <%= category.budget&.amount ? number_to_currency(category.budget.amount) : "N/A" %>
             </span>
           </div>
           
-          <% percentage = category.calculator.budget_percentage %>
-          <div class="h-2 bg-gray-200 rounded overflow-hidden">
-            <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
-          </div>
-          
-          <div class="flex justify-between mt-1">
-            <p class="text-xs text-gray-500"><%= percentage %>% used</p>
-            <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
-              <%= budget_status(percentage) %>
-            </p>
-          </div>
+          <% if category.budget&.amount %>
+            <% percentage = category.calculator.budget_percentage %>
+            <div class="h-2 bg-gray-200 rounded overflow-hidden">
+              <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
+            </div>
+            
+            <div class="flex justify-between mt-1">
+              <p class="text-xs text-gray-500"><%= percentage %>% used</p>
+              <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
+                <%= budget_status(percentage) %>
+              </p>
+            </div>
+          <% else %>
+            <div class="h-2 bg-gray-200 rounded overflow-hidden">
+              <div class="bg-gray-300 h-2 rounded w-0"></div>
+            </div>
+            
+            <div class="flex justify-between mt-1">
+              <p class="text-xs text-gray-500">No budget set</p>
+              <p class="text-xs text-gray-500">Set budget to track</p>
+            </div>
+          <% end %>
         </div>
         
       <% elsif category.income? %>

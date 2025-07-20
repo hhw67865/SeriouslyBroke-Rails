@@ -9,21 +9,33 @@
         <div class="flex justify-between text-sm mb-2">
           <span class="text-gray-500">Monthly Budget</span>
           <span class="font-medium text-gray-900">
-            <%= number_to_currency(category.calculator.total_amount) %> / <%= number_to_currency(category.budget&.amount || 0) %>
+            <%= number_to_currency(category.calculator.total_amount) %> / 
+            <%= category.budget&.amount ? number_to_currency(category.budget.amount) : "N/A" %>
           </span>
         </div>
         
-        <% percentage = category.calculator.budget_percentage %>
-        <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-          <div class="h-3 rounded-full <%= budget_status_color(percentage) %>" style="width: <%= [percentage, 100].min %>%;"></div>
-        </div>
-        
-        <div class="flex justify-between mt-2">
-          <p class="text-sm text-gray-500"><%= percentage %>% used</p>
-          <p class="text-sm <%= budget_status_color(percentage).gsub('bg-', 'text-') %>">
-            <%= budget_status(percentage) %>
-          </p>
-        </div>
+        <% if category.budget&.amount %>
+          <% percentage = category.calculator.budget_percentage %>
+          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-3 rounded-full <%= budget_status_color(percentage) %>" style="width: <%= [percentage, 100].min %>%;"></div>
+          </div>
+          
+          <div class="flex justify-between mt-2">
+            <p class="text-sm text-gray-500"><%= percentage %>% used</p>
+            <p class="text-sm <%= budget_status_color(percentage).gsub('bg-', 'text-') %>">
+              <%= budget_status(percentage) %>
+            </p>
+          </div>
+        <% else %>
+          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+            <div class="bg-gray-300 h-3 rounded w-0"></div>
+          </div>
+          
+          <div class="flex justify-between mt-2">
+            <p class="text-sm text-gray-500">No budget set</p>
+            <p class="text-sm text-gray-500">Set budget to track spending</p>
+          </div>
+        <% end %>
       </div>
       
       <div class="border-t border-gray-200 pt-4">

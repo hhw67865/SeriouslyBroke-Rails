@@ -1,0 +1,77 @@
+<%# Budget Form Partial - matches Categories design patterns %>
+<%= page_header(
+    title: @budget.persisted? ? "Edit Budget" : "New Budget",
+    subtitle: @budget.category ? "Set spending limits for #{@budget.category.name}" : "Set spending limits for this category"
+) %>
+
+<div class="max-w-2xl mx-auto">
+  <%= simple_form_for @budget, html: { class: "space-y-6" } do |f| %>
+    <%# Main Form Card %>
+    <div class="bg-white shadow-sm rounded-lg border border-gray-100 p-6">
+      <div class="space-y-6">
+        <%# Category Selection (only for new budgets without category_id) %>
+        <% unless @budget.category_id %>
+          <div>
+            <%= f.association :category,
+                collection: current_user.categories.expenses.order(:name),
+                label_method: :name,
+                value_method: :id,
+                include_blank: "Select an expense category",
+                label: "Category",
+                label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+                input_html: { 
+                  class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
+                } %>
+          </div>
+        <% else %>
+          <%# Show category name for existing budgets %>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+              <%= @budget.category.name %>
+            </div>
+            <%= f.hidden_field :category_id %>
+          </div>
+        <% end %>
+
+        <%# Budget Amount %>
+        <div>
+          <%= f.input :amount,
+              as: :decimal,
+              label: "Budget Amount",
+              label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+              input_html: { 
+                class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+                placeholder: "0.00",
+                step: 0.01,
+                min: 0
+              },
+              wrapper_html: { class: "relative" },
+              hint: "Enter the maximum amount you want to spend in this category" %>
+        </div>
+
+        <%# Budget Period %>
+        <div>
+          <%= f.input :period,
+              collection: Budget.periods.keys.map { |period| [period.humanize, period] },
+              label: "Budget Period",
+              label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+              input_html: { 
+                class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
+              },
+              hint: "Choose how often this budget resets" %>
+        </div>
+      </div>
+    </div>
+
+    <%# Action Buttons %>
+    <div class="flex justify-end space-x-4">
+      <%= link_to "Cancel", 
+          @budget.category ? category_path(@budget.category) : categories_path,
+          class: "inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" %>
+      
+      <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",
+          class: "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" %>
+    </div>
+  <% end %>
+</div> 

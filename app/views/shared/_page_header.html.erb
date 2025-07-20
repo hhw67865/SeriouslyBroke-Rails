@@ -70,59 +70,75 @@
         
         <% if search[:field_selector].present? %>
           <%# Enhanced Search with Field Selector %>
-          <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand">
-            <%# Field Selector Dropdown %>
-            <%= f.select :field, 
-                search[:field_selector][:options],
-                { include_blank: false, selected: search[:field_selector][:selected] },
-                { 
-                  class: "py-2 pl-3 pr-8 border-0 bg-transparent text-gray-900 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-l-md min-w-32",
-                  data: { 
-                    "shared--search-placeholder-target": "fieldSelector",
-                    action: "change->shared--search-placeholder#fieldChanged"
-                  }
-                } %>
-            
-            <%# Separator %>
-            <div class="w-px h-6 bg-gray-300"></div>
-            
-            <%# Search Input %>
-            <div class="relative flex-1">
-              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand">
+              <%# Field Selector Dropdown %>
+              <%= f.select :field, 
+                  search[:field_selector][:options],
+                  { include_blank: false, selected: search[:field_selector][:selected] },
+                  { 
+                    class: "py-2 pl-3 pr-8 border-0 bg-transparent text-gray-900 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-l-md min-w-32",
+                    data: { 
+                      "shared--search-placeholder-target": "fieldSelector",
+                      action: "change->shared--search-placeholder#fieldChanged"
+                    }
+                  } %>
+              
+              <%# Separator %>
+              <div class="w-px h-6 bg-gray-300"></div>
+              
+              <%# Search Input %>
+              <div class="relative flex-1">
+                <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                  <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+                </div>
+                <%= f.text_field :q, 
+                               value: search[:query],
+                               placeholder: search[:placeholder] || "Search...", 
+                               class: "pl-10 py-2 pr-3 block w-64 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
+                               autocomplete: "off",
+                               data: { "shared--search-placeholder-target": "searchInput" } %>
               </div>
-              <%= f.text_field :q, 
-                             value: search[:query],
-                             placeholder: search[:placeholder] || "Search...", 
-                             class: "pl-10 py-2 pr-3 block w-64 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
-                             autocomplete: "off",
-                             data: { "shared--search-placeholder-target": "searchInput" } %>
             </div>
+            
+            <%# Integrated Clear Button %>
+            <% if search[:has_results] %>
+              <% clear_url = search[:clear_url] || search[:url] %>
+              <%= link_to clear_url, 
+                  class: "inline-flex items-center justify-center rounded-md bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors duration-200 whitespace-nowrap",
+                  title: "Clear search" do %>
+                <%= heroicon "x-mark", options: { class: "h-4 w-4" } %>
+                <span class="hidden sm:inline ml-1">Clear</span>
+              <% end %>
+            <% end %>
           </div>
         <% else %>
           <%# Simple Search (like categories) %>
-          <div class="relative">
-            <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-              <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+          <div class="flex items-center gap-2">
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
+              </div>
+              <%= f.text_field :query, 
+                             value: search[:query],
+                             placeholder: search[:placeholder] || "Search...", 
+                             class: "pl-10 py-2 pr-3 block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand sm:text-sm sm:leading-6",
+                             autocomplete: "off" %>
             </div>
-            <%= f.text_field :query, 
-                           value: search[:query],
-                           placeholder: search[:placeholder] || "Search...", 
-                           class: "pl-10 py-2 pr-3 block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-brand sm:text-sm sm:leading-6",
-                           autocomplete: "off" %>
+            
+            <%# Integrated Clear Button %>
+            <% if search[:has_results] %>
+              <% clear_url = search[:clear_url] || search[:url] %>
+              <%= link_to clear_url, 
+                  class: "inline-flex items-center justify-center rounded-md bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors duration-200 whitespace-nowrap",
+                  title: "Clear search" do %>
+                <%= heroicon "x-mark", options: { class: "h-4 w-4" } %>
+                <span class="hidden sm:inline ml-1">Clear</span>
+              <% end %>
+            <% end %>
           </div>
         <% end %>
-        
-        <%# Clear Search Button %>
-        <% if search[:has_results] %>
-          <% clear_url = search[:clear_url] || search[:url] %>
-          <%= link_to clear_url, 
-              class: "inline-flex items-center gap-x-1 rounded-md bg-gray-100 hover:bg-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition-colors duration-200",
-              title: "Clear search" do %>
-            <%= heroicon "x-mark", options: { class: "h-4 w-4" } %>
-            <span class="hidden sm:inline">Clear</span>
-          <% end %>
-        <% end %>
+
         
         <%# Hidden Fields for State Preservation %>
         <% if search[:hidden_fields].present? %>

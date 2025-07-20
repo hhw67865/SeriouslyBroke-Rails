@@ -22,13 +22,17 @@
       <% end %>
     </ul>
     
-    <%= link_to "#", class: "mt-4 w-full inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
+    <%= link_to entries_path(field: "category", q: @category.name), class: "mt-4 w-full inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
       <span>View All Activity</span>
       <%= heroicon "arrow-right", options: { class: "h-4 w-4 ml-1.5" } %>
     <% end %>
   <% else %>
-    <div class="text-center py-4">
-      <p class="text-sm text-gray-500">No recent activity</p>
+    <div class="text-center py-6">
+      <p class="text-sm text-gray-500 mb-3">No recent activity</p>
+      <%= link_to entries_path(field: "category", q: @category.name), class: "inline-flex items-center px-3 py-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+        <span>View All Activity</span>
+        <%= heroicon "arrow-right", options: { class: "h-4 w-4 ml-1.5" } %>
+      <% end %>
     </div>
   <% end %>
 </div> 
