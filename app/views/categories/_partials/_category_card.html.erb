@@ -1,32 +1,26 @@
-<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
-  <div class="p-5 flex-grow">
-    <div class="flex justify-between items-start mb-4">
-      <div class="flex items-center">
-        <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
-          <% case category.category_type %>
-          <% when "expense" %>
-            <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
-          <% when "income" %>
-            <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-          <% when "savings" %>
-            <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
-          <% end %>
-        </div>
-        <div class="ml-3">
-          <h3 class="text-lg font-medium text-gray-900"><%= category.name %></h3>
-          <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
-            <%= category.category_type.capitalize %>
-          </span>
+<div class="group cursor-pointer" onclick="window.location='<%= category_path(category) %>'">
+  <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
+    <div class="p-5 flex-grow">
+      <div class="flex justify-between items-start mb-4">
+        <div class="flex items-center">
+          <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
+            <% case category.category_type %>
+            <% when "expense" %>
+              <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
+            <% when "income" %>
+              <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
+            <% when "savings" %>
+              <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
+            <% end %>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-lg font-medium text-gray-900"><%= category.name %></h3>
+            <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
+              <%= category.category_type.capitalize %>
+            </span>
+          </div>
         </div>
       </div>
-      
-      <div class="dropdown">
-        <button type="button" class="text-gray-400 hover:text-gray-500">
-          <%= heroicon "ellipsis-vertical", options: { class: "h-5 w-5" } %>
-        </button>
-        <!-- Dropdown Menu (would be implemented with JS) -->
-      </div>
-    </div>
     
     <div class="mt-2">
       <% if category.expense? %>
@@ -119,13 +113,11 @@
     </div>
   </div>
   
-  <div class="bg-gray-50 px-5 py-3 flex justify-between items-center mt-auto">
-    <%= link_to edit_category_path(category), class: "text-sm font-medium text-brand hover:text-brand-dark" do %>
-      Edit
-    <% end %>
-    
-    <%= link_to category_path(category), class: "text-sm font-medium text-gray-600 hover:text-gray-900" do %>
-      View Details
-    <% end %>
+    <%# Hover indicator %>
+    <div class="bg-gray-50 px-5 py-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+      <div class="text-center">
+        <span class="text-sm text-gray-500">Click to view details</span>
+      </div>
+    </div>
   </div>
 </div> 

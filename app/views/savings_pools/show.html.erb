@@ -204,7 +204,7 @@
         Manage Categories
       <% end %>
     </div>
-    
+
     <% if @connected_categories.any? %>
       <%# Separate savings and expense categories %>
       <% savings_categories = @connected_categories.select(&:savings?) %>

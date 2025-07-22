@@ -54,15 +54,15 @@
     <%# Amounts - Simple Layout %>
     <div class="space-y-3">
       <div class="flex justify-between items-center">
-        <span class="text-sm text-gray-500">Current</span>
-        <span class="text-lg font-semibold <%= current_balance >= 0 ? 'text-gray-900' : 'text-red-500' %>">
+        <span class="text-xs text-gray-500">Current</span>
+        <span class="text-base font-semibold <%= current_balance >= 0 ? 'text-gray-900' : 'text-red-500' %>">
           <%= number_to_currency(current_balance) %>
         </span>
       </div>
       
       <div class="flex justify-between items-center">
-        <span class="text-sm text-gray-500">Target</span>
-        <span class="text-lg font-medium text-gray-600">
+        <span class="text-xs text-gray-500">Target</span>
+        <span class="text-base font-medium text-gray-600">
           <%= number_to_currency(target_amount) %>
         </span>
       </div>
