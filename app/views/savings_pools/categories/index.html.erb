@@ -1,0 +1,154 @@
+<%# Category Management for Savings Pool %>
+<%= page_header(
+    title: "Manage Categories",
+    subtitle: "Connect categories to #{@savings_pool.name} for automatic progress tracking",
+    breadcrumbs: [
+      { label: "Savings Pools", url: savings_pools_path },
+      { label: @savings_pool.name, url: savings_pool_path(@savings_pool) },
+      { label: "Manage Categories" }
+    ]
+) %>
+
+<div class="max-w-4xl mx-auto">
+  
+  <%# Information Box %>
+  <div class="bg-blue-50 rounded-lg p-6 mb-8 border border-blue-200">
+    <div class="flex items-start">
+      <div class="flex-shrink-0">
+        <%= heroicon "information-circle", options: { class: "h-5 w-5 text-blue-400" } %>
+      </div>
+      <div class="ml-3">
+        <h3 class="text-sm font-medium text-blue-800">How Category Connections Work</h3>
+        <div class="mt-2 text-sm text-blue-700">
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong>Savings Categories:</strong> Money spent in these categories will <span class="text-green-700 font-medium">add to</span> your savings pool</li>
+            <li><strong>Expense Categories:</strong> Money spent in these categories will <span class="text-red-700 font-medium">subtract from</span> your savings pool</li>
+            <li><strong>Progress Tracking:</strong> Your goal progress updates automatically based on connected category activity</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <%# Category Selection Form %>
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+    <%= form_with url: categories_savings_pool_path(@savings_pool), method: :patch, local: true do |form| %>
+      
+      <%# Categories by Type - Only savings and expenses %>
+      <% @all_categories.where(category_type: ['savings', 'expense']).group_by(&:category_type).each do |category_type, categories| %>
+        <div class="mb-8">
+          <div class="flex items-center mb-6">
+            <% if category_type == 'savings' %>
+              <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                <%= heroicon "plus-circle", options: { class: "h-5 w-5 text-green-600" } %>
+              </div>
+              <h3 class="text-lg font-semibold text-green-700">
+                Savings Categories (<%= categories.count %>)
+              </h3>
+                         <% elsif category_type == 'expense' %>
+               <div class="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center mr-3">
+                 <%= heroicon "minus-circle", options: { class: "h-5 w-5 text-red-600" } %>
+               </div>
+               <h3 class="text-lg font-semibold text-red-700">
+                 Expense Categories (<%= categories.count %>)
+               </h3>
+             <% end %>
+          </div>
+
+          <% if categories.any? %>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <% categories.each do |category| %>
+                <% 
+                  is_connected = @connected_category_ids.include?(category.id)
+                  has_other_pool = category.savings_pool.present? && category.savings_pool != @savings_pool
+                  other_pool = category.savings_pool if has_other_pool
+                %>
+                
+                <div class="relative">
+                  <label class="flex items-center p-4 border rounded-lg cursor-pointer transition-colors
+                    <%= if is_connected
+                          category_type == 'savings' ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                        elsif has_other_pool
+                          'border-yellow-300 bg-yellow-50'
+                        else
+                          'border-gray-200 hover:border-gray-300'
+                        end %>">
+                    
+                    <%= form.check_box :category_ids, 
+                        { 
+                          multiple: true, 
+                          checked: is_connected,
+                          class: "h-4 w-4 rounded border-gray-300 focus:ring-2 focus:ring-brand mr-3 #{has_other_pool && !is_connected ? 'text-yellow-600' : 'text-brand'}"
+                        }, 
+                        category.id, 
+                        "" %>
+                    
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between">
+                        <div>
+                          <div class="font-medium text-gray-900 truncate">
+                            <%= category.name %>
+                          </div>
+                          
+                          <%# Category Status %>
+                          <div class="flex items-center mt-1">
+                            <% if is_connected %>
+                                                             <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                                 <%= category_type == 'savings' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' %>">
+                                <%= heroicon "check", options: { class: "h-3 w-3 mr-1" } %>
+                                Connected
+                              </span>
+                            <% elsif has_other_pool %>
+                              <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                <%= heroicon "exclamation-triangle", options: { class: "h-3 w-3 mr-1" } %>
+                                Connected to <%= other_pool.name %>
+                              </span>
+                            <% else %>
+                              <span class="text-xs text-gray-500">Available to connect</span>
+                            <% end %>
+                          </div>
+                        </div>
+                        
+                        <%# Monthly Amount %>
+                        <div class="text-right ml-4">
+                          <div class="text-sm font-medium text-gray-900">
+                            <%= number_to_currency(category.calculator.total_amount) %>
+                          </div>
+                          <div class="text-xs text-gray-500">this month</div>
+                        </div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              <% end %>
+            </div>
+          <% else %>
+            <div class="text-center py-8 text-gray-500">
+              <div class="mb-2">No <%= category_type %> categories found</div>
+              <p class="text-sm">
+                <%= link_to "Create your first #{category_type} category", 
+                    new_category_path(type: category_type), 
+                    class: "text-brand hover:text-brand-dark font-medium" %>
+              </p>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <%# Form Actions %>
+      <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+        <%= form.submit "Update Connected Categories",
+            class: "inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-brand hover:bg-brand-dark" %>
+        
+        <%= link_to savings_pool_path(@savings_pool), 
+            class: "inline-flex justify-center items-center px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50" do %>
+          Cancel
+        <% end %>
+      </div>
+      
+    <% end %>
+  </div>
+
+
+
+</div> 

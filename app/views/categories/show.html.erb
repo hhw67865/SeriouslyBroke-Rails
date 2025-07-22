@@ -1,7 +1,29 @@
 <% content_for :title, @category.name %>
 
+<%= page_header(
+    title: @category.name,
+    subtitle: "#{@category.category_type.titleize} category details and management",
+    breadcrumbs: [
+      { label: "Categories", url: categories_path(type: @category.category_type) },
+      { label: @category.name }
+    ],
+    actions: [
+      {
+        label: "Edit",
+        url: edit_category_path(@category),
+        class: "inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+      },
+      {
+        label: "Delete",
+        url: category_path(@category),
+        method: :delete,
+        class: "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700",
+        confirm: "Are you sure? This will delete all related items and entries."
+      }
+    ]
+) %>
+
 <div class="container mx-auto px-4 py-6">
-  <%= render "categories/_partials/show/header", category: @category %>
   <%= render "categories/_partials/show/category_banner", category: @category %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

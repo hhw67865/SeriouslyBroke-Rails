@@ -101,16 +101,33 @@
             </div>
             
             <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount > 0 %>
-              <% progress = category.savings_pool.calculator.progress_percentage %>
+              <% 
+                progress = category.savings_pool.calculator.progress_percentage
+                current_balance = category.savings_pool.calculator.current_balance
+              %>
               <div class="mt-3">
                 <div class="flex justify-between text-xs text-gray-500 mb-1">
                   <span>Pool progress</span>
                   <span><%= number_to_currency(category.savings_pool.calculator.current_balance) %> / <%= number_to_currency(category.savings_pool.target_amount) %></span>
                 </div>
                 <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div class="h-2 bg-brand rounded-full" style="width: <%= progress %>%;"></div>
+                  <div class="h-2 rounded-full 
+                       <%= if progress >= 100 
+                             'bg-green-500'
+                           elsif progress < 0
+                             'bg-red-500'
+                           else
+                             'bg-brand'
+                           end %>" 
+                       style="width: <%= progress %>%;"></div>
                 </div>
-                <p class="text-xs text-gray-500 mt-1"><%= progress %>% of target</p>
+                <p class="text-xs text-gray-500 mt-1">
+                  <% if progress < 0 %>
+                    <span class="text-red-600 font-medium"><%= progress %>% of target</span>
+                  <% else %>
+                    <%= progress %>% of target
+                  <% end %>
+                </p>
               </div>
             <% end %>
           </div>

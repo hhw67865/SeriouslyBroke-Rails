@@ -6,10 +6,13 @@
   <nav class="space-y-1">
     <% links.each do |link| %>
       <% 
-        # Check if we're on an exact page match or a sub-page of categories/entries
-        is_active = current_page?(link[:path]) || 
-                   (link[:name] == "Categories" && controller_name == "categories") ||
-                   (link[:name] == "Entries" && controller_name == "entries")
+        # Check if current path starts with the nav link path (handles sub-pages automatically)
+        # Special case: root path should only match exactly, not all paths starting with "/"
+        is_active = if link[:path] == "/"
+                      request.path == "/"
+                    else
+                      request.path.start_with?(link[:path]) && link[:path] != "#"
+                    end
       %>
       <%= link_to link[:path], 
           class: class_names(

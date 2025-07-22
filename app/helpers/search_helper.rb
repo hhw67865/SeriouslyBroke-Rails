@@ -12,6 +12,12 @@ module SearchHelper
       'e.g., Monthly payment, Grocery shopping'
     when 'category'
       'e.g., Food, Housing, Income'
+    when 'name'
+      'e.g., Coffee, Food, Emergency Fund'
+    when 'category_type'
+      'e.g., expense, income, savings'
+    when 'target_amount'
+      'e.g., 1000, 5000'
     else
       'Enter search term...'
     end
@@ -106,7 +112,10 @@ module SearchHelper
       'date' => search_placeholder('date'),
       'item' => search_placeholder('item'),
       'description' => search_placeholder('description'),
-      'category' => search_placeholder('category')
+      'category' => search_placeholder('category'),
+      'name' => search_placeholder('name'),
+      'category_type' => search_placeholder('category_type'),
+      'target_amount' => search_placeholder('target_amount')
     }.to_json.html_safe
   end
 end 

@@ -40,17 +40,17 @@
           </div>
           
           <% if category.budget&.amount %>
-            <% percentage = category.calculator.budget_percentage %>
-            <div class="h-2 bg-gray-200 rounded overflow-hidden">
-              <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
-            </div>
-            
-            <div class="flex justify-between mt-1">
-              <p class="text-xs text-gray-500"><%= percentage %>% used</p>
-              <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
-                <%= budget_status(percentage) %>
-              </p>
-            </div>
+          <% percentage = category.calculator.budget_percentage %>
+          <div class="h-2 bg-gray-200 rounded overflow-hidden">
+            <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
+          </div>
+          
+          <div class="flex justify-between mt-1">
+            <p class="text-xs text-gray-500"><%= percentage %>% used</p>
+            <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
+              <%= budget_status(percentage) %>
+            </p>
+          </div>
           <% else %>
             <div class="h-2 bg-gray-200 rounded overflow-hidden">
               <div class="bg-gray-300 h-2 rounded w-0"></div>

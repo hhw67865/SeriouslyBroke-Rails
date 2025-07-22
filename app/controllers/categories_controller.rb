@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class CategoriesController < ApplicationController
+  include Searchable
+  
   before_action :set_category, only: [:show, :edit, :update, :destroy]
   before_action :set_categories, only: [:index]
 
@@ -63,11 +65,14 @@ class CategoriesController < ApplicationController
 
   def set_categories
     @type = params[:type] || "expense"
-    @query = params[:query]
+    @search_state = current_search_state(params)
+    @query = @search_state[:query] # For backward compatibility
 
-    @categories = current_user.categories
-      .with_type(@type)
-      .search(@query)
-      .order(name: :asc)
+    categories = current_user.categories.with_type(@type)
+    
+    # Apply search using the new searchable system
+    categories = apply_search(categories, { q: params[:q], field: params[:field] })
+    
+    @categories = categories.order(name: :asc)
   end
 end

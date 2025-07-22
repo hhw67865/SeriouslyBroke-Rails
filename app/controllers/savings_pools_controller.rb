@@ -1,15 +1,47 @@
 # frozen_string_literal: true
 
 class SavingsPoolsController < ApplicationController
+  include Searchable
+  
   before_action :set_savings_pool, only: [:show, :edit, :update, :destroy]
 
   # GET /savings_pools
   def index
-    @savings_pools = current_user.savings_pools
+    @search_state = current_search_state(params)
+    @query = @search_state[:query] # For backward compatibility
+    
+    # Load savings pools without eager loading (calculator uses direct SQL)
+    savings_pools = current_user.savings_pools
+    
+    # Apply search using the new searchable system
+    savings_pools = apply_search(savings_pools, { q: params[:q], field: params[:field] })
+    
+    @savings_pools = savings_pools.order(:name)
+    
+    # Load recent entries for each savings pool to avoid N+1 in the view
+    # This is more efficient than preloading all entries
+    @recent_entries_by_pool = {}
+    @savings_pools.each do |pool|
+      @recent_entries_by_pool[pool.id] = pool.entries
+                                             .includes(item: :category)
+                                             .order(date: :desc)
+                                             .limit(3)
+    end
   end
 
   # GET /savings_pools/1
-  def show; end
+  def show
+    # Load recent entries for activity section - avoid N+1
+    @recent_entries = @savings_pool.entries
+                                   .includes(item: :category)
+                                   .order(date: :desc)
+                                   .limit(8)
+    
+    # Load categories for connected categories section - avoid N+1 in calculator calls
+    @connected_categories = @savings_pool.categories
+                                         .includes(:entries)
+                                         .order(:name)
+  end
 
   # GET /savings_pools/new
   def new
@@ -24,7 +56,7 @@ class SavingsPoolsController < ApplicationController
     @savings_pool = current_user.savings_pools.new(savings_pool_params)
 
     if @savings_pool.save
-      redirect_to savings_pools_path, notice: "Savings pool was successfully created."
+      redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully created."
     else
       render :new, status: :unprocessable_entity
     end
@@ -33,7 +65,7 @@ class SavingsPoolsController < ApplicationController
   # PATCH/PUT /savings_pools/1
   def update
     if @savings_pool.update(savings_pool_params)
-      redirect_to savings_pools_path, notice: "Savings pool was successfully updated."
+      redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -48,6 +80,7 @@ class SavingsPoolsController < ApplicationController
   private
 
   def set_savings_pool
+    # Load savings pool without eager loading (calculator uses direct SQL)
     @savings_pool = current_user.savings_pools.find(params[:id])
   end
 

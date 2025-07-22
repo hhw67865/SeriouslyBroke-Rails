@@ -7,20 +7,27 @@
               when "income"
                 "Track your income sources and monthly earnings"
               when "savings"
-                "Organize your savings goals and track progress"
+                "Organize your savings pools and track progress"
               else
                 "Manage your expense, income, and savings categories"
               end,
-    search: {
+    search: show_search_form? ? {
       enabled: true,
       url: categories_path,
-      query: @query,
-      placeholder: "Search #{@type} categories...",
-      has_results: @query.present?,
+      field_selector: {
+        options: search_options_with_selection(@search_state[:field]),
+        selected: @search_state[:field],
+        placeholders: search_placeholders_js
+      },
+      query: @search_state[:query],
+      placeholder: search_placeholder(@search_state[:field]),
+      has_results: @search_state[:has_search],
+      results_text: @search_state[:has_search] ? search_results_text(@categories, @search_state) : nil,
+      clear_url: categories_path(type: @type),
       hidden_fields: {
         type: @type
       }
-    },
+    } : nil,
     actions: [
       standard_action_button(
         label: "New #{@type.singularize.titleize} Category",

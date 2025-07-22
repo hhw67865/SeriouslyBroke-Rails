@@ -1,32 +1,99 @@
-<%= form_with(model: savings_pool, class: "contents") do |form| %>
-  <% if savings_pool.errors.any? %>
-    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
-      <h2><%= pluralize(savings_pool.errors.count, "error") %> prohibited this savings_pool from being saved:</h2>
-
-      <ul class="list-disc ml-6">
-        <% savings_pool.errors.each do |error| %>
-          <li><%= error.full_message %></li>
-        <% end %>
-      </ul>
+<%# Savings Pool Form - SimpleForm with brand styling %>
+<div class="bg-white shadow-sm rounded-lg border border-gray-100 p-6">
+  <%= simple_form_for savings_pool, html: { class: "space-y-6" } do |f| %>
+    
+    <%# Goal Name %>
+    <div>
+      <%= f.input :name,
+          label: "Savings Pool Name",
+          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+          input_html: { 
+            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+            placeholder: "e.g., Emergency Fund, Vacation, New Car"
+          },
+                      hint: "Give your savings pool a descriptive name" %>
     </div>
-  <% end %>
 
-  <div class="my-5">
-    <%= form.label :name %>
-    <%= form.text_field :name, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": savings_pool.errors[:name].none?, "border-red-400 focus:outline-red-600": savings_pool.errors[:name].any? }] %>
+    <%# Target Amount %>
+    <div>
+      <%= f.input :target_amount,
+          as: :decimal,
+          label: "Target Amount",
+          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+          input_html: { 
+            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+            placeholder: "0.00",
+            step: 0.01,
+            min: 0.01
+          },
+          wrapper_html: { class: "relative" },
+          hint: "How much money do you want to save for this goal?" %>
   </div>
 
-  <div class="my-5">
-    <%= form.label :target_amount %>
-    <%= form.text_field :target_amount, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": savings_pool.errors[:target_amount].none?, "border-red-400 focus:outline-red-600": savings_pool.errors[:target_amount].any? }] %>
+    <%# Progress Indicator (for existing goals) %>
+    <% if savings_pool.persisted? %>
+      <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-brand">
+        <h4 class="text-sm font-medium text-gray-900 mb-2">Current Progress</h4>
+        <% calculator = savings_pool.calculator %>
+        <% progress = calculator.progress_percentage %>
+        <% current_balance = calculator.current_balance %>
+        
+        <div class="flex justify-between text-sm text-gray-600 mb-2">
+          <span>Progress toward goal</span>
+          <span class="font-medium"><%= progress %>%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
+          <div class="h-2 rounded-full bg-brand transition-all duration-300" 
+               style="width: <%= [progress, 100].min %>%;"></div>
   </div>
 
-  <div class="my-5">
-    <%= form.label :user_id %>
-    <%= form.text_field :user_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": savings_pool.errors[:user_id].none?, "border-red-400 focus:outline-red-600": savings_pool.errors[:user_id].any? }] %>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <span class="text-gray-500">Current Balance:</span>
+            <span class="font-medium <%= current_balance >= 0 ? 'text-status-success' : 'text-status-danger' %>">
+              <%= number_to_currency(current_balance) %>
+            </span>
+          </div>
+          <div>
+            <span class="text-gray-500">Remaining:</span>
+            <span class="font-medium text-brand">
+              <%= number_to_currency(calculator.remaining_amount) %>
+            </span>
+          </div>
   </div>
-
-  <div class="inline">
-    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
   </div>
 <% end %>
+
+    <%# Goal Information Box %>
+    <div class="bg-blue-50 rounded-lg p-4 border border-blue-200">
+      <div class="flex items-start">
+        <div class="flex-shrink-0">
+          <%= heroicon "information-circle", options: { class: "h-5 w-5 text-blue-400" } %>
+        </div>
+        <div class="ml-3">
+          <h4 class="text-sm font-medium text-blue-800">How it works</h4>
+          <div class="mt-1 text-sm text-blue-700">
+            <ul class="list-disc list-inside space-y-1">
+              <li>After creating your goal, connect categories to track progress</li>
+              <li>Savings categories will <strong>add money</strong> to your goal</li>
+              <li>Expense categories will <strong>subtract money</strong> from your goal</li>
+              <li>Track your net progress toward your target amount</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <%# Form Actions %>
+    <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+      <%= f.submit savings_pool.persisted? ? "Update Savings Pool" : "Create Savings Pool",
+          class: "inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" %>
+      
+      <%= link_to savings_pools_path, 
+          class: "inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
+        Cancel
+      <% end %>
+    </div>
+    
+  <% end %>
+</div>

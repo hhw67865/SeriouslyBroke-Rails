@@ -1,6 +1,6 @@
 # SeriouslyBroke
 
-A modern web application for tracking and managing personal finances, helping users stay on top of their spending and savings goals. Visit [SeriouslyBroke.com](https://seriouslybroke.com) to get started.
+A modern web application for tracking and managing personal finances, helping users stay on top of their spending and savings pools. Visit [SeriouslyBroke.com](https://seriouslybroke.com) to get started.
 
 ## Features
 

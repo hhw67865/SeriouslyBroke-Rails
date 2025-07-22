@@ -6,7 +6,12 @@ Rails.application.routes.draw do
   # Application routes (protected by authentication)
   authenticated :user do
     root 'dashboard#index', as: :authenticated_root
-    resources :savings_pools
+    resources :savings_pools do
+      member do
+        get :categories, to: 'savings_pools/categories#index'
+        patch :categories, to: 'savings_pools/categories#update'
+      end
+    end
     resources :entries
     resources :items, only: [:edit, :update, :destroy]
     resources :categories
