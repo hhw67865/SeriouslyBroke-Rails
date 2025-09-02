@@ -4,6 +4,7 @@ class Entry < ApplicationRecord
   include ModelSearchable
   
   belongs_to :item
+  accepts_nested_attributes_for :item
 
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :date, presence: true

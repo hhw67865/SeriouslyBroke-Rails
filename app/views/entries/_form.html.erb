@@ -1,37 +1,80 @@
-<%= form_with(model: entry, class: "contents") do |form| %>
-  <% if entry.errors.any? %>
-    <div id="error_explanation" class="bg-red-50 text-red-500 px-3 py-2 font-medium rounded-md mt-3">
-      <h2><%= pluralize(entry.errors.count, "error") %> prohibited this entry from being saved:</h2>
+<%= simple_form_for(entry) do |f| %>
+  <%= f.error_notification %>
+  <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
 
-      <ul class="list-disc ml-6">
-        <% entry.errors.each do |error| %>
-          <li><%= error.full_message %></li>
-        <% end %>
-      </ul>
+  <div>
+    <%# Transaction Details Section %>
+    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Transaction Details</h2>
+        
+        <div data-controller="app--entry--form">
+          <%= f.simple_fields_for :item do |df| %>
+            <%= df.hidden_field :name, data: { app__entry__form_target: "itemNameField" } %>
+          <% end %>
+
+          <div class="form-group">
+            <label for="category_id" class="form-label">Category</label>
+            <%= select_tag :category_id,
+                options_from_collection_for_select(@categories, :id, :name, entry.item&.category_id),
+                prompt: "Select or create a category",
+                data: {
+                  app__entry__form_target: "categorySelect"
+                },
+                class: "form-select" %>
+          </div>
+
+          <div class="form-group">
+            <label for="entry_item_id" class="form-label">Name</label>
+            <%= f.select :item_id,
+                options_from_collection_for_select(
+                  entry.persisted? ? entry.item.category.items : [], 
+                  :id, 
+                  :name, 
+                  entry.item_id
+                ),
+                { prompt: "Choose a Category first" },
+                { 
+                  data: { app__entry__form_target: "itemSelect" },
+                  class: "form-select"
+                } %>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
+          <%= f.input :amount,
+              as: :decimal,
+              placeholder: "0.00",
+              hint: "Enter the transaction amount",
+              input_html: { 
+                step: 0.01,
+                min: 0.01
+              } %>
+
+          <%= f.input :date,
+              as: :string,
+              hint: "When did this transaction occur?",
+              input_html: {
+                type: "date",
+                value: (entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d"))
+              } %>
+        </div>
+
+        <%= f.input :description,
+            placeholder: "Add any notes about this transaction",
+            hint: "Optional details about this entry",
+            input_html: { rows: 3 } %>
+      </div>
     </div>
-  <% end %>
 
-  <div class="my-5">
-    <%= form.label :amount %>
-    <%= form.text_field :amount, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:amount].none?, "border-red-400 focus:outline-red-600": entry.errors[:amount].any? }] %>
-  </div>
 
-  <div class="my-5">
-    <%= form.label :date %>
-    <%= form.datetime_field :date, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:date].none?, "border-red-400 focus:outline-red-600": entry.errors[:date].any? }] %>
-  </div>
 
-  <div class="my-5">
-    <%= form.label :description %>
-    <%= form.text_area :description, rows: 4, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:description].none?, "border-red-400 focus:outline-red-600": entry.errors[:description].any? }] %>
-  </div>
-
-  <div class="my-5">
-    <%= form.label :item_id %>
-    <%= form.text_field :item_id, class: ["block shadow-sm rounded-md border px-3 py-2 mt-2 w-full", { "border-gray-400 focus:outline-blue-600": entry.errors[:item_id].none?, "border-red-400 focus:outline-red-600": entry.errors[:item_id].any? }] %>
-  </div>
-
-  <div class="inline">
-    <%= form.submit class: "w-full sm:w-auto rounded-md px-3.5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white inline-block font-medium cursor-pointer" %>
+    <%# Form Actions %>
+    <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
+      <%= link_to "Cancel", entries_path, 
+          class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
+      
+      <%= f.button :submit, entry.persisted? ? "Update Entry" : "Create Entry" %>
+    </div>
   </div>
 <% end %>

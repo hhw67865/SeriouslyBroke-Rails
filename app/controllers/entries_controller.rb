@@ -5,6 +5,7 @@ class EntriesController < ApplicationController
   
   before_action :set_entry, only: [:show, :edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
+  before_action :load_options, only: [:new, :edit, :create, :update]
 
   # GET /entries
   def index
@@ -21,8 +22,9 @@ class EntriesController < ApplicationController
 
   # GET /entries/new
   def new
-    @entry = current_user.entries.build
+    @entry = Entry.new
     @entry.item = @item if @item
+    @entry.build_item
   end
 
   # GET /entries/1/edit
@@ -31,12 +33,13 @@ class EntriesController < ApplicationController
 
   # POST /entries
   def create
-    @entry = current_user.entries.build(entry_params)
+    @entry = Entry.new(entry_params)
     @entry.item = @item if @item
 
     if @entry.save
       redirect_to entries_path, notice: 'Entry was successfully created.'
     else
+      @entry.build_item
       render :new, status: :unprocessable_entity
     end
   end
@@ -55,6 +58,8 @@ class EntriesController < ApplicationController
     @entry.destroy
     redirect_to entries_path, notice: 'Entry was successfully deleted.'
   end
+
+
 
   private
 
@@ -109,7 +114,20 @@ class EntriesController < ApplicationController
     @item = current_user.items.find(params[:item_id]) if params[:item_id]
   end
 
+  def load_options
+    @categories = current_user.categories.order(:name)
+  end
+
   def entry_params
-    params.require(:entry).permit(:amount, :date, :description, :item_id)
+    params.require(:entry).permit(:amount, :date, :description, :item_id).tap do |permitted_params|
+      permitted_params[:item_attributes] = item_attributes if permitted_params[:item_id].blank? && params.dig(:entry, :item_attributes, :name).present?
+    end
+  end
+
+  def item_attributes
+    params.require(:entry).require(:item_attributes).permit(:name).tap do |attrs|
+      # Set category_id from the category select if creating a new item
+      attrs[:category_id] = params[:category_id] if params[:category_id].present?
+    end
   end
 end

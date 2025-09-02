@@ -14,7 +14,9 @@ Rails.application.routes.draw do
     end
     resources :entries
     resources :items, only: [:edit, :update, :destroy]
-    resources :categories
+    resources :categories do
+      get :items, on: :member
+    end
     resources :budgets, only: [:new, :create, :edit, :update, :destroy]
   end
 

@@ -50,6 +50,11 @@ class CategoriesController < ApplicationController
     redirect_to categories_path(type: category_type), notice: "Category was successfully deleted."
   end
 
+  def items
+    category = current_user.categories.find(params[:id])
+    render json: category.items.order(:name), status: :ok
+  end
+
   private
 
   def set_category
