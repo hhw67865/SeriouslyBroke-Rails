@@ -20,9 +20,9 @@ class SavingsPoolsController < ApplicationController
       .order(date: :desc)
       .limit(8)
 
-    # Load categories for connected categories section - avoid N+1 in calculator calls
+    # Load categories for connected categories section
+    # CategoryCalculator uses direct SQL queries, so no eager loading needed
     @connected_categories = @savings_pool.categories
-      .includes(:entries)
       .order(:name)
   end
 
