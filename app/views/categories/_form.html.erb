@@ -15,17 +15,18 @@
               <div>
                 <label class="cursor-pointer flex flex-col">
                   <div class="relative">
-                    <%= f.radio_button :category_type, type, 
+                    <%= f.radio_button :category_type, 
+type, 
                                       class: "sr-only", 
                                       data: { 
                                         action: "change->app--category--form#selectCategoryType"
                                       } %>
                     <div class="w-full border-2 rounded-lg p-4 transition-all flex flex-col items-center category-type-option
-                              <%= f.object.category_type == type ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300' %>"
+                              <%= f.object.category_type == type ? "border-brand bg-brand-light" : "border-gray-200 hover:border-gray-300" %>"
                         data-type="<%= type %>"
                         data-app--category--form-target="categoryTypeOption">
                       <div class="w-10 h-10 rounded-md flex items-center justify-center mb-2 
-                                <%= f.object.category_type == type ? 'bg-brand' : 'bg-gray-200' %>"
+                                <%= f.object.category_type == type ? "bg-brand" : "bg-gray-200" %>"
                            data-app--category--form-target="categoryTypeIcon">
                         <% case type %>
                         <% when "expense" %>
@@ -36,7 +37,7 @@
                           <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
                         <% end %>
                       </div>
-                      <span class="text-sm font-medium <%= f.object.category_type == type ? 'text-gray-900' : 'text-gray-700' %>"
+                      <span class="text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"
                             data-app--category--form-target="categoryTypeText">
                         <%= type.capitalize %>
                       </span>
@@ -61,16 +62,17 @@
         
         <div class="mb-4 mt-2">
           <div class="grid grid-cols-8 sm:grid-cols-10 lg:grid-cols-12 gap-3">
-            <% %w[#C9C78B #5F741D #4CAF50 #2EC4B6 #2196F3 #03A9F4 #673AB7 #9C27B0 #F44336 #FF9800 #FFC107 #FDCA40 #455A64 #212121 #E2E1C6 #FDFDFE].each do |color| %>
+            <% ["#C9C78B", "#5F741D", "#4CAF50", "#2EC4B6", "#2196F3", "#03A9F4", "#673AB7", "#9C27B0", "#F44336", "#FF9800", "#FFC107", "#FDCA40", "#455A64", "#212121", "#E2E1C6", "#FDFDFE"].each do |color| %>
               <div>
                 <label class="cursor-pointer">
-                  <%= f.radio_button :color, color, 
+                  <%= f.radio_button :color, 
+color, 
                                     class: "sr-only color-radio", 
                                     data: { 
                                       action: "change->app--category--form#selectColor"
                                     } %>
                   <div class="h-10 w-10 rounded-md border-2 transition-all
-                            <%= f.object.color == color ? 'ring-2 ring-offset-2 ring-gray-700' : 'hover:opacity-90' %>"
+                            <%= f.object.color == color ? "ring-2 ring-offset-2 ring-gray-700" : "hover:opacity-90" %>"
                        data-color="<%= color %>" 
                        data-app--category--form-target="colorOption"
                        style="background-color: <%= color %>;"></div>
@@ -85,7 +87,7 @@
               <span 
                 class="h-6 w-6 rounded inline-block border"
                 data-app--category--form-target="selectedColorPreview"
-                style="background-color: <%= f.object.color || '#C9C78B' %>;">
+                style="background-color: <%= f.object.color || "#C9C78B" %>;">
               </span>
               <code class="text-sm bg-gray-100 px-2 py-1 rounded" data-app--category--form-target="selectedColorCode">
                 <%= f.object.color || "#C9C78B" %>

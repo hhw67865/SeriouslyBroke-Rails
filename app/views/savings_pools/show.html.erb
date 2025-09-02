@@ -64,7 +64,7 @@
               <%= heroicon "check-circle", options: { class: "h-4 w-4 mr-2" } %>
               Goal Achieved!
             </div>
-          <% elsif progress < 0 %>
+          <% elsif progress.negative? %>
             <div class="inline-flex items-center px-3 py-2 rounded-full text-sm font-medium bg-red-100 text-red-800">
               <%= heroicon "exclamation-triangle", options: { class: "h-4 w-4 mr-2" } %>
               <%= progress %>% Complete
@@ -93,7 +93,7 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="text-center lg:text-left">
             <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Balance</div>
-            <div class="text-3xl font-bold <%= current_balance >= 0 ? 'text-gray-900' : 'text-red-600' %>">
+            <div class="text-3xl font-bold <%= current_balance >= 0 ? "text-gray-900" : "text-red-600" %>">
               <%= number_to_currency(current_balance) %>
             </div>
           </div>
@@ -173,16 +173,16 @@
               <div>
                 <div class="font-medium text-gray-900"><%= entry.item.name %></div>
                 <div class="text-sm text-gray-500 flex items-center">
-                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-2 <%= entry.category.savings? ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800' %>">
-                    <%= entry.category.savings? ? 'Savings' : 'Expense' %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-2 <%= entry.category.savings? ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800" %>">
+                    <%= entry.category.savings? ? "Savings" : "Expense" %>
                   </span>
                   <%= entry.category.name %> • <%= time_ago_in_words(entry.date) %> ago
                 </div>
               </div>
             </div>
             <div class="text-right">
-              <div class="font-semibold <%= entry.category.savings? ? 'text-green-600' : 'text-red-600' %>">
-                <%= entry.category.savings? ? '+' : '-' %><%= number_to_currency(entry.amount) %>
+              <div class="font-semibold <%= entry.category.savings? ? "text-green-600" : "text-red-600" %>">
+                <%= entry.category.savings? ? "+" : "-" %><%= number_to_currency(entry.amount) %>
               </div>
               <div class="text-xs text-gray-500">
                 <%= entry.date.strftime("%b %d, %Y") %>

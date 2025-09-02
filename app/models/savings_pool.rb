@@ -2,7 +2,7 @@
 
 class SavingsPool < ApplicationRecord
   include ModelSearchable
-  
+
   belongs_to :user
   has_many :categories, dependent: :nullify
   has_many :items, through: :categories

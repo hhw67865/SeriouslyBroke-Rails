@@ -12,9 +12,9 @@ module Searchable
   def apply_search(query, search_params = {})
     search_term = search_params[:q]&.strip
     search_field = search_params[:field]
-    
+
     return query if search_term.blank? || search_field.blank?
-    
+
     # Use the model's search_by method if available
     if query.model.respond_to?(:search_by)
       query.search_by(search_field, search_term)
@@ -27,8 +27,8 @@ module Searchable
   # @return [Array<Array>] Array of [display_name, field_key] pairs
   def search_field_options
     model_class = controller_model_class
-    return [] unless model_class&.respond_to?(:searchable_options)
-    
+    return [] unless model_class.respond_to?(:searchable_options)
+
     model_class.searchable_options
   end
 
@@ -52,4 +52,4 @@ module Searchable
       nil
     end
   end
-end 
+end

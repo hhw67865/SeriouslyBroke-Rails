@@ -13,7 +13,7 @@
     </div>
   </div>
   
-  <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount > 0 %>
+  <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount.positive? %>
     <% 
       progress = category.savings_pool.calculator.progress_percentage
       current_balance = category.savings_pool.calculator.current_balance
@@ -32,7 +32,7 @@
       </div>
       <div class="flex justify-between text-xs text-gray-500 mt-1">
         <span>
-          <% if progress < 0 %>
+          <% if progress.negative? %>
             <span class="text-red-600 font-medium"><%= progress %>% complete</span>
           <% else %>
             <%= progress %>% complete

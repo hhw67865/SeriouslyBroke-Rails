@@ -50,7 +50,7 @@
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span class="text-gray-500">Current Balance:</span>
-            <span class="font-medium <%= current_balance >= 0 ? 'text-status-success' : 'text-status-danger' %>">
+            <span class="font-medium <%= current_balance >= 0 ? "text-status-success" : "text-status-danger" %>">
               <%= number_to_currency(current_balance) %>
             </span>
           </div>

@@ -24,7 +24,7 @@
           <%= heroicon "check-circle", options: { class: "h-4 w-4 mr-1" } %>
           Goal reached!
         </span>
-      <% elsif progress < 0 %>
+      <% elsif progress.negative? %>
         <span class="inline-flex items-center text-sm text-red-600">
           <%= heroicon "exclamation-triangle", options: { class: "h-4 w-4 mr-1" } %>
           <%= progress %>% complete
@@ -55,7 +55,7 @@
     <div class="space-y-3">
       <div class="flex justify-between items-center">
         <span class="text-xs text-gray-500">Current</span>
-        <span class="text-base font-semibold <%= current_balance >= 0 ? 'text-gray-900' : 'text-red-500' %>">
+        <span class="text-base font-semibold <%= current_balance >= 0 ? "text-gray-900" : "text-red-500" %>">
           <%= number_to_currency(current_balance) %>
         </span>
       </div>
@@ -83,8 +83,8 @@
                 <% end %>
                 <span class="text-gray-600 truncate"><%= entry.item.name %></span>
               </div>
-              <span class="font-medium <%= entry.category.savings? ? 'text-green-600' : 'text-red-600' %> ml-2">
-                <%= entry.category.savings? ? '+' : '-' %><%= number_to_currency(entry.amount) %>
+              <span class="font-medium <%= entry.category.savings? ? "text-green-600" : "text-red-600" %> ml-2">
+                <%= entry.category.savings? ? "+" : "-" %><%= number_to_currency(entry.amount) %>
               </span>
             </div>
           <% end %>

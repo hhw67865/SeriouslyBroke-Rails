@@ -11,7 +11,7 @@ class SavingsPoolCalculator
   # Get the current progress as a percentage of the target amount
   def progress_percentage
     return 0 unless savings_pool.target_amount.to_f.positive?
-    
+
     progress = (current_balance / savings_pool.target_amount * 100).round
     # Cap positive progress at 100%, but allow negative percentages
     [progress, 100].min
@@ -25,17 +25,17 @@ class SavingsPoolCalculator
   # Get all contributions from savings categories (all time)
   def contributions
     savings_pool.entries
-                .joins(item: :category)
-                .where(categories: { category_type: :savings })
-                .sum(:amount)
+      .joins(item: :category)
+      .where(categories: { category_type: :savings })
+      .sum(:amount)
   end
 
   # Get all withdrawals from expense categories attached to this pool (all time)
   def withdrawals
     savings_pool.entries
-                .joins(item: :category)
-                .where(categories: { category_type: :expense })
-                .sum(:amount)
+      .joins(item: :category)
+      .where(categories: { category_type: :expense })
+      .sum(:amount)
   end
 
   # Calculate remaining amount needed to reach target

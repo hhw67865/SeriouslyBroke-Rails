@@ -48,27 +48,35 @@ class CategoryCalculator
 
     items_with_amounts.sort_by { |_, amount| -amount }.first(limit).to_h
   end
-  
+
   # Items for current month with detailed information
   def current_month_items
     result = {}
-    
+
     category.items.each do |item|
-      month_entries = item.entries.where(date: date_range)
-      if month_entries.any?
-        result[item] = {
-          total_amount: month_entries.sum(:amount),
-          latest_entry: month_entries.order(date: :desc).first,
-          entry_count: month_entries.count
-        }
-      end
+      item_data = build_item_data(item)
+      result[item] = item_data if item_data
     end
-    
-    # Sort by highest total amount
-    result.sort_by { |_, data| -data[:total_amount] }.to_h
+
+    sort_items_by_amount(result)
   end
 
   private
+
+  def build_item_data(item)
+    month_entries = item.entries.where(date: date_range)
+    return unless month_entries.any?
+
+    {
+      total_amount: month_entries.sum(:amount),
+      latest_entry: month_entries.order(date: :desc).first,
+      entry_count: month_entries.count
+    }
+  end
+
+  def sort_items_by_amount(items_hash)
+    items_hash.sort_by { |_, data| -data[:total_amount] }.to_h
+  end
 
   def current_amount
     total_amount

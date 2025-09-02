@@ -3,24 +3,7 @@
 module SearchHelper
   # Generate placeholder text based on the selected search field
   def search_placeholder(field)
-    case field&.to_s
-    when 'date'
-      'e.g., 2024-01-15 or Jan 15'
-    when 'item'
-      'e.g., Coffee, Rent, Salary'
-    when 'description'
-      'e.g., Monthly payment, Grocery shopping'
-    when 'category'
-      'e.g., Food, Housing, Income'
-    when 'name'
-      'e.g., Coffee, Food, Emergency Fund'
-    when 'category_type'
-      'e.g., expense, income, savings'
-    when 'target_amount'
-      'e.g., 1000, 5000'
-    else
-      'Enter search term...'
-    end
+    search_placeholders.fetch(field&.to_s, "Enter search term...")
   end
 
   # Get search field options for the current controller
@@ -34,18 +17,18 @@ module SearchHelper
 
   # Check if current controller supports search functionality
   def controller_supports_search?
-    controller.class.included_modules.include?(Searchable) && 
-    search_field_options_for_controller.any?
+    controller.class.included_modules.include?(Searchable) &&
+      search_field_options_for_controller.any?
   end
 
   # Generate search results count text
   def search_results_text(collection, search_state)
-    return '' unless search_state[:has_search]
-    
+    return "" unless search_state[:has_search]
+
     count = collection.respond_to?(:size) ? collection.size : collection.count
     field_name = search_field_options_for_controller.find { |opt| opt[1].to_s == search_state[:field].to_s }&.first || search_state[:field]
-    
-    "Found #{pluralize(count, 'result')} for \"#{search_state[:query]}\" in #{field_name}"
+
+    "Found #{pluralize(count, "result")} for \"#{search_state[:query]}\" in #{field_name}"
   end
 
   # Helper to determine if we should show search form
@@ -72,7 +55,7 @@ module SearchHelper
   # Generate CSS classes for search form elements based on state
   def search_form_css_classes(has_results: false, is_active: false)
     base_classes = "bg-white rounded-lg shadow-sm border"
-    
+
     if has_results
       "#{base_classes} border-brand"
     elsif is_active
@@ -85,37 +68,44 @@ module SearchHelper
   # Get entry type configuration for headers
   def entry_type_config(type)
     configs = {
-      'all' => {
-        title: 'All Entries',
-        description: 'Manage all your financial transactions in one place'
+      "all" => {
+        title: "All Entries",
+        description: "Manage all your financial transactions in one place"
       },
-      'expenses' => {
-        title: 'Expenses',
-        description: 'Track and manage your expense transactions'
+      "expenses" => {
+        title: "Expenses",
+        description: "Track and manage your expense transactions"
       },
-      'income' => {
-        title: 'Income',
-        description: 'Monitor your income sources and earnings'
+      "income" => {
+        title: "Income",
+        description: "Monitor your income sources and earnings"
       },
-      'savings' => {
-        title: 'Savings',
-        description: 'Record your savings deposits and contributions'
+      "savings" => {
+        title: "Savings",
+        description: "Record your savings deposits and contributions"
       }
     }
-    
-    configs[type&.to_s] || configs['all']
+
+    configs[type&.to_s] || configs["all"]
   end
 
   # Get JavaScript placeholders object for search fields
   def search_placeholders_js
-    {
-      'date' => search_placeholder('date'),
-      'item' => search_placeholder('item'),
-      'description' => search_placeholder('description'),
-      'category' => search_placeholder('category'),
-      'name' => search_placeholder('name'),
-      'category_type' => search_placeholder('category_type'),
-      'target_amount' => search_placeholder('target_amount')
-    }.to_json.html_safe
+    # Return JSON string - escaping handled by view context
+    search_placeholders.to_json
   end
-end 
+
+  private
+
+  def search_placeholders
+    {
+      "date" => "e.g., 2024-01-15 or Jan 15",
+      "item" => "e.g., Coffee, Rent, Salary",
+      "description" => "e.g., Monthly payment, Grocery shopping",
+      "category" => "e.g., Food, Housing, Income",
+      "name" => "e.g., Coffee, Food, Emergency Fund",
+      "category_type" => "e.g., expense, income, savings",
+      "target_amount" => "e.g., 1000, 5000"
+    }
+  end
+end

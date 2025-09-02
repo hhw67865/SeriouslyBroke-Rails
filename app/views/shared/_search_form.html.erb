@@ -1,7 +1,10 @@
 <!-- Search Form -->
 <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
   <div class="p-4">
-    <%= form_with url: search_url, method: :get, local: true, html: { 
+    <%= form_with url: search_url, 
+method: :get, 
+local: true, 
+html: { 
       class: "flex flex-col sm:flex-row gap-3 items-start sm:items-end"
     } do |f| %>
       
@@ -40,7 +43,7 @@
       </div>
       
       <!-- Preserve other parameters -->
-      <% if defined?(current_type) && current_type != 'all' %>
+      <% if defined?(current_type) && current_type != "all" %>
         <%= f.hidden_field :type, value: current_type %>
       <% end %>
       

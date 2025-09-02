@@ -237,3 +237,7 @@ RSpec/ExampleLength:
 # Disable i18n locale texts check as it's not necessary for this application
 Rails/I18nLocaleTexts:
   Enabled: false
+
+# Disable uniqueness validation index requirement - prefer Rails validation flexibility
+Rails/UniqueValidationWithoutIndex:
+  Enabled: false

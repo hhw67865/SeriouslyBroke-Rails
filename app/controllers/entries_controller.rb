@@ -2,7 +2,7 @@
 
 class EntriesController < ApplicationController
   include Searchable
-  
+
   before_action :set_entry, only: [:show, :edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
   before_action :load_options, only: [:new, :edit, :create, :update]
@@ -10,15 +10,14 @@ class EntriesController < ApplicationController
   # GET /entries
   def index
     @entries = build_entries_query
-    @current_type = params[:type] || 'all'
+    @current_type = params[:type] || "all"
     @current_sort = params[:sort]
-    @current_direction = params[:direction] == 'desc' ? 'desc' : 'asc'
+    @current_direction = params[:direction] == "desc" ? "desc" : "asc"
     @search_state = current_search_state(params)
   end
 
   # GET /entries/1
-  def show
-  end
+  def show; end
 
   # GET /entries/new
   def new
@@ -28,8 +27,7 @@ class EntriesController < ApplicationController
   end
 
   # GET /entries/1/edit
-  def edit
-  end
+  def edit; end
 
   # POST /entries
   def create
@@ -37,7 +35,7 @@ class EntriesController < ApplicationController
     @entry.item = @item if @item
 
     if @entry.save
-      redirect_to entries_path, notice: 'Entry was successfully created.'
+      redirect_to entries_path, notice: "Entry was successfully created."
     else
       @entry.build_item
       render :new, status: :unprocessable_entity
@@ -47,7 +45,7 @@ class EntriesController < ApplicationController
   # PATCH/PUT /entries/1
   def update
     if @entry.update(entry_params)
-      redirect_to entry_path(@entry), notice: 'Entry was successfully updated.'
+      redirect_to entry_path(@entry), notice: "Entry was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -56,35 +54,31 @@ class EntriesController < ApplicationController
   # DELETE /entries/1
   def destroy
     @entry.destroy
-    redirect_to entries_path, notice: 'Entry was successfully deleted.'
+    redirect_to entries_path, notice: "Entry was successfully deleted."
   end
-
-
 
   private
 
   def build_entries_query
     entries = current_user.entries.includes(item: :category)
-    
+
     # Apply type filtering
     entries = apply_type_filter(entries)
-    
+
     # Apply search
     entries = apply_search(entries, { q: params[:q], field: params[:field] })
-    
+
     # Apply sorting
-    entries = apply_sorting(entries)
-    
-    entries
+    apply_sorting(entries)
   end
 
   def apply_type_filter(entries)
     case params[:type]
-    when 'expenses'
+    when "expenses"
       entries.expenses
-    when 'income'
+    when "income"
       entries.incomes
-    when 'savings'
+    when "savings"
       entries.savings
     else
       entries
@@ -93,12 +87,12 @@ class EntriesController < ApplicationController
 
   def apply_sorting(entries)
     sort_column = params[:sort]
-    sort_direction = params[:direction] == 'desc' ? 'desc' : 'asc'
-    
+    sort_direction = params[:direction] == "desc" ? "desc" : "asc"
+
     case sort_column
-    when 'date'
+    when "date"
       entries.order(date: sort_direction)
-    when 'amount'
+    when "amount"
       entries.order(amount: sort_direction)
     else
       # Default sorting by date (newest first)

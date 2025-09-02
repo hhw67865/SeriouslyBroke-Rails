@@ -2,7 +2,7 @@
 
 class CategoriesController < ApplicationController
   include Searchable
-  
+
   before_action :set_category, only: [:show, :edit, :update, :destroy]
   before_action :set_categories, only: [:index]
 
@@ -59,7 +59,7 @@ class CategoriesController < ApplicationController
 
   def set_category
     @category = current_user.categories.find(params[:id])
-    
+
     # Preload entries with their items for the recent activity section
     @recent_entries = @category.entries.includes(:item).order(date: :desc).limit(5)
   end
@@ -74,10 +74,10 @@ class CategoriesController < ApplicationController
     @query = @search_state[:query] # For backward compatibility
 
     categories = current_user.categories.with_type(@type)
-    
+
     # Apply search using the new searchable system
     categories = apply_search(categories, { q: params[:q], field: params[:field] })
-    
+
     @categories = categories.order(name: :asc)
   end
 end
