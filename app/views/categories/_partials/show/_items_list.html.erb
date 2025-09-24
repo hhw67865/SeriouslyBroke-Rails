@@ -4,7 +4,7 @@
     <h2 class="text-xl font-semibold">Items This Month</h2>
   </div>
   
-  <% current_month_items = category.calculator.current_month_items %>
+  <% current_month_items = category.calculator(selected_date).current_month_items %>
   
   <% if current_month_items.any? %>
     <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">

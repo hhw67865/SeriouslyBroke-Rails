@@ -23,18 +23,19 @@
       </div>
     
     <div class="mt-2">
+      <% calc = category.calculator(selected_date) %>
       <% if category.expense? %>
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Budget</span>
             <span class="font-medium text-gray-900">
-              <%= number_to_currency(category.calculator.total_amount) %> / 
+              <%= number_to_currency(calc.total_amount) %> / 
               <%= category.budget&.amount ? number_to_currency(category.budget.amount) : "N/A" %>
             </span>
           </div>
           
           <% if category.budget&.amount %>
-          <% percentage = category.calculator.budget_percentage %>
+          <% percentage = calc.budget_percentage %>
           <div class="h-2 bg-gray-200 rounded overflow-hidden">
             <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
           </div>
@@ -61,14 +62,14 @@
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Income</span>
-            <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.total_amount) %></span>
+            <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
           </div>
           
           <div class="flex justify-between mt-2">
             <span class="text-xs text-gray-500">vs last month</span>
-            <span class="text-xs flex items-center gap-1 <%= category.calculator.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
-              <%= heroicon category.calculator.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-3 w-3" } %>
-              <%= category.calculator.previous_month_change_percentage.abs %>%
+            <span class="text-xs flex items-center gap-1 <%= calc.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
+              <%= heroicon calc.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-3 w-3" } %>
+              <%= calc.previous_month_change_percentage.abs %>%
             </span>
           </div>
         </div>
@@ -77,7 +78,7 @@
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Contribution</span>
-            <span class="font-medium text-gray-900"><%= number_to_currency(category.calculator.monthly_contribution) %></span>
+            <span class="font-medium text-gray-900"><%= number_to_currency(calc.monthly_contribution) %></span>
           </div>
           
           <% if category.savings_pool.present? %>
@@ -92,7 +93,7 @@
         <div class="mt-4">
           <h4 class="text-sm font-medium text-gray-700 mb-2">Top Items</h4>
           <ul class="space-y-1">
-            <% category.calculator.top_items.each do |item, amount| %>
+            <% calc.top_items.each do |item, amount| %>
               <li class="flex justify-between text-sm">
                 <span class="text-gray-600 truncate max-w-[70%]"><%= item.name %></span>
                 <% case category.category_type %>
