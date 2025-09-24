@@ -1,0 +1,109 @@
+<%
+  # Default values (from helpers backed by session)
+  current_month = selected_month
+  current_year  = selected_year
+
+  # Compute prev/next month-year pairs
+  if current_month == 1
+    prev_month = 12
+    prev_year  = current_year - 1
+  else
+    prev_month = current_month - 1
+    prev_year  = current_year
+  end
+
+  if current_month == 12
+    next_month = 1
+    next_year  = current_year + 1
+  else
+    next_month = current_month + 1
+    next_year  = current_year
+  end
+  
+  # Style variant: 'sidebar' for desktop sidebar, 'mobile' for mobile header
+  variant = local_assigns[:variant] || 'sidebar'
+  
+  # Base classes for different variants
+  container_classes = case variant
+    when 'mobile'
+      "flex items-center gap-1"
+    when 'sidebar'
+      "p-4 border-b border-light"
+    else
+      "flex items-center gap-1"
+  end
+  
+  # Professional arrow buttons (rectangular, high-contrast)
+  button_classes = case variant
+    when 'mobile'
+      "inline-flex items-center justify-center px-2.5 py-2 rounded-md bg-white text-gray-800 border border-gray-300 hover:bg-gray-100 shadow-sm transition"
+    when 'sidebar'
+      "inline-flex items-center justify-center px-2.5 py-2 rounded-md bg-white text-brand border border-brand hover:bg-brand hover:text-white shadow-sm transition"
+    else
+      "inline-flex items-center justify-center px-2.5 py-2 rounded-md bg-white text-gray-800 border border-gray-300 hover:bg-gray-100 shadow-sm transition"
+  end
+  
+  # Date display (neutral text-only inside group)
+  date_display_classes = case variant
+    when 'mobile'
+      "px-3 py-2 text-sm font-semibold text-gray-900 text-center"
+    when 'sidebar'
+      "px-4 py-2 text-sm font-semibold text-brand-dark text-center"
+    else
+      "px-4 py-2 text-sm font-semibold text-gray-900 text-center"
+  end
+
+  # Grouped control styling (single widget look)
+  group_classes = case variant
+    when 'mobile'
+      "inline-flex items-stretch rounded-md border border-gray-300 bg-white shadow-sm"
+    when 'sidebar'
+      "flex w-full items-stretch rounded-md border-2 border-brand bg-white shadow-sm"
+    else
+      "inline-flex items-stretch rounded-md border border-gray-300 bg-white shadow-sm"
+  end
+
+  # Base button within group
+  btn_group_base = case variant
+    when 'mobile'
+      "w-10 h-full flex items-center justify-center px-0 py-2 text-gray-800 hover:bg-gray-100 transition focus:outline-none"
+    when 'sidebar'
+      "w-10 h-full flex items-center justify-center px-0 py-2 text-brand-dark hover:bg-brand/10 transition focus:outline-none"
+    else
+      "w-10 h-full flex items-center justify-center px-0 py-2 text-gray-800 hover:bg-gray-100 transition focus:outline-none"
+  end
+
+  # Divider color between segments
+  divider_class = case variant
+    when 'mobile'
+      "border-gray-300"
+    when 'sidebar'
+      "border-brand"
+    else
+      "border-gray-300"
+  end
+%>
+
+<div class="<%= container_classes %>">
+  
+  <div class="<%= group_classes %> <%= 'justify-center' if variant == 'sidebar' %>">
+    <!-- Previous Month (left segment) -->
+    <%= link_to url_for(month: prev_month, year: prev_year),
+                class: "#{btn_group_base} rounded-l-md border-r #{divider_class}",
+                title: "Previous month" do %>
+      <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
+    <% end %>
+
+    <!-- Month/Year (center segment) -->
+    <div class="<%= date_display_classes %> select-none cursor-default flex-1 text-center">
+      <%= Date.new(current_year, current_month).strftime(variant == 'mobile' ? "%b %Y" : "%B %Y") %>
+    </div>
+
+    <!-- Next Month (right segment) -->
+    <%= link_to url_for(month: next_month, year: next_year),
+                class: "#{btn_group_base} rounded-r-md border-l #{divider_class}",
+                title: "Next month" do %>
+      <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
+    <% end %>
+  </div>
+</div>

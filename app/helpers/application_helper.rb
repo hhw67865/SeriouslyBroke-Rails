@@ -70,6 +70,19 @@ module ApplicationHelper
     end
   end
 
+  def current_month_year?
+    selected_month == Date.current.month && selected_year == Date.current.year
+  end
+
+  def format_month_year(month: nil, year: nil)
+    month ||= selected_month
+    year ||= selected_year
+    Date.new(year, month, 1).strftime("%B %Y")
+  end
+
+  # Note: default_url_options (in DateContext) auto-adds month/year to all links,
+  # so helpers to manually append those params are no longer needed.
+
   private
 
   def primary_button_classes

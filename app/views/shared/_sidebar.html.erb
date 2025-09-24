@@ -18,6 +18,9 @@
     <div class="flex-1 text-xl font-bold tracking-tight">
       <span class="text-[#A4A266]">Seriously</span><span class="text-brand">Broke</span>
     </div>
+    
+    <%# Date Selector for Mobile %>
+    <%= render "shared/date_selector", variant: 'mobile' %>
   </div>
 
   <%# Sidebar for Desktop and Mobile %>
@@ -37,6 +40,9 @@
       </div>
 
       <%= render "shared/brand" %>
+      
+      <%# Date Selector %>
+      <%= render "shared/date_selector", variant: 'sidebar' %>
       
       <div class="flex-1 overflow-y-auto">
         <nav class="flex flex-1 flex-col">
