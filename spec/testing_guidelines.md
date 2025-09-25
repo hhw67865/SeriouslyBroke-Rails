@@ -725,6 +725,47 @@ describe "Sign in" do
 end
 ```
 
+### Setup Patterns: Keep `it` blocks minimal
+- Put data creation and navigation in `before` blocks.
+- Only define `let`/`let!` when the variable itself is referenced in expectations; otherwise create it in `before` as a local to avoid unused memoized helpers.
+- Standardize navigation (e.g., `visit ...`) in `before` to keep examples focused on assertions.
+
+```ruby
+# ✅ Good: Focused example, setup in before
+describe "Details card" do
+  let!(:user) { create(:user) }
+  let!(:category) { create(:category, category_type: "expense", user: user) }
+
+  before do
+    sign_in user
+    # Background data not referenced by name in expectations
+    groceries = create(:item, category: category)
+    create(:entry, item: groceries)
+    visit category_path(category)
+  end
+
+  it "shows accurate counts and created date", :aggregate_failures do
+    expect(page).to have_content("Number of Items")
+    expect(page).to have_content("1")
+    expect(page).to have_content(category.created_at.strftime("%b %d, %Y"))
+  end
+end
+
+# ❌ Avoid: Inline setup in the example and unused let!s
+describe "Details card" do
+  let!(:user) { create(:user) }
+  let!(:category) { create(:category, category_type: "expense", user: user) }
+  let!(:item1) { create(:item, category: category) } # Not referenced by name
+
+  it "shows accurate counts" do
+    sign_in user
+    create(:entry, item: item1)
+    visit category_path(category)
+    expect(page).to have_content("1")
+  end
+end
+```
+
 ### Shared Setup
 For complex setup, use before blocks with specific scoping:
 ```ruby

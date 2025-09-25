@@ -5,7 +5,12 @@ require "rails_helper"
 RSpec.describe "Categories Index - Header", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before do
+    create_list(:category, 2, :income, user: user)
+    create_list(:category, 2, :expense, user: user)
+    create_list(:category, 1, :savings, user: user)
+    sign_in user
+  end
 
   describe "type-specific headers", :aggregate_failures do
     it "shows correct content for income categories" do

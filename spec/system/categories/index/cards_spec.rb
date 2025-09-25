@@ -9,9 +9,10 @@ RSpec.describe "Categories Index - Cards", type: :system do
 
   let!(:user) { create(:user) }
 
-  # Shared dates
-  let(:base_date) { Date.new(2025, 8, 1) }
+  # Shared dates based on current month
+  let(:base_date) { Date.current.beginning_of_month }
   let(:next_date) { base_date.next_month }
+  let(:prev_date) { base_date.prev_month }
 
   before do
     sign_in user
@@ -29,6 +30,9 @@ RSpec.describe "Categories Index - Cards", type: :system do
       # Month A entries (total 150)
       create(:entry, item: groceries_item, amount: 100, date: base_date + 2.days)
       create(:entry, item: dining_item, amount: 50, date: base_date + 10.days)
+      # Previous month entries (total 120)
+      create(:entry, item: groceries_item, amount: 70, date: prev_date + 3.days)
+      create(:entry, item: dining_item, amount: 50, date: prev_date + 9.days)
       # Month B entries (total 300)
       create(:entry, item: groceries_item, amount: 200, date: next_date + 5.days)
       create(:entry, item: dining_item, amount: 100, date: next_date + 12.days)
@@ -63,12 +67,11 @@ RSpec.describe "Categories Index - Cards", type: :system do
     end
 
     it "updates budget info when navigating to previous month via navbar" do
-      find("button[title='Next month']").click # Go to September first
-      find("button[title='Previous month']").click # Back to August
+      find("button[title='Previous month']").click
 
       expect(page).to have_current_path(categories_path(type: "expense"))
-      expect(page).to have_content(currency(150))
-      expect(page).to have_content("15% used")
+      expect(page).to have_content(currency(120))
+      expect(page).to have_content("12% used")
     end
   end
 
