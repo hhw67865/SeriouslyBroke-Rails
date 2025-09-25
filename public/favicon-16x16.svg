@@ -1,0 +1,7 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple monogram for small size -->
+  <rect width="16" height="16" rx="3" fill="#A4A266"/>
+  <text x="8" y="8" text-anchor="middle" dominant-baseline="middle"
+        font-family="ui-sans-serif, -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial"
+        font-weight="800" font-size="8" fill="#FFFFFF" letter-spacing="0.4">SB</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple, professional monogram: solid brand background with bold SB -->
+  <rect width="32" height="32" rx="6" fill="#A4A266"/>
+  <text x="16" y="16" text-anchor="middle" dominant-baseline="middle"
+        font-family="ui-sans-serif, -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial"
+        font-weight="800" font-size="16" fill="#FFFFFF" letter-spacing="0.6">SB</text>
+</svg>

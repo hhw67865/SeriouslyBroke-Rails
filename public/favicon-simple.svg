@@ -1,0 +1,19 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Simple version for conversion to ICO -->
+  <rect width="64" height="64" rx="12" fill="#A4A266"/>
+  
+  <!-- S letter - simplified for small sizes -->
+  <path d="M18 22C18 19.8 19.8 18 22 18H28C30.2 18 32 19.8 32 22C32 24.2 30.2 26 28 26H22C19.8 26 18 27.8 18 30C18 32.2 19.8 34 22 34H28C30.2 34 32 35.8 32 38C32 40.2 30.2 42 28 42H22C19.8 42 18 40.2 18 38" 
+        stroke="white" 
+        stroke-width="4" 
+        stroke-linecap="round" 
+        fill="none"/>
+  
+  <!-- B letter - simplified for small sizes -->
+  <path d="M36 18V46M36 18H44C46.2 18 48 19.8 48 22C48 24.2 46.2 26 44 26H36M36 26H45C47.2 26 49 27.8 49 30C49 32.2 47.2 34 45 34H36" 
+        stroke="white" 
+        stroke-width="4" 
+        stroke-linecap="round" 
+        stroke-linejoin="round" 
+        fill="none"/>
+</svg>
