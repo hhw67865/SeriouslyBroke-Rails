@@ -234,6 +234,10 @@ AllCops:
 RSpec/ExampleLength:
   Max: 10
 
+# Allow more memoized helpers for complex system tests
+RSpec/MultipleMemoizedHelpers:
+  Max: 8
+
 # Disable i18n locale texts check as it's not necessary for this application
 Rails/I18nLocaleTexts:
   Enabled: false

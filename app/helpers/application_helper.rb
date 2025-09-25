@@ -80,7 +80,7 @@ module ApplicationHelper
     Date.new(year, month, 1).strftime("%B %Y")
   end
 
-  # Note: default_url_options (in DateContext) auto-adds month/year to all links,
+  # NOTE: default_url_options (in DateContext) auto-adds month/year to all links,
   # so helpers to manually append those params are no longer needed.
 
   private

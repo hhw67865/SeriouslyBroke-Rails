@@ -874,4 +874,252 @@ end
 - ❌ Not testing search functionality thoroughly when using the searchable system
 - ❌ Missing navigation tests where buttons/links actually appear
 
+## Rubocop Compliance for RSpec Tests
+
+To maintain code quality and prevent Rubocop violations, follow these specific guidelines for RSpec tests.
+
+### Memoized Helpers Management (`RSpec/MultipleMemoizedHelpers`)
+
+**Current Limit**: 8 helpers per describe block (configured in `.rubocop.yml`)
+
+**✅ Good: Strategic Helper Usage**
+```ruby
+describe "expense card shows correct monthly budget" do
+  let!(:expense_category) { create(:category, category_type: "expense", user: user) }
+  let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
+  let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
+  
+  before do
+    # Create budget and entries in before block when they're only used for setup
+    create(:budget, category: expense_category, amount: 1000)
+    create(:entry, item: groceries_item, amount: 100, date: base_date)
+    create(:entry, item: dining_item, amount: 50, date: base_date)
+    
+    visit categories_path(type: "expense")
+  end
+  
+  # Tests here...
+end
+```
+
+**❌ Avoid: Excessive let! Usage**
+```ruby
+describe "expense card shows correct monthly budget" do
+  let!(:expense_category) { create(:category, category_type: "expense", user: user) }
+  let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
+  let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
+  let!(:budget) { create(:budget, category: expense_category, amount: 1000) }
+  let!(:entry1) { create(:entry, item: groceries_item, amount: 100, date: base_date) }
+  let!(:entry2) { create(:entry, item: dining_item, amount: 50, date: base_date) }
+  let!(:next_month_entry1) { create(:entry, item: groceries_item, amount: 200, date: next_date) }
+  let!(:next_month_entry2) { create(:entry, item: dining_item, amount: 100, date: next_date) }
+  # 8+ helpers - triggers Rubocop warning
+end
+```
+
+### When to Use `let!` vs `before` Blocks (`RSpec/LetSetup`)
+
+**Use `let!` when:**
+- The object is referenced by name in tests
+- You need the object's attributes (id, name, etc.) in expectations
+- The object represents the main subject being tested
+
+**Use `before` blocks when:**
+- Objects are only needed for setup/context
+- Objects won't be directly referenced in test assertions
+- Creating multiple related objects for background data
+
+**✅ Good: Proper let! Usage**
+```ruby
+describe "search with type filtering" do
+  let!(:income_category) { create(:category, name: "Freelance Income", category_type: "income", user: user) }
+  
+  before do
+    # Background data that won't be directly referenced
+    create(:category, name: "Freelance Tools", category_type: "expense", user: user)
+    create(:category, name: "Freelance Savings", category_type: "savings", user: user)
+    
+    visit categories_path(type: "income")
+  end
+  
+  it "searches within selected category type only" do
+    fill_in "q", with: "Freelance"
+    find("input[name='q']").send_keys(:return)
+    
+    expect(page).to have_content(income_category.name) # Using the let! object
+    expect(page).not_to have_content("Freelance Tools")
+  end
+end
+```
+
+**❌ Avoid: Unused let! Statements**
+```ruby
+describe "search functionality" do
+  let!(:searchable_income) { create(:category, name: "Freelance Income", user: user) }
+  let!(:searchable_expense) { create(:category, name: "Freelance Tools", user: user) }
+  
+  # If these variables are never referenced by name in tests, use before block instead
+  
+  it "performs search correctly" do
+    fill_in "q", with: "Freelance"
+    # Not using searchable_income or searchable_expense variables directly
+    expect(page).to have_content("Freelance Income")
+  end
+end
+```
+
+### Example Length Management (`RSpec/ExampleLength`)
+
+**Current Limit**: 10 lines per example (configured in `.rubocop.yml`)
+
+**✅ Good: Split Long Examples into Focused Tests**
+```ruby
+describe "type filtering" do
+  it "shows only income categories when income type selected" do
+    visit categories_path(type: "income")
+    expect(page).to have_content("Income Categories")
+    income_categories.each { |cat| expect(page).to have_content(cat.name) }
+  end
+
+  it "shows only expense categories when expense type selected" do
+    visit categories_path(type: "expense")
+    expect(page).to have_content("Expense Categories")
+    expense_categories.each { |cat| expect(page).to have_content(cat.name) }
+  end
+
+  it "defaults to expense categories when no type specified" do
+    visit categories_path
+    expect(page).to have_content("Expense Categories")
+  end
+end
+```
+
+**❌ Avoid: One Long Test with Multiple Scenarios**
+```ruby
+describe "type filtering" do
+  it "shows correct categories for each type" do
+    # Test income type
+    visit categories_path(type: "income")
+    expect(page).to have_content("Income Categories")
+    income_categories.each { |cat| expect(page).to have_content(cat.name) }
+    
+    # Test expense type  
+    visit categories_path(type: "expense")
+    expect(page).to have_content("Expense Categories")
+    expense_categories.each { |cat| expect(page).to have_content(cat.name) }
+    
+    # Test default
+    visit categories_path
+    expect(page).to have_content("Expense Categories")
+    # 15+ lines - triggers Rubocop warning
+  end
+end
+```
+
+### Meaningful Variable Naming (`RSpec/IndexedLet`)
+
+**✅ Good: Descriptive Names**
+```ruby
+describe "expense card displays correct information" do
+  let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
+  let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
+  let!(:gas_item) { create(:item, category: expense_category, name: "Gas") }
+  
+  # Clear what each item represents
+end
+```
+
+**❌ Avoid: Generic Indexed Names**
+```ruby
+describe "expense card displays correct information" do
+  let!(:item1) { create(:item, category: expense_category, name: "Groceries") }
+  let!(:item2) { create(:item, category: expense_category, name: "Dining") }
+  let!(:item3) { create(:item, category: expense_category, name: "Gas") }
+  
+  # Unclear what item1, item2, item3 represent
+end
+```
+
+### Complex System Test Considerations
+
+**When More Helpers Are Acceptable:**
+- System tests that need to set up complex user scenarios
+- Tests involving multiple related models (user, categories, items, entries, budgets)
+- Month-based testing that requires data across different time periods
+- Tests that verify calculations across multiple data points
+
+**Strategies to Stay Within Limits:**
+```ruby
+# Strategy 1: Group related objects in before blocks
+describe "monthly budget calculations" do
+  let!(:expense_category) { create(:category, category_type: "expense", user: user) }
+  let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
+  let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
+  
+  before do
+    # Group all entries and budget creation together
+    create(:budget, category: expense_category, amount: 1000)
+    
+    # Current month entries
+    create(:entry, item: groceries_item, amount: 100, date: base_date)
+    create(:entry, item: dining_item, amount: 50, date: base_date)
+    
+    # Next month entries
+    create(:entry, item: groceries_item, amount: 200, date: next_date)
+    create(:entry, item: dining_item, amount: 100, date: next_date)
+    
+    visit categories_path(type: "expense", month: base_date.month, year: base_date.year)
+  end
+end
+
+# Strategy 2: Extract setup to helper methods
+describe "complex scenario testing" do
+  let!(:expense_category) { create(:category, category_type: "expense", user: user) }
+  
+  before do
+    setup_monthly_budget_data(expense_category)
+    visit categories_path(type: "expense")
+  end
+  
+  private
+  
+  def setup_monthly_budget_data(category)
+    create(:budget, category: category, amount: 1000)
+    # Create all necessary test data
+  end
+end
+```
+
+### Configuration Notes
+
+The project's `.rubocop.yml` includes these RSpec-specific settings:
+
+```yaml
+# RSpec specific configurations
+RSpec/ExampleLength:
+  Max: 10
+
+# Allow more memoized helpers for complex system tests  
+RSpec/MultipleMemoizedHelpers:
+  Max: 8
+```
+
+These limits balance code quality with the practical needs of comprehensive system testing. They can be adjusted if consistently needed, but should be increased thoughtfully.
+
+### Quick Rubocop Check Commands
+
+```bash
+# Check specific test files
+bundle exec rubocop spec/system/categories/index/cards_spec.rb --format simple
+
+# Check all spec files
+bundle exec rubocop spec/ --format simple
+
+# Auto-correct simple issues
+bundle exec rubocop spec/ --autocorrect
+
+# Check entire project
+bundle exec rubocop --format simple
+```
+
 This documentation should be updated as new testing patterns emerge in the codebase.

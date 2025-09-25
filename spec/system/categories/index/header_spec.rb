@@ -4,14 +4,13 @@ require "rails_helper"
 
 RSpec.describe "Categories Index - Header", type: :system do
   let!(:user) { create(:user) }
-  let!(:income_categories) { create_list(:category, 2, :income, user: user) }
 
   before { sign_in user }
 
   describe "type-specific headers", :aggregate_failures do
     it "shows correct content for income categories" do
       visit categories_path(type: "income")
-      
+
       expect(page).to have_content("Income Categories")
       expect(page).to have_content("Track your income sources and monthly earnings")
       expect(page).to have_link("New Income Category")
@@ -19,7 +18,7 @@ RSpec.describe "Categories Index - Header", type: :system do
 
     it "shows correct content for expense categories" do
       visit categories_path(type: "expense")
-      
+
       expect(page).to have_content("Expense Categories")
       expect(page).to have_content("Manage your expense categories and track your spending")
       expect(page).to have_link("New Expense Category")
@@ -27,7 +26,7 @@ RSpec.describe "Categories Index - Header", type: :system do
 
     it "shows correct content for savings categories" do
       visit categories_path(type: "savings")
-      
+
       expect(page).to have_content("Savings Categories")
       expect(page).to have_content("Organize your savings pools and track progress")
       expect(page).to have_link("New Saving Category")
@@ -38,7 +37,7 @@ RSpec.describe "Categories Index - Header", type: :system do
     it "navigates to new category page with correct type", :aggregate_failures do
       visit categories_path(type: "income")
       click_link "New Income Category"
-      
+
       expect(page).to have_current_path(new_category_path(type: "income"))
     end
   end
@@ -54,4 +53,3 @@ RSpec.describe "Categories Index - Header", type: :system do
     end
   end
 end
-

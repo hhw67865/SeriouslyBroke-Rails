@@ -24,7 +24,7 @@ RSpec.describe "Navbar", type: :system do
     it "navigates to main sections correctly", :aggregate_failures do
       click_link "Categories"
       expect(page).to have_current_path(categories_path)
-      
+
       click_link "Dashboard"
       expect(page).to have_current_path(authenticated_root_path)
     end
@@ -33,7 +33,7 @@ RSpec.describe "Navbar", type: :system do
   describe "active navigation state" do
     it "highlights current section", :aggregate_failures do
       visit categories_path
-      
+
       # Check for active navigation link with the specific styling classes
       expect(page).to have_css("a.bg-white").or have_css("a[class*='bg-white']")
     end
@@ -53,10 +53,10 @@ RSpec.describe "Navbar", type: :system do
       # Test next month navigation
       expect(page).to have_css("button[title='Next month']")
       expect(page).to have_css("button[title='Previous month']")
-      
+
       find("button[title='Next month']").click
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-      
+
       # Test previous month navigation
       find("button[title='Previous month']").click
       expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
@@ -66,18 +66,18 @@ RSpec.describe "Navbar", type: :system do
       # Navigate to next month
       find("button[title='Next month']").click
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-      
+
       # Navigate to different page
       click_link "Categories"
       expect(page).to have_current_path(categories_path)
-      
+
       # Month selection should persist
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-      
+
       # Navigate to another page
       click_link "Dashboard"
       expect(page).to have_current_path(authenticated_root_path)
-      
+
       # Month selection should still persist
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
     end
@@ -86,16 +86,15 @@ RSpec.describe "Navbar", type: :system do
       # Navigate to a different month
       find("button[title='Next month']").click
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
-      
+
       # Sign out and back in (simulating new session)
       click_button "Sign out"
-      
+
       sign_in user
       visit authenticated_root_path
-      
+
       # Should show current month again for new session
       expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
     end
-
   end
 end

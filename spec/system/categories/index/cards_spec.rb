@@ -19,17 +19,19 @@ RSpec.describe "Categories Index - Cards", type: :system do
 
   describe "expense card shows correct monthly budget and links to show", :aggregate_failures do
     let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food") }
-    let!(:budget) { create(:budget, category: expense_category, amount: 1000) }
-    let!(:item1) { create(:item, category: expense_category, name: "Groceries") }
-    let!(:item2) { create(:item, category: expense_category, name: "Dining") }
+    let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
+    let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
 
     before do
+      # Create budget for expense category
+      create(:budget, category: expense_category, amount: 1000)
+
       # Month A entries (total 150)
-      create(:entry, item: item1, amount: 100, date: base_date + 2.days)
-      create(:entry, item: item2, amount: 50,  date: base_date + 10.days)
+      create(:entry, item: groceries_item, amount: 100, date: base_date + 2.days)
+      create(:entry, item: dining_item, amount: 50, date: base_date + 10.days)
       # Month B entries (total 300)
-      create(:entry, item: item1, amount: 200, date: next_date + 5.days)
-      create(:entry, item: item2, amount: 100, date: next_date + 12.days)
+      create(:entry, item: groceries_item, amount: 200, date: next_date + 5.days)
+      create(:entry, item: dining_item, amount: 100, date: next_date + 12.days)
 
       visit categories_path(type: "expense", month: base_date.month, year: base_date.year)
     end
@@ -72,18 +74,18 @@ RSpec.describe "Categories Index - Cards", type: :system do
 
   describe "income card shows correct monthly income and links to show", :aggregate_failures do
     let!(:income_category) { create(:category, category_type: "income", user: user, name: "Salary") }
-    let!(:item1) { create(:item, category: income_category, name: "Paycheck") }
-    let!(:item2) { create(:item, category: income_category, name: "Bonus") }
+    let!(:paycheck_item) { create(:item, category: income_category, name: "Paycheck") }
+    let!(:bonus_item) { create(:item, category: income_category, name: "Bonus") }
 
     before do
       # Previous month baseline for % change (500)
-      create(:entry, item: item1, amount: 500, date: base_date.prev_month + 5.days)
+      create(:entry, item: paycheck_item, amount: 500, date: base_date.prev_month + 5.days)
       # Current month (750)
-      create(:entry, item: item1, amount: 500, date: base_date + 1.day)
-      create(:entry, item: item2, amount: 250, date: base_date + 15.days)
+      create(:entry, item: paycheck_item, amount: 500, date: base_date + 1.day)
+      create(:entry, item: bonus_item, amount: 250, date: base_date + 15.days)
       # Next month (1000)
-      create(:entry, item: item1, amount: 700, date: next_date + 3.days)
-      create(:entry, item: item2, amount: 300, date: next_date + 10.days)
+      create(:entry, item: paycheck_item, amount: 700, date: next_date + 3.days)
+      create(:entry, item: bonus_item, amount: 300, date: next_date + 10.days)
 
       visit categories_path(type: "income", month: base_date.month, year: base_date.year)
     end
@@ -92,7 +94,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content(currency(750))
       # 50% up vs last month (750 vs 500)
       expect(page).to have_content("50%")
-      
+
       # Top items with positive amounts
       expect(page).to have_content("Paycheck")
       expect(page).to have_content("Bonus")
@@ -115,26 +117,26 @@ RSpec.describe "Categories Index - Cards", type: :system do
   describe "savings card shows correct monthly contribution and links to show", :aggregate_failures do
     let!(:pool) { create(:savings_pool, user: user, name: "Main Pool") }
     let!(:savings_category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency Fund") }
-    let!(:item1) { create(:item, category: savings_category, name: "Transfer") }
-    let!(:item2) { create(:item, category: savings_category, name: "Rollover") }
+    let!(:transfer_item) { create(:item, category: savings_category, name: "Transfer") }
+    let!(:rollover_item) { create(:item, category: savings_category, name: "Rollover") }
 
     before do
       # Month A entries (total 250)
-      create(:entry, item: item1, amount: 200, date: base_date + 7.days)
-      create(:entry, item: item2, amount: 50,  date: base_date + 14.days)
+      create(:entry, item: transfer_item, amount: 200, date: base_date + 7.days)
+      create(:entry, item: rollover_item, amount: 50, date: base_date + 14.days)
       # Month B entries (total 300)
-      create(:entry, item: item1, amount: 200, date: next_date + 1.day)
-      create(:entry, item: item2, amount: 100, date: next_date + 8.days)
+      create(:entry, item: transfer_item, amount: 200, date: next_date + 1.day)
+      create(:entry, item: rollover_item, amount: 100, date: next_date + 8.days)
 
       visit categories_path(type: "savings", month: base_date.month, year: base_date.year)
     end
 
     it "displays correct monthly contribution, savings pool, and top items for selected month" do
       expect(page).to have_content(currency(250))
-      
+
       # Shows associated savings pool
       expect(page).to have_content("Savings Pool: Main Pool")
-      
+
       # Top items with amounts (savings shows plain amounts)
       expect(page).to have_content("Transfer")
       expect(page).to have_content("Rollover")
