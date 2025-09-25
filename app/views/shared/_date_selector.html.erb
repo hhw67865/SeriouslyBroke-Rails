@@ -20,10 +20,8 @@
     next_year  = current_year
   end
 
-  # Preserve existing query params (e.g., type, q, field) when navigating months
+  # Preserve existing query params for form redirects
   base_params = request.query_parameters.deep_dup.symbolize_keys.except(:month, :year)
-  prev_url = "#{request.path}?#{base_params.merge(month: prev_month, year: prev_year).to_query}"
-  next_url = "#{request.path}?#{base_params.merge(month: next_month, year: next_year).to_query}"
   
   # Style variant: 'sidebar' for desktop sidebar, 'mobile' for mobile header
   variant = local_assigns[:variant] || 'sidebar'
@@ -93,10 +91,15 @@
   
   <div class="<%= group_classes %> <%= 'justify-center' if variant == 'sidebar' %>">
     <!-- Previous Month (left segment) -->
-    <%= link_to prev_url,
-                class: "#{btn_group_base} rounded-l-md border-r #{divider_class}",
-                title: "Previous month" do %>
-      <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
+    <%= form_with url: request.path, method: :get, local: true, class: "m-0 inline" do |f| %>
+      <% base_params.each do |key, value| %>
+        <%= f.hidden_field key, value: value %>
+      <% end %>
+      <%= f.hidden_field :month, value: prev_month %>
+      <%= f.hidden_field :year, value: prev_year %>
+      <button type="submit" class="<%= btn_group_base %> rounded-l-md border-r <%= divider_class %> border-0 cursor-pointer" title="Previous month">
+        <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
+      </button>
     <% end %>
 
     <!-- Month/Year (center segment) -->
@@ -105,10 +108,15 @@
     </div>
 
     <!-- Next Month (right segment) -->
-    <%= link_to next_url,
-                class: "#{btn_group_base} rounded-r-md border-l #{divider_class}",
-                title: "Next month" do %>
-      <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
+    <%= form_with url: request.path, method: :get, local: true, class: "m-0 inline" do |f| %>
+      <% base_params.each do |key, value| %>
+        <%= f.hidden_field key, value: value %>
+      <% end %>
+      <%= f.hidden_field :month, value: next_month %>
+      <%= f.hidden_field :year, value: next_year %>
+      <button type="submit" class="<%= btn_group_base %> rounded-r-md border-l <%= divider_class %> border-0 cursor-pointer" title="Next month">
+        <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
+      </button>
     <% end %>
   </div>
 </div>

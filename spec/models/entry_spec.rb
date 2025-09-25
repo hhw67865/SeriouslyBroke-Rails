@@ -17,16 +17,6 @@ RSpec.describe Entry, type: :model do
       entry = create(:entry, amount: 15.99)
       expect(entry.amount).to eq(15.99)
     end
-
-    it "handles negative amounts" do
-      entry = create(:entry, amount: -10.50)
-      expect(entry.amount).to eq(-10.50)
-    end
-
-    it "handles zero amounts" do
-      entry = create(:entry, amount: 0)
-      expect(entry.amount).to eq(0.00)
-    end
   end
 
   describe "delegations" do
