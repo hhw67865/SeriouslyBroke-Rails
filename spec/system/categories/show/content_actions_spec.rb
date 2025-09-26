@@ -8,8 +8,9 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
   before { sign_in user }
 
   describe "expense category", :aggregate_failures do
+    let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }
+
     before do
-      create(:category, category_type: "expense", user: user, name: "Food")
       create(:budget, category: category, amount: 1000)
       visit category_path(category)
     end
@@ -29,10 +30,15 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_current_path(edit_category_path(category))
     end
 
-    it "deletes with Delete button and redirects to index with type" do
+    it "deletes category completely from database", :aggregate_failures do
+      expect(Category.exists?(category.id)).to be(true)
+
       accept_confirm { click_button "Delete" }
+
       expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content("Category was successfully deleted")
+      expect(page).not_to have_content(category.name)
+      expect(Category.exists?(category.id)).to be(false)
     end
   end
 
@@ -53,10 +59,15 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_current_path(edit_category_path(category))
     end
 
-    it "deletes with Delete button and redirects to index with type" do
+    it "deletes category completely from database", :aggregate_failures do
+      expect(Category.exists?(category.id)).to be(true)
+
       accept_confirm { click_button "Delete" }
+
       expect(page).to have_current_path(categories_path(type: "income"))
       expect(page).to have_content("Category was successfully deleted")
+      expect(page).not_to have_content(category.name)
+      expect(Category.exists?(category.id)).to be(false)
     end
   end
 
@@ -80,10 +91,15 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_current_path(edit_category_path(category))
     end
 
-    it "deletes with Delete button and redirects to index with type" do
+    it "deletes category completely from database", :aggregate_failures do
+      expect(Category.exists?(category.id)).to be(true)
+
       accept_confirm { click_button "Delete" }
+
       expect(page).to have_current_path(categories_path(type: "savings"))
       expect(page).to have_content("Category was successfully deleted")
+      expect(page).not_to have_content(category.name)
+      expect(Category.exists?(category.id)).to be(false)
     end
   end
 end

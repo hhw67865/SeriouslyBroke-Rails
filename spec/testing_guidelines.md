@@ -471,15 +471,59 @@ end
 
 ## Code Style Preferences
 
-### Use Aggregate Failures
-Group related expectations with `:aggregate_failures`:
+### Use Aggregate Failures (Updated Pattern)
+**NEW PATTERN: Apply `:aggregate_failures` at the describe block level** for cleaner organization:
 ```ruby
-it "completes sign up successfully", :aggregate_failures do
-  fill_sign_up_form
-  within("form") { click_button "Sign up" }
+describe "successful submission", :aggregate_failures do
+  before { visit new_user_registration_path }
 
-  expect(page).to have_content("Welcome! You have signed up successfully.")
-  expect(page).to have_current_path(authenticated_root_path)
+  it "completes sign up successfully" do
+    fill_sign_up_form
+    within("form") { click_button "Sign up" }
+
+    expect(page).to have_content("Welcome! You have signed up successfully.")
+    expect(page).to have_current_path(authenticated_root_path)
+  end
+
+  it "creates user account" do
+    fill_sign_up_form
+    within("form") { click_button "Sign up" }
+
+    expect(User.count).to eq(1)
+    expect(User.last.email).to eq("test@example.com")
+  end
+end
+```
+
+**Why describe-level is better:**
+- Reduces clutter in individual `it` blocks  
+- All tests in the describe block inherit the behavior
+- Cleaner, more readable test structure
+- Easier to maintain
+
+**❌ OLD PATTERN (avoid):**
+```ruby
+describe "form validation" do
+  it "shows error for missing name", :aggregate_failures do
+    # test code...
+  end
+  
+  it "shows error for duplicate name", :aggregate_failures do
+    # test code...
+  end
+end
+```
+
+**✅ NEW PATTERN (preferred):**
+```ruby
+describe "form validation", :aggregate_failures do
+  it "shows error for missing name" do
+    # test code...
+  end
+  
+  it "shows error for duplicate name" do
+    # test code...
+  end
 end
 ```
 
@@ -626,17 +670,18 @@ end
 ```
 
 **Aggregate Failures Rule:**
-- **ALWAYS use `:aggregate_failures`** when a test has multiple `expect` statements
+- **ALWAYS use `:aggregate_failures` at the describe block level** for sections with multiple expectations
 - This shows all failures at once instead of stopping at the first one
 - Essential for system tests where multiple elements need to work together
+- Apply to describe blocks, not individual `it` blocks, for cleaner code
 
 ### Navigation Testing Within Page Sections
 Test navigation where it naturally occurs within page sections:
 
 **In Header Sections** (`index/header_spec.rb`):
 ```ruby
-describe "create button navigation" do
-  it "navigates to new category page", :aggregate_failures do
+describe "create button navigation", :aggregate_failures do
+  it "navigates to new category page" do
     click_link "New Category"
     expect(page).to have_current_path(new_category_path)
     expect(page).to have_content("New Category")
@@ -646,15 +691,15 @@ end
 
 **In Action Sections** (`show/actions_spec.rb`):
 ```ruby
-describe "edit navigation" do
-  it "navigates to edit page", :aggregate_failures do
+describe "edit navigation", :aggregate_failures do
+  it "navigates to edit page" do
     click_link "Edit Category"
     expect(page).to have_current_path(edit_category_path(category))
   end
 end
 
-describe "delete functionality" do
-  it "deletes and redirects to index", :aggregate_failures do
+describe "delete functionality", :aggregate_failures do
+  it "deletes and redirects to index" do
     accept_confirm { click_button "Delete Category" }
     expect(page).to have_current_path(categories_path)
     expect(page).to have_content("Category was successfully deleted")
@@ -664,8 +709,8 @@ end
 
 **In Form Sections** (`new/form_spec.rb`, `edit/form_spec.rb`):
 ```ruby
-describe "navigation" do
-  it "returns to index when clicking back", :aggregate_failures do
+describe "navigation", :aggregate_failures do
+  it "returns to index when clicking back" do
     click_link "Back to Categories"
     expect(page).to have_current_path(categories_path)
   end
