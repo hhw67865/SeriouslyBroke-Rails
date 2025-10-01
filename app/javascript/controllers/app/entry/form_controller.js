@@ -27,10 +27,6 @@ export default class extends Controller {
 
   initializeCategorySelect() {
     this.categorySelect = new TomSelect(this.categorySelectTarget, {
-      create: (input) => {
-        this.updateItemSelect(null)
-        return { text: `Create "${input}"`, value: "" }
-      },
       onChange: (value) => {
         if (value === "") {
           // User created a new category - clear items
