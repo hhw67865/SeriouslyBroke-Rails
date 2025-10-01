@@ -92,4 +92,74 @@ RSpec.describe "Entries Index - Table", type: :system do
       end
     end
   end
+
+  describe "action buttons", :aggregate_failures do
+    let!(:expense_item) { create(:item, category: expense_category, name: "Coffee") }
+    let!(:entry) do
+      create(
+        :entry,
+        item: expense_item,
+        amount: 5.50,
+        description: "Morning coffee",
+        date: Date.parse("2024-01-15")
+      )
+    end
+
+    before { visit entries_path }
+
+    describe "edit action" do
+      it "navigates to edit form with prefilled data" do
+        within("tbody tr", text: "Morning coffee") do
+          find("a[title='Edit']").click
+        end
+
+        expect(page).to have_current_path(edit_entry_path(entry))
+        expect(page).to have_field("Amount", with: "5.5")
+        expect(page).to have_field("Description", with: "Morning coffee")
+        expect(page).to have_field("Date", with: "2024-01-15")
+      end
+
+      it "shows item name in name dropdown" do
+        within("tbody tr", text: "Morning coffee") do
+          find("a[title='Edit']").click
+        end
+
+        expect(page).to have_select("entry_item_id", selected: "Coffee")
+      end
+
+      it "shows category name in category dropdown" do
+        within("tbody tr", text: "Morning coffee") do
+          find("a[title='Edit']").click
+        end
+
+        expect(page).to have_select("category_id", selected: "Food")
+      end
+    end
+
+    describe "delete action" do
+      it "has delete link with turbo attributes" do
+        within("tbody tr", text: "Morning coffee") do
+          delete_link = find("a[title='Delete']")
+          expect(delete_link[:href]).to include(entry_path(entry))
+          expect(delete_link["data-turbo-method"]).to eq("delete")
+          expect(delete_link["data-turbo-confirm"]).to be_present
+        end
+      end
+
+      it "deletes entry when confirmed" do
+        expect(Entry.exists?(entry.id)).to be(true)
+
+        accept_confirm do
+          within("tbody tr", text: "Morning coffee") do
+            find("a[title='Delete']").click
+          end
+        end
+
+        expect(page).to have_current_path(entries_path)
+        expect(page).to have_content("Entry was successfully deleted")
+        expect(page).not_to have_content("Morning coffee")
+        expect(Entry.exists?(entry_id)).to be(false)
+      end
+    end
+  end
 end
