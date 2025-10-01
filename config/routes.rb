@@ -12,7 +12,7 @@ Rails.application.routes.draw do
         patch :categories, to: 'savings_pools/categories#update'
       end
     end
-    resources :entries
+    resources :entries, except: [:show]
     resources :items, only: [:edit, :update, :destroy]
     resources :categories do
       get :items, on: :member

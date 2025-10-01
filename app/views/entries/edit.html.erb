@@ -8,10 +8,6 @@
     </div>
     
     <div class="flex flex-col sm:flex-row gap-4">
-      <%= link_to @entry, class: "flex items-center justify-center sm:justify-start text-sm font-medium text-[#6c757d] hover:text-[#2d3436]" do %>
-        <%= heroicon "eye", options: { class: "h-4 w-4 mr-1" } %> View Details
-      <% end %>
-      
       <%= link_to entries_path, class: "flex items-center justify-center sm:justify-start text-sm font-medium text-[#6c757d] hover:text-[#2d3436]" do %>
         <%= heroicon "arrow-left", options: { class: "h-4 w-4 mr-1" } %> Back to Entries
       <% end %>

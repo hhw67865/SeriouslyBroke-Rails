@@ -158,7 +158,7 @@ RSpec.describe "Entries Index - Table", type: :system do
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully deleted")
         expect(page).not_to have_content("Morning coffee")
-        expect(Entry.exists?(entry_id)).to be(false)
+        expect(Entry.exists?(entry.id)).to be(false)
       end
     end
   end

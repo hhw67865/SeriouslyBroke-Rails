@@ -3,7 +3,7 @@
 class EntriesController < ApplicationController
   include Searchable
 
-  before_action :set_entry, only: [:show, :edit, :update, :destroy]
+  before_action :set_entry, only: [:edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
   before_action :load_options, only: [:new, :edit, :create, :update]
 
@@ -15,9 +15,6 @@ class EntriesController < ApplicationController
     @current_direction = params[:direction] == "desc" ? "desc" : "asc"
     @search_state = current_search_state(params)
   end
-
-  # GET /entries/1
-  def show; end
 
   # GET /entries/new
   def new
@@ -45,7 +42,7 @@ class EntriesController < ApplicationController
   # PATCH/PUT /entries/1
   def update
     if @entry.update(entry_params)
-      redirect_to entry_path(@entry), notice: "Entry was successfully updated."
+      redirect_to entries_path, notice: "Entry was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
