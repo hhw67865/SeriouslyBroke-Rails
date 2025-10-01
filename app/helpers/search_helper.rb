@@ -25,8 +25,8 @@ module SearchHelper
   def search_results_text(collection, search_state)
     return "" unless search_state[:has_search]
 
-    count = collection.respond_to?(:size) ? collection.size : collection.count
-    field_name = search_field_options_for_controller.find { |opt| opt[1].to_s == search_state[:field].to_s }&.first || search_state[:field]
+    count = collection_total_count(collection)
+    field_name = find_field_label(search_state[:field])
 
     "Found #{pluralize(count, "result")} for \"#{search_state[:query]}\" in #{field_name}"
   end
@@ -97,9 +97,25 @@ module SearchHelper
 
   private
 
+  def collection_total_count(collection)
+    # Use total_count for paginated collections (Kaminari), otherwise use count
+    if collection.respond_to?(:total_count)
+      collection.total_count
+    elsif collection.respond_to?(:size)
+      collection.size
+    else
+      collection.count
+    end
+  end
+
+  def find_field_label(field)
+    search_field_options_for_controller
+      .find { |opt| opt[1].to_s == field.to_s }&.first || field
+  end
+
   def search_placeholders
     {
-      "date" => "e.g., 2024-01-15 or Jan 15",
+      "date" => "e.g., 2024-01-15, 2024-3, 2025-9, or 2024",
       "item" => "e.g., Coffee, Rent, Salary",
       "description" => "e.g., Monthly payment, Grocery shopping",
       "category" => "e.g., Food, Housing, Income",

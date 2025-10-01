@@ -20,6 +20,9 @@ gem "turbo-rails"
 # Authentication and Authorization
 gem "devise", "~> 4.9"
 
+# Pagination
+gem "kaminari", "~> 1.2"
+
 # Windows compatibility
 gem "tzinfo-data", platforms: [:windows, :jruby]
 

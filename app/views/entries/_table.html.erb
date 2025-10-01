@@ -28,6 +28,44 @@
         </tbody>
       </table>
     </div>
+    
+    <%# Pagination %>
+    <% if entries.respond_to?(:current_page) && entries.total_pages > 1 %>
+      <div class="bg-white px-6 py-4 border-t border-gray-200">
+        <%# Mobile pagination %>
+        <div class="flex justify-between items-center md:hidden">
+          <%= link_to_prev_page entries, "Previous", class: "relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-800 transition-colors duration-200 shadow-sm" %>
+          <div class="flex items-center">
+            <span class="text-sm font-semibold text-gray-900">Page <%= entries.current_page %> of <%= entries.total_pages %></span>
+          </div>
+          <%= link_to_next_page entries, "Next", class: "relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-800 transition-colors duration-200 shadow-sm" %>
+        </div>
+        
+        <%# Desktop pagination %>
+        <div class="hidden md:flex md:items-center md:justify-between">
+          <div class="flex-1">
+            <p class="text-sm text-gray-700">
+              Showing <span class="font-semibold text-gray-900"><%= entries.offset_value + 1 %></span> to 
+              <span class="font-semibold text-gray-900"><%= entries.offset_value + entries.length %></span> of 
+              <span class="font-semibold text-gray-900"><%= entries.total_count %></span> entries
+            </p>
+          </div>
+          <div class="flex items-center space-x-3">
+            <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+              <%= paginate entries %>
+            </nav>
+          </div>
+        </div>
+      </div>
+    <% elsif entries.respond_to?(:total_count) && entries.total_count.positive? %>
+      <%# Show total count even when no pagination needed %>
+      <div class="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+        <p class="text-sm text-gray-700 text-center">
+          <span class="font-medium"><%= entries.total_count %></span> 
+          <%= entries.total_count == 1 ? "entry" : "entries" %> total
+        </p>
+      </div>
+    <% end %>
   <% else %>
     <div class="text-center py-12">
       <div class="text-gray-500 text-lg">No entries found</div>

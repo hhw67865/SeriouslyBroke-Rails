@@ -68,8 +68,9 @@ class EntriesController < ApplicationController
     # Apply search
     entries = apply_search(entries, { q: params[:q], field: params[:field] })
 
-    # Apply sorting
-    apply_sorting(entries)
+    # Apply sorting and pagination
+    entries = apply_sorting(entries)
+    entries.page(params[:page])
   end
 
   def apply_type_filter(entries)
