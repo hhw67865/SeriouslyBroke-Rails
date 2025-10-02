@@ -94,14 +94,11 @@ RSpec.describe "Entries Index - Table", type: :system do
   end
 
   describe "action buttons", :aggregate_failures do
-    let!(:expense_item) { create(:item, category: expense_category, name: "Coffee") }
+    let!(:expense_item) { create(:item, category: expense_category) }
     let!(:entry) do
       create(
         :entry,
-        item: expense_item,
-        amount: 5.50,
-        description: "Morning coffee",
-        date: Date.parse("2024-01-15")
+        item: expense_item
       )
     end
 
@@ -109,36 +106,36 @@ RSpec.describe "Entries Index - Table", type: :system do
 
     describe "edit action" do
       it "navigates to edit form with prefilled data" do
-        within("tbody tr", text: "Morning coffee") do
+        within("tbody tr", text: entry.item.name) do
           find("a[title='Edit']").click
         end
 
         expect(page).to have_current_path(edit_entry_path(entry))
-        expect(page).to have_field("Amount", with: "5.5")
-        expect(page).to have_field("Description", with: "Morning coffee")
-        expect(page).to have_field("Date", with: "2024-01-15")
+        expect(page).to have_field("Amount", with: entry.amount)
+        expect(page).to have_field("Description", with: entry.description)
+        expect(page).to have_field("Date", with: entry.date.strftime("%Y-%m-%d"))
       end
 
       it "shows item name in name dropdown" do
-        within("tbody tr", text: "Morning coffee") do
+        within("tbody tr", text: entry.item.name) do
           find("a[title='Edit']").click
         end
 
-        expect(page).to have_select("entry_item_id", selected: "Coffee")
+        expect(page).to have_select("entry_item_id", selected: entry.item.name)
       end
 
       it "shows category name in category dropdown" do
-        within("tbody tr", text: "Morning coffee") do
+        within("tbody tr", text: entry.item.name) do
           find("a[title='Edit']").click
         end
 
-        expect(page).to have_select("category_id", selected: "Food")
+        expect(page).to have_select("category_id", selected: entry.item.category.name)
       end
     end
 
     describe "delete action" do
       it "has delete link with turbo attributes" do
-        within("tbody tr", text: "Morning coffee") do
+        within("tbody tr", text: entry.item.name) do
           delete_link = find("a[title='Delete']")
           expect(delete_link[:href]).to include(entry_path(entry))
           expect(delete_link["data-turbo-method"]).to eq("delete")
@@ -150,14 +147,14 @@ RSpec.describe "Entries Index - Table", type: :system do
         expect(Entry.exists?(entry.id)).to be(true)
 
         accept_confirm do
-          within("tbody tr", text: "Morning coffee") do
+          within("tbody tr", text: entry.item.name) do
             find("a[title='Delete']").click
           end
         end
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully deleted")
-        expect(page).not_to have_content("Morning coffee")
+        expect(page).not_to have_content(entry.item.name)
         expect(Entry.exists?(entry.id)).to be(false)
       end
     end

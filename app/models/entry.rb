@@ -21,4 +21,5 @@ class Entry < ApplicationRecord
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
+  searchable :savings_pool, through: [:item, :category, :savings_pool], column: :name, label: "Savings Pool"
 end

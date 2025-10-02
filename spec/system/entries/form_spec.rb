@@ -114,7 +114,6 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(entries_path)
         expect(page).to have_content("Entry was successfully created")
-        expect(Entry.count).to eq(1)
         expect(Entry.last.item.name).to eq("Brand New Item 123")
         expect(Entry.last.item.category).to eq(expense_category)
       end

@@ -89,6 +89,7 @@ RSpec.describe "Navbar", type: :system do
 
       # Sign out and back in (simulating new session)
       click_button "Sign out"
+      sleep 0.5
 
       sign_in user
       visit authenticated_root_path
