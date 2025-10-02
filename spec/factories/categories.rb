@@ -22,5 +22,15 @@ FactoryBot.define do
       name { "Savings for #{Faker::Commerce.product_name} + Faker::Number.number(digits: 2).to_s" }
       association :savings_pool
     end
+
+    trait :with_items_and_entries do
+      transient do
+        items_count { rand(2..4) }
+      end
+
+      after(:create) do |category, evaluator|
+        create_list(:item, evaluator.items_count, :with_entries, category: category)
+      end
+    end
   end
 end

@@ -749,6 +749,118 @@ context "with duplicate email" do
 end
 ```
 
+### Factory Randomization Best Practices
+
+**Philosophy: Random by Default, Specific When Testing**
+
+Factories should use randomization and realistic defaults to create varied test data. Only specify exact values when testing specific calculations or behaviors.
+
+#### ✅ Good: Random Factory Definitions
+```ruby
+# spec/factories/categories.rb
+FactoryBot.define do
+  factory :category do
+    name { Faker::Commerce.department + Faker::Number.number(digits: 2).to_s }
+    color { Faker::Color.hex_color }
+    category_type { :expense }
+    association :user
+
+    trait :with_items_and_entries do
+      transient do
+        items_count { rand(2..4) }  # Random count
+      end
+
+      after(:create) do |category, evaluator|
+        create_list(:item, evaluator.items_count, :with_entries, category: category)
+      end
+    end
+  end
+end
+
+# spec/factories/items.rb
+FactoryBot.define do
+  factory :item do
+    name { Faker::Commerce.product_name }  # Random name
+    description { Faker::Lorem.sentence }   # Random description
+    frequency { :one_time }
+    association :category
+
+    trait :with_entries do
+      transient do
+        entries_count { rand(2..5) }  # Random count
+      end
+
+      after(:create) do |item, evaluator|
+        create_list(:entry, evaluator.entries_count, item: item)
+      end
+    end
+  end
+end
+
+# spec/factories/entries.rb
+FactoryBot.define do
+  factory :entry do
+    amount { Faker::Number.decimal(l_digits: 2, r_digits: 2) }  # Random amount
+    date { Date.current }  # Use current date, not hardcoded
+    description { Faker::Lorem.sentence }
+    association :item
+  end
+end
+```
+
+#### ❌ Avoid: Hardcoded Factory Values
+```ruby
+# ❌ BAD: Hardcoded counts and amounts
+trait :with_items_and_entries do
+  transient do
+    items_count { 3 }  # Always 3
+    entry_amount { 100.0 }  # Always $100
+    entry_date { Date.parse("2024-01-01") }  # Fixed date
+  end
+
+  after(:create) do |category, evaluator|
+    evaluator.items_count.times do
+      item = create(:item, category: category)
+      create(:entry, item: item, amount: evaluator.entry_amount, date: evaluator.entry_date)
+    end
+  end
+end
+```
+
+#### ✅ Good: Specific Values in Tests When Needed
+```ruby
+# When testing exact calculations, specify values in the test
+describe "savings pool card display" do
+  let!(:savings_item) { create(:item, category: savings_category) }
+
+  before do
+    # Specify exact amounts for calculation testing
+    create_list(:entry, 3, item: savings_item, amount: 200.0)
+    create_list(:entry, 2, item: expense_item, amount: 50.0)
+  end
+
+  # Current balance: (3 × $200) - (2 × $50) = $600 - $100 = $500
+  it "shows correct current balance" do
+    expect(current_amount.text).to eq("$500.00")
+  end
+end
+```
+
+#### Key Principles:
+1. **Use `rand()` for counts**: `rand(2..5)` instead of hardcoded `3`
+2. **Use `Date.current` for dates**: Not fixed dates like `Date.parse("2024-01-01")`
+3. **Use Faker for text**: `Faker::Commerce.product_name` instead of `"Product Name"`
+4. **Randomize amounts**: `Faker::Number.decimal(l_digits: 2, r_digits: 2)` in factories
+5. **Override only when testing**: Specify exact values in tests when verifying calculations
+6. **Chain traits**: Use `:with_entries` on items, which uses random factory defaults
+
+#### Benefits:
+- **Catches edge cases**: Random data reveals bugs that fixed data might miss
+- **Realistic testing**: Data varies like production data
+- **Flexible**: Can still override for specific test needs
+- **DRY**: No need to specify common values repeatedly
+- **Maintainable**: Factories reflect real-world variability
+
 ## RSpec Feature Usage
 
 ### Let and Let!
@@ -1038,13 +1150,38 @@ describe "search with type filtering" do
 end
 ```
 
+**✅ Good: Background Data in before Block**
+```ruby
+describe "search by category" do
+  # ✅ Main subjects are referenced by name
+  let!(:emergency_fund) { create(:savings_pool, user: user, name: "Emergency Fund") }
+  let!(:vacation_fund) { create(:savings_pool, user: user, name: "Vacation Fund") }
+  
+  before do
+    # ✅ Background data not referenced by variable name
+    create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
+    create(:category, user: user, name: "Travel Budget", savings_pool: vacation_fund)
+    visit savings_pools_path
+  end
+  
+  it "finds savings pools by category name" do
+    fill_in "q", with: "Home"
+    find("input[name='q']").send_keys(:return)
+    
+    # Using the let! objects, not the category variables
+    expect(page).to have_content(emergency_fund.name)
+    expect(page).not_to have_content(vacation_fund.name)
+  end
+end
+```
+
 **❌ Avoid: Unused let! Statements**
 ```ruby
 describe "search functionality" do
   let!(:searchable_income) { create(:category, name: "Freelance Income", user: user) }
   let!(:searchable_expense) { create(:category, name: "Freelance Tools", user: user) }
   
-  # If these variables are never referenced by name in tests, use before block instead
+  # ❌ These variables are never referenced by name in tests, use before block instead
   
   it "performs search correctly" do
     fill_in "q", with: "Freelance"
@@ -1053,6 +1190,24 @@ describe "search functionality" do
   end
 end
 ```
+
+**❌ Avoid: Setup Data as let! When Not Referenced**
+```ruby
+describe "search by category" do
+  let!(:emergency_fund) { create(:savings_pool, name: "Emergency Fund") }
+  let!(:home_category) { create(:category, name: "Home Savings", savings_pool: emergency_fund) }
+  let!(:travel_category) { create(:category, name: "Travel Budget", savings_pool: vacation_fund) }
+  
+  # ❌ home_category and travel_category are never referenced by name
+  
+  it "finds savings pools by category name" do
+    fill_in "q", with: "Home"
+    expect(page).to have_content(emergency_fund.name)  # Only emergency_fund is referenced
+  end
+end
+```
+
+**Key Rule:** If you're not using the variable name (e.g., `home_category.id` or `home_category.name`) in your test assertions, create it in a `before` block instead of `let!`.
 
 ### Example Length Management (`RSpec/ExampleLength`)
 

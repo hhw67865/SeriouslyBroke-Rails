@@ -12,6 +12,7 @@ class SavingsPool < ApplicationRecord
 
   # Configure searchable fields
   searchable :name, label: "Name"
+  searchable :category, through: :categories, column: :name, label: "Category"
 
   # Calculator for savings pool metrics
   def calculator
