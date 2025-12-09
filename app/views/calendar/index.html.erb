@@ -1,0 +1,33 @@
+<%# Monthly Calendar Prototype - light, thin, square, airy UI %>
+
+<div class="px-4 sm:px-6 lg:px-8 py-6 font-light">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-medium tracking-tight text-gray-900"><%= format_month_year %></h1>
+  </div>
+
+  <% if !month_has_data?(@month_date) %>
+    <div class="mb-4 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+      No entries recorded this month.
+      <%= link_to "Add an entry", new_entry_path, class: "ml-1 text-brand-dark underline hover:text-brand" %>
+    </div>
+  <% end %>
+
+  <%# Weekday headers (Sun–Sat) %>
+  <div class="calendar-weekdays text-xs text-gray-500 mb-1 select-none">
+    <% %w[Sun Mon Tue Wed Thu Fri Sat].each do |dow| %>
+      <div class="py-2 text-center tracking-wide"><%= dow %></div>
+    <% end %>
+  </div>
+
+  <%# Month grid (6 weeks) %>
+  <div class="calendar-month calendar-grid">
+    <% month_weeks(@month_date).each do |week| %>
+      <div class="calendar-week-row">
+        <% week.each do |day| %>
+          <%= render "calendar/day_cell", day: day %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+</div>

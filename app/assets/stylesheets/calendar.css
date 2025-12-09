@@ -1,0 +1,60 @@
+/*
+  Calendar styles
+  - Light, thin, and clean
+  - Square-ish edges, airy spacing
+  - Uses CSS variables from custom palette (see app/assets/stylesheets/custom.css)
+*/
+
+.calendar-weekdays,
+.calendar-week-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.calendar-month {
+  display: grid;
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.calendar-week-columns {
+  display: grid;
+  gap: 0.75rem;
+  height: 30rem;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .calendar-week-columns {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+
+.calendar-week-row>a {
+  min-height: 92px;
+}
+
+@media (min-width: 640px) {
+  .calendar-week-row>a {
+    min-height: 110px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .calendar-week-row>a {
+    min-height: 124px;
+  }
+}
+
+.calendar-adjacent {
+  background-color: var(--color-gray-50);
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

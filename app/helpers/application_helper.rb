@@ -80,8 +80,9 @@ module ApplicationHelper
     Date.new(year, month, 1).strftime("%B %Y")
   end
 
-  # NOTE: default_url_options (in DateContext) auto-adds month/year to all links,
-  # so helpers to manually append those params are no longer needed.
+  # NOTE: Month/year are stored in session by DateContext and URLs are cleaned via redirect.
+  # If a link or form needs to change the visible month, pass :month and :year explicitly;
+  # DateContext will update session then redirect to a clean URL without those params.
 
   private
 

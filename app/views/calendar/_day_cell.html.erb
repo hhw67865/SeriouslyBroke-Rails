@@ -1,0 +1,29 @@
+<% entries = entries_for_date(day[:date]) %>
+<% expense = entries.select { |e| e.category.expense? }.sum(&:amount).to_i %>
+<% income = entries.select { |e| e.category.income? }.sum(&:amount).to_i %>
+<% savings = entries.select { |e| e.category.savings? }.sum(&:amount).to_i %>
+
+<%= link_to calendar_week_path(date: day[:date].strftime("%Y-%m-%d")),
+    class: "block rounded-md border border-gray-200 bg-white p-2 hover:border-gray-300 hover:shadow-sm transition-all #{muted_day_class(day[:in_month])}" do %>
+  <span class="text-xs font-medium"><%= day[:date].day %></span>
+  <div class="mt-1 pl-3 border-l border-gray-200/70 space-y-0.5">
+    <% if expense > 0 %>
+      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
+        <span class="text-gray-500 font-extralight tracking-tight">Expense</span>
+        <span class="font-extralight text-[7.5px] text-status-danger tabular-nums">-<%= format_currency(expense) %></span>
+      </div>
+    <% end %>
+    <% if income > 0 %>
+      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
+        <span class="text-gray-500 font-extralight tracking-tight">Income</span>
+        <span class="font-extralight text-[7.5px] text-status-success tabular-nums">+<%= format_currency(income) %></span>
+      </div>
+    <% end %>
+    <% if savings > 0 %>
+      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
+        <span class="text-gray-500 font-extralight tracking-tight">Savings</span>
+        <span class="font-extralight text-[7.5px] text-brand-dark tabular-nums">+<%= format_currency(savings) %></span>
+      </div>
+    <% end %>
+  </div>
+<% end %>

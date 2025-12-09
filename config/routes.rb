@@ -18,6 +18,10 @@ Rails.application.routes.draw do
       get :items, on: :member
     end
     resources :budgets, only: [:new, :create, :edit, :update, :destroy]
+
+    # Calendar
+    get 'calendar', to: 'calendar#index', as: :calendar
+    get 'calendar/week', to: 'calendar#week', as: :calendar_week
   end
 
   # Landing page for non-authenticated users
