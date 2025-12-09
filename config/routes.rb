@@ -6,23 +6,24 @@ Rails.application.routes.draw do
   # Application routes (protected by authentication)
   authenticated :user do
     root 'dashboard#index', as: :authenticated_root
-    resources :savings_pools do
-      member do
-        get :categories, to: 'savings_pools/categories#index'
-        patch :categories, to: 'savings_pools/categories#update'
-      end
-    end
-    resources :entries, except: [:show]
-    resources :items, only: [:edit, :update, :destroy]
-    resources :categories do
-      get :items, on: :member
-    end
-    resources :budgets, only: [:new, :create, :edit, :update, :destroy]
-
-    # Calendar
-    get 'calendar', to: 'calendar#index', as: :calendar
-    get 'calendar/week', to: 'calendar#week', as: :calendar_week
   end
+
+  resources :savings_pools do
+    member do
+      get :categories, to: 'savings_pools/categories#index'
+      patch :categories, to: 'savings_pools/categories#update'
+    end
+  end
+  resources :entries, except: [:show]
+  resources :items, only: [:edit, :update, :destroy]
+  resources :categories do
+    get :items, on: :member
+  end
+  resources :budgets, only: [:new, :create, :edit, :update, :destroy]
+
+  # Calendar
+  get 'calendar', to: 'calendar#index', as: :calendar
+  get 'calendar/week', to: 'calendar#week', as: :calendar_week
 
   # Landing page for non-authenticated users
   root 'pages#home'
