@@ -41,9 +41,16 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Monthly Spending Trend</h3>
-        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
-          <!-- Placeholder for chart -->
-          <p class="text-gray-400">Spending trend visualization will appear here</p>
+        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+          <% 
+            chart_data = [
+              { name: "Spending", data: calculate_running_total(category.entries.group_by_day(:date, range: selected_date.beginning_of_month..selected_date.end_of_month).sum(:amount)) }
+            ]
+            if category.budget&.amount
+              chart_data << { name: "Budget", data: budget_line_series(category.budget.amount, selected_date.beginning_of_month..selected_date.end_of_month) }
+            end
+          %>
+          <%= line_chart chart_data, curve: false, points: false, colors: ["#3b82f6", "#ef4444"], prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -68,9 +75,8 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Income Stability</h3>
-        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
-          <!-- Placeholder for chart -->
-          <p class="text-gray-400">Income stability visualization will appear here</p>
+        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+          <%= line_chart category.entries.group_by_month(:date, range: (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month).sum(:amount), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -137,9 +143,8 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Savings Progress</h3>
-        <div class="bg-gray-50 rounded-lg p-4 h-48 flex items-center justify-center">
-          <!-- Placeholder for chart -->
-          <p class="text-gray-400">Savings progress visualization will appear here</p>
+        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+          <%= line_chart savings_evolution_series(category, (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>
     </div>

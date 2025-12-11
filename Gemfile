@@ -64,5 +64,7 @@ group :test do
   gem "shoulda-matchers", "~> 6.4"
 end
 
+gem "chartkick"
+gem "groupdate"
 gem "heroicon"
 gem "simple_form", "~> 5.3"
