@@ -6,6 +6,7 @@ class EntriesController < ApplicationController
   before_action :set_entry, only: [:edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
   before_action :load_options, only: [:new, :edit, :create, :update]
+  before_action :set_previous_url, only: [:new, :create]
 
   # GET /entries
   def index
@@ -32,7 +33,7 @@ class EntriesController < ApplicationController
     @entry.item = @item if @item
 
     if @entry.save
-      redirect_to entries_path, notice: "Entry was successfully created."
+      redirect_to previous_path, notice: "Entry was successfully created."
     else
       @entry.build_item
       render :new, status: :unprocessable_entity
@@ -120,6 +121,20 @@ class EntriesController < ApplicationController
     params.require(:entry).require(:item_attributes).permit(:name).tap do |attrs|
       # Set category_id from the category select if creating a new item
       attrs[:category_id] = params[:category_id] if params[:category_id].present?
+    end
+  end
+
+  def set_previous_url
+    @previous_url = params[:previous_url]
+    return unless @previous_url.blank? && request.referer.present? && URI(request.referer).path != new_entry_path
+    @previous_url = request.referer
+  end
+
+  def previous_path
+    if @previous_url.present? && @previous_url.include?("calendar")
+      calendar_week_path(date: @entry.date)
+    else
+      entries_path
     end
   end
 end

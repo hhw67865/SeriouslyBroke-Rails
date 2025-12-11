@@ -8,21 +8,21 @@
   <span class="text-xs font-medium"><%= day[:date].day %></span>
   <div class="mt-1 pl-3 border-l border-gray-200/70 space-y-0.5">
     <% if expense > 0 %>
-      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
-        <span class="text-gray-500 font-extralight tracking-tight">Expense</span>
-        <span class="font-extralight text-[7.5px] text-status-danger tabular-nums">-<%= format_currency(expense) %></span>
+      <div class="mb-1">
+        <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Expense</div>
+        <div class="font-light text-s text-status-danger tabular-nums text-right">-<%= format_currency(expense) %></div>
       </div>
     <% end %>
     <% if income > 0 %>
-      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
-        <span class="text-gray-500 font-extralight tracking-tight">Income</span>
-        <span class="font-extralight text-[7.5px] text-status-success tabular-nums">+<%= format_currency(income) %></span>
+      <div class="mb-1">
+        <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Income</div>
+        <div class="font-light text-s text-status-success tabular-nums text-right">+<%= format_currency(income) %></div>
       </div>
     <% end %>
     <% if savings > 0 %>
-      <div class="flex items-baseline justify-between pr-1 text-sm leading-4">
-        <span class="text-gray-500 font-extralight tracking-tight">Savings</span>
-        <span class="font-extralight text-[7.5px] text-brand-dark tabular-nums">+<%= format_currency(savings) %></span>
+      <div class="mb-1">
+        <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Savings</div>
+        <div class="font-light text-s text-brand-dark tabular-nums text-right">+<%= format_currency(savings) %></div>
       </div>
     <% end %>
   </div>

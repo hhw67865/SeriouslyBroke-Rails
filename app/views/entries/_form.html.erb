@@ -1,7 +1,7 @@
 <%= simple_form_for(entry) do |f| %>
   <%= f.error_notification %>
   <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
-
+  <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
   <div>
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
@@ -72,7 +72,7 @@
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <%= link_to "Cancel", 
-entries_path, 
+          @previous_url.present? ? @previous_url : entries_path, 
           class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
       
       <%= f.button :submit, entry.persisted? ? "Update Entry" : "Create Entry" %>
