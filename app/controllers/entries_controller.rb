@@ -6,7 +6,7 @@ class EntriesController < ApplicationController
   before_action :set_entry, only: [:edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
   before_action :load_options, only: [:new, :edit, :create, :update]
-  before_action :set_previous_url, only: [:new, :create]
+  before_action :set_previous_url, only: [:new, :create, :edit, :update]
 
   # GET /entries
   def index
@@ -43,7 +43,7 @@ class EntriesController < ApplicationController
   # PATCH/PUT /entries/1
   def update
     if @entry.update(entry_params)
-      redirect_to entries_path, notice: "Entry was successfully updated."
+      redirect_to previous_path, notice: "Entry was successfully updated."
     else
       render :edit, status: :unprocessable_entity
     end
@@ -134,7 +134,7 @@ class EntriesController < ApplicationController
     if @previous_url.present? && @previous_url.include?("calendar")
       calendar_week_path(date: @entry.date)
     else
-      entries_path
+      @previous_url || entries_path
     end
   end
 end
