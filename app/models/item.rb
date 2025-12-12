@@ -6,6 +6,8 @@ class Item < ApplicationRecord
 
   enum :frequency, { one_time: 0, monthly: 1, yearly: 2 }
 
+  normalizes :name, with: ->(name) { name.squish }
+
   validates :name, presence: true
   validates :name, uniqueness: { scope: :category_id, case_sensitive: false }
 

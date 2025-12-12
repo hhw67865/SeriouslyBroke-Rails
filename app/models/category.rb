@@ -9,6 +9,8 @@ class Category < ApplicationRecord
   has_many :entries, through: :items
   has_one :budget, dependent: :destroy
 
+  normalizes :name, with: ->(name) { name.squish }
+
   validates :name, presence: true
   validates :category_type, presence: true
   validates :name, uniqueness: { scope: :user_id, case_sensitive: false }
