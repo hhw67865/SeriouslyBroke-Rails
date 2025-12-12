@@ -96,6 +96,6 @@ class SavingsPoolsController < ApplicationController
   end
 
   def savings_pool_params
-    params.require(:savings_pool).permit(:name, :target_amount)
+    params.require(:savings_pool).permit(:name, :target_amount, :start_date)
   end
 end

@@ -24,18 +24,24 @@ class SavingsPoolCalculator
 
   # Get all contributions from savings categories (all time)
   def contributions
-    savings_pool.entries
+    query = savings_pool.entries
       .joins(item: :category)
       .where(categories: { category_type: :savings })
-      .sum(:amount)
+
+    query = query.where("entries.date >= ?", savings_pool.start_date) if savings_pool.start_date.present?
+
+    query.sum(:amount)
   end
 
   # Get all withdrawals from expense categories attached to this pool (all time)
   def withdrawals
-    savings_pool.entries
+    query = savings_pool.entries
       .joins(item: :category)
       .where(categories: { category_type: :expense })
-      .sum(:amount)
+
+    query = query.where("entries.date >= ?", savings_pool.start_date) if savings_pool.start_date.present?
+
+    query.sum(:amount)
   end
 
   # Calculate remaining amount needed to reach target
