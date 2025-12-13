@@ -8,7 +8,7 @@ ruby "3.2.2"
 gem "bootsnap", require: false
 gem "pg", "~> 1.1"
 gem "puma", ">= 5.0"
-gem "rails", "~> 7.1.5", ">= 7.1.5.1"
+gem "rails", "8.1.1"
 gem "sprockets-rails"
 
 # Frontend and Asset Pipeline
@@ -42,8 +42,8 @@ end
 
 group :development do
   # Development Assistance
-  gem "annotate", "~> 3.2"
-  gem "bullet", "~> 8.0"
+  gem "annotate"
+  gem "bullet"
   gem "web-console"
 
   # Code Quality
