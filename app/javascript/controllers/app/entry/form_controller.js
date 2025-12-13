@@ -11,13 +11,12 @@ export default class extends Controller {
   initializeItemSelect() {
     this.itemSelect = new TomSelect(this.itemSelectTarget, {
       create: (input) => {
-        this.itemNameFieldTarget.value = input
-        return { text: input, value: "" }
+        return { text: input, value: input, is_new: true }
       },
       onChange: (value) => {
-        if (value === "") {
-          const selectedItem = this.itemSelect.getItem(value)
-          this.itemNameFieldTarget.value = selectedItem ? selectedItem.textContent : ""
+        const item = this.itemSelect.options[value]
+        if (item && item.is_new) {
+          this.itemNameFieldTarget.value = item.text
         } else {
           this.itemNameFieldTarget.value = ""
         }
@@ -38,22 +37,22 @@ export default class extends Controller {
       }
     })
   }
-  
+
   updateItemSelect(items) {
     if (this.itemSelect) {
       this.itemSelect.destroy()
     }
-  
+
     if (items === null) {
       this.itemSelectTarget.innerHTML = '<option value="">Create an item</option>'
     } else {
       this.itemSelectTarget.innerHTML = '<option value="">Select or Create an item</option>' +
         items.map(item => `<option value="${item.id}">${item.name}</option>`).join('')
     }
-  
+
     this.initializeItemSelect()
   }
-  
+
   fetchItemsForCategory(categoryId) {
     fetch(`/categories/${categoryId}/items`)
       .then(response => response.json())

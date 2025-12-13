@@ -36,7 +36,7 @@ class EntriesController < ApplicationController
       redirect_to previous_path, notice: "Entry was successfully created."
     else
       @entry.build_item
-      render :new, status: :unprocessable_entity
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -45,7 +45,7 @@ class EntriesController < ApplicationController
     if @entry.update(entry_params)
       redirect_to previous_path, notice: "Entry was successfully updated."
     else
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 
@@ -113,6 +113,9 @@ class EntriesController < ApplicationController
 
   def entry_params
     params.require(:entry).permit(:amount, :date, :description, :item_id).tap do |permitted_params|
+      # If item_id is not a valid UUID (e.g. name of new item from TomSelect), treat it as blank
+      permitted_params[:item_id] = nil if permitted_params[:item_id].present? && !permitted_params[:item_id].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+
       permitted_params[:item_attributes] = item_attributes if permitted_params[:item_id].blank? && params.dig(:entry, :item_attributes, :name).present?
     end
   end
