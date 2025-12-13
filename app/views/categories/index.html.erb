@@ -44,7 +44,9 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
   <% if @categories.present? %>
     <% @categories.each do |category| %>
-      <%= render "categories/_partials/category_card", category: category %>
+      <% cache [category, selected_date] do %>
+        <%= render "categories/_partials/category_card", category: category %>
+      <% end %>
     <% end %>
   <% else %>
     <%= render "categories/_partials/empty_state" %>

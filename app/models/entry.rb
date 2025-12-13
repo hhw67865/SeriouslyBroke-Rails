@@ -3,7 +3,7 @@
 class Entry < ApplicationRecord
   include ModelSearchable
 
-  belongs_to :item
+  belongs_to :item, touch: true
   accepts_nested_attributes_for :item
 
   validates :amount, presence: true, numericality: { greater_than: 0 }

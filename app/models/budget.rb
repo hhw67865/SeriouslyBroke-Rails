@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Budget < ApplicationRecord
-  belongs_to :category
+  belongs_to :category, touch: true
 
   enum :period, { month: 0, year: 1 }
 
