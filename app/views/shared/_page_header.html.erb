@@ -19,63 +19,93 @@
         ]
     %>
 
-<div class="flex flex-col md:flex-row md:items-center justify-between pb-5 mb-6 border-b border-gray-200">
-  <div>
-    <%# Breadcrumbs Navigation %>
-    <% if local_assigns[:breadcrumbs].present? %>
-      <nav class="text-sm mb-2" aria-label="Breadcrumb">
-        <ol class="flex flex-wrap items-center space-x-2">
-          <% breadcrumbs.each_with_index do |crumb, index| %>
-            <li class="flex items-center">
-              <% if index.positive? %>
-                <%= heroicon "chevron-right", options: { class: "h-4 w-4 text-gray-400 mx-1" } %>
+<div class="pb-5 mb-6 border-b border-gray-200">
+  <div class="flex flex-col md:flex-row md:items-center justify-between">
+    <div>
+      <%# Breadcrumbs Navigation %>
+      <% if local_assigns[:breadcrumbs].present? %>
+        <nav class="text-sm mb-2" aria-label="Breadcrumb">
+          <ol class="flex flex-wrap items-center space-x-2">
+            <% breadcrumbs.each_with_index do |crumb, index| %>
+              <li class="flex items-center">
+                <% if index.positive? %>
+                  <%= heroicon "chevron-right", options: { class: "h-4 w-4 text-gray-400 mx-1" } %>
+                <% end %>
+                
+                <% if crumb[:url].present? && index < breadcrumbs.size - 1 %>
+                  <%= link_to crumb[:label], 
+                              crumb[:url], 
+                              class: "text-gray-500 hover:text-gray-700 transition-colors duration-200" %>
+                <% else %>
+                  <span class="text-gray-900 font-medium"><%= crumb[:label] %></span>
+                <% end %>
+              </li>
+            <% end %>
+          </ol>
+        </nav>
+      <% end %>
+      
+      <%# Page Title %>
+      <h1 class="text-2xl font-semibold tracking-tight text-gray-900">
+        <%= title %>
+      </h1>
+      
+      <%# Optional Subtitle %>
+      <% if local_assigns[:subtitle].present? %>
+        <p class="text-sm text-gray-500 mt-1">
+          <%= subtitle %>
+        </p>
+      <% end %>
+    </div>
+    
+    <%# Actions Section (Buttons Only) %>
+    <div class="mt-4 md:mt-0 flex items-center gap-3">
+      <%# Action Buttons %>
+      <% if local_assigns[:actions].present? %>
+        <% actions.each do |action| %>
+          <% if action[:method] == :delete %>
+            <%# Delete action with button_to for proper method handling %>
+            <%= button_to action[:url], 
+                method: action[:method],
+                class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300",
+                data: action[:confirm] ? { turbo_confirm: action[:confirm] } : {} do %>
+              <% if action[:icon].present? %>
+                <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
               <% end %>
-              
-              <% if crumb[:url].present? && index < breadcrumbs.size - 1 %>
-                <%= link_to crumb[:label], 
-crumb[:url], 
-                    class: "text-gray-500 hover:text-gray-700 transition-colors duration-200" %>
-              <% else %>
-                <span class="text-gray-900 font-medium"><%= crumb[:label] %></span>
+              <span><%= action[:label] %></span>
+            <% end %>
+          <% else %>
+            <%# Regular link action %>
+            <%= link_to action[:url], class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
+              <% if action[:icon].present? %>
+                <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
               <% end %>
-            </li>
+              <span><%= action[:label] %></span>
+            <% end %>
           <% end %>
-        </ol>
-      </nav>
-    <% end %>
-    
-    <%# Page Title %>
-    <h1 class="text-2xl font-semibold tracking-tight text-gray-900">
-      <%= title %>
-    </h1>
-    
-    <%# Optional Subtitle %>
-    <% if local_assigns[:subtitle].present? %>
-      <p class="text-sm text-gray-500 mt-1">
-        <%= subtitle %>
-      </p>
-    <% end %>
+        <% end %>
+      <% end %>
+    </div>
   </div>
-  
-  <%# Actions Section (Search + Buttons) %>
-  <div class="mt-4 md:mt-0 flex items-center gap-3">
-    <%# Search Form %>
-    <% if local_assigns[:search].present? && search[:enabled] %>
+
+  <%# Search Form Section (Full Width Row) %>
+  <% if local_assigns[:search].present? && search[:enabled] %>
+    <div class="mt-4">
       <%= form_with url: search[:url], 
-method: :get, 
-local: true, 
-html: { 
-        class: "relative",
-        data: search[:field_selector].present? ? {
-          controller: "shared--search-placeholder",
-          "shared--search-placeholder-placeholders-value": search[:field_selector][:placeholders] || {}
-        } : {}
-      } do |f| %>
+                    method: :get, 
+                    local: true, 
+                    html: { 
+                      class: "relative",
+                      data: search[:field_selector].present? ? {
+                        controller: "shared--search-placeholder",
+                        "shared--search-placeholder-placeholders-value": search[:field_selector][:placeholders] || {}
+                      } : {}
+                    } do |f| %>
         
         <% if search[:field_selector].present? %>
           <%# Enhanced Search with Field Selector %>
           <div class="flex items-center gap-2">
-            <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand">
+            <div class="flex items-center shadow-sm ring-1 ring-inset ring-gray-300 rounded-md focus-within:ring-2 focus-within:ring-brand w-full">
               <%# Field Selector Dropdown %>
               <%= f.select :field, 
                   search[:field_selector][:options],
@@ -99,7 +129,7 @@ html: {
                 <%= f.text_field :q, 
                                value: search[:query],
                                placeholder: search[:placeholder] || "Search...", 
-                               class: "pl-10 py-2 pr-3 block w-64 border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
+                               class: "pl-10 py-2 pr-3 block w-full border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:border-0 sm:text-sm sm:leading-6 rounded-r-md",
                                autocomplete: "off",
                                data: { "shared--search-placeholder-target": "searchInput" } %>
               </div>
@@ -119,7 +149,7 @@ html: {
         <% else %>
           <%# Simple Search (like categories) %>
           <div class="flex items-center gap-2">
-            <div class="relative">
+            <div class="relative flex-1">
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <%= heroicon "magnifying-glass", options: { class: "h-4 w-4 text-gray-400" } %>
               </div>
@@ -143,7 +173,6 @@ html: {
           </div>
         <% end %>
 
-        
         <%# Hidden Fields for State Preservation %>
         <% if search[:hidden_fields].present? %>
           <% search[:hidden_fields].each do |field, value| %>
@@ -152,34 +181,8 @@ html: {
         <% end %>
         
       <% end %>
-    <% end %>
-    
-    <%# Action Buttons %>
-    <% if local_assigns[:actions].present? %>
-      <% actions.each do |action| %>
-        <% if action[:method] == :delete %>
-          <%# Delete action with button_to for proper method handling %>
-          <%= button_to action[:url], 
-              method: action[:method],
-              class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300",
-              data: action[:confirm] ? { turbo_confirm: action[:confirm] } : {} do %>
-            <% if action[:icon].present? %>
-              <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
-            <% end %>
-            <span><%= action[:label] %></span>
-          <% end %>
-        <% else %>
-          <%# Regular link action %>
-          <%= link_to action[:url], class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
-            <% if action[:icon].present? %>
-              <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
-            <% end %>
-            <span><%= action[:label] %></span>
-          <% end %>
-        <% end %>
-      <% end %>
-    <% end %>
-  </div>
+    </div>
+  <% end %>
 </div>
 
 <%# Search Results Info Banner %>
