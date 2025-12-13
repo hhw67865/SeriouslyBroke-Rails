@@ -29,7 +29,9 @@
 <% if @savings_pools.present? %>
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
     <% @savings_pools.each do |savings_pool| %>
-      <%= render "savings_pool", savings_pool: savings_pool %>
+      <% cache [savings_pool] do %>
+        <%= render "savings_pool", savings_pool: savings_pool %>
+      <% end %>
     <% end %>
   </div>
 <% else %>

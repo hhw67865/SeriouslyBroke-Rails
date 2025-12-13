@@ -27,23 +27,25 @@
   <%= render "categories/_partials/show/category_banner", category: @category %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Left Column -->
-    <div class="lg:col-span-2 space-y-6">
-      <%= render "categories/_partials/show/summary_card", category: @category %>
-      <%= render "categories/_partials/show/items_list", category: @category %>
-    </div>
-    
-    <!-- Right Column -->
-    <div class="space-y-6">
-      <%= render "categories/_partials/show/details_card", category: @category %>
+    <% cache [@category, selected_date] do %>
+      <!-- Left Column -->
+      <div class="lg:col-span-2 space-y-6">
+        <%= render "categories/_partials/show/summary_card", category: @category %>
+        <%= render "categories/_partials/show/items_list", category: @category %>
+      </div>
       
-      <% if @category.expense? %>
-        <%= render "categories/_partials/show/budget_card", category: @category %>
-      <% elsif @category.savings? && @category.savings_pool.present? %>
-        <%= render "categories/_partials/show/savings_pool_card", category: @category %>
-      <% end %>
-      
-      <%= render "categories/_partials/show/recent_activity", category: @category %>
-    </div>
+      <!-- Right Column -->
+      <div class="space-y-6">
+        <%= render "categories/_partials/show/details_card", category: @category %>
+        
+        <% if @category.expense? %>
+          <%= render "categories/_partials/show/budget_card", category: @category %>
+        <% elsif @category.savings? && @category.savings_pool.present? %>
+          <%= render "categories/_partials/show/savings_pool_card", category: @category %>
+        <% end %>
+        
+        <%= render "categories/_partials/show/recent_activity", category: @category %>
+      </div>
+    <% end %>
   </div>
 </div>

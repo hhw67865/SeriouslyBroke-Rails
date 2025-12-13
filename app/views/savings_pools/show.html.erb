@@ -32,6 +32,7 @@
 
 <div class="max-w-6xl mx-auto">
   
+  <% cache [@savings_pool, selected_date] do %>
   <%# Hero Progress Section %>
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-8 mb-8">
     <%# Progress Visualization %>
@@ -288,7 +289,4 @@
       </div>
     <% end %>
   </div>
-
-
-
-</div>
+  <% end %>
