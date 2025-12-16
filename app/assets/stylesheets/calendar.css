@@ -18,6 +18,30 @@
   gap: 0.5rem;
 }
 
+.calendar-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-gray-600);
+}
+
+.calendar-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.calendar-legend__swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
 .calendar-week-columns {
   display: grid;
   gap: 0.75rem;
@@ -33,7 +57,7 @@
 }
 
 .calendar-week-row>a {
-  min-height: 92px;
+  min-height: 56px;
 }
 
 @media (min-width: 640px) {

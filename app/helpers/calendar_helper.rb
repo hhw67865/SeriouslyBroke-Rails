@@ -31,6 +31,23 @@ module CalendarHelper
     (date + offset).strftime("%Y-%m-%d")
   end
 
+  def compact_currency(amount)
+    "$" + number_to_human(
+      amount,
+      format: "%n%u",
+      precision: 3,
+      significant: true,
+      strip_insignificant_zeros: true,
+      units: {
+        unit: "",
+        thousand: "k",
+        million: "m",
+        billion: "b",
+        trillion: "t"
+      }
+    )
+  end
+
   def month_has_data?(month_date)
     @entries.any?
   end

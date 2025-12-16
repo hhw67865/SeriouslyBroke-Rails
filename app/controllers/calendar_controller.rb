@@ -42,6 +42,7 @@ class CalendarController < ApplicationController
 
     entries.each do |e|
       by_day[e.date.to_date] << {
+        id: e.id,
         name: e.item.name,
         amount: e.amount,
         type: e.category.category_type.to_sym,
