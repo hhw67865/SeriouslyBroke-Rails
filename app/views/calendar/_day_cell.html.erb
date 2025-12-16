@@ -1,7 +1,7 @@
 <% entries = entries_for_date(day[:date]) %>
-<% expense = entries.select { |e| e.category.expense? }.sum(&:amount).to_i %>
-<% income = entries.select { |e| e.category.income? }.sum(&:amount).to_i %>
-<% savings = entries.select { |e| e.category.savings? }.sum(&:amount).to_i %>
+<% expense = entries.select { |e| e.category.expense? }.sum(&:amount) %>
+<% income = entries.select { |e| e.category.income? }.sum(&:amount) %>
+<% savings = entries.select { |e| e.category.savings? }.sum(&:amount) %>
 
 <%= link_to calendar_week_path(date: day[:date].strftime("%Y-%m-%d")),
     class: "block rounded-md border border-gray-200 bg-white p-2 hover:border-gray-300 hover:shadow-sm transition-all #{muted_day_class(day[:in_month])}" do %>
@@ -10,19 +10,19 @@
     <% if expense > 0 %>
       <div class="mb-1">
         <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Expense</div>
-        <div class="font-light text-s text-status-danger tabular-nums text-right">-<%= format_currency(expense) %></div>
+        <div class="font-light text-s text-status-danger tabular-nums text-right">-<%= number_to_currency(expense) %></div>
       </div>
     <% end %>
     <% if income > 0 %>
       <div class="mb-1">
         <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Income</div>
-        <div class="font-light text-s text-status-success tabular-nums text-right">+<%= format_currency(income) %></div>
+        <div class="font-light text-s text-status-success tabular-nums text-right">+<%= number_to_currency(income) %></div>
       </div>
     <% end %>
     <% if savings > 0 %>
       <div class="mb-1">
         <div class="text-gray-500 font-extralight tracking-tight text-s leading-tight">Savings</div>
-        <div class="font-light text-s text-brand-dark tabular-nums text-right">+<%= format_currency(savings) %></div>
+        <div class="font-light text-s text-brand-dark tabular-nums text-right">+<%= number_to_currency(savings) %></div>
       </div>
     <% end %>
   </div>

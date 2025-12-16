@@ -43,13 +43,13 @@
           <div class="rounded border border-gray-100">
             <div class="flex justify-between px-2.5 py-2 bg-gray-50">
               <div class="text-xs font-light text-gray-600"><%= label %></div>
-              <div class="text-xs font-semibold <%= color %>"><%= sym == :expense ? '-' : '+' %><%= format_currency(entries.sum { |e| e[:amount].to_i }) %></div>
+              <div class="text-xs font-semibold <%= color %>"><%= sym == :expense ? '-' : '+' %><%= number_to_currency(entries.sum { |e| e[:amount] }) %></div>
             </div>
             <ul>
               <% entries.each do |e| %>
                 <li class="px-2.5 py-2 text-xs border-b border-gray-100 last:border-b-0">
                   <div class="text-gray-700 mb-1"><%= e[:name] %></div>
-                  <div class="font-medium <%= color %>"><%= sym == :expense ? '-' : '+' %><%= format_currency(e[:amount]) %></div>
+                  <div class="font-medium <%= color %>"><%= sym == :expense ? '-' : '+' %><%= number_to_currency(e[:amount]) %></div>
                 </li>
               <% end %>
             </ul>
@@ -68,7 +68,7 @@
         <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
           <span class="font-medium text-gray-700"><%= label %></span>
           <span class="font-bold <%= color %>">
-            <%= type == :expense ? '-' : '+' %><%= format_currency(@weekly_breakdown[type][:total]) %>
+            <%= type == :expense ? '-' : '+' %><%= number_to_currency(@weekly_breakdown[type][:total]) %>
           </span>
         </div>
         <ul class="divide-y divide-gray-100">
@@ -79,7 +79,7 @@
             <% sorted_categories.each do |category_name, amount| %>
               <li class="px-4 py-2 flex justify-between items-center text-sm hover:bg-gray-50">
                 <span class="text-gray-600"><%= category_name %></span>
-                <span class="font-medium text-gray-900"><%= format_currency(amount) %></span>
+                <span class="font-medium text-gray-900"><%= number_to_currency(amount) %></span>
               </li>
             <% end %>
           <% end %>

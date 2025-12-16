@@ -26,11 +26,6 @@ module CalendarHelper
     in_month ? "" : "calendar-adjacent"
   end
 
-  # Format currency with proper symbol and formatting
-  def format_currency(amount)
-    number_to_currency(amount.to_i)
-  end
-
   def week_nav_date(date, direction)
     offset = direction == :prev ? -7 : 7
     (date + offset).strftime("%Y-%m-%d")
