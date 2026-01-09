@@ -15,6 +15,9 @@
 
 ## TODO
 
+- Total income view graph
+- YTD view of category
+- Items per category page.
 - Category type shown in entries creation
 - Clicking on items within category show will instead show the entries
 - Budget Management section needs to be based on selected month
