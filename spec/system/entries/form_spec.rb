@@ -8,7 +8,7 @@ RSpec.describe "Entries Forms", type: :system do
   let!(:income_category) { create(:category, user: user, name: "Salary", category_type: :income) }
   let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   # Helper methods
   def select_category(category_name)

@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Savings Pools Form", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "New Form" do
     before { visit new_savings_pool_path }

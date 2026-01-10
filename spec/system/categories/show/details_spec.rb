@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Categories Show - Details Card", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "with explicit color" do
     let!(:category) { create(:category, category_type: "expense", user: user, color: "#123456") }

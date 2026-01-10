@@ -7,7 +7,7 @@ RSpec.describe "Entries Index - Table", type: :system do
   let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "table display", :aggregate_failures do
     let!(:expense_item) { create(:item, category: expense_category, name: "Groceries") }

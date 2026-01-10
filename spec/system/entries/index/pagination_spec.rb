@@ -7,7 +7,7 @@ RSpec.describe "Entries Index - Pagination", type: :system do
   let!(:category) { create(:category, :expense, user: user, name: "Food") }
   let!(:item) { create(:item, category: category, name: "Groceries") }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "pagination display", :aggregate_failures do
     context "with fewer entries than per_page limit" do

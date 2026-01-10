@@ -894,7 +894,7 @@ describe "Details card" do
   let!(:category) { create(:category, category_type: "expense", user: user) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     # Background data not referenced by name in expectations
     groceries = create(:item, category: category)
     create(:entry, item: groceries)
@@ -915,7 +915,7 @@ describe "Details card" do
   let!(:item1) { create(:item, category: category) } # Not referenced by name
 
   it "shows accurate counts" do
-    sign_in user
+    sign_in user, scope: :user
     create(:entry, item: item1)
     visit category_path(category)
     expect(page).to have_content("1")
@@ -927,10 +927,27 @@ end
 For complex setup, use before blocks with specific scoping:
 ```ruby
 before do
-  sign_in user
+  sign_in user, scope: :user
   visit authenticated_root_path
 end
 ```
+
+## Authentication in System Tests
+
+Use Devise's `sign_in` helper with the explicit scope for reliable authentication:
+
+```ruby
+# ✅ Good: Use explicit scope
+before do
+  sign_in user, scope: :user
+  visit calendar_path
+end
+
+# ✅ Also good: Inline authentication
+before { sign_in user, scope: :user }
+```
+
+**Important**: Always include `scope: :user` when using the `sign_in` helper in system tests. This ensures Devise can properly map the user to the correct authentication scope.
 
 ## Common Test Patterns
 

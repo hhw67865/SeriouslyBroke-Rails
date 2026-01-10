@@ -6,7 +6,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
   let!(:user) { create(:user) }
   let!(:category) { create(:category, name: "Original Name", category_type: "expense", color: "#C9C78B", user: user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "form display", :aggregate_failures do
     before { visit edit_category_path(category) }

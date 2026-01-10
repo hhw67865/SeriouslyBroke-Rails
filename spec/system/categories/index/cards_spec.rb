@@ -15,7 +15,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
   let(:prev_date) { base_date.prev_month }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
   end
 
   describe "expense card shows correct monthly budget and links to show", :aggregate_failures do

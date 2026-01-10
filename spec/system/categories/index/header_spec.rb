@@ -9,7 +9,7 @@ RSpec.describe "Categories Index - Header", type: :system do
     create_list(:category, 2, :income, user: user)
     create_list(:category, 2, :expense, user: user)
     create_list(:category, 1, :savings, user: user)
-    sign_in user
+    sign_in user, scope: :user
   end
 
   describe "type-specific headers", :aggregate_failures do

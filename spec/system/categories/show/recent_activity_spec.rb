@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Categories Show - Recent Activity", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "recent entries list and navigation", :aggregate_failures do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }

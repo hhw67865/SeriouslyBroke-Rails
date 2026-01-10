@@ -6,7 +6,7 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
   let(:user) { create(:user) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     visit savings_pools_path
   end
 

@@ -12,7 +12,7 @@ RSpec.describe "Entries Index - Search", type: :system do
   let(:income_item) { create(:item, category: income_category, name: "Freelance Work") }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
 
     # Create savings categories and items
     vacation_category = create(:category, :savings, user: user, name: "Vacation Savings", savings_pool: vacation_pool)

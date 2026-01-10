@@ -8,7 +8,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000)
   end
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "savings pool card display", :aggregate_failures do
     let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }

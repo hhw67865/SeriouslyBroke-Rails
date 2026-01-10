@@ -184,7 +184,7 @@ RSpec.describe "Authentication", type: :system do
     let!(:user) { create(:user, email: "test@example.com", password: "password123") }
 
     before do
-      sign_in user
+      sign_in user, scope: :user
       visit authenticated_root_path
     end
 

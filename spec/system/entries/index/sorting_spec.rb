@@ -8,7 +8,7 @@ RSpec.describe "Entries Index - Sorting", type: :system do
   let!(:item) { create(:item, category: category, name: "Groceries") }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     # Create entries with different dates and amounts for sorting tests
     create(:entry, item: item, amount: 100, date: Date.parse("2024-01-10"), description: "First entry")
     create(:entry, item: item, amount: 300, date: Date.parse("2024-01-15"), description: "Third entry")

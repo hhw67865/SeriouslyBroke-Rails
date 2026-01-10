@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Categories Show - Savings Pool", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   it "shows savings pool card and navigates to pool details", :aggregate_failures do
     pool = create(:savings_pool, user: user, name: "Main Pool", target_amount: 2000)

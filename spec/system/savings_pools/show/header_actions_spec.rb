@@ -7,7 +7,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
   let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     visit savings_pool_path(savings_pool)
   end
 

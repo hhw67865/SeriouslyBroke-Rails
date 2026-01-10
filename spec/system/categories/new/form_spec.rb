@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Categories New - Form", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "form display", :aggregate_failures do
     before { visit new_category_path }

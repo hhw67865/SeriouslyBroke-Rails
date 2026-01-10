@@ -9,7 +9,7 @@ RSpec.describe "Savings Pools Index - Search", type: :system do
   let!(:car_fund) { create(:savings_pool, user: user, name: "New Car Fund", target_amount: 20_000) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     visit savings_pools_path
   end
 

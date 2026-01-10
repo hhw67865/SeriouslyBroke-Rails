@@ -7,7 +7,7 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
   let(:user) { create(:user) }
   let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "with connected categories", :aggregate_failures do
     before do

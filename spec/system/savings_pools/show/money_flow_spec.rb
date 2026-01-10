@@ -8,7 +8,7 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
   let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
   let!(:expense_category) { create(:category, user: user, category_type: :expense, savings_pool: savings_pool) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "contributions and withdrawals", :aggregate_failures do
     let!(:savings_item) { create(:item, category: savings_category, name: "Monthly Savings") }

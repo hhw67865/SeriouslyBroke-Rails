@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Entries Index - Header", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "page header elements", :aggregate_failures do
     it "shows correct title and subtitle for all entries" do

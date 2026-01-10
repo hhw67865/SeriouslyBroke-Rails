@@ -7,7 +7,7 @@ RSpec.describe "Items Edit - Form", type: :system do
   let!(:category) { create(:category, name: "Groceries", user: user) }
   let!(:item) { create(:item, name: "Original Item", description: "Original description", frequency: "one_time", category: category) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "form display", :aggregate_failures do
     before { visit edit_item_path(item) }

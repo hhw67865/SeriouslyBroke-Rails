@@ -6,7 +6,7 @@ RSpec.describe "Savings Pools Index - Empty State", type: :system do
   let(:user) { create(:user) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
   end
 
   describe "when no savings pools exist", :aggregate_failures do

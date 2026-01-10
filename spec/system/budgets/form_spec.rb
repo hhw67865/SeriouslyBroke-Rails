@@ -6,7 +6,7 @@ RSpec.describe "Budgets Forms", type: :system do
   let(:user) { create(:user) }
   let!(:expense_category) { create(:category, user: user, name: "Groceries", category_type: :expense) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "New Budget Form - From Category Page", :aggregate_failures do
     before { visit new_budget_path(category_id: expense_category.id) }

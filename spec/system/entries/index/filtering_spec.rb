@@ -13,7 +13,7 @@ RSpec.describe "Entries Index - Filtering", type: :system do
   let!(:savings_item) { create(:item, category: savings_category, name: "Emergency Savings") }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     create(:entry, item: expense_item, amount: 150, description: "Weekly shopping")
     create(:entry, item: income_item, amount: 3000, description: "Salary payment")
     create(:entry, item: savings_item, amount: 500, description: "Emergency fund deposit")

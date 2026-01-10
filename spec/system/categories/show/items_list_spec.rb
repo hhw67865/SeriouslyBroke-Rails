@@ -7,7 +7,7 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
   let(:base_date) { Date.current.beginning_of_month }
   let(:next_date) { base_date.next_month }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "expense items list", :aggregate_failures do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }

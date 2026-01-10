@@ -6,7 +6,7 @@ RSpec.describe "Navbar", type: :system do
   let!(:user) { create(:user) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
     visit authenticated_root_path
   end
 
@@ -91,7 +91,7 @@ RSpec.describe "Navbar", type: :system do
       click_button "Sign out"
       sleep 0.5
 
-      sign_in user
+      sign_in user, scope: :user
       visit authenticated_root_path
 
       # Should show current month again for new session

@@ -7,7 +7,7 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   let!(:savings_pool) { create(:savings_pool, name: "Emergency Fund", user: user) }
 
   before do
-    sign_in user
+    sign_in user, scope: :user
   end
 
   describe "page display", :aggregate_failures do

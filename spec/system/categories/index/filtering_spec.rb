@@ -8,7 +8,7 @@ RSpec.describe "Categories Index - Filtering", type: :system do
   let!(:expense_categories) { create_list(:category, 2, :expense, user: user) }
   let!(:savings_categories) { create_list(:category, 1, :savings, user: user) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   describe "type filtering", :aggregate_failures do
     it "shows only income categories when income type selected" do
