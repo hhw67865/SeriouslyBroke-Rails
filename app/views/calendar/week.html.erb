@@ -1,98 +1,44 @@
-<% range_label = @week_start.month == @week_end.month ?
-  "#{@week_start.strftime('%b %-d')} – #{@week_end.strftime('%-d, %Y')}" :
-  "#{@week_start.strftime('%b %-d')} – #{@week_end.strftime('%b %-d, %Y')}" %>
-
 <div class="px-4 sm:px-6 lg:px-8 py-6 font-light">
-<div class="flex items-center justify-between mb-6">
-  <div class="flex items-center gap-3">
-    <%= link_to calendar_path(month: @focused_date.month, year: @focused_date.year),
-        class: "inline-flex items-center gap-2 px-3 py-2 rounded-md border border-gray-300 bg-white text-sm hover:bg-gray-100 shadow-sm transition" do %>
-      <%= heroicon "arrow-left", options: { class: "w-4 h-4" } %>
-      Monthly
-    <% end %>
-    <h1 class="text-xl font-medium text-gray-900">Week of <%= range_label %></h1>
-  </div>
-  <div class="flex gap-2">
-    <%= link_to calendar_week_path(date: week_nav_date(@focused_date, :prev)),
-        class: "inline-flex items-center px-3 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
-      <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
-    <% end %>
-    <%= link_to calendar_week_path(date: week_nav_date(@focused_date, :next)),
-        class: "inline-flex items-center px-3 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
-      <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
-    <% end %>
-    <%= link_to new_entry_path,
-        class: "ml-3 inline-flex items-center gap-2 px-3 py-2 rounded-md bg-brand text-on-dark hover:bg-brand-dark shadow-sm transition" do %>
-      <%= heroicon "plus", options: { class: "w-4 h-4" } %>
-      Create Entry
-    <% end %>
-  </div>
-</div>
-
-
-<div class="calendar-week-columns mb-8">
-  <% (@week_start..@week_end).each do |day| %>
-    <% day_entries = (@week_entries_by_day || {})[day] || [] %>
-    <div class="rounded-md border border-gray-200 bg-white p-3 hover:border-gray-300 hover:shadow-sm transition h-full flex flex-col">
-      <div class="text-xs text-gray-500"><%= day.strftime('%a') %></div>
-      <div class="text-sm font-medium text-gray-900 border-b border-gray-100 pb-2 mb-2"><%= day.strftime('%-m/%-d') %></div>
-      <div class="space-y-3 flex-1 overflow-y-auto max-h-96 custom-scrollbar">
-        <% [[:expense, 'Expense', 'text-status-danger'], [:income, 'Income', 'text-status-success'], [:savings, 'Savings', 'text-brand-dark']].each do |sym, label, color| %>
-          <% entries = day_entries.select { |e| e[:type] == sym } %>
-          <% next if entries.empty? %>
-          <div class="rounded border border-gray-100">
-            <div class="flex justify-between px-2.5 py-2 bg-gray-50 gap-2">
-              <div class="text-xs font-light text-gray-600"><%= label %></div>
-              <div class="text-xs font-semibold <%= color %>"><%= sym == :expense ? '-' : '+' %><%= number_to_currency(entries.sum { |e| e[:amount] }) %></div>
-            </div>
-            <ul>
-              <% entries.each do |e| %>
-                <li class="px-2.5 py-2 text-xs border-b border-gray-100 last:border-b-0 group">
-                  <div class="text-gray-700 mb-1"><%= e[:name] %></div>
-                  <div class="font-medium <%= color %>"><%= sym == :expense ? '-' : '+' %><%= number_to_currency(e[:amount]) %></div>
-                  <div class="flex items-center gap-3 mt-0 max-h-0 overflow-hidden opacity-0 transition-all duration-200 group-hover:mt-2 group-hover:max-h-12 group-hover:opacity-100">
-                    <%= link_to "Edit", edit_entry_path(e[:id]),
-                        class: "text-brand-dark font-medium transition-colors duration-200 hover:bg-brand-light hover:text-brand" %>
-                    <%= link_to "Delete", entry_path(e[:id]),
-                        data: { turbo_method: :delete, turbo_confirm: "Are you sure you want to delete this entry?" },
-                        class: "text-gray-700 font-medium transition-colors duration-200 hover:bg-status-danger-light hover:text-status-danger" %>
-                  </div>
-                </li>
-              <% end %>
-            </ul>
-          </div>
-        <% end %>
-      </div>
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <%= link_to calendar_path(@presenter.month_path_params),
+          class: "inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-sm hover:bg-gray-100 shadow-sm transition" do %>
+        <%= heroicon "arrow-left", options: { class: "w-4 h-4" } %>
+        Monthly
+      <% end %>
+      <h1 class="text-xl font-medium text-gray-900">Week of <%= @presenter.range_label %></h1>
     </div>
-  <% end %>
-</div>
+    <div class="flex gap-2">
+      <%= link_to calendar_week_path(date: @presenter.prev_week_date),
+          class: "inline-flex items-center px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
+        <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
+      <% end %>
+      <%= link_to calendar_week_path(date: @presenter.next_week_date),
+          class: "inline-flex items-center px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
+        <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
+      <% end %>
+      <%= link_to new_entry_path,
+          class: "ml-3 inline-flex items-center gap-2 px-3 py-2 rounded bg-brand text-on-dark hover:bg-brand-dark shadow-sm transition" do %>
+        <%= heroicon "plus", options: { class: "w-4 h-4" } %>
+        Create Entry
+      <% end %>
+    </div>
+  </div>
 
-<div class="mt-8 pt-8 border-t border-gray-200">
-  <h2 class="text-lg font-medium text-gray-900 mb-4">Weekly Summary</h2>
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-    <% [[:expense, 'Expenses', 'text-status-danger'], [:income, 'Income', 'text-status-success'], [:savings, 'Savings', 'text-brand-dark']].each do |type, label, color| %>
-      <div class="rounded-md border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
-          <span class="font-medium text-gray-700"><%= label %></span>
-          <span class="font-bold <%= color %>">
-            <%= type == :expense ? '-' : '+' %><%= number_to_currency(@weekly_breakdown[type][:total]) %>
-          </span>
-        </div>
-        <ul class="divide-y divide-gray-100">
-          <% sorted_categories = @weekly_breakdown[type][:categories].sort_by { |_, amount| -amount } %>
-          <% if sorted_categories.empty? %>
-            <li class="px-4 py-3 text-sm text-gray-500 italic text-center">No entries</li>
-          <% else %>
-            <% sorted_categories.each do |category_name, amount| %>
-              <li class="px-4 py-2 flex justify-between items-center text-sm hover:bg-gray-50">
-                <span class="text-gray-600"><%= category_name %></span>
-                <span class="font-medium text-gray-900"><%= number_to_currency(amount) %></span>
-              </li>
-            <% end %>
-          <% end %>
-        </ul>
-      </div>
+  <div class="calendar-week-columns mb-8">
+    <% @presenter.days.each do |day| %>
+      <%= render "calendar/week_day_column", day: day %>
     <% end %>
   </div>
-</div>
+
+  <div class="mt-8 pt-8 border-t border-gray-200">
+    <h2 class="text-lg font-medium text-gray-900 mb-4">Weekly Summary</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      <% CategoryTypeHelper::CATEGORY_TYPES.each do |type| %>
+        <%= render "calendar/week_summary_card",
+            type: type,
+            breakdown: @presenter.weekly_breakdown[type] %>
+      <% end %>
+    </div>
+  </div>
 </div>

@@ -1,20 +1,15 @@
-<% entries = entries_for_date(day[:date]) %>
-<% expense = entries.select { |e| e.category.expense? }.sum(&:amount) %>
-<% income = entries.select { |e| e.category.income? }.sum(&:amount) %>
-<% savings = entries.select { |e| e.category.savings? }.sum(&:amount) %>
-
+<%# locals: (day:) %>
 <%= link_to calendar_week_path(date: day[:date].strftime("%Y-%m-%d")),
-    class: "block rounded-md border border-gray-200 bg-white p-2 hover:border-gray-300 hover:shadow-sm transition-all #{muted_day_class(day[:in_month])}" do %>
+    class: "block rounded border border-gray-200 bg-white p-2 hover:border-gray-300 hover:shadow-sm transition-all #{day[:in_month] ? '' : 'calendar-adjacent'}" do %>
   <span class="text-xs font-medium block text-center sm:text-left"><%= day[:date].day %></span>
   <div class="mt-0.5 flex flex-col items-center space-y-0.5">
-    <% if expense > 0 %>
-      <div class="text-xs leading-none text-status-danger font-medium"><%= compact_currency(expense) %></div>
-    <% end %>
-    <% if income > 0 %>
-      <div class="text-xs leading-none text-status-success font-medium"><%= compact_currency(income) %></div>
-    <% end %>
-    <% if savings > 0 %>
-      <div class="text-xs leading-none text-brand-dark font-medium"><%= compact_currency(savings) %></div>
+    <% CategoryTypeHelper::CATEGORY_TYPES.each do |type| %>
+      <% amount = day[:totals][type] %>
+      <% if amount.positive? %>
+        <div class="text-xs leading-none <%= category_type_color(type) %> font-medium">
+          <%= compact_currency(amount) %>
+        </div>
+      <% end %>
     <% end %>
   </div>
 <% end %>

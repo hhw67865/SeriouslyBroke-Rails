@@ -1,41 +1,24 @@
-<%# Monthly Calendar Prototype - light, thin, square, airy UI %>
-
 <div class="px-4 sm:px-6 lg:px-8 py-6 font-light">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-    <h1 class="text-xl font-medium tracking-tight text-gray-900"><%= format_month_year %></h1>
-    <div class="calendar-legend sm:ml-auto w-full sm:w-auto">
-      <div class="calendar-legend__item">
-        <span class="calendar-legend__swatch bg-status-danger"></span>
-        <span>Expense</span>
-      </div>
-      <div class="calendar-legend__item">
-        <span class="calendar-legend__swatch bg-status-success"></span>
-        <span>Income</span>
-      </div>
-      <div class="calendar-legend__item">
-        <span class="calendar-legend__swatch bg-brand-dark"></span>
-        <span>Savings</span>
-      </div>
-    </div>
+    <h1 class="text-xl font-medium tracking-tight text-gray-900"><%= @presenter.month_label %></h1>
+    <%= render "calendar/legend" %>
   </div>
 
-  <% if !month_has_data?(@month_date) %>
-    <div class="mb-4 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+  <% unless @presenter.data? %>
+    <div class="mb-4 rounded border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
       No entries recorded this month.
       <%= link_to "Add an entry", new_entry_path, class: "ml-1 text-brand-dark underline hover:text-brand" %>
     </div>
   <% end %>
 
-  <%# Weekday headers (Sun–Sat) %>
   <div class="calendar-weekdays text-xs text-gray-500 mb-1 select-none">
     <% %w[Sun Mon Tue Wed Thu Fri Sat].each do |dow| %>
       <div class="py-2 text-center tracking-wide"><%= dow %></div>
     <% end %>
   </div>
 
-  <%# Month grid (6 weeks) %>
   <div class="calendar-month calendar-grid">
-    <% month_weeks(@month_date).each do |week| %>
+    <% @presenter.weeks.each do |week| %>
       <div class="calendar-week-row">
         <% week.each do |day| %>
           <%= render "calendar/day_cell", day: day %>
@@ -43,5 +26,4 @@
       </div>
     <% end %>
   </div>
-
 </div>

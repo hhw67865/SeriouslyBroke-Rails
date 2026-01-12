@@ -1,0 +1,8 @@
+<div class="calendar-legend sm:ml-auto w-full sm:w-auto">
+  <% CategoryTypeHelper::CATEGORY_TYPES.each do |type| %>
+    <div class="calendar-legend__item">
+      <span class="calendar-legend__swatch <%= category_type_bg(type) %>"></span>
+      <span><%= category_type_label(type) %></span>
+    </div>
+  <% end %>
+</div>

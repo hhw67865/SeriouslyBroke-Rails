@@ -1,0 +1,26 @@
+<%# locals: (day:) %>
+<div class="rounded border border-gray-200 bg-white p-3 hover:border-gray-300 hover:shadow-sm transition h-full flex flex-col">
+  <div class="text-xs text-gray-500"><%= day[:date].strftime('%a') %></div>
+  <div class="text-sm font-medium text-gray-900 border-b border-gray-100 pb-2 mb-2">
+    <%= day[:date].strftime('%-m/%-d') %>
+  </div>
+  <div class="space-y-3 flex-1 overflow-y-auto max-h-96 custom-scrollbar">
+    <% CategoryTypeHelper::CATEGORY_TYPES.each do |type| %>
+      <% entries = day[:entries_by_type][type] %>
+      <% next if entries.empty? %>
+      <div class="rounded border border-gray-100">
+        <div class="flex justify-between px-2.5 py-2 bg-gray-50 gap-2">
+          <div class="text-xs font-light text-gray-600"><%= category_type_label(type) %></div>
+          <div class="text-xs font-semibold <%= category_type_color(type) %>">
+            <%= format_amount_with_sign(entries.sum { |e| e[:amount] }, type) %>
+          </div>
+        </div>
+        <ul>
+          <% entries.each do |entry| %>
+            <%= render "calendar/entry_item", entry: entry, type: type %>
+          <% end %>
+        </ul>
+      </div>
+    <% end %>
+  </div>
+</div>
