@@ -1,5 +1,5 @@
 <%# Item Edit Form - SimpleForm with brand styling %>
-<div class="bg-white shadow-sm rounded-lg border border-gray-100 p-6">
+<div class="bg-white shadow-sm rounded border border-gray-100 p-6">
   <%= simple_form_for item, html: { class: "space-y-6" } do |f| %>
     <%# Item Name %>
     <div>
@@ -49,14 +49,12 @@
     </div>
 
     <%# Form Actions %>
-    <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
+    <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
+      <%= link_to "Cancel", category_path(item.category),
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+
       <%= f.submit "Update Item",
-          class: "inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" %>
-      
-      <%= link_to category_path(item.category), 
-          class: "inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
-        Cancel
-      <% end %>
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
     </div>
     
   <% end %>

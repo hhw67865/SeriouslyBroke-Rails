@@ -12,7 +12,7 @@
 <div class="max-w-4xl mx-auto">
   
   <%# Information Box %>
-  <div class="bg-blue-50 rounded-lg p-6 mb-8 border border-blue-200">
+  <div class="bg-blue-50 rounded p-6 mb-8 border border-blue-200">
     <div class="flex items-start">
       <div class="flex-shrink-0">
         <%= heroicon "information-circle", options: { class: "h-5 w-5 text-blue-400" } %>
@@ -31,7 +31,7 @@
   </div>
 
   <%# Category Selection Form %>
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+  <div class="bg-white rounded shadow-sm border border-gray-100 p-6">
     <%= form_with url: categories_savings_pool_path(@savings_pool), method: :patch, local: true do |form| %>
       
       <%# Categories by Type - Only savings and expenses %>
@@ -65,7 +65,7 @@
                 %>
                 
                 <div class="relative">
-                  <label class="flex items-center p-4 border rounded-lg cursor-pointer transition-colors
+                  <label class="flex items-center p-4 border rounded cursor-pointer transition-colors
                     <%= if is_connected
                           category_type == 'savings' ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
                         elsif has_other_pool
@@ -138,10 +138,10 @@
       <%# Form Actions %>
       <div class="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-200">
         <%= form.submit "Update Connected Categories",
-            class: "inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-brand hover:bg-brand-dark" %>
+            class: "inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-medium rounded text-white bg-brand hover:bg-brand-dark" %>
         
         <%= link_to savings_pool_path(@savings_pool), 
-            class: "inline-flex justify-center items-center px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50" do %>
+            class: "inline-flex justify-center items-center px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded text-gray-700 bg-white hover:bg-gray-50" do %>
           Cancel
         <% end %>
       </div>

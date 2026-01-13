@@ -27,7 +27,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     it "shows correct current balance" do
-      within(".bg-white.rounded-xl", text: "Emergency Fund") do
+      within(".bg-white.rounded", text: "Emergency Fund") do
         current_label = find("span.text-xs.text-gray-500", text: "Current")
         current_amount = current_label.sibling("span.text-base.font-semibold")
         expect(current_amount.text).to eq("$500.00")
@@ -35,7 +35,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     it "shows correct target amount" do
-      within(".bg-white.rounded-xl", text: "Emergency Fund") do
+      within(".bg-white.rounded", text: "Emergency Fund") do
         target_label = find("span.text-xs.text-gray-500", text: "Target")
         target_amount = target_label.sibling("span.text-base.font-medium")
         expect(target_amount.text).to eq("$10,000.00")
@@ -43,13 +43,13 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     it "shows correct progress percentage" do
-      within(".bg-white.rounded-xl", text: "Emergency Fund") do
+      within(".bg-white.rounded", text: "Emergency Fund") do
         expect(page).to have_content("5% complete")
       end
     end
 
     it "shows recent activity section" do
-      within(".bg-white.rounded-xl", text: "Emergency Fund") do
+      within(".bg-white.rounded", text: "Emergency Fund") do
         expect(page).to have_content("Recent activity")
       end
     end
@@ -70,7 +70,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
       end
 
       it "shows correct progress percentage and balance" do
-        within(".bg-white.rounded-xl", text: "Emergency Fund") do
+        within(".bg-white.rounded", text: "Emergency Fund") do
           expect(page).to have_content("50% complete")
 
           current_label = find("span.text-xs.text-gray-500", text: "Current")
@@ -94,7 +94,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
       end
 
       it "shows goal reached message" do
-        within(".bg-white.rounded-xl", text: "Emergency Fund") do
+        within(".bg-white.rounded", text: "Emergency Fund") do
           expect(page).to have_content("Goal reached!")
         end
       end
@@ -114,7 +114,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
       end
 
       it "shows negative progress and balance" do
-        within(".bg-white.rounded-xl", text: "Emergency Fund") do
+        within(".bg-white.rounded", text: "Emergency Fund") do
           expect(page).to have_content("-5% complete")
 
           current_label = find("span.text-xs.text-gray-500", text: "Current")
@@ -152,7 +152,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     it "shows recent activity with correct entry details" do
-      within(".bg-white.rounded-xl", text: "Emergency Fund") do
+      within(".bg-white.rounded", text: "Emergency Fund") do
         expect(page).to have_content("Recent activity")
         expect(page).to have_content("Monthly Deposit")
         expect(page).to have_content("+$1,000.00")

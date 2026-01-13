@@ -4,7 +4,7 @@
   <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
   <div>
     <%# Transaction Details Section %>
-    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Transaction Details</h2>
         
@@ -71,11 +71,13 @@
 
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-      <%= link_to "Cancel", 
-          @previous_url.present? ? @previous_url : entries_path, 
-          class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
-      
-      <%= f.button :submit, entry.persisted? ? "Update Entry" : "Create Entry" %>
+      <%= link_to "Cancel",
+          @previous_url.present? ? @previous_url : entries_path,
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+
+      <%= f.button :submit,
+          entry.persisted? ? "Update Entry" : "Create Entry",
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
     </div>
   </div>
 <% end %>

@@ -63,11 +63,12 @@
       <%# Action Buttons %>
       <% if local_assigns[:actions].present? %>
         <% actions.each do |action| %>
+          <% default_class = "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
           <% if action[:method] == :delete %>
             <%# Delete action with button_to for proper method handling %>
-            <%= button_to action[:url], 
+            <%= button_to action[:url],
                 method: action[:method],
-                class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300",
+                class: action[:class] || default_class,
                 data: action[:confirm] ? { turbo_confirm: action[:confirm] } : {} do %>
               <% if action[:icon].present? %>
                 <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
@@ -76,7 +77,7 @@
             <% end %>
           <% else %>
             <%# Regular link action %>
-            <%= link_to action[:url], class: action[:class] || "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark hover:to-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300" do %>
+            <%= link_to action[:url], class: action[:class] || default_class do %>
               <% if action[:icon].present? %>
                 <%= heroicon action[:icon], options: { class: "h-4 w-4" } %>
               <% end %>
@@ -187,8 +188,8 @@
 
 <%# Search Results Info Banner %>
 <% if local_assigns[:search].present? && search[:has_results] && search[:results_text].present? %>
-  <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-    <p class="text-blue-800 text-sm">
+  <div class="mb-4 p-3 bg-status-info-light border border-status-info rounded">
+    <p class="text-status-info text-sm">
       <%= search[:results_text] %>
     </p>
   </div>

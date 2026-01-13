@@ -43,7 +43,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
     end
 
     it "shows correct amounts with signs" do
-      activity_section = page.all("div.bg-white.rounded-xl", text: "Recent Activity").first
+      activity_section = page.all("div.bg-white.rounded", text: "Recent Activity").first
       within(activity_section) do
         expect(page).to have_content("+$500.00")
         expect(page).to have_content("-$150.00")
@@ -52,7 +52,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
     end
 
     it "displays category names" do
-      activity_section = page.all("div.bg-white.rounded-xl", text: "Recent Activity").first
+      activity_section = page.all("div.bg-white.rounded", text: "Recent Activity").first
       within(activity_section) do
         expect(page).to have_content("Home Savings")
         expect(page).to have_content("Emergency Withdrawal")
@@ -60,15 +60,15 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
     end
 
     it "shows entry types with badges" do
-      activity_section = page.all("div.bg-white.rounded-xl", text: "Recent Activity").first
+      activity_section = page.all("div.bg-white.rounded", text: "Recent Activity").first
       within(activity_section) do
-        expect(page).to have_css(".bg-green-100.text-green-800", text: "Savings")
-        expect(page).to have_css(".bg-red-100.text-red-800", text: "Expense")
+        expect(page).to have_css(".bg-status-success-light.text-status-success", text: "Savings")
+        expect(page).to have_css(".bg-status-danger-light.text-status-danger", text: "Expense")
       end
     end
 
     it "displays entry dates" do
-      activity_section = page.all("div.bg-white.rounded-xl", text: "Recent Activity").first
+      activity_section = page.all("div.bg-white.rounded", text: "Recent Activity").first
       within(activity_section) do
         expect(page).to have_content(Date.current.strftime("%b %d, %Y"))
         expect(page).to have_content((Date.current - 1.day).strftime("%b %d, %Y"))
@@ -89,15 +89,15 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
     end
 
     it "shows only the 8 most recent entries" do
-      entries = page.all("div.bg-gray-50.rounded-lg")
+      entries = page.all("div.bg-gray-50.rounded")
       expect(entries.count).to eq(8)
     end
 
     it "shows entries in descending date order" do
-      activity_section = page.all("div.bg-white.rounded-xl", text: "Recent Activity").first
+      activity_section = page.all("div.bg-white.rounded", text: "Recent Activity").first
       within(activity_section) do
         # Get entry date elements (they are in the right column of each entry card)
-        dates = page.all("div.bg-gray-50.rounded-lg div.text-right div.text-xs.text-gray-500").map(&:text)
+        dates = page.all("div.bg-gray-50.rounded div.text-right div.text-xs.text-gray-500").map(&:text)
         expect(dates.first).to include(Date.current.strftime("%b %d, %Y"))
         expect(dates.last).to include((Date.current - 7.days).strftime("%b %d, %Y"))
       end

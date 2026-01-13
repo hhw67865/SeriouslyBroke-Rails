@@ -11,13 +11,13 @@
       {
         label: "Edit",
         url: edit_category_path(@category),
-        class: "inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+        class: "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition"
       },
       {
         label: "Delete",
         url: category_path(@category),
         method: :delete,
-        class: "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700",
+        class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-status-danger text-white text-sm font-medium hover:opacity-90 shadow-sm transition",
         confirm: "Are you sure? This will delete all related items and entries."
       }
     ]

@@ -9,14 +9,14 @@
   <%# Mobile Header %>
   <div class="sticky top-0 z-40 flex h-16 items-center gap-x-4 bg-white/95 backdrop-blur-sm px-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] sm:gap-x-6 sm:px-6 lg:hidden">
     <button type="button" 
-            class="-m-2.5 p-2.5 text-gray-700 hover:text-brand transition-all duration-200 ease-in-out rounded-xl active:scale-95 lg:hidden"
+            class="-m-2.5 p-2.5 text-gray-700 hover:text-brand transition-all duration-200 ease-in-out rounded active:scale-95 lg:hidden"
             data-action="shared--sidebar#toggle">
       <span class="sr-only">Open sidebar</span>
       <%= heroicon "bars-3", options: { class: "h-6 w-6" } %>
     </button>
 
     <div class="flex-1 text-xl font-bold tracking-tight">
-      <span class="text-[#A4A266]">Seriously</span><span class="text-brand">Broke</span>
+      <span class="text-brand-dark">Seriously</span><span class="text-brand">Broke</span>
     </div>
     
     <%# Date Selector for Mobile %>
@@ -32,7 +32,7 @@
       <%# Close button for mobile %>
       <div class="absolute right-0 top-0 flex pr-2 pt-2 lg:hidden">
         <button type="button" 
-                class="ml-1 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all duration-200 ease-in-out active:scale-95 focus:outline-none"
+                class="ml-1 flex h-10 w-10 items-center justify-center rounded bg-white/10 text-white hover:bg-white/20 transition-all duration-200 ease-in-out active:scale-95 focus:outline-none"
                 data-action="shared--sidebar#close">
           <span class="sr-only">Close sidebar</span>
           <%= heroicon "x-mark", options: { class: "h-6 w-6" } %>

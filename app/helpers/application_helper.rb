@@ -39,22 +39,27 @@ module ApplicationHelper
            actions: actions
   end
 
-  def standard_action_button(label:, url:, icon: nil, style: :primary)
+  def standard_action_button(label:, url:, icon: nil, style: :primary, method: nil, confirm: nil)
     classes = case style
               when :primary
                 primary_button_classes
               when :secondary
                 secondary_button_classes
+              when :danger
+                danger_button_classes
               else
                 style.to_s
               end
 
-    {
+    result = {
       label: label,
       url: url,
       icon: icon,
       class: classes
     }
+    result[:method] = method if method
+    result[:confirm] = confirm if confirm
+    result
   end
 
   def breadcrumb_trail(*crumbs)
@@ -87,19 +92,14 @@ module ApplicationHelper
   private
 
   def primary_button_classes
-    [
-      "inline-flex items-center gap-x-2 rounded-md bg-gradient-to-r from-brand to-brand-dark",
-      "px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-brand-dark",
-      "hover:to-brand-dark focus-visible:outline focus-visible:outline-2",
-      "focus-visible:outline-offset-2 focus-visible:outline-brand transition-all duration-300"
-    ].join(" ")
+    "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
   end
 
   def secondary_button_classes
-    [
-      "inline-flex items-center gap-x-2 rounded-md bg-white px-4 py-2.5 text-sm",
-      "font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300",
-      "hover:bg-gray-50 transition-colors duration-200"
-    ].join(" ")
+    "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition"
+  end
+
+  def danger_button_classes
+    "inline-flex items-center gap-2 px-4 py-2 rounded bg-status-danger text-white text-sm font-medium hover:opacity-90 shadow-sm transition"
   end
 end

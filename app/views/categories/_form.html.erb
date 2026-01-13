@@ -3,7 +3,7 @@
   <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
 
   <div data-controller="app--category--form">
-    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Basic Information</h2>
         
@@ -21,7 +21,7 @@ type,
                                       data: { 
                                         action: "change->app--category--form#selectCategoryType"
                                       } %>
-                    <div class="w-full border-2 rounded-lg p-4 transition-all flex flex-col items-center category-type-option
+                    <div class="w-full border-2 rounded p-4 transition-all flex flex-col items-center category-type-option
                               <%= f.object.category_type == type ? "border-brand bg-brand-light" : "border-gray-200 hover:border-gray-300" %>"
                         data-type="<%= type %>"
                         data-app--category--form-target="categoryTypeOption">
@@ -54,7 +54,7 @@ type,
       </div>
     </div>
 
-    <div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 mb-6">
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Appearance</h2>
         
@@ -111,14 +111,15 @@ color,
 
     <%= f.hidden_field :user_id, value: current_user.id if category.new_record? %>
 
+    <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-      <% if category.persisted? %>
-        <%= link_to "Cancel", category_path(category), class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
-      <% else %>
-        <%= link_to "Cancel", categories_path, class: "rounded-lg px-5 py-3 sm:py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 text-center font-medium w-full sm:w-auto" %>
-      <% end %>
-      
-      <%= f.button :submit %>
+      <% cancel_path = category.persisted? ? category_path(category) : categories_path %>
+      <%= link_to "Cancel", cancel_path,
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+
+      <%= f.button :submit,
+          category.persisted? ? "Update Category" : "Create Category",
+          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
     </div>
   </div>
 <% end %>

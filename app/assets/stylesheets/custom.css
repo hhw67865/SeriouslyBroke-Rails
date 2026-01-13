@@ -98,4 +98,22 @@
 .text-on-dark-light { color: var(--color-text-on-primary-light); }
 
 /* Border Utilities */
-.border-light { border-color: rgba(255, 255, 255, 0.1); } 
+.border-light { border-color: rgba(255, 255, 255, 0.1); }
+.border-status-success { border-color: var(--color-success); }
+.border-status-warning { border-color: var(--color-warning); }
+.border-status-danger { border-color: var(--color-danger); }
+.border-status-info { border-color: var(--color-info); }
+
+/* Hover Utilities */
+.hover\:text-brand:hover { color: var(--color-primary); }
+.hover\:text-brand-dark:hover { color: var(--color-primary-dark); }
+.hover\:bg-brand-dark:hover { background-color: var(--color-primary-dark); }
+.hover\:opacity-90:hover { opacity: 0.9; }
+.hover\:opacity-80:hover { opacity: 0.8; }
+
+/* Focus Ring Brand */
+.focus\:ring-brand:focus { --tw-ring-color: var(--color-primary); }
+
+/* Additional Brand Utilities for Landing Pages */
+.hover\:bg-brand\/10:hover { background-color: rgba(201, 199, 139, 0.1); }
+.border-brand-dark { border-color: var(--color-primary-dark); } 

@@ -83,17 +83,17 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
     end
 
     it "shows correct total for contributing category" do
-      within("div.bg-green-50", text: "Monthly Savings") do
+      within("div.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$400.00")
         expect(page).to have_content(Date.current.strftime("%B %Y"))
       end
     end
 
     it "shows current month category amounts" do
-      within("div.bg-green-50", text: "Monthly Savings") do
+      within("div.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$400.00")
       end
-      within("div.bg-red-50", text: "Medical Bills") do
+      within("div.bg-status-danger-light", text: "Medical Bills") do
         expect(page).to have_content("-$150.00")
       end
     end
@@ -101,11 +101,11 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
     it "updates category amounts when navigating to previous month" do
       find("button[title='Previous month']").click
 
-      within("div.bg-green-50", text: "Monthly Savings") do
+      within("div.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$200.00")
         expect(page).to have_content(Date.current.prev_month.strftime("%B %Y"))
       end
-      within("div.bg-red-50", text: "Medical Bills") do
+      within("div.bg-status-danger-light", text: "Medical Bills") do
         expect(page).to have_content("-$70.00")
         expect(page).to have_content(Date.current.prev_month.strftime("%B %Y"))
       end

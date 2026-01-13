@@ -1,31 +1,31 @@
 <%# Clean & Minimal Savings Goal Card %>
-<% 
-  calculator = savings_pool.calculator 
+<%
+  calculator = savings_pool.calculator
   current_balance = calculator.current_balance
   target_amount = savings_pool.target_amount
   progress = calculator.progress_percentage
-  
+
   # Get recent entries for this savings pool (preloaded in controller)
   recent_entries = @recent_entries_by_pool&.dig(savings_pool.id) || []
 %>
 
 <div class="group cursor-pointer" onclick="window.location='<%= savings_pool_path(savings_pool) %>'">
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 transition-all duration-200 hover:shadow-md hover:border-gray-200 h-full">
-    
+  <div class="bg-white rounded shadow-sm border border-gray-100 p-6 transition-all duration-200 hover:shadow-md hover:border-gray-200 h-full">
+
     <%# Goal Name %>
     <div class="mb-4">
       <h3 class="text-lg font-semibold text-gray-900 truncate mb-1">
         <%= savings_pool.name %>
       </h3>
-      
+
       <%# Simple status %>
       <% if progress >= 100 %>
-        <span class="inline-flex items-center text-sm text-green-600">
+        <span class="inline-flex items-center text-sm text-status-success">
           <%= heroicon "check-circle", options: { class: "h-4 w-4 mr-1" } %>
           Goal reached!
         </span>
       <% elsif progress.negative? %>
-        <span class="inline-flex items-center text-sm text-red-600">
+        <span class="inline-flex items-center text-sm text-status-danger">
           <%= heroicon "exclamation-triangle", options: { class: "h-4 w-4 mr-1" } %>
           <%= progress %>% complete
         </span>
@@ -39,14 +39,14 @@
     <%# Progress Bar %>
     <div class="mb-5">
       <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-        <div class="h-2 rounded-full transition-all duration-500 ease-out 
-             <%= if progress >= 100 
-                   'bg-green-500'
+        <div class="h-2 rounded-full transition-all duration-500 ease-out
+             <%= if progress >= 100
+                   'bg-status-success'
                  elsif progress < 0
-                   'bg-red-500'
+                   'bg-status-danger'
                  else
                    'bg-brand'
-                 end %>" 
+                 end %>"
              style="width: <%= [progress, 100].min %>%;"></div>
       </div>
     </div>
@@ -55,11 +55,11 @@
     <div class="space-y-3">
       <div class="flex justify-between items-center">
         <span class="text-xs text-gray-500">Current</span>
-        <span class="text-base font-semibold <%= current_balance >= 0 ? "text-gray-900" : "text-red-500" %>">
+        <span class="text-base font-semibold <%= current_balance >= 0 ? "text-gray-900" : "text-status-danger" %>">
           <%= number_to_currency(current_balance) %>
         </span>
       </div>
-      
+
       <div class="flex justify-between items-center">
         <span class="text-xs text-gray-500">Target</span>
         <span class="text-base font-medium text-gray-600">
@@ -77,13 +77,13 @@
             <div class="flex items-center justify-between text-xs">
               <div class="flex items-center truncate">
                 <% if entry.category.savings? %>
-                  <%= heroicon "arrow-up", options: { class: "h-3 w-3 text-green-500 mr-1 flex-shrink-0" } %>
+                  <%= heroicon "arrow-up", options: { class: "h-3 w-3 text-status-success mr-1 flex-shrink-0" } %>
                 <% else %>
-                  <%= heroicon "arrow-down", options: { class: "h-3 w-3 text-red-500 mr-1 flex-shrink-0" } %>
+                  <%= heroicon "arrow-down", options: { class: "h-3 w-3 text-status-danger mr-1 flex-shrink-0" } %>
                 <% end %>
                 <span class="text-gray-600 truncate"><%= entry.item.name %></span>
               </div>
-              <span class="font-medium <%= entry.category.savings? ? "text-green-600" : "text-red-600" %> ml-2">
+              <span class="font-medium <%= entry.category.savings? ? "text-status-success" : "text-status-danger" %> ml-2">
                 <%= entry.category.savings? ? "+" : "-" %><%= number_to_currency(entry.amount) %>
               </span>
             </div>
@@ -112,4 +112,4 @@
     </div>
 
   </div>
-</div> 
+</div>

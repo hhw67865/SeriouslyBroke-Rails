@@ -1,10 +1,10 @@
 <nav class="flex justify-between items-center px-4 sm:px-6 py-4 max-w-7xl mx-auto relative" data-controller="public--menu">
-  <div class="text-xl sm:text-2xl font-bold text-[#A4A266]">
-    Seriously<span class="text-[#C9C78B]">Broke</span>
+  <div class="text-xl sm:text-2xl font-bold text-brand-dark">
+    Seriously<span class="text-brand">Broke</span>
   </div>
 
   <%# Mobile menu button %>
-  <button class="md:hidden text-gray-600 hover:text-[#C9C78B] transition-colors" data-action="public--menu#toggle">
+  <button class="md:hidden text-gray-600 hover:text-brand transition-colors" data-action="public--menu#toggle">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" data-public--menu-target="openIcon">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
     </svg>
@@ -15,28 +15,28 @@
 
   <%# Desktop navigation %>
   <div class="hidden md:flex space-x-6 lg:space-x-8">
-    <a href="#features" class="text-gray-600 hover:text-[#C9C78B] transition-colors">Features</a>
-    <a href="#about" class="text-gray-600 hover:text-[#C9C78B] transition-colors">About</a>
-    <a href="#contact" class="text-gray-600 hover:text-[#C9C78B] transition-colors">Contact</a>
+    <a href="#features" class="text-gray-600 hover:text-brand transition-colors">Features</a>
+    <a href="#about" class="text-gray-600 hover:text-brand transition-colors">About</a>
+    <a href="#contact" class="text-gray-600 hover:text-brand transition-colors">Contact</a>
   </div>
 
   <%# Desktop auth buttons %>
-  <div class="hidden md:flex space-x-3 lg:space-x-4">
-    <%= link_to "Log In", new_user_session_path, class: "px-4 lg:px-6 py-2 rounded-xl border-2 border-[#C9C78B] text-[#A4A266] hover:bg-[#C9C78B]/10 transition-colors" %>
-    <%= link_to "Sign Up Free", new_user_registration_path, class: "px-4 lg:px-6 py-2 rounded-xl bg-gradient-to-r from-[#C9C78B] to-[#A4A266] text-white hover:shadow-lg transition-all hover:-translate-y-0.5" %>
+  <div class="hidden md:flex gap-3 lg:gap-4">
+    <%= link_to "Log In", new_user_session_path, class: "inline-flex items-center justify-center gap-2 px-4 lg:px-6 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+    <%= link_to "Sign Up Free", new_user_registration_path, class: "inline-flex items-center justify-center gap-2 px-4 lg:px-6 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
   </div>
 
   <%# Mobile menu %>
-  <div class="hidden absolute top-full left-0 right-0 bg-white shadow-lg rounded-b-2xl p-6 md:hidden space-y-6 z-50 border-t border-gray-100" data-public--menu-target="content">
+  <div class="hidden absolute top-full left-0 right-0 bg-white shadow-lg rounded-b p-6 md:hidden space-y-6 z-50 border-t border-gray-100" data-public--menu-target="content">
     <div class="flex flex-col space-y-4">
-      <a href="#features" class="text-gray-600 hover:text-[#C9C78B] transition-colors text-lg" data-action="public--menu#close">Features</a>
-      <a href="#about" class="text-gray-600 hover:text-[#C9C78B] transition-colors text-lg" data-action="public--menu#close">About</a>
-      <a href="#contact" class="text-gray-600 hover:text-[#C9C78B] transition-colors text-lg" data-action="public--menu#close">Contact</a>
+      <a href="#features" class="text-gray-600 hover:text-brand transition-colors text-lg" data-action="public--menu#close">Features</a>
+      <a href="#about" class="text-gray-600 hover:text-brand transition-colors text-lg" data-action="public--menu#close">About</a>
+      <a href="#contact" class="text-gray-600 hover:text-brand transition-colors text-lg" data-action="public--menu#close">Contact</a>
     </div>
     <hr class="border-gray-200">
-    <div class="flex flex-col space-y-4">
-      <%= link_to "Log In", new_user_session_path, class: "px-6 py-3 rounded-xl border-2 border-[#C9C78B] text-[#A4A266] hover:bg-[#C9C78B]/10 transition-colors text-center" %>
-      <%= link_to "Sign Up Free", new_user_registration_path, class: "px-6 py-3 rounded-xl bg-gradient-to-r from-[#C9C78B] to-[#A4A266] text-white hover:shadow-lg transition-all hover:-translate-y-0.5 text-center" %>
+    <div class="flex flex-col gap-4">
+      <%= link_to "Log In", new_user_session_path, class: "inline-flex items-center justify-center gap-2 px-6 py-3 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+      <%= link_to "Sign Up Free", new_user_registration_path, class: "inline-flex items-center justify-center gap-2 px-6 py-3 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
     </div>
   </div>
-</nav> 
+</nav>

@@ -28,14 +28,14 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
     end
 
     it "shows correct total contributions" do
-      contributions_card = page.all("div.bg-white.rounded-xl", text: "Total Contributions").first
+      contributions_card = page.all("div.bg-white.rounded", text: "Total Contributions").first
       within(contributions_card) do
         expect(page).to have_content("+$650.00")
       end
     end
 
     it "shows correct total withdrawals" do
-      withdrawals_card = page.all("div.bg-white.rounded-xl", text: "Total Withdrawals").first
+      withdrawals_card = page.all("div.bg-white.rounded", text: "Total Withdrawals").first
       within(withdrawals_card) do
         expect(page).to have_content("-$125.00")
       end
@@ -51,14 +51,14 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
     end
 
     it "shows correct contributions" do
-      contributions_card = page.all("div.bg-white.rounded-xl", text: "Total Contributions").first
+      contributions_card = page.all("div.bg-white.rounded", text: "Total Contributions").first
       within(contributions_card) do
         expect(page).to have_content("+$1,000.00")
       end
     end
 
     it "shows zero withdrawals" do
-      withdrawals_card = page.all("div.bg-white.rounded-xl", text: "Total Withdrawals").first
+      withdrawals_card = page.all("div.bg-white.rounded", text: "Total Withdrawals").first
       within(withdrawals_card) do
         expect(page).to have_content("-$0.00")
       end
@@ -74,14 +74,14 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
     end
 
     it "shows zero contributions" do
-      contributions_card = page.all("div.bg-white.rounded-xl", text: "Total Contributions").first
+      contributions_card = page.all("div.bg-white.rounded", text: "Total Contributions").first
       within(contributions_card) do
         expect(page).to have_content("+$0.00")
       end
     end
 
     it "shows correct withdrawals" do
-      withdrawals_card = page.all("div.bg-white.rounded-xl", text: "Total Withdrawals").first
+      withdrawals_card = page.all("div.bg-white.rounded", text: "Total Withdrawals").first
       within(withdrawals_card) do
         expect(page).to have_content("-$300.00")
       end

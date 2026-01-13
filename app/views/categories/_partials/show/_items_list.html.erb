@@ -1,5 +1,5 @@
 <!-- Items List -->
-<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
   <div class="flex justify-between items-center mb-4">
     <h2 class="text-xl font-semibold">Items This Month</h2>
   </div>
@@ -7,7 +7,7 @@
   <% current_month_items = category.calculator(selected_date).current_month_items %>
   
   <% if current_month_items.any? %>
-    <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded-lg">
+    <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded">
       <table class="min-w-full divide-y divide-gray-300">
         <thead class="bg-gray-50">
           <tr>
@@ -52,7 +52,7 @@
       </table>
     </div>
   <% else %>
-    <div class="bg-gray-50 rounded-lg p-6 text-center">
+    <div class="bg-gray-50 rounded p-6 text-center">
       <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
         <%= heroicon "inbox", options: { class: "h-6 w-6 text-gray-400" } %>
       </div>

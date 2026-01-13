@@ -1,5 +1,5 @@
 <!-- Budget Management for Expense Categories -->
-<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
   <h2 class="text-xl font-semibold mb-4">Budget Management</h2>
   
   <% if category.budget.present? %>
@@ -22,19 +22,19 @@
       </div>
     </dl>
     
-    <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex justify-center items-center rounded-md px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
-      <%= heroicon "pencil-square", options: { class: "h-4 w-4 mr-1.5" } %>
+    <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" do %>
+      <%= heroicon "pencil-square", options: { class: "h-4 w-4" } %>
       <span>Update Budget</span>
     <% end %>
   <% else %>
-    <div class="bg-gray-50 rounded-lg p-6 text-center">
+    <div class="bg-gray-50 rounded p-6 text-center">
       <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
         <%= heroicon "calculator", options: { class: "h-6 w-6 text-gray-400" } %>
       </div>
       <h3 class="text-base font-medium text-gray-900 mb-1">No budget set</h3>
       <p class="text-sm text-gray-500 mb-4">Setting a budget helps you track your spending</p>
-      <%= link_to new_budget_path(category_id: category.id), class: "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-brand hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand" do %>
-        <%= heroicon "plus", options: { class: "h-4 w-4 mr-1.5" } %>
+      <%= link_to new_budget_path(category_id: category.id), class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
+        <%= heroicon "plus", options: { class: "h-4 w-4" } %>
         <span>Create Budget</span>
       <% end %>
     </div>

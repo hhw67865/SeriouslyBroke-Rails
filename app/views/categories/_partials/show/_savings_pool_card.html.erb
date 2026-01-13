@@ -1,5 +1,5 @@
 <!-- Savings Pool Information -->
-<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
   <h2 class="text-xl font-semibold mb-4">Savings Pool</h2>
   
   <div class="flex items-center justify-between mb-4">
@@ -20,20 +20,20 @@
     %>
     <div class="mb-4">
       <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-        <div class="h-2.5 rounded-full 
-             <%= if progress >= 100 
-                   'bg-green-500'
+        <div class="h-2.5 rounded-full
+             <%= if progress >= 100
+                   'bg-status-success'
                  elsif progress < 0
-                   'bg-red-500'
+                   'bg-status-danger'
                  else
                    'bg-brand'
-                 end %>" 
+                 end %>"
              style="width: <%= progress %>%;"></div>
       </div>
       <div class="flex justify-between text-xs text-gray-500 mt-1">
         <span>
           <% if progress.negative? %>
-            <span class="text-red-600 font-medium"><%= progress %>% complete</span>
+            <span class="text-status-danger font-medium"><%= progress %>% complete</span>
           <% else %>
             <%= progress %>% complete
           <% end %>
@@ -47,13 +47,13 @@
     This category contributes to a shared savings pool. Multiple categories may contribute to or withdraw from this pool.
   </p>
   
-  <div class="flex space-x-3">
-    <%= link_to savings_pool_path(category.savings_pool), class: "flex-1 inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gradient-to-r from-brand to-brand-dark text-white text-sm font-medium hover:from-brand-dark hover:to-brand-dark transition-all duration-300" do %>
-      <%= heroicon "arrow-right", options: { class: "h-4 w-4 mr-1.5" } %>
+  <div class="flex gap-3">
+    <%= link_to savings_pool_path(category.savings_pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
+      <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
       <span>View Savings Pool</span>
     <% end %>
-    
-    <%= link_to edit_savings_pool_path(category.savings_pool), class: "inline-flex justify-center items-center rounded-md px-3.5 py-2.5 bg-gray-100 hover:bg-gray-50 text-sm font-medium" do %>
+
+    <%= link_to edit_savings_pool_path(category.savings_pool), class: "inline-flex items-center justify-center px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition" do %>
       <%= heroicon "pencil-square", options: { class: "h-4 w-4" } %>
     <% end %>
   </div>

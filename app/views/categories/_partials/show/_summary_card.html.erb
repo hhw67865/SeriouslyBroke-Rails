@@ -1,5 +1,5 @@
 <!-- Summary Card -->
-<div class="bg-white shadow-sm rounded-lg overflow-hidden border border-gray-100 p-6">
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
   
   <% calc = category.calculator(selected_date) %>
@@ -41,7 +41,7 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Monthly Spending Trend</h3>
-        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
           <% 
             chart_data = [
               { name: "Spending", data: calculate_running_total(category.entries.group_by_day(:date, range: selected_date.beginning_of_month..selected_date.end_of_month).sum(:amount)) }
@@ -75,7 +75,7 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Income Stability</h3>
-        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
           <%= line_chart category.entries.group_by_month(:date, range: (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month).sum(:amount), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>
@@ -91,7 +91,7 @@
         </div>
         
         <% if category.savings_pool.present? %>
-          <div class="mt-4 p-4 rounded-lg bg-gray-50 border border-gray-200">
+          <div class="mt-4 p-4 rounded bg-gray-50 border border-gray-200">
             <div class="flex justify-between items-start">
               <div>
                 <h4 class="text-sm font-medium text-gray-700">Savings Pool</h4>
@@ -118,19 +118,19 @@
                   <span><%= number_to_currency(category.savings_pool.calculator.current_balance) %> / <%= number_to_currency(category.savings_pool.target_amount) %></span>
                 </div>
                 <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                  <div class="h-2 rounded-full 
-                       <%= if progress >= 100 
-                             'bg-green-500'
+                  <div class="h-2 rounded-full
+                       <%= if progress >= 100
+                             'bg-status-success'
                            elsif progress < 0
-                             'bg-red-500'
+                             'bg-status-danger'
                            else
                              'bg-brand'
-                           end %>" 
+                           end %>"
                        style="width: <%= progress %>%;"></div>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">
                   <% if progress.negative? %>
-                    <span class="text-red-600 font-medium"><%= progress %>% of target</span>
+                    <span class="text-status-danger font-medium"><%= progress %>% of target</span>
                   <% else %>
                     <%= progress %>% of target
                   <% end %>
@@ -143,7 +143,7 @@
       
       <div class="border-t border-gray-200 pt-4">
         <h3 class="text-base font-medium mb-3">Savings Progress</h3>
-        <div class="bg-gray-50 rounded-lg p-4 flex items-center justify-center">
+        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
           <%= line_chart savings_evolution_series(category, (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>

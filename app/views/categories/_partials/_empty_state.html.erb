@@ -1,5 +1,5 @@
 <div class="col-span-full">
-  <div class="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
+  <div class="rounded border-2 border-dashed border-gray-300 p-12 text-center">
     <div class="mx-auto h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center">
       <% case @type %>
       <% when "expense" %>
@@ -25,7 +25,7 @@
         Get started by creating a new category.
       <% end %>
     </p>
-    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-x-2 rounded-md bg-brand px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand" do %>
+    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
       <%= heroicon "plus", options: { class: "h-4 w-4" } %>
       <span>New <%= @type.singularize.titleize %> Category</span>
     <% end %>
