@@ -41,11 +41,11 @@ class Category < ApplicationRecord
   # Configure searchable fields
   searchable :name, label: "Name"
 
-  # Calculator for category metrics (memoized per month)
-  def calculator(date = Date.current)
-    month_key = date.beginning_of_month
+  # Calculator for category metrics (memoized per month and period)
+  def calculator(date = Date.current, period: :monthly)
+    cache_key = "#{date.year}-#{date.month}-#{period}"
     @calculators ||= {}
-    @calculators[month_key] ||= CategoryCalculator.new(self, date)
+    @calculators[cache_key] ||= CategoryCalculator.new(self, date, period: period)
   end
 
   private

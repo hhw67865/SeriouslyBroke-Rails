@@ -5,6 +5,9 @@ class CategoriesController < ApplicationController
 
   before_action :set_category, only: [:show, :edit, :update, :destroy]
   before_action :set_categories, only: [:index]
+  before_action :set_period, only: [:show]
+
+  helper_method :current_period
 
   # GET /categories
   def index
@@ -30,7 +33,7 @@ class CategoriesController < ApplicationController
     if @category.save
       redirect_to categories_path(type: @category.category_type), notice: "Category was successfully created."
     else
-      render :new, status: :unprocessable_entity
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -39,7 +42,7 @@ class CategoriesController < ApplicationController
     if @category.update(category_params)
       redirect_to categories_path(type: @category.category_type), notice: "Category was successfully updated."
     else
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 
@@ -65,7 +68,7 @@ class CategoriesController < ApplicationController
   end
 
   def category_params
-    params.require(:category).permit(:name, :category_type, :color, :savings_pool_id)
+    params.expect(category: [:name, :category_type, :color, :savings_pool_id])
   end
 
   def set_categories
@@ -79,5 +82,13 @@ class CategoriesController < ApplicationController
     categories = apply_search(categories, { q: params[:q], field: params[:field] })
 
     @categories = categories.order(name: :asc)
+  end
+
+  def set_period
+    @period = params[:period] == "ytd" ? :ytd : :monthly
+  end
+
+  def current_period
+    @period || :monthly
   end
 end

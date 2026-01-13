@@ -13,13 +13,6 @@
         <dt class="text-sm font-medium text-gray-500">Period</dt>
         <dd class="text-sm text-gray-900"><%= category.budget.period.capitalize %></dd>
       </div>
-      
-      <div class="py-3 flex justify-between">
-        <dt class="text-sm font-medium text-gray-500">Spending Rate</dt>
-        <dd class="text-sm text-gray-900">
-          <%= number_to_currency(category.calculator.total_amount) %> / <%= category.budget.period.capitalize %>
-        </dd>
-      </div>
     </dl>
     
     <%= link_to edit_budget_path(category.budget), class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" do %>

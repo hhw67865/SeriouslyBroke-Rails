@@ -1,26 +1,32 @@
 <!-- Summary Card -->
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
-  
-  <% calc = category.calculator(selected_date) %>
+
+  <% calc = category.calculator(selected_date, period: current_period) %>
   <% if category.expense? %>
     <!-- Expense Category Summary -->
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500">Monthly Budget</span>
+          <span class="text-gray-500"><%= period_budget_label %></span>
           <span class="font-medium text-gray-900">
-            <%= number_to_currency(calc.total_amount) %> / 
-            <%= category.budget&.amount ? number_to_currency(category.budget.amount) : "N/A" %>
+            <%= number_to_currency(calc.total_amount) %> /
+            <%= calc.effective_budget ? number_to_currency(calc.effective_budget) : "N/A" %>
           </span>
         </div>
-        
-        <% if category.budget&.amount %>
+
+        <% if calc.yearly_budget? %>
+          <p class="text-xs text-gray-400 mb-2">
+            <%= number_to_currency(calc.monthly_budget_rate) %>/mo from <%= number_to_currency(category.budget.amount) %>/yr
+          </p>
+        <% end %>
+
+        <% if calc.effective_budget %>
           <% percentage = calc.budget_percentage %>
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
             <div class="h-3 rounded-full <%= budget_status_color(percentage) %>" style="width: <%= [percentage, 100].min %>%;"></div>
           </div>
-          
+
           <div class="flex justify-between mt-2">
             <p class="text-sm text-gray-500"><%= percentage %>% used</p>
             <p class="text-sm <%= budget_status_color(percentage).gsub("bg-", "text-") %>">
@@ -31,23 +37,32 @@
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
             <div class="bg-gray-300 h-3 rounded w-0"></div>
           </div>
-          
+
           <div class="flex justify-between mt-2">
             <p class="text-sm text-gray-500">No budget set</p>
             <p class="text-sm text-gray-500">Set budget to track spending</p>
           </div>
         <% end %>
       </div>
-      
+
       <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3">Monthly Spending Trend</h3>
+        <h3 class="text-base font-medium mb-3"><%= period_trend_label %> Spending Trend</h3>
         <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <% 
-            chart_data = [
-              { name: "Spending", data: calculate_running_total(category.entries.group_by_day(:date, range: selected_date.beginning_of_month..selected_date.end_of_month).sum(:amount)) }
-            ]
-            if category.budget&.amount
-              chart_data << { name: "Budget", data: budget_line_series(category.budget.amount, selected_date.beginning_of_month..selected_date.end_of_month) }
+          <%
+            if current_period == :ytd
+              chart_data = [
+                { name: "Spending", data: calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount)) }
+              ]
+              if calc.monthly_budget_rate
+                chart_data << { name: "Budget", data: budget_line_series(calc.monthly_budget_rate, calc.date_range, group: :month) }
+              end
+            else
+              chart_data = [
+                { name: "Spending", data: calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount)) }
+              ]
+              if calc.monthly_budget_rate
+                chart_data << { name: "Budget", data: budget_line_series(calc.monthly_budget_rate, calc.date_range) }
+              end
             end
           %>
           <%= line_chart chart_data, curve: false, points: false, colors: ["#3b82f6", "#ef4444"], prefix: "$ " %>
@@ -60,23 +75,30 @@
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500">Monthly Income</span>
+          <span class="text-gray-500"><%= period_amount_label(:income) %></span>
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
-        
-        <div class="flex justify-between mt-4">
-          <span class="text-sm text-gray-500">vs last month</span>
-          <span class="text-sm flex items-center gap-1 <%= calc.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
-            <%= heroicon calc.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-4 w-4" } %>
-            <%= calc.previous_month_change_percentage.abs %>%
-          </span>
-        </div>
+
+        <% if current_period == :monthly %>
+          <div class="flex justify-between mt-4">
+            <span class="text-sm text-gray-500">vs last month</span>
+            <span class="text-sm flex items-center gap-1 <%= calc.previous_month_trend == :up ? "text-status-success" : "text-status-danger" %>">
+              <%= heroicon calc.previous_month_trend == :up ? "arrow-up" : "arrow-down", options: { class: "h-4 w-4" } %>
+              <%= calc.previous_month_change_percentage.abs %>%
+            </span>
+          </div>
+        <% end %>
       </div>
-      
+
       <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3">Income Stability</h3>
+        <h3 class="text-base font-medium mb-3">Income <%= current_period == :ytd ? "This Year" : "Trend" %></h3>
         <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <%= line_chart category.entries.group_by_month(:date, range: (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month).sum(:amount), curve: false, points: false, prefix: "$ " %>
+          <%
+            income_chart_range = current_period == :ytd ?
+              calc.date_range :
+              (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month
+          %>
+          <%= line_chart category.entries.group_by_month(:date, range: income_chart_range).sum(:amount), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -86,7 +108,7 @@
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500">Monthly Contribution</span>
+          <span class="text-gray-500"><%= period_amount_label(:savings) %></span>
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.monthly_contribution) %></span>
         </div>
         
@@ -142,9 +164,14 @@
       </div>
       
       <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3">Savings Progress</h3>
+        <h3 class="text-base font-medium mb-3">Savings <%= current_period == :ytd ? "This Year" : "Progress" %></h3>
         <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <%= line_chart savings_evolution_series(category, (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month), curve: false, points: false, prefix: "$ " %>
+          <%
+            savings_chart_range = current_period == :ytd ?
+              calc.date_range :
+              (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month
+          %>
+          <%= line_chart savings_evolution_series(category, savings_chart_range), curve: false, points: false, prefix: "$ " %>
         </div>
       </div>
     </div>

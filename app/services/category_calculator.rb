@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class CategoryCalculator
-  attr_reader :category, :date_range
+  attr_reader :category, :date_range, :period
 
-  def initialize(category, date = Date.current)
+  def initialize(category, date = Date.current, period: :monthly)
     @category = category
-    @date_range = date.all_month
+    @period = period
+    @date_range = compute_date_range(date)
   end
 
   # Shared methods
@@ -15,8 +16,31 @@ class CategoryCalculator
 
   # Expense methods
   def budget_percentage
-    return 0 unless category.expense? && category.budget&.amount.to_f.positive?
-    (total_amount / category.budget.amount * 100).round
+    return 0 unless category.expense? && effective_budget.to_f.positive?
+    (total_amount / effective_budget * 100).round
+  end
+
+  # Returns the monthly budget rate (yearly budgets are converted to monthly)
+  def monthly_budget_rate
+    return nil unless category.expense? && category.budget&.amount
+
+    if category.budget.year?
+      (category.budget.amount / 12.0).round(2)
+    else
+      category.budget.amount
+    end
+  end
+
+  # Returns true if budget is yearly (for display purposes)
+  def yearly_budget?
+    category.budget&.year?
+  end
+
+  # Returns the effective budget for the current period
+  def effective_budget
+    return nil unless monthly_budget_rate
+
+    period == :ytd ? monthly_budget_rate * months_in_range : monthly_budget_rate
   end
 
   # Income methods
@@ -62,6 +86,21 @@ class CategoryCalculator
   end
 
   private
+
+  def compute_date_range(date)
+    case period
+    when :ytd
+      date.beginning_of_year..date.end_of_month
+    else
+      date.all_month
+    end
+  end
+
+  def months_in_range
+    first_date = date_range.first
+    last_date = date_range.last
+    ((last_date.year - first_date.year) * 12) + (last_date.month - first_date.month) + 1
+  end
 
   def build_item_data(item)
     month_entries = item.entries.where(date: date_range)
