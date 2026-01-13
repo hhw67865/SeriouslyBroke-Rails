@@ -21,6 +21,9 @@ bin/ci                       # Full CI pipeline (style, security, tests, seeds)
 # Database
 rails db:prepare             # Create/migrate database
 rails db:seed:replant        # Reset and re-seed
+
+# Tailwind CSS
+bin/rails tailwindcss:build  # Rebuild CSS (required when adding new utility classes)
 ```
 
 ## Documentation
@@ -62,6 +65,16 @@ This agent should be used proactively after completing significant code changes.
 - Comprehensive design checklist in `/docs/design-standards.md`
 - When making visual (front-end, UI/UX) changes, always refer to this file for guidance
 - Use Tailwind with custom colors from `custom.css` (check available colors before using)
+- **Squared edges**: Use `rounded` not `rounded-lg/xl/2xl` for professional aesthetic
+
+### Tailwind CSS Important Notes
+
+- **Rebuild after adding new classes**: When using Tailwind utility classes that weren't previously in the codebase (e.g., new responsive variants like `sm:hidden`, `sm:flex`), you must rebuild:
+  ```bash
+  bin/rails tailwindcss:build
+  ```
+- If `bin/dev` is running, it watches for changes automatically
+- If styles aren't applying, always check if the CSS needs rebuilding first
 
 ### Quick Visual Check
 
@@ -77,20 +90,28 @@ IMMEDIATELY after implementing any front-end change:
 
 This verification ensures changes meet design standards and user requirements.
 
+### Cleanup After Visual Verification
+
+After completing visual verification with Playwright, clean up screenshots:
+```bash
+rm -f .playwright-mcp/*.png
+```
+This prevents accumulation of temporary screenshot files in the repository.
+
 ### Comprehensive Design Review
 
 Invoke the `design-review` agent for thorough design validation when:
 
 - Completing significant UI/UX features
 - Before finalizing PRs with visual changes
-- Needing comprehensive accessibility and responsiveness testing
+- Needing review of styling consistency and color usage
 
 The design-review agent performs:
-- Multi-viewport testing (desktop 1440px, tablet 768px, mobile 375px)
-- Interaction and user flow verification
-- Accessibility checks (WCAG 2.1 AA compliance)
-- Visual polish assessment (alignment, spacing, typography)
-- Console error checking
+- Review of custom.css color utility usage vs raw Tailwind colors
+- Consistency checks with project styling standards (squared edges, spacing)
+- Responsive layout logic verification
+- Visual hierarchy and typography assessment
+- Identification of styling improvements
 
 ---
 

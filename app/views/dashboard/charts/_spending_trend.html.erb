@@ -1,24 +1,29 @@
 <%# Spending Trend Chart %>
-<div class="bg-white rounded shadow-sm p-6" data-controller="chart--spending-trend">
+<div class="bg-white rounded shadow-sm p-6">
   <div class="flex items-center justify-between mb-6">
     <h3 class="font-semibold text-gray-900">Monthly Spending Trend</h3>
-    <div class="flex bg-gray-100 rounded p-1">
-      <button type="button" 
-              class="px-3 py-1 text-sm font-medium rounded-md"
-              data-chart--spending-trend-target="weekTab">Week</button>
-      <button type="button" 
-              class="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm text-brand"
-              data-chart--spending-trend-target="monthTab">Month</button>
-      <button type="button" 
-              class="px-3 py-1 text-sm font-medium rounded-md"
-              data-chart--spending-trend-target="yearTab">Year</button>
-    </div>
   </div>
 
-  <div class="h-[250px] relative" data-chart--spending-trend-target="container">
-    <%# Chart will be rendered here by JavaScript %>
-    <div class="absolute inset-0 flex items-center justify-center text-gray-500 font-medium italic">
-      Loading spending trend data...
-    </div>
+  <div class="h-[250px]">
+    <%
+      # Get expense entries for the last 6 months
+      expense_data = current_user.entries
+        .joins(item: :category)
+        .where(categories: { category_type: :expense })
+        .where(date: 6.months.ago.beginning_of_month..Date.current.end_of_month)
+        .group_by_month(:date)
+        .sum(:amount)
+    %>
+    <%= line_chart expense_data,
+        curve: false,
+        points: false,
+        colors: ["#C9C78B"],
+        prefix: "$",
+        thousands: ",",
+        height: "250px",
+        library: {
+          legend: { display: false },
+          scales: { y: { beginAtZero: true } }
+        } %>
   </div>
 </div> 

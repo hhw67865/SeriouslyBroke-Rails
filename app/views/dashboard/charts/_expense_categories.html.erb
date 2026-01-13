@@ -2,16 +2,29 @@
 <div class="bg-white rounded shadow-sm p-6">
   <div class="flex items-center justify-between mb-6">
     <h3 class="font-semibold text-gray-900">Expense Categories</h3>
-    <div class="flex bg-gray-100 rounded p-1">
-      <button type="button" class="px-3 py-1 text-sm font-medium rounded-md">Week</button>
-      <button type="button" class="px-3 py-1 text-sm font-medium rounded-md bg-white shadow-sm text-brand">Month</button>
-      <button type="button" class="px-3 py-1 text-sm font-medium rounded-md">Year</button>
-    </div>
   </div>
 
-  <div class="h-[250px] relative">
-    <div class="absolute inset-0 flex items-center justify-center text-gray-500 font-medium italic">
-      Expense categories visualization will appear here
-    </div>
+  <div class="h-[250px]">
+    <%
+      # Get expense breakdown by category for current month
+      category_data = current_user.entries
+        .joins(item: :category)
+        .where(categories: { category_type: :expense })
+        .where(date: Date.current.beginning_of_month..Date.current.end_of_month)
+        .group("categories.name")
+        .sum(:amount)
+    %>
+    <% if category_data.any? %>
+      <%= pie_chart category_data,
+          donut: true,
+          prefix: "$",
+          thousands: ",",
+          height: "250px",
+          legend: "bottom" %>
+    <% else %>
+      <div class="h-full flex items-center justify-center text-gray-500 text-sm">
+        No expense data for this month
+      </div>
+    <% end %>
   </div>
 </div> 

@@ -1,26 +1,34 @@
 <div class="px-4 sm:px-6 lg:px-8 py-6 font-light">
-  <div class="flex items-center justify-between mb-6">
-    <div class="flex items-center gap-3">
+  <%# Header: 2 rows on all screen sizes %>
+  <div class="mb-6">
+    <%# Row 1: Monthly link + Create Entry button %>
+    <div class="flex items-center justify-between mb-4">
       <%= link_to calendar_path(@presenter.month_path_params),
-          class: "inline-flex items-center gap-2 px-3 py-2 rounded border border-gray-300 bg-white text-sm hover:bg-gray-100 shadow-sm transition" do %>
+          class: "inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 hover:underline transition" do %>
         <%= heroicon "arrow-left", options: { class: "w-4 h-4" } %>
         Monthly
       <% end %>
-      <h1 class="text-xl font-medium text-gray-900">Week of <%= @presenter.range_label %></h1>
-    </div>
-    <div class="flex gap-2">
-      <%= link_to calendar_week_path(date: @presenter.prev_week_date),
-          class: "inline-flex items-center px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
-        <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
-      <% end %>
-      <%= link_to calendar_week_path(date: @presenter.next_week_date),
-          class: "inline-flex items-center px-3 py-2 rounded border border-gray-300 bg-white hover:bg-gray-100 shadow-sm transition" do %>
-        <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
-      <% end %>
       <%= link_to new_entry_path,
-          class: "ml-3 inline-flex items-center gap-2 px-3 py-2 rounded bg-brand text-on-dark hover:bg-brand-dark shadow-sm transition" do %>
+          class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
         <%= heroicon "plus", options: { class: "w-4 h-4" } %>
         Create Entry
+      <% end %>
+    </div>
+
+    <%# Row 2: Date with inline navigation (centered) %>
+    <div class="flex items-center justify-center gap-3 sm:gap-4">
+      <%= link_to calendar_week_path(date: @presenter.prev_week_date),
+          class: "text-gray-400 hover:text-gray-600 transition",
+          title: "Previous week" do %>
+        <%= heroicon "chevron-left", options: { class: "w-5 h-5 sm:w-6 sm:h-6" } %>
+      <% end %>
+      <h1 class="text-xl sm:text-2xl font-medium tracking-tight text-gray-900">
+        Week of <%= @presenter.range_label %>
+      </h1>
+      <%= link_to calendar_week_path(date: @presenter.next_week_date),
+          class: "text-gray-400 hover:text-gray-600 transition",
+          title: "Next week" do %>
+        <%= heroicon "chevron-right", options: { class: "w-5 h-5 sm:w-6 sm:h-6" } %>
       <% end %>
     </div>
   </div>

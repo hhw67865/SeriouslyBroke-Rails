@@ -48,7 +48,7 @@ type,
             <% end %>
           </div>
           <% if category.errors[:category_type].any? %>
-            <p class="mt-2 text-sm text-red-600"><%= category.errors[:category_type].first %></p>
+            <p class="mt-2 text-sm text-status-danger"><%= category.errors[:category_type].first %></p>
           <% end %>
         </div>
       </div>
