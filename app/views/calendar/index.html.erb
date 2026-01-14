@@ -12,7 +12,7 @@
   <% end %>
 
   <div class="calendar-weekdays text-xs text-gray-500 mb-1 select-none">
-    <% %w[Sun Mon Tue Wed Thu Fri Sat].each do |dow| %>
+    <% ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].each do |dow| %>
       <div class="py-2 text-center tracking-wide"><%= dow %></div>
     <% end %>
   </div>

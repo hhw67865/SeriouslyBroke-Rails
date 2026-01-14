@@ -1,0 +1,5 @@
+<nav class="flex space-x-8 px-6" aria-label="Tabs">
+  <%= link_to "Expenses", root_path(tab: :expenses), class: tab_classes(:expenses, @tab) %>
+  <%= link_to "Income", root_path(tab: :income), class: tab_classes(:income, @tab) %>
+  <%= link_to "Savings", root_path(tab: :savings), class: tab_classes(:savings, @tab) %>
+</nav>

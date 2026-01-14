@@ -7,7 +7,7 @@
       <p class="text-[#6c757d] mt-1">Record a new financial transaction</p>
     </div>
     
-    <% if @previous_url.present? && @previous_url.include?('calendar') %>
+    <% if @previous_url.present? && @previous_url.include?("calendar") %>
       <%= link_to @previous_url, class: "flex items-center justify-center sm:justify-start text-sm font-medium text-[#6c757d] hover:text-[#2d3436]" do %>
         <%= heroicon "arrow-left", options: { class: "h-4 w-4 mr-1" } %> Back to Weekly View
       <% end %>

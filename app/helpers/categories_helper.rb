@@ -45,6 +45,13 @@ module CategoriesHelper
     end
   end
 
+  # Calculate number of months in a date range (inclusive)
+  def months_in_range(range)
+    first_date = range.first
+    last_date = range.last
+    ((last_date.year - first_date.year) * 12) + (last_date.month - first_date.month) + 1
+  end
+
   def calculate_running_total(data_hash)
     total = 0
     data_hash.each_with_object({}) do |(date, amount), result|

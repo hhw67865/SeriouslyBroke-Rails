@@ -21,7 +21,7 @@ RSpec.describe "Calendar Week - Navigation", type: :system do
     it "navigates to previous week" do
       prev_week_date = test_date - 7
 
-      find("a[href*='#{prev_week_date.strftime('%Y-%m-%d')}']").click
+      find("a[href*='#{prev_week_date.strftime("%Y-%m-%d")}']").click
 
       expect(page).to have_current_path(
         calendar_week_path(date: prev_week_date.strftime("%Y-%m-%d"))
@@ -33,7 +33,7 @@ RSpec.describe "Calendar Week - Navigation", type: :system do
     it "navigates to next week" do
       next_week_date = test_date + 7
 
-      find("a[href*='#{next_week_date.strftime('%Y-%m-%d')}']").click
+      find("a[href*='#{next_week_date.strftime("%Y-%m-%d")}']").click
 
       expect(page).to have_current_path(
         calendar_week_path(date: next_week_date.strftime("%Y-%m-%d"))

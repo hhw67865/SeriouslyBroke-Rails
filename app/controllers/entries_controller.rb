@@ -112,7 +112,7 @@ class EntriesController < ApplicationController
   end
 
   def entry_params
-    params.require(:entry).permit(:amount, :date, :description, :item_id).tap do |permitted_params|
+    params.expect(entry: [:amount, :date, :description, :item_id]).tap do |permitted_params|
       # If item_id is not a valid UUID (e.g. name of new item from TomSelect), treat it as blank
       permitted_params[:item_id] = nil if permitted_params[:item_id].present? && !permitted_params[:item_id].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
 

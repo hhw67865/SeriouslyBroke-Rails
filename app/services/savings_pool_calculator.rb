@@ -28,7 +28,7 @@ class SavingsPoolCalculator
       .joins(item: :category)
       .where(categories: { category_type: :savings })
 
-    query = query.where("entries.date >= ?", savings_pool.start_date) if savings_pool.start_date.present?
+    query = query.where(entries: { date: savings_pool.start_date.. }) if savings_pool.start_date.present?
 
     query.sum(:amount)
   end
@@ -39,7 +39,7 @@ class SavingsPoolCalculator
       .joins(item: :category)
       .where(categories: { category_type: :expense })
 
-    query = query.where("entries.date >= ?", savings_pool.start_date) if savings_pool.start_date.present?
+    query = query.where(entries: { date: savings_pool.start_date.. }) if savings_pool.start_date.present?
 
     query.sum(:amount)
   end

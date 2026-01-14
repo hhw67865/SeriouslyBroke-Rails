@@ -1,0 +1,50 @@
+<% cache [current_user, selected_date, current_period, :income] do %>
+<%# Income Chart: Stacked column by category %>
+<div class="mb-8">
+  <h3 class="text-lg font-medium text-gray-900 mb-4">Income by Category (<%= @presenter.ytd? ? "YTD" : "6 months" %>)</h3>
+  <div class="bg-gray-50 rounded p-4">
+    <% if @presenter.income_chart_data.any? %>
+      <%= column_chart @presenter.income_chart_data,
+          stacked: true,
+          prefix: "$ ",
+          colors: @presenter.income_chart_colors %>
+    <% else %>
+      <p class="text-gray-500 text-center py-8">No income data available</p>
+    <% end %>
+  </div>
+</div>
+
+<%# Summary Stats %>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+  <div class="bg-gray-50 rounded p-4">
+    <p class="text-sm text-gray-500"><%= period_amount_label(:income) %></p>
+    <p class="text-2xl font-semibold text-status-success"><%= number_to_currency(@presenter.total_income) %></p>
+  </div>
+  <% unless @presenter.ytd? %>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500">vs Last Month</p>
+      <% change = @presenter.income_change_percentage %>
+      <p class="text-2xl font-semibold <%= change >= 0 ? "text-status-success" : "text-status-danger" %>">
+        <%= change >= 0 ? "+" : "" %><%= change %>%
+      </p>
+    </div>
+  <% end %>
+</div>
+
+<%# Category Breakdown %>
+<div>
+  <h3 class="text-lg font-medium text-gray-900 mb-4">By Category</h3>
+  <% if @presenter.income_categories_breakdown.any? %>
+    <div class="space-y-3">
+      <% @presenter.income_categories_breakdown.each do |cat| %>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100">
+          <span class="text-gray-700"><%= cat[:name] %></span>
+          <span class="font-medium text-gray-900"><%= number_to_currency(cat[:amount]) %></span>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-gray-500">No income recorded <%= period_time_label %></p>
+  <% end %>
+</div>
+<% end %>

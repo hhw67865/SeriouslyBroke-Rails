@@ -26,17 +26,9 @@
 <div class="container mx-auto px-4 py-6">
   <%= render "categories/_partials/show/category_banner", category: @category %>
 
-  <%# Period Toggle %>
-  <div class="flex gap-2 mb-6">
-    <%= link_to category_path(@category),
-        class: "px-4 py-2 text-sm font-medium rounded #{current_period == :monthly ? 'bg-brand text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}" do %>
-      Monthly
-    <% end %>
-    <%= link_to category_path(@category, period: "ytd"),
-        class: "px-4 py-2 text-sm font-medium rounded #{current_period == :ytd ? "bg-brand text-white" : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}" do %>
-      Year to Date
-    <% end %>
-  </div>
+  <%= render "shared/period_toggle",
+      monthly_path: category_path(@category),
+      ytd_path: category_path(@category, period: "ytd") %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <% cache [@category, selected_date, current_period] do %>

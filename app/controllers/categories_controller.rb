@@ -2,12 +2,10 @@
 
 class CategoriesController < ApplicationController
   include Searchable
+  include PeriodContext
 
   before_action :set_category, only: [:show, :edit, :update, :destroy]
   before_action :set_categories, only: [:index]
-  before_action :set_period, only: [:show]
-
-  helper_method :current_period
 
   # GET /categories
   def index
@@ -82,13 +80,5 @@ class CategoriesController < ApplicationController
     categories = apply_search(categories, { q: params[:q], field: params[:field] })
 
     @categories = categories.order(name: :asc)
-  end
-
-  def set_period
-    @period = params[:period] == "ytd" ? :ytd : :monthly
-  end
-
-  def current_period
-    @period || :monthly
   end
 end

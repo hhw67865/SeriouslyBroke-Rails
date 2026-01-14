@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class CategoryCalculator
+  include CategoriesHelper
+
   attr_reader :category, :date_range, :period
 
   def initialize(category, date = Date.current, period: :monthly)
@@ -40,7 +42,7 @@ class CategoryCalculator
   def effective_budget
     return nil unless monthly_budget_rate
 
-    period == :ytd ? monthly_budget_rate * months_in_range : monthly_budget_rate
+    period == :ytd ? monthly_budget_rate * months_in_range(date_range) : monthly_budget_rate
   end
 
   # Income methods
@@ -94,12 +96,6 @@ class CategoryCalculator
     else
       date.all_month
     end
-  end
-
-  def months_in_range
-    first_date = date_range.first
-    last_date = date_range.last
-    ((last_date.year - first_date.year) * 12) + (last_date.month - first_date.month) + 1
   end
 
   def build_item_data(item)

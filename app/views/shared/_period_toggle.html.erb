@@ -1,0 +1,12 @@
+<%# Period Toggle - Shared partial for monthly/YTD switching %>
+<%# Required locals: monthly_path, ytd_path %>
+<div class="flex gap-2 mb-6">
+  <%= link_to monthly_path,
+      class: "px-4 py-2 text-sm font-medium rounded #{current_period == :monthly ? "bg-brand text-white" : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}" do %>
+    Monthly
+  <% end %>
+  <%= link_to ytd_path,
+      class: "px-4 py-2 text-sm font-medium rounded #{current_period == :ytd ? "bg-brand text-white" : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}" do %>
+    Year to Date
+  <% end %>
+</div>

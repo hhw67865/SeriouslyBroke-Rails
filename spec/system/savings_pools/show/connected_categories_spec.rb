@@ -4,6 +4,7 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
   include ActiveSupport::Testing::TimeHelpers
+
   let(:user) { create(:user) }
   let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
 

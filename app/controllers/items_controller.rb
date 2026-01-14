@@ -11,7 +11,7 @@ class ItemsController < ApplicationController
     if @item.update(item_params)
       redirect_to category_path(@item.category), notice: "Item was successfully updated."
     else
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 
@@ -29,6 +29,6 @@ class ItemsController < ApplicationController
   end
 
   def item_params
-    params.require(:item).permit(:name, :description, :frequency, :category_id)
+    params.expect(item: [:name, :description, :frequency, :category_id])
   end
 end

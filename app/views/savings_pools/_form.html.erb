@@ -99,7 +99,8 @@
 
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
-      <%= link_to "Cancel", savings_pools_path,
+      <%= link_to "Cancel", 
+savings_pools_path,
           class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
 
       <%= f.submit savings_pool.persisted? ? "Update Savings Pool" : "Create Savings Pool",

@@ -14,7 +14,7 @@ RSpec.describe "Calendar Index - Grid", type: :system do
     before { visit calendar_path }
 
     it "shows all seven days of the week" do
-      %w[Sun Mon Tue Wed Thu Fri Sat].each do |day|
+      ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].each do |day|
         expect(page).to have_content(day)
       end
     end

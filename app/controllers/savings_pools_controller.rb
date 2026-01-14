@@ -41,7 +41,7 @@ class SavingsPoolsController < ApplicationController
     if @savings_pool.save
       redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully created."
     else
-      render :new, status: :unprocessable_entity
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -50,7 +50,7 @@ class SavingsPoolsController < ApplicationController
     if @savings_pool.update(savings_pool_params)
       redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully updated."
     else
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 
@@ -96,6 +96,6 @@ class SavingsPoolsController < ApplicationController
   end
 
   def savings_pool_params
-    params.require(:savings_pool).permit(:name, :target_amount, :start_date)
+    params.expect(savings_pool: [:name, :target_amount, :start_date])
   end
 end

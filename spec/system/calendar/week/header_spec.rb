@@ -32,7 +32,7 @@ RSpec.describe "Calendar Week - Header", type: :system do
       click_link "Monthly"
 
       # Navigation goes to /calendar with optional month/year params
-      expect(page).to have_current_path(/\/calendar/)
+      expect(page).to have_current_path(%r{/calendar})
       expect(page).to have_content(test_date.strftime("%B %Y"))
     end
   end

@@ -19,7 +19,7 @@ class BudgetsController < ApplicationController
     if @budget.save
       redirect_to category_path(@budget.category), notice: "Budget was successfully created."
     else
-      render :new, status: :unprocessable_entity
+      render :new, status: :unprocessable_content
     end
   end
 
@@ -28,7 +28,7 @@ class BudgetsController < ApplicationController
     if @budget.update(budget_params)
       redirect_to category_path(@budget.category), notice: "Budget was successfully updated."
     else
-      render :edit, status: :unprocessable_entity
+      render :edit, status: :unprocessable_content
     end
   end
 
@@ -50,6 +50,6 @@ class BudgetsController < ApplicationController
   end
 
   def budget_params
-    params.require(:budget).permit(:amount, :period, :category_id)
+    params.expect(budget: [:amount, :period, :category_id])
   end
 end

@@ -1,3 +1,31 @@
-<div class="min-h-screen bg-gray-50 p-6">
-  <h1 class="text-2xl font-semibold text-gray-900">Dashboard</h1>
+<% content_for :title, "Dashboard" %>
+
+<div class="w-full">
+  <%= page_header(
+      title: "Dashboard",
+      subtitle: format_month_year
+  ) %>
+
+  <%# Tab Navigation with Content %>
+  <div class="bg-white rounded shadow-sm border border-gray-200">
+    <div class="border-b border-gray-200">
+      <%= render "tabs" %>
+    </div>
+
+    <%# Tab Content %>
+    <div class="p-6">
+      <%= render "shared/period_toggle",
+          monthly_path: root_path(tab: @tab),
+          ytd_path: root_path(tab: @tab, period: "ytd") %>
+
+      <% case @tab %>
+      <% when :expenses %>
+        <%= render "expenses_tab" %>
+      <% when :income %>
+        <%= render "income_tab" %>
+      <% when :savings %>
+        <%= render "savings_tab" %>
+      <% end %>
+    </div>
+  </div>
 </div>

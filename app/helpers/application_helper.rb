@@ -79,6 +79,15 @@ module ApplicationHelper
     selected_month == Date.current.month && selected_year == Date.current.year
   end
 
+  def tab_classes(tab_name, current_tab)
+    base = "py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200"
+    if tab_name == current_tab
+      "#{base} border-brand text-brand"
+    else
+      "#{base} border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+    end
+  end
+
   def format_month_year(month: nil, year: nil)
     month ||= selected_month
     year ||= selected_year
