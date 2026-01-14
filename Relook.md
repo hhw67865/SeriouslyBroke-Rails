@@ -1,17 +1,7 @@
-## Relook
-
-- Graphs
-    - Not optimized
-    - Not Tested
-    - Category show graphs.
-
-
-
 
 ## TODO
 
 - Total income view graph
-- YTD view of category
 - Items per category page.
 - Category type shown in entries creation
 - Clicking on items within category show will instead show the entries
