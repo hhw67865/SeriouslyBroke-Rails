@@ -90,6 +90,12 @@ IMMEDIATELY after implementing any front-end change:
 
 This verification ensures changes meet design standards and user requirements.
 
+### Playwright Login Credentials
+
+When accessing the website through Playwright, use these credentials:
+- **Email**: `demo@example.com`
+- **Password**: `password123`
+
 ### Cleanup After Visual Verification
 
 After completing visual verification with Playwright, clean up screenshots:
