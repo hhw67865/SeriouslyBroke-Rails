@@ -85,8 +85,8 @@ module CategoriesHelper
     # Calculate total savings before the start of the range
     initial_balance = category.entries.where(date: ...range.begin).sum(:amount)
 
-    # Get monthly sums within the range (sorted chronologically)
-    monthly_data = category.entries.group_by_month(:date, range: range).sum(:amount).sort.to_h
+    # Get monthly sums within the range (Groupdate handles ordering with range option)
+    monthly_data = category.entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
 
     # Accumulate
     current_total = initial_balance
