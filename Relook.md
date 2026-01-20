@@ -1,6 +1,7 @@
 
 ## TODO
 
+- Jan 15 savings did show on moonthly, are we calculating this basede on current time or the end of month? ideally end of month.
 - Items per category page.
 - Category type shown in entries creation
 - Clicking on items within category show will instead show the entries

@@ -24,6 +24,26 @@ RSpec.describe Category, type: :model do
         expect(budget.errors[:category]).to include("must be an expense category")
       end
     end
+
+    context "when changing category_type from expense to non-expense" do
+      let(:category) { create(:category, :expense) }
+      let!(:budget) { create(:budget, category: category) }
+
+      it "destroys the budget when changing to income" do
+        category.update!(category_type: :income)
+        expect(Budget.exists?(budget.id)).to be false
+      end
+
+      it "destroys the budget when changing to savings" do
+        category.update!(category_type: :savings)
+        expect(Budget.exists?(budget.id)).to be false
+      end
+
+      it "keeps the budget when remaining as expense" do
+        category.update!(name: "Updated Name")
+        expect(Budget.exists?(budget.id)).to be true
+      end
+    end
   end
 
   describe "enums" do

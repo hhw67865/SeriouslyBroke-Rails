@@ -22,6 +22,8 @@ class Category < ApplicationRecord
          savings: 2
        }
 
+  before_validation :destroy_budget_if_not_expense
+
   validate :budget_only_for_expense
 
   # Basic scopes
@@ -49,6 +51,13 @@ class Category < ApplicationRecord
   end
 
   private
+
+  def destroy_budget_if_not_expense
+    return unless category_type_changed? && !expense? && budget
+
+    budget.destroy
+    self.budget = nil
+  end
 
   def budget_only_for_expense
     errors.add(:budget, "can only be set for expense categories") if budget.present? && !expense?
