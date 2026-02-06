@@ -63,6 +63,34 @@ RSpec.describe "Entries Forms", type: :system do
       it "starts with no category selected" do
         expect(page).to have_select("category_id", selected: "Select a category")
       end
+
+      it "groups categories by type" do
+        create(:category, user: user, name: "Vacation Fund", category_type: :savings)
+
+        visit new_entry_path
+        find("#category_id-ts-control").click
+
+        within("#category_id-ts-dropdown") do
+          expect(page).to have_css(".optgroup-header", text: /expenses/i)
+          expect(page).to have_css(".optgroup-header", text: /incomes/i)
+          expect(page).to have_css(".optgroup-header", text: /savings/i)
+        end
+      end
+
+      it "shows categories under correct group headers" do
+        visit new_entry_path
+        find("#category_id-ts-control").click
+
+        within("#category_id-ts-dropdown") do
+          # Food should be under Expenses group
+          expenses_group = find(".optgroup", text: /expenses/i)
+          expect(expenses_group).to have_content("Food")
+
+          # Salary should be under Incomes group
+          incomes_group = find(".optgroup", text: /incomes/i)
+          expect(incomes_group).to have_content("Salary")
+        end
+      end
     end
 
     describe "category and item interaction", :aggregate_failures do
@@ -127,6 +155,26 @@ RSpec.describe "Entries Forms", type: :system do
 
         expect(page).to have_current_path(new_entry_path)
         expect(page).to have_content("can't be blank")
+      end
+
+      it "shows error when category is not selected" do
+        fill_in "Amount", with: "50.00"
+        click_button "Create Entry"
+
+        expect(page).to have_content("must be selected")
+      end
+
+      it "shows error when item name is not selected" do
+        select_category("Food")
+        fill_in "Amount", with: "50.00"
+        click_button "Create Entry"
+
+        expect(page).to have_content("must be selected")
+      end
+
+      it "shows required indicators on category and name fields" do
+        expect(page).to have_css("label", text: "* Category")
+        expect(page).to have_css("label", text: "* Name")
       end
     end
 

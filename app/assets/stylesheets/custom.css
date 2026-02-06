@@ -116,4 +116,21 @@
 
 /* Additional Brand Utilities for Landing Pages */
 .hover\:bg-brand\/10:hover { background-color: rgba(201, 199, 139, 0.1); }
-.border-brand-dark { border-color: var(--color-primary-dark); } 
+.border-brand-dark { border-color: var(--color-primary-dark); }
+
+/* TomSelect Optgroup Headers */
+.ts-dropdown .optgroup-header {
+  background-color: var(--color-gray-100);
+  color: var(--color-gray-600);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.75rem;
+  cursor: default;
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.ts-dropdown .optgroup .option {
+  padding-left: 1.25rem;
+}

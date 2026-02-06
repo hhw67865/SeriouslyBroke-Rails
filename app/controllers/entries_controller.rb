@@ -108,7 +108,7 @@ class EntriesController < ApplicationController
   end
 
   def load_options
-    @categories = current_user.categories.order(:name)
+    @categories = current_user.categories.order(:category_type, :name)
   end
 
   def entry_params

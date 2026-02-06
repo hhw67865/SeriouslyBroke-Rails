@@ -14,30 +14,43 @@
           <% end %>
 
           <div class="form-group">
-            <label for="category_id" class="form-label">Category</label>
+            <label for="category_id" class="form-label">
+              <abbr title="required">*</abbr> Category
+            </label>
             <%= select_tag :category_id,
-                options_from_collection_for_select(@categories, :id, :name, entry.item&.category_id),
+                grouped_options_for_select(
+                  @categories.group_by(&:category_type).transform_keys { |type| type.to_s.pluralize.titleize }.transform_values { |cats| cats.map { |c| [c.name, c.id] } },
+                  entry.item&.category_id
+                ),
                 prompt: "Select a category",
                 data: {
                   app__entry__form_target: "categorySelect"
                 },
-                class: "form-select" %>
+                class: "form-select #{entry.errors[:item].any? && entry.item&.category_id.blank? ? 'border-red-500' : ''}" %>
+            <% if entry.errors[:item].any? && entry.item&.category_id.blank? %>
+              <p class="mt-2 text-sm text-red-600">must be selected</p>
+            <% end %>
           </div>
 
           <div class="form-group">
-            <label for="entry_item_id" class="form-label">Name</label>
+            <label for="entry_item_id" class="form-label">
+              <abbr title="required">*</abbr> Name
+            </label>
             <%= f.select :item_id,
                 options_from_collection_for_select(
-                  entry.persisted? ? entry.item.category.items : [], 
-                  :id, 
-                  :name, 
+                  entry.persisted? ? entry.item.category.items : [],
+                  :id,
+                  :name,
                   entry.item_id
                 ),
                 { prompt: "Choose a Category first" },
-                { 
+                {
                   data: { app__entry__form_target: "itemSelect" },
-                  class: "form-select"
+                  class: "form-select #{entry.errors[:item].any? ? 'border-red-500' : ''}"
                 } %>
+            <% if entry.errors[:item].any? %>
+              <p class="mt-2 text-sm text-red-600">must be selected</p>
+            <% end %>
           </div>
         </div>
 
