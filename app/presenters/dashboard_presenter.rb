@@ -44,18 +44,18 @@ class DashboardPresenter
       return {} if total_expenses.zero?
 
       if ytd?
-        monthly_totals = expense_entries.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
+        monthly_totals = @user.entries.expenses.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
         data = calculate_running_total(monthly_totals)
         data.transform_keys { |d| d.strftime("%b %Y") }
       else
-        daily_totals = expense_entries.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+        daily_totals = @user.entries.expenses.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
         calculate_running_total(daily_totals)
       end
     end
   end
 
   def total_expenses
-    @total_expenses ||= expense_entries.where(date: period_range).sum(:amount)
+    @total_expenses ||= @user.entries.expenses.where(date: period_range).sum(:amount)
   end
 
   def expense_categories_breakdown
@@ -101,7 +101,7 @@ class DashboardPresenter
   end
 
   def total_income
-    @total_income ||= income_entries.where(date: period_range).sum(:amount)
+    @total_income ||= @user.entries.incomes.where(date: period_range).sum(:amount)
   end
 
   def income_categories_breakdown
@@ -126,13 +126,13 @@ class DashboardPresenter
   def savings_chart_data
     @savings_chart_data ||= begin
       range = ytd? ? period_range : six_month_range
-      initial_balance = savings_entries.where(date: ...range.begin).sum(:amount)
-      period_contributions = savings_entries.where(date: range).sum(:amount)
+      initial_balance = @user.entries.savings.where(date: ...range.begin).sum(:amount)
+      period_contributions = @user.entries.savings.where(date: range).sum(:amount)
 
       # Return empty if no balance and no contributions
       return {} if initial_balance.zero? && period_contributions.zero?
 
-      monthly_data = savings_entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
+      monthly_data = @user.entries.savings.group_by_month(:date, range: range, default_value: 0).sum(:amount)
 
       current_total = initial_balance
       monthly_data.each_with_object({}) do |(d, amount), result|
@@ -143,11 +143,11 @@ class DashboardPresenter
   end
 
   def total_savings_contribution
-    @total_savings_contribution ||= savings_entries.where(date: period_range).sum(:amount)
+    @total_savings_contribution ||= @user.entries.savings.where(date: period_range).sum(:amount)
   end
 
   def total_savings_balance
-    @total_savings_balance ||= savings_entries.sum(:amount)
+    @total_savings_balance ||= @user.entries.savings.sum(:amount)
   end
 
   def savings_categories_breakdown
@@ -178,18 +178,6 @@ class DashboardPresenter
     @savings_categories ||= @user.categories.savings.includes(items: :entries)
   end
 
-  def expense_entries
-    Entry.joins(item: :category).where(categories: { user_id: @user.id, category_type: :expense })
-  end
-
-  def income_entries
-    Entry.joins(item: :category).where(categories: { user_id: @user.id, category_type: :income })
-  end
-
-  def savings_entries
-    Entry.joins(item: :category).where(categories: { user_id: @user.id, category_type: :savings })
-  end
-
   def period_range
     @period_range ||= ytd? ? ytd_range : month_range
   end
@@ -216,7 +204,7 @@ class DashboardPresenter
 
   def calculate_income_change
     current = total_income
-    previous = income_entries.where(date: previous_month_range).sum(:amount)
+    previous = @user.entries.incomes.where(date: previous_month_range).sum(:amount)
     return 0 if previous.zero?
 
     ((current - previous) / previous.to_f * 100).round
