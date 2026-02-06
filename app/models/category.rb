@@ -3,7 +3,7 @@
 class Category < ApplicationRecord
   include ModelSearchable
 
-  belongs_to :user
+  belongs_to :user, touch: true
   belongs_to :savings_pool, optional: true, touch: true
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
