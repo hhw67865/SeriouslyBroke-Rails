@@ -29,8 +29,8 @@
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Budget</span>
             <span class="font-medium text-gray-900">
-              <%= number_to_currency(calc.total_amount) %> / 
-              <%= category.budget&.amount ? number_to_currency(category.budget.amount) : "N/A" %>
+              <%= number_to_currency(calc.total_amount) %> /
+              <%= calc.monthly_budget_rate ? number_to_currency(calc.monthly_budget_rate) : "N/A" %>
             </span>
           </div>
           

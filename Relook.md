@@ -2,9 +2,6 @@
 ## TODO
 
 - Items per category page.
-- category budget shown ono card needs to account for yearly or monthly
-- Clicking on items within category show will instead show the entries
-- Budget Management section needs to be based on selected month
 - Statistics should be yearly only
 - Need a place to show all items of a category. prob category/id/items
 - Move items between categories

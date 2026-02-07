@@ -26,7 +26,7 @@
                 data: {
                   app__entry__form_target: "categorySelect"
                 },
-                class: "form-select #{entry.errors[:item].any? && entry.item&.category_id.blank? ? 'border-red-500' : ''}" %>
+                class: "form-select #{"border-red-500" if entry.errors[:item].any? && entry.item&.category_id.blank?}" %>
             <% if entry.errors[:item].any? && entry.item&.category_id.blank? %>
               <p class="mt-2 text-sm text-red-600">must be selected</p>
             <% end %>
@@ -46,7 +46,7 @@
                 { prompt: "Choose a Category first" },
                 {
                   data: { app__entry__form_target: "itemSelect" },
-                  class: "form-select #{entry.errors[:item].any? ? 'border-red-500' : ''}"
+                  class: "form-select #{"border-red-500" if entry.errors[:item].any?}"
                 } %>
             <% if entry.errors[:item].any? %>
               <p class="mt-2 text-sm text-red-600">must be selected</p>

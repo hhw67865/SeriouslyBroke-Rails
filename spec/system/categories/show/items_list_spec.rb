@@ -42,19 +42,42 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
       expect(page).to have_content("-#{ActionController::Base.helpers.number_to_currency(100)}")
     end
 
-    it "Edit and View links work for items" do
-      # Click Edit within Groceries row, not the page header Edit
+    it "Edit link works for items" do
       within(find("tr", text: "Groceries")) do
         click_link "Edit"
       end
       expect(page).to have_current_path(edit_item_path(groceries_item))
+    end
 
-      # Go back and test View within Groceries row
-      visit category_path(category)
-      within(find("tr", text: "Groceries")) do
-        click_link "View"
+    it "View button toggles inline entries and shows correct data" do
+      expect(page).not_to have_css("[data-shared--toggle-target='content']:not(.hidden)")
+
+      within(find("tbody", text: "Groceries")) do
+        click_button "View"
+
+        # Verify entry data is displayed
+        expect(page).to have_content((base_date + 2.days).strftime("%b %d, %Y"))
+        expect(page).to have_content(ActionController::Base.helpers.number_to_currency(100))
+
+        click_button "Hide"
       end
-      expect(page).to have_current_path(entries_path(field: "item", q: groceries_item.name))
+
+      expect(page).not_to have_css("[data-shared--toggle-target='content']:not(.hidden)")
+    end
+
+    it "shows entries scoped to the correct item" do
+      within(find("tbody", text: "Groceries")) { click_button "View" }
+      within(find("tbody", text: "Dining")) { click_button "View" }
+
+      # Groceries entry details
+      groceries_row = find("tbody", text: "Groceries")
+      expect(groceries_row).to have_content((base_date + 2.days).strftime("%b %d, %Y"))
+      expect(groceries_row).to have_content(ActionController::Base.helpers.number_to_currency(100))
+
+      # Dining entry details
+      dining_row = find("tbody", text: "Dining")
+      expect(dining_row).to have_content((base_date + 10.days).strftime("%b %d, %Y"))
+      expect(dining_row).to have_content(ActionController::Base.helpers.number_to_currency(50))
     end
   end
 

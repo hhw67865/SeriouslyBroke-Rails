@@ -34,14 +34,15 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     end
   end
 
-  describe "category display" do
-    let!(:savings_category) { create(:category, name: "Monthly Savings", category_type: "savings", user: user) }
-    let!(:expense_category) { create(:category, name: "Vacation Expenses", category_type: "expense", user: user) }
-    let!(:income_category) { create(:category, name: "Salary", category_type: "income", user: user) }
+  describe "category display", :aggregate_failures do
+    before do
+      create(:category, name: "Monthly Savings", category_type: "savings", user: user)
+      create(:category, name: "Vacation Expenses", category_type: "expense", user: user)
+      create(:category, name: "Salary", category_type: "income", user: user)
+      visit categories_savings_pool_path(savings_pool)
+    end
 
-    before { visit categories_savings_pool_path(savings_pool) }
-
-    it "shows savings and expense categories separated", :aggregate_failures do
+    it "shows savings and expense categories separated" do
       expect(page).to have_content("Savings Categories (1)")
       expect(page).to have_content("Expense Categories (1)")
       expect(page).to have_content("Monthly Savings")
@@ -53,13 +54,13 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       expect(page).not_to have_content("Income Categories")
     end
 
-    it "shows available status for unconnected categories", :aggregate_failures do
+    it "shows available status for unconnected categories" do
       within(:xpath, "//label[contains(., 'Monthly Savings')]") do
         expect(page).to have_content("Available to connect")
       end
     end
 
-    it "displays monthly amount for each category", :aggregate_failures do
+    it "displays monthly amount for each category" do
       expect(page).to have_content("this month", minimum: 1)
     end
   end
@@ -71,42 +72,30 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     before { visit categories_savings_pool_path(savings_pool) }
 
     it "connects a single savings category", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Monthly Savings')]") do
-        find("input[type='checkbox']").check
-      end
+      check_category("Monthly Savings")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
       expect(page).to have_current_path(savings_pool_path(savings_pool))
-      savings_category.reload
-      expect(savings_category.savings_pool).to eq(savings_pool)
+      expect(savings_category.reload.savings_pool).to eq(savings_pool)
     end
 
     it "connects a single expense category", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Vacation Expenses')]") do
-        find("input[type='checkbox']").check
-      end
+      check_category("Vacation Expenses")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expense_category.reload
-      expect(expense_category.savings_pool).to eq(savings_pool)
+      expect(expense_category.reload.savings_pool).to eq(savings_pool)
     end
 
     it "connects multiple categories at once", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Monthly Savings')]") do
-        find("input[type='checkbox']").check
-      end
-      within(:xpath, "//label[contains(., 'Vacation Expenses')]") do
-        find("input[type='checkbox']").check
-      end
+      check_category("Monthly Savings")
+      check_category("Vacation Expenses")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      savings_category.reload
-      expense_category.reload
-      expect(savings_category.savings_pool).to eq(savings_pool)
-      expect(expense_category.savings_pool).to eq(savings_pool)
+      expect(savings_category.reload.savings_pool).to eq(savings_pool)
+      expect(expense_category.reload.savings_pool).to eq(savings_pool)
     end
   end
 
@@ -127,27 +116,18 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     before { visit categories_savings_pool_path(savings_pool) }
 
     it "shows connected status for connected categories", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Connected Savings')]") do
-        expect(page).to have_content("Connected")
-        expect(find("input[type='checkbox']")).to be_checked
-      end
+      expect(category_label("Connected Savings")).to have_content("Connected")
+      expect(category_checkbox("Connected Savings")).to be_checked
     end
 
     it "disconnects a category by connecting a different one", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Connected Savings')]") do
-        find("input[type='checkbox']").uncheck
-      end
-      within(:xpath, "//label[contains(., 'Other Savings')]") do
-        find("input[type='checkbox']").check
-      end
-
+      uncheck_category("Connected Savings")
+      check_category("Other Savings")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      connected_savings.reload
-      other_savings.reload
-      expect(connected_savings.savings_pool).to be_nil
-      expect(other_savings.savings_pool).to eq(savings_pool)
+      expect(connected_savings.reload.savings_pool).to be_nil
+      expect(other_savings.reload.savings_pool).to eq(savings_pool)
     end
   end
 
@@ -166,21 +146,16 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     before { visit categories_savings_pool_path(savings_pool) }
 
     it "shows conflict warning for categories connected to other pools", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Conflicting Category')]") do
-        expect(page).to have_content("Connected to Other Pool")
-      end
+      expect(category_label("Conflicting Category")).to have_content("Connected to Other Pool")
     end
 
     it "allows reassigning category from one pool to another", :aggregate_failures do
-      within(:xpath, "//label[contains(., 'Conflicting Category')]") do
-        find("input[type='checkbox']").check
-      end
+      check_category("Conflicting Category")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
       expect(page).to have_current_path(savings_pool_path(savings_pool))
-      conflicting_category.reload
-      expect(conflicting_category.savings_pool).to eq(savings_pool)
+      expect(conflicting_category.reload.savings_pool).to eq(savings_pool)
     end
   end
 
@@ -191,5 +166,23 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       click_link "Cancel"
       expect(page).to have_current_path(savings_pool_path(savings_pool))
     end
+  end
+
+  private
+
+  def category_label(name)
+    find(:xpath, "//label[contains(., '#{name}')]")
+  end
+
+  def category_checkbox(name)
+    category_label(name).find("input[type='checkbox']")
+  end
+
+  def check_category(name)
+    category_checkbox(name).check
+  end
+
+  def uncheck_category(name)
+    category_checkbox(name).uncheck
   end
 end

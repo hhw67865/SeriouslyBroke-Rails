@@ -40,18 +40,7 @@ class DashboardPresenter
   # === Expenses Tab ===
 
   def expenses_chart_data
-    @expenses_chart_data ||= begin
-      return {} if total_expenses.zero?
-
-      if ytd?
-        monthly_totals = @user.entries.expenses.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
-        data = calculate_running_total(monthly_totals)
-        data.transform_keys { |d| d.strftime("%b %Y") }
-      else
-        daily_totals = @user.entries.expenses.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
-        calculate_running_total(daily_totals)
-      end
-    end
+    @expenses_chart_data ||= compute_expenses_chart_data
   end
 
   def total_expenses
@@ -90,14 +79,7 @@ class DashboardPresenter
   # === Income Tab ===
 
   def income_chart_data
-    @income_chart_data ||= begin
-      range = ytd? ? period_range : six_month_range
-      income_categories.map do |category|
-        monthly_data = category.entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
-        formatted_data = monthly_data.transform_keys { |d| d.strftime("%b %Y") }
-        { name: category.name, data: formatted_data }
-      end.reject { |series| series[:data].values.all?(&:zero?) }
-    end
+    @income_chart_data ||= compute_income_chart_data
   end
 
   def total_income
@@ -124,22 +106,7 @@ class DashboardPresenter
   # === Savings Tab ===
 
   def savings_chart_data
-    @savings_chart_data ||= begin
-      range = ytd? ? period_range : six_month_range
-      initial_balance = @user.entries.savings.where(date: ...range.begin).sum(:amount)
-      period_contributions = @user.entries.savings.where(date: range).sum(:amount)
-
-      # Return empty if no balance and no contributions
-      return {} if initial_balance.zero? && period_contributions.zero?
-
-      monthly_data = @user.entries.savings.group_by_month(:date, range: range, default_value: 0).sum(:amount)
-
-      current_total = initial_balance
-      monthly_data.each_with_object({}) do |(d, amount), result|
-        current_total += amount
-        result[d.strftime("%b %Y")] = current_total
-      end
-    end
+    @savings_chart_data ||= compute_savings_chart_data
   end
 
   def total_savings_contribution
@@ -151,13 +118,7 @@ class DashboardPresenter
   end
 
   def savings_categories_breakdown
-    @savings_categories_breakdown ||= savings_categories.map do |category|
-      {
-        name: category.name,
-        amount: category.calculator(@date, period: period).total_amount,
-        balance: category.entries.sum(:amount)
-      }
-    end.sort_by { |c| -c[:amount] }
+    @savings_categories_breakdown ||= build_savings_breakdown
   end
 
   def savings_chart_colors
@@ -208,5 +169,71 @@ class DashboardPresenter
     return 0 if previous.zero?
 
     ((current - previous) / previous.to_f * 100).round
+  end
+
+  def compute_expenses_chart_data
+    return {} if total_expenses.zero?
+
+    ytd? ? ytd_expenses_data : monthly_expenses_data
+  end
+
+  def ytd_expenses_data
+    totals = expenses_scope.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
+    calculate_running_total(totals).transform_keys { |d| d.strftime("%b %Y") }
+  end
+
+  def monthly_expenses_data
+    totals = expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+    calculate_running_total(totals)
+  end
+
+  def expenses_scope
+    @user.entries.expenses
+  end
+
+  def compute_income_chart_data
+    range = ytd? ? period_range : six_month_range
+    series = income_categories.map do |category|
+      monthly_data = category.entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
+      { name: category.name, data: monthly_data.transform_keys { |d| d.strftime("%b %Y") } }
+    end
+    series.reject { |s| s[:data].values.all?(&:zero?) }
+  end
+
+  def compute_savings_chart_data
+    range = savings_chart_range
+    initial = savings_scope.where(date: ...range.begin).sum(:amount)
+    contributions = savings_scope.where(date: range).sum(:amount)
+    return {} if initial.zero? && contributions.zero?
+
+    build_savings_running_total(range, initial)
+  end
+
+  def savings_chart_range
+    ytd? ? period_range : six_month_range
+  end
+
+  def savings_scope
+    @user.entries.savings
+  end
+
+  def build_savings_running_total(range, initial_balance)
+    monthly_data = savings_scope.group_by_month(:date, range: range, default_value: 0).sum(:amount)
+    current_total = initial_balance
+    monthly_data.each_with_object({}) do |(d, amount), result|
+      current_total += amount
+      result[d.strftime("%b %Y")] = current_total
+    end
+  end
+
+  def build_savings_breakdown
+    breakdown = savings_categories.map do |category|
+      {
+        name: category.name,
+        amount: category.calculator(@date, period: period).total_amount,
+        balance: category.entries.sum(:amount)
+      }
+    end
+    breakdown.sort_by { |c| -c[:amount] }
   end
 end

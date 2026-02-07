@@ -122,6 +122,17 @@ Every new line must be justified. Prefer extending existing methods over creatin
 - Respect RESTful routing conventions
 - Use Rails' form helpers, not custom form building
 
+### Simplicity-First Frontend
+
+Prefer the simplest solution that works. Escalate complexity only when truly needed:
+
+1. **Pure HTML first** - Use semantic HTML elements (`<details>/<summary>` for toggles, `<dialog>` for modals, etc.)
+2. **CSS next** - Many interactions can be CSS-only (`:hover`, `:focus`, transitions)
+3. **Turbo Frames/Streams** - For server-rendered partial updates without full page reloads
+4. **Stimulus** - Only when client-side state or DOM manipulation is unavoidable
+
+Never reach for Stimulus or JavaScript when HTML or CSS can solve the problem. The goal is maintainable, accessible, progressively-enhanced interfaces.
+
 ## Code Organization Guidelines
 
 ### File & Method Sizing

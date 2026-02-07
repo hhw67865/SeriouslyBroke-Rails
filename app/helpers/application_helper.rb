@@ -39,27 +39,19 @@ module ApplicationHelper
            actions: actions
   end
 
-  def standard_action_button(label:, url:, icon: nil, style: :primary, method: nil, confirm: nil)
+  def standard_action_button(label:, url:, **options)
+    style = options[:style] || :primary
     classes = case style
-              when :primary
-                primary_button_classes
-              when :secondary
-                secondary_button_classes
-              when :danger
-                danger_button_classes
-              else
-                style.to_s
+              when :primary then primary_button_classes
+              when :secondary then secondary_button_classes
+              when :danger then danger_button_classes
+              else style.to_s
               end
 
-    result = {
-      label: label,
-      url: url,
-      icon: icon,
-      class: classes
-    }
-    result[:method] = method if method
-    result[:confirm] = confirm if confirm
-    result
+    { label: label, url: url, icon: options[:icon], class: classes }.tap do |result|
+      result[:method] = options[:method] if options[:method]
+      result[:confirm] = options[:confirm] if options[:confirm]
+    end
   end
 
   def breadcrumb_trail(*crumbs)

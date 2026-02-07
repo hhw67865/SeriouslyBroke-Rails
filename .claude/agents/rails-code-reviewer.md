@@ -60,6 +60,7 @@ You review the most recent uncommitted changes (git diff of staged and unstaged 
 ### Code Organization & Readability
 - **Are there walls of code?** Methods exceeding 15-20 lines need scrutiny
 - **Are files appropriately sized?** Not too large (god objects) nor too fragmented (over-abstraction)
+- **Are view partials too long?** ERB files over 50-60 lines should be scrutinized for extraction opportunities. Nested structures (tables within tables, forms within cards) are strong candidates for partials.
 - **Is the purpose of each file/class/method immediately clear from its name and structure?**
 - **Would a new developer understand this code without extensive context?**
 

@@ -99,13 +99,14 @@ class CategoryCalculator
   end
 
   def build_item_data(item)
-    month_entries = item.entries.where(date: date_range)
-    return unless month_entries.any?
+    month_entries = item.entries.where(date: date_range).order(date: :desc).to_a
+    return if month_entries.empty?
 
     {
-      total_amount: month_entries.sum(:amount),
-      latest_entry: month_entries.order(date: :desc).first,
-      entry_count: month_entries.count
+      total_amount: month_entries.sum(&:amount),
+      latest_entry: month_entries.first,
+      entry_count: month_entries.size,
+      entries: month_entries
     }
   end
 

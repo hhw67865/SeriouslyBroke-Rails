@@ -21,8 +21,10 @@
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-200 bg-white">
-          <% current_month_items.each do |item, data| %>
+        <% amount_color_class = category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>
+        <% amount_prefix = category.expense? ? "-" : "+" %>
+        <% current_month_items.each do |item, data| %>
+          <tbody class="divide-y divide-gray-200 bg-white" data-controller="shared--toggle">
             <tr>
               <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
                 <%= item.name %>
@@ -36,19 +38,32 @@
               <td class="whitespace-nowrap px-3 py-4 text-sm text-right text-gray-500">
                 <%= data[:entry_count] %>
               </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-right font-medium 
-                <%= category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>">
-                <%= (category.expense? ? "-" : "+") + number_to_currency(data[:total_amount]) %>
+              <td class="whitespace-nowrap px-3 py-4 text-sm text-right font-medium <%= amount_color_class %>">
+                <%= amount_prefix + number_to_currency(data[:total_amount]) %>
               </td>
               <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                <div class="flex justify-end gap-2">
+                <div class="flex justify-end items-center gap-3">
                   <%= link_to "Edit", edit_item_path(item), class: "text-brand hover:text-brand-dark" %>
-                  <%= link_to "View", entries_path(field: "item", q: item.name), class: "text-gray-600 hover:text-gray-900" %>
+                  <button type="button" data-action="shared--toggle#toggle" class="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
+                    <span data-shared--toggle-target="button">View</span>
+                    <span data-shared--toggle-target="icon" class="transition-transform duration-200">
+                      <%= heroicon "chevron-down", options: { class: "h-4 w-4" } %>
+                    </span>
+                  </button>
                 </div>
               </td>
             </tr>
-          <% end %>
-        </tbody>
+            <tr data-shared--toggle-target="content" class="hidden">
+              <td colspan="6" class="py-0 px-4 sm:px-6">
+                <div class="animate-fadeSlideIn border-l-2 border-gray-300 bg-gray-50 my-2">
+                  <%= render "categories/_partials/show/item_entries",
+                      entries: data[:entries],
+                      amount_color_class: amount_color_class %>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        <% end %>
       </table>
     </div>
   <% else %>
