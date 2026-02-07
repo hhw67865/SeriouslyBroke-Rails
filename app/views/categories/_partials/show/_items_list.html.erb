@@ -1,13 +1,25 @@
 <!-- Items List -->
-<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
-  <div class="flex justify-between items-center mb-4">
+<div class="bg-white shadow-sm rounded border border-gray-100">
+  <div class="flex justify-between items-center p-6 pb-4">
     <h2 class="text-xl font-semibold"><%= period_items_label %></h2>
   </div>
 
   <% current_month_items = category.calculator(selected_date, period: current_period).current_month_items %>
-  
+  <% amount_color_class = category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>
+  <% amount_prefix = category.expense? ? "-" : "+" %>
+
   <% if current_month_items.any? %>
-    <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 sm:rounded">
+    <% items_collection = current_month_items.map { |item, data| { item: item, data: data } } %>
+
+    <%# Mobile: Card Layout %>
+    <div class="md:hidden divide-y divide-gray-200 border-t border-gray-100">
+      <%= render partial: "categories/_partials/show/item_card",
+                 collection: items_collection,
+                 locals: { amount_color_class: amount_color_class, amount_prefix: amount_prefix } %>
+    </div>
+
+    <%# Desktop: Table Layout %>
+    <div class="hidden md:block overflow-x-auto">
       <table class="min-w-full divide-y divide-gray-300">
         <thead class="bg-gray-50">
           <tr>
@@ -21,53 +33,13 @@
             </th>
           </tr>
         </thead>
-        <% amount_color_class = category.expense? ? "text-status-danger" : (category.income? ? "text-status-success" : "text-brand") %>
-        <% amount_prefix = category.expense? ? "-" : "+" %>
-        <% current_month_items.each do |item, data| %>
-          <tbody class="divide-y divide-gray-200 bg-white" data-controller="shared--toggle">
-            <tr>
-              <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
-                <%= item.name %>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                <%= item.frequency&.humanize || "One-time" %>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                <%= data[:latest_entry].date.strftime("%b %d, %Y") %>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-right text-gray-500">
-                <%= data[:entry_count] %>
-              </td>
-              <td class="whitespace-nowrap px-3 py-4 text-sm text-right font-medium <%= amount_color_class %>">
-                <%= amount_prefix + number_to_currency(data[:total_amount]) %>
-              </td>
-              <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                <div class="flex justify-end items-center gap-3">
-                  <%= link_to "Edit", edit_item_path(item), class: "text-brand hover:text-brand-dark" %>
-                  <button type="button" data-action="shared--toggle#toggle" class="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
-                    <span data-shared--toggle-target="button">View</span>
-                    <span data-shared--toggle-target="icon" class="transition-transform duration-200">
-                      <%= heroicon "chevron-down", options: { class: "h-4 w-4" } %>
-                    </span>
-                  </button>
-                </div>
-              </td>
-            </tr>
-            <tr data-shared--toggle-target="content" class="hidden">
-              <td colspan="6" class="py-0 px-4 sm:px-6">
-                <div class="animate-fadeSlideIn border-l-2 border-gray-300 bg-gray-50 my-2">
-                  <%= render "categories/_partials/show/item_entries",
-                      entries: data[:entries],
-                      amount_color_class: amount_color_class %>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        <% end %>
+        <%= render partial: "categories/_partials/show/item_row",
+                   collection: items_collection,
+                   locals: { amount_color_class: amount_color_class, amount_prefix: amount_prefix } %>
       </table>
     </div>
   <% else %>
-    <div class="bg-gray-50 rounded p-6 text-center">
+    <div class="bg-gray-50 rounded m-6 mt-0 p-6 text-center">
       <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
         <%= heroicon "inbox", options: { class: "h-6 w-6 text-gray-400" } %>
       </div>
@@ -75,4 +47,4 @@
       <p class="text-sm text-gray-500 mb-4">Items will appear here when you add entries for <%= period_time_label %></p>
     </div>
   <% end %>
-</div> 
+</div>

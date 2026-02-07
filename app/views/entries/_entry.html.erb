@@ -1,23 +1,7 @@
-<%# Individual Entry Row %>
+<%# Desktop Entry Row %>
 <tr class="hover:bg-gray-50 transition-colors duration-200">
   <td class="px-6 py-4 whitespace-nowrap">
-    <% case entry.item.category.category_type %>
-    <% when "expense" %>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-status-danger-light text-status-danger">
-        <%= heroicon "minus-circle", options: { class: "w-3 h-3 mr-1" } %>
-        Expense
-      </span>
-    <% when "income" %>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-status-success-light text-status-success">
-        <%= heroicon "plus-circle", options: { class: "w-3 h-3 mr-1" } %>
-        Income
-      </span>
-    <% when "savings" %>
-      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-status-info-light text-status-info">
-        <%= heroicon "circle-stack", options: { class: "w-3 h-3 mr-1" } %>
-        Savings
-      </span>
-    <% end %>
+    <%= entry_type_badge(entry.item.category.category_type, with_icon: true) %>
   </td>
   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
     <%= entry.date.strftime("%b %d, %Y") %>
@@ -29,7 +13,7 @@
     <% end %>
   </td>
   <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-    <%= entry.item.category.name %>
+    <%= link_to entry.item.category.name, category_path(entry.item.category), class: "hover:text-brand transition-colors" %>
   </td>
   <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
     <%= number_to_currency(entry.amount) %>

@@ -1,0 +1,16 @@
+<%# Mobile Entries List %>
+<div class="divide-y divide-gray-200">
+  <% entries.each do |entry| %>
+    <div class="px-3 py-2.5 flex items-center justify-between">
+      <div class="flex-1 min-w-0 mr-3">
+        <div class="text-sm text-gray-600"><%= entry.date.strftime("%b %d, %Y") %></div>
+        <% if entry.description.present? %>
+          <div class="text-xs text-gray-400 truncate"><%= entry.description %></div>
+        <% end %>
+      </div>
+      <span class="text-sm font-medium <%= amount_color_class %>">
+        <%= number_to_currency(entry.amount) %>
+      </span>
+    </div>
+  <% end %>
+</div>
