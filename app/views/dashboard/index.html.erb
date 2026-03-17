@@ -14,9 +14,12 @@
 
     <%# Tab Content %>
     <div class="p-6">
-      <%= render "shared/period_toggle",
-          monthly_path: root_path(tab: @tab),
-          ytd_path: root_path(tab: @tab, period: "ytd") %>
+      <div class="flex items-start justify-between">
+        <%= render "shared/period_toggle",
+            monthly_path: root_path(tab: @tab),
+            ytd_path: root_path(tab: @tab, period: "ytd") %>
+        <%= render "tracked_filter" %>
+      </div>
 
       <% case @tab %>
       <% when :expenses %>

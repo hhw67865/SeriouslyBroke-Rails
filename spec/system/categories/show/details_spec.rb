@@ -30,6 +30,35 @@ RSpec.describe "Categories Show - Details Card", type: :system do
     end
   end
 
+  describe "tracked toggle", :aggregate_failures do
+    let!(:category) { create(:category, :expense, user: user) }
+
+    it "shows tracked by default and toggles off when clicked" do
+      visit category_path(category)
+
+      expect(page).to have_content("Tracked")
+      expect(page).to have_css("button.bg-brand")
+
+      find("dt", text: "Tracked").ancestor(".py-3").find("button").click
+
+      expect(page).to have_css("button.bg-gray-300")
+      expect(category.reload.tracked).to be false
+    end
+
+    it "toggles an untracked category back on" do
+      category.update!(tracked: false)
+      visit category_path(category)
+
+      expect(page).to have_css("button.bg-gray-300")
+
+      find("dt", text: "Tracked").ancestor(".py-3").find("button").click
+
+      expect(page).to have_content("Tracked")
+      expect(page).to have_css("button.bg-brand")
+      expect(category.reload.tracked).to be true
+    end
+  end
+
   describe "without color" do
     let!(:category) { create(:category, category_type: "income", user: user, color: nil) }
 

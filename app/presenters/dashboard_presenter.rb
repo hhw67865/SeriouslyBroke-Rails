@@ -27,10 +27,11 @@ class DashboardPresenter
 
   attr_reader :date, :period
 
-  def initialize(user:, date:, period: :monthly)
+  def initialize(user:, date:, period: :monthly, show_total: true)
     @user = user
     @date = date
     @period = period
+    @show_total = show_total
   end
 
   def ytd?
@@ -44,11 +45,15 @@ class DashboardPresenter
   end
 
   def total_expenses
-    @total_expenses ||= @user.entries.expenses.where(date: period_range).sum(:amount)
+    @total_expenses ||= expenses_scope.where(date: period_range).sum(:amount)
+  end
+
+  def total_tracked_expenses
+    @total_tracked_expenses ||= tracked_expenses_scope.where(date: period_range).sum(:amount)
   end
 
   def expense_categories_breakdown
-    @expense_categories_breakdown ||= expense_categories
+    @expense_categories_breakdown ||= tracked_expense_categories
       .map { |category| { name: category.name, amount: category.calculator(@date, period: period).total_amount } }
       .reject { |c| c[:amount].zero? }
       .sort_by { |c| -c[:amount] }
@@ -56,7 +61,7 @@ class DashboardPresenter
 
   def total_budget
     @total_budget ||= begin
-      monthly = expense_categories.sum { |cat| cat.calculator(@date).monthly_budget_rate.to_f }
+      monthly = tracked_expense_categories.sum { |cat| cat.calculator(@date).monthly_budget_rate.to_f }
       ytd? ? monthly * months_in_range(period_range) : monthly
     end
   end
@@ -73,7 +78,7 @@ class DashboardPresenter
   end
 
   def expenses_chart_colors
-    [COLORS[:terracotta], COLORS[:dusty_teal]]
+    [COLORS[:dusty_teal], COLORS[:brand], COLORS[:terracotta]]
   end
 
   # === Income Tab ===
@@ -83,11 +88,11 @@ class DashboardPresenter
   end
 
   def total_income
-    @total_income ||= @user.entries.incomes.where(date: period_range).sum(:amount)
+    @total_income ||= tracked_income_scope.where(date: period_range).sum(:amount)
   end
 
   def income_categories_breakdown
-    @income_categories_breakdown ||= income_categories
+    @income_categories_breakdown ||= tracked_income_categories
       .map { |category| { name: category.name, amount: category.calculator(@date, period: period).total_amount } }
       .reject { |c| c[:amount].zero? }
       .sort_by { |c| -c[:amount] }
@@ -110,11 +115,11 @@ class DashboardPresenter
   end
 
   def total_savings_contribution
-    @total_savings_contribution ||= @user.entries.savings.where(date: period_range).sum(:amount)
+    @total_savings_contribution ||= tracked_savings_scope.where(date: period_range).sum(:amount)
   end
 
   def total_savings_balance
-    @total_savings_balance ||= @user.entries.savings.sum(:amount)
+    @total_savings_balance ||= tracked_savings_scope.sum(:amount)
   end
 
   def savings_categories_breakdown
@@ -125,18 +130,32 @@ class DashboardPresenter
     [COLORS[:brand_dark]]
   end
 
+  # === Tracked Filter ===
+
+  def categories_for_filter(type)
+    all_categories_by_type[type.to_s] || []
+  end
+
+  def tracked_count_for(type)
+    categories_for_filter(type).count(&:tracked?)
+  end
+
   private
 
-  def expense_categories
-    @expense_categories ||= @user.categories.expenses.includes(:budget, items: :entries)
+  def all_categories_by_type
+    @all_categories_by_type ||= @user.categories.order(:name).group_by(&:category_type)
   end
 
-  def income_categories
-    @income_categories ||= @user.categories.incomes.includes(items: :entries)
+  def tracked_expense_categories
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, items: :entries)
   end
 
-  def savings_categories
-    @savings_categories ||= @user.categories.savings.includes(items: :entries)
+  def tracked_income_categories
+    @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)
+  end
+
+  def tracked_savings_categories
+    @tracked_savings_categories ||= @user.categories.savings.tracked.includes(items: :entries)
   end
 
   def period_range
@@ -160,40 +179,62 @@ class DashboardPresenter
   end
 
   def monthly_budget_rate
-    @monthly_budget_rate ||= expense_categories.sum { |cat| cat.calculator(@date).monthly_budget_rate.to_f }
+    @monthly_budget_rate ||= tracked_expense_categories.sum { |cat| cat.calculator(@date).monthly_budget_rate.to_f }
   end
 
   def calculate_income_change
     current = total_income
-    previous = @user.entries.incomes.where(date: previous_month_range).sum(:amount)
+    previous = tracked_income_scope.where(date: previous_month_range).sum(:amount)
     return 0 if previous.zero?
 
     ((current - previous) / previous.to_f * 100).round
   end
 
   def compute_expenses_chart_data
-    return {} if total_expenses.zero?
+    return [] if total_expenses.zero?
 
     ytd? ? ytd_expenses_data : monthly_expenses_data
   end
 
   def ytd_expenses_data
-    totals = expenses_scope.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
-    calculate_running_total(totals).transform_keys { |d| d.strftime("%b %Y") }
+    tracked = tracked_expenses_scope.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
+    series = [{ name: "Tracked", data: calculate_running_total(tracked).transform_keys { |d| d.strftime("%b %Y") } }]
+    if @show_total
+      total = expenses_scope.group_by_month(:date, range: period_range, default_value: 0).sum(:amount)
+      series << { name: "Total", data: calculate_running_total(total).transform_keys { |d| d.strftime("%b %Y") } }
+    end
+    series
   end
 
   def monthly_expenses_data
-    totals = expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
-    calculate_running_total(totals)
+    tracked = tracked_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+    series = [{ name: "Tracked", data: calculate_running_total(tracked) }]
+    if @show_total
+      total = expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+      series << { name: "Total", data: calculate_running_total(total) }
+    end
+    series
   end
 
   def expenses_scope
     @user.entries.expenses
   end
 
+  def tracked_expenses_scope
+    @user.entries.expenses.tracked
+  end
+
+  def tracked_income_scope
+    @user.entries.incomes.tracked
+  end
+
+  def tracked_savings_scope
+    @user.entries.savings.tracked
+  end
+
   def compute_income_chart_data
     range = ytd? ? period_range : six_month_range
-    series = income_categories.map do |category|
+    series = tracked_income_categories.map do |category|
       monthly_data = category.entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
       { name: category.name, data: monthly_data.transform_keys { |d| d.strftime("%b %Y") } }
     end
@@ -214,7 +255,7 @@ class DashboardPresenter
   end
 
   def savings_scope
-    @user.entries.savings
+    tracked_savings_scope
   end
 
   def build_savings_running_total(range, initial_balance)
@@ -227,7 +268,7 @@ class DashboardPresenter
   end
 
   def build_savings_breakdown
-    breakdown = savings_categories.map do |category|
+    breakdown = tracked_savings_categories.map do |category|
       {
         name: category.name,
         amount: category.calculator(@date, period: period).total_amount,

@@ -15,6 +15,7 @@ class Entry < ApplicationRecord
   scope :expenses, -> { joins(item: :category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(item: :category).where(categories: { category_type: :income }) }
   scope :savings, -> { joins(item: :category).where(categories: { category_type: :savings }) }
+  scope :tracked, -> { where(categories: { tracked: true }) }
 
   # Define searchable fields using the DSL
   searchable :description, label: "Description"

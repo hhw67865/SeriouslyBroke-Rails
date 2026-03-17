@@ -46,6 +46,36 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
   end
 
+  describe "show/hide total toggle", :aggregate_failures do
+    let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries") }
+    let!(:expense_item) { create(:item, category: expense_category, name: "Weekly Shopping") }
+
+    before do
+      create(:budget, category: expense_category, amount: 500)
+      create(:entry, item: expense_item, amount: 150.00, date: base_date + 5.days)
+      visit root_path
+    end
+
+    it "shows 'Show Total' button by default" do
+      expect(page).to have_link("Show Total")
+      expect(page).not_to have_link("Hide Total")
+    end
+
+    it "toggles to 'Hide Total' when clicked" do
+      click_link "Show Total"
+
+      expect(page).to have_link("Hide Total")
+      expect(page).not_to have_link("Show Total")
+    end
+
+    it "returns to 'Show Total' when toggled back" do
+      click_link "Show Total"
+      click_link "Hide Total"
+
+      expect(page).to have_link("Show Total")
+    end
+  end
+
   describe "YTD view", :aggregate_failures do
     let!(:expense_category) { create(:category, :expense, user: user, name: "Utilities") }
     let!(:expense_item) { create(:item, category: expense_category, name: "Electric") }
@@ -61,8 +91,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       expect(page).to have_content("YTD Spending")
     end
 
-    it "shows YTD Expenses label in summary stats" do
-      expect(page).to have_content("YTD Expenses")
+    it "shows YTD Tracked label in summary stats" do
+      expect(page).to have_content("YTD Tracked")
     end
 
     it "shows YTD Budget label" do

@@ -30,6 +30,8 @@ class Category < ApplicationRecord
   scope :expenses, -> { where(category_type: :expense) }
   scope :incomes, -> { where(category_type: :income) }
   scope :savings, -> { where(category_type: :savings) }
+  scope :tracked, -> { where(tracked: true) }
+  scope :untracked, -> { where(tracked: false) }
 
   scope :with_type,
         lambda { |type|

@@ -5,6 +5,6 @@ class DashboardController < ApplicationController
 
   def index
     @tab = (params[:tab] || :expenses).to_sym
-    @presenter = DashboardPresenter.new(user: current_user, date: selected_date, period: current_period)
+    @presenter = DashboardPresenter.new(user: current_user, date: selected_date, period: current_period, show_total: params[:show_total] == "true")
   end
 end

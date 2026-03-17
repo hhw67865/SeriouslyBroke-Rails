@@ -1,0 +1,34 @@
+<%# Tracked Categories Filter - Shows categories for the active tab only %>
+<% tab_type = @tab == :expenses ? :expense : @tab %>
+<% categories = @presenter.categories_for_filter(tab_type) %>
+<% return if categories.empty? %>
+
+<details class="relative inline-block">
+  <summary class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition list-none">
+    <%= heroicon "adjustments-horizontal", options: { class: "h-4 w-4" } %>
+    Tracked
+    <% tracked = @presenter.tracked_count_for(tab_type) %>
+    <% if tracked.positive? %>
+      <span class="inline-flex items-center justify-center w-5 h-5 text-xs font-medium bg-gray-200 text-gray-600 rounded-full"><%= tracked %></span>
+    <% end %>
+  </summary>
+  <div class="absolute z-10 mt-2 bg-white rounded shadow-lg border border-gray-200 p-4 right-0 <%= categories.size > 8 ? "w-[32rem]" : "w-72" %>">
+    <p class="text-xs text-gray-500 mb-4">Untracked categories are excluded from calculations and charts.</p>
+    <div class="<%= categories.size > 8 ? "columns-2 gap-x-6" : "" %> space-y-1">
+      <% categories.each do |category| %>
+        <div class="flex items-center justify-between py-1.5 break-inside-avoid">
+          <span class="text-sm text-gray-700 flex items-center gap-2">
+            <span class="w-3 h-3 rounded-sm shrink-0" style="background-color: <%= category.color || "#C9C78B" %>;"></span>
+            <%= category.name %>
+          </span>
+          <%= button_to toggle_tracked_category_path(category),
+              method: :patch,
+              data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-5", shared__toggle_off_value: "translate-x-1" },
+              class: "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer #{category.tracked? ? "bg-brand" : "bg-gray-300"}" do %>
+            <span data-shared--toggle-target="thumb" class="inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200 <%= category.tracked? ? "translate-x-5" : "translate-x-1" %>"></span>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</details>

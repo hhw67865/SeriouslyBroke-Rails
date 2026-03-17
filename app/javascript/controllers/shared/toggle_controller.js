@@ -1,18 +1,13 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Connects to data-controller="shared--toggle"
 export default class extends Controller {
-  static targets = ["content", "button", "icon"]
+  static targets = ["thumb"]
+  static values = { on: String, off: String }
 
   toggle() {
-    const isHidden = this.contentTarget.classList.toggle("hidden")
-
-    if (this.hasButtonTarget) {
-      this.buttonTarget.textContent = isHidden ? "View" : "Hide"
-    }
-
-    if (this.hasIconTarget) {
-      this.iconTarget.classList.toggle("rotate-180", !isHidden)
-    }
+    this.element.classList.toggle("bg-brand")
+    this.element.classList.toggle("bg-gray-300")
+    this.thumbTarget.classList.toggle(this.onValue)
+    this.thumbTarget.classList.toggle(this.offValue)
   }
 }

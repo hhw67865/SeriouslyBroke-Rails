@@ -4,7 +4,7 @@ class CategoriesController < ApplicationController
   include Searchable
   include PeriodContext
 
-  before_action :set_category, only: [:show, :edit, :update, :destroy]
+  before_action :set_category, only: [:show, :edit, :update, :destroy, :toggle_tracked]
   before_action :set_categories, only: [:index]
 
   # GET /categories
@@ -54,6 +54,14 @@ class CategoriesController < ApplicationController
   def items
     category = current_user.categories.find(params[:id])
     render json: category.items.order(:name), status: :ok
+  end
+
+  def toggle_tracked
+    if @category.update(tracked: !@category.tracked?)
+      redirect_back_or_to(root_path)
+    else
+      redirect_back_or_to(root_path, alert: "Could not update category.")
+    end
   end
 
   private

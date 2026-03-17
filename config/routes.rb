@@ -17,7 +17,10 @@ Rails.application.routes.draw do
   resources :entries, except: [:show]
   resources :items, only: [:edit, :update, :destroy]
   resources :categories do
-    get :items, on: :member
+    member do
+      get :items
+      patch :toggle_tracked
+    end
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 

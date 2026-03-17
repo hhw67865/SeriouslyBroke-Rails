@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2025_12_13_152514) do
+ActiveRecord::Schema[8.1].define(version: 2026_03_16_214133) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -30,6 +30,7 @@ ActiveRecord::Schema[8.1].define(version: 2025_12_13_152514) do
     t.datetime "created_at", null: false
     t.string "name", null: false
     t.uuid "savings_pool_id"
+    t.boolean "tracked", default: true, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index ["savings_pool_id"], name: "index_categories_on_savings_pool_id"

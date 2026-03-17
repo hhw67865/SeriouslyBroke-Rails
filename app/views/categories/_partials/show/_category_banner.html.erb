@@ -16,6 +16,11 @@
       <span class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium ring-1 ring-inset ring-gray-200 mt-1">
         <%= category.category_type.capitalize %>
       </span>
+      <% unless category.tracked? %>
+        <span class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium text-gray-500 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
+          Untracked
+        </span>
+      <% end %>
     </div>
   </div>
 </div> 
