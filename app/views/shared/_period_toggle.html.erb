@@ -7,6 +7,7 @@
   <% end %>
   <%= link_to ytd_path,
       class: "px-4 py-2 text-sm font-medium rounded #{current_period == :ytd ? "bg-brand text-white" : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"}" do %>
-    Year to Date
+    <span class="sm:hidden">YTD</span>
+    <span class="hidden sm:inline">Year to Date</span>
   <% end %>
 </div>

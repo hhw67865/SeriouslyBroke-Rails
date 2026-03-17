@@ -2,7 +2,7 @@
 <% cache [current_user, selected_date, current_period, show_total, :expenses] do %>
 <%# Expenses Chart: Cumulative expense totals with budget line %>
 <div class="mb-8">
-  <div class="flex items-center justify-between mb-4">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
     <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Spending" : "Monthly Spending" %></h3>
     <%= link_to root_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
         class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>

@@ -14,7 +14,7 @@
 
     <%# Tab Content %>
     <div class="p-6">
-      <div class="flex items-start justify-between">
+      <div class="flex items-start justify-between gap-3">
         <%= render "shared/period_toggle",
             monthly_path: root_path(tab: @tab),
             ytd_path: root_path(tab: @tab, period: "ytd") %>
