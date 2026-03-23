@@ -38,12 +38,13 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
     end
 
-    it "removes untracked category from breakdown" do
+    it "shows untracked category separately in breakdown" do
       dining.update!(tracked: false)
       visit root_path
 
       expect(page).to have_content("Groceries")
-      expect(page).not_to have_content("Dining")
+      expect(page).to have_css("p.uppercase", text: /untracked/i)
+      expect(page).to have_content("Dining")
     end
 
     it "shows only expense categories in the tracked filter" do
@@ -86,20 +87,21 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       create(:entry, item: freelance_item, amount: 1000.00, date: base_date + 2.days)
     end
 
-    it "reduces income total when a category is untracked" do
+    it "reduces tracked income total when a category is untracked" do
       freelance.update!(tracked: false)
       visit root_path(tab: "income")
 
-      expect(page).to have_content("$5,000.00")
-      expect(page).not_to have_content("$6,000.00")
+      within_stat_card("Tracked Income") { expect(page).to have_content("$5,000.00") }
+      within_stat_card("Total Income") { expect(page).to have_content("$6,000.00") }
     end
 
-    it "removes untracked category from breakdown" do
+    it "shows untracked category separately in breakdown" do
       freelance.update!(tracked: false)
       visit root_path(tab: "income")
 
       expect(page).to have_content("Salary")
-      expect(page).not_to have_content("Freelance")
+      expect(page).to have_css("p.uppercase", text: /untracked/i)
+      expect(page).to have_content("Freelance")
     end
 
     it "shows only income categories in the tracked filter" do
@@ -126,20 +128,21 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       create(:entry, item: vacation_item, amount: 200.00, date: base_date + 2.days)
     end
 
-    it "reduces savings totals when a category is untracked" do
+    it "reduces tracked savings totals when a category is untracked" do
       vacation.update!(tracked: false)
       visit root_path(tab: "savings")
 
-      expect(page).to have_content("$500.00")
-      expect(page).not_to have_content("$700.00")
+      within_stat_card("Tracked Contribution") { expect(page).to have_content("$500.00") }
+      within_stat_card("Total Contribution") { expect(page).to have_content("$700.00") }
     end
 
-    it "removes untracked category from breakdown" do
+    it "shows untracked category separately in breakdown" do
       vacation.update!(tracked: false)
       visit root_path(tab: "savings")
 
       expect(page).to have_content("Emergency Fund")
-      expect(page).not_to have_content("Vacation Fund")
+      expect(page).to have_css("p.uppercase", text: /untracked/i)
+      expect(page).to have_content("Vacation Fund")
     end
 
     it "shows only savings categories in the tracked filter" do

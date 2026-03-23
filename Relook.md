@@ -9,5 +9,4 @@
 - Move items between categories
 - Block category deletion if it has items, give a way to move items to another category.
 - Entry creation needs to be faster.
-- clicking category on dashboard should take u to category page
 - Could put iteems into saavings pool rather than categories.

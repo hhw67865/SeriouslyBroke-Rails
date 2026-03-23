@@ -39,10 +39,31 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       expect(page).to have_content("$500.00")
     end
 
-    it "shows category breakdown with expense categories" do
+    it "shows category breakdown with linked expense categories" do
       expect(page).to have_content("By Category")
-      expect(page).to have_content("Groceries")
+      expect(page).to have_link("Groceries", href: category_path(expense_category))
       expect(page).to have_content("$225.50")
+    end
+  end
+
+  describe "untracked categories in breakdown", :aggregate_failures do
+    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
+    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
+    let!(:dining) { create(:category, :expense, user: user, name: "Dining", tracked: false) }
+    let!(:dining_item) { create(:item, category: dining, name: "Restaurants") }
+
+    before do
+      create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
+      create(:entry, item: dining_item, amount: 150.00, date: base_date + 2.days)
+      visit root_path
+    end
+
+    it "shows tracked and untracked categories separately with links" do
+      within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      expect(page).to have_css("p.uppercase", text: /untracked/i)
+      expect(page).to have_link("Groceries", href: category_path(groceries))
+      expect(page).to have_link("Dining", href: category_path(dining))
     end
   end
 
@@ -98,5 +119,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     it "shows YTD Budget label" do
       expect(page).to have_content("YTD Budget")
     end
+  end
+
+  private
+
+  def within_stat_card(label, &)
+    card = find("p", text: label).ancestor("div.bg-gray-50")
+    within(card, &)
   end
 end

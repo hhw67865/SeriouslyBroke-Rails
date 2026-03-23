@@ -1,0 +1,19 @@
+<% if categories.any? %>
+  <div class="pt-3 mt-3 border-t border-gray-200">
+    <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Untracked</p>
+    <% categories.each do |cat| %>
+      <div class="flex items-center justify-between py-2 border-b border-gray-100">
+        <% if local_assigns[:show_balance] %>
+          <div>
+            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-400 hover:text-brand-dark" %>
+            <span class="text-sm text-gray-400 ml-2">(Balance: <%= number_to_currency(cat[:balance]) %>)</span>
+          </div>
+          <span class="font-medium text-gray-400">+<%= number_to_currency(cat[:amount]) %></span>
+        <% else %>
+          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-400 hover:text-brand-dark" %>
+          <span class="font-medium text-gray-400"><%= number_to_currency(cat[:amount]) %></span>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>
