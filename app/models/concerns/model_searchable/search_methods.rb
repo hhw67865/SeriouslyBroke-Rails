@@ -65,9 +65,13 @@ module ModelSearchable
     end
 
     def parse_exact_date(query)
-      Date.parse(query)
+      Date.strptime(query, "%m/%d/%Y")
     rescue Date::Error
-      nil
+      begin
+        Date.parse(query)
+      rescue Date::Error
+        nil
+      end
     end
 
     def parse_date_range(query)

@@ -132,8 +132,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       vacation.update!(tracked: false)
       visit root_path(tab: "savings")
 
-      within_stat_card("Tracked Contribution") { expect(page).to have_content("$500.00") }
-      within_stat_card("Total Contribution") { expect(page).to have_content("$700.00") }
+      within_stat_card("Contributed") { expect(page).to have_content("$500.00") }
     end
 
     it "shows untracked category separately in breakdown" do
@@ -159,7 +158,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
   private
 
   def within_stat_card(label, &)
-    card = find("p", text: label).ancestor("div.bg-gray-50")
+    card = find("div.md\\:grid-cols-3 > div", text: label)
     within(card, &)
   end
 

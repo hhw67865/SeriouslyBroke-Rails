@@ -18,7 +18,7 @@
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
   <div class="bg-gray-50 rounded p-4">
     <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked" : "Tracked Income" %></p>
-    <p class="text-2xl font-semibold text-status-success"><%= number_to_currency(@presenter.total_tracked_income) %></p>
+    <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_income) %></p>
   </div>
   <div class="bg-gray-50 rounded p-4">
     <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total" : "Total Income" %></p>
@@ -28,7 +28,7 @@
     <div class="bg-gray-50 rounded p-4">
       <p class="text-sm text-gray-500">vs Last Month</p>
       <% change = @presenter.income_change_percentage %>
-      <p class="text-2xl font-semibold <%= change >= 0 ? "text-status-success" : "text-status-danger" %>">
+      <p class="text-2xl font-semibold <%= change >= 0 ? "text-brand-dark" : "text-terracotta" %>">
         <%= change >= 0 ? "+" : "" %><%= change %>%
       </p>
     </div>

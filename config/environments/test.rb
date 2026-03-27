@@ -50,4 +50,7 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Capybara Lockstep middleware for test synchronization
+  config.middleware.insert_before 0, Capybara::Lockstep::Middleware if defined?(Capybara::Lockstep)
 end

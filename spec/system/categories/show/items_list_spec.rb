@@ -50,7 +50,7 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
     end
 
     it "View button toggles inline entries and shows correct data" do
-      expect(page).not_to have_css("[data-shared--toggle-target='content']:not(.hidden)")
+      expect(page).not_to have_css("[data-app--category--expandable-target='content']:not(.hidden)")
 
       within(find("tbody", text: "Groceries")) do
         click_button "View"
@@ -62,7 +62,7 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
         click_button "Hide"
       end
 
-      expect(page).not_to have_css("[data-shared--toggle-target='content']:not(.hidden)")
+      expect(page).not_to have_css("[data-app--category--expandable-target='content']:not(.hidden)")
     end
 
     it "shows entries scoped to the correct item" do

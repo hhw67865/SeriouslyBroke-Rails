@@ -57,6 +57,7 @@ end
 group :test do
   # System/Integration Testing
   gem "capybara"
+  gem "capybara-lockstep"
   gem "selenium-webdriver"
 
   # Testing Support

@@ -17,6 +17,15 @@ class SavingsPool < ApplicationRecord
   searchable :name, label: "Name"
   searchable :category, through: :categories, column: :name, label: "Category"
 
+  # Entries scoped to start_date and filtered by category type
+  def contribution_entries
+    entries.joins(item: :category).where(categories: { category_type: :savings }).where(date: start_date..)
+  end
+
+  def withdrawal_entries
+    entries.joins(item: :category).where(categories: { category_type: :expense }).where(date: start_date..)
+  end
+
   # Calculator for savings pool metrics
   def calculator
     @calculator ||= SavingsPoolCalculator.new(self)

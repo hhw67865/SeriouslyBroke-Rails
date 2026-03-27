@@ -1,0 +1,13 @@
+<div class="mb-8">
+  <h3 class="text-lg font-medium text-gray-900 mb-4">Contributions vs Withdrawals (<%= @presenter.ytd? ? "YTD" : "6 months" %>)</h3>
+  <div class="bg-gray-50 rounded p-4">
+    <% flow_data = @presenter.flow_chart_data %>
+    <% if flow_data.any? { |s| s[:data].values.any?(&:positive?) } %>
+      <%= column_chart flow_data,
+          prefix: "$ ",
+          colors: @presenter.flow_chart_colors %>
+    <% else %>
+      <p class="text-gray-500 text-center py-8">No savings flow data available</p>
+    <% end %>
+  </div>
+</div>

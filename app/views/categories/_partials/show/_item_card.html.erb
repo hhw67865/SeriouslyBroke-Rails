@@ -1,5 +1,5 @@
 <%# Mobile Item Card %>
-<div class="p-4 hover:bg-gray-50 transition-colors" data-controller="shared--toggle">
+<div class="p-4 hover:bg-gray-50 transition-colors" data-controller="app--category--expandable">
   <%# Header: Item name + Total amount %>
   <div class="flex items-center justify-between mb-2">
     <div class="font-medium text-gray-900 truncate flex-1 mr-3"><%= item_card[:item].name %></div>
@@ -21,16 +21,16 @@
   <%# Actions %>
   <div class="flex items-center justify-between">
     <%= link_to "Edit", edit_item_path(item_card[:item]), class: "text-sm text-brand hover:text-brand-dark font-medium" %>
-    <button type="button" data-action="shared--toggle#toggle" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
-      <span data-shared--toggle-target="button">View entries</span>
-      <span data-shared--toggle-target="icon" class="transition-transform duration-200">
+    <button type="button" data-action="app--category--expandable#toggle" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
+      <span data-app--category--expandable-target="button">View entries</span>
+      <span data-app--category--expandable-target="icon" class="transition-transform duration-200">
         <%= heroicon "chevron-down", options: { class: "h-4 w-4" } %>
       </span>
     </button>
   </div>
 
   <%# Expandable entries %>
-  <div data-shared--toggle-target="content" class="hidden mt-3">
+  <div data-app--category--expandable-target="content" class="hidden mt-3">
     <div class="border-l-2 border-gray-300 bg-gray-50 rounded-r">
       <%= render "categories/_partials/show/item_entries_mobile",
           entries: item_card[:data][:entries],

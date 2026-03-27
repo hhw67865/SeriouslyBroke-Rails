@@ -1,56 +1,6 @@
-<% cache [current_user, selected_date, current_period, :savings] do %>
-<%# Savings Chart: Cumulative balance %>
-<div class="mb-8">
-  <h3 class="text-lg font-medium text-gray-900 mb-4">Savings Balance (<%= @presenter.ytd? ? "YTD" : "6 months" %>)</h3>
-  <div class="bg-gray-50 rounded p-4">
-    <% if @presenter.savings_chart_data.any? %>
-      <%= line_chart @presenter.savings_chart_data,
-          curve: false,
-          points: false,
-          prefix: "$ ",
-          colors: @presenter.savings_chart_colors %>
-    <% else %>
-      <p class="text-gray-500 text-center py-8">No savings data available</p>
-    <% end %>
-  </div>
-</div>
-
-<%# Summary Stats %>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-  <div class="bg-gray-50 rounded p-4">
-    <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked" : "Tracked Contribution" %></p>
-    <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_savings_contribution) %></p>
-  </div>
-  <div class="bg-gray-50 rounded p-4">
-    <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total" : "Total Contribution" %></p>
-    <p class="text-2xl font-semibold text-gray-700"><%= number_to_currency(@presenter.total_savings_contribution) %></p>
-  </div>
-  <div class="bg-gray-50 rounded p-4">
-    <p class="text-sm text-gray-500">Total Balance</p>
-    <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_savings_balance) %></p>
-  </div>
-</div>
-
-<%# Category Breakdown %>
-<div>
-  <h3 class="text-lg font-medium text-gray-900 mb-4">By Category</h3>
-  <% tracked = @presenter.savings_categories_breakdown %>
-  <% untracked = @presenter.untracked_savings_categories_breakdown %>
-  <% if tracked.any? || untracked.any? %>
-    <div class="space-y-3">
-      <% tracked.each do |cat| %>
-        <div class="flex items-center justify-between py-2 border-b border-gray-100">
-          <div>
-            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark" %>
-            <span class="text-sm text-gray-500 ml-2">(Balance: <%= number_to_currency(cat[:balance]) %>)</span>
-          </div>
-          <span class="font-medium text-gray-900">+<%= number_to_currency(cat[:amount]) %></span>
-        </div>
-      <% end %>
-      <%= render "dashboard/untracked_breakdown", categories: untracked, show_balance: true %>
-    </div>
-  <% else %>
-    <p class="text-gray-500">No savings categories</p>
-  <% end %>
-</div>
+<% cache [current_user, selected_date, current_period, :savings_v2] do %>
+  <%= render "dashboard/savings_flow_chart" %>
+  <%= render "dashboard/savings_stat_cards" %>
+  <%= render "dashboard/savings_pools_strip" %>
+  <%= render "dashboard/savings_contribution_breakdown" %>
 <% end %>

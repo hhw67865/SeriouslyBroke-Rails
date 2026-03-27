@@ -4,6 +4,9 @@
   --color-primary-light: #e2e1c6;
   --color-primary-dark: #a9a76b;
   
+  /* Accent Colors */
+  --color-terracotta: #C4977A;
+
   /* Background Colors */
   --color-bg-primary: var(--color-primary);
   --color-bg-primary-light: var(--color-primary-light);
@@ -61,6 +64,10 @@
 
 .text-brand-dark {
   color: var(--color-primary-dark);
+}
+
+.text-terracotta {
+  color: var(--color-terracotta);
 }
 
 .border-brand {

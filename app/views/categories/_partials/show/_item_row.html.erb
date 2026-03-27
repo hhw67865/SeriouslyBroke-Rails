@@ -1,5 +1,5 @@
 <%# Desktop Item Row %>
-<tbody class="divide-y divide-gray-200 bg-white" data-controller="shared--toggle">
+<tbody class="divide-y divide-gray-200 bg-white" data-controller="app--category--expandable">
   <tr>
     <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
       <%= item_row[:item].name %>
@@ -19,16 +19,16 @@
     <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
       <div class="flex justify-end items-center gap-3">
         <%= link_to "Edit", edit_item_path(item_row[:item]), class: "text-brand hover:text-brand-dark" %>
-        <button type="button" data-action="shared--toggle#toggle" class="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
-          <span data-shared--toggle-target="button">View</span>
-          <span data-shared--toggle-target="icon" class="transition-transform duration-200">
+        <button type="button" data-action="app--category--expandable#toggle" class="inline-flex items-center gap-1 text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
+          <span data-app--category--expandable-target="button">View</span>
+          <span data-app--category--expandable-target="icon" class="transition-transform duration-200">
             <%= heroicon "chevron-down", options: { class: "h-4 w-4" } %>
           </span>
         </button>
       </div>
     </td>
   </tr>
-  <tr data-shared--toggle-target="content" class="hidden">
+  <tr data-app--category--expandable-target="content" class="hidden">
     <td colspan="6" class="py-0 px-4 sm:px-6">
       <div class="animate-fadeSlideIn border-l-2 border-gray-300 bg-gray-50 my-2">
         <%= render "categories/_partials/show/item_entries",

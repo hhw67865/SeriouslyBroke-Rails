@@ -1,0 +1,21 @@
+<div class="mb-8">
+  <h3 class="text-lg font-medium text-gray-900 mb-4">Contributions by Category</h3>
+  <% tracked = @presenter.savings_categories_breakdown %>
+  <% untracked = @presenter.untracked_savings_categories_breakdown %>
+  <% if tracked.any? || untracked.any? %>
+    <div class="space-y-3">
+      <% tracked.each do |cat| %>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100">
+          <div>
+            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark" %>
+            <span class="text-sm text-gray-500 ml-2">(Total Contributed: <%= number_to_currency(cat[:total_contributed]) %>)</span>
+          </div>
+          <span class="font-medium text-brand-dark">+<%= number_to_currency(cat[:amount]) %></span>
+        </div>
+      <% end %>
+      <%= render "dashboard/untracked_breakdown", categories: untracked, show_total_contributed: true %>
+    </div>
+  <% else %>
+    <p class="text-gray-500">No savings categories</p>
+  <% end %>
+</div>
