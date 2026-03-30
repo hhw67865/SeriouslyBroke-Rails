@@ -170,13 +170,12 @@ spec/system/
 
 ### Running Tests
 
-After implementing features, run relevant tests to verify:
+After implementing features, run relevant tests to verify.
+Only run one rspec file at a time, since there is a known problem with running all tests at once.
 
 ```bash
-bundle exec rspec spec/system/feature_name/  # Run feature tests
-bundle exec rspec                             # Run all tests
+bundle exec rspec spec/system/feature_name.rb  # Run file tests
 ```
-
 ---
 
 ## Summary: Implementation Checklist

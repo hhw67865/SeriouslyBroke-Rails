@@ -55,4 +55,30 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expect(page).to have_link("Groceries")
     end
   end
+
+  describe "top spending order", :aggregate_failures do
+    before do
+      small_cat = create(:category, :expense, user: user, name: "Coffee")
+      large_cat = create(:category, :expense, user: user, name: "Rent")
+      medium_cat = create(:category, :expense, user: user, name: "Groceries")
+
+      create(:entry, item: create(:item, category: small_cat, name: "Latte"), amount: 50, date: base_date + 1.day)
+      create(:entry, item: create(:item, category: large_cat, name: "Monthly"), amount: 2000, date: base_date + 1.day)
+      create(:entry, item: create(:item, category: medium_cat, name: "Food"), amount: 400, date: base_date + 1.day)
+      visit root_path
+    end
+
+    it "orders top spending by amount descending" do
+      within top_spending_section do
+        names = all("a").map(&:text)
+        expect(names).to eq(["Rent", "Groceries", "Coffee"])
+      end
+    end
+  end
+
+  private
+
+  def top_spending_section
+    find("h3", text: "Top Spending").ancestor("div.mb-8")
+  end
 end

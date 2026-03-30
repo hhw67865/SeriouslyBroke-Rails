@@ -98,7 +98,9 @@ module Dashboard
     end
 
     def all_budgeted_breakdown
+      # Sort by most over-budget first, then by highest spend for non-budgeted
       @all_budgeted_breakdown ||= @parent.build_category_breakdown(@parent.tracked_budgetable_expense_categories)
+        .sort_by { |c| [c[:budget] ? -(c[:amount] - c[:budget]) : 1, -c[:amount]] }
     end
 
     def percentage_change(previous, current)

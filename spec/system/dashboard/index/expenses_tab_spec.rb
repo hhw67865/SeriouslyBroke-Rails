@@ -102,6 +102,59 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
   end
 
+  describe "budget details in budgeted section", :aggregate_failures do
+    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
+    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
+    let!(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
+    let!(:utilities_item) { create(:item, category: utilities, name: "Electric") }
+    let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
+    let!(:dining_item) { create(:item, category: dining, name: "Restaurant") }
+
+    before do
+      create(:budget, category: groceries, amount: 500)
+      create(:budget, category: utilities, amount: 200)
+      create(:budget, category: dining, amount: 300)
+
+      # Groceries: $650 spent on $500 budget → +$150 over
+      create(:entry, item: groceries_item, amount: 650, date: base_date + 1.day)
+      # Utilities: $80 spent on $200 budget → $120 left
+      create(:entry, item: utilities_item, amount: 80, date: base_date + 2.days)
+      # Dining: $400 spent on $300 budget → +$100 over
+      create(:entry, item: dining_item, amount: 400, date: base_date + 3.days)
+
+      visit root_path(tab: "expenses")
+    end
+
+    it "shows budget amount next to spent amount" do
+      within budgeted_section do
+        expect(page).to have_content("$650.00 / $500.00")
+        expect(page).to have_content("$80.00 / $200.00")
+        expect(page).to have_content("$400.00 / $300.00")
+      end
+    end
+
+    it "shows over/remaining amounts" do
+      within budgeted_section do
+        expect(page).to have_content("+$150.00 over")
+        expect(page).to have_content("+$100.00 over")
+        expect(page).to have_content("$120.00 left")
+      end
+    end
+
+    it "orders categories by most over budget first" do
+      within budgeted_section do
+        names = all("a[href^='/categories']").map(&:text)
+        expect(names).to eq(["Groceries", "Dining", "Utilities"])
+      end
+    end
+
+    it "shows budget totals" do
+      within budgeted_section do
+        expect(page).to have_content("$1,130.00 / $1,000.00")
+      end
+    end
+  end
+
   describe "YTD view", :aggregate_failures do
     let!(:expense_category) { create(:category, :expense, user: user, name: "Utilities") }
     let!(:expense_item) { create(:item, category: expense_category, name: "Electric") }

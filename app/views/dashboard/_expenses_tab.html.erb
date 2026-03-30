@@ -1,5 +1,5 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, :expenses_v3] do %>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v6] do %>
 <%# Expenses Chart: Cumulative expense totals with budget line %>
 <div class="mb-8">
   <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -56,9 +56,23 @@
   <% if budgeted.any? %>
     <div class="space-y-3">
       <% budgeted.each do |cat| %>
-        <div class="flex items-center justify-between py-2 border-b border-gray-100">
-          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark" %>
-          <span class="font-medium text-gray-900"><%= number_to_currency(cat[:amount]) %></span>
+        <div class="py-2 border-b border-gray-100">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2 mb-1">
+            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark truncate" %>
+            <% if cat[:budget] %>
+              <span class="font-medium text-gray-900 shrink-0 text-sm sm:text-base">
+                <%= number_to_currency(cat[:amount]) %>
+                <span class="text-gray-400 font-normal">/ <%= number_to_currency(cat[:budget]) %></span>
+              </span>
+            <% else %>
+              <span class="font-medium text-gray-900 shrink-0 text-sm sm:text-base"><%= number_to_currency(cat[:amount]) %></span>
+            <% end %>
+          </div>
+          <% if cat[:budget_percentage] %>
+            <p class="text-xs font-medium <%= cat[:over_budget] ? "text-terracotta" : "text-gray-500" %>">
+              <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
+            </p>
+          <% end %>
         </div>
       <% end %>
     </div>
@@ -85,9 +99,9 @@
   <% if pool_covered.any? %>
     <div class="space-y-3">
       <% pool_covered.each do |cat| %>
-        <div class="flex items-center justify-between py-2 border-b border-gray-100">
-          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark" %>
-          <span class="font-medium text-gray-900"><%= number_to_currency(cat[:amount]) %></span>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100 gap-2">
+          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark truncate" %>
+          <span class="font-medium text-gray-900 shrink-0"><%= number_to_currency(cat[:amount]) %></span>
         </div>
       <% end %>
     </div>

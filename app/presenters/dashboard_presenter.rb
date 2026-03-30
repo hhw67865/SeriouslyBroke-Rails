@@ -190,9 +190,25 @@ class DashboardPresenter
   end
 
   def build_category_breakdown(categories)
-    categories
-      .map { |category| { id: category.id, name: category.name, amount: category.calculator(@date, period: period).total_amount } }
-      .reject { |c| c[:amount].zero? }
-      .sort_by { |c| -c[:amount] }
+    results = categories.map { |category| build_category_entry(category) }
+    results.reject { |c| c[:amount].zero? }.sort_by { |c| -c[:amount] }
+  end
+
+  private
+
+  def build_category_entry(category)
+    calc = category.calculator(@date, period: period)
+    entry = { id: category.id, name: category.name, amount: calc.total_amount }
+    enrich_with_budget(entry, category, calc)
+    entry
+  end
+
+  def enrich_with_budget(entry, category, calc)
+    return unless category.budgetable? && calc.effective_budget.to_f.positive?
+
+    entry[:budget] = calc.effective_budget
+    entry[:budget_percentage] = calc.budget_percentage
+    entry[:over_budget] = calc.total_amount > calc.effective_budget
+    entry[:budget_diff] = (calc.total_amount - calc.effective_budget).abs
   end
 end
