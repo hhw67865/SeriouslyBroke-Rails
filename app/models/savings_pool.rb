@@ -3,7 +3,7 @@
 class SavingsPool < ApplicationRecord
   include ModelSearchable
 
-  belongs_to :user
+  belongs_to :user, touch: true
   has_many :categories, dependent: :nullify
   has_many :items, through: :categories
   has_many :entries, through: :items
