@@ -54,17 +54,21 @@ module Dashboard
       end
     end
 
+    def total_pools_balance
+      pools_summary.sum { |p| p[:balance] }
+    end
+
     # === Pools Summary (period-aware) ===
 
     def pools_summary
       @pools_summary ||= @user.savings_pools.includes(categories: { items: :entries }).map do |pool|
-        calc = pool.calculator
+        calc = pool.calculator(as_of: period_range.end)
         {
           id: pool.id,
           name: pool.name,
           period_contributions: pool_period_contributions(pool),
           period_withdrawals: pool_period_withdrawals(pool),
-          total_net: calc.current_balance,
+          balance: calc.current_balance,
           target_amount: pool.target_amount,
           progress_percentage: calc.progress_percentage
         }

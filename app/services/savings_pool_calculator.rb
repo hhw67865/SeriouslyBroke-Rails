@@ -3,8 +3,9 @@
 class SavingsPoolCalculator
   attr_reader :savings_pool
 
-  def initialize(savings_pool, _date = nil)
+  def initialize(savings_pool, as_of: nil)
     @savings_pool = savings_pool
+    @as_of = as_of
   end
 
   def progress_percentage
@@ -19,11 +20,15 @@ class SavingsPoolCalculator
   end
 
   def contributions
-    savings_pool.contribution_entries.sum(:amount)
+    scope = savings_pool.contribution_entries
+    scope = scope.where(date: ..@as_of) if @as_of
+    scope.sum(:amount)
   end
 
   def withdrawals
-    savings_pool.withdrawal_entries.sum(:amount)
+    scope = savings_pool.withdrawal_entries
+    scope = scope.where(date: ..@as_of) if @as_of
+    scope.sum(:amount)
   end
 
   def remaining_amount

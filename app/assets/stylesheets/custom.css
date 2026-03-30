@@ -6,6 +6,7 @@
   
   /* Accent Colors */
   --color-terracotta: #C4977A;
+  --color-dusty-teal: #7BA3A8;
 
   /* Background Colors */
   --color-bg-primary: var(--color-primary);
@@ -68,6 +69,14 @@
 
 .text-terracotta {
   color: var(--color-terracotta);
+}
+
+.bg-terracotta {
+  background-color: var(--color-terracotta);
+}
+
+.bg-dusty-teal {
+  background-color: var(--color-dusty-teal);
 }
 
 .border-brand {

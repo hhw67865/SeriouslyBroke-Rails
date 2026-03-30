@@ -11,18 +11,15 @@ class CategoryCalculator
     @date_range = compute_date_range(date)
   end
 
-  # Shared methods
   def total_amount
     category.entries.where(date: date_range).sum(:amount)
   end
 
-  # Expense methods
   def budget_percentage
     return 0 unless category.expense? && effective_budget.to_f.positive?
     (total_amount / effective_budget * 100).round
   end
 
-  # Returns the monthly budget rate (yearly budgets are converted to monthly)
   def monthly_budget_rate
     return nil unless category.expense? && category.budget&.amount
 
@@ -33,19 +30,16 @@ class CategoryCalculator
     end
   end
 
-  # Returns true if budget is yearly (for display purposes)
   def yearly_budget?
     category.budget&.year?
   end
 
-  # Returns the effective budget for the current period
   def effective_budget
     return nil unless monthly_budget_rate
 
     period == :ytd ? monthly_budget_rate * months_in_range(date_range) : monthly_budget_rate
   end
 
-  # Income methods
   def previous_month_change_percentage
     return 0 unless category.income? && !previous_month_amount.zero?
 
@@ -57,13 +51,11 @@ class CategoryCalculator
     percentage >= 0 ? :up : :down
   end
 
-  # Savings methods
   def monthly_contribution
     return 0 unless category.savings?
     total_amount
   end
 
-  # For all categories
   def top_items(limit = 3)
     items_with_amounts = {}
 
@@ -75,7 +67,6 @@ class CategoryCalculator
     items_with_amounts.sort_by { |_, amount| -amount }.first(limit).to_h
   end
 
-  # Items for current month with detailed information
   def current_month_items
     result = {}
 

@@ -23,6 +23,7 @@ class Category < ApplicationRecord
        }
 
   before_validation :destroy_budget_if_not_expense
+  before_validation :destroy_budget_if_pool_linked
 
   validate :budget_only_for_expense
 
@@ -32,11 +33,13 @@ class Category < ApplicationRecord
   scope :savings, -> { where(category_type: :savings) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
+  scope :budgetable, -> { expenses.where(savings_pool_id: nil) }
+  scope :pool_covered, -> { expenses.where.not(savings_pool_id: nil) }
 
   scope :with_type,
         lambda { |type|
           case (type || :expense).to_sym
-          when :expense then expenses.includes(:budget, :items)
+          when :expense then expenses.includes(:budget, :savings_pool, :items)
           when :income then incomes.includes(:items)
           when :savings then savings.includes(:items, :savings_pool)
           end
@@ -45,17 +48,29 @@ class Category < ApplicationRecord
   # Configure searchable fields
   searchable :name, label: "Name"
 
-  # Calculator for category metrics (memoized per month and period)
+  def budgetable?
+    expense? && savings_pool_id.nil?
+  end
+
+  def pool_covered?
+    expense? && savings_pool_id.present?
+  end
+
   def calculator(date = Date.current, period: :monthly)
-    cache_key = "#{date.year}-#{date.month}-#{period}"
-    @calculators ||= {}
-    @calculators[cache_key] ||= CategoryCalculator.new(self, date, period: period)
+    CategoryCalculator.new(self, date, period: period)
   end
 
   private
 
   def destroy_budget_if_not_expense
     return unless category_type_changed? && !expense? && budget
+
+    budget.destroy
+    self.budget = nil
+  end
+
+  def destroy_budget_if_pool_linked
+    return unless savings_pool_id_changed? && savings_pool_id.present? && budget
 
     budget.destroy
     self.budget = nil

@@ -30,7 +30,7 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
     it "clicking Year to Date adds period=ytd to URL" do
       click_link "Year to Date"
 
-      expect(page).to have_current_path(root_path(tab: "expenses", period: "ytd"))
+      expect(page).to have_current_path(root_path(tab: "all", period: "ytd"))
     end
 
     it "clicking Monthly removes period param" do

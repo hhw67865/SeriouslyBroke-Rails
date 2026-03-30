@@ -22,7 +22,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "shows all expenses as tracked by default" do
-      visit root_path
+      visit root_path(tab: "expenses")
 
       within_stat_card("Tracked Expenses") { expect(page).to have_content("$450.00") }
       within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
@@ -31,7 +31,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "reduces tracked total and budget when a budgeted category is untracked" do
       dining.update!(tracked: false)
-      visit root_path
+      visit root_path(tab: "expenses")
 
       within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
@@ -40,7 +40,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked category separately in breakdown" do
       dining.update!(tracked: false)
-      visit root_path
+      visit root_path(tab: "expenses")
 
       expect(page).to have_content("Groceries")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
@@ -49,7 +49,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows only expense categories in the tracked filter" do
       create(:category, :income, user: user, name: "Salary")
-      visit root_path
+      visit root_path(tab: "expenses")
 
       open_tracked_filter
       expect(page).to have_content("Groceries")
@@ -58,7 +58,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "toggles a category via the filter popover" do
-      visit root_path
+      visit root_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
 
@@ -70,7 +70,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked count badge" do
       dining.update!(tracked: false)
-      visit root_path
+      visit root_path(tab: "expenses")
 
       expect(find("summary")).to have_content("1")
     end

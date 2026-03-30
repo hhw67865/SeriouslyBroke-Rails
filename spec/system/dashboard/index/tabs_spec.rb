@@ -11,15 +11,16 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
   end
 
   describe "tab display", :aggregate_failures do
-    it "shows all three tabs" do
+    it "shows all four tabs" do
+      expect(page).to have_link("All")
       expect(page).to have_link("Expenses")
       expect(page).to have_link("Income")
       expect(page).to have_link("Savings")
     end
 
-    it "defaults to Expenses tab" do
-      expenses_link = find("nav[aria-label='Tabs'] a", text: "Expenses")
-      expect(expenses_link[:class]).to include("border-brand")
+    it "defaults to All tab" do
+      all_link = find("nav[aria-label='Tabs'] a", text: "All")
+      expect(all_link[:class]).to include("border-brand")
     end
   end
 

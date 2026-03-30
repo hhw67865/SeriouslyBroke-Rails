@@ -59,6 +59,10 @@ class DashboardPresenter
     @savings ||= Dashboard::SavingsPresenter.new(self)
   end
 
+  def overview
+    @overview ||= Dashboard::OverviewPresenter.new(self)
+  end
+
   # === Expenses Tab (delegated) ===
 
   delegate :expenses_chart_data,
@@ -95,8 +99,25 @@ class DashboardPresenter
            :flow_chart_colors,
            :total_withdrawals,
            :pools_summary,
+           :total_pools_balance,
            :savings_rate,
            to: :savings
+
+  # === All/Overview Tab (delegated) ===
+
+  delegate :overview_chart_data,
+           :overview_chart_colors,
+           :net_amount,
+           :expense_ratio,
+           :income_change,
+           :expenses_change,
+           :budgeted_total,
+           :budget_used_percentage,
+           :top_expense_categories,
+           :pool_covered_total,
+           :all_budgeted_categories_breakdown,
+           :pool_covered_categories_breakdown,
+           to: :overview
 
   # === Tracked Filter ===
 
@@ -129,7 +150,15 @@ class DashboardPresenter
   end
 
   def tracked_expense_categories
-    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, items: :entries)
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :savings_pool, items: :entries)
+  end
+
+  def tracked_budgetable_expense_categories
+    @tracked_budgetable_expense_categories ||= tracked_expense_categories.select(&:budgetable?)
+  end
+
+  def tracked_pool_covered_expense_categories
+    @tracked_pool_covered_expense_categories ||= tracked_expense_categories.select(&:pool_covered?)
   end
 
   def tracked_income_categories

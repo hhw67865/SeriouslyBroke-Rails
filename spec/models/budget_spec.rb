@@ -20,6 +20,18 @@ RSpec.describe Budget, type: :model do
         expect(budget.errors[:category]).to include("must be an expense category")
       end
     end
+
+    describe "pool mutual exclusivity" do
+      let(:user) { create(:user) }
+      let(:pool) { create(:savings_pool, user: user) }
+      let(:expense_category) { create(:category, :expense, user: user, savings_pool: pool) }
+
+      it "rejects budget on a category linked to a savings pool", :aggregate_failures do
+        budget = build(:budget, category: expense_category)
+        expect(budget).not_to be_valid
+        expect(budget.errors[:category]).to include("cannot have a budget when linked to a savings pool")
+      end
+    end
   end
 
   describe "enums" do

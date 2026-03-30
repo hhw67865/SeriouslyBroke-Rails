@@ -18,10 +18,14 @@
         <%= render "shared/period_toggle",
             monthly_path: root_path(tab: @tab),
             ytd_path: root_path(tab: @tab, period: "ytd") %>
-        <%= render "tracked_filter" %>
+        <% unless @tab == :all %>
+          <%= render "tracked_filter" %>
+        <% end %>
       </div>
 
       <% case @tab %>
+      <% when :all %>
+        <%= render "all_tab" %>
       <% when :expenses %>
         <%= render "expenses_tab" %>
       <% when :income %>

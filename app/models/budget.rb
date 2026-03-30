@@ -7,6 +7,7 @@ class Budget < ApplicationRecord
 
   validates :amount, :period, presence: true
   validate :category_must_be_expense
+  validate :category_must_not_have_pool
 
   delegate :user, to: :category
 
@@ -14,5 +15,9 @@ class Budget < ApplicationRecord
 
   def category_must_be_expense
     errors.add(:category, "must be an expense category") unless category&.expense?
+  end
+
+  def category_must_not_have_pool
+    errors.add(:category, "cannot have a budget when linked to a savings pool") if category&.savings_pool_id?
   end
 end

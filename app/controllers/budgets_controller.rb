@@ -46,7 +46,7 @@ class BudgetsController < ApplicationController
   end
 
   def set_category
-    @category = current_user.categories.expenses.find(params[:category_id]) if params[:category_id]
+    @category = current_user.categories.expenses.budgetable.find(params[:category_id]) if params[:category_id]
   end
 
   def budget_params

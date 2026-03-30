@@ -42,9 +42,10 @@
       <div class="space-y-6">
         <%= render "categories/_partials/show/details_card", category: @category %>
         
-        <% if @category.expense? %>
+        <% if @category.budgetable? %>
           <%= render "categories/_partials/show/budget_card", category: @category %>
-        <% elsif @category.savings? && @category.savings_pool.present? %>
+        <% end %>
+        <% if @category.savings_pool.present? %>
           <%= render "categories/_partials/show/savings_pool_card", category: @category %>
         <% end %>
         

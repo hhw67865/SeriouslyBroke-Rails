@@ -124,7 +124,14 @@ entertainment_items = [
   { name: "Gaming", frequency: :monthly }
 ].map { |attrs| expense_categories[4].items.create!(attrs) }
 
-# Create budget for expense categories
+# Link some expense categories to savings pools (pool-covered expenses)
+# These represent irregular expenses funded by savings pools, not budgets
+Rails.logger.debug "Linking expense categories to savings pools..."
+expense_categories.find { |c| c.name == "Health" }.update!(savings_pool: savings_pools[0])           # Health → Emergency Fund
+expense_categories.find { |c| c.name == "Education" }.update!(savings_pool: savings_pools[4])        # Education → Retirement Supplement
+expense_categories.find { |c| c.name == "Gifts & Donations" }.update!(savings_pool: savings_pools[1]) # Gifts → Vacation to Europe
+
+# Create budgets only for budgetable expense categories (not pool-linked)
 Rails.logger.debug "Creating budgets..."
 expense_budgets = {
   "Housing" => 1500,
@@ -132,14 +139,11 @@ expense_budgets = {
   "Food & Dining" => 600,
   "Utilities" => 300,
   "Entertainment" => 200,
-  "Health" => 250,
   "Personal Care" => 100,
-  "Education" => 150,
-  "Shopping" => 200,
-  "Gifts & Donations" => 100
+  "Shopping" => 200
 }
 
-expense_categories.each do |category|
+expense_categories.select(&:budgetable?).each do |category|
   category.create_budget!(
     amount: expense_budgets[category.name] || rand(100..1000),
     period: :month

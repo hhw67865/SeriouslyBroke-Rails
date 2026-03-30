@@ -26,9 +26,8 @@ class SavingsPool < ApplicationRecord
     entries.joins(item: :category).where(categories: { category_type: :expense }).where(date: start_date..)
   end
 
-  # Calculator for savings pool metrics
-  def calculator
-    @calculator ||= SavingsPoolCalculator.new(self)
+  def calculator(as_of: nil)
+    SavingsPoolCalculator.new(self, as_of: as_of)
   end
 
   private

@@ -29,7 +29,17 @@
     
     <div class="mt-2">
       <% calc = category.calculator(selected_date) %>
-      <% if category.expense? %>
+      <% if category.pool_covered? %>
+        <div class="mb-4">
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-500">Spent <%= period_time_label %></span>
+            <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
+          </div>
+          <p class="text-xs text-gray-500 mt-2">
+            Pool: <%= category.savings_pool.name %>
+          </p>
+        </div>
+      <% elsif category.expense? %>
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Monthly Budget</span>
@@ -38,13 +48,13 @@
               <%= calc.monthly_budget_rate ? number_to_currency(calc.monthly_budget_rate) : "N/A" %>
             </span>
           </div>
-          
+
           <% if category.budget&.amount %>
           <% percentage = calc.budget_percentage %>
           <div class="h-2 bg-gray-200 rounded overflow-hidden">
             <div class="<%= budget_status_color(percentage) %> h-2 rounded" style="width: <%= [percentage, 100].min %>%;"></div>
           </div>
-          
+
           <div class="flex justify-between mt-1">
             <p class="text-xs text-gray-500"><%= percentage %>% used</p>
             <p class="text-xs <%= percentage > 90 ? "text-status-danger" : (percentage > 75 ? "text-status-warning" : "text-gray-500") %>">
@@ -55,7 +65,7 @@
             <div class="h-2 bg-gray-200 rounded overflow-hidden">
               <div class="bg-gray-300 h-2 rounded w-0"></div>
             </div>
-            
+
             <div class="flex justify-between mt-1">
               <p class="text-xs text-gray-500">No budget set</p>
               <p class="text-xs text-gray-500">Set budget to track</p>

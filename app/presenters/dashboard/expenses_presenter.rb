@@ -31,7 +31,7 @@ module Dashboard
 
     def total_budget
       @total_budget ||= begin
-        monthly = @parent.tracked_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
+        monthly = @parent.tracked_budgetable_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
         @parent.ytd? ? monthly * months_in_range(period_range) : monthly
       end
     end
@@ -64,7 +64,7 @@ module Dashboard
     end
 
     def monthly_budget_rate
-      @monthly_budget_rate ||= @parent.tracked_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
+      @monthly_budget_rate ||= @parent.tracked_budgetable_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
     end
 
     def compute_expenses_chart_data

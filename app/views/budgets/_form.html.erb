@@ -13,7 +13,7 @@
         <% unless @budget.category_id %>
           <div>
             <%= f.association :category,
-                collection: current_user.categories.expenses.order(:name),
+                collection: current_user.categories.expenses.budgetable.order(:name),
                 label_method: :name,
                 value_method: :id,
                 include_blank: "Select an expense category",

@@ -1,0 +1,119 @@
+<% cache [current_user, selected_date, current_period, :all_v7] do %>
+<% income = @presenter.total_tracked_income %>
+<% expenses = @presenter.total_tracked_expenses %>
+<% savings = @presenter.total_tracked_savings_contribution %>
+<% net = @presenter.net_amount %>
+
+<%# Income allocation bar %>
+<div class="mb-8">
+  <h3 class="text-lg font-medium text-gray-900 mb-4">Where Your Money Went</h3>
+  <% if income.positive? %>
+    <% expense_pct = (expenses / income.to_f * 100).round(1) %>
+    <% savings_pct = (savings / income.to_f * 100).round(1) %>
+    <% remaining_pct = [100 - expense_pct - savings_pct, 0].max.round(1) %>
+    <div class="bg-gray-50 rounded p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-sm font-medium text-gray-900"><%= number_to_currency(income) %> earned</span>
+        <span class="text-sm font-medium <%= net >= 0 ? "text-brand-dark" : "text-terracotta" %>"><%= number_to_currency(net) %> remaining</span>
+      </div>
+      <div class="flex w-full h-8 rounded overflow-hidden">
+        <% if expense_pct.positive? %>
+          <div class="bg-terracotta flex items-center justify-center" style="width: <%= expense_pct %>%">
+            <% if expense_pct > 10 %>
+              <span class="text-xs font-medium text-white"><%= expense_pct %>%</span>
+            <% end %>
+          </div>
+        <% end %>
+        <% if savings_pct.positive? %>
+          <div class="bg-dusty-teal flex items-center justify-center" style="width: <%= savings_pct %>%">
+            <% if savings_pct > 10 %>
+              <span class="text-xs font-medium text-white"><%= savings_pct %>%</span>
+            <% end %>
+          </div>
+        <% end %>
+        <% if remaining_pct.positive? %>
+          <div class="bg-brand flex items-center justify-center" style="width: <%= remaining_pct %>%">
+            <% if remaining_pct > 10 %>
+              <span class="text-xs font-medium text-white"><%= remaining_pct %>%</span>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+      <div class="flex flex-wrap gap-4 mt-3 text-xs">
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-sm bg-terracotta"></span>
+          <span class="text-gray-600">Expenses <%= number_to_currency(expenses) %></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-sm bg-dusty-teal"></span>
+          <span class="text-gray-600">Savings <%= number_to_currency(savings) %></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-sm bg-brand"></span>
+          <span class="text-gray-600">Remaining <%= number_to_currency(net) %></span>
+        </div>
+      </div>
+    </div>
+  <% elsif expenses.positive? || savings.positive? %>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500 mb-2">No income recorded <%= period_time_label %></p>
+      <p class="text-sm text-gray-700">Expenses: <%= number_to_currency(expenses) %> · Savings: <%= number_to_currency(savings) %></p>
+    </div>
+  <% else %>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-gray-500 text-center py-4">No data available <%= period_time_label %></p>
+    </div>
+  <% end %>
+</div>
+
+<%# Health Indicators %>
+<div class="grid grid-cols-1 md:grid-cols-<%= @presenter.total_budget.positive? ? 3 : 2 %> gap-4 mb-8">
+  <% if @presenter.total_budget.positive? %>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= period_budget_label %></p>
+      <p class="text-2xl font-semibold <%= @presenter.budget_used_percentage > 100 ? "text-terracotta" : "text-brand-dark" %>">
+        <%= @presenter.budget_used_percentage %>% used
+      </p>
+      <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+        <div class="h-2 rounded-full <%= @presenter.budget_used_percentage > 100 ? "bg-terracotta" : "bg-brand" %>"
+             style="width: <%= [@presenter.budget_used_percentage, 100].min %>%"></div>
+      </div>
+      <p class="text-xs text-gray-400 mt-1"><%= number_to_currency(@presenter.budgeted_total) %> of <%= number_to_currency(@presenter.total_budget) %></p>
+    </div>
+  <% end %>
+  <div class="bg-gray-50 rounded p-4">
+    <p class="text-sm text-gray-500">Savings Rate</p>
+    <p class="text-2xl font-semibold text-brand-dark"><%= @presenter.savings_rate %>%</p>
+    <p class="text-xs text-gray-400">of income saved</p>
+  </div>
+  <div class="bg-gray-50 rounded p-4">
+    <p class="text-sm text-gray-500">Expense Ratio</p>
+    <p class="text-2xl font-semibold text-gray-700"><%= @presenter.expense_ratio %>%</p>
+    <p class="text-xs text-gray-400">of income spent</p>
+  </div>
+</div>
+
+<%# Savings Pools Progress %>
+<%= render "dashboard/savings_pools_strip" %>
+
+<%# Top Spending %>
+<% top_categories = @presenter.top_expense_categories %>
+<% if top_categories.any? %>
+  <div class="mb-8">
+    <h3 class="text-lg font-medium text-gray-900 mb-4">Top Spending</h3>
+    <div class="space-y-3">
+      <% top_categories.each do |cat| %>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100">
+          <div class="flex items-center gap-3">
+            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark" %>
+            <% if expenses.positive? %>
+              <span class="text-xs text-gray-400"><%= (cat[:amount] / expenses.to_f * 100).round %>%</span>
+            <% end %>
+          </div>
+          <span class="font-medium text-gray-900"><%= number_to_currency(cat[:amount]) %></span>
+        </div>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+<% end %>
