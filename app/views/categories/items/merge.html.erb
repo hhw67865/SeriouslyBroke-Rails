@@ -2,7 +2,7 @@
 
 <%= page_header(
     title: "Merge into #{@target.name}",
-    subtitle: "Select items to merge &mdash; their entries will be transferred to <strong>#{@target.name}</strong>".html_safe,
+    subtitle: "Select items to merge — their entries will be transferred to #{@target.name}",
     breadcrumbs: [
       { label: "Categories", url: categories_path(type: @category.category_type) },
       { label: @category.name, url: category_path(@category) },
@@ -40,7 +40,7 @@
                        data-filter-name="<%= item.name.downcase %>"
                        data-item-name="<%= item.name %>"
                        data-item-entries="<%= item.entries.size %>"
-                       data-item-amount="<%= number_to_currency(item.entries.map(&:amount).sum) %>">
+                       data-item-amount="<%= number_to_currency(item.entries.sum(&:amount)) %>">
                   <input type="checkbox" name="source_item_ids[]" value="<%= item.id %>"
                          class="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand mr-3"
                          data-action="change->app--item--merge#selectionChanged">
@@ -48,7 +48,7 @@
                     <div class="flex items-center justify-between">
                       <span class="font-medium text-gray-900 text-sm"><%= item.name %></span>
                       <span class="text-sm font-medium text-gray-900">
-                        <%= number_to_currency(item.entries.map(&:amount).sum) %>
+                        <%= number_to_currency(item.entries.sum(&:amount)) %>
                       </span>
                     </div>
                     <div class="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
@@ -87,7 +87,8 @@
                     class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition cursor-pointer disabled:opacity-50",
                     disabled: true,
                     data: { "app--item--merge-target": "submitButton" } %>
-                <%= link_to "Cancel", category_items_path(@category),
+                <%= link_to "Cancel", 
+category_items_path(@category),
                     class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition text-center" %>
               </div>
             </div>
@@ -100,7 +101,8 @@
   <div class="max-w-2xl mx-auto">
     <div class="bg-white shadow-sm rounded border border-gray-100 p-12 text-center">
       <p class="text-sm text-gray-500 mb-4">No other items available to merge.</p>
-      <%= link_to "Back to Manage Items", category_items_path(@category),
+      <%= link_to "Back to Manage Items", 
+category_items_path(@category),
           class: "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
     </div>
   </div>

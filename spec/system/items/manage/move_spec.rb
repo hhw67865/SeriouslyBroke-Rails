@@ -6,12 +6,12 @@ RSpec.describe "Items Manage - Move", type: :system do
   let!(:user) { create(:user) }
   let!(:source_category) { create(:category, name: "Food", user: user) }
   let!(:target_category) { create(:category, name: "Dining", user: user) }
-  let!(:item1) { create(:item, name: "Pizza", category: source_category) }
-  let!(:item2) { create(:item, name: "Sushi", category: source_category) }
+  let!(:pizza) { create(:item, name: "Pizza", category: source_category) }
+  let!(:sushi) { create(:item, name: "Sushi", category: source_category) }
 
   before do
-    create(:entry, item: item1)
-    create(:entry, item: item2)
+    create(:entry, item: pizza)
+    create(:entry, item: sushi)
     sign_in user, scope: :user
   end
 
@@ -27,7 +27,7 @@ RSpec.describe "Items Manage - Move", type: :system do
       expect(page).not_to have_content("Pizza")
       expect(page).to have_content("Sushi")
 
-      expect(item1.reload.category).to eq(target_category)
+      expect(pizza.reload.category).to eq(target_category)
     end
 
     it "auto-merges when target has item with same name" do

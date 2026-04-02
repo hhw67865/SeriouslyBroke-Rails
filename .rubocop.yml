@@ -22,6 +22,9 @@ Metrics/ClassLength:
   Max: 400
   CountComments: false
 
+Metrics/AbcSize:
+  Max: 20
+
 Metrics/MethodLength:
   Max: 20
   CountComments: false

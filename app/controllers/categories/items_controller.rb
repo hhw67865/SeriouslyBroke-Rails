@@ -6,6 +6,7 @@ module Categories
 
     before_action :set_category
     before_action :set_items, only: [:index]
+    before_action :set_target_item, only: [:merge, :perform_merge]
 
     # GET /categories/:category_id/items (HTML + JSON)
     def index
@@ -33,41 +34,30 @@ module Categories
 
     # POST /categories/:category_id/items/move
     def move
-      target_category = current_user.categories.find(params[:target_category_id])
       items = @category.items.where(id: params[:item_ids])
+      return redirect_to category_items_path(@category), alert: "No items selected." if items.empty?
 
-      if items.empty?
-        redirect_to category_items_path(@category), alert: "No items selected."
-        return
-      end
-
-      Item.transaction do
-        items.each { |item| item.move_to_category(target_category) }
-      end
-
-      redirect_to category_items_path(@category), notice: "Items moved to #{target_category.name}."
+      target = current_user.categories.find(params[:target_category_id])
+      Item.transaction { items.each { |item| item.move_to_category(target) } }
+      redirect_to category_items_path(@category), notice: "Items moved to #{target.name}."
     end
 
     # GET /categories/:category_id/items/merge?target_item_id=X
-    # POST /categories/:category_id/items/merge
     def merge
-      @target = @category.items.find(params[:target_item_id])
+      @other_items = @category.items.includes(:entries).where.not(id: @target.id).order(updated_at: :desc)
+    end
 
-      if request.get?
-        @other_items = @category.items.includes(:entries).where.not(id: @target.id).order(updated_at: :desc)
-        render :merge
-      else
-        source_ids = Array(params[:source_item_ids])
-        sources = @category.items.where(id: source_ids)
+    # POST /categories/:category_id/items/merge
+    def perform_merge
+      sources = @category.items.where(id: Array(params[:source_item_ids]))
 
-        if sources.empty?
-          redirect_to merge_category_items_path(@category, target_item_id: @target.id), alert: "Select at least one item to merge."
-          return
-        end
-
-        Item.merge(target: @target, sources: sources)
-        redirect_to category_items_path(@category), notice: "#{sources.size} item(s) merged into #{@target.name}."
+      if sources.empty?
+        redirect_to merge_category_items_path(@category, target_item_id: @target.id), alert: "Select at least one item to merge."
+        return
       end
+
+      Item.merge(target: @target, sources: sources)
+      redirect_to category_items_path(@category), notice: "#{sources.size} item(s) merged into #{@target.name}."
     end
 
     private
@@ -80,6 +70,10 @@ module Categories
       @search_state = current_search_state(params)
       items = @category.items.includes(:entries).order(updated_at: :desc)
       @items = apply_search(items, { q: params[:q], field: params[:field] })
+    end
+
+    def set_target_item
+      @target = @category.items.find(params[:target_item_id])
     end
 
     def item_params

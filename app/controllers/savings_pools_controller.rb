@@ -14,8 +14,7 @@ class SavingsPoolsController < ApplicationController
 
   # GET /savings_pools/1
   def show
-    # Load recent entries for activity section - avoid N+1
-    @recent_entries = @savings_pool.entries
+    @recent_entries = @savings_pool.timeline_entries
       .includes(item: :category)
       .order(date: :desc)
       .limit(8)
@@ -82,7 +81,7 @@ class SavingsPoolsController < ApplicationController
     # This is more efficient than preloading all entries
     recent_entries = {}
     @savings_pools.each do |pool|
-      recent_entries[pool.id] = pool.entries
+      recent_entries[pool.id] = pool.timeline_entries
         .includes(item: :category)
         .order(date: :desc)
         .limit(3)

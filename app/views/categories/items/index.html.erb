@@ -2,7 +2,7 @@
 
 <%= page_header(
     title: "Manage Items",
-    subtitle: "#{@category.name} &mdash; #{@items.size} item#{'s' unless @items.size == 1}".html_safe,
+    subtitle: "#{@category.name} — #{pluralize(@items.size, "item")}",
     breadcrumbs: [
       { label: "Categories", url: categories_path(type: @category.category_type) },
       { label: @category.name, url: category_path(@category) },
@@ -80,9 +80,11 @@
                   <span>Last active: <%= time_ago_in_words(item.updated_at) %> ago</span>
                 </div>
                 <div class="flex items-center gap-3 mt-2">
-                  <%= link_to "Edit", edit_item_path(item),
+                  <%= link_to "Edit", 
+edit_item_path(item),
                       class: "text-xs text-brand hover:text-brand-dark font-medium" %>
-                  <%= link_to "Merge", merge_category_items_path(@category, target_item_id: item.id),
+                  <%= link_to "Merge", 
+merge_category_items_path(@category, target_item_id: item.id),
                       class: "text-xs text-brand hover:text-brand-dark font-medium" %>
                 </div>
               </div>
@@ -136,9 +138,11 @@
                   </td>
                   <td class="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm sm:pr-6">
                     <div class="flex items-center justify-end gap-3">
-                      <%= link_to "Edit", edit_item_path(item),
+                      <%= link_to "Edit", 
+edit_item_path(item),
                           class: "text-brand hover:text-brand-dark font-medium" %>
-                      <%= link_to "Merge", merge_category_items_path(@category, target_item_id: item.id),
+                      <%= link_to "Merge", 
+merge_category_items_path(@category, target_item_id: item.id),
                           class: "text-brand hover:text-brand-dark font-medium" %>
                     </div>
                   </td>
@@ -156,7 +160,8 @@
       </div>
       <h3 class="text-base font-medium text-gray-900 mb-1">No items in this category</h3>
       <p class="text-sm text-gray-500 mb-4">Items are created automatically when you add entries.</p>
-      <%= link_to "Back to Category", category_path(@category),
+      <%= link_to "Back to Category", 
+category_path(@category),
           class: "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
     </div>
   <% end %>

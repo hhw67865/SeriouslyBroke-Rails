@@ -35,7 +35,7 @@ RSpec.describe "Items Manage - Index", type: :system do
     end
   end
 
-  describe "empty state" do
+  describe "empty state", :aggregate_failures do
     it "shows empty message when no items" do
       visit category_items_path(category)
 
@@ -45,10 +45,9 @@ RSpec.describe "Items Manage - Index", type: :system do
   end
 
   describe "search", :aggregate_failures do
-    let!(:groceries) { create(:item, name: "Groceries", category: category) }
-    let!(:dining) { create(:item, name: "Dining Out", category: category) }
-
     it "filters items by name" do
+      create(:item, name: "Groceries", category: category)
+      create(:item, name: "Dining Out", category: category)
       visit category_items_path(category, field: "name", q: "Groceries")
 
       expect(page).to have_content("Groceries")

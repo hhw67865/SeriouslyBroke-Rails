@@ -22,10 +22,9 @@ class Item < ApplicationRecord
   def self.merge(target:, sources:)
     transaction do
       sources.each do |source|
-        source.entries.update_all(item_id: target.id)
-        source.destroy!
+        source.entries.update_all(item_id: target.id) # rubocop:disable Rails/SkipsModelValidations
+        source.reload.destroy!
       end
-      target.touch
     end
   end
 

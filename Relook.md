@@ -7,8 +7,7 @@
 - fireworks whenever you add savings.
 - Multiple entries
 - Make savings pools to automatically create expense and savings. Prob give a default name with option to change.
+- tutorial
 - Account settings
 - Statistics should be yearly only
-- Block category deletion if it has items, give a way to move items to another category.
 - Entry creation needs to be faster.
-- saving pool shouldnt display entries outsidee timeline.

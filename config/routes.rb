@@ -20,7 +20,7 @@ Rails.application.routes.draw do
     resources :items, only: [:index, :new, :create], controller: 'categories/items' do
       collection do
         get :merge
-        post :merge
+        post :merge, action: :perform_merge
         post :move
       end
     end

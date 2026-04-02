@@ -6,13 +6,13 @@ RSpec.describe "Items Manage - Merge", type: :system do
   let!(:user) { create(:user) }
   let!(:category) { create(:category, name: "Food", user: user) }
   let!(:target) { create(:item, name: "Groceries", category: category) }
-  let!(:source1) { create(:item, name: "Grocery Store", category: category) }
-  let!(:source2) { create(:item, name: "Supermarket", category: category) }
+  let!(:grocery_store) { create(:item, name: "Grocery Store", category: category) }
+  let!(:supermarket) { create(:item, name: "Supermarket", category: category) }
 
   before do
     create_list(:entry, 2, item: target)
-    create_list(:entry, 3, item: source1)
-    create(:entry, item: source2)
+    create_list(:entry, 3, item: grocery_store)
+    create(:entry, item: supermarket)
     sign_in user, scope: :user
   end
 

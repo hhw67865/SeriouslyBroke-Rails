@@ -26,6 +26,10 @@ class SavingsPool < ApplicationRecord
     entries.joins(item: :category).where(categories: { category_type: :expense }).where(date: start_date..)
   end
 
+  def timeline_entries
+    contribution_entries.or(withdrawal_entries)
+  end
+
   def calculator(as_of: nil)
     SavingsPoolCalculator.new(self, as_of: as_of)
   end

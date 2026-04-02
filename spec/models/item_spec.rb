@@ -26,21 +26,21 @@ RSpec.describe Item, type: :model do
     let(:user) { create(:user) }
     let(:category) { create(:category, user: user) }
     let(:target) { create(:item, name: "Target", category: category) }
-    let(:source1) { create(:item, name: "Source 1", category: category) }
-    let(:source2) { create(:item, name: "Source 2", category: category) }
+    let(:first_source) { create(:item, name: "Source A", category: category) }
+    let(:second_source) { create(:item, name: "Source B", category: category) }
 
     before do
       create_list(:entry, 2, item: target)
-      create_list(:entry, 3, item: source1)
-      create(:entry, item: source2)
+      create_list(:entry, 3, item: first_source)
+      create(:entry, item: second_source)
     end
 
     it "transfers all entries to target and destroys sources", :aggregate_failures do
-      Item.merge(target: target, sources: [source1, source2])
+      described_class.merge(target: target, sources: [first_source, second_source])
 
       expect(target.entries.count).to eq(6)
-      expect(Item.exists?(source1.id)).to be(false)
-      expect(Item.exists?(source2.id)).to be(false)
+      expect(described_class.exists?(first_source.id)).to be(false)
+      expect(described_class.exists?(second_source.id)).to be(false)
     end
   end
 
@@ -65,7 +65,7 @@ RSpec.describe Item, type: :model do
 
       item.move_to_category(target_category)
 
-      expect(Item.exists?(item.id)).to be(false)
+      expect(described_class.exists?(item.id)).to be(false)
       expect(existing.entries.count).to eq(3)
     end
   end
