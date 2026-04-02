@@ -11,8 +11,6 @@
   <%# Details row %>
   <div class="flex items-center justify-between text-sm text-gray-500 mb-3">
     <div class="flex items-center gap-3">
-      <span><%= item_card[:item].frequency&.humanize || "One-time" %></span>
-      <span class="text-gray-300">|</span>
       <span><%= item_card[:data][:entry_count] %> <%= "entry".pluralize(item_card[:data][:entry_count]) %></span>
     </div>
     <span><%= item_card[:data][:latest_entry].date.strftime("%b %d") %></span>

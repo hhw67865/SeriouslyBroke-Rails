@@ -12,10 +12,6 @@ RSpec.describe Item, type: :model do
     it { is_expected.to validate_presence_of(:name) }
   end
 
-  describe "enums" do
-    it { is_expected.to define_enum_for(:frequency).with_values(one_time: 0, monthly: 1, yearly: 2) }
-  end
-
   describe "delegation" do
     let(:user) { create(:user) }
     let(:category) { create(:category, user: user) }
@@ -23,6 +19,54 @@ RSpec.describe Item, type: :model do
 
     it "delegates user to category" do
       expect(item.user).to eq(user)
+    end
+  end
+
+  describe ".merge" do
+    let(:user) { create(:user) }
+    let(:category) { create(:category, user: user) }
+    let(:target) { create(:item, name: "Target", category: category) }
+    let(:source1) { create(:item, name: "Source 1", category: category) }
+    let(:source2) { create(:item, name: "Source 2", category: category) }
+
+    before do
+      create_list(:entry, 2, item: target)
+      create_list(:entry, 3, item: source1)
+      create(:entry, item: source2)
+    end
+
+    it "transfers all entries to target and destroys sources", :aggregate_failures do
+      Item.merge(target: target, sources: [source1, source2])
+
+      expect(target.entries.count).to eq(6)
+      expect(Item.exists?(source1.id)).to be(false)
+      expect(Item.exists?(source2.id)).to be(false)
+    end
+  end
+
+  describe "#move_to_category" do
+    let(:user) { create(:user) }
+    let(:source_category) { create(:category, name: "Source", user: user) }
+    let(:target_category) { create(:category, name: "Target", user: user) }
+
+    it "moves item to target category" do
+      item = create(:item, name: "My Item", category: source_category)
+
+      item.move_to_category(target_category)
+
+      expect(item.reload.category).to eq(target_category)
+    end
+
+    it "merges with existing same-named item in target category", :aggregate_failures do
+      item = create(:item, name: "Groceries", category: source_category)
+      create_list(:entry, 2, item: item)
+      existing = create(:item, name: "Groceries", category: target_category)
+      create(:entry, item: existing)
+
+      item.move_to_category(target_category)
+
+      expect(Item.exists?(item.id)).to be(false)
+      expect(existing.entries.count).to eq(3)
     end
   end
 

@@ -4,13 +4,16 @@ class ItemsController < ApplicationController
   before_action :set_item, only: [:edit, :update, :destroy]
 
   # GET /items/1/edit
-  def edit; end
+  def edit
+    @previous_url = request.referer
+  end
 
   # PATCH/PUT /items/1
   def update
     if @item.update(item_params)
-      redirect_to category_path(@item.category), notice: "Item was successfully updated."
+      redirect_to params[:previous_url].presence || category_path(@item.category), notice: "Item was successfully updated."
     else
+      @previous_url = params[:previous_url]
       render :edit, status: :unprocessable_content
     end
   end
@@ -29,6 +32,6 @@ class ItemsController < ApplicationController
   end
 
   def item_params
-    params.expect(item: [:name, :description, :frequency, :category_id])
+    params.expect(item: [:name, :description, :category_id])
   end
 end

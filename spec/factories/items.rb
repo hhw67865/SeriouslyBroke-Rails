@@ -4,7 +4,6 @@ FactoryBot.define do
   factory :item do
     name { Faker::Commerce.product_name }
     description { Faker::Lorem.sentence }
-    frequency { :one_time }
     association :category
 
     trait :expense do
@@ -26,18 +25,6 @@ FactoryBot.define do
         user { create(:user) }
       end
       association :category, factory: [:category, :savings]
-    end
-
-    trait :one_time do
-      frequency { :one_time }
-    end
-
-    trait :monthly do
-      frequency { :monthly }
-    end
-
-    trait :yearly do
-      frequency { :yearly }
     end
 
     trait :with_entries do

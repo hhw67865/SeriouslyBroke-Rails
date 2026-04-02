@@ -79,49 +79,49 @@ Rails.logger.debug "Creating expense items..."
 
 # Housing items
 housing_items = [
-  { name: "Rent", frequency: :monthly },
-  { name: "Home Insurance", frequency: :yearly },
-  { name: "Property Tax", frequency: :monthly },
-  { name: "Maintenance", frequency: :monthly },
-  { name: "Mortgage", frequency: :monthly }
+  { name: "Rent" },
+  { name: "Home Insurance" },
+  { name: "Property Tax" },
+  { name: "Maintenance" },
+  { name: "Mortgage" }
 ].map { |attrs| expense_categories[0].items.create!(attrs) }
 
 # Transportation items
 transportation_items = [
-  { name: "Gas", frequency: :monthly },
-  { name: "Car Insurance", frequency: :yearly },
-  { name: "Public Transit", frequency: :monthly },
-  { name: "Car Maintenance", frequency: :monthly },
-  { name: "Parking", frequency: :monthly },
-  { name: "Rideshare", frequency: :monthly }
+  { name: "Gas" },
+  { name: "Car Insurance" },
+  { name: "Public Transit" },
+  { name: "Car Maintenance" },
+  { name: "Parking" },
+  { name: "Rideshare" }
 ].map { |attrs| expense_categories[1].items.create!(attrs) }
 
 # Food items
 food_items = [
-  { name: "Groceries", frequency: :monthly },
-  { name: "Dining Out", frequency: :monthly },
-  { name: "Takeout", frequency: :monthly },
-  { name: "Coffee Shops", frequency: :monthly },
-  { name: "Work Lunches", frequency: :monthly }
+  { name: "Groceries" },
+  { name: "Dining Out" },
+  { name: "Takeout" },
+  { name: "Coffee Shops" },
+  { name: "Work Lunches" }
 ].map { |attrs| expense_categories[2].items.create!(attrs) }
 
 # Utilities items
 utilities_items = [
-  { name: "Electricity", frequency: :monthly },
-  { name: "Water", frequency: :monthly },
-  { name: "Internet", frequency: :monthly },
-  { name: "Phone", frequency: :monthly },
-  { name: "Streaming Services", frequency: :monthly },
-  { name: "Gas", frequency: :monthly }
+  { name: "Electricity" },
+  { name: "Water" },
+  { name: "Internet" },
+  { name: "Phone" },
+  { name: "Streaming Services" },
+  { name: "Gas" }
 ].map { |attrs| expense_categories[3].items.create!(attrs) }
 
 # Entertainment items
 entertainment_items = [
-  { name: "Movies", frequency: :monthly },
-  { name: "Concerts", frequency: :monthly },
-  { name: "Subscriptions", frequency: :monthly },
-  { name: "Hobbies", frequency: :monthly },
-  { name: "Gaming", frequency: :monthly }
+  { name: "Movies" },
+  { name: "Concerts" },
+  { name: "Subscriptions" },
+  { name: "Hobbies" },
+  { name: "Gaming" }
 ].map { |attrs| expense_categories[4].items.create!(attrs) }
 
 # Link some expense categories to savings pools (pool-covered expenses)
@@ -153,23 +153,23 @@ end
 # Create income items
 Rails.logger.debug "Creating income items..."
 income_items = {
-  "Salary" => [{ name: "Primary Job", frequency: :monthly }],
+  "Salary" => [{ name: "Primary Job" }],
   "Freelance" => [
-    { name: "Web Development", frequency: :monthly },
-    { name: "Writing", frequency: :monthly },
-    { name: "Consulting", frequency: :monthly }
+    { name: "Web Development" },
+    { name: "Writing" },
+    { name: "Consulting" }
   ],
   "Investments" => [
-    { name: "Dividends", frequency: :yearly },
-    { name: "Interest", frequency: :monthly },
-    { name: "Capital Gains", frequency: :yearly }
+    { name: "Dividends" },
+    { name: "Interest" },
+    { name: "Capital Gains" }
   ],
   "Gifts" => [
-    { name: "Birthday", frequency: :yearly },
-    { name: "Holiday", frequency: :yearly }
+    { name: "Birthday" },
+    { name: "Holiday" }
   ],
   "Rental Income" => [
-    { name: "Property Rental", frequency: :monthly }
+    { name: "Property Rental" }
   ]
 }
 
@@ -183,19 +183,19 @@ end
 Rails.logger.debug "Creating savings items..."
 savings_items = {
   "Emergency Fund" => [
-    { name: "Monthly Contribution", frequency: :monthly }
+    { name: "Monthly Contribution" }
   ],
   "Vacation" => [
-    { name: "Vacation Savings", frequency: :monthly }
+    { name: "Vacation Savings" }
   ],
   "Home Down Payment" => [
-    { name: "Home Savings", frequency: :monthly }
+    { name: "Home Savings" }
   ],
   "Retirement" => [
-    { name: "Additional Retirement", frequency: :monthly }
+    { name: "Additional Retirement" }
   ],
   "Vehicle" => [
-    { name: "Car Fund", frequency: :monthly }
+    { name: "Car Fund" }
   ]
 }
 
@@ -328,7 +328,7 @@ months.each do |month_start|
     )
   end
 
-  # Entertainment expenses - varied frequency
+  # Entertainment expenses
   entertainment_entries = {
     "Movies" => [
       { amount: rand(15..30), day: rand(5..15) },
@@ -391,7 +391,7 @@ months.each do |month_start|
   # Investments - quarterly for some items
   investments_category = income_categories[2]
 
-  # For dividends (paid every 3 months, but using yearly frequency)
+  # For dividends (paid every 3 months)
   if (month_start.month % 3).zero?
     investments_category.items.find_by(name: "Dividends").entries.create!(
       amount: 350,
@@ -450,8 +450,7 @@ months.each do |month_start|
     if category.items.empty?
       3.times do |i|
         category.items.create!(
-          name: "#{category.name} Item #{i + 1}",
-          frequency: [:monthly, :yearly].sample
+          name: "#{category.name} Item #{i + 1}"
         )
       end
     end

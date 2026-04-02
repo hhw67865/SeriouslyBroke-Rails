@@ -5,9 +5,6 @@
       <%= item_row[:item].name %>
     </td>
     <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-      <%= item_row[:item].frequency&.humanize || "One-time" %>
-    </td>
-    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
       <%= item_row[:data][:latest_entry].date.strftime("%b %d, %Y") %>
     </td>
     <td class="whitespace-nowrap px-3 py-4 text-sm text-right text-gray-500">

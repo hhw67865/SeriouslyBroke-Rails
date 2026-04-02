@@ -782,7 +782,6 @@ FactoryBot.define do
   factory :item do
     name { Faker::Commerce.product_name }  # Random name
     description { Faker::Lorem.sentence }   # Random description
-    frequency { :one_time }
     association :category
 
     trait :with_entries do

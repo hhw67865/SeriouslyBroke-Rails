@@ -1,6 +1,6 @@
 <%# Item Edit Form - SimpleForm with brand styling %>
 <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
-  <%= simple_form_for item, html: { class: "space-y-6" } do |f| %>
+  <%= simple_form_for item, url: local_assigns[:url], html: { class: "space-y-6" } do |f| %>
     <%# Item Name %>
     <div>
       <%= f.input :name,
@@ -26,35 +26,26 @@
           hint: "Optional description to help identify this item" %>
     </div>
 
-    <%# Frequency Selection %>
-    <div>
-      <%= f.input :frequency,
-          collection: Item.frequencies.keys.map { |freq| [freq.humanize, freq] },
-          label: "Frequency",
-          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-          input_html: { 
-            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
-          },
-          hint: "How often does this item typically occur?" %>
-    </div>
-
     <%# Category (Read-only for editing) %>
     <div>
       <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
       <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
         <%= item.category.name %>
       </div>
-      <p class="text-xs text-gray-500 mt-1">Category cannot be changed after creation</p>
+      <p class="text-xs text-gray-500 mt-1">Use Manage Items to move between categories</p>
       <%= f.hidden_field :category_id %>
     </div>
 
+    <% if @previous_url.present? %>
+      <%= hidden_field_tag :previous_url, @previous_url %>
+    <% end %>
+
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
-      <%= link_to "Cancel", 
-category_path(item.category),
+      <%= link_to "Cancel", @previous_url.presence || category_path(item.category),
           class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
 
-      <%= f.submit "Update Item",
+      <%= f.submit item.persisted? ? "Update Item" : "Create Item",
           class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
     </div>
     

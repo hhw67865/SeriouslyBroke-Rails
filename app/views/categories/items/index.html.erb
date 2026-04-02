@@ -1,0 +1,163 @@
+<% content_for :title, "Manage Items - #{@category.name}" %>
+
+<%= page_header(
+    title: "Manage Items",
+    subtitle: "#{@category.name} &mdash; #{@items.size} item#{'s' unless @items.size == 1}".html_safe,
+    breadcrumbs: [
+      { label: "Categories", url: categories_path(type: @category.category_type) },
+      { label: @category.name, url: category_path(@category) },
+      { label: "Manage Items" }
+    ],
+    search: {
+      enabled: true,
+      url: category_items_path(@category),
+      field_selector: {
+        options: search_options_with_selection(@search_state[:field]),
+        selected: @search_state[:field]
+      },
+      query: @search_state[:query],
+      placeholder: "Search items...",
+      has_results: @search_state[:has_search],
+      clear_url: category_items_path(@category)
+    },
+    actions: [
+      {
+        label: "New Item",
+        url: new_category_item_path(@category),
+        class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
+      }
+    ]
+) %>
+
+<div class="container mx-auto px-4 py-6" data-controller="app--item--management">
+  <% if @items.any? %>
+    <%= form_with url: move_category_items_path(@category), method: :post, local: true do %>
+      <%# Bulk Actions Toolbar %>
+      <div class="bg-brand/5 rounded mb-4 px-4 py-3"
+           data-app--item--management-target="toolbar">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">
+            <span data-app--item--management-target="selectedCount">0</span> selected
+          </span>
+
+          <div class="flex items-center gap-2 flex-1">
+            <select name="target_category_id" required
+                    class="block w-full sm:w-auto rounded border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 text-sm py-2">
+              <option value="">Select a Category</option>
+              <% current_user.categories.where(category_type: @category.category_type).where.not(id: @category.id).order(:name).each do |cat| %>
+                <option value="<%= cat.id %>"><%= cat.name %></option>
+              <% end %>
+            </select>
+            <button type="submit"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition whitespace-nowrap">
+              <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
+              Move
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <%# Items Table %>
+      <div class="bg-white shadow-sm rounded border border-gray-100">
+        <%# Mobile: Card Layout %>
+        <div class="md:hidden divide-y divide-gray-200">
+          <% @items.each do |item| %>
+            <div class="p-4 flex items-start gap-3">
+              <input type="checkbox" name="item_ids[]" value="<%= item.id %>"
+                     class="mt-1 h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+                     data-app--item--management-target="checkbox"
+                     data-action="change->app--item--management#selectionChanged">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                  <span class="font-medium text-gray-900 truncate"><%= item.name %></span>
+                  <span class="text-sm font-medium text-gray-900">
+                    <%= number_to_currency(item.entries.sum(&:amount)) %>
+                  </span>
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                  <span><%= item.entries.size %> entries</span>
+                  <span>Last active: <%= time_ago_in_words(item.updated_at) %> ago</span>
+                </div>
+                <div class="flex items-center gap-3 mt-2">
+                  <%= link_to "Edit", edit_item_path(item),
+                      class: "text-xs text-brand hover:text-brand-dark font-medium" %>
+                  <%= link_to "Merge", merge_category_items_path(@category, target_item_id: item.id),
+                      class: "text-xs text-brand hover:text-brand-dark font-medium" %>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <%# Desktop: Table Layout %>
+        <div class="hidden md:block overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-300">
+            <thead class="bg-gray-50">
+              <tr>
+                <th scope="col" class="py-3.5 pl-4 pr-3 sm:pl-6 w-10">
+                  <input type="checkbox"
+                         class="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+                         data-app--item--management-target="selectAll"
+                         data-action="change->app--item--management#toggleAll">
+                </th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Name</th>
+                <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Last Active</th>
+                <th scope="col" class="px-3 py-3.5 text-right text-sm font-semibold text-gray-900">Entries</th>
+                <th scope="col" class="px-3 py-3.5 text-right text-sm font-semibold text-gray-900">Total Amount</th>
+                <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                  <span class="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 bg-white">
+              <% @items.each do |item| %>
+                <tr class="hover:bg-gray-50">
+                  <td class="py-4 pl-4 pr-3 sm:pl-6">
+                    <input type="checkbox" name="item_ids[]" value="<%= item.id %>"
+                           class="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+                           data-app--item--management-target="checkbox"
+                           data-action="change->app--item--management#selectionChanged">
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900">
+                    <%= item.name %>
+                    <% if item.description.present? %>
+                      <p class="text-xs text-gray-500 font-normal truncate max-w-xs"><%= item.description %></p>
+                    <% end %>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    <%= time_ago_in_words(item.updated_at) %> ago
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500 text-right">
+                    <%= item.entries.size %>
+                  </td>
+                  <td class="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-900 text-right">
+                    <%= number_to_currency(item.entries.sum(&:amount)) %>
+                  </td>
+                  <td class="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm sm:pr-6">
+                    <div class="flex items-center justify-end gap-3">
+                      <%= link_to "Edit", edit_item_path(item),
+                          class: "text-brand hover:text-brand-dark font-medium" %>
+                      <%= link_to "Merge", merge_category_items_path(@category, target_item_id: item.id),
+                          class: "text-brand hover:text-brand-dark font-medium" %>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+    <div class="bg-white shadow-sm rounded border border-gray-100 p-12 text-center">
+      <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
+        <%= heroicon "inbox", options: { class: "h-6 w-6 text-gray-400" } %>
+      </div>
+      <h3 class="text-base font-medium text-gray-900 mb-1">No items in this category</h3>
+      <p class="text-sm text-gray-500 mb-4">Items are created automatically when you add entries.</p>
+      <%= link_to "Back to Category", category_path(@category),
+          class: "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+    </div>
+  <% end %>
+</div>

@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe "Items Edit - Form", type: :system do
   let!(:user) { create(:user) }
   let!(:category) { create(:category, name: "Groceries", user: user) }
-  let!(:item) { create(:item, name: "Original Item", description: "Original description", frequency: "one_time", category: category) }
+  let!(:item) { create(:item, name: "Original Item", description: "Original description", category: category) }
 
   before { sign_in user, scope: :user }
 
@@ -17,12 +17,7 @@ RSpec.describe "Items Edit - Form", type: :system do
       expect(page).to have_content("Update details for Original Item")
       expect(page).to have_field("Name")
       expect(page).to have_field("Description")
-      expect(page).to have_field("Frequency")
       expect(page).to have_button("Update Item")
-    end
-
-    it "shows frequency options" do
-      expect(page).to have_select("Frequency", options: ["", "One time", "Monthly", "Yearly"])
     end
 
     it "shows read-only category information" do
@@ -48,23 +43,6 @@ RSpec.describe "Items Edit - Form", type: :system do
 
       expect(page).to have_field("Name", with: "Original Item")
       expect(page).to have_field("Description", with: "Original description")
-      expect(page).to have_select("Frequency", selected: "One time")
-    end
-
-    it "pre-fills monthly frequency correctly" do
-      monthly_item = create(:item, :monthly, name: "Monthly Rent", category: category)
-      visit edit_item_path(monthly_item)
-
-      expect(page).to have_field("Name", with: "Monthly Rent")
-      expect(page).to have_select("Frequency", selected: "Monthly")
-    end
-
-    it "pre-fills yearly frequency correctly" do
-      yearly_item = create(:item, :yearly, name: "Annual Insurance", category: category)
-      visit edit_item_path(yearly_item)
-
-      expect(page).to have_field("Name", with: "Annual Insurance")
-      expect(page).to have_select("Frequency", selected: "Yearly")
     end
   end
 
@@ -135,17 +113,6 @@ RSpec.describe "Items Edit - Form", type: :system do
       expect(item.description).to eq("Updated description text")
     end
 
-    it "updates frequency and persists changes" do
-      select "Monthly", from: "Frequency"
-      click_button "Update Item"
-
-      expect(page).to have_content("Item was successfully updated")
-      expect(page).to have_current_path(category_path(category))
-
-      item.reload
-      expect(item.frequency).to eq("monthly")
-    end
-
     it "clears description when set to empty" do
       fill_in "Description", with: ""
       click_button "Update Item"
@@ -159,7 +126,6 @@ RSpec.describe "Items Edit - Form", type: :system do
     it "updates multiple fields simultaneously" do
       fill_in "Name", with: "Completely Updated"
       fill_in "Description", with: "New description"
-      select "Yearly", from: "Frequency"
       click_button "Update Item"
 
       expect(page).to have_content("Item was successfully updated")
@@ -168,7 +134,6 @@ RSpec.describe "Items Edit - Form", type: :system do
       item.reload
       expect(item.name).to eq("Completely Updated")
       expect(item.description).to eq("New description")
-      expect(item.frequency).to eq("yearly")
     end
   end
 
@@ -213,40 +178,6 @@ RSpec.describe "Items Edit - Form", type: :system do
 
       expect(page).to have_content("Salary")
       expect(page).to have_content("Category cannot be changed after creation")
-    end
-  end
-
-  describe "form behavior with different frequencies", :aggregate_failures do
-    it "handles one_time frequency updates correctly" do
-      item.update!(frequency: "monthly")
-      visit edit_item_path(item)
-
-      select "One time", from: "Frequency"
-      click_button "Update Item"
-
-      expect(page).to have_content("Item was successfully updated")
-      item.reload
-      expect(item.frequency).to eq("one_time")
-    end
-
-    it "handles monthly frequency updates correctly" do
-      visit edit_item_path(item)
-      select "Monthly", from: "Frequency"
-      click_button "Update Item"
-
-      expect(page).to have_content("Item was successfully updated")
-      item.reload
-      expect(item.frequency).to eq("monthly")
-    end
-
-    it "handles yearly frequency updates correctly" do
-      visit edit_item_path(item)
-      select "Yearly", from: "Frequency"
-      click_button "Update Item"
-
-      expect(page).to have_content("Item was successfully updated")
-      item.reload
-      expect(item.frequency).to eq("yearly")
     end
   end
 

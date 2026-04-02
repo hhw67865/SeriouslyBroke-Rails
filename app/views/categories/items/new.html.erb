@@ -1,0 +1,16 @@
+<% content_for :title, "New Item - #{@category.name}" %>
+
+<%= page_header(
+    title: "New Item",
+    subtitle: "Add an item to #{@category.name}",
+    breadcrumbs: [
+      { label: "Categories", url: categories_path(type: @category.category_type) },
+      { label: @category.name, url: category_path(@category) },
+      { label: "Manage Items", url: category_items_path(@category) },
+      { label: "New Item" }
+    ]
+) %>
+
+<div class="max-w-2xl mx-auto">
+  <%= render "items/form", item: @item, url: category_items_path(@category) %>
+</div>

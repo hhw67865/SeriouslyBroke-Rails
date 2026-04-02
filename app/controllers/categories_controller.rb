@@ -51,11 +51,6 @@ class CategoriesController < ApplicationController
     redirect_to categories_path(type: category_type), notice: "Category was successfully deleted."
   end
 
-  def items
-    category = current_user.categories.find(params[:id])
-    render json: category.items.order(:name), status: :ok
-  end
-
   def toggle_tracked
     if @category.update(tracked: !@category.tracked?)
       redirect_back_or_to(root_path)
