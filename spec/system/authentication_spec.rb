@@ -88,6 +88,29 @@ RSpec.describe "Authentication", type: :system do
       end
     end
 
+    describe "honeypot bot protection", :aggregate_failures do
+      it "rejects submission when honeypot field is filled" do
+        fill_in "Email", with: "bot@example.com"
+        fill_in "Password", with: "password123"
+        fill_in "Password confirmation", with: "password123"
+        page.find("#website", visible: false).set("http://spam.com")
+        click_button "Sign up"
+
+        expect(page).to have_current_path(root_path)
+        expect(User.find_by(email: "bot@example.com")).to be_nil
+      end
+
+      it "allows submission when honeypot field is blank" do
+        fill_in "Email", with: "legit@example.com"
+        fill_in "Password", with: "password123"
+        fill_in "Password confirmation", with: "password123"
+        click_button "Sign up"
+
+        expect(page).to have_current_path(authenticated_root_path)
+        expect(User.find_by(email: "legit@example.com")).to be_present
+      end
+    end
+
     describe "navigation", :aggregate_failures do
       it "provides correct navigation links" do
         click_link "Already have an account? Sign in"
