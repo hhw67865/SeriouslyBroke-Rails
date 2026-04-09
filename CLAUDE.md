@@ -33,7 +33,8 @@ All coding standards and patterns are documented in `/docs/`:
 - **`docs/coding-standards.md`** - Architecture, custom patterns (Presenter, Calculator, Searchable), and key principles (Fat Models/Skinny Controllers, DRY, RESTful design)
 - **`docs/design-standards.md`** - S-Tier SaaS design checklist (colors, typography, spacing, components, accessibility)
 - **`docs/searchable-system-reference.md`** - Complete reference for the searchable DSL system
-- **`spec/testing_guidelines.md`** - Comprehensive testing patterns and RSpec conventions
+
+Testing standards are in the `system-test-writer` skill (`.claude/skills/system-test-writer/`).
 
 Always consult these files before implementing features to ensure consistency with established patterns.
 
@@ -81,26 +82,26 @@ This agent should be used proactively after completing significant code changes.
 IMMEDIATELY after implementing any front-end change:
 
 1. **Identify what changed** - Review the modified components/pages
-2. **Navigate to affected pages** - Use `mcp__playwright__browser_navigate` to visit each changed view
+2. **Navigate to affected pages** - Use the `agent-browser` skill to visit each changed view
 3. **Verify design compliance** - Compare against `/docs/design-standards.md`
 4. **Validate feature implementation** - Ensure the change fulfills the user's specific request
 5. **Check acceptance criteria** - Review any provided context files or requirements
 6. **Capture evidence** - Take full page screenshot at desktop viewport (1440px) of each changed view
-7. **Check for errors** - Run `mcp__playwright__browser_console_messages`
+7. **Check for errors** - Check browser console for JavaScript errors
 
 This verification ensures changes meet design standards and user requirements.
 
-### Playwright Login Credentials
+### Browser Login Credentials
 
-When accessing the website through Playwright, use these credentials:
+When accessing the website through agent-browser, use these credentials:
 - **Email**: `demo@example.com`
 - **Password**: `password123`
 
 ### Cleanup After Visual Verification
 
-After completing visual verification with Playwright, clean up screenshots:
+After completing visual verification with agent-browser, clean up any saved screenshots:
 ```bash
-rm -f .playwright-mcp/*.png
+rm -f *.png
 ```
 This prevents accumulation of temporary screenshot files in the repository.
 
@@ -112,69 +113,25 @@ Invoke the `design-review` agent for thorough design validation when:
 - Before finalizing PRs with visual changes
 - Needing review of styling consistency and color usage
 
-The design-review agent performs:
-- Review of custom.css color utility usage vs raw Tailwind colors
+The design-review agent reads the design standards and performs:
+- Verification against custom.css color tokens and component specs
 - Consistency checks with project styling standards (squared edges, spacing)
 - Responsive layout logic verification
 - Visual hierarchy and typography assessment
-- Identification of styling improvements
+- Anti-pattern detection per the design standards guide
 
 ---
 
 ## Testing Workflow
 
-### Philosophy
-
-- **Minimal code**: Write tests with as few lines as possible while maintaining clarity
-- **System test focus**: Primarily use system tests for end-to-end functionality testing
-- **DRY principles**: Extract common actions into private helper methods
-- **Essential functionality focus**: Test core functionality without over-testing every detail
-
-### Before Writing Tests
-
-1. **Read the testing guidelines** - Check `/spec/testing_guidelines.md` for project-specific standards
-2. **Examine existing tests** - Look at similar tests in `spec/system/` to match established patterns
-3. **Understand the feature** - Review the implementation to identify core functionality needing tests
-
-### Test File Organization
-
-Tests follow a strict page-based structure mirroring the web application:
-
-```
-spec/system/
-├── feature_name/     # Group by model/feature or app section
-│   ├── index/        # Index page folder
-│   │   ├── header_spec.rb
-│   │   ├── cards_spec.rb
-│   │   └── filtering_spec.rb
-│   ├── show/         # Show page folder
-│   ├── new/          # New page folder
-│   └── edit/         # Edit page folder
-```
-
-### Testing Standards
-
-- Use `:aggregate_failures` at the describe block level for cleaner code
-- One concept per test - each `it` block tests one logical behavior
-- Extract repeated DOM interactions into private helper methods
-- Use factories efficiently with traits and associations
-- Test user-visible behavior, not implementation details
-
-### What NOT to Do
-
-- Don't write separate tests for every single element on a page
-- Don't duplicate test logic - extract to helpers
-- Don't test framework behavior (Rails validations work)
-- Don't write overly specific selectors that break easily
-- Don't create unnecessary test data
+Use the `system-test-writer` skill to write system tests. This skill handles page-based test organization, DRY patterns, and all project testing conventions automatically.
 
 ### Running Tests
 
-After implementing features, run relevant tests to verify.
-Only run one rspec file at a time, since there is a known problem with running all tests at once.
+Always run test files one at a time, never entire directories or the full suite:
 
 ```bash
-bundle exec rspec spec/system/feature_name.rb  # Run file tests
+bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file at a time
 ```
 ---
 
@@ -188,6 +145,6 @@ When implementing any feature:
 4. **Fix issues** - Address any review feedback
 5. **If front-end changes** - Perform Quick Visual Check
 6. **If significant UI** - Run design-review agent
-7. **Write tests** - Follow patterns in `spec/testing_guidelines.md`
-8. **Run tests** - Verify implementation with `bundle exec rspec`
+7. **Write tests** - Use the `system-test-writer` skill
+8. **Run tests** - Run each test file individually with `bundle exec rspec path/to/spec.rb`
 9. **Commit** - Only after all checks pass
