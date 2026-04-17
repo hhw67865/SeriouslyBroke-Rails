@@ -12,7 +12,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before { visit root_path(tab: "expenses") }
 
     it "shows empty message when no expense data" do
-      expect(page).to have_content("No expense data")
+      expect(page).to have_content("No budgeted expense data")
       expect(page).to have_content("No budgeted expenses")
       expect(page).to have_content("No pool-covered expenses")
     end
@@ -36,11 +36,11 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit root_path(tab: "expenses")
     end
 
-    it "shows Budgeted section with only budgetable categories" do
-      within budgeted_section do
+    it "shows Monthly Budget section with only budgetable categories" do
+      within monthly_budget_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
-        expect(page).not_to have_content("Car Repair")
+        expect(page).not_to have_link("Car Repair")
       end
     end
 
@@ -48,13 +48,18 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       within pool_covered_section do
         expect(page).to have_link("Car Repair")
         expect(page).to have_content("$200.00")
-        expect(page).not_to have_content("Groceries")
+        expect(page).not_to have_link("Groceries")
       end
     end
 
     it "shows budget total only for budgetable categories" do
       expect(page).to have_content("Monthly Budget")
       expect(page).to have_content("$500.00")
+    end
+
+    it "excludes pool-covered spending from budgeted totals" do
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$150.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$150.00") }
     end
   end
 
@@ -93,9 +98,9 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit root_path(tab: "expenses")
     end
 
-    it "shows tracked and untracked categories separately with links" do
-      within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+    it "shows tracked and total budgeted stats with category links" do
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_link("Groceries", href: category_path(groceries))
       expect(page).to have_link("Dining", href: category_path(dining))
@@ -126,7 +131,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "shows budget amount next to spent amount" do
-      within budgeted_section do
+      within monthly_budget_section do
         expect(page).to have_content("$650.00 / $500.00")
         expect(page).to have_content("$80.00 / $200.00")
         expect(page).to have_content("$400.00 / $300.00")
@@ -134,7 +139,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "shows over/remaining amounts" do
-      within budgeted_section do
+      within monthly_budget_section do
         expect(page).to have_content("+$150.00 over")
         expect(page).to have_content("+$100.00 over")
         expect(page).to have_content("$120.00 left")
@@ -142,14 +147,14 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "orders categories by most over budget first" do
-      within budgeted_section do
+      within monthly_budget_section do
         names = all("a[href^='/categories']").map(&:text)
         expect(names).to eq(["Groceries", "Dining", "Utilities"])
       end
     end
 
     it "shows budget totals" do
-      within budgeted_section do
+      within monthly_budget_section do
         expect(page).to have_content("$1,130.00 / $1,000.00")
       end
     end
@@ -166,12 +171,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit root_path(tab: "expenses", period: "ytd")
     end
 
-    it "shows YTD Spending heading" do
-      expect(page).to have_content("YTD Spending")
+    it "shows YTD Budgeted Spending heading" do
+      expect(page).to have_content("YTD Budgeted Spending")
     end
 
-    it "shows YTD Tracked label in summary stats" do
-      expect(page).to have_content("YTD Tracked")
+    it "shows YTD Tracked Budgeted label in summary stats" do
+      expect(page).to have_content("YTD Tracked Budgeted")
     end
 
     it "shows YTD Budget label" do
@@ -181,12 +186,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
 
   private
 
-  def budgeted_section
-    find("h3", text: "Budgeted").ancestor("div.mb-8")
+  def monthly_budget_section
+    find("h2", text: "Monthly Budget").ancestor("section")
   end
 
   def pool_covered_section
-    find("h3", text: "Pool-Covered").ancestor("div.mb-8")
+    find("h2", text: "Pool-Covered Spending").ancestor("section")
   end
 
   def within_stat_card(label, &)

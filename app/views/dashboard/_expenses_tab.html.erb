@@ -1,57 +1,61 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, :expenses_v6] do %>
-<%# Expenses Chart: Cumulative expense totals with budget line %>
-<div class="mb-8">
-  <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-    <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Spending" : "Monthly Spending" %></h3>
-    <%= link_to root_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
-        class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>
-      <%= heroicon show_total ? "eye-slash" : "eye", options: { class: "h-3.5 w-3.5" } %>
-      <%= show_total ? "Hide Total" : "Show Total" %>
-    <% end %>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v7] do %>
+
+<%# === MONTHLY BUDGET SYSTEM === %>
+<%# Recurring expenses tracked against monthly budget caps %>
+<section class="mb-12">
+  <div class="border-l-4 border-brand pl-4 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">Monthly Budget</h2>
+    <p class="text-sm text-gray-500">Recurring expenses tracked against your monthly budgets</p>
   </div>
-  <div class="bg-gray-50 rounded p-4">
-    <% if @presenter.expenses_chart_data.any? %>
-      <% chart_data = [] %>
-      <% if @presenter.budget_line_data.any? %>
-        <% chart_data << { name: "Budget", data: @presenter.budget_line_data } %>
+
+  <%# Budget Chart %>
+  <div class="mb-8">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Budgeted Spending" : "Monthly Budgeted Spending" %></h3>
+      <%= link_to root_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
+          class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>
+        <%= heroicon show_total ? "eye-slash" : "eye", options: { class: "h-3.5 w-3.5" } %>
+        <%= show_total ? "Hide Total" : "Show Total" %>
       <% end %>
-      <% chart_data += @presenter.expenses_chart_data %>
-      <%= line_chart chart_data,
-          curve: false,
-          points: false,
-          prefix: "$ ",
-          colors: @presenter.expenses_chart_colors %>
-    <% else %>
-      <p class="text-gray-500 text-center py-8">No expense data <%= period_time_label %></p>
+    </div>
+    <div class="bg-gray-50 rounded p-4">
+      <% if @presenter.expenses_chart_data.any? %>
+        <% chart_data = [] %>
+        <% if @presenter.budget_line_data.any? %>
+          <% chart_data << { name: "Budget", data: @presenter.budget_line_data } %>
+        <% end %>
+        <% chart_data += @presenter.expenses_chart_data %>
+        <%= line_chart chart_data,
+            curve: false,
+            points: false,
+            prefix: "$ ",
+            colors: @presenter.expenses_chart_colors %>
+      <% else %>
+        <p class="text-gray-500 text-center py-8">No budgeted expense data <%= period_time_label %></p>
+      <% end %>
+    </div>
+  </div>
+
+  <%# Budget Stats %>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Budgeted" : "Tracked Budgeted" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_budgetable_expenses) %></p>
+    </div>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Budgeted" : "Total Budgeted" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_budgetable_expenses) %></p>
+    </div>
+    <% if @presenter.total_budget.positive? %>
+      <div class="bg-gray-50 rounded p-4">
+        <p class="text-sm text-gray-500"><%= period_budget_label %></p>
+        <p class="text-2xl font-semibold text-gray-700"><%= number_to_currency(@presenter.total_budget) %></p>
+      </div>
     <% end %>
   </div>
-</div>
 
-<%# Summary Stats %>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-  <div class="bg-gray-50 rounded p-4">
-    <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked" : "Tracked Expenses" %></p>
-    <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_expenses) %></p>
-  </div>
-  <div class="bg-gray-50 rounded p-4">
-    <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total" : "Total Expenses" %></p>
-    <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_expenses) %></p>
-  </div>
-  <% if @presenter.total_budget.positive? %>
-    <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= period_budget_label %></p>
-      <p class="text-2xl font-semibold text-gray-700"><%= number_to_currency(@presenter.total_budget) %></p>
-    </div>
-  <% end %>
-</div>
-
-<%# Budgeted Expenses — recurring, controlled by monthly budgets %>
-<div class="mb-8">
-  <div class="flex items-center gap-2 mb-4">
-    <h3 class="text-lg font-medium text-gray-900">Budgeted</h3>
-    <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">recurring</span>
-  </div>
+  <%# Budgeted breakdown %>
   <% budgeted = @presenter.all_budgeted_categories_breakdown %>
   <% if budgeted.any? %>
     <div class="space-y-3">
@@ -87,14 +91,29 @@
   <% else %>
     <p class="text-gray-500 text-sm">No budgeted expenses <%= period_time_label %></p>
   <% end %>
-</div>
+</section>
 
-<%# Pool-Covered Expenses — irregular, funded by savings pools %>
-<div class="mb-8">
-  <div class="flex items-center gap-2 mb-4">
-    <h3 class="text-lg font-medium text-gray-900">Pool-Covered</h3>
-    <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">irregular</span>
+<%# === SAVINGS POOL SYSTEM === %>
+<%# Irregular expenses funded by pre-saved savings pools %>
+<section class="mb-12">
+  <div class="border-l-4 border-dusty-teal pl-4 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">Pool-Covered Spending</h2>
+    <p class="text-sm text-gray-500">Irregular expenses funded by your savings pools — separate from monthly budget</p>
   </div>
+
+  <%# Pool Stats %>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Pool Spending" : "Tracked Pool Spending" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_pool_covered_expenses) %></p>
+    </div>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Pool Spending" : "Total Pool Spending" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_pool_covered_expenses) %></p>
+    </div>
+  </div>
+
+  <%# Pool-covered breakdown %>
   <% pool_covered = @presenter.pool_covered_categories_breakdown %>
   <% if pool_covered.any? %>
     <div class="space-y-3">
@@ -114,7 +133,7 @@
   <% else %>
     <p class="text-gray-500 text-sm">No pool-covered expenses <%= period_time_label %></p>
   <% end %>
-</div>
+</section>
 
 <%# Untracked Categories %>
 <% untracked = @presenter.untracked_expense_categories_breakdown %>

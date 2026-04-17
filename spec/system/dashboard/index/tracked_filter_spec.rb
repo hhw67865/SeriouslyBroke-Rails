@@ -24,8 +24,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     it "shows all expenses as tracked by default" do
       visit root_path(tab: "expenses")
 
-      within_stat_card("Tracked Expenses") { expect(page).to have_content("$450.00") }
-      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Monthly Budget") { expect(page).to have_content("$1,000.00") }
     end
 
@@ -33,8 +33,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       dining.update!(tracked: false)
       visit root_path(tab: "expenses")
 
-      within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
     end
 
@@ -64,8 +64,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$300.00") # wait for page reload
-      within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
     end
 
@@ -77,8 +77,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$0.00")
-      within_stat_card("Tracked Expenses") { expect(page).to have_content("$0.00") }
-      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$0.00") }
+      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
       expect(groceries.reload).not_to be_tracked
       expect(dining.reload).not_to be_tracked
     end

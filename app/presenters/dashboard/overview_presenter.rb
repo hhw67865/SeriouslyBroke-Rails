@@ -9,7 +9,7 @@ module Dashboard
       @user = parent.user
     end
 
-    # === Chart: Income vs (Expenses + Savings) stacked ===
+    # === Chart: Income vs Expenses with Savings net delta ===
 
     def overview_chart_data
       @overview_chart_data ||= compute_overview_chart_data
@@ -23,10 +23,13 @@ module Dashboard
       ]
     end
 
-    # === Summary Stats ===
+    # === Cash-flow stats ===
 
+    # Pure cash flow: what came in vs what actually left.
+    # Savings contributions are tracked separately via savings_delta — they are
+    # an allocation of money you still hold, not money spent.
     def net_amount
-      @net_amount ||= @parent.total_tracked_income - @parent.total_tracked_expenses - @parent.total_tracked_savings_contribution
+      @net_amount ||= @parent.total_tracked_income - @parent.total_tracked_expenses
     end
 
     def expense_ratio
@@ -34,6 +37,20 @@ module Dashboard
       return 0 if income.zero?
 
       (@parent.total_tracked_expenses / income.to_f * 100).round(1)
+    end
+
+    # === Savings flow (separate from net) ===
+
+    def savings_contributions_total
+      @savings_contributions_total ||= @user.entries.savings.tracked.where(date: period_range).sum(:amount)
+    end
+
+    def savings_withdrawals_total
+      @savings_withdrawals_total ||= @user.entries.pool_covered_expenses.tracked.where(date: period_range).sum(:amount)
+    end
+
+    def savings_delta
+      savings_contributions_total - savings_withdrawals_total
     end
 
     # === Month-over-month comparison (monthly mode only) ===
@@ -56,7 +73,7 @@ module Dashboard
       )
     end
 
-    # === Budget health ===
+    # === Budget health (budgetable expenses only) ===
 
     def budgeted_total
       @budgeted_total ||= all_budgeted_breakdown.sum { |c| c[:amount] }
@@ -69,7 +86,7 @@ module Dashboard
       (budgeted_total / budget.to_f * 100).round
     end
 
-    # === Top spending (all expense categories combined) ===
+    # === Top spending (all expense categories combined — cash flow view) ===
 
     def top_expense_categories
       @top_expense_categories ||= @parent.expense_categories_breakdown.first(5)
@@ -119,7 +136,7 @@ module Dashboard
       [
         { name: "Income", data: monthly_totals(@user.entries.incomes.tracked, range) },
         { name: "Expenses", data: monthly_totals(@user.entries.expenses.tracked, range) },
-        { name: "Savings", data: monthly_totals(@user.entries.savings.tracked, range) }
+        { name: "Net Savings", data: monthly_savings_delta(range) }
       ]
     end
 
@@ -128,6 +145,14 @@ module Dashboard
         .group_by_month(:date, range: range, default_value: 0)
         .sum(:amount)
         .transform_keys { |d| d.strftime("%b %Y") }
+    end
+
+    def monthly_savings_delta(range)
+      contributions = monthly_totals(@user.entries.savings.tracked, range)
+      withdrawals = monthly_totals(@user.entries.pool_covered_expenses.tracked, range)
+      contributions.each_with_object({}) do |(month, amount), result|
+        result[month] = amount - withdrawals.fetch(month, 0)
+      end
     end
   end
 end

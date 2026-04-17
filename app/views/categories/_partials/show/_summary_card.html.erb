@@ -3,8 +3,38 @@
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
   <% calc = category.calculator(selected_date, period: current_period) %>
-  <% if category.expense? %>
-    <!-- Expense Category Summary -->
+  <% if category.pool_covered? %>
+    <!-- Pool-Covered Expense Category Summary -->
+    <div class="space-y-6">
+      <div>
+        <div class="flex justify-between text-sm mb-2">
+          <span class="text-gray-500">Spent <%= period_time_label %></span>
+          <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
+        </div>
+        <p class="text-xs text-gray-500">
+          Funded by savings pool
+          <%= link_to category.savings_pool.name, savings_pool_path(category.savings_pool), class: "text-brand hover:text-brand-dark" %>
+          — separate from your monthly budget
+        </p>
+      </div>
+
+      <div class="border-t border-gray-200 pt-4">
+        <h3 class="text-base font-medium mb-3"><%= period_trend_label %> Spending Trend</h3>
+        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
+          <%
+            spending_data = if current_period == :ytd
+                              calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount))
+                            else
+                              calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount))
+                            end
+          %>
+          <%= line_chart [{ name: "Spending", data: spending_data }], curve: false, points: false, colors: ["#3b82f6"], prefix: "$ " %>
+        </div>
+      </div>
+    </div>
+
+  <% elsif category.expense? %>
+    <!-- Budgeted Expense Category Summary -->
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
@@ -69,7 +99,7 @@
         </div>
       </div>
     </div>
-    
+
   <% elsif category.income? %>
     <!-- Income Category Summary -->
     <div class="space-y-6">
