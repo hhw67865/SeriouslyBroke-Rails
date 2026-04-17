@@ -1,9 +1,7 @@
 
 ## TODO
-
-- add confirmable or something to prevent bots from signing up.
-
-- Tracking panel. Lets just make it all a form and add an apply button,
+- Remove bug where savings pool expense is showing on budget graph.
+- Bug, savings pool savings deducts then the expense doesn’t deduct from savings it also deducts from income.
 - fireworks whenever you add savings.
 - Multiple entries
 - Make savings pools to automatically create expense and savings. Prob give a default name with option to change.

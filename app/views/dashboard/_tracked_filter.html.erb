@@ -13,22 +13,27 @@
     <% end %>
   </summary>
   <div class="absolute z-10 mt-2 bg-white rounded shadow-lg border border-gray-200 p-4 right-0 w-72 <%= categories.size > 8 ? "sm:w-[32rem]" : "" %> max-h-[60vh] overflow-y-auto">
-    <p class="text-xs text-gray-500 mb-4">Untracked categories are excluded from calculations and charts.</p>
-    <div class="<%= categories.size > 8 ? "sm:columns-2 gap-x-6" : "" %> space-y-1">
-      <% categories.each do |category| %>
-        <div class="flex items-center justify-between py-1.5 break-inside-avoid">
-          <span class="text-sm text-gray-700 flex items-center gap-2">
-            <span class="w-3 h-3 rounded-sm shrink-0" style="background-color: <%= category.color || "#C9C78B" %>;"></span>
-            <%= category.name %>
-          </span>
-          <%= button_to toggle_tracked_category_path(category),
-              method: :patch,
-              data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-5", shared__toggle_off_value: "translate-x-1" },
-              class: "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer #{category.tracked? ? "bg-brand" : "bg-gray-300"}" do %>
-            <span data-shared--toggle-target="thumb" class="inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200 <%= category.tracked? ? "translate-x-5" : "translate-x-1" %>"></span>
-          <% end %>
-        </div>
-      <% end %>
-    </div>
+    <%= form_with url: update_tracked_categories_path, method: :patch, data: { turbo: false } do |f| %>
+      <div class="flex items-center justify-between mb-4">
+        <p class="text-xs text-gray-500">Untracked categories are excluded from calculations and charts.</p>
+        <%= f.submit "Apply", class: "ml-3 px-3 py-1 text-xs font-medium text-white bg-brand rounded shadow-sm hover:bg-brand-dark cursor-pointer transition" %>
+      </div>
+      <div class="<%= categories.size > 8 ? "sm:columns-2 gap-x-6" : "" %> space-y-1">
+        <% categories.each do |category| %>
+          <div class="flex items-center justify-between py-1.5 break-inside-avoid">
+            <span class="text-sm text-gray-700 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-sm shrink-0" style="background-color: <%= category.color || "#C9C78B" %>;"></span>
+              <%= category.name %>
+            </span>
+            <label class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 cursor-pointer bg-gray-300 has-[:checked]:bg-[var(--color-primary)]">
+              <input type="hidden" name="categories[<%= category.id %>][tracked]" value="0">
+              <input type="checkbox" name="categories[<%= category.id %>][tracked]" value="1" <%= "checked" if category.tracked? %>
+                     class="sr-only peer">
+              <span class="inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200 translate-x-1 peer-checked:translate-x-5"></span>
+            </label>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
   </div>
 </details>

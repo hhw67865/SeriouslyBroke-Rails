@@ -61,11 +61,26 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       visit root_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
+      apply_tracked
 
       expect(page).to have_content("$300.00") # wait for page reload
       within_stat_card("Tracked Expenses") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
       within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
+    end
+
+    it "applies multiple toggle changes in a single submission" do
+      visit root_path(tab: "expenses")
+      open_tracked_filter
+      toggle_tracked("Dining")
+      toggle_tracked("Groceries")
+      apply_tracked
+
+      expect(page).to have_content("$0.00")
+      within_stat_card("Tracked Expenses") { expect(page).to have_content("$0.00") }
+      within_stat_card("Total Expenses") { expect(page).to have_content("$450.00") }
+      expect(groceries.reload).not_to be_tracked
+      expect(dining.reload).not_to be_tracked
     end
 
     it "shows untracked count badge" do
@@ -170,8 +185,12 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     within("details") do
       find("span", text: category_name, exact_text: true)
         .ancestor(".flex.items-center")
-        .find("button[type='submit']")
+        .find("label")
         .click
     end
+  end
+
+  def apply_tracked
+    within("details") { click_button "Apply" }
   end
 end

@@ -59,6 +59,14 @@ class CategoriesController < ApplicationController
     end
   end
 
+  def update_tracked
+    params[:categories]&.each do |id, attrs|
+      current_user.categories.find_by(id: id)&.update(tracked: attrs[:tracked] == "1")
+    end
+
+    redirect_back_or_to(root_path)
+  end
+
   private
 
   def set_category
