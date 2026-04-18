@@ -3,9 +3,7 @@
 class Budget < ApplicationRecord
   belongs_to :category, touch: true
 
-  enum :period, { month: 0, year: 1 }
-
-  validates :amount, :period, presence: true
+  validates :amount, presence: true
   validate :category_must_be_expense
   validate :category_must_not_have_pool
 

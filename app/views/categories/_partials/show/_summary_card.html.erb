@@ -28,7 +28,7 @@
                               calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount))
                             end
           %>
-          <%= line_chart [{ name: "Spending", data: spending_data }], curve: false, points: false, colors: ["#3b82f6"], prefix: "$ " %>
+          <%= line_chart [{ name: "Spending", data: spending_data }], curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand]], prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -45,24 +45,25 @@
           </span>
         </div>
 
-        <% if calc.yearly_budget? %>
-          <p class="text-xs text-gray-400 mb-2">
-            <%= number_to_currency(calc.monthly_budget_rate) %>/mo from <%= number_to_currency(category.budget.amount) %>/yr
-          </p>
-        <% end %>
-
         <% if calc.effective_budget %>
-          <% percentage = calc.budget_percentage %>
+          <% cap_percentage = calc.budget_percentage %>
+          <% pace_percentage = calc.budget_pace_percentage %>
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div class="h-3 rounded-full <%= budget_status_color(percentage) %>" style="width: <%= [percentage, 100].min %>%;"></div>
+            <div class="h-3 rounded-full <%= budget_status_color(pace_percentage) %>" style="width: <%= [cap_percentage, 100].min %>%;"></div>
           </div>
 
           <div class="flex justify-between mt-2">
-            <p class="text-sm text-gray-500"><%= percentage %>% used</p>
-            <p class="text-sm <%= budget_status_color(percentage).gsub("bg-", "text-") %>">
-              <%= budget_status(percentage) %>
+            <p class="text-sm text-gray-500"><%= cap_percentage %>% used</p>
+            <p class="text-sm <%= budget_status_color(pace_percentage).gsub("bg-", "text-") %>">
+              <%= budget_status(pace_percentage) %>
             </p>
           </div>
+
+          <% if category.budget&.prorated? && calc.budget_pace != calc.effective_budget %>
+            <p class="text-xs text-gray-500 mt-1">
+              Expected by today: <%= number_to_currency(calc.budget_pace) %>
+            </p>
+          <% end %>
         <% else %>
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
             <div class="bg-gray-300 h-3 rounded w-0"></div>
@@ -79,23 +80,16 @@
         <h3 class="text-base font-medium mb-3"><%= period_trend_label %> Spending Trend</h3>
         <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
           <%
-            if current_period == :ytd
-              chart_data = [
-                { name: "Spending", data: calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount)) }
-              ]
-              if calc.monthly_budget_rate
-                chart_data << { name: "Budget", data: budget_line_series(calc.monthly_budget_rate, calc.date_range, group: :month) }
-              end
-            else
-              chart_data = [
-                { name: "Spending", data: calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount)) }
-              ]
-              if calc.monthly_budget_rate
-                chart_data << { name: "Budget", data: budget_line_series(calc.monthly_budget_rate, calc.date_range) }
-              end
-            end
+            spending_data = if current_period == :ytd
+                              calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount))
+                            else
+                              calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount))
+                            end
+            budget_curve = calc.budget_curve
+            chart_data = [{ name: "Spending", data: spending_data }]
+            chart_data << { name: "Budget", data: budget_curve } if budget_curve.any?
           %>
-          <%= line_chart chart_data, curve: false, points: false, colors: ["#3b82f6", "#ef4444"], prefix: "$ " %>
+          <%= line_chart chart_data, curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand], DashboardPresenter::COLORS[:dusty_teal]], prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -128,7 +122,7 @@
               calc.date_range :
               (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month
           %>
-          <%= line_chart category.entries.group_by_month(:date, range: income_chart_range).sum(:amount), curve: false, points: false, prefix: "$ " %>
+          <%= line_chart category.entries.group_by_month(:date, range: income_chart_range).sum(:amount), curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand]], prefix: "$ " %>
         </div>
       </div>
     </div>
@@ -201,7 +195,7 @@
               calc.date_range :
               (selected_date.beginning_of_month - 5.months)..selected_date.end_of_month
           %>
-          <%= line_chart savings_evolution_series(category, savings_chart_range), curve: false, points: false, prefix: "$ " %>
+          <%= line_chart savings_evolution_series(category, savings_chart_range), curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand_dark]], prefix: "$ " %>
         </div>
       </div>
     </div>

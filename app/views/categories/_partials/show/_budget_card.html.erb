@@ -10,8 +10,10 @@
       </div>
       
       <div class="py-3 flex justify-between">
-        <dt class="text-sm font-medium text-gray-500">Period</dt>
-        <dd class="text-sm text-gray-900"><%= category.budget.period.capitalize %></dd>
+        <dt class="text-sm font-medium text-gray-500">Prorated</dt>
+        <dd class="text-sm text-gray-900">
+          <%= category.budget.prorated? ? "Yes — tracks daily pace" : "No — flat monthly cap" %>
+        </dd>
       </div>
     </dl>
     

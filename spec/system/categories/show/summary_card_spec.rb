@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
+  include ActiveSupport::Testing::TimeHelpers
+
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
 
@@ -74,6 +76,36 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
 
       expect(page).to have_content("YTD Contribution")
       expect(page).to have_content("Items This Year")
+    end
+  end
+
+  describe "prorated budget summary", :aggregate_failures do
+    let(:april15) { Date.new(2026, 4, 15) }
+    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
+    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
+
+    before do
+      create(:budget, category: groceries, amount: 300, prorated: true)
+      create(:entry, item: groceries_item, amount: 200, date: Date.new(2026, 4, 10))
+      travel_to april15
+      visit category_path(groceries)
+    end
+
+    it "shows cap-based '% used' (bar width) and pace-based status label" do
+      # Day 15 of 30. Spent $200 / $300 cap → 67% used (bar).
+      # Pace = $150, over pace → status label reflects pace.
+      expect(page).to have_content("67% used")
+      expect(page).to have_content("Budget exceeded")
+    end
+
+    it "shows $ spent / $ full-cap in the header" do
+      expect(page).to have_content("$200.00")
+      expect(page).to have_content("$300.00")
+    end
+
+    it "shows the expected-by-today pace amount" do
+      # Day 15 of 30, $300 budget → pace = $150
+      expect(page).to have_content("Expected by today: $150.00")
     end
   end
 end

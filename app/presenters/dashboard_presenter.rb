@@ -213,9 +213,13 @@ class DashboardPresenter
   def enrich_with_budget(entry, category, calc)
     return unless category.budgetable? && calc.effective_budget.to_f.positive?
 
+    pace = calc.budget_pace
+    spent = calc.total_amount
     entry[:budget] = calc.effective_budget
+    entry[:prorated] = category.budget.prorated?
     entry[:budget_percentage] = calc.budget_percentage
-    entry[:over_budget] = calc.total_amount > calc.effective_budget
-    entry[:budget_diff] = (calc.total_amount - calc.effective_budget).abs
+    entry[:budget_pace] = pace
+    entry[:over_budget] = spent > pace
+    entry[:budget_diff] = (spent - pace).abs
   end
 end

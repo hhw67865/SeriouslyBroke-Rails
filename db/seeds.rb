@@ -146,7 +146,7 @@ expense_budgets = {
 expense_categories.select(&:budgetable?).each do |category|
   category.create_budget!(
     amount: expense_budgets[category.name] || rand(100..1000),
-    period: :month
+    prorated: ["Groceries", "Entertainment", "Shopping"].include?(category.name)
   )
 end
 

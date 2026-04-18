@@ -9,7 +9,6 @@ RSpec.describe Budget, type: :model do
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:amount) }
-    it { is_expected.to validate_presence_of(:period) }
 
     describe "category type validation" do
       let(:income_category) { create(:category, :income) }
@@ -34,7 +33,13 @@ RSpec.describe Budget, type: :model do
     end
   end
 
-  describe "enums" do
-    it { is_expected.to define_enum_for(:period).with_values(month: 0, year: 1) }
+  describe "prorated flag" do
+    it "defaults to false" do
+      expect(build(:budget).prorated).to be(false)
+    end
+
+    it "accepts true when explicitly set" do
+      expect(build(:budget, :prorated).prorated).to be(true)
+    end
   end
 end

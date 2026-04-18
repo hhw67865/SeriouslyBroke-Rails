@@ -26,7 +26,11 @@ module Dashboard
         budget_line_series(monthly_budget_rate, period_range, group: :month)
           .transform_keys { |d| d.strftime("%b %Y") }
       else
-        budget_line_series(total_budget, period_range)
+        sum_curves(
+          @parent.tracked_budgetable_expense_categories.map do |cat|
+            cat.calculator(@parent.date).budget_curve
+          end
+        )
       end
     end
 
@@ -134,6 +138,12 @@ module Dashboard
         series << { name: "Total", data: calculate_running_total(total) }
       end
       series
+    end
+
+    def sum_curves(curves)
+      curves.each_with_object({}) do |curve, acc|
+        curve.each { |date, val| acc[date] = (acc[date] || 0) + val }
+      end
     end
   end
 end

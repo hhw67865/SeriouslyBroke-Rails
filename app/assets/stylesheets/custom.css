@@ -130,6 +130,9 @@
 /* Focus Ring Brand */
 .focus\:ring-brand:focus { --tw-ring-color: var(--color-primary); }
 
+/* Accent Color Brand (for native checkbox/radio tinting) */
+.accent-brand { accent-color: var(--color-primary); }
+
 /* Additional Brand Utilities for Landing Pages */
 .hover\:bg-brand\/10:hover { background-color: rgba(201, 199, 139, 0.1); }
 .border-brand-dark { border-color: var(--color-primary-dark); }

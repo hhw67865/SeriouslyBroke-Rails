@@ -50,17 +50,17 @@
               hint: "Enter the maximum amount you want to spend in this category" %>
         </div>
 
-        <%# Budget Period %>
+        <%# Prorated toggle %>
         <div>
-          <%= f.input :period,
-              collection: Budget.periods.keys.map { |period| [period.humanize, period] },
-              label: "Budget Period",
-              label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-              input_html: { 
-                class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
-              },
-              hint: "Choose how often this budget resets" %>
+          <div class="flex items-center gap-3 mb-2">
+            <%= f.check_box :prorated, class: "h-5 w-5 rounded border-gray-300 accent-brand focus:ring-brand focus:ring-1 cursor-pointer" %>
+            <%= f.label :prorated, "Prorate daily", class: "text-sm font-medium text-gray-700 cursor-pointer" %>
+          </div>
+          <p class="text-xs text-gray-500">
+            Spread the budget evenly across the month so you can see if you're on pace day-to-day. Turn off for expenses that happen in one-time chunks (like rent or subscriptions).
+          </p>
         </div>
+
       </div>
     </div>
 

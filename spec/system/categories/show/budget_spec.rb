@@ -34,41 +34,25 @@ RSpec.describe "Categories Show - Budget (Expense)", type: :system do
     end
   end
 
-  context "with yearly budget", :aggregate_failures do
-    let!(:category) { create(:category, category_type: "expense", user: user, name: "Insurance") }
+  describe "prorated flag persistence", :aggregate_failures do
+    let!(:groceries) { create(:category, category_type: "expense", user: user, name: "Prorated Groceries") }
 
-    before do
-      create(:budget, :yearly, category: category, amount: 2025)
-      visit category_path(category)
+    it "creates a prorated budget when the checkbox is checked" do
+      visit new_budget_path(category_id: groceries.id)
+      fill_in "Amount", with: "300.00"
+      check "Prorate daily"
+      click_button "Create Budget"
+
+      expect(page).to have_current_path(category_path(groceries))
+      expect(groceries.reload.budget.prorated).to be(true)
     end
 
-    it "shows monthly conversion text in summary card" do
-      # $2,025/year = $168.75/month
-      expect(page).to have_content("$168.75/mo from $2,025.00/yr")
-    end
+    it "creates a non-prorated budget when the checkbox is left unchecked" do
+      visit new_budget_path(category_id: groceries.id)
+      fill_in "Amount", with: "300.00"
+      click_button "Create Budget"
 
-    it "shows Year period in budget management card" do
-      expect(page).to have_content("Period")
-      expect(page).to have_content("Year")
-    end
-  end
-
-  context "with monthly budget", :aggregate_failures do
-    let!(:category) { create(:category, category_type: "expense", user: user, name: "Groceries") }
-
-    before do
-      create(:budget, :monthly, category: category, amount: 500)
-      visit category_path(category)
-    end
-
-    it "does not show monthly conversion text" do
-      expect(page).not_to have_content("/mo from")
-      expect(page).not_to have_content("/yr")
-    end
-
-    it "shows Month period in budget management card" do
-      expect(page).to have_content("Period")
-      expect(page).to have_content("Month")
+      expect(groceries.reload.budget.prorated).to be(false)
     end
   end
 end

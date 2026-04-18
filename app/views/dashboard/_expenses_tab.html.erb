@@ -1,5 +1,5 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, :expenses_v7] do %>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v9] do %>
 
 <%# === MONTHLY BUDGET SYSTEM === %>
 <%# Recurring expenses tracked against monthly budget caps %>
@@ -74,7 +74,14 @@
           </div>
           <% if cat[:budget_percentage] %>
             <p class="text-xs font-medium <%= cat[:over_budget] ? "text-terracotta" : "text-gray-500" %>">
-              <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
+              <% if cat[:prorated] %>
+                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over pace" : "#{number_to_currency(cat[:budget_diff])} under pace" %>
+                <% if cat[:budget_pace] != cat[:budget] %>
+                  <span class="text-gray-400 font-normal">· expected today: <%= number_to_currency(cat[:budget_pace]) %></span>
+                <% end %>
+              <% else %>
+                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
+              <% end %>
             </p>
           <% end %>
         </div>

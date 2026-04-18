@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
+  include ActiveSupport::Testing::TimeHelpers
+
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
 
@@ -181,6 +183,45 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
 
     it "shows YTD Budget label" do
       expect(page).to have_content("YTD Budget")
+    end
+  end
+
+  describe "prorated budget scenario", :aggregate_failures do
+    let(:april15) { Date.new(2026, 4, 15) }
+    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
+    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
+    let!(:rent) { create(:category, :expense, user: user, name: "Rent") }
+    let!(:rent_item) { create(:item, category: rent, name: "Monthly Rent") }
+
+    before do
+      create(:budget, category: groceries, amount: 300, prorated: true)
+      create(:budget, category: rent, amount: 200) # not prorated
+      create(:entry, item: groceries_item, amount: 200, date: Date.new(2026, 4, 10))
+      create(:entry, item: rent_item, amount: 50, date: Date.new(2026, 4, 1))
+      travel_to april15
+      visit root_path(tab: "expenses")
+    end
+
+    it "shows prorated row with over-pace text and expected pace amount" do
+      # Groceries pace on day 15 = 300 * 15 / 30 = 150. Spent $200. Over pace by $50.
+      within(".space-y-3") do
+        expect(page).to have_content("Groceries")
+        expect(page).to have_content("$200.00")
+        expect(page).to have_content("$300.00")
+        expect(page).to have_content("+$50.00 over pace")
+        expect(page).to have_content("expected today: $150.00")
+      end
+    end
+
+    it "shows flat (non-prorated) row with normal 'left' text" do
+      within(".space-y-3") do
+        expect(page).to have_content("Rent")
+        expect(page).to have_content("$150.00 left")
+      end
+    end
+
+    it "keeps Monthly Budget stat as full sum of caps" do
+      within_stat_card("Monthly Budget") { expect(page).to have_content("$500.00") }
     end
   end
 
