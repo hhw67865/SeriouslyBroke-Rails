@@ -26,7 +26,7 @@ module Dashboard
     # === Cash-flow stats ===
 
     # Pure cash flow: what came in vs what actually left.
-    # Savings contributions are tracked separately via savings_delta — they are
+    # Savings contributions are tracked separately via net_savings — they are
     # an allocation of money you still hold, not money spent.
     def net_amount
       @net_amount ||= @parent.total_tracked_income - @parent.total_tracked_expenses
@@ -49,8 +49,16 @@ module Dashboard
       @savings_withdrawals_total ||= @user.entries.pool_covered_expenses.tracked.where(date: period_range).sum(:amount)
     end
 
-    def savings_delta
+    def net_savings
       savings_contributions_total - savings_withdrawals_total
+    end
+
+    # Income remaining after budgetable expenses and savings contributions.
+    # Can be negative when budgetable + contributions > income.
+    def income_remaining
+      @parent.total_tracked_income -
+        @parent.total_tracked_budgetable_expenses -
+        savings_contributions_total
     end
 
     # === Month-over-month comparison (monthly mode only) ===
