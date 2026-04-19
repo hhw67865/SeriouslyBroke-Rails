@@ -184,8 +184,8 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_current_path(entries_path)
       end
 
-      it "returns to entries index when clicking back" do
-        click_link "Back to Entries"
+      it "returns to entries index when clicking the Entries breadcrumb" do
+        within("nav[aria-label='Breadcrumb']") { click_link "Entries" }
         expect(page).to have_current_path(entries_path)
       end
     end
@@ -270,8 +270,8 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_current_path(entries_path)
       end
 
-      it "returns to entries index when clicking back" do
-        click_link "Back to Entries"
+      it "returns to entries index when clicking the Entries breadcrumb" do
+        within("nav[aria-label='Breadcrumb']") { click_link "Entries" }
         expect(page).to have_current_path(entries_path)
       end
     end

@@ -1,0 +1,21 @@
+<%# Account Information %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
+  <h2 class="text-xl font-semibold mb-4">Account Information</h2>
+
+  <dl class="divide-y divide-gray-200">
+    <div class="py-3 flex justify-between">
+      <dt class="text-sm font-medium text-gray-500">Name</dt>
+      <dd class="text-sm text-gray-900"><%= current_user.name.presence || "—" %></dd>
+    </div>
+
+    <div class="py-3 flex justify-between">
+      <dt class="text-sm font-medium text-gray-500">Email</dt>
+      <dd class="text-sm text-gray-900"><%= current_user.email %></dd>
+    </div>
+
+    <div class="py-3 flex justify-between">
+      <dt class="text-sm font-medium text-gray-500">Member since</dt>
+      <dd class="text-sm text-gray-900"><%= current_user.created_at.strftime("%b %d, %Y") %></dd>
+    </div>
+  </dl>
+</div>

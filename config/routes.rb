@@ -34,6 +34,11 @@ Rails.application.routes.draw do
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
+  resource :account, only: [:show] do
+    patch :toggle_theme
+    patch :toggle_ming_mode
+  end
+
   # Calendar
   get "calendar", to: "calendar#index", as: :calendar
   get "calendar/week", to: "calendar#week", as: :calendar_week

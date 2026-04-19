@@ -1,20 +1,14 @@
 <% content_for :title, "Edit Entry" %>
 
-<div class="container mx-auto px-4 sm:px-6 py-6 sm:py-10">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8 gap-4">
-    <div>
-      <h1 class="text-xl sm:text-2xl font-bold text-[#2d3436]">Edit Entry</h1>
-      <p class="text-[#6c757d] mt-1">Update your transaction details</p>
-    </div>
-    
-    <div class="flex flex-col sm:flex-row gap-4">
-      <%= link_to entries_path, class: "flex items-center justify-center sm:justify-start text-sm font-medium text-[#6c757d] hover:text-[#2d3436]" do %>
-        <%= heroicon "arrow-left", options: { class: "h-4 w-4 mr-1" } %> Back to Entries
-      <% end %>
-    </div>
-  </div>
+<%= page_header(
+    title: "Edit Entry",
+    subtitle: "Update your transaction details",
+    breadcrumbs: [
+      { label: "Entries", url: entries_path },
+      { label: "Edit" }
+    ]
+) %>
 
-  <div class="max-w-3xl mx-auto">
-    <%= render "form", entry: @entry %>
-  </div>
+<div class="max-w-3xl mx-auto">
+  <%= render "form", entry: @entry %>
 </div>

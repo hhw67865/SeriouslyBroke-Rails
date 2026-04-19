@@ -29,18 +29,16 @@ module CategoriesHelper
 
   def budget_status(percentage)
     case percentage
-    when (101..) then "Budget exceeded"
-    when (91..100) then "Almost depleted"
-    when (76..90) then "Warning zone"
-    when (51..75) then "On track"
-    else "Well under budget"
+    when (111..) then "Budget exceeded"
+    when (101..110) then "Over budget"
+    else "On track"
     end
   end
 
   def budget_status_color(percentage)
     case percentage
-    when (91..) then "bg-status-danger"
-    when (76..90) then "bg-status-warning"
+    when (111..) then "bg-status-danger"
+    when (101..110) then "bg-status-warning"
     else "bg-brand"
     end
   end

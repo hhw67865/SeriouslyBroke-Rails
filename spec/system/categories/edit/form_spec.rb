@@ -33,8 +33,8 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
 
     it "shows navigation elements" do
-      expect(page).to have_link("View Details")
-      expect(page).to have_link("Back to Categories")
+      expect(page).to have_link("Categories", href: categories_path)
+      expect(page).to have_link(category.name, href: category_path(category))
       expect(page).to have_link("Cancel")
     end
   end
@@ -155,13 +155,13 @@ RSpec.describe "Categories Edit - Form", type: :system do
   describe "navigation", :aggregate_failures do
     before { visit edit_category_path(category) }
 
-    it "navigates to category details when clicking View Details" do
-      click_link "View Details"
+    it "navigates to category details when clicking the category breadcrumb" do
+      within("nav[aria-label='Breadcrumb']") { click_link category.name }
       expect(page).to have_current_path(category_path(category))
     end
 
-    it "returns to categories index when clicking Back to Categories" do
-      click_link "Back to Categories"
+    it "returns to categories index when clicking the Categories breadcrumb" do
+      within("nav[aria-label='Breadcrumb']") { click_link "Categories" }
       expect(page).to have_current_path(categories_path)
     end
 

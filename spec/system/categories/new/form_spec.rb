@@ -32,7 +32,7 @@ RSpec.describe "Categories New - Form", type: :system do
     end
 
     it "shows navigation elements" do
-      expect(page).to have_link("Back to Categories")
+      expect(page).to have_link("Categories", href: categories_path)
       expect(page).to have_link("Cancel")
     end
   end
@@ -161,8 +161,8 @@ RSpec.describe "Categories New - Form", type: :system do
   describe "navigation", :aggregate_failures do
     before { visit new_category_path }
 
-    it "returns to categories index when clicking Back to Categories" do
-      click_link "Back to Categories"
+    it "returns to categories index when clicking the Categories breadcrumb" do
+      within("nav[aria-label='Breadcrumb']") { click_link "Categories" }
       expect(page).to have_current_path(categories_path)
     end
 
@@ -173,9 +173,9 @@ RSpec.describe "Categories New - Form", type: :system do
   end
 
   describe "type-specific navigation from prepopulated form", :aggregate_failures do
-    it "navigates back to expense categories when prepopulated with expense" do
+    it "navigates back to categories when prepopulated with expense" do
       visit new_category_path(type: "expense")
-      click_link "Back to Categories"
+      within("nav[aria-label='Breadcrumb']") { click_link "Categories" }
       expect(page).to have_current_path(categories_path)
     end
 
