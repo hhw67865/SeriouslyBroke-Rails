@@ -8,10 +8,13 @@ class SavingsPool < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
 
+  attr_accessor :create_expense_category, :create_savings_category
+
   validates :name, :target_amount, presence: true
   validates :start_date, presence: true
 
   after_initialize :set_default_start_date, if: :new_record?
+  after_create :create_auto_categories
 
   # Configure searchable fields
   searchable :name, label: "Name"
@@ -38,5 +41,33 @@ class SavingsPool < ApplicationRecord
 
   def set_default_start_date
     self.start_date ||= Date.current
+  end
+
+  def create_auto_categories
+    create_linked_category(:expense) if boolean_cast(create_expense_category)
+    create_linked_category(:savings) if boolean_cast(create_savings_category)
+  end
+
+  def create_linked_category(type)
+    base_name = "#{name} #{type.to_s.capitalize}"
+    categories.create!(
+      user: user,
+      name: unique_category_name(base_name),
+      category_type: type
+    )
+  end
+
+  def unique_category_name(base_name)
+    candidate = base_name
+    suffix = 2
+    while user.categories.exists?(["LOWER(name) = ?", candidate.downcase])
+      candidate = "#{base_name} #{suffix}"
+      suffix += 1
+    end
+    candidate
+  end
+
+  def boolean_cast(value)
+    ActiveModel::Type::Boolean.new.cast(value)
   end
 end

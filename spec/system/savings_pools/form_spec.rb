@@ -85,6 +85,61 @@ RSpec.describe "Savings Pools Form", type: :system do
         expect(page).to have_current_path(savings_pools_path)
       end
     end
+
+    describe "auto-create categories" do
+      it "renders both checkboxes unchecked by default", :aggregate_failures do
+        expect(page).to have_field("Create an expense category", type: "checkbox", checked: false)
+        expect(page).to have_field("Create a savings category", type: "checkbox", checked: false)
+      end
+
+      it "creates only the pool when neither box is checked" do
+        fill_in "Savings Pool Name", with: "Plain Pool"
+        fill_in "Target Amount", with: "1000"
+        click_button "Create Savings Pool"
+
+        expect(SavingsPool.last.categories.count).to eq(0)
+      end
+
+      it "creates a linked expense category when the expense box is checked", :aggregate_failures do
+        fill_in "Savings Pool Name", with: "Expense Pool"
+        fill_in "Target Amount", with: "1000"
+        check "Create an expense category"
+        click_button "Create Savings Pool"
+
+        pool = SavingsPool.last
+        expect(pool.categories.count).to eq(1)
+        category = pool.categories.first
+        expect(category.name).to eq("Expense Pool Expense")
+        expect(category.category_type).to eq("expense")
+      end
+
+      it "creates a linked savings category when the savings box is checked", :aggregate_failures do
+        fill_in "Savings Pool Name", with: "Savings Pool"
+        fill_in "Target Amount", with: "1000"
+        check "Create a savings category"
+        click_button "Create Savings Pool"
+
+        pool = SavingsPool.last
+        expect(pool.categories.count).to eq(1)
+        category = pool.categories.first
+        expect(category.name).to eq("Savings Pool Savings")
+        expect(category.category_type).to eq("savings")
+      end
+
+      it "creates both linked categories when both boxes are checked", :aggregate_failures do
+        fill_in "Savings Pool Name", with: "Dual Pool"
+        fill_in "Target Amount", with: "1000"
+        check "Create an expense category"
+        check "Create a savings category"
+        click_button "Create Savings Pool"
+
+        pool = SavingsPool.last
+        expect(pool.categories.pluck(:name)).to contain_exactly(
+          "Dual Pool Expense",
+          "Dual Pool Savings"
+        )
+      end
+    end
   end
 
   describe "Edit Form" do
@@ -173,6 +228,13 @@ RSpec.describe "Savings Pools Form", type: :system do
       it "returns to index when clicking cancel" do
         click_link "Cancel"
         expect(page).to have_current_path(savings_pools_path)
+      end
+    end
+
+    describe "auto-create categories section" do
+      it "does not render the checkboxes on the edit form", :aggregate_failures do
+        expect(page).not_to have_field("Create an expense category")
+        expect(page).not_to have_field("Create a savings category")
       end
     end
   end

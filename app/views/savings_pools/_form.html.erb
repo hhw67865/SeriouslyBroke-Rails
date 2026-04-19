@@ -77,6 +77,30 @@
   </div>
 <% end %>
 
+    <%# Auto-create categories (only on new records) %>
+    <% unless savings_pool.persisted? %>
+      <div class="bg-gray-50 rounded p-4 border border-gray-200">
+        <h4 class="text-sm font-medium text-gray-900 mb-1">Create categories automatically (optional)</h4>
+        <p class="text-sm text-gray-600 mb-3">Save time by creating linked categories now. Each category will be named after this pool.</p>
+
+        <div class="space-y-2">
+          <%= f.input :create_expense_category,
+              as: :boolean,
+              label: "Create an expense category",
+              input_html: { class: "rounded border-gray-300 text-brand focus:ring-brand" },
+              wrapper_html: { class: "flex items-center gap-2" },
+              label_html: { class: "text-sm text-gray-700" } %>
+
+          <%= f.input :create_savings_category,
+              as: :boolean,
+              label: "Create a savings category",
+              input_html: { class: "rounded border-gray-300 text-brand focus:ring-brand" },
+              wrapper_html: { class: "flex items-center gap-2" },
+              label_html: { class: "text-sm text-gray-700" } %>
+        </div>
+      </div>
+    <% end %>
+
     <%# Goal Information Box %>
     <div class="bg-status-info-light rounded p-4 border border-status-info">
       <div class="flex items-start">

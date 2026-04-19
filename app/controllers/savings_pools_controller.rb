@@ -95,6 +95,14 @@ class SavingsPoolsController < ApplicationController
   end
 
   def savings_pool_params
-    params.expect(savings_pool: [:name, :target_amount, :start_date])
+    params.expect(
+      savings_pool: [
+        :name,
+        :target_amount,
+        :start_date,
+        :create_expense_category,
+        :create_savings_category
+      ]
+    )
   end
 end

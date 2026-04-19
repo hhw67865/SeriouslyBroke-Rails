@@ -1,9 +1,8 @@
 
 ## TODO
 
-- fireworks whenever you add savings.
+- fireworks whenever you add savings. Ming mode
 - Multiple entries
-- Make savings pools to automatically create expense and savings. Prob give a default name with option to change.
 - tutorial
 - Account settings
 - Statistics should be yearly only

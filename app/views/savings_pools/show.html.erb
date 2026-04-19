@@ -217,7 +217,8 @@
           <% if savings_categories.any? %>
             <div class="space-y-3">
               <% savings_categories.each do |category| %>
-                <div class="flex items-center justify-between p-3 bg-status-success-light border border-status-success rounded">
+                <%= link_to category_path(category),
+                    class: "flex items-center justify-between p-3 bg-status-success-light border border-status-success rounded hover:shadow-md transition" do %>
                   <div class="flex items-center">
                     <div class="w-8 h-8 rounded-full bg-status-success-light flex items-center justify-center mr-3">
                       <%= heroicon "arrow-up", options: { class: "h-4 w-4 text-status-success" } %>
@@ -233,7 +234,7 @@
                     </div>
                     <div class="text-xs text-gray-500"><%= format_month_year %></div>
                   </div>
-                </div>
+                <% end %>
               <% end %>
             </div>
           <% else %>
@@ -250,7 +251,8 @@
           <% if expense_categories.any? %>
             <div class="space-y-3">
               <% expense_categories.each do |category| %>
-                <div class="flex items-center justify-between p-3 bg-status-danger-light border border-status-danger rounded">
+                <%= link_to category_path(category),
+                    class: "flex items-center justify-between p-3 bg-status-danger-light border border-status-danger rounded hover:shadow-md transition" do %>
                   <div class="flex items-center">
                     <div class="w-8 h-8 rounded-full bg-status-danger-light flex items-center justify-center mr-3">
                       <%= heroicon "arrow-down", options: { class: "h-4 w-4 text-status-danger" } %>
@@ -266,7 +268,7 @@
                     </div>
                     <div class="text-xs text-gray-500"><%= format_month_year %></div>
                   </div>
-                </div>
+                <% end %>
               <% end %>
             </div>
           <% else %>

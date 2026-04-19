@@ -84,17 +84,17 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
     end
 
     it "shows correct total for contributing category" do
-      within("div.bg-status-success-light", text: "Monthly Savings") do
+      within("a.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$400.00")
         expect(page).to have_content(Date.current.strftime("%B %Y"))
       end
     end
 
     it "shows current month category amounts" do
-      within("div.bg-status-success-light", text: "Monthly Savings") do
+      within("a.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$400.00")
       end
-      within("div.bg-status-danger-light", text: "Medical Bills") do
+      within("a.bg-status-danger-light", text: "Medical Bills") do
         expect(page).to have_content("-$150.00")
       end
     end
@@ -102,11 +102,11 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
     it "updates category amounts when navigating to previous month" do
       find("button[title='Previous month']").click
 
-      within("div.bg-status-success-light", text: "Monthly Savings") do
+      within("a.bg-status-success-light", text: "Monthly Savings") do
         expect(page).to have_content("+$200.00")
         expect(page).to have_content(Date.current.prev_month.strftime("%B %Y"))
       end
-      within("div.bg-status-danger-light", text: "Medical Bills") do
+      within("a.bg-status-danger-light", text: "Medical Bills") do
         expect(page).to have_content("-$70.00")
         expect(page).to have_content(Date.current.prev_month.strftime("%B %Y"))
       end
@@ -177,6 +177,35 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
     it "navigates to categories management page" do
       click_link "Manage Categories"
       expect(page).to have_current_path(categories_savings_pool_path(savings_pool))
+    end
+  end
+
+  describe "clickable category cards", :aggregate_failures do
+    let!(:savings_category) do
+      create(:category, user: user, name: "Monthly Savings", category_type: :savings, savings_pool: savings_pool)
+    end
+    let!(:expense_category) do
+      create(:category, user: user, name: "Medical Bills", category_type: :expense, savings_pool: savings_pool)
+    end
+
+    before { visit savings_pool_path(savings_pool) }
+
+    it "renders contributing category card as a link to the category show page" do
+      expect(page).to have_link("Monthly Savings", href: category_path(savings_category))
+    end
+
+    it "renders withdrawing category card as a link to the category show page" do
+      expect(page).to have_link("Medical Bills", href: category_path(expense_category))
+    end
+
+    it "navigates to the category show page when a contributing card is clicked" do
+      click_link "Monthly Savings"
+      expect(page).to have_current_path(category_path(savings_category))
+    end
+
+    it "navigates to the category show page when a withdrawing card is clicked" do
+      click_link "Medical Bills"
+      expect(page).to have_current_path(category_path(expense_category))
     end
   end
 end
