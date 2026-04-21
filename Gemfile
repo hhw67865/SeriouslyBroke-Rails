@@ -66,6 +66,7 @@ group :test do
 end
 
 gem "chartkick"
+gem "dentaku", "~> 3.5"
 gem "groupdate"
 gem "heroicon"
 gem "simple_form", "~> 5.3"

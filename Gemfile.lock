@@ -117,6 +117,9 @@ GEM
     debug (1.11.0)
       irb (~> 1.10)
       reline (>= 0.3.8)
+    dentaku (3.5.7)
+      bigdecimal
+      concurrent-ruby
     devise (4.9.4)
       bcrypt (~> 3.0)
       orm_adapter (~> 0.1)
@@ -431,6 +434,7 @@ DEPENDENCIES
   chartkick
   database_cleaner-active_record (~> 2.2)
   debug
+  dentaku (~> 3.5)
   devise (~> 4.9)
   factory_bot_rails (~> 6.4)
   faker (~> 3.5)

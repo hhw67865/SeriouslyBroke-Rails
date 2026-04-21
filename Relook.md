@@ -1,9 +1,8 @@
 
 ## TODO
 
-- fireworks whenever you add savings. Ming mode
+- fireworks whenever you add savings and capybaras. Ming mode
 - Multiple entries
 - tutorial
-- Account settings
-- Statistics should be yearly only
+- Statistics should be yearly only (Ming page)
 - Entry creation needs to be faster.

@@ -113,11 +113,19 @@ class EntriesController < ApplicationController
 
   def entry_params
     params.expect(entry: [:amount, :date, :description, :item_id]).tap do |permitted_params|
+      permitted_params[:amount] = evaluate_formula(permitted_params[:amount])
+
       # If item_id is not a valid UUID (e.g. name of new item from TomSelect), treat it as blank
       permitted_params[:item_id] = nil if permitted_params[:item_id].present? && !permitted_params[:item_id].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
 
       permitted_params[:item_attributes] = item_attributes if permitted_params[:item_id].blank? && params.dig(:entry, :item_attributes, :name).present?
     end
+  end
+
+  def evaluate_formula(raw)
+    return raw if raw.blank?
+    result = Dentaku::Calculator.new.evaluate(raw.to_s)
+    result.is_a?(Numeric) ? result : raw
   end
 
   def item_attributes

@@ -56,12 +56,12 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
           <%= f.input :amount,
-              as: :decimal,
+              as: :string,
               placeholder: "0.00",
-              hint: "Enter the transaction amount",
-              input_html: { 
-                step: 0.01,
-                min: 0.01
+              hint: "Enter an amount or formula (e.g. 10*5, 192.92-85.02)",
+              input_html: {
+                inputmode: "decimal",
+                autocomplete: "off"
               } %>
 
           <%= f.input :date,

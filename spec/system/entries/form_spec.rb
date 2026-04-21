@@ -178,6 +178,63 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
+    describe "formula support", :aggregate_failures do
+      it "evaluates a multiplication formula and saves the result" do
+        select_category("Food")
+        select_item("Groceries")
+        fill_in "Amount", with: "10*5"
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(entries_path)
+        expect(page).to have_content("Entry was successfully created")
+        expect(Entry.last.amount).to eq(50)
+      end
+
+      it "evaluates a formula with parentheses" do
+        select_category("Food")
+        select_item("Groceries")
+        fill_in "Amount", with: "10*(5+2)"
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(entries_path)
+        expect(Entry.count).to eq(1)
+        expect(Entry.last.amount).to eq(70)
+      end
+
+      it "evaluates decimal subtraction" do
+        select_category("Food")
+        select_item("Groceries")
+        fill_in "Amount", with: "192.92-85.02"
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(entries_path)
+        expect(Entry.count).to eq(1)
+        expect(Entry.last.amount).to eq(BigDecimal("107.9"))
+      end
+
+      it "still accepts a plain number" do
+        select_category("Food")
+        select_item("Groceries")
+        fill_in "Amount", with: "50"
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(entries_path)
+        expect(Entry.count).to eq(1)
+        expect(Entry.last.amount).to eq(50)
+      end
+
+      it "shows a validation error for an invalid formula" do
+        select_category("Food")
+        select_item("Groceries")
+        fill_in "Amount", with: "abc"
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(new_entry_path)
+        expect(page).to have_content("is not a number")
+        expect(Entry.count).to eq(0)
+      end
+    end
+
     describe "navigation", :aggregate_failures do
       it "returns to entries index when clicking cancel" do
         click_link "Cancel"
