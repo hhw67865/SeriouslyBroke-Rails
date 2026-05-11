@@ -1,5 +1,5 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, :expenses_v9] do %>
+<% cache [current_user, selected_date, current_period, show_total, pace_cache_key(selected_date), :expenses_v9] do %>
 
 <%# === MONTHLY BUDGET SYSTEM === %>
 <%# Recurring expenses tracked against monthly budget caps %>

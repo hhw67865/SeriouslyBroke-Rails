@@ -43,6 +43,13 @@ module CategoriesHelper
     end
   end
 
+  # Cache-key component for views that render prorated budget pace.
+  # Returns Date.current when the selected month includes today or is in the
+  # future (so the daily ramp value changes), nil otherwise.
+  def pace_cache_key(selected_date)
+    selected_date.end_of_month >= Date.current ? Date.current : nil
+  end
+
   # Calculate number of months in a date range (inclusive)
   def months_in_range(range)
     first_date = range.first

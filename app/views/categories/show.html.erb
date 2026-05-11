@@ -36,7 +36,7 @@
       ytd_path: category_path(@category, period: "ytd") %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <% cache [@category, selected_date, current_period] do %>
+    <% cache [@category, selected_date, current_period, pace_cache_key(selected_date)] do %>
       <!-- Left Column -->
       <div class="lg:col-span-2 space-y-6">
         <%= render "categories/_partials/show/summary_card", category: @category %>
