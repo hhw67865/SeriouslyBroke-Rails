@@ -1,0 +1,42 @@
+<%# On-screen calculator for the amount field. Shown on touch devices (and
+    narrow viewports), where the native keypad has no operator keys; hidden
+    when a precise pointer/keyboard is available. %>
+<div class="grid-cols-4 gap-1.5 mt-1 hidden max-sm:grid pointer-coarse:grid">
+  <%
+    keys = [
+      { label: "C", action: "clear", aria: "Clear" },
+      { label: "(", value: "(", aria: "Open parenthesis" },
+      { label: ")", value: ")", aria: "Close parenthesis" },
+      { label: "⌫", action: "backspace", aria: "Backspace" },
+      { label: "7", value: "7" }, { label: "8", value: "8" }, { label: "9", value: "9" },
+      { label: "÷", value: "/", op: true, aria: "Divide" },
+      { label: "4", value: "4" }, { label: "5", value: "5" }, { label: "6", value: "6" },
+      { label: "×", value: "*", op: true, aria: "Multiply" },
+      { label: "1", value: "1" }, { label: "2", value: "2" }, { label: "3", value: "3" },
+      { label: "−", value: "-", op: true, aria: "Subtract" },
+      { label: "0", value: "0", span: 2 },
+      { label: ".", value: ".", aria: "Decimal point" },
+      { label: "+", value: "+", op: true, aria: "Add" }
+    ]
+  %>
+  <% keys.each do |key| %>
+    <%
+      action = key[:action] || "insert"
+      classes = ["py-3 rounded border text-lg font-medium transition active:scale-95"]
+      classes << "col-span-2" if key[:span] == 2
+      classes << if key[:op]
+        "border-brand bg-brand-light text-brand-dark active:bg-brand"
+      else
+        "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
+      end
+    %>
+    <%= button_tag key[:label],
+        type: "button",
+        "aria-label": key[:aria],
+        class: classes.join(" "),
+        data: {
+          action: "shared--calculator-pad##{action}",
+          value: key[:value]
+        } %>
+  <% end %>
+</div>

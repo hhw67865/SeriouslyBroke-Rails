@@ -127,6 +127,9 @@
 .hover\:opacity-90:hover { opacity: 0.9; }
 .hover\:opacity-80:hover { opacity: 0.8; }
 
+/* Active Utilities */
+.active\:bg-brand:active { background-color: var(--color-primary); }
+
 /* Focus Ring Brand */
 .focus\:ring-brand:focus { --tw-ring-color: var(--color-primary); }
 

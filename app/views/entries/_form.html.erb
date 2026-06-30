@@ -55,14 +55,19 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-5">
-          <%= f.input :amount,
-              as: :string,
-              placeholder: "0.00",
-              hint: "Enter an amount or formula (e.g. 10*5, 192.92-85.02)",
-              input_html: {
-                inputmode: "decimal",
-                autocomplete: "off"
-              } %>
+          <div data-controller="shared--calculator-pad">
+            <%= f.input :amount,
+                as: :string,
+                placeholder: "0.00",
+                hint: "Enter an amount or formula (e.g. 10*5, 192.92-85.02)",
+                input_html: {
+                  inputmode: "none",
+                  autocomplete: "off",
+                  data: { shared__calculator_pad_target: "input" }
+                } %>
+
+            <%= render "shared/calculator_pad" %>
+          </div>
 
           <%= f.input :date,
               as: :string,

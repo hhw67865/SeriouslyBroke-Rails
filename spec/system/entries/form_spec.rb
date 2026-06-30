@@ -32,6 +32,10 @@ RSpec.describe "Entries Forms", type: :system do
     sleep 0.3
   end
 
+  def tap_pad(*labels)
+    labels.each { |label| click_button(label) }
+  end
+
   describe "New Entry Form" do
     before { visit new_entry_path }
 
@@ -232,6 +236,33 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_current_path(new_entry_path)
         expect(page).to have_content("is not a number")
         expect(Entry.count).to eq(0)
+      end
+    end
+
+    describe "calculator pad on desktop", :aggregate_failures do
+      it "stays hidden in favor of the keyboard" do
+        expect(page).not_to have_button("7")
+        expect(page).not_to have_button("×")
+      end
+    end
+
+    describe "calculator pad on mobile", :aggregate_failures do
+      before { page.driver.browser.manage.window.resize_to(390, 844) }
+      after { page.driver.browser.manage.window.maximize }
+
+      it "builds a formula from the buttons and saves the evaluated result" do
+        select_category("Food")
+        select_item("Groceries")
+        tap_pad("1", "0", "×", "5")
+        click_button "Create Entry"
+
+        expect(page).to have_current_path(entries_path)
+        expect(Entry.last.amount).to eq(50)
+      end
+
+      it "clears the amount with the C button" do
+        tap_pad("9", "9", "C")
+        expect(page).to have_field("Amount", with: "")
       end
     end
 
