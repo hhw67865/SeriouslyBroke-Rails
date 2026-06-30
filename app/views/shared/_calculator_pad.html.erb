@@ -1,7 +1,7 @@
-<%# On-screen calculator for the amount field. Shown on touch devices (and
-    narrow viewports), where the native keypad has no operator keys; hidden
-    when a precise pointer/keyboard is available. %>
-<div class="grid-cols-4 gap-1.5 mt-1 hidden max-sm:grid pointer-coarse:grid">
+<%# On-screen calculator for the amount field. Shown only on mobile-width
+    viewports, where the native keypad has no operator keys; hidden on
+    desktop, where a keyboard is available. %>
+<div class="grid-cols-4 gap-1.5 mt-1 hidden max-sm:grid">
   <%
     keys = [
       { label: "C", action: "clear", aria: "Clear" },
