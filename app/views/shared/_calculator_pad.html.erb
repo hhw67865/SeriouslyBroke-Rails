@@ -8,11 +8,17 @@
       { label: "(", value: "(", aria: "Open parenthesis" },
       { label: ")", value: ")", aria: "Close parenthesis" },
       { label: "⌫", action: "backspace", aria: "Backspace" },
-      { label: "7", value: "7" }, { label: "8", value: "8" }, { label: "9", value: "9" },
+      { label: "7", value: "7" }, 
+      { label: "8", value: "8" }, 
+      { label: "9", value: "9" },
       { label: "÷", value: "/", op: true, aria: "Divide" },
-      { label: "4", value: "4" }, { label: "5", value: "5" }, { label: "6", value: "6" },
+      { label: "4", value: "4" }, 
+      { label: "5", value: "5" }, 
+      { label: "6", value: "6" },
       { label: "×", value: "*", op: true, aria: "Multiply" },
-      { label: "1", value: "1" }, { label: "2", value: "2" }, { label: "3", value: "3" },
+      { label: "1", value: "1" }, 
+      { label: "2", value: "2" }, 
+      { label: "3", value: "3" },
       { label: "−", value: "-", op: true, aria: "Subtract" },
       { label: "0", value: "0", span: 2 },
       { label: ".", value: ".", aria: "Decimal point" },
@@ -26,7 +32,7 @@
       classes << "col-span-2" if key[:span] == 2
       classes << if key[:op]
         "border-brand bg-brand-light text-brand-dark active:bg-brand"
-      else
+                 else
         "border-gray-200 bg-white text-gray-700 active:bg-gray-100"
       end
     %>

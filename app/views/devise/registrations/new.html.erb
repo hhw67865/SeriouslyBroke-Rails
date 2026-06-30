@@ -44,6 +44,19 @@
           <input type="text" name="website" id="website" tabindex="-1" autocomplete="off">
         </div>
 
+        <%# Auto-detect the new user's timezone from the browser. Falls back to
+            blank (normalized to nil → UTC) if JavaScript is unavailable. %>
+        <%= f.hidden_field :timezone %>
+        <script>
+          (function () {
+            var field = document.getElementById("user_timezone");
+            if (!field) return;
+            try {
+              field.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+            } catch (e) { /* leave blank; server falls back to UTC */ }
+          })();
+        </script>
+
         <div class="space-y-4">
           <div>
             <%= f.label :email, class: "block text-sm font-medium text-gray-700" %>

@@ -12,8 +12,8 @@ module Users
     protected
 
     def configure_permitted_parameters
-      devise_parameter_sanitizer.permit(:sign_up, keys: [:name])
-      devise_parameter_sanitizer.permit(:account_update, keys: [:name, :email_confirmation])
+      devise_parameter_sanitizer.permit(:sign_up, keys: [:name, :timezone])
+      devise_parameter_sanitizer.permit(:account_update, keys: [:name, :email_confirmation, :timezone])
     end
 
     def update_resource(resource, params)

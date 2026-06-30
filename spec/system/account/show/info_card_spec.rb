@@ -22,4 +22,20 @@ RSpec.describe "Account Show - Info Card", type: :system do
       expect(page).to have_link("Edit", href: edit_user_registration_path)
     end
   end
+
+  describe "timezone display", :aggregate_failures do
+    it "shows the user's timezone when set" do
+      user.update!(timezone: "America/New_York")
+      visit account_path
+
+      expect(page).to have_content("Timezone")
+      expect(page).to have_content("Eastern Time (US & Canada)")
+    end
+
+    it "shows a not-set notice when the user has no timezone" do
+      visit account_path
+
+      expect(page).to have_content("Not set (defaults to UTC)")
+    end
+  end
 end

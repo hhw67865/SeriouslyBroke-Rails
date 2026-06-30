@@ -46,6 +46,19 @@
       </div>
 
       <div>
+        <%= f.input :timezone,
+            as: :select,
+            collection: ActiveSupport::TimeZone.all.map { |z| [z.to_s, z.tzinfo.identifier] },
+            include_blank: "Select your timezone",
+            label: "Timezone",
+            hint: "Used to decide when your budgeting day rolls over",
+            label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
+            input_html: {
+              class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
+            } %>
+      </div>
+
+      <div>
         <%= f.input :password,
             label: "New password",
             required: false,

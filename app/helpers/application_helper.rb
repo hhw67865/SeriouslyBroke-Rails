@@ -86,6 +86,16 @@ module ApplicationHelper
     Date.new(year, month, 1).strftime("%B %Y")
   end
 
+  # Friendly label for a stored IANA timezone identifier, matching the labels in
+  # the account-edit dropdown. Falls back to the offset-prefixed identifier for
+  # zones outside ActiveSupport's curated list, then to the raw identifier.
+  def friendly_timezone(identifier)
+    return if identifier.blank?
+
+    zone = ActiveSupport::TimeZone.all.find { |z| z.tzinfo.identifier == identifier }
+    (zone || ActiveSupport::TimeZone[identifier])&.to_s || identifier
+  end
+
   # NOTE: Month/year are stored in session by DateContext and URLs are cleaned via redirect.
   # If a link or form needs to change the visible month, pass :month and :year explicitly;
   # DateContext will update session then redirect to a clean URL without those params.
