@@ -17,7 +17,12 @@ class User < ApplicationRecord
 
   enum :theme, { light: 0, dark: 1 }
 
+  normalizes :timezone, with: ->(value) { value.presence }
+
   validates :email, confirmation: { case_sensitive: false }, if: :will_save_change_to_email?
+  validates :timezone,
+            inclusion: { in: TZInfo::Timezone.all_identifiers },
+            allow_nil: true
 
   def toggle_theme!
     update(theme: light? ? :dark : :light)

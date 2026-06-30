@@ -13,7 +13,8 @@ Rails.logger.debug "Creating users..."
 user1 = User.create!(
   email: "demo@example.com",
   password: "password123",
-  name: "Demo User"
+  name: "Demo User",
+  timezone: "America/New_York"
 )
 
 # Define category structure with color schemes

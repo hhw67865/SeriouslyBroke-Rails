@@ -48,4 +48,29 @@ RSpec.describe User, type: :model do
       expect(user).to be_valid
     end
   end
+
+  describe "timezone validation", :aggregate_failures do
+    it "allows a real IANA identifier" do
+      expect(build(:user, timezone: "America/New_York")).to be_valid
+    end
+
+    it "allows a non-curated but real IANA identifier" do
+      expect(build(:user, timezone: "America/Detroit")).to be_valid
+    end
+
+    it "allows nil (not yet detected)" do
+      expect(build(:user, timezone: nil)).to be_valid
+    end
+
+    it "rejects a bogus zone" do
+      user = build(:user, timezone: "Mars/Olympus")
+      expect(user).not_to be_valid
+      expect(user.errors[:timezone]).to be_present
+    end
+
+    it "normalizes a blank submission to nil so the edit form can clear it" do
+      user = create(:user, timezone: "")
+      expect(user.timezone).to be_nil
+    end
+  end
 end

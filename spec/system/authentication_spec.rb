@@ -32,6 +32,14 @@ RSpec.describe "Authentication", type: :system do
         expect(page).to have_current_path(authenticated_root_path)
       end
 
+      it "auto-detects the new user's timezone from the browser", :aggregate_failures do
+        fill_sign_up_form
+        within("form") { click_button "Sign up" }
+
+        expect(page).to have_current_path(authenticated_root_path)
+        expect(User.find_by(email: valid_email).timezone).to be_present
+      end
+
       private
 
       def fill_sign_up_form(email: valid_email, password: valid_password, confirmation: nil)

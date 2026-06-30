@@ -14,6 +14,17 @@
     </div>
 
     <div class="py-3 flex justify-between">
+      <dt class="text-sm font-medium text-gray-500">Timezone</dt>
+      <dd class="text-sm text-gray-900">
+        <% if current_user.timezone.present? %>
+          <%= friendly_timezone(current_user.timezone) %>
+        <% else %>
+          <span class="text-gray-400">Not set (defaults to UTC)</span>
+        <% end %>
+      </dd>
+    </div>
+
+    <div class="py-3 flex justify-between">
       <dt class="text-sm font-medium text-gray-500">Member since</dt>
       <dd class="text-sm text-gray-900"><%= current_user.created_at.strftime("%b %d, %Y") %></dd>
     </div>
