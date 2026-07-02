@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
 class ApplicationController < ActionController::Base
+  around_action :use_user_timezone
+
   include DateContext
 
   before_action :authenticate_user!
-  prepend_around_action :use_user_timezone
 
   private
 
