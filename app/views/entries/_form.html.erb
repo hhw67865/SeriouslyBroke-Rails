@@ -26,9 +26,9 @@
                 data: {
                   app__entry__form_target: "categorySelect"
                 },
-                class: "form-select #{"border-red-500" if entry.errors[:item].any? && entry.item&.category_id.blank?}" %>
+                class: "form-select #{"form-input-error" if entry.errors[:item].any? && entry.item&.category_id.blank?}" %>
             <% if entry.errors[:item].any? && entry.item&.category_id.blank? %>
-              <p class="mt-2 text-sm text-red-600">must be selected</p>
+              <p class="form-error">must be selected</p>
             <% end %>
           </div>
 
@@ -46,10 +46,10 @@
                 { prompt: "Choose a Category first" },
                 {
                   data: { app__entry__form_target: "itemSelect" },
-                  class: "form-select #{"border-red-500" if entry.errors[:item].any?}"
+                  class: "form-select #{"form-input-error" if entry.errors[:item].any?}"
                 } %>
             <% if entry.errors[:item].any? %>
-              <p class="mt-2 text-sm text-red-600">must be selected</p>
+              <p class="form-error">must be selected</p>
             <% end %>
           </div>
         </div>
@@ -58,14 +58,11 @@
           <div data-controller="shared--calculator-pad">
             <%= f.input :amount, hint: "Enter an amount or formula (e.g. 10*5, 192.92-85.02)" do %>
               <div class="relative">
-                <%# Classes mirror the :input component in
-                    config/initializers/simple_form_default.rb (block form
-                    bypasses it) — keep in sync, plus pr-14 for the toggle. %>
                 <%= f.input_field :amount,
                     as: :string,
                     placeholder: "0.00",
                     autocomplete: "off",
-                    class: "appearance-none block w-full px-5 py-4 pr-14 border-2 rounded-xl text-[#2d3436] placeholder-[#adb5bd] focus:outline-none focus:ring-2 focus:ring-[#5F741D]/20 focus:border-[#5F741D] transition duration-200 ease-in-out text-lg #{entry.errors[:amount].any? ? "border-red-500" : "border-[#e9ecef]"}",
+                    class: "form-input pr-10 #{"form-input-error" if entry.errors[:amount].any?}",
                     data: { shared__calculator_pad_target: "input" } %>
                 <%= render "shared/calculator_pad_toggle" %>
               </div>
@@ -83,7 +80,7 @@
               } %>
         </div>
 
-        <%= f.input :description,
+        <%= f.input :description, wrapper_html: { class: "mt-5" },
             placeholder: "Add any notes about this transaction",
             hint: "Optional details about this entry",
             input_html: { rows: 3 } %>
@@ -96,11 +93,10 @@
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <%= link_to "Cancel",
           (@previous_url.presence || entries_path),
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+          class: "btn btn-secondary" %>
 
       <%= f.button :submit,
-          entry.persisted? ? "Update Entry" : "Create Entry",
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
+          entry.persisted? ? "Update Entry" : "Create Entry" %>
     </div>
   </div>
 <% end %>

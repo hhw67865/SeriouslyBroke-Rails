@@ -17,17 +17,13 @@
                 label_method: :name,
                 value_method: :id,
                 include_blank: "Select an expense category",
-                label: "Category",
-                label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-                input_html: { 
-                  class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm"
-                } %>
+                label: "Category" %>
           </div>
         <% else %>
           <%# Show category name for existing budgets %>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
-            <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+            <label class="form-label">Category</label>
+            <div class="form-input flex items-center bg-gray-50">
               <%= @budget.category.name %>
             </div>
             <%= f.hidden_field :category_id %>
@@ -39,24 +35,21 @@
           <%= f.input :amount,
               as: :decimal,
               label: "Budget Amount",
-              label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-              input_html: { 
-                class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+              input_html: {
                 placeholder: "0.00",
                 step: 0.01,
                 min: 0
               },
-              wrapper_html: { class: "relative" },
               hint: "Enter the maximum amount you want to spend in this category" %>
         </div>
 
         <%# Prorated toggle %>
         <div>
-          <div class="flex items-center gap-3 mb-2">
-            <%= f.check_box :prorated, class: "h-5 w-5 rounded border-gray-300 accent-brand focus:ring-brand focus:ring-1 cursor-pointer" %>
-            <%= f.label :prorated, "Prorate daily", class: "text-sm font-medium text-gray-700 cursor-pointer" %>
+          <div class="flex items-center gap-2 mb-2">
+            <%= f.check_box :prorated, class: "form-checkbox" %>
+            <%= f.label :prorated, "Prorate daily", class: "form-label mb-0 cursor-pointer" %>
           </div>
-          <p class="text-xs text-gray-500">
+          <p class="form-hint">
             Spread the budget evenly across the month so you can see if you're on pace day-to-day. Turn off for expenses that happen in one-time chunks (like rent or subscriptions).
           </p>
         </div>
@@ -68,10 +61,10 @@
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <%= link_to "Cancel",
           @budget.category ? category_path(@budget.category) : categories_path,
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+          class: "btn btn-secondary" %>
 
       <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
+          class: "btn btn-primary" %>
     </div>
   <% end %>
 </div> 

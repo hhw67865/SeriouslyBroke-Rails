@@ -1,1 +1,205 @@
 @import "tailwindcss";
+
+@theme {
+  /* Sage scale — anchored to the existing brand #C9C78B (see custom.css --color-primary) */
+  --color-sage-100: #F1F0DF;
+  --color-sage-200: #e2e1c6;
+  --color-sage-400: #C9C78B;
+  --color-sage-500: #a9a76b;
+  --color-sage-600: #8F8C5A;
+  --color-sage-700: #75733F;
+  --color-sage-800: #63612F;
+
+  /* Form neutrals (warm gray, matches sage temperature) */
+  --color-form-border: #d6d5cb;
+  --color-form-border-hover: #b8b6a8;
+  --color-form-placeholder: #a6a49a;
+  --color-form-error: #d92d20;
+}
+
+@layer components {
+  /* ── Form component classes: the single source of truth for form styling.
+     Referenced by config/initializers/simple_form.rb and used directly in
+     raw forms (Devise, search, entry-form selects). ── */
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: #43423a;
+    margin-bottom: 6px;
+  }
+  .form-label abbr {
+    text-decoration: none;
+    color: var(--color-sage-600);
+    margin-right: 1px;
+  }
+
+  .form-input,
+  .form-select,
+  .form-textarea {
+    display: block;
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 14px;
+    color: #26251f;
+    background-color: #fff;
+    border: 1px solid var(--color-form-border);
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(40, 38, 25, 0.04);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .form-input::placeholder,
+  .form-select::placeholder,
+  .form-textarea::placeholder {
+    color: var(--color-form-placeholder);
+  }
+  .form-input:hover,
+  .form-select:hover,
+  .form-textarea:hover {
+    border-color: var(--color-form-border-hover);
+  }
+  .form-input:focus,
+  .form-select:focus,
+  .form-textarea:focus {
+    outline: none;
+    border-color: var(--color-sage-600);
+    box-shadow: 0 0 0 3px rgba(201, 199, 139, 0.32), 0 1px 2px rgba(40, 38, 25, 0.04);
+  }
+  .form-input:disabled,
+  .form-select:disabled,
+  .form-textarea:disabled {
+    background-color: #f4f4f1;
+    color: #9b9a90;
+    cursor: not-allowed;
+  }
+
+  .form-select {
+    appearance: none;
+    padding-right: 34px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23777468' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+  }
+
+  .form-textarea {
+    height: auto;
+    min-height: 38px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  .form-checkbox {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    accent-color: var(--color-sage-600);
+    cursor: pointer;
+  }
+
+  .form-hint {
+    font-size: 12px;
+    color: #8b897c;
+    margin-top: 5px;
+    line-height: 1.45;
+  }
+
+  .form-error {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-form-error);
+    margin-top: 5px;
+  }
+
+  /* Error modifier — declared after the base focus rules so it wins on ties */
+  .form-input-error,
+  .form-input-error:hover {
+    border-color: var(--color-form-error);
+  }
+  .form-input-error:focus {
+    border-color: var(--color-form-error);
+    box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.15), 0 1px 2px rgba(40, 38, 25, 0.04);
+  }
+
+  /* Rails wraps invalid fields (non-SimpleForm builders, e.g. Devise) in
+     div.field_with_errors — style through it and neutralize the extra box. */
+  .field_with_errors {
+    display: contents;
+  }
+  .field_with_errors .form-input,
+  .field_with_errors .form-select,
+  .field_with_errors .form-textarea {
+    border-color: var(--color-form-error);
+  }
+  .field_with_errors .form-input:focus,
+  .field_with_errors .form-select:focus,
+  .field_with_errors .form-textarea:focus {
+    border-color: var(--color-form-error);
+    box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.15), 0 1px 2px rgba(40, 38, 25, 0.04);
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(201, 199, 139, 0.32);
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--color-sage-700);
+    color: #fff;
+    box-shadow: 0 1px 2px rgba(40, 38, 25, 0.1);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background-color: var(--color-sage-800);
+  }
+
+  /* Light variant for auth pages: airy brand-sage button with dark text
+     (white-on-#C9C78B fails contrast; dark text keeps it readable). */
+  .btn-primary-light {
+    background-color: var(--color-sage-400);
+    color: #2b2a1f;
+    box-shadow: 0 1px 2px rgba(40, 38, 25, 0.1);
+  }
+  .btn-primary-light:hover:not(:disabled) {
+    background-color: var(--color-sage-500);
+  }
+
+  .btn-secondary {
+    background-color: #fff;
+    border-color: var(--color-form-border);
+    color: #44423a;
+    box-shadow: 0 1px 2px rgba(40, 38, 25, 0.04);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background-color: #f7f7f4;
+    border-color: var(--color-form-border-hover);
+  }
+}

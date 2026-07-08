@@ -23,7 +23,7 @@ RSpec.describe "Items Edit - Form", type: :system do
     it "shows read-only category information" do
       expect(page).to have_content("Category")
       expect(page).to have_content("Groceries")
-      expect(page).to have_content("Category cannot be changed after creation")
+      expect(page).to have_content("Use Manage Items to move between categories")
     end
 
     it "shows navigation elements" do
@@ -177,7 +177,7 @@ RSpec.describe "Items Edit - Form", type: :system do
       visit edit_item_path(income_item)
 
       expect(page).to have_content("Salary")
-      expect(page).to have_content("Category cannot be changed after creation")
+      expect(page).to have_content("Use Manage Items to move between categories")
     end
   end
 

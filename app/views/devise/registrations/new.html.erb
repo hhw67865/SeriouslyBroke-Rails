@@ -28,7 +28,7 @@
       <% end %>
 
       <div>
-        <h2 class="text-center text-3xl font-bold text-brand-dark">
+        <h2 class="text-center text-3xl font-bold text-sage-600">
           Create your account
         </h2>
         <p class="mt-2 text-center text-sm text-gray-600">
@@ -59,29 +59,29 @@
 
         <div class="space-y-4">
           <div>
-            <%= f.label :email, class: "block text-sm font-medium text-gray-700" %>
-            <%= f.email_field :email, autofocus: true, autocomplete: "email", class: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent" %>
+            <%= f.label :email, class: "form-label" %>
+            <%= f.email_field :email, autofocus: true, autocomplete: "email", class: "form-input" %>
           </div>
 
           <div>
-            <%= f.label :password, class: "block text-sm font-medium text-gray-700" %>
-            <%= f.password_field :password, autocomplete: "new-password", class: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent" %>
+            <%= f.label :password, class: "form-label" %>
+            <%= f.password_field :password, autocomplete: "new-password", class: "form-input" %>
             <% if @minimum_password_length %>
-              <p class="mt-1 text-xs text-gray-500">Minimum <%= @minimum_password_length %> characters</p>
+              <p class="form-hint">Minimum <%= @minimum_password_length %> characters</p>
             <% end %>
           </div>
 
           <div>
-            <%= f.label :password_confirmation, class: "block text-sm font-medium text-gray-700" %>
-            <%= f.password_field :password_confirmation, autocomplete: "new-password", class: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent" %>
+            <%= f.label :password_confirmation, class: "form-label" %>
+            <%= f.password_field :password_confirmation, autocomplete: "new-password", class: "form-input" %>
           </div>
         </div>
 
-        <%= f.submit "Sign up", class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
+        <%= f.submit "Sign up", class: "w-full btn btn-primary-light" %>
       <% end %>
 
       <div class="text-center text-sm">
-        <%= link_to "Already have an account? Sign in", new_session_path(resource_name), class: "text-brand-dark hover:text-brand transition-colors" %>
+        <%= link_to "Already have an account? Sign in", new_session_path(resource_name), class: "text-sage-700 hover:text-sage-800 transition-colors" %>
       </div>
     </div>
   </div>

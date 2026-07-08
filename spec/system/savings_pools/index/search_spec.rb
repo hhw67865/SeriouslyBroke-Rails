@@ -76,8 +76,8 @@ RSpec.describe "Savings Pools Index - Search", type: :system do
       fill_in "q", with: "Fund"
       find("input[name='q']").send_keys(:return)
 
-      expect(page).to have_content(emergency_fund.name)
       expect(page).to have_content(car_fund.name)
+      expect(page).not_to have_content(emergency_fund.name)
       expect(page).not_to have_content(vacation_fund.name)
     end
 

@@ -147,7 +147,144 @@
   color: var(--color-primary-dark);
 }
 
-/* TomSelect Optgroup Headers */
+/* ══ TomSelect overrides (ported from FluxInc/configatorium, re-tokened) ══
+   The base CSS comes from the CDN <link> which loads after this file —
+   hence the !important on rules that must beat it. Geometry and colors
+   mirror .form-input in app/assets/tailwind/application.css. */
+
+/* Hide original select when TomSelect is active — visually hidden but
+   still findable by Capybara (do NOT change to display:none). */
+select.ts-hidden-accessible {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* TomSelect copies the original select's classes (e.g. form-select) onto
+   the wrapper — reset them so only the inner .ts-control shows styling. */
+.ts-wrapper {
+  position: relative;
+  z-index: 1;
+  height: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.ts-wrapper.focus {
+  z-index: 51;
+}
+
+/* The control clones .form-input */
+.ts-wrapper .ts-control {
+  height: 38px;
+  min-height: 38px;
+  border-radius: 4px !important;
+  border: 1px solid var(--color-form-border) !important;
+  background: #fff !important;
+  padding: 2px 12px !important;
+  font-size: 14px;
+  line-height: 1.25rem;
+  box-shadow: 0 1px 2px rgba(40, 38, 25, 0.04) !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  align-items: center !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ts-wrapper .ts-control:hover {
+  border-color: var(--color-form-border-hover) !important;
+}
+
+.ts-wrapper.focus .ts-control {
+  border-color: var(--color-sage-600) !important;
+  box-shadow: 0 0 0 3px rgba(201, 199, 139, 0.32), 0 1px 2px rgba(40, 38, 25, 0.04) !important;
+}
+
+/* Propagate the error state (class copied onto the wrapper) to the control */
+.ts-wrapper.form-input-error .ts-control {
+  border-color: var(--color-form-error) !important;
+}
+
+.ts-wrapper.form-input-error.focus .ts-control {
+  border-color: var(--color-form-error) !important;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.15), 0 1px 2px rgba(40, 38, 25, 0.04) !important;
+}
+
+/* When an item is selected, collapse the inner search input so it doesn't
+   push the item or show a stray placeholder */
+.ts-wrapper .ts-control > .item ~ input {
+  width: 0 !important;
+  min-width: 0 !important;
+  flex: 0 0 0px !important;
+  overflow: hidden !important;
+  position: absolute !important;
+}
+
+.ts-wrapper .ts-control > .item ~ input::placeholder {
+  color: transparent !important;
+}
+
+/* …but restore it on focus so the user can type to search */
+.ts-wrapper.focus .ts-control > .item ~ input {
+  position: relative !important;
+  width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+/* When nothing is selected, the input fills the control */
+.ts-wrapper .ts-control:not(.has-items) > input {
+  width: 100% !important;
+}
+
+/* Inner search input: no border-inside-a-border, no inner focus outline */
+.ts-wrapper .ts-control > input {
+  font-size: 14px !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  height: auto !important;
+  background: transparent !important;
+}
+
+.ts-wrapper .ts-control > input:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.ts-wrapper .ts-control > .item {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* Dropdown as a card */
+.ts-wrapper .ts-dropdown {
+  z-index: 50;
+  border-radius: 4px;
+  border: 1px solid var(--color-form-border);
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(40, 38, 25, 0.1);
+}
+
+.ts-wrapper .ts-dropdown .option.active {
+  background-color: var(--color-sage-100);
+  color: var(--color-sage-800);
+}
+
+/* Optgroup headers (kept from the previous styling, unchanged look) */
 .ts-dropdown .optgroup-header {
   background-color: var(--color-gray-100);
   color: var(--color-gray-600);

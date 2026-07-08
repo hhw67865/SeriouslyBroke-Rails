@@ -48,7 +48,7 @@ type,
             <% end %>
           </div>
           <% if category.errors[:category_type].any? %>
-            <p class="mt-2 text-sm text-status-danger"><%= category.errors[:category_type].first %></p>
+            <p class="form-error"><%= category.errors[:category_type].first %></p>
           <% end %>
         </div>
       </div>
@@ -114,13 +114,12 @@ color,
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <% cancel_path = category.persisted? ? category_path(category) : categories_path %>
-      <%= link_to "Cancel", 
+      <%= link_to "Cancel",
 cancel_path,
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+          class: "btn btn-secondary" %>
 
       <%= f.button :submit,
-          category.persisted? ? "Update Category" : "Create Category",
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
+          category.persisted? ? "Update Category" : "Create Category" %>
     </div>
   </div>
 <% end %>

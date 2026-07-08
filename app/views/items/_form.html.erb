@@ -5,9 +5,7 @@
     <div>
       <%= f.input :name,
           label: "Item Name",
-          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-          input_html: { 
-            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+          input_html: {
             placeholder: "Enter item name"
           },
           hint: "The name of this expense, income, or savings item" %>
@@ -17,9 +15,7 @@
     <div>
       <%= f.input :description,
           label: "Description (Optional)",
-          label_html: { class: "block text-sm font-medium text-gray-700 mb-2" },
-          input_html: { 
-            class: "block w-full rounded-md border-gray-300 shadow-sm focus:border-brand focus:ring-brand focus:ring-1 sm:text-sm",
+          input_html: {
             rows: 3,
             placeholder: "Add any additional details about this item"
           },
@@ -28,11 +24,11 @@
 
     <%# Category (Read-only for editing) %>
     <div>
-      <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
-      <div class="block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-900">
+      <label class="form-label">Category</label>
+      <div class="form-input flex items-center bg-gray-50">
         <%= item.category.name %>
       </div>
-      <p class="text-xs text-gray-500 mt-1">Use Manage Items to move between categories</p>
+      <p class="form-hint">Use Manage Items to move between categories</p>
       <%= f.hidden_field :category_id %>
     </div>
 
@@ -42,12 +38,12 @@
 
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
-      <%= link_to "Cancel", 
+      <%= link_to "Cancel",
 @previous_url.presence || category_path(item.category),
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" %>
+          class: "btn btn-secondary" %>
 
       <%= f.submit item.persisted? ? "Update Item" : "Create Item",
-          class: "inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" %>
+          class: "btn btn-primary" %>
     </div>
     
   <% end %>
