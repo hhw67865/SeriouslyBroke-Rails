@@ -239,20 +239,23 @@ RSpec.describe "Entries Forms", type: :system do
       end
     end
 
-    describe "calculator pad on desktop", :aggregate_failures do
-      it "stays hidden in favor of the keyboard" do
+    describe "calculator pad", :aggregate_failures do
+      it "is hidden until toggled open with the Calculator button" do
         expect(page).not_to have_button("7")
         expect(page).not_to have_button("×")
-      end
-    end
 
-    describe "calculator pad on mobile", :aggregate_failures do
-      before { page.driver.browser.manage.window.resize_to(390, 844) }
-      after { page.driver.browser.manage.window.maximize }
+        click_button "Calculator"
+        expect(page).to have_button("7")
+        expect(page).to have_button("×")
+
+        click_button "Calculator"
+        expect(page).not_to have_button("7")
+      end
 
       it "builds a formula from the buttons and saves the evaluated result" do
         select_category("Food")
         select_item("Groceries")
+        click_button "Calculator"
         tap_pad("1", "0", "×", "5")
         click_button "Create Entry"
 
@@ -261,6 +264,7 @@ RSpec.describe "Entries Forms", type: :system do
       end
 
       it "clears the amount with the C button" do
+        click_button "Calculator"
         tap_pad("9", "9", "C")
         expect(page).to have_field("Amount", with: "")
       end

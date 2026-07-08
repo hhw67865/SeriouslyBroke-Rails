@@ -1,12 +1,22 @@
 import { Controller } from "@hotwired/stimulus"
 
-// Drives an on-screen calculator pad for a numeric/formula input on touch
-// devices, where the native keypad has no operator keys. Each key inserts at
+// Drives an on-screen calculator pad for a numeric/formula input. The pad
+// starts hidden and is revealed with the toggle button. Each key inserts at
 // the cursor so users can build expressions (e.g. 192.92-85.02). Reusable on
 // any form: add data-controller="shared--calculator-pad", point the input at
-// the "input" target, and render the shared/calculator_pad partial.
+// the "input" target, render shared/calculator_pad_toggle inside a relative
+// wrapper around the input (with right padding for the button), and render
+// the shared/calculator_pad partial below.
 export default class extends Controller {
-  static targets = ["input"]
+  static targets = ["input", "pad", "toggleButton"]
+
+  toggle(event) {
+    event.preventDefault()
+    const show = this.padTarget.classList.contains("hidden")
+    this.padTarget.classList.toggle("hidden", !show)
+    this.padTarget.classList.toggle("grid", show)
+    this.toggleButtonTarget.setAttribute("aria-expanded", String(show))
+  }
 
   insert(event) {
     event.preventDefault()

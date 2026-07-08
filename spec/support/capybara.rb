@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 Capybara.default_max_wait_time = 5
+# Let finders match aria-label so icon-only buttons are clickable by name
+Capybara.enable_aria_label = true
 
 # Headless Chrome driver
 Capybara.register_driver :selenium_chrome_headless do |app|

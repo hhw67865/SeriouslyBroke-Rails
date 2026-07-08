@@ -140,6 +140,13 @@
 .hover\:bg-brand\/10:hover { background-color: rgba(201, 199, 139, 0.1); }
 .border-brand-dark { border-color: var(--color-primary-dark); }
 
+/* Calculator pad toggle: open state matches the pad's operator keys */
+.calculator-pad-toggle[aria-expanded="true"] {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+}
+
 /* TomSelect Optgroup Headers */
 .ts-dropdown .optgroup-header {
   background-color: var(--color-gray-100);

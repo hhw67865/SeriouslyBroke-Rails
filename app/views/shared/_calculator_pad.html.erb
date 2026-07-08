@@ -1,7 +1,6 @@
-<%# On-screen calculator for the amount field. Shown only on mobile-width
-    viewports, where the native keypad has no operator keys; hidden on
-    desktop, where a keyboard is available. %>
-<div class="grid-cols-4 gap-1.5 mt-1 hidden max-sm:grid">
+<%# On-screen calculator for the amount field. Hidden by default; shown and
+    hidden by the shared/calculator_pad_toggle button rendered in the input. %>
+<div id="calculator-pad" class="hidden grid-cols-4 gap-1.5 mt-1" data-shared--calculator-pad-target="pad">
   <%
     keys = [
       { label: "C", action: "clear", aria: "Clear" },
