@@ -25,6 +25,7 @@
     <%= render "shared/flash" if flash.any? %>
     
     <% if current_user %>
+      <%= render "shared/capybaras" if current_user.ming_mode? %>
       <%= render "shared/sidebar" %>
       <main class="lg:pl-64">
         <div class="px-4 py-4 sm:px-6 lg:px-8">

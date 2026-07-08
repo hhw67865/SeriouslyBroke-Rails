@@ -14,3 +14,157 @@
 .animate-fadeSlideIn {
   animation: fadeSlideIn 0.2s ease-out;
 }
+
+/* --- Ming mode capybaras ------------------------------------------- */
+
+.capybara-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capybara-layer {
+    display: none;
+  }
+}
+
+.capybara {
+  position: absolute;
+}
+
+.capybara__flip {
+  display: block;
+}
+
+.capybara__flip--mirrored {
+  transform: scaleX(-1);
+}
+
+/* Idle "alive" motion: gentle bottom-anchored breathing on every pose */
+.capybara__body {
+  display: block;
+  width: 150px;
+  height: auto;
+  transform-origin: bottom center;
+  animation: capybara-breathe 2.5s ease-in-out infinite;
+}
+
+@keyframes capybara-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.97); }
+}
+
+/* Walk: wrapper strolls across the viewport, body waddles */
+.capybara--walk {
+  bottom: 0;
+  left: 0;
+  animation: capybara-walk-across 15s linear forwards;
+}
+
+.capybara--walk.capybara--rtl {
+  animation-name: capybara-walk-across-rtl;
+}
+
+@keyframes capybara-walk-across {
+  from { transform: translateX(-160px); }
+  to { transform: translateX(100vw); }
+}
+
+@keyframes capybara-walk-across-rtl {
+  from { transform: translateX(100vw); }
+  to { transform: translateX(-160px); }
+}
+
+/* Waddle replaces breathing while walking (both animate transform, so
+   they cannot run on the same element; the waddle's bob reads as alive) */
+.capybara__body--waddle {
+  animation: capybara-waddle 0.6s ease-in-out infinite;
+}
+
+@keyframes capybara-waddle {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  50% { transform: rotate(3deg) translateY(-4px); }
+}
+
+/* Peek: slide partway in from an edge with a curious tilt, hold, retreat.
+   Right/bottom only — the left edge sits under the z-50 sidebar on desktop. */
+.capybara--peek-right {
+  right: 0;
+  animation: capybara-peek-right 5s ease-in-out forwards;
+}
+
+@keyframes capybara-peek-right {
+  0%, 100% { transform: translateX(110%) rotate(0deg); }
+  30%, 70% { transform: translateX(30%) rotate(-6deg); }
+}
+
+.capybara--peek-bottom {
+  bottom: 0;
+  animation: capybara-peek-bottom 5s ease-in-out forwards;
+}
+
+@keyframes capybara-peek-bottom {
+  0%, 100% { transform: translateY(110%) rotate(0deg); }
+  30%, 70% { transform: translateY(35%) rotate(3deg); }
+}
+
+/* Rest: sleep (60s) and rare specials (30s) fade in, idle, fade out */
+.capybara--rest {
+  bottom: 8px;
+  animation: capybara-fade 30s ease-in-out forwards;
+}
+
+.capybara--rest-slow {
+  animation-duration: 60s;
+}
+
+/* Corner placement — the left corner must clear the fixed sidebar (w-64) on desktop */
+.capybara--corner-right {
+  right: 16px;
+}
+
+.capybara--corner-left {
+  left: 16px;
+}
+
+@media (min-width: 1024px) {
+  .capybara--corner-left {
+    left: calc(16rem + 16px);
+  }
+}
+
+@keyframes capybara-fade {
+  0%, 100% { opacity: 0; }
+  5%, 95% { opacity: 1; }
+}
+
+/* Slower, deeper breathing while asleep */
+.capybara__body--doze {
+  animation: capybara-breathe-deep 4s ease-in-out infinite;
+}
+
+@keyframes capybara-breathe-deep {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.94); }
+}
+
+/* Floating z's layered above the sleeping pose */
+.capybara__zzz {
+  position: absolute;
+  top: -6px;
+  right: 24px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #8c7355;
+  opacity: 0;
+  animation: capybara-zzz 3s ease-out infinite;
+}
+
+@keyframes capybara-zzz {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.6); }
+  30% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(14px, -34px) scale(1.1); }
+}
