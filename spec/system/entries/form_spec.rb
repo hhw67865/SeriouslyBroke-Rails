@@ -268,6 +268,16 @@ RSpec.describe "Entries Forms", type: :system do
         tap_pad("9", "9", "C")
         expect(page).to have_field("Amount", with: "")
       end
+
+      it "suppresses the mobile keyboard while the pad is open" do
+        expect(find_field("Amount")["inputmode"]).to be_blank
+
+        click_button "Calculator"
+        expect(find_field("Amount")["inputmode"]).to eq("none")
+
+        click_button "Calculator"
+        expect(find_field("Amount")["inputmode"]).to be_blank
+      end
     end
 
     describe "navigation", :aggregate_failures do

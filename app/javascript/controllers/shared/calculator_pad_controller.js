@@ -16,6 +16,20 @@ export default class extends Controller {
     this.padTarget.classList.toggle("hidden", !show)
     this.padTarget.classList.toggle("grid", show)
     this.toggleButtonTarget.setAttribute("aria-expanded", String(show))
+
+    // While the pad is open it replaces the keyboard: inputmode="none" keeps
+    // the mobile virtual keyboard hidden even though the input stays focused
+    // (setValue refocuses after every key). Blur first so an already-open
+    // keyboard is dismissed — changing inputmode alone doesn't close it.
+    if (show) {
+      this.inputTarget.setAttribute("inputmode", "none")
+      if (document.activeElement === this.inputTarget) {
+        this.inputTarget.blur()
+        this.inputTarget.focus()
+      }
+    } else {
+      this.inputTarget.removeAttribute("inputmode")
+    }
   }
 
   insert(event) {

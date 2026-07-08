@@ -82,6 +82,16 @@
     cursor: not-allowed;
   }
 
+  /* iOS Safari gives natively-styled date inputs an intrinsic width that
+     ignores width: 100%, pushing them past the viewport on narrow screens. */
+  .form-input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .form-input[type="date"]::-webkit-date-and-time-value {
+    text-align: left;
+  }
+
   .form-select {
     appearance: none;
     padding-right: 34px;
