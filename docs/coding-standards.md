@@ -4,12 +4,13 @@ This document defines the architecture, patterns, and coding conventions for the
 
 ## Core Domain Models
 
-- **User** → has_many Categories, SavingsPools
+- **User** → has_many Categories, Pools
 - **Category** (expense/income/savings types) → has_many Items, has_one Budget
 - **Item** → has_many Entries
 - **Entry** → the actual transaction record
-- **SavingsPool** → goal tracking with target amounts
-- **Budget** → period-based spending limits (expense categories only)
+- **Pool** → a bank account, a spending envelope, or a savings goal (`pool_type`)
+- **PoolMovement** → a transfer between two of a user's own pools
+- **Budget** → a funding rule, owned by either an expense Category or a Pool
 
 ## Custom Patterns
 
