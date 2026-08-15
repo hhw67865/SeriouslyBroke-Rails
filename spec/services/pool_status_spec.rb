@@ -95,6 +95,36 @@ RSpec.describe PoolStatus, type: :model do
       expect(status.amount).to eq(200)
     end
 
+    # The two below are the multi-cycle cases. #paid_since_anchor is cumulative across
+    # every cycle since the anchor while the rule's amount is one cycle's worth, so a
+    # bare `amount - paid` only holds while nothing has rolled. Cycle 1 is paid in full
+    # in both, which is the ordinary state of a recurring bill, not an edge case.
+    it "reports the whole amount when a rolled cycle is wholly unpaid", :aggregate_failures do
+      pool = envelope("Insurance")
+      rule = bill_rule(pool, "Insurance", amount: 600, anchor_date: Date.new(2025, 8, 1))
+      fund(pool, 1200)
+      create(:entry, item: rule.item, amount: 600, date: Date.new(2025, 8, 2)) # cycle 1, settled
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdue)
+      expect(status.amount).to eq(600)
+    end
+
+    it "reports only the remainder when a rolled cycle is partly paid", :aggregate_failures do
+      pool = envelope("Insurance")
+      rule = bill_rule(pool, "Insurance", amount: 600, anchor_date: Date.new(2025, 8, 1))
+      fund(pool, 1200)
+      create(:entry, item: rule.item, amount: 600, date: Date.new(2025, 8, 2)) # cycle 1, settled
+      create(:entry, item: rule.item, amount: 250, date: Date.new(2026, 2, 2)) # cycle 2, part paid
+
+      status = pool.status(today: today)
+
+      # Owed through cycle 2 is 600 * 2 = 1200; 850 has been paid.
+      expect(status.state).to eq(:overdue)
+      expect(status.amount).to eq(350)
+    end
+
     # wont_make_it vs behind: due Feb 14 with no boundary before it AND far below
     # a steady schedule. Moving money is the only fix, so that must be the wording.
     it "reports wont_make_it ahead of behind", :aggregate_failures do

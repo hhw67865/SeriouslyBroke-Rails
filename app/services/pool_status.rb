@@ -89,9 +89,17 @@ class PoolStatus
   # recorded against its item is $200 outstanding, and reporting $600 overstates by
   # exactly what the user has paid. Reuses BudgetCalculator's own payment signal
   # rather than re-querying the item's entries here.
+  #
+  # `target * (cycles_completed + 1)`, never a bare `target`. The two sides have to be
+  # on the same basis: #paid_since_anchor is CUMULATIVE across every cycle since the
+  # anchor, while #target is ONE cycle's worth, so subtracting them only lines up while
+  # cycles_completed is 0. On a $600 six-monthly bill with cycle 1 paid and cycle 2
+  # overdue and untouched, `target - paid` is `600 - 600` and reports $0 owed on a bill
+  # owed in full — and $0 reads as settled. Total owed through the current cycle against
+  # total ever paid is the comparison that holds for every cycle.
   def overdue_amount
     calc = calculator_for(overdue_budget)
-    [calc.target - calc.paid_since_anchor, 0.to_d].max
+    [(calc.target * (calc.cycles_completed + 1)) - calc.paid_since_anchor, 0.to_d].max
   end
 
   # How far below a steady schedule this pool is. A rule with N periods in its
