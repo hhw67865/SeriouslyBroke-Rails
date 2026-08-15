@@ -3,7 +3,7 @@
 require "rails_helper"
 
 RSpec.describe BudgetCalculator, type: :model do
-  let(:user) { create(:user, pay_cadence: :biweekly, pay_anchor_date: Date.new(2026, 2, 6)) }
+  let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let(:car) { create(:pool, :budget_pool, user: user, account: checking, name: "Car") }
   let(:category) { create(:category, :expense, user: user, name: "Car Spending", pool: car) }
@@ -43,7 +43,7 @@ RSpec.describe BudgetCalculator, type: :model do
     create(:pool_budget, :one_time, pool: car, amount: amount, anchor_date: anchor, item: item)
   end
 
-  # A user who never told us when they get paid, so User#pay_dates returns [].
+  # A user who never told us when they get paid, so User#period_boundaries returns [].
   def cadence_less_rule(*traits, **attrs)
     other = create(:user)
     pool = create(:pool, :budget_pool, user: other, name: "Car")

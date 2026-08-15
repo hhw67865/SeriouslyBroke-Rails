@@ -90,7 +90,7 @@ RSpec.describe PoolCalculator, type: :model do
   end
 
   describe "envelope behaviour" do
-    let(:envelope_user) { create(:user, pay_cadence: :biweekly, pay_anchor_date: Date.new(2026, 2, 6)) }
+    let(:envelope_user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
     let(:checking) { create(:pool, :account, user: envelope_user, name: "Checking") }
     let(:car) { create(:pool, :budget_pool, user: envelope_user, account: checking, name: "Car") }
     let(:car_category) { create(:category, :expense, user: envelope_user, name: "Car Spending", pool: car) }

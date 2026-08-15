@@ -26,7 +26,7 @@ class BudgetCalculator
   end
 
   def period_end
-    budget.basis_per_paycheck? ? pay_period_end : today.end_of_month
+    budget.basis_per_paycheck? ? period_end_date : today.end_of_month
   end
 
   # The payment signal is the amount paid, never the number of entries. Counting
@@ -119,7 +119,7 @@ class BudgetCalculator
   end
 
   def periods_until_due
-    [user.pay_dates(from: today, to: due_date).count, 1].max
+    [user.period_boundaries(from: today, to: due_date).count, 1].max
   end
 
   # Fulfillment short-circuits scheduling: #due_date still reports the anchor,
@@ -145,8 +145,8 @@ class BudgetCalculator
     today.day < anchor.day ? months - 1 : months
   end
 
-  def pay_period_end
-    next_payday = user.pay_dates(from: today + 1, to: today + 45).first
-    next_payday ? next_payday - 1 : today.end_of_month
+  def period_end_date
+    next_boundary = user.period_boundaries(from: today + 1, to: today + 45).first
+    next_boundary ? next_boundary - 1 : today.end_of_month
   end
 end

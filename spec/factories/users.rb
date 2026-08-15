@@ -8,8 +8,8 @@ FactoryBot.define do
     password_confirmation { "password123" }
 
     trait :biweekly do
-      pay_cadence { :biweekly }
-      pay_anchor_date { Date.new(2026, 2, 6) }
+      period_cadence { :biweekly }
+      period_anchor_date { Date.new(2026, 2, 6) }
     end
   end
 end

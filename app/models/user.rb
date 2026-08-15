@@ -21,7 +21,7 @@ class User < ApplicationRecord
 
   # Prefixed so the enum never generates a bare `User#weekly?`, which would be
   # meaningless on a user.
-  enum :pay_cadence, { weekly: 0, biweekly: 1, semimonthly: 2, monthly: 3 }, prefix: :pay
+  enum :period_cadence, { weekly: 0, biweekly: 1, semimonthly: 2, monthly: 3 }, prefix: :period
 
   normalizes :timezone, with: ->(value) { value.presence }
 
@@ -29,6 +29,13 @@ class User < ApplicationRecord
   validates :timezone,
             inclusion: { in: TZInfo::Timezone.all_identifiers },
             allow_nil: true
+  validates :typical_income, numericality: { greater_than: 0 }, allow_nil: true
+  # Without an anchor a configured cadence yields no boundaries at all, and the
+  # `[count, 1].max` clamp downstream then reports "1 period before this bill" —
+  # the app would demand the entire bill out of the next paycheck.
+  validates :period_anchor_date,
+            presence: { message: "is required when you set a period" },
+            if: :period_cadence
 
   validate :default_account_is_own_account
 
@@ -42,16 +49,18 @@ class User < ApplicationRecord
     update(theme: light? ? :dark : :light)
   end
 
-  # Every pay date in [from, to], ascending. Empty unless a cadence is configured.
-  def pay_dates(from:, to:)
+  # Every period boundary in [from, to], ascending. Empty unless a period is configured.
+  # A period is DECLARED by the user — it is not inferred from income, so multiple jobs
+  # and irregular pay are simply not a question here.
+  def period_boundaries(from:, to:)
     from = from.to_date
     to = to.to_date
-    return [] if pay_cadence.blank? || pay_anchor_date.blank? || to < from
+    return [] if period_cadence.blank? || period_anchor_date.blank? || to < from
 
-    case pay_cadence
-    when "weekly", "biweekly" then strided_pay_dates(STRIDE_DAYS.fetch(pay_cadence), from, to)
-    when "monthly" then monthly_pay_dates([pay_anchor_date.day], from, to)
-    when "semimonthly" then monthly_pay_dates(semimonthly_days, from, to)
+    case period_cadence
+    when "weekly", "biweekly" then strided_dates(STRIDE_DAYS.fetch(period_cadence), from, to)
+    when "monthly" then monthly_dates([period_anchor_date.day], from, to)
+    when "semimonthly" then monthly_dates(semimonthly_days, from, to)
     else []
     end
   end
@@ -60,15 +69,15 @@ class User < ApplicationRecord
 
   # The anchor is one occurrence of the series, not its start, so the schedule
   # extends backward from it as well — `ceil` handles a negative offset.
-  def strided_pay_dates(stride, from, to)
-    steps = ((from - pay_anchor_date).to_i / stride.to_f).ceil
-    first = pay_anchor_date + (steps * stride)
+  def strided_dates(stride, from, to)
+    steps = ((from - period_anchor_date).to_i / stride.to_f).ceil
+    first = period_anchor_date + (steps * stride)
     return [] if first > to
 
     (first..to).step(stride).to_a
   end
 
-  def monthly_pay_dates(days, from, to)
+  def monthly_dates(days, from, to)
     dates = []
     cursor = from.beginning_of_month
     while cursor <= to
@@ -82,7 +91,7 @@ class User < ApplicationRecord
   end
 
   def semimonthly_days
-    first = pay_anchor_date.day
+    first = period_anchor_date.day
     [first, first <= 15 ? first + 15 : first - 15].sort
   end
 
