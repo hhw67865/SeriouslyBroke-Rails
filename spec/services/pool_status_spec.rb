@@ -23,7 +23,9 @@ RSpec.describe PoolStatus, type: :model do
   # An item is the only fulfillment signal BudgetCalculator#overdue? accepts, so
   # every example that needs an overdue rule has to route through here.
   def bill_rule(pool, name, amount:, anchor_date:)
-    category = create(:category, :expense, user: user, name: "#{pool.name} bills", pool: pool)
+    # Named per item, not per pool: category names are unique per user, and a pool with two
+    # bills in it calls this twice.
+    category = create(:category, :expense, user: user, name: "#{pool.name} #{name}", pool: pool)
     item = create(:item, category: category, name: name)
     create(:pool_budget, pool: pool, amount: amount, interval_months: 6, anchor_date: anchor_date, item: item)
   end
@@ -95,6 +97,36 @@ RSpec.describe PoolStatus, type: :model do
       expect(status.amount).to eq(200)
     end
 
+    # Two overdue rules, created LATEST-DUE-FIRST so insertion order and due-date order
+    # disagree. `has_many :budgets` carries no ORDER BY, so without a deterministic sort
+    # this pool reads $200 · Feb 3 or $600 · Feb 1 at random between page loads.
+    it "names the earliest of several overdue rules", :aggregate_failures do
+      pool = envelope("Utilities")
+      bill_rule(pool, "Electric", amount: 200, anchor_date: Date.new(2026, 2, 3))
+      bill_rule(pool, "Water", amount: 600, anchor_date: Date.new(2026, 2, 1))
+      fund(pool, 800)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdue)
+      expect(status.due_on).to eq(Date.new(2026, 2, 1))
+      expect(status.amount).to eq(600)
+    end
+
+    # Same due date, so the date cannot break the tie. Created smallest-first, so insertion
+    # order and the intended order disagree: the larger obligation is the one to name.
+    it "breaks a tie between two overdue rules toward the larger", :aggregate_failures do
+      pool = envelope("Levies")
+      bill_rule(pool, "Small", amount: 200, anchor_date: Date.new(2026, 2, 1))
+      bill_rule(pool, "Large", amount: 600, anchor_date: Date.new(2026, 2, 1))
+      fund(pool, 800)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdue)
+      expect(status.amount).to eq(600)
+    end
+
     # The two below are the multi-cycle cases. #paid_since_anchor is cumulative across
     # every cycle since the anchor while the rule's amount is one cycle's worth, so a
     # bare `amount - paid` only holds while nothing has rolled. Cycle 1 is paid in full
@@ -164,6 +196,31 @@ RSpec.describe PoolStatus, type: :model do
       fund(pool, 300)
 
       expect(pool.status(today: today).state).not_to eq(:wont_make_it)
+    end
+
+    # The `from` side of the window is `today + 1`, so a boundary landing today does NOT
+    # rescue a future bill — today's distribution is the one being looked at right now.
+    # The first expectation states that premise instead of leaving it incidental.
+    it "fires even when a boundary lands today, which cannot spread a future bill", :aggregate_failures do
+      pool = envelope("Dentist")
+      create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 14))
+
+      expect(user.period_boundaries(from: today, to: today)).to eq([today])
+      expect(pool.status(today: today).state).to eq(:wont_make_it)
+    end
+
+    # Two rules, both unreachable, created LATEST-DUE-FIRST so insertion order and due-date
+    # order disagree. Without a deterministic sort the pick is whatever Postgres returns.
+    it "names the earliest of several unreachable rules", :aggregate_failures do
+      pool = envelope("Repairs")
+      create(:pool_budget, :one_time, pool: pool, amount: 400, anchor_date: Date.new(2026, 2, 13))
+      create(:pool_budget, :one_time, pool: pool, amount: 150, anchor_date: Date.new(2026, 2, 12))
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:wont_make_it)
+      expect(status.due_on).to eq(Date.new(2026, 2, 12))
+      expect(status.amount).to eq(150)
     end
 
     # The two examples below pin the off-by-one deliberately rather than leaving it to

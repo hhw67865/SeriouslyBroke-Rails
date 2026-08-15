@@ -56,10 +56,26 @@ class PoolStatus
 
   def pool_calculator = @pool_calculator ||= pool.calculator(today: today)
 
-  def calculator_for(budget) = budget.calculator(today: today)
+  # Memoized per rule. BudgetCalculator#due_date re-runs the paid_since_anchor SUM every
+  # time it is asked, and a single #state + #due_on asks several times per rule — six
+  # identical SELECT SUMs per rule, per pool, on the one screen this class exists to render.
+  def calculator_for(budget)
+    (@calculators ||= {})[budget] ||= budget.calculator(today: today)
+  end
 
+  # Sorted, not raw. `has_many :budgets` carries no ORDER BY, so the "first match" that
+  # #overdue_budget and #unreachable_budget take would be whatever order Postgres happened
+  # to hand back — a Utilities envelope with water due Feb 1 and electric due Feb 3, both
+  # unpaid, reading `overdue $X · Feb 1` or `overdue $Y · Feb 3` at random between page
+  # loads with no data change.
+  #
+  # Same key and same reasoning as PoolCalculator#budgets_by_due_date, which already guards
+  # this: earliest due date first, because the most urgent rule is the one worth naming;
+  # `-amount` breaks a tie toward the larger obligation; `id` makes even identical rows
+  # deterministic. The brief mandates a singular rule, so which one it is has to be stable.
   def anchored_budgets
     @anchored_budgets ||= pool.budgets.select { |b| b.anchor_date.present? }
+      .sort_by { |b| [calculator_for(b).due_date, -b.amount, b.id] }
   end
 
   def overdue_budget
@@ -70,6 +86,19 @@ class PoolStatus
 
   # A rule nothing can save: it still has a shortfall and no period boundary
   # falls between today and its due date, so no future funding can reach it.
+  #
+  # The window is deliberately asymmetric — `today + 1` on one side, the due date
+  # included on the other — because the two sides answer different questions.
+  #
+  # The `to` side asks *will money arrive in time to pay this?*, so a boundary landing on
+  # the due date counts: you distribute that morning and pay the bill that day.
+  #
+  # The `from` side asks *can any FUTURE period help spread this?*, and today's
+  # distribution is the one being looked at right now. If nothing falls between tomorrow
+  # and the due date, the bill cannot be smoothed and has to be funded now or not at all
+  # — which is the entire signal :wont_make_it exists to give. Using `today` here would
+  # collapse that: a $300 bill due Feb 14 with boundaries on Feb 6 and Feb 20 would read
+  # as comfortably fundable, hiding that today is the only chance to fund it.
   def unreachable_budget
     return @unreachable_budget if defined?(@unreachable_budget)
 
