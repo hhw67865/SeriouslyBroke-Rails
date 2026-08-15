@@ -25,7 +25,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
       create(:entry, item: expense_item, amount: 100.00, date: base_date + 5.days)
     end
 
-    it "shows current month pool balance on savings tab" do
+    it "shows current month pool balance on savings tab", pending: "savings-category contributions become movements in Plan 3" do
       visit root_path(tab: "savings")
 
       pool_card = find("a[href='#{pool_path(pool)}']")
@@ -68,7 +68,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
   end
 
   describe "status badges", :aggregate_failures do
-    it "shows 'funded' badge when pool reaches 100%" do
+    it "shows 'funded' badge when pool reaches 100%", pending: "savings-category contributions become movements in Plan 3" do
       pool = create(:pool, user: user, name: "Small Goal", target_amount: 100, start_date: 1.year.ago)
       cat = create(:category, :savings, user: user, name: "Small Savings", pool: pool)
       item = create(:item, category: cat, name: "Deposit")

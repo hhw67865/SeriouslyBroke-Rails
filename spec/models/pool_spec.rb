@@ -127,7 +127,7 @@ RSpec.describe Pool, type: :model do
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
-    it "sums the account's own balance and its child pools", :aggregate_failures do
+    it "sums the account's own balance and its child pools", :aggregate_failures, pending: "savings-category contributions become movements in Plan 3" do
       checking = create(:pool, :account, user: user)
       groceries = create(:pool, :budget_pool, user: user, account: checking)
       vacation = create(:pool, :savings_pool, user: user, account: checking)
@@ -142,12 +142,49 @@ RSpec.describe Pool, type: :model do
       expect(checking.total).to eq(165)
     end
 
-    it "equals the pool's own balance when it has no child pools" do
+    it "equals the pool's own balance when it has no child pools", pending: "savings-category contributions become movements in Plan 3" do
       pool = create(:pool, :account, user: user)
 
       deposit(pool, 70)
 
       expect(pool.total).to eq(70)
+    end
+
+    # Replaces the coverage the two pending examples above used to give #total.
+    # Same structure, but funded the way the new PoolCalculator#balance reads money:
+    # income entries and movements, not savings-category entries.
+    it "sums the account's own balance and its child pools, funded by movements", :aggregate_failures do
+      checking, groceries, vacation = funded_account
+
+      expect(checking.child_pools).to contain_exactly(groceries, vacation)
+      expect(checking.calculator.current_balance).to eq(100) # 200 paid in, 100 moved out
+      expect(groceries.calculator.current_balance).to eq(25) # 60 moved in, 35 spent
+      expect(vacation.calculator.current_balance).to eq(40)
+      expect(checking.total).to eq(165)
+    end
+
+    it "equals the pool's own balance when it has no child pools, funded by movements" do
+      pool = create(:pool, :account, user: user)
+
+      pay(pool, 70)
+
+      expect(pool.total).to eq(70)
+    end
+
+    def pay(pool, amount)
+      category = create(:category, :income, user: pool.user, pool: pool, name: "#{pool.name} Paycheck")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    def funded_account
+      checking = create(:pool, :account, user: user)
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+      vacation = create(:pool, :savings_pool, user: user, account: checking)
+      pay(checking, 200)
+      create(:pool_movement, from_pool: checking, to_pool: groceries, amount: 60)
+      create(:pool_movement, from_pool: checking, to_pool: vacation, amount: 40)
+      withdraw(groceries, 35)
+      [checking, groceries, vacation]
     end
   end
 

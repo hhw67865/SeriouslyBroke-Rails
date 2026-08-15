@@ -71,8 +71,8 @@ class Pool < ApplicationRecord
     contribution_entries.or(withdrawal_entries)
   end
 
-  def calculator(as_of: nil)
-    PoolCalculator.new(self, as_of: as_of)
+  def calculator(as_of: nil, today: Date.current)
+    PoolCalculator.new(self, as_of: as_of, today: today)
   end
 
   # What the bank actually says: unallocated cash plus every pool inside it.

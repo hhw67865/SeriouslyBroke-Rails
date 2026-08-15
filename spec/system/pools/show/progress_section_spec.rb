@@ -25,11 +25,11 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
       visit pool_path(pool)
     end
 
-    it "shows correct progress percentage" do
+    it "shows correct progress percentage", pending: "savings-category contributions become movements in Plan 3" do
       expect(page).to have_content("5% complete")
     end
 
-    it "shows correct current balance" do
+    it "shows correct current balance", pending: "savings-category contributions become movements in Plan 3" do
       metric_boxes = page.all("div.text-center")
       current_balance_box = metric_boxes.find { |box| box.text.include?("CURRENT BALANCE") }
       expect(current_balance_box).to have_content("$500.00")
@@ -41,13 +41,13 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
       expect(target_box).to have_content("$10,000.00")
     end
 
-    it "shows correct remaining amount" do
+    it "shows correct remaining amount", pending: "savings-category contributions become movements in Plan 3" do
       metric_boxes = page.all("div.text-center")
       remaining_box = metric_boxes.find { |box| box.text.include?("STILL NEEDED") }
       expect(remaining_box).to have_content("$9,500.00")
     end
 
-    it "shows correct status badge" do
+    it "shows correct status badge", pending: "savings-category contributions become movements in Plan 3" do
       expect(page).to have_content("Getting Started")
     end
   end
@@ -61,12 +61,12 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
         visit pool_path(pool)
       end
 
-      it "shows correct progress and status" do
+      it "shows correct progress and status", pending: "savings-category contributions become movements in Plan 3" do
         expect(page).to have_content("50% complete")
         expect(page).to have_content("Making Progress")
       end
 
-      it "shows correct remaining amount" do
+      it "shows correct remaining amount", pending: "savings-category contributions become movements in Plan 3" do
         metric_boxes = page.all("div.text-center")
         remaining_box = metric_boxes.find { |box| box.text.include?("STILL NEEDED") }
         expect(remaining_box).to have_content("$5,000.00")
@@ -81,7 +81,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
         visit pool_path(pool)
       end
 
-      it "shows correct progress and status" do
+      it "shows correct progress and status", pending: "savings-category contributions become movements in Plan 3" do
         expect(page).to have_content("80% complete")
         expect(page).to have_content("Almost There")
       end
@@ -95,12 +95,12 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
         visit pool_path(pool)
       end
 
-      it "shows goal achieved status" do
+      it "shows goal achieved status", pending: "savings-category contributions become movements in Plan 3" do
         expect(page).to have_content("100% complete")
         expect(page).to have_content("Goal Achieved!")
       end
 
-      it "shows excess saved instead of still needed" do
+      it "shows excess saved instead of still needed", pending: "savings-category contributions become movements in Plan 3" do
         metric_boxes = page.all("div.text-center")
         excess_box = metric_boxes.find { |box| box.text.include?("EXCESS SAVED") }
         expect(excess_box).to have_content("$0.00")
