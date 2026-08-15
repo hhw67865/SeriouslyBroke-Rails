@@ -29,7 +29,7 @@ class PoolStatus
   def amount
     case state
     when :overdrawn then -balance
-    when :overdue then overdue_budget.amount.to_d
+    when :overdue then overdue_amount
     when :wont_make_it then shortfall_for(unreachable_budget)
     when :behind then behind_amount
     else balance
@@ -40,6 +40,7 @@ class PoolStatus
     case state
     when :overdue then calculator_for(overdue_budget).due_date
     when :wont_make_it then calculator_for(unreachable_budget).due_date
+    when :behind then lagging_due_date
     else next_due_date
     end
   end
@@ -84,6 +85,15 @@ class PoolStatus
     calculator_for(budget).shortfall(pool_calculator.allocated_balances[budget] || 0.to_d)
   end
 
+  # The unpaid remainder, not the rule's face value: a $600 bill with $400 already
+  # recorded against its item is $200 outstanding, and reporting $600 overstates by
+  # exactly what the user has paid. Reuses BudgetCalculator's own payment signal
+  # rather than re-querying the item's entries here.
+  def overdue_amount
+    calc = calculator_for(overdue_budget)
+    [calc.target - calc.paid_since_anchor, 0.to_d].max
+  end
+
   # How far below a steady schedule this pool is. A rule with N periods in its
   # full cycle and R remaining should hold amount * (N - R) / N by now.
   # Summed over anchored rules only, which is what makes the :behind branch and the
@@ -115,5 +125,16 @@ class PoolStatus
 
   def next_due_date
     anchored_budgets.map { |b| calculator_for(b).due_date }.min
+  end
+
+  # The earliest due date among the rules that actually own part of the lag. #amount
+  # stays the pool-wide sum — the total is what the user has to make up — but the date
+  # has to name a rule that contributed to it. Drawn from every anchored rule instead,
+  # a pool behind on its March insurance would read "behind $385 · Feb 28" and send the
+  # user to look at the gas envelope, which is perfectly on schedule.
+  def lagging_due_date
+    anchored_budgets.select { |b| behind_amount_for(b).positive? }
+      .map { |b| calculator_for(b).due_date }
+      .min
   end
 end

@@ -83,6 +83,18 @@ RSpec.describe PoolStatus, type: :model do
       expect(status.due_on).to eq(Date.new(2026, 2, 1))
     end
 
+    it "reports what is still unpaid on the overdue rule, not its face value", :aggregate_failures do
+      pool = envelope("Water")
+      rule = bill_rule(pool, "Water", amount: 600, anchor_date: Date.new(2026, 2, 1))
+      fund(pool, 600)
+      create(:entry, item: rule.item, amount: 400, date: Date.new(2026, 2, 2))
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdue)
+      expect(status.amount).to eq(200)
+    end
+
     # wont_make_it vs behind: due Feb 14 with no boundary before it AND far below
     # a steady schedule. Moving money is the only fix, so that must be the wording.
     it "reports wont_make_it ahead of behind", :aggregate_failures do
@@ -123,6 +135,23 @@ RSpec.describe PoolStatus, type: :model do
 
       expect(pool.status(today: today).state).not_to eq(:wont_make_it)
     end
+
+    # The two examples below pin the off-by-one deliberately rather than leaving it to
+    # whichever way the range happened to be written. A boundary landing ON the due date
+    # counts as in time: you distribute that morning and pay the bill the same day.
+    it "does not fire when a boundary lands exactly on the due date" do
+      pool = envelope("Dentist")
+      create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 20))
+
+      expect(pool.status(today: today).state).to eq(:on_track)
+    end
+
+    it "fires when the only boundary lands the day after the due date" do
+      pool = envelope("Dentist")
+      create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 19))
+
+      expect(pool.status(today: today).state).to eq(:wont_make_it)
+    end
   end
 
   describe ":behind" do
@@ -145,6 +174,34 @@ RSpec.describe PoolStatus, type: :model do
       fund(pool, 600)
 
       expect(pool.status(today: today).state).to eq(:on_track)
+    end
+
+    # Allocation fills the earliest due date first, so funding $200 settles the Feb 28
+    # rule and starves the Mar 1 one. The lag is entirely the later rule's, and naming
+    # the earlier date would point the user at the bill that is on schedule.
+    it "names the earliest due date among the rules actually behind", :aggregate_failures do
+      pool = envelope("Car")
+      create(:pool_budget, pool: pool, amount: 200, interval_months: 6, anchor_date: Date.new(2026, 2, 28))
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 200)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:behind)
+      expect(status.due_on).to eq(Date.new(2026, 3, 1))
+    end
+
+    it "sums the lag across every rule behind, and then names the earliest of those", :aggregate_failures do
+      pool = envelope("Car")
+      create(:pool_budget, pool: pool, amount: 200, interval_months: 6, anchor_date: Date.new(2026, 2, 28))
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 20)
+
+      status = pool.status(today: today)
+
+      # 200 * 11/13 - 20 = 149.23 behind on the Feb rule, 600 * 11/13 - 0 = 507.69 on the Mar one.
+      expect(status.amount).to be_within(0.01).of(656.92)
+      expect(status.due_on).to eq(Date.new(2026, 2, 28))
     end
 
     # periods_in_cycle divides by its own return value, so both shapes that make
