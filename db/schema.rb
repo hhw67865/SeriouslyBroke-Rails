@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_080000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -76,6 +76,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_080000) do
     t.index ["from_pool_id"], name: "index_pool_movements_on_from_pool_id"
     t.index ["source_entry_id"], name: "index_pool_movements_on_source_entry_id"
     t.index ["to_pool_id"], name: "index_pool_movements_on_to_pool_id"
+    t.check_constraint "amount > 0::money", name: "pool_movements_positive_amount"
     t.check_constraint "from_pool_id <> to_pool_id", name: "pool_movements_distinct_pools"
   end
 

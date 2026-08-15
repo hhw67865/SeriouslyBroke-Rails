@@ -126,6 +126,27 @@ RSpec.describe PoolMovement, type: :model do
 
       expect { movement.update_column(:to_pool_id, car.id) }.not_to raise_error
     end
+
+    # A self-transfer is meaningless but nets to zero; a negative amount silently inverts
+    # the direction of the transfer, so money leaves the pool the row says it enters.
+    it "refuses a negative amount written past the validation" do
+      movement = create(:pool_movement, from_pool: checking, to_pool: groceries)
+
+      expect { movement.update_column(:amount, -10) }
+        .to raise_error(ActiveRecord::StatementInvalid, /pool_movements_positive_amount/)
+    end
+
+    it "refuses a zero amount inserted in bulk" do
+      expect do
+        described_class.insert_all!([{ from_pool_id: checking.id, to_pool_id: groceries.id, amount: 0, date: Time.zone.now }])
+      end.to raise_error(ActiveRecord::StatementInvalid, /pool_movements_positive_amount/)
+    end
+
+    it "still admits a positive amount written past the validation" do
+      movement = create(:pool_movement, from_pool: checking, to_pool: groceries)
+
+      expect { movement.update_column(:amount, 0.01) }.not_to raise_error
+    end
   end
   # rubocop:enable Rails/SkipsModelValidations
 
