@@ -87,3 +87,6 @@ node_modules/
 # tasks.json
 # tasks/ 
 .claude/scheduled_tasks.lock
+
+# Superpowers scratch (SDD ledgers, brainstorm mockups)
+.superpowers/
