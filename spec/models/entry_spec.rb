@@ -100,6 +100,13 @@ RSpec.describe Entry, type: :model do
       expect(entry.effective_pool).to be_nil
     end
 
+    # The ownership validator guards this exact hazard; the two must not disagree about
+    # whether the chain is safe to walk. Both links break the same way, so both are held.
+    it "is nil rather than raising when the chain is not filled in yet", :aggregate_failures do
+      expect(build(:entry, item: Item.new(name: "Unfiled")).effective_pool).to be_nil
+      expect(build(:entry, item: nil).effective_pool).to be_nil
+    end
+
     # The four examples above cover the cells where the entry has no pool of its own,
     # plus one where it does. These cover the rest of the entry-pool/category-pool/
     # default-account space so no level of the chain can silently win out of turn.
@@ -183,6 +190,56 @@ RSpec.describe Entry, type: :model do
 
       expect(entry).not_to be_valid
       expect(entry.errors[:pool]).to include("must belong to the same user")
+    end
+
+    # The example above uses persisted pools, so an id comparison would satisfy it too.
+    # This one holds the record comparison in place: with nothing saved, both sides'
+    # `user_id` are nil, and `nil == nil` would wave the foreign pool straight through.
+    it "rejects an unsaved pool owned by a different unsaved user", :aggregate_failures do
+      item = Item.new(name: "Unfiled", category: Category.new(user: User.new))
+      entry = build(:entry, item: item, pool: build(:pool, :account, user: User.new))
+
+      expect(entry).not_to be_valid
+      expect(entry.errors[:pool]).to include("must belong to the same user")
+    end
+  end
+
+  # The mirror of Category's income rule: Entry#pool is a second channel to the same
+  # destination, so income has to land in an account here too, never in an envelope.
+  describe "income entries" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
+
+    def income_entry_overriding_to(pool)
+      category = create(:category, :income, user: user)
+      build(:entry, item: create(:item, category: category), pool: pool)
+    end
+
+    it "may override to an account pool" do
+      expect(income_entry_overriding_to(checking)).to be_valid
+    end
+
+    it "may not override to a budget pool", :aggregate_failures do
+      entry = income_entry_overriding_to(groceries)
+
+      expect(entry).not_to be_valid
+      expect(entry.errors[:pool]).to include("must be an account for income entries")
+    end
+
+    it "may not override to a savings pool", :aggregate_failures do
+      entry = income_entry_overriding_to(create(:pool, :savings_pool, user: user, account: checking))
+
+      expect(entry).not_to be_valid
+      expect(entry.errors[:pool]).to include("must be an account for income entries")
+    end
+
+    # Pins the income? guard: without this a validator that rejected every non-account
+    # override would pass every example above.
+    it "does not constrain expense entries, which may override to a budget pool" do
+      category = create(:category, :expense, user: user)
+
+      expect(build(:entry, item: create(:item, category: category), pool: groceries)).to be_valid
     end
   end
 end

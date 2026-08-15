@@ -64,7 +64,7 @@ class Category < ApplicationRecord
   # Public on purpose: Entry#effective_pool and PoolCalculator both call it.
   # category's pool -> the user's default account
   def effective_pool
-    pool || user.default_account
+    pool || user&.default_account
   end
 
   private

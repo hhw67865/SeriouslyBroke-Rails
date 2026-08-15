@@ -17,6 +17,7 @@ class Entry < ApplicationRecord
   validates :date, presence: true
 
   validate :pool_must_belong_to_user
+  validate :income_must_land_in_an_account
 
   delegate :user, to: :item
   delegate :category, to: :item
@@ -37,17 +38,32 @@ class Entry < ApplicationRecord
 
   # entry override -> category's pool -> the user's default account
   def effective_pool
-    pool || category.effective_pool
+    pool || resolved_category&.effective_pool
   end
 
   private
 
-  # Records, not ids: under `build` an unsaved association leaves `*_id` nil on both
-  # sides, and `nil == nil` would wave a foreign pool through. `user` resolves through
-  # item -> category, so both have to be there before it can be asked for at all.
-  def pool_must_belong_to_user
-    return if pool.blank? || item&.category.blank?
+  # `category` and `user` are delegations through `item`, so on a half-built entry they
+  # raise rather than return nil. Everything below reaches the category through here so
+  # the guard can never be half-applied to one link and not the other.
+  def resolved_category
+    item&.category
+  end
 
-    errors.add(:pool, "must belong to the same user") unless pool.user == user
+  # Records, not ids: under `build` an unsaved association leaves `*_id` nil on both
+  # sides, and `nil == nil` would wave a foreign pool through.
+  def pool_must_belong_to_user
+    return if pool.blank? || resolved_category.blank?
+
+    errors.add(:pool, "must belong to the same user") unless pool.user == resolved_category.user
+  end
+
+  # The counterpart to Category#income_must_land_in_an_account. The override is a second
+  # channel to the same destination, so it carries the same rule: income lands in an
+  # account, never directly in an envelope.
+  def income_must_land_in_an_account
+    return if pool.blank? || !resolved_category&.income?
+
+    errors.add(:pool, "must be an account for income entries") unless pool.pool_type_account?
   end
 end

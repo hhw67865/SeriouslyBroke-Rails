@@ -187,8 +187,19 @@ RSpec.describe Category, type: :model do
       expect(create(:category, :expense, user: user, pool: nil).effective_pool).to eq(checking)
     end
 
+    it "uses the category's own pool when the user has no default account" do
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+
+      expect(create(:category, :expense, user: user, pool: groceries).effective_pool).to eq(groceries)
+    end
+
     it "is nil when the category has no pool and the user has no default account" do
       expect(create(:category, :expense, user: user, pool: nil).effective_pool).to be_nil
+    end
+
+    # Matches the guard Entry#effective_pool needs on its own link in the chain.
+    it "is nil rather than raising when the category has no user" do
+      expect(described_class.new(name: "Unfiled").effective_pool).to be_nil
     end
   end
 end
