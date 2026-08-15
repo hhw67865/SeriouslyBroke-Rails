@@ -29,13 +29,32 @@ class BudgetCalculator
     budget.basis_per_paycheck? ? pay_period_end : today.end_of_month
   end
 
+  # The payment signal is the amount paid, never the number of entries. Counting
+  # rows treats a $1 payment and a $500 payment as the same event: a partial
+  # payment would retire the whole obligation, and a bill settled in two
+  # instalments would roll two cycles instead of one.
+  def paid_since_anchor
+    return 0.to_d if budget.item.nil?
+
+    budget.item.entries.where(date: budget.anchor_date..).sum(:amount).to_d
+  end
+
   # Zero for an anchorless rule: with no anchor there is no cycle to have
-  # completed, and the entry scope would have no lower bound to count from.
+  # completed, and the entry scope would have no lower bound to sum from.
+  # Strictly this early return is now redundant — #elapsed_cycles is already 0
+  # without an anchor, so the `min` below floors the result at 0 anyway — but it
+  # states the rule directly and spares a meaningless unbounded SQL sum.
+  #
+  # The `min` keeps a prepayment from rolling a cycle that has not yet come due,
+  # erring in the same conservative direction as #elapsed_cycles itself.
   def cycles_completed
     return 0 if budget.anchor_date.nil?
     return elapsed_cycles if budget.item.nil?
+    # Nothing is owed, so nothing can be outstanding — and #amount admits zero,
+    # which would otherwise divide by zero right here.
+    return elapsed_cycles if target.zero?
 
-    budget.item.entries.where(date: budget.anchor_date..).count
+    [(paid_since_anchor / target).floor, elapsed_cycles].min
   end
 
   # How many occurrences of this bill have already come due, regardless of what
@@ -57,12 +76,14 @@ class BudgetCalculator
   # It needs a separate axis, or a settled bill bills the user forever.
   def one_time? = budget.anchor_date.present? && budget.interval_months.nil?
 
-  # An item is a real fulfillment signal. Without one we fall back to the same
-  # "assume paid on time" reading that anchored no-item rules already get.
+  # An item is a real fulfillment signal, and the test is the amount paid, not
+  # that *something* was paid — a $100 entry against a $500 bill leaves $400 owed.
+  # Without an item we fall back to the same "assume paid on time" reading that
+  # anchored no-item rules already get.
   def fulfilled?
     return false unless one_time?
 
-    budget.item ? cycles_completed.positive? : today >= budget.anchor_date
+    budget.item ? paid_since_anchor >= target : today >= budget.anchor_date
   end
 
   # The `item.present?` check is belt-and-braces: no reachable shape can now
@@ -77,10 +98,16 @@ class BudgetCalculator
     budget.item.present? && due_date < today
   end
 
+  # A settled rule has no funding gap, so this reports zero rather than a raw
+  # `target - allocated`. Both this and #required are public and Task 8 may render
+  # either; a paid bill showing "$500 still needed" is the same lie in reverse.
+  #
   # `0.to_d` rather than a bare `0`: on the overfunded path `max` returns the
   # literal it was given, and an Integer leaking out here made #required's return
   # type depend on whether the rule happened to be funded.
   def shortfall(allocated)
+    return 0.to_d if fulfilled?
+
     [target - allocated, 0.to_d].max
   end
 
@@ -90,10 +117,10 @@ class BudgetCalculator
 
   # Fulfillment short-circuits scheduling: #due_date still reports the anchor,
   # because a one-time rule genuinely never rolls, but a settled obligation must
-  # stop asking for money regardless of how its date compares to today.
+  # stop asking for money regardless of how its date compares to today. That gate
+  # lives in #shortfall alone — duplicating it here would leave two guards where
+  # neither can be shown to matter.
   def required(allocated)
-    return 0.to_d if fulfilled?
-
     (shortfall(allocated) / periods_until_due).round(2)
   end
 

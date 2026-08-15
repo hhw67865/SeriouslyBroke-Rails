@@ -11,12 +11,12 @@ RSpec.describe BudgetCalculator, type: :model do
 
   # Spec §4.4's recurring bill: $800 every 6 months, next due Jun 1. Pass an item
   # to give it a fulfillment signal; without one it is assumed paid on time.
-  def insurance_rule(item: nil, interval: 6, anchor: Date.new(2026, 6, 1))
+  def insurance_rule(item: nil, interval: 6, anchor: Date.new(2026, 6, 1), amount: 800)
     create(
       :pool_budget,
       :recurring,
       pool: car,
-      amount: 800,
+      amount: amount,
       interval_months: interval,
       anchor_date: anchor,
       item: item
@@ -119,6 +119,22 @@ RSpec.describe BudgetCalculator, type: :model do
 
       expect(budget.calculator(today: Date.new(2026, 6, 3)).elapsed_cycles).to eq(0)
     end
+
+    # Month-end anchors lag by a day: Jan 31 + 1 month is Feb 28, so the February
+    # occurrence has arguably come due on Feb 28, but the day-of-month backoff does
+    # not release it until Mar 1. Pinned deliberately — the lag under-rolls, which
+    # keeps an obligation visible a day longer rather than forgetting it early.
+    it "lags a day for a month-end anchor, erring toward not rolling" do
+      budget = insurance_rule(interval: 1, anchor: Date.new(2026, 1, 31))
+
+      expect(budget.calculator(today: Date.new(2026, 2, 28)).elapsed_cycles).to eq(1)
+    end
+
+    it "catches up the day after a month-end anchor's short month" do
+      budget = insurance_rule(interval: 1, anchor: Date.new(2026, 1, 31))
+
+      expect(budget.calculator(today: Date.new(2026, 3, 1)).elapsed_cycles).to eq(2)
+    end
   end
 
   describe "#cycles_completed" do
@@ -150,6 +166,70 @@ RSpec.describe BudgetCalculator, type: :model do
       create(:entry, item: item, amount: 800, date: Date.new(2026, 12, 5))
 
       expect(budget.calculator(today: Date.new(2027, 1, 1)).cycles_completed).to eq(2)
+    end
+
+    # The signal is the amount paid, not the number of rows. A $1 entry and a $500
+    # entry are not the same event, and treating them alike loses real money.
+    it "does not roll on a partial payment" do
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(0)
+    end
+
+    it "rolls exactly once when the bill is settled in instalments" do
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 6, 2))
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 6, 9))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
+
+    it "rolls once when the bill is overpaid" do
+      create(:entry, item: item, amount: 900, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
+
+    # Paying two cycles' worth up front must not roll a cycle that has not yet come
+    # due — the same conservative direction #elapsed_cycles already errs in.
+    it "never rolls further than the cycles that have actually come due" do
+      create(:entry, item: item, amount: 1600, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
+
+    it "is zero for a rule whose amount is zero, rather than dividing by it" do
+      free = create(:item, category: category, name: "Free")
+      budget = insurance_rule(item: free, amount: 0)
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
+  end
+
+  describe "#paid_since_anchor" do
+    let(:item) { create(:item, category: category, name: "Insurance") }
+    let(:budget) { insurance_rule(item: item) }
+
+    it "sums the entries recorded on or after the anchor" do
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 6, 2))
+      create(:entry, item: item, amount: 250, date: Date.new(2026, 6, 9))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).paid_since_anchor).to eq(650)
+    end
+
+    it "excludes entries recorded before the anchor" do
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 5, 30))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).paid_since_anchor).to eq(0)
+    end
+
+    it "is zero for a rule with no item to read a payment from" do
+      expect(insurance_rule.calculator(today: Date.new(2026, 7, 1)).paid_since_anchor).to eq(0)
+    end
+
+    it "is an exact decimal" do
+      create(:entry, item: item, amount: 400, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).paid_since_anchor).to be_a(BigDecimal)
     end
   end
 
@@ -195,6 +275,24 @@ RSpec.describe BudgetCalculator, type: :model do
       budget = insurance_rule(item: item)
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).due_date).to eq(Date.new(2026, 6, 1))
+    end
+
+    # The state the pay-based rolling design exists for: two occurrences have come
+    # due, only one was paid, so the rule still points at the one still owed.
+    it "stays one cycle behind when only one of two elapsed cycles was paid" do
+      item = create(:item, category: category, name: "Insurance")
+      budget = insurance_rule(item: item)
+      create(:entry, item: item, amount: 800, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2027, 1, 1)).due_date).to eq(Date.new(2026, 12, 1))
+    end
+
+    it "reads as overdue while it is a cycle behind" do
+      item = create(:item, category: category, name: "Insurance")
+      budget = insurance_rule(item: item)
+      create(:entry, item: item, amount: 800, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2027, 1, 1))).to be_overdue
     end
 
     it "rolls once the bill is actually recorded on the item" do
@@ -264,9 +362,33 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(one_time_rule(item: registration).calculator(today: Date.new(2026, 6, 3))).not_to be_fulfilled
     end
 
+    # The four payment states. A partial payment must NOT fulfil the rule — that
+    # would zero the requirement while real money is still owed.
+    it "is false for a one-time rule that has only been partly paid" do
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 100, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3))).not_to be_fulfilled
+    end
+
     it "is true for a one-time rule once an entry lands on its item" do
       budget = one_time_rule(item: registration)
       create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3))).to be_fulfilled
+    end
+
+    it "is true for a one-time rule settled in instalments" do
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 200, date: Date.new(2026, 2, 1))
+      create(:entry, item: registration, amount: 300, date: Date.new(2026, 2, 8))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3))).to be_fulfilled
+    end
+
+    it "is true for a one-time rule that was overpaid" do
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 600, date: Date.new(2026, 2, 1))
 
       expect(budget.calculator(today: Date.new(2026, 6, 3))).to be_fulfilled
     end
@@ -316,6 +438,24 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "stays an exact decimal even on the clamped path" do
       expect(budget.calculator(today: today).shortfall(750)).to be_a(BigDecimal)
+    end
+
+    # A settled rule has no funding gap. Reporting one would let Task 8 render
+    # "$500 still needed" next to a bill that was paid months ago.
+    it "is zero for a fulfilled rule regardless of what is allocated" do
+      registration = create(:item, category: category, name: "Registration")
+      settled = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
+
+      expect(settled.calculator(today: Date.new(2026, 6, 3)).shortfall(0)).to eq(0)
+    end
+
+    it "still reports the gap for a rule that was only partly paid" do
+      registration = create(:item, category: category, name: "Registration")
+      partly = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 100, date: Date.new(2026, 2, 1))
+
+      expect(partly.calculator(today: Date.new(2026, 6, 3)).shortfall(0)).to eq(500)
     end
   end
 
@@ -448,6 +588,16 @@ RSpec.describe BudgetCalculator, type: :model do
       create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
 
       expect(budget.calculator(today: Date.new(2026, 6, 3)).required(0)).to eq(0)
+    end
+
+    # The partial-payment trap: a $100 entry against a $500 bill must not silently
+    # retire the remaining $400.
+    it "keeps demanding the balance of a one-time rule that was only partly paid" do
+      registration = create(:item, category: category, name: "Registration")
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 100, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3)).required(400)).to eq(100.00)
     end
 
     it "still spreads a one-time rule with no item before its date arrives" do
