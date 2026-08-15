@@ -630,7 +630,7 @@ And privately:
 
   def default_account_is_own_account
     return if default_account.blank?
-    return if default_account.account? && default_account.user_id == id
+    return if default_account.pool_type_account? && default_account.user_id == id
 
     errors.add(:default_account, "must be an account you own")
   end
