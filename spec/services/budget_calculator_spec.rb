@@ -28,6 +28,11 @@ RSpec.describe BudgetCalculator, type: :model do
     create(:pool_budget, pool: car, amount: amount, interval_months: interval, anchor_date: anchor)
   end
 
+  # A dated one-off — a bill or a savings goal that never repeats.
+  def one_time_rule(item: nil, amount: 500, anchor: Date.new(2026, 2, 1))
+    create(:pool_budget, :one_time, pool: car, amount: amount, anchor_date: anchor, item: item)
+  end
+
   # A user who never told us when they get paid, so User#pay_dates returns [].
   def cadence_less_rule(*traits, **attrs)
     other = create(:user)
@@ -99,6 +104,21 @@ RSpec.describe BudgetCalculator, type: :model do
 
       expect(budget.calculator(today: Date.new(2027, 6, 1)).elapsed_cycles).to eq(3)
     end
+
+    # These two shapes have no cycle to elapse. They are unreachable through
+    # #due_date, which guards on the same nils first, but the method is public
+    # so it must answer rather than raise on a perfectly valid record.
+    it "is zero for a rate rule, which has no anchor to count from" do
+      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+
+      expect(budget.calculator(today: today).elapsed_cycles).to eq(0)
+    end
+
+    it "is zero for a one-time rule, which has no interval to divide by" do
+      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3)).elapsed_cycles).to eq(0)
+    end
   end
 
   describe "#cycles_completed" do
@@ -109,6 +129,20 @@ RSpec.describe BudgetCalculator, type: :model do
       create(:entry, item: item, amount: 800, date: Date.new(2026, 5, 30))
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(0)
+    end
+
+    it "is zero for an anchorless rate rule even when it has an item" do
+      gas = create(:item, category: category, name: "Gas")
+      budget = create(:pool_budget, :rate, pool: car, amount: 80, item: gas)
+      create(:entry, item: gas, amount: 10, date: Date.new(2026, 2, 3))
+
+      expect(budget.calculator(today: today).cycles_completed).to eq(0)
+    end
+
+    it "is zero for an anchorless rate rule with no item" do
+      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+
+      expect(budget.calculator(today: today).cycles_completed).to eq(0)
     end
 
     it "counts entries recorded on or after the anchor" do
@@ -206,16 +240,62 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "is true for a one-time rule with an item whose date has passed" do
       registration = create(:item, category: category, name: "Registration")
-      budget = create(
-        :pool_budget,
-        :one_time,
-        pool: car,
-        amount: 500,
-        anchor_date: Date.new(2026, 2, 1),
-        item: registration
-      )
 
-      expect(budget.calculator(today: Date.new(2026, 6, 3))).to be_overdue
+      expect(one_time_rule(item: registration).calculator(today: Date.new(2026, 6, 3))).to be_overdue
+    end
+
+    # A one-time rule never rolls its due date, so without a fulfillment axis it
+    # would read as late forever — even years after the bill was actually settled.
+    it "stops being true for a one-time rule once its bill is recorded" do
+      registration = create(:item, category: category, name: "Registration")
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3))).not_to be_overdue
+    end
+  end
+
+  # A one-time rule has no next occurrence to roll into, so "done" cannot be read
+  # off the schedule the way it is for a recurring rule. It needs its own axis.
+  describe "#fulfilled?" do
+    let(:registration) { create(:item, category: category, name: "Registration") }
+
+    it "is false for a one-time rule with an item and no entry against it" do
+      expect(one_time_rule(item: registration).calculator(today: Date.new(2026, 6, 3))).not_to be_fulfilled
+    end
+
+    it "is true for a one-time rule once an entry lands on its item" do
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3))).to be_fulfilled
+    end
+
+    it "is false for a one-time rule with no item before its date arrives" do
+      expect(one_time_rule.calculator(today: Date.new(2026, 1, 31))).not_to be_fulfilled
+    end
+
+    # Same "assume paid on time" reading that anchored no-item rules already get.
+    it "is true for a one-time rule with no item once its date has passed" do
+      expect(one_time_rule.calculator(today: Date.new(2026, 6, 3))).to be_fulfilled
+    end
+
+    it "is true for a one-time rule with no item on the date itself" do
+      expect(one_time_rule.calculator(today: Date.new(2026, 2, 1))).to be_fulfilled
+    end
+
+    # Fulfillment is a one-time concept only: a recurring rule expresses the same
+    # idea by rolling its due date, and a rate rule never finishes at all.
+    it "is false for a recurring rule whose occurrence was recorded" do
+      item = create(:item, category: category, name: "Insurance")
+      budget = insurance_rule(item: item)
+      create(:entry, item: item, amount: 800, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1))).not_to be_fulfilled
+    end
+
+    it "is false for a rate rule, which never finishes" do
+      expect(create(:pool_budget, :rate, pool: car, amount: 80).calculator(today: today)).not_to be_fulfilled
     end
   end
 
@@ -349,6 +429,43 @@ RSpec.describe BudgetCalculator, type: :model do
       budget = cadence_less_rule(:one_time, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
       expect(budget.calculator(today: today).required(0)).to eq(500.00)
+    end
+
+    # The four fulfillment cells for the one-time shape. An unfulfilled rule still
+    # spreads its shortfall; a fulfilled one must stop asking for money entirely,
+    # or a reached savings goal bills the user forever.
+    it "still spreads a one-time rule whose item has no entry yet" do
+      registration = create(:item, category: category, name: "Registration")
+      budget = one_time_rule(item: registration, anchor: Date.new(2026, 8, 1))
+
+      # 13 paydays in [Feb 6, Aug 1].
+      expect(budget.calculator(today: today).required(0)).to eq(38.46)
+    end
+
+    it "is zero for a one-time rule once its bill is recorded" do
+      registration = create(:item, category: category, name: "Registration")
+      budget = one_time_rule(item: registration)
+      create(:entry, item: registration, amount: 500, date: Date.new(2026, 2, 1))
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3)).required(0)).to eq(0)
+    end
+
+    it "still spreads a one-time rule with no item before its date arrives" do
+      budget = one_time_rule(anchor: Date.new(2026, 8, 1))
+
+      expect(budget.calculator(today: today).required(0)).to eq(38.46)
+    end
+
+    it "is zero for a one-time rule with no item once its date has passed" do
+      budget = one_time_rule
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3)).required(0)).to eq(0)
+    end
+
+    it "returns an exact decimal on the fulfilled path too" do
+      budget = one_time_rule
+
+      expect(budget.calculator(today: Date.new(2026, 6, 3)).required(0)).to be_a(BigDecimal)
     end
 
     # Budget#calculator is defined on every budget, and a category-mode one has no

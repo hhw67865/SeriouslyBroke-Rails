@@ -29,7 +29,10 @@ class BudgetCalculator
     budget.basis_per_paycheck? ? pay_period_end : today.end_of_month
   end
 
+  # Zero for an anchorless rule: with no anchor there is no cycle to have
+  # completed, and the entry scope would have no lower bound to count from.
   def cycles_completed
+    return 0 if budget.anchor_date.nil?
     return elapsed_cycles if budget.item.nil?
 
     budget.item.entries.where(date: budget.anchor_date..).count
@@ -38,13 +41,39 @@ class BudgetCalculator
   # How many occurrences of this bill have already come due, regardless of what
   # was recorded. Once today reaches the anchor, one occurrence has passed — so
   # this is (whole intervals elapsed) + 1, never a bare division.
+  #
+  # Zero where the concept does not apply — no anchor to count from, or no
+  # interval to divide by. Both are unreachable through #due_date, which guards
+  # on the same nils, but this is public API and must answer rather than raise.
   def elapsed_cycles
+    return 0 if budget.anchor_date.nil? || budget.interval_months.nil?
     return 0 if today < budget.anchor_date
 
     (months_since_anchor / budget.interval_months) + 1
   end
 
+  # A one-time rule is the only shape with no next occurrence to roll into, so
+  # being done cannot be read off its schedule the way a recurring rule's can.
+  # It needs a separate axis, or a settled bill bills the user forever.
+  def one_time? = budget.anchor_date.present? && budget.interval_months.nil?
+
+  # An item is a real fulfillment signal. Without one we fall back to the same
+  # "assume paid on time" reading that anchored no-item rules already get.
+  def fulfilled?
+    return false unless one_time?
+
+    budget.item ? cycles_completed.positive? : today >= budget.anchor_date
+  end
+
+  # The `item.present?` check is belt-and-braces: no reachable shape can now
+  # satisfy `due_date < today` without an item. Anchorless rules end at or after
+  # today, a recurring rule's due date always rolls past today, and a one-time
+  # rule with a past anchor is caught by #fulfilled? above. Kept because "no
+  # fulfillment signal means never late" is the rule being expressed, and the
+  # alternative is leaning on a non-local invariant three shapes away.
   def overdue?
+    return false if fulfilled?
+
     budget.item.present? && due_date < today
   end
 
@@ -59,7 +88,12 @@ class BudgetCalculator
     [user.pay_dates(from: today, to: due_date).count, 1].max
   end
 
+  # Fulfillment short-circuits scheduling: #due_date still reports the anchor,
+  # because a one-time rule genuinely never rolls, but a settled obligation must
+  # stop asking for money regardless of how its date compares to today.
   def required(allocated)
+    return 0.to_d if fulfilled?
+
     (shortfall(allocated) / periods_until_due).round(2)
   end
 
