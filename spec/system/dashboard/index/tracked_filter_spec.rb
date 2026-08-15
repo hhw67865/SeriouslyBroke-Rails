@@ -131,11 +131,11 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
   end
 
   describe "savings tab", :aggregate_failures do
-    let!(:emergency_pool) { create(:savings_pool, user: user, name: "Emergency") }
-    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", savings_pool: emergency_pool) }
+    let!(:emergency_pool) { create(:pool, user: user, name: "Emergency") }
+    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", pool: emergency_pool) }
     let!(:emergency_item) { create(:item, category: emergency, name: "Monthly Transfer") }
-    let!(:vacation_pool) { create(:savings_pool, user: user, name: "Vacation") }
-    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", savings_pool: vacation_pool) }
+    let!(:vacation_pool) { create(:pool, user: user, name: "Vacation") }
+    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", pool: vacation_pool) }
     let!(:vacation_item) { create(:item, category: vacation, name: "Deposit") }
 
     before do

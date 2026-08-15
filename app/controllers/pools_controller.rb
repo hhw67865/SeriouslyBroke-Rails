@@ -1,62 +1,62 @@
 # frozen_string_literal: true
 
-class SavingsPoolsController < ApplicationController
+class PoolsController < ApplicationController
   include Searchable
 
-  before_action :set_savings_pool, only: [:show, :edit, :update, :destroy]
+  before_action :set_pool, only: [:show, :edit, :update, :destroy]
 
-  # GET /savings_pools
+  # GET /pools
   def index
     setup_search_state
-    @savings_pools = load_filtered_savings_pools
+    @pools = load_filtered_pools
     @recent_entries_by_pool = load_recent_entries_by_pool
   end
 
-  # GET /savings_pools/1
+  # GET /pools/1
   def show
-    @recent_entries = @savings_pool.timeline_entries
+    @recent_entries = @pool.timeline_entries
       .includes(item: :category)
       .order(date: :desc)
       .limit(8)
 
     # Load categories for connected categories section
     # CategoryCalculator uses direct SQL queries, so no eager loading needed
-    @connected_categories = @savings_pool.categories
+    @connected_categories = @pool.categories
       .order(:name)
   end
 
-  # GET /savings_pools/new
+  # GET /pools/new
   def new
-    @savings_pool = current_user.savings_pools.new
+    @pool = current_user.pools.new
   end
 
-  # GET /savings_pools/1/edit
+  # GET /pools/1/edit
   def edit; end
 
-  # POST /savings_pools
+  # POST /pools
   def create
-    @savings_pool = current_user.savings_pools.new(savings_pool_params)
+    @pool = current_user.pools.new(pool_params)
 
-    if @savings_pool.save
-      redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully created."
+    if @pool.save
+      redirect_to pool_path(@pool), notice: "Savings pool was successfully created."
     else
       render :new, status: :unprocessable_content
     end
   end
 
-  # PATCH/PUT /savings_pools/1
+  # PATCH/PUT /pools/1
   def update
-    if @savings_pool.update(savings_pool_params)
-      redirect_to savings_pool_path(@savings_pool), notice: "Savings pool was successfully updated."
+    if @pool.update(pool_params)
+      redirect_to pool_path(@pool), notice: "Savings pool was successfully updated."
     else
       render :edit, status: :unprocessable_content
     end
   end
 
-  # DELETE /savings_pools/1
+  # DELETE /pools/1
   def destroy
-    @savings_pool.destroy
-    redirect_to savings_pools_path, notice: "Savings pool was successfully deleted."
+    @pool.destroy
+    redirect_to pools_path, notice: "Savings pool was successfully deleted."
   end
 
   private
@@ -66,21 +66,21 @@ class SavingsPoolsController < ApplicationController
     @query = @search_state[:query] # For backward compatibility
   end
 
-  def load_filtered_savings_pools
+  def load_filtered_pools
     # Load savings pools without eager loading (calculator uses direct SQL)
-    savings_pools = current_user.savings_pools
+    pools = current_user.pools
 
     # Apply search using the new searchable system
-    savings_pools = apply_search(savings_pools, { q: params[:q], field: params[:field] })
+    pools = apply_search(pools, { q: params[:q], field: params[:field] })
 
-    savings_pools.order(:name)
+    pools.order(:name)
   end
 
   def load_recent_entries_by_pool
     # Load recent entries for each savings pool to avoid N+1 in the view
     # This is more efficient than preloading all entries
     recent_entries = {}
-    @savings_pools.each do |pool|
+    @pools.each do |pool|
       recent_entries[pool.id] = pool.timeline_entries
         .includes(item: :category)
         .order(date: :desc)
@@ -89,14 +89,14 @@ class SavingsPoolsController < ApplicationController
     recent_entries
   end
 
-  def set_savings_pool
+  def set_pool
     # Load savings pool without eager loading (calculator uses direct SQL)
-    @savings_pool = current_user.savings_pools.find(params[:id])
+    @pool = current_user.pools.find(params[:id])
   end
 
-  def savings_pool_params
+  def pool_params
     params.expect(
-      savings_pool: [
+      pool: [
         :name,
         :target_amount,
         :start_date,

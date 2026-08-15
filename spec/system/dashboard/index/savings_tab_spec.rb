@@ -18,10 +18,10 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "stat cards reflect selected month", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago) }
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "Emergency", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago) }
+    let!(:savings_cat) { create(:category, :savings, user: user, name: "Emergency", pool: pool) }
     let!(:savings_item) { create(:item, category: savings_cat, name: "Monthly Transfer") }
-    let!(:withdrawal_cat) { create(:category, :expense, user: user, name: "Emergency Withdrawal", savings_pool: pool) }
+    let!(:withdrawal_cat) { create(:category, :expense, user: user, name: "Emergency Withdrawal", pool: pool) }
     let!(:withdrawal_item) { create(:item, category: withdrawal_cat, name: "ATM") }
 
     before do
@@ -38,8 +38,8 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "contributions by category shows total up to selected date", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Vacation Fund", target_amount: 3000, start_date: 1.year.ago) }
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "Vacation Savings", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "Vacation Fund", target_amount: 3000, start_date: 1.year.ago) }
+    let!(:savings_cat) { create(:category, :savings, user: user, name: "Vacation Savings", pool: pool) }
     let!(:savings_item) { create(:item, category: savings_cat, name: "Deposit") }
 
     before do
@@ -56,10 +56,10 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "savings pool numbers", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "House Fund", target_amount: 10_000, start_date: 1.year.ago) }
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "House Savings", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "House Fund", target_amount: 10_000, start_date: 1.year.ago) }
+    let!(:savings_cat) { create(:category, :savings, user: user, name: "House Savings", pool: pool) }
     let!(:savings_item) { create(:item, category: savings_cat, name: "Deposit") }
-    let!(:withdrawal_cat) { create(:category, :expense, user: user, name: "House Withdrawal", savings_pool: pool) }
+    let!(:withdrawal_cat) { create(:category, :expense, user: user, name: "House Withdrawal", pool: pool) }
     let!(:withdrawal_item) { create(:item, category: withdrawal_cat, name: "Withdrawal") }
 
     before do
@@ -70,7 +70,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
     end
 
     it "shows pool balance, progress, and period flow" do
-      pool_card = find("a[href='#{savings_pool_path(pool)}']")
+      pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
         expect(page).to have_content("House Fund")
         expect(page).to have_content("$1,400.00")
@@ -83,8 +83,8 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "includes entries before pool start_date", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "New Pool", target_amount: 5000, start_date: base_date) }
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "Pool Savings", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "New Pool", target_amount: 5000, start_date: base_date) }
+    let!(:savings_cat) { create(:category, :savings, user: user, name: "Pool Savings", pool: pool) }
     let!(:savings_item) { create(:item, category: savings_cat, name: "Transfer") }
 
     before do
@@ -100,8 +100,8 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "YTD view", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Vacation Fund", target_amount: 3000, start_date: 1.year.ago) }
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "Vacation", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "Vacation Fund", target_amount: 3000, start_date: 1.year.ago) }
+    let!(:savings_cat) { create(:category, :savings, user: user, name: "Vacation", pool: pool) }
     let!(:savings_item) { create(:item, category: savings_cat, name: "Deposit") }
 
     before do
@@ -121,11 +121,11 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   end
 
   describe "untracked categories in breakdown", :aggregate_failures do
-    let!(:emergency_pool) { create(:savings_pool, user: user, name: "Emergency", target_amount: 5000, start_date: 1.year.ago) }
-    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", savings_pool: emergency_pool) }
+    let!(:emergency_pool) { create(:pool, user: user, name: "Emergency", target_amount: 5000, start_date: 1.year.ago) }
+    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", pool: emergency_pool) }
     let!(:emergency_item) { create(:item, category: emergency, name: "Monthly Transfer") }
-    let!(:vacation_pool) { create(:savings_pool, user: user, name: "Vacation", target_amount: 3000, start_date: 1.year.ago) }
-    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", tracked: false, savings_pool: vacation_pool) }
+    let!(:vacation_pool) { create(:pool, user: user, name: "Vacation", target_amount: 3000, start_date: 1.year.ago) }
+    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", tracked: false, pool: vacation_pool) }
     let!(:vacation_item) { create(:item, category: vacation, name: "Deposit") }
 
     before do

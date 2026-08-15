@@ -57,8 +57,8 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
 
     it "pre-fills savings category correctly" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, name: "Emergency Fund", user: user, savings_pool: savings_pool)
+      pool = create(:pool, user: user)
+      savings_category = create(:category, :savings, name: "Emergency Fund", user: user, pool: pool)
       visit edit_category_path(savings_category)
 
       expect(page).to have_field("Name", with: "Emergency Fund")
@@ -195,8 +195,8 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
 
     it "redirects to savings index when updating savings category" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, user: user, savings_pool: savings_pool)
+      pool = create(:pool, user: user)
+      savings_category = create(:category, :savings, user: user, pool: pool)
       visit edit_category_path(savings_category)
 
       fill_in "Name", with: "Updated Savings"

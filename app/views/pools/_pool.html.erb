@@ -1,21 +1,21 @@
 <%# Clean & Minimal Savings Goal Card %>
 <%
-  calculator = savings_pool.calculator
+  calculator = pool.calculator
   current_balance = calculator.current_balance
-  target_amount = savings_pool.target_amount
+  target_amount = pool.target_amount
   progress = calculator.progress_percentage
 
   # Get recent entries for this savings pool (preloaded in controller)
-  recent_entries = @recent_entries_by_pool&.dig(savings_pool.id) || []
+  recent_entries = @recent_entries_by_pool&.dig(pool.id) || []
 %>
 
-<div class="group cursor-pointer" onclick="window.location='<%= savings_pool_path(savings_pool) %>'">
+<div class="group cursor-pointer" onclick="window.location='<%= pool_path(pool) %>'">
   <div class="bg-white rounded shadow-sm border border-gray-100 p-6 transition-all duration-200 hover:shadow-md hover:border-gray-200 h-full">
 
     <%# Goal Name %>
     <div class="mb-4">
       <h3 class="text-lg font-semibold text-gray-900 truncate mb-1">
-        <%= savings_pool.name %>
+        <%= pool.name %>
       </h3>
 
       <%# Simple status %>

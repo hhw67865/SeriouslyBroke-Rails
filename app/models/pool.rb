@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class SavingsPool < ApplicationRecord
+class Pool < ApplicationRecord
   include ModelSearchable
 
   belongs_to :user, touch: true
@@ -34,7 +34,7 @@ class SavingsPool < ApplicationRecord
   end
 
   def calculator(as_of: nil)
-    SavingsPoolCalculator.new(self, as_of: as_of)
+    PoolCalculator.new(self, as_of: as_of)
   end
 
   private

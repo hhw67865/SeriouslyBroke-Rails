@@ -96,8 +96,8 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
   end
 
   describe "savings items list", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user) }
-    let!(:category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency Fund") }
+    let!(:pool) { create(:pool, user: user) }
+    let!(:category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency Fund") }
     let!(:transfer_item) { create(:item, category: category, name: "Transfer") }
 
     before do

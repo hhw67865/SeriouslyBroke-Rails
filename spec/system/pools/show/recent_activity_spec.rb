@@ -4,9 +4,9 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
   let(:user) { create(:user) }
-  let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
-  let!(:savings_category) { create(:category, user: user, name: "Home Savings", category_type: :savings, savings_pool: savings_pool) }
-  let!(:expense_category) { create(:category, user: user, name: "Emergency Withdrawal", category_type: :expense, savings_pool: savings_pool) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:savings_category) { create(:category, user: user, name: "Home Savings", category_type: :savings, pool: pool) }
+  let!(:expense_category) { create(:category, user: user, name: "Emergency Withdrawal", category_type: :expense, pool: pool) }
 
   before { sign_in user, scope: :user }
 
@@ -19,7 +19,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
       create(:entry, item: expense_item, amount: 150.0, date: Date.current - 1.day)
       create(:entry, item: savings_item, amount: 300.0, date: Date.current - 2.days)
 
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows recent activity section" do
@@ -34,7 +34,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
         click_link "Show All Activity"
       end
 
-      expect(page).to have_current_path(entries_path(field: "savings_pool", q: savings_pool.name))
+      expect(page).to have_current_path(entries_path(field: "pool", q: pool.name))
     end
 
     it "displays all entry items" do
@@ -85,7 +85,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
         create(:entry, item: savings_item, amount: 100.0, date: Date.current - i.days)
       end
 
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows only the 8 most recent entries" do
@@ -105,7 +105,7 @@ RSpec.describe "Savings Pools Show - Recent Activity", type: :system do
   end
 
   describe "with no entries" do
-    before { visit savings_pool_path(savings_pool) }
+    before { visit pool_path(pool) }
 
     it "does not show recent activity header" do
       expect(page).not_to have_content("Recent Activity")

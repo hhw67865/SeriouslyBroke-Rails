@@ -4,9 +4,9 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Show - Money Flow", type: :system do
   let(:user) { create(:user) }
-  let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
-  let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
-  let!(:expense_category) { create(:category, user: user, category_type: :expense, savings_pool: savings_pool) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
+  let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
 
   before { sign_in user, scope: :user }
 
@@ -24,7 +24,7 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
       create(:entry, item: expense_item, amount: 50.0, date: Date.current)
       create(:entry, item: expense_item, amount: 75.0, date: Date.current - 1.day)
 
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows correct total contributions" do
@@ -47,7 +47,7 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
 
     before do
       create_list(:entry, 4, item: savings_item, amount: 250.0)
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows correct contributions" do
@@ -70,7 +70,7 @@ RSpec.describe "Savings Pools Show - Money Flow", type: :system do
 
     before do
       create_list(:entry, 3, item: expense_item, amount: 100.0)
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows zero contributions" do

@@ -1,46 +1,46 @@
 # frozen_string_literal: true
 
-module SavingsPools
+module Pools
   class CategoriesController < ApplicationController
-    before_action :set_savings_pool
+    before_action :set_pool
 
-    # GET /savings_pools/:id/categories
+    # GET /pools/:id/categories
     def index
       # Only load what's actually accessed in Ruby code:
-      # - savings_pool for conflict detection ("Connected to other goal")
+      # - pool for conflict detection ("Connected to other goal")
       # CategoryCalculator uses direct SQL queries, not Ruby associations
       @all_categories = current_user.categories
         .where(category_type: ["savings", "expense"])
-        .includes(:savings_pool)
+        .includes(:pool)
         .order(:name)
-      @connected_category_ids = @savings_pool.categories.pluck(:id)
+      @connected_category_ids = @pool.categories.pluck(:id)
 
       # Group categories to show conflicts
-      @categories_with_other_pools = @all_categories.where.not(savings_pool: [nil, @savings_pool])
-        .group_by(&:savings_pool)
+      @categories_with_other_pools = @all_categories.where.not(pool: [nil, @pool])
+        .group_by(&:pool)
     end
 
-    # PATCH /savings_pools/:id/categories
+    # PATCH /pools/:id/categories
     def update
       category_ids = params[:category_ids] || []
 
       # Remove categories that are no longer selected
-      @savings_pool.categories.where.not(id: category_ids).find_each do |category|
-        category.update(savings_pool_id: nil)
+      @pool.categories.where.not(id: category_ids).find_each do |category|
+        category.update(pool_id: nil)
       end
 
       # Add newly selected categories
       current_user.categories.where(id: category_ids).find_each do |category|
-        category.update(savings_pool_id: @savings_pool.id)
+        category.update(pool_id: @pool.id)
       end
 
-      redirect_to @savings_pool, notice: "Categories updated successfully!"
+      redirect_to @pool, notice: "Categories updated successfully!"
     end
 
     private
 
-    def set_savings_pool
-      @savings_pool = current_user.savings_pools.find(params[:id])
+    def set_pool
+      @pool = current_user.pools.find(params[:id])
     end
   end
 end

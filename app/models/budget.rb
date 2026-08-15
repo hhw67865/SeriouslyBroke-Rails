@@ -16,6 +16,6 @@ class Budget < ApplicationRecord
   end
 
   def category_must_not_have_pool
-    errors.add(:category, "cannot have a budget when linked to a savings pool") if category&.savings_pool_id?
+    errors.add(:category, "cannot have a budget when linked to a savings pool") if category&.pool_id?
   end
 end

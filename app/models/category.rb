@@ -4,7 +4,7 @@ class Category < ApplicationRecord
   include ModelSearchable
 
   belongs_to :user, touch: true
-  belongs_to :savings_pool, optional: true, touch: true
+  belongs_to :pool, optional: true, touch: true
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
   has_one :budget, dependent: :destroy
@@ -33,15 +33,15 @@ class Category < ApplicationRecord
   scope :savings, -> { where(category_type: :savings) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
-  scope :budgetable, -> { expenses.where(savings_pool_id: nil) }
-  scope :pool_covered, -> { expenses.where.not(savings_pool_id: nil) }
+  scope :budgetable, -> { expenses.where(pool_id: nil) }
+  scope :pool_covered, -> { expenses.where.not(pool_id: nil) }
 
   scope :with_type,
         lambda { |type|
           case (type || :expense).to_sym
-          when :expense then expenses.includes(:budget, :savings_pool, :items)
+          when :expense then expenses.includes(:budget, :pool, :items)
           when :income then incomes.includes(:items)
-          when :savings then savings.includes(:items, :savings_pool)
+          when :savings then savings.includes(:items, :pool)
           end
         }
 
@@ -49,11 +49,11 @@ class Category < ApplicationRecord
   searchable :name, label: "Name"
 
   def budgetable?
-    expense? && savings_pool_id.nil?
+    expense? && pool_id.nil?
   end
 
   def pool_covered?
-    expense? && savings_pool_id.present?
+    expense? && pool_id.present?
   end
 
   def calculator(date = Date.current, period: :monthly)
@@ -70,7 +70,7 @@ class Category < ApplicationRecord
   end
 
   def destroy_budget_if_pool_linked
-    return unless savings_pool_id_changed? && savings_pool_id.present? && budget
+    return unless pool_id_changed? && pool_id.present? && budget
 
     budget.destroy
     self.budget = nil

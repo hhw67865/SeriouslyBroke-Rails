@@ -4,13 +4,13 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Index - Search", type: :system do
   let(:user) { create(:user) }
-  let!(:emergency_fund) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
-  let!(:vacation_fund) { create(:savings_pool, user: user, name: "Vacation Fund", target_amount: 5000) }
-  let!(:car_fund) { create(:savings_pool, user: user, name: "New Car Fund", target_amount: 20_000) }
+  let!(:emergency_fund) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:vacation_fund) { create(:pool, user: user, name: "Vacation Fund", target_amount: 5000) }
+  let!(:car_fund) { create(:pool, user: user, name: "New Car Fund", target_amount: 20_000) }
 
   before do
     sign_in user, scope: :user
-    visit savings_pools_path
+    visit pools_path
   end
 
   describe "search by name", :aggregate_failures do
@@ -47,10 +47,10 @@ RSpec.describe "Savings Pools Index - Search", type: :system do
 
   describe "search by category", :aggregate_failures do
     before do
-      create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
-      create(:category, user: user, name: "Travel Budget", savings_pool: vacation_fund)
-      create(:category, user: user, name: "Vehicle Fund", savings_pool: car_fund)
-      visit savings_pools_path
+      create(:category, user: user, name: "Home Savings", pool: emergency_fund)
+      create(:category, user: user, name: "Travel Budget", pool: vacation_fund)
+      create(:category, user: user, name: "Vehicle Fund", pool: car_fund)
+      visit pools_path
       select "Category", from: "field"
     end
 
@@ -82,7 +82,7 @@ RSpec.describe "Savings Pools Index - Search", type: :system do
     end
 
     it "shows savings pool when any of its categories match" do
-      create(:category, user: user, name: "Medical Emergency", savings_pool: emergency_fund)
+      create(:category, user: user, name: "Medical Emergency", pool: emergency_fund)
 
       fill_in "q", with: "Medical"
       find("input[name='q']").send_keys(:return)
@@ -114,7 +114,7 @@ RSpec.describe "Savings Pools Index - Search", type: :system do
     end
 
     it "displays result count for category search" do
-      create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
+      create(:category, user: user, name: "Home Savings", pool: emergency_fund)
 
       select "Category", from: "field"
       fill_in "q", with: "Home"

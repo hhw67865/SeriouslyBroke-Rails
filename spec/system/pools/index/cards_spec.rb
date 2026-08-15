@@ -4,15 +4,15 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Index - Cards", type: :system do
   let(:user) { create(:user) }
-  let!(:savings_pool) do
-    create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000)
+  let!(:pool) do
+    create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000)
   end
 
   before { sign_in user, scope: :user }
 
   describe "savings pool card display", :aggregate_failures do
-    let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
-    let!(:expense_category) { create(:category, user: user, category_type: :expense, savings_pool: savings_pool) }
+    let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
+    let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
     let!(:savings_item) { create(:item, category: savings_category) }
     let!(:expense_item) { create(:item, category: expense_category) }
 
@@ -23,7 +23,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     before do
       create_list(:entry, 3, item: savings_item, amount: 200.0)
       create_list(:entry, 2, item: expense_item, amount: 50.0)
-      visit savings_pools_path
+      visit pools_path
     end
 
     it "shows correct current balance" do
@@ -57,7 +57,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
   describe "progress states" do
     context "with 50% progress", :aggregate_failures do
-      let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
+      let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
       let!(:savings_item) { create(:item, category: savings_category) }
 
       # Current balance: $5,000
@@ -66,7 +66,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
       before do
         create(:entry, item: savings_item, amount: 5000.0)
-        visit savings_pools_path
+        visit pools_path
       end
 
       it "shows correct progress percentage and balance" do
@@ -81,7 +81,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     context "when goal is reached", :aggregate_failures do
-      let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
+      let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
       let!(:savings_item) { create(:item, category: savings_category) }
 
       # Current balance: $10,000
@@ -90,7 +90,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
       before do
         create(:entry, item: savings_item, amount: 10_000.0)
-        visit savings_pools_path
+        visit pools_path
       end
 
       it "shows goal reached message" do
@@ -101,7 +101,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     context "with negative balance", :aggregate_failures do
-      let!(:expense_category) { create(:category, user: user, category_type: :expense, savings_pool: savings_pool) }
+      let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
       let!(:expense_item) { create(:item, category: expense_category) }
 
       # Current balance: -$500
@@ -110,7 +110,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
       before do
         create(:entry, item: expense_item, amount: 500.0)
-        visit savings_pools_path
+        visit pools_path
       end
 
       it "shows negative progress and balance" do
@@ -131,7 +131,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
         :category,
         user: user,
         category_type: :savings,
-        savings_pool: savings_pool
+        pool: pool
       )
     end
     let!(:expense_category) do
@@ -139,7 +139,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
         :category,
         user: user,
         category_type: :expense,
-        savings_pool: savings_pool
+        pool: pool
       )
     end
     let!(:deposit_item) { create(:item, category: savings_category, name: "Monthly Deposit") }
@@ -148,7 +148,7 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     before do
       create(:entry, item: deposit_item, amount: 1000, date: Date.current)
       create(:entry, item: withdrawal_item, amount: 200, date: Date.current - 1.day)
-      visit savings_pools_path
+      visit pools_path
     end
 
     it "shows recent activity with correct entry details" do
@@ -163,13 +163,13 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
   end
 
   describe "card interactions", :aggregate_failures do
-    before { visit savings_pools_path }
+    before { visit pools_path }
 
     it "navigates to savings pool show page when clicked" do
-      find("div.group", text: savings_pool.name).click
+      find("div.group", text: pool.name).click
 
-      expect(page).to have_current_path(savings_pool_path(savings_pool))
-      expect(page).to have_content(savings_pool.name)
+      expect(page).to have_current_path(pool_path(pool))
+      expect(page).to have_content(pool.name)
     end
   end
 end

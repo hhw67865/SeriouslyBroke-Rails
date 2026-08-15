@@ -3,7 +3,7 @@
 # Clear existing data
 Rails.logger.debug "Clearing existing data..."
 # Delete in the correct order to avoid foreign key violations
-[Entry, Item, Budget, Category, SavingsPool, User].each do |model|
+[Entry, Item, Budget, Category, Pool, User].each do |model|
   Rails.logger.debug { "Deleting #{model.name} records..." }
   model.delete_all
 end
@@ -60,20 +60,20 @@ end
 
 # Create savings pools
 Rails.logger.debug "Creating savings pools..."
-savings_pools = [
+pools = [
   { name: "Emergency Fund", target_amount: 10_000 },
   { name: "Vacation to Europe", target_amount: 5000 },
   { name: "House Down Payment", target_amount: 50_000 },
   { name: "New Car", target_amount: 15_000 },
   { name: "Retirement Supplement", target_amount: 100_000 }
-].map { |attrs| user1.savings_pools.create!(attrs) }
+].map { |attrs| user1.pools.create!(attrs) }
 
 # Link savings categories to savings pools
-savings_categories[0].update(savings_pool: savings_pools[0]) # Emergency Fund
-savings_categories[1].update(savings_pool: savings_pools[1]) # Vacation
-savings_categories[2].update(savings_pool: savings_pools[2]) # Home Down Payment
-savings_categories[3].update(savings_pool: savings_pools[4]) # Retirement
-savings_categories[4].update(savings_pool: savings_pools[3]) # Vehicle
+savings_categories[0].update(pool: pools[0]) # Emergency Fund
+savings_categories[1].update(pool: pools[1]) # Vacation
+savings_categories[2].update(pool: pools[2]) # Home Down Payment
+savings_categories[3].update(pool: pools[4]) # Retirement
+savings_categories[4].update(pool: pools[3]) # Vehicle
 
 # Create expense category items
 Rails.logger.debug "Creating expense items..."
@@ -128,9 +128,9 @@ entertainment_items = [
 # Link some expense categories to savings pools (pool-covered expenses)
 # These represent irregular expenses funded by savings pools, not budgets
 Rails.logger.debug "Linking expense categories to savings pools..."
-expense_categories.find { |c| c.name == "Health" }.update!(savings_pool: savings_pools[0])           # Health → Emergency Fund
-expense_categories.find { |c| c.name == "Education" }.update!(savings_pool: savings_pools[4])        # Education → Retirement Supplement
-expense_categories.find { |c| c.name == "Gifts & Donations" }.update!(savings_pool: savings_pools[1]) # Gifts → Vacation to Europe
+expense_categories.find { |c| c.name == "Health" }.update!(pool: pools[0])           # Health → Emergency Fund
+expense_categories.find { |c| c.name == "Education" }.update!(pool: pools[4])        # Education → Retirement Supplement
+expense_categories.find { |c| c.name == "Gifts & Donations" }.update!(pool: pools[1]) # Gifts → Vacation to Europe
 
 # Create budgets only for budgetable expense categories (not pool-linked)
 Rails.logger.debug "Creating budgets..."

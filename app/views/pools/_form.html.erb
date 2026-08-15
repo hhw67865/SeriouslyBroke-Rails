@@ -1,6 +1,6 @@
 <%# Savings Pool Form - SimpleForm with brand styling %>
 <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
-  <%= simple_form_for savings_pool, html: { class: "space-y-6" } do |f| %>
+  <%= simple_form_for pool, html: { class: "space-y-6" } do |f| %>
     
     <%# Goal Name %>
     <div>
@@ -35,10 +35,10 @@
     </div>
 
     <%# Progress Indicator (for existing goals) %>
-    <% if savings_pool.persisted? %>
+    <% if pool.persisted? %>
       <div class="bg-gray-50 rounded p-4 border-l-4 border-brand">
         <h4 class="text-sm font-medium text-gray-900 mb-2">Current Progress</h4>
-        <% calculator = savings_pool.calculator %>
+        <% calculator = pool.calculator %>
         <% progress = calculator.progress_percentage %>
         <% current_balance = calculator.current_balance %>
         
@@ -69,7 +69,7 @@
 <% end %>
 
     <%# Auto-create categories (only on new records) %>
-    <% unless savings_pool.persisted? %>
+    <% unless pool.persisted? %>
       <div class="bg-gray-50 rounded p-4 border border-gray-200">
         <h4 class="text-sm font-medium text-gray-900 mb-1">Create categories automatically (optional)</h4>
         <p class="text-sm text-gray-600 mb-3">Save time by creating linked categories now. Each category will be named after this pool.</p>
@@ -109,10 +109,10 @@
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
       <%= link_to "Cancel",
-savings_pools_path,
+pools_path,
           class: "btn btn-secondary" %>
 
-      <%= f.submit savings_pool.persisted? ? "Update Savings Pool" : "Create Savings Pool",
+      <%= f.submit pool.persisted? ? "Update Savings Pool" : "Create Savings Pool",
           class: "btn btn-primary" %>
     </div>
     

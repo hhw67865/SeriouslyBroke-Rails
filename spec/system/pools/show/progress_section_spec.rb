@@ -4,9 +4,9 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Show - Progress Section", type: :system do
   let(:user) { create(:user) }
-  let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
-  let!(:savings_category) { create(:category, user: user, category_type: :savings, savings_pool: savings_pool) }
-  let!(:expense_category) { create(:category, user: user, category_type: :expense, savings_pool: savings_pool) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
+  let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
 
   before { sign_in user, scope: :user }
 
@@ -22,7 +22,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
       # Current balance: $600 - $100 = $500
       # Progress: ($500 / $10,000) × 100 = 5%
 
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows correct progress percentage" do
@@ -58,7 +58,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
 
       before do
         create(:entry, item: savings_item, amount: 5000.0)
-        visit savings_pool_path(savings_pool)
+        visit pool_path(pool)
       end
 
       it "shows correct progress and status" do
@@ -78,7 +78,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
 
       before do
         create(:entry, item: savings_item, amount: 8000.0)
-        visit savings_pool_path(savings_pool)
+        visit pool_path(pool)
       end
 
       it "shows correct progress and status" do
@@ -92,7 +92,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
 
       before do
         create(:entry, item: savings_item, amount: 10_000.0)
-        visit savings_pool_path(savings_pool)
+        visit pool_path(pool)
       end
 
       it "shows goal achieved status" do
@@ -112,7 +112,7 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
 
       before do
         create(:entry, item: expense_item, amount: 500.0)
-        visit savings_pool_path(savings_pool)
+        visit pool_path(pool)
       end
 
       it "shows negative progress" do

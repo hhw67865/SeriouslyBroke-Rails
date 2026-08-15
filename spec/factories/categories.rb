@@ -20,7 +20,7 @@ FactoryBot.define do
     trait :savings do
       category_type { :savings }
       name { "Savings for #{Faker::Commerce.product_name} + Faker::Number.number(digits: 2).to_s" }
-      association :savings_pool
+      association :pool
     end
 
     trait :with_items_and_entries do

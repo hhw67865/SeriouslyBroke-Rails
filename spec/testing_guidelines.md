@@ -18,7 +18,7 @@ This document serves as a comprehensive reference for how tests should be writte
 The system test structure mirrors your web application's pages. Each **web page** gets its own folder, then we divide tests by **page sections** to keep them focused and manageable.
 
 **Grouping Strategy:**
-- **By Model/Feature**: `categories/`, `items/`, `savings_pools/` 
+- **By Model/Feature**: `categories/`, `items/`, `pools/` 
 - **By App Section**: `dashboard/`, `reports/`, `admin/`
 - **Special Cases**: `authentication/` (can be single file if simple)
 
@@ -1170,14 +1170,14 @@ end
 ```ruby
 describe "search by category" do
   # ✅ Main subjects are referenced by name
-  let!(:emergency_fund) { create(:savings_pool, user: user, name: "Emergency Fund") }
-  let!(:vacation_fund) { create(:savings_pool, user: user, name: "Vacation Fund") }
+  let!(:emergency_fund) { create(:pool, user: user, name: "Emergency Fund") }
+  let!(:vacation_fund) { create(:pool, user: user, name: "Vacation Fund") }
   
   before do
     # ✅ Background data not referenced by variable name
-    create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
-    create(:category, user: user, name: "Travel Budget", savings_pool: vacation_fund)
-    visit savings_pools_path
+    create(:category, user: user, name: "Home Savings", pool: emergency_fund)
+    create(:category, user: user, name: "Travel Budget", pool: vacation_fund)
+    visit pools_path
   end
   
   it "finds savings pools by category name" do
@@ -1210,9 +1210,9 @@ end
 **❌ Avoid: Setup Data as let! When Not Referenced**
 ```ruby
 describe "search by category" do
-  let!(:emergency_fund) { create(:savings_pool, name: "Emergency Fund") }
-  let!(:home_category) { create(:category, name: "Home Savings", savings_pool: emergency_fund) }
-  let!(:travel_category) { create(:category, name: "Travel Budget", savings_pool: vacation_fund) }
+  let!(:emergency_fund) { create(:pool, name: "Emergency Fund") }
+  let!(:home_category) { create(:category, name: "Home Savings", pool: emergency_fund) }
+  let!(:travel_category) { create(:category, name: "Travel Budget", pool: vacation_fund) }
   
   # ❌ home_category and travel_category are never referenced by name
   

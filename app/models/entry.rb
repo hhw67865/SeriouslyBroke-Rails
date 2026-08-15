@@ -15,8 +15,8 @@ class Entry < ApplicationRecord
   scope :expenses, -> { joins(item: :category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(item: :category).where(categories: { category_type: :income }) }
   scope :savings, -> { joins(item: :category).where(categories: { category_type: :savings }) }
-  scope :budgetable_expenses, -> { expenses.where(categories: { savings_pool_id: nil }) }
-  scope :pool_covered_expenses, -> { expenses.where.not(categories: { savings_pool_id: nil }) }
+  scope :budgetable_expenses, -> { expenses.where(categories: { pool_id: nil }) }
+  scope :pool_covered_expenses, -> { expenses.where.not(categories: { pool_id: nil }) }
   scope :tracked, -> { where(categories: { tracked: true }) }
 
   # Define searchable fields using the DSL
@@ -24,5 +24,5 @@ class Entry < ApplicationRecord
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
-  searchable :savings_pool, through: [:item, :category, :savings_pool], column: :name, label: "Savings Pool"
+  searchable :pool, through: [:item, :category, :pool], column: :name, label: "Pool"
 end

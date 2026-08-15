@@ -4,11 +4,11 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Show - Header Actions", type: :system do
   let(:user) { create(:user) }
-  let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
 
   before do
     sign_in user, scope: :user
-    visit savings_pool_path(savings_pool)
+    visit pool_path(pool)
   end
 
   describe "page header", :aggregate_failures do
@@ -17,20 +17,20 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
     end
 
     it "shows breadcrumbs" do
-      expect(page).to have_link("Savings Pools", href: savings_pools_path)
+      expect(page).to have_link("Savings Pools", href: pools_path)
       expect(page).to have_content("Emergency Fund")
     end
   end
 
   describe "edit action", :aggregate_failures do
     it "shows edit button" do
-      expect(page).to have_link("Edit", href: edit_savings_pool_path(savings_pool))
+      expect(page).to have_link("Edit", href: edit_pool_path(pool))
     end
 
     it "navigates to edit page" do
       click_link "Edit"
 
-      expect(page).to have_current_path(edit_savings_pool_path(savings_pool))
+      expect(page).to have_current_path(edit_pool_path(pool))
       expect(page).to have_content("Edit Savings Pool")
     end
   end
@@ -43,16 +43,16 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
     end
 
     it "deletes savings pool when confirmed" do
-      savings_pool_id = savings_pool.id
-      expect(SavingsPool.exists?(savings_pool_id)).to be(true)
+      pool_id = pool.id
+      expect(Pool.exists?(pool_id)).to be(true)
 
       accept_confirm do
         click_button "Delete"
       end
 
-      expect(page).to have_current_path(savings_pools_path)
+      expect(page).to have_current_path(pools_path)
       expect(page).to have_content("Savings pool was successfully deleted")
-      expect(SavingsPool.exists?(savings_pool_id)).to be(false)
+      expect(Pool.exists?(pool_id)).to be(false)
     end
   end
 
@@ -62,7 +62,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
         click_link "Savings Pools"
       end
 
-      expect(page).to have_current_path(savings_pools_path)
+      expect(page).to have_current_path(pools_path)
       expect(page).to have_content("Track your financial goals and savings progress")
     end
   end

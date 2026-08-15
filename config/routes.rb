@@ -9,10 +9,10 @@ Rails.application.routes.draw do
     root "dashboard#index", as: :authenticated_root
   end
 
-  resources :savings_pools do
+  resources :pools do
     member do
-      get :categories, to: "savings_pools/categories#index"
-      patch :categories, to: "savings_pools/categories#update"
+      get :categories, to: "pools/categories#index"
+      patch :categories, to: "pools/categories#update"
     end
   end
   resources :entries, except: [:show]

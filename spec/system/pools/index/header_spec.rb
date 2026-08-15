@@ -7,7 +7,7 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
 
   before do
     sign_in user, scope: :user
-    visit savings_pools_path
+    visit pools_path
   end
 
   describe "page header elements", :aggregate_failures do
@@ -23,8 +23,8 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
 
   describe "search form presence", :aggregate_failures do
     before do
-      create(:savings_pool, user: user, name: "Emergency Fund")
-      visit savings_pools_path
+      create(:pool, user: user, name: "Emergency Fund")
+      visit pools_path
     end
 
     it "shows search field and field selector" do
@@ -37,7 +37,7 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
     it "navigates to new savings pool page" do
       click_link "New Savings Pool"
 
-      expect(page).to have_current_path(new_savings_pool_path)
+      expect(page).to have_current_path(new_pool_path)
       expect(page).to have_content("New Savings Pool")
     end
   end

@@ -58,8 +58,8 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
   end
 
   describe "savings category labels", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user) }
-    let!(:category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency") }
+    let!(:pool) { create(:pool, user: user) }
+    let!(:category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency") }
     let!(:item) { create(:item, category: category, name: "Transfer") }
 
     before { create(:entry, item: item, amount: 200, date: base_date + 7.days) }

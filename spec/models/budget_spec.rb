@@ -22,8 +22,8 @@ RSpec.describe Budget, type: :model do
 
     describe "pool mutual exclusivity" do
       let(:user) { create(:user) }
-      let(:pool) { create(:savings_pool, user: user) }
-      let(:expense_category) { create(:category, :expense, user: user, savings_pool: pool) }
+      let(:pool) { create(:pool, user: user) }
+      let(:expense_category) { create(:category, :expense, user: user, pool: pool) }
 
       it "rejects budget on a category linked to a savings pool", :aggregate_failures do
         budget = build(:budget, category: expense_category)

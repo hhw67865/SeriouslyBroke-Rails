@@ -158,7 +158,7 @@ class DashboardPresenter
   end
 
   def tracked_expense_categories
-    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :savings_pool, items: :entries)
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :pool, items: :entries)
   end
 
   def tracked_budgetable_expense_categories

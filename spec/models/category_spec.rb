@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe Category, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to belong_to(:savings_pool).optional }
+    it { is_expected.to belong_to(:pool).optional }
     it { is_expected.to have_many(:items).dependent(:destroy) }
     it { is_expected.to have_many(:entries).through(:items) }
     it { is_expected.to have_one(:budget).dependent(:destroy) }
@@ -52,11 +52,11 @@ RSpec.describe Category, type: :model do
 
   describe "scopes" do
     let(:user) { create(:user) }
-    let(:pool) { create(:savings_pool, user: user) }
+    let(:pool) { create(:pool, user: user) }
     let!(:expense_category) { create(:category, category_type: :expense, user: user) }
-    let!(:pool_covered_category) { create(:category, category_type: :expense, user: user, savings_pool: pool) }
+    let!(:pool_covered_category) { create(:category, category_type: :expense, user: user, pool: pool) }
     let!(:income_category) { create(:category, category_type: :income, user: user) }
-    let!(:savings_category) { create(:category, category_type: :savings, user: user, savings_pool: create(:savings_pool, user: user)) }
+    let!(:savings_category) { create(:category, category_type: :savings, user: user, pool: create(:pool, user: user)) }
 
     describe ".expenses" do
       it "returns only expense categories" do
@@ -91,11 +91,11 @@ RSpec.describe Category, type: :model do
 
   describe "#budgetable? and #pool_covered?" do
     let(:user) { create(:user) }
-    let(:pool) { create(:savings_pool, user: user) }
+    let(:pool) { create(:pool, user: user) }
 
     it "budgetable? is true for expense without pool, false with pool", :aggregate_failures do
       plain = create(:category, :expense, user: user)
-      covered = create(:category, :expense, user: user, savings_pool: pool)
+      covered = create(:category, :expense, user: user, pool: pool)
       income = create(:category, :income, user: user)
 
       expect(plain).to be_budgetable
@@ -105,7 +105,7 @@ RSpec.describe Category, type: :model do
 
     it "pool_covered? is the inverse of budgetable? for expenses", :aggregate_failures do
       plain = create(:category, :expense, user: user)
-      covered = create(:category, :expense, user: user, savings_pool: pool)
+      covered = create(:category, :expense, user: user, pool: pool)
 
       expect(plain).not_to be_pool_covered
       expect(covered).to be_pool_covered
@@ -114,16 +114,16 @@ RSpec.describe Category, type: :model do
 
   describe "destroy_budget_if_pool_linked callback" do
     let(:user) { create(:user) }
-    let(:pool) { create(:savings_pool, user: user) }
+    let(:pool) { create(:pool, user: user) }
     let(:category) { create(:category, :expense, user: user) }
     let!(:budget) { create(:budget, category: category) }
 
     it "destroys the budget when category gets linked to a savings pool" do
-      category.update!(savings_pool: pool)
+      category.update!(pool: pool)
       expect(Budget.exists?(budget.id)).to be false
     end
 
-    it "keeps the budget when savings_pool is not changed" do
+    it "keeps the budget when pool is not changed" do
       category.update!(name: "Updated Name")
       expect(Budget.exists?(budget.id)).to be true
     end

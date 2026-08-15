@@ -1,28 +1,28 @@
 <%# Professional Savings Goal Show Page %>
 <%
-  calculator = @savings_pool.calculator
+  calculator = @pool.calculator
   progress = calculator.progress_percentage
   current_balance = calculator.current_balance
-  target_amount = @savings_pool.target_amount
+  target_amount = @pool.target_amount
   remaining = calculator.remaining_amount
 %>
 
 <%= page_header(
-    title: @savings_pool.name,
+    title: @pool.name,
     subtitle: "Savings pool details and progress",
     breadcrumbs: [
-      { label: "Savings Pools", url: savings_pools_path },
-      { label: @savings_pool.name }
+      { label: "Savings Pools", url: pools_path },
+      { label: @pool.name }
     ],
     actions: [
       {
         label: "Edit",
-        url: edit_savings_pool_path(@savings_pool),
+        url: edit_pool_path(@pool),
         class: "inline-flex items-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition"
       },
       {
         label: "Delete",
-        url: savings_pool_path(@savings_pool),
+        url: pool_path(@pool),
         method: :delete,
         class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-status-danger text-white text-sm font-medium hover:opacity-90 shadow-sm transition",
         confirm: "Are you sure you want to delete this savings pool? This action cannot be undone."
@@ -32,7 +32,7 @@
 
 <div class="max-w-6xl mx-auto">
 
-  <% cache [@savings_pool, selected_date] do %>
+  <% cache [@pool, selected_date] do %>
   <%# Hero Progress Section %>
   <div class="bg-white rounded shadow-sm border border-gray-100 p-8 mb-8">
     <%# Progress Visualization %>
@@ -145,7 +145,7 @@
         <h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3>
         <div class="flex items-center gap-3">
           <span class="text-sm text-gray-500">Last 8 transactions</span>
-          <%= link_to entries_path(field: "savings_pool", q: @savings_pool.name), class: "inline-flex items-center px-3 py-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+          <%= link_to entries_path(field: "pool", q: @pool.name), class: "inline-flex items-center px-3 py-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
             <span>Show All Activity</span>
             <%= heroicon "arrow-right", options: { class: "h-4 w-4 ml-1.5" } %>
           <% end %>
@@ -195,7 +195,7 @@
   <div class="bg-white rounded shadow-sm border border-gray-100 p-6 mb-8">
     <div class="flex items-center justify-between mb-6">
       <h3 class="text-lg font-semibold text-gray-900">Connected Categories</h3>
-      <%= link_to categories_savings_pool_path(@savings_pool),
+      <%= link_to categories_pool_path(@pool),
           class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
         <%= heroicon "cog-6-tooth", options: { class: "h-4 w-4" } %>
         Manage Categories
@@ -283,7 +283,7 @@
         </div>
         <div class="text-gray-500 mb-2">No categories connected</div>
         <p class="text-sm text-gray-400 mb-6">Connect categories to start tracking your progress automatically</p>
-        <%= link_to categories_savings_pool_path(@savings_pool),
+        <%= link_to categories_pool_path(@pool),
             class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
           <%= heroicon "plus", options: { class: "h-4 w-4" } %>
           Connect Your First Category

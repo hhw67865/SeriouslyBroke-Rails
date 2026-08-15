@@ -76,7 +76,7 @@ RSpec.describe Item, type: :model do
       {
         expense: create(:category, category_type: :expense, user: user),
         income: create(:category, category_type: :income, user: user),
-        savings: create(:category, category_type: :savings, user: user, savings_pool: create(:savings_pool, user: user))
+        savings: create(:category, category_type: :savings, user: user, pool: create(:pool, user: user))
       }
     end
 

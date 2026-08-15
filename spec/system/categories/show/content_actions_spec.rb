@@ -72,8 +72,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
   end
 
   describe "savings category", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Main Pool") }
-    let!(:category) { create(:category, category_type: "savings", user: user, name: "Emergency Fund", savings_pool: pool) }
+    let!(:pool) { create(:pool, user: user, name: "Main Pool") }
+    let!(:category) { create(:category, category_type: "savings", user: user, name: "Emergency Fund", pool: pool) }
 
     before { visit category_path(category) }
 

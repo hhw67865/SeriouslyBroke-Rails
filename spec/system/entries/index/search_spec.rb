@@ -6,8 +6,8 @@ RSpec.describe "Entries Index - Search", type: :system do
   let(:user) { create(:user) }
   let(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let(:vacation_pool) { create(:savings_pool, user: user, name: "Vacation Fund") }
-  let(:emergency_pool) { create(:savings_pool, user: user, name: "Emergency Fund") }
+  let(:vacation_pool) { create(:pool, user: user, name: "Vacation Fund") }
+  let(:emergency_pool) { create(:pool, user: user, name: "Emergency Fund") }
   let(:expense_item) { create(:item, category: expense_category, name: "Groceries") }
   let(:income_item) { create(:item, category: income_category, name: "Freelance Work") }
 
@@ -15,8 +15,8 @@ RSpec.describe "Entries Index - Search", type: :system do
     sign_in user, scope: :user
 
     # Create savings categories and items
-    vacation_category = create(:category, :savings, user: user, name: "Vacation Savings", savings_pool: vacation_pool)
-    emergency_category = create(:category, :savings, user: user, name: "Emergency Savings", savings_pool: emergency_pool)
+    vacation_category = create(:category, :savings, user: user, name: "Vacation Savings", pool: vacation_pool)
+    emergency_category = create(:category, :savings, user: user, name: "Emergency Savings", pool: emergency_pool)
     vacation_item = create(:item, category: vacation_category, name: "Vacation Contribution")
     emergency_item = create(:item, category: emergency_category, name: "Emergency Contribution")
 
@@ -37,7 +37,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     create(:entry, item: expense_item, amount: 80, description: "February utilities", date: Date.parse("2024-02-28"))
     create(:entry, item: expense_item, amount: 120, description: "March rent", date: Date.parse("2024-03-01"))
 
-    # Savings pool entries
+    # Pool entries
     create(:entry, item: vacation_item, amount: 500, description: "Monthly vacation savings", date: Date.parse("2024-01-15"))
     create(:entry, item: vacation_item, amount: 300, description: "Bonus to vacation", date: Date.parse("2024-02-10"))
     create(:entry, item: emergency_item, amount: 1000, description: "Emergency fund deposit", date: Date.parse("2024-01-20"))
@@ -52,7 +52,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     end
 
     it "shows all search field options" do
-      expect(page).to have_select("field", options: ["Description", "Date", "Item", "Category", "Savings pool"])
+      expect(page).to have_select("field", options: ["Description", "Date", "Item", "Category", "Pool"])
     end
   end
 
@@ -220,7 +220,7 @@ RSpec.describe "Entries Index - Search", type: :system do
 
   describe "search by savings pool", :aggregate_failures do
     it "finds all entries in categories belonging to the savings pool" do
-      select "Savings pool", from: "field"
+      select "Pool", from: "field"
       fill_in "q", with: "Vacation Fund"
       find("input[name='q']").send_keys(:return)
 
@@ -231,7 +231,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     end
 
     it "finds entries by partial savings pool name" do
-      select "Savings pool", from: "field"
+      select "Pool", from: "field"
       fill_in "q", with: "Emergency"
       find("input[name='q']").send_keys(:return)
 
@@ -242,12 +242,12 @@ RSpec.describe "Entries Index - Search", type: :system do
 
     context "with multiple categories in same pool" do
       before do
-        another_vacation_category = create(:category, :savings, user: user, name: "Travel Savings", savings_pool: vacation_pool)
+        another_vacation_category = create(:category, :savings, user: user, name: "Travel Savings", pool: vacation_pool)
         another_vacation_item = create(:item, category: another_vacation_category, name: "Travel Fund")
         create(:entry, item: another_vacation_item, amount: 250, description: "Travel contribution", date: Date.parse("2024-03-15"))
 
         visit entries_path
-        select "Savings pool", from: "field"
+        select "Pool", from: "field"
         fill_in "q", with: "Vacation"
         find("input[name='q']").send_keys(:return)
       end
@@ -261,7 +261,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     end
 
     it "shows no results for non-matching savings pool" do
-      select "Savings pool", from: "field"
+      select "Pool", from: "field"
       fill_in "q", with: "NonexistentPool"
       find("input[name='q']").send_keys(:return)
 

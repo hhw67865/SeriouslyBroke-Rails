@@ -50,8 +50,8 @@
         <% if @category.budgetable? %>
           <%= render "categories/_partials/show/budget_card", category: @category %>
         <% end %>
-        <% if @category.savings_pool.present? %>
-          <%= render "categories/_partials/show/savings_pool_card", category: @category %>
+        <% if @category.pool.present? %>
+          <%= render "categories/_partials/show/pool_card", category: @category %>
         <% end %>
         
         <%= render "categories/_partials/show/recent_activity", category: @category %>

@@ -118,8 +118,8 @@ RSpec.describe "Categories Index - Cards", type: :system do
   end
 
   describe "savings card shows correct monthly contribution and links to show", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Main Pool") }
-    let!(:savings_category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency Fund") }
+    let!(:pool) { create(:pool, user: user, name: "Main Pool") }
+    let!(:savings_category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency Fund") }
     let!(:transfer_item) { create(:item, category: savings_category, name: "Transfer") }
     let!(:rollover_item) { create(:item, category: savings_category, name: "Rollover") }
 

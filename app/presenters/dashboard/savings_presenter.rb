@@ -61,7 +61,7 @@ module Dashboard
     # === Pools Summary (period-aware) ===
 
     def pools_summary
-      @pools_summary ||= @user.savings_pools.includes(categories: { items: :entries }).map do |pool|
+      @pools_summary ||= @user.pools.includes(categories: { items: :entries }).map do |pool|
         calc = pool.calculator(as_of: period_range.end)
         {
           id: pool.id,
@@ -99,7 +99,7 @@ module Dashboard
 
     def savings_withdrawal_scope
       @user.entries.joins(item: :category)
-        .joins("INNER JOIN savings_pools ON savings_pools.id = categories.savings_pool_id")
+        .joins("INNER JOIN pools ON pools.id = categories.pool_id")
         .where(categories: { category_type: :expense })
     end
 

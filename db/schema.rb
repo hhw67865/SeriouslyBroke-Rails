@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_06_30_143158) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_032532) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -29,11 +29,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_30_143158) do
     t.string "color"
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.uuid "savings_pool_id"
+    t.uuid "pool_id"
     t.boolean "tracked", default: true, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["savings_pool_id"], name: "index_categories_on_savings_pool_id"
+    t.index ["pool_id"], name: "index_categories_on_pool_id"
     t.index ["user_id"], name: "index_categories_on_user_id"
   end
 
@@ -56,14 +56,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_30_143158) do
     t.index ["category_id"], name: "index_items_on_category_id"
   end
 
-  create_table "savings_pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+  create_table "pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "name", null: false
     t.date "start_date"
     t.money "target_amount", scale: 2
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["user_id"], name: "index_savings_pools_on_user_id"
+    t.index ["user_id"], name: "index_pools_on_user_id"
   end
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -88,9 +88,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_06_30_143158) do
   end
 
   add_foreign_key "budgets", "categories"
-  add_foreign_key "categories", "savings_pools"
+  add_foreign_key "categories", "pools"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
   add_foreign_key "items", "categories"
-  add_foreign_key "savings_pools", "users"
+  add_foreign_key "pools", "users"
 end

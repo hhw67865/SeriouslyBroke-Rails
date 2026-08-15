@@ -10,7 +10,7 @@ RSpec.describe "Savings Pools Index - Empty State", type: :system do
   end
 
   describe "when no savings pools exist", :aggregate_failures do
-    before { visit savings_pools_path }
+    before { visit pools_path }
 
     it "shows empty state message" do
       expect(page).to have_content("No savings pools yet")
@@ -24,16 +24,16 @@ RSpec.describe "Savings Pools Index - Empty State", type: :system do
     it "navigates to new savings pool page when clicking create link" do
       click_link "Create Your First Goal"
 
-      expect(page).to have_current_path(new_savings_pool_path)
+      expect(page).to have_current_path(new_pool_path)
       expect(page).to have_content("New Savings Pool")
     end
   end
 
   describe "when search returns no results", :aggregate_failures do
     before do
-      create(:savings_pool, user: user, name: "Emergency Fund")
-      create(:savings_pool, user: user, name: "Vacation Fund")
-      visit savings_pools_path
+      create(:pool, user: user, name: "Emergency Fund")
+      create(:pool, user: user, name: "Vacation Fund")
+      visit pools_path
       fill_in "q", with: "Nonexistent"
       find("input[name='q']").send_keys(:return)
     end

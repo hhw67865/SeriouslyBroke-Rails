@@ -4,8 +4,8 @@
   
   <div class="flex items-center justify-between mb-4">
     <div>
-      <h3 class="font-medium text-gray-900"><%= category.savings_pool.name %></h3>
-      <p class="text-sm text-gray-500 mt-1">Target: <%= number_to_currency(category.savings_pool.target_amount) %></p>
+      <h3 class="font-medium text-gray-900"><%= category.pool.name %></h3>
+      <p class="text-sm text-gray-500 mt-1">Target: <%= number_to_currency(category.pool.target_amount) %></p>
     </div>
     
     <div class="h-10 w-10 bg-brand rounded-full flex items-center justify-center">
@@ -13,10 +13,10 @@
     </div>
   </div>
   
-  <% if category.savings_pool.target_amount.present? && category.savings_pool.target_amount.positive? %>
+  <% if category.pool.target_amount.present? && category.pool.target_amount.positive? %>
     <% 
-      progress = category.savings_pool.calculator.progress_percentage
-      current_balance = category.savings_pool.calculator.current_balance
+      progress = category.pool.calculator.progress_percentage
+      current_balance = category.pool.calculator.current_balance
     %>
     <div class="mb-4">
       <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
@@ -38,7 +38,7 @@
             <%= progress %>% complete
           <% end %>
         </span>
-        <span>Target: <%= number_to_currency(category.savings_pool.target_amount) %></span>
+        <span>Target: <%= number_to_currency(category.pool.target_amount) %></span>
       </div>
     </div>
   <% end %>
@@ -48,12 +48,12 @@
   </p>
   
   <div class="flex gap-3">
-    <%= link_to savings_pool_path(category.savings_pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
+    <%= link_to pool_path(category.pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
       <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
       <span>View Savings Pool</span>
     <% end %>
 
-    <%= link_to edit_savings_pool_path(category.savings_pool), class: "inline-flex items-center justify-center px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition" do %>
+    <%= link_to edit_pool_path(category.pool), class: "inline-flex items-center justify-center px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition" do %>
       <%= heroicon "pencil-square", options: { class: "h-4 w-4" } %>
     <% end %>
   </div>

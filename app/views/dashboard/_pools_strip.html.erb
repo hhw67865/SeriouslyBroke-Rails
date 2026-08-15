@@ -40,7 +40,7 @@
           <% badge_text = "#{progress}%" %>
         <% end %>
 
-        <%= link_to savings_pool_path(pool[:id]),
+        <%= link_to pool_path(pool[:id]),
             class: "block rounded p-4 hover:opacity-90 transition #{card_class}" do %>
           <div class="flex items-center justify-between mb-2">
             <p class="text-sm font-medium text-gray-900 truncate"><%= pool[:name] %></p>

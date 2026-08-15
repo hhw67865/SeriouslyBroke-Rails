@@ -4,7 +4,7 @@
     subtitle: "Track your financial goals and savings progress",
     search: show_search_form? ? {
       enabled: true,
-      url: savings_pools_path,
+      url: pools_path,
       field_selector: {
         options: search_options_with_selection(@search_state[:field]),
         selected: @search_state[:field],
@@ -13,24 +13,24 @@
       query: @search_state[:query],
       placeholder: search_placeholder(@search_state[:field]),
       has_results: @search_state[:has_search],
-      results_text: @search_state[:has_search] ? search_results_text(@savings_pools, @search_state) : nil,
-      clear_url: savings_pools_path
+      results_text: @search_state[:has_search] ? search_results_text(@pools, @search_state) : nil,
+      clear_url: pools_path
     } : nil,
     actions: [
       {
         label: "New Savings Pool",
-        url: new_savings_pool_path,
+        url: new_pool_path,
         class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
       }
     ]
 ) %>
 
 <%# Main Content %>
-<% if @savings_pools.present? %>
+<% if @pools.present? %>
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    <% @savings_pools.each do |savings_pool| %>
-      <% cache [savings_pool] do %>
-        <%= render "savings_pool", savings_pool: savings_pool %>
+    <% @pools.each do |pool| %>
+      <% cache [pool] do %>
+        <%= render "pool", pool: pool %>
       <% end %>
     <% end %>
   </div>
@@ -44,7 +44,7 @@
     <p class="text-gray-600 mb-8 max-w-md mx-auto">
       Start building your financial future by creating your first savings pool.
     </p>
-    <%= link_to new_savings_pool_path, 
+    <%= link_to new_pool_path, 
         class: "inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded text-white bg-brand hover:bg-brand-dark transition-colors duration-200" do %>
       <%= heroicon "plus", options: { class: "h-5 w-5 mr-2" } %>
       Create Your First Goal

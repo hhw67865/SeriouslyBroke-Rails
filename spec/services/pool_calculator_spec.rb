@@ -2,17 +2,17 @@
 
 require "rails_helper"
 
-RSpec.describe SavingsPoolCalculator, type: :model do
+RSpec.describe PoolCalculator, type: :model do
   let(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
-  let!(:pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000, start_date: base_date - 6.months) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, start_date: base_date - 6.months) }
 
   # Savings category (contributions)
-  let!(:savings_cat) { create(:category, :savings, user: user, name: "Emergency Savings", savings_pool: pool) }
+  let!(:savings_cat) { create(:category, :savings, user: user, name: "Emergency Savings", pool: pool) }
   let!(:savings_item) { create(:item, category: savings_cat, name: "Monthly Transfer") }
 
   # Expense category linked to pool (withdrawals)
-  let!(:expense_cat) { create(:category, :expense, user: user, name: "Emergency Expense", savings_pool: pool) }
+  let!(:expense_cat) { create(:category, :expense, user: user, name: "Emergency Expense", pool: pool) }
   let!(:expense_item) { create(:item, category: expense_cat, name: "Withdrawal") }
 
   before do

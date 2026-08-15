@@ -1,10 +1,10 @@
 <%# Category Management for Savings Pool %>
 <%= page_header(
     title: "Manage Categories",
-    subtitle: "Connect categories to #{@savings_pool.name} for automatic progress tracking",
+    subtitle: "Connect categories to #{@pool.name} for automatic progress tracking",
     breadcrumbs: [
-      { label: "Savings Pools", url: savings_pools_path },
-      { label: @savings_pool.name, url: savings_pool_path(@savings_pool) },
+      { label: "Savings Pools", url: pools_path },
+      { label: @pool.name, url: pool_path(@pool) },
       { label: "Manage Categories" }
     ]
 ) %>
@@ -32,7 +32,7 @@
 
   <%# Category Selection Form %>
   <div class="bg-white rounded shadow-sm border border-gray-100 p-6">
-    <%= form_with url: categories_savings_pool_path(@savings_pool), method: :patch, local: true do |form| %>
+    <%= form_with url: categories_pool_path(@pool), method: :patch, local: true do |form| %>
       
       <%# Categories by Type - Only savings and expenses %>
       <% @all_categories.where(category_type: ["savings", "expense"]).group_by(&:category_type).each do |category_type, categories| %>
@@ -60,8 +60,8 @@
               <% categories.each do |category| %>
                 <% 
                   is_connected = @connected_category_ids.include?(category.id)
-                  has_other_pool = category.savings_pool.present? && category.savings_pool != @savings_pool
-                  other_pool = category.savings_pool if has_other_pool
+                  has_other_pool = category.pool.present? && category.pool != @pool
+                  other_pool = category.pool if has_other_pool
                 %>
                 
                 <div class="relative">
@@ -140,7 +140,7 @@
         <%= form.submit "Update Connected Categories",
             class: "inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-medium rounded text-white bg-brand hover:bg-brand-dark" %>
         
-        <%= link_to savings_pool_path(@savings_pool), 
+        <%= link_to pool_path(@pool), 
             class: "inline-flex justify-center items-center px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded text-gray-700 bg-white hover:bg-gray-50" do %>
           Cancel
         <% end %>

@@ -21,14 +21,14 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   end
 
   describe "budgeted vs pool-covered split", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Car Fund", target_amount: 5000, start_date: 1.year.ago) }
+    let!(:pool) { create(:pool, user: user, name: "Car Fund", target_amount: 5000, start_date: 1.year.ago) }
 
     # Budgeted expense category
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
 
     # Pool-covered expense category
-    let!(:car_repair) { create(:category, :expense, user: user, name: "Car Repair", savings_pool: pool) }
+    let!(:car_repair) { create(:category, :expense, user: user, name: "Car Repair", pool: pool) }
     let!(:car_repair_item) { create(:item, category: car_repair, name: "Mechanic") }
 
     before do

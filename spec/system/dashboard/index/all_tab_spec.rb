@@ -122,9 +122,9 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   end
 
   describe "Net Savings stat card — negative delta", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Buffer", target_amount: 1000, start_date: 1.year.ago) }
-    let!(:savings_item) { create(:item, category: create(:category, :savings, user: user, name: "Buffer In", savings_pool: pool), name: "Deposit") }
-    let!(:withdrawal_item) { create(:item, category: create(:category, :expense, user: user, name: "Buffer Out", savings_pool: pool), name: "Spend") }
+    let!(:pool) { create(:pool, user: user, name: "Buffer", target_amount: 1000, start_date: 1.year.ago) }
+    let!(:savings_item) { create(:item, category: create(:category, :savings, user: user, name: "Buffer In", pool: pool), name: "Deposit") }
+    let!(:withdrawal_item) { create(:item, category: create(:category, :expense, user: user, name: "Buffer Out", pool: pool), name: "Spend") }
 
     it "renders a negative net change when withdrawals exceed contributions" do
       create(:entry, item: savings_item, amount: 100.00, date: base_date + 1.day)
@@ -158,14 +158,14 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   private
 
   def seed_mixed_financial_data
-    pool = create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
+    pool = create(:pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
     create(:budget, category: expense_cat, amount: 500)
 
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)
-    create_entry_for(create(:category, :expense, user: user, name: "Car Repair", savings_pool: pool), "Mechanic", 200.00, 3)
-    create_entry_for(create(:category, :savings, user: user, name: "Emergency Savings", savings_pool: pool), "Transfer", 500.00, 4)
+    create_entry_for(create(:category, :expense, user: user, name: "Car Repair", pool: pool), "Mechanic", 200.00, 3)
+    create_entry_for(create(:category, :savings, user: user, name: "Emergency Savings", pool: pool), "Transfer", 500.00, 4)
   end
 
   def create_entry_for(category, item_name, amount, day_offset)

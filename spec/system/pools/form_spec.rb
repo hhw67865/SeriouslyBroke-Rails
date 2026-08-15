@@ -8,7 +8,7 @@ RSpec.describe "Savings Pools Form", type: :system do
   before { sign_in user, scope: :user }
 
   describe "New Form" do
-    before { visit new_savings_pool_path }
+    before { visit new_pool_path }
 
     describe "form display", :aggregate_failures do
       it "shows all form elements" do
@@ -62,7 +62,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         click_button "Create Savings Pool"
 
         expect(page).to have_content("Savings pool was successfully created")
-        expect(page).to have_current_path(savings_pool_path(SavingsPool.last))
+        expect(page).to have_current_path(pool_path(Pool.last))
         expect(page).to have_content("Emergency Fund")
       end
 
@@ -72,7 +72,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         click_button "Create Savings Pool"
 
         expect(page).to have_content("Savings pool was successfully created")
-        pool = SavingsPool.last
+        pool = Pool.last
         expect(pool.name).to eq("Vacation Fund")
         expect(pool.target_amount).to eq(2500)
         expect(pool.user).to eq(user)
@@ -82,7 +82,7 @@ RSpec.describe "Savings Pools Form", type: :system do
     describe "navigation", :aggregate_failures do
       it "returns to index when clicking cancel" do
         click_link "Cancel"
-        expect(page).to have_current_path(savings_pools_path)
+        expect(page).to have_current_path(pools_path)
       end
     end
 
@@ -97,7 +97,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         fill_in "Target Amount", with: "1000"
         click_button "Create Savings Pool"
 
-        expect(SavingsPool.last.categories.count).to eq(0)
+        expect(Pool.last.categories.count).to eq(0)
       end
 
       it "creates a linked expense category when the expense box is checked", :aggregate_failures do
@@ -106,7 +106,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         check "Create an expense category"
         click_button "Create Savings Pool"
 
-        pool = SavingsPool.last
+        pool = Pool.last
         expect(pool.categories.count).to eq(1)
         category = pool.categories.first
         expect(category.name).to eq("Expense Pool Expense")
@@ -119,7 +119,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         check "Create a savings category"
         click_button "Create Savings Pool"
 
-        pool = SavingsPool.last
+        pool = Pool.last
         expect(pool.categories.count).to eq(1)
         category = pool.categories.first
         expect(category.name).to eq("Savings Pool Savings")
@@ -133,7 +133,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         check "Create a savings category"
         click_button "Create Savings Pool"
 
-        pool = SavingsPool.last
+        pool = Pool.last
         expect(pool.categories.pluck(:name)).to contain_exactly(
           "Dual Pool Expense",
           "Dual Pool Savings"
@@ -143,9 +143,9 @@ RSpec.describe "Savings Pools Form", type: :system do
   end
 
   describe "Edit Form" do
-    let!(:savings_pool) { create(:savings_pool, name: "Original Name", target_amount: 1000, user: user) }
+    let!(:pool) { create(:pool, name: "Original Name", target_amount: 1000, user: user) }
 
-    before { visit edit_savings_pool_path(savings_pool) }
+    before { visit edit_pool_path(pool) }
 
     describe "form display", :aggregate_failures do
       it "shows all form elements pre-filled" do
@@ -165,12 +165,12 @@ RSpec.describe "Savings Pools Form", type: :system do
     end
 
     describe "progress indicator with data", :aggregate_failures do
-      let!(:savings_category) { create(:category, category_type: "savings", user: user, savings_pool: savings_pool) }
+      let!(:savings_category) { create(:category, category_type: "savings", user: user, pool: pool) }
       let!(:savings_item) { create(:item, category: savings_category) }
 
       before do
         create(:entry, item: savings_item, amount: 300)
-        visit edit_savings_pool_path(savings_pool)
+        visit edit_pool_path(pool)
       end
 
       it "shows current balance and progress" do
@@ -199,7 +199,7 @@ RSpec.describe "Savings Pools Form", type: :system do
         click_button "Update Savings Pool"
 
         expect(page).to have_content("Savings pool was successfully updated")
-        expect(page).to have_current_path(savings_pool_path(savings_pool))
+        expect(page).to have_current_path(pool_path(pool))
         expect(page).to have_content("Updated Name")
       end
 
@@ -208,8 +208,8 @@ RSpec.describe "Savings Pools Form", type: :system do
         click_button "Update Savings Pool"
 
         expect(page).to have_content("Savings pool was successfully updated")
-        savings_pool.reload
-        expect(savings_pool.target_amount).to eq(5000)
+        pool.reload
+        expect(pool.target_amount).to eq(5000)
       end
 
       it "updates both fields simultaneously" do
@@ -218,16 +218,16 @@ RSpec.describe "Savings Pools Form", type: :system do
         click_button "Update Savings Pool"
 
         expect(page).to have_content("Savings pool was successfully updated")
-        savings_pool.reload
-        expect(savings_pool.name).to eq("New Vacation Fund")
-        expect(savings_pool.target_amount).to eq(3500)
+        pool.reload
+        expect(pool.name).to eq("New Vacation Fund")
+        expect(pool.target_amount).to eq(3500)
       end
     end
 
     describe "navigation", :aggregate_failures do
       it "returns to index when clicking cancel" do
         click_link "Cancel"
-        expect(page).to have_current_path(savings_pools_path)
+        expect(page).to have_current_path(pools_path)
       end
     end
 

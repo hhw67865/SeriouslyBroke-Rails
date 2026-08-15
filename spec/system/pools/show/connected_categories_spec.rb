@@ -6,16 +6,16 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:user) { create(:user) }
-  let!(:savings_pool) { create(:savings_pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
 
   before { sign_in user, scope: :user }
 
   describe "with connected categories", :aggregate_failures do
     before do
-      create(:category, user: user, name: "Monthly Savings", category_type: :savings, savings_pool: savings_pool)
-      create(:category, user: user, name: "Bonus Income", category_type: :savings, savings_pool: savings_pool)
-      create(:category, user: user, name: "Medical Bills", category_type: :expense, savings_pool: savings_pool)
-      visit savings_pool_path(savings_pool)
+      create(:category, user: user, name: "Monthly Savings", category_type: :savings, pool: pool)
+      create(:category, user: user, name: "Bonus Income", category_type: :savings, pool: pool)
+      create(:category, user: user, name: "Medical Bills", category_type: :expense, pool: pool)
+      visit pool_path(pool)
     end
 
     it "shows connected categories section" do
@@ -57,9 +57,9 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
   end
 
   describe "with category amounts", :aggregate_failures do
-    let!(:savings_category) { create(:category, user: user, name: "Monthly Savings", category_type: :savings, savings_pool: savings_pool) }
+    let!(:savings_category) { create(:category, user: user, name: "Monthly Savings", category_type: :savings, pool: pool) }
     let!(:savings_item) { create(:item, category: savings_category) }
-    let!(:expense_category) { create(:category, user: user, name: "Medical Bills", category_type: :expense, savings_pool: savings_pool) }
+    let!(:expense_category) { create(:category, user: user, name: "Medical Bills", category_type: :expense, pool: pool) }
     let!(:expense_item) { create(:item, category: expense_category) }
 
     before do
@@ -80,7 +80,7 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
         create(:entry, item: expense_item, amount: 30.0, date: prev_month.beginning_of_month + 9.days)
       end
 
-      visit savings_pool_path(savings_pool)
+      visit pool_path(pool)
     end
 
     it "shows correct total for contributing category" do
@@ -115,8 +115,8 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
 
   describe "with only savings categories", :aggregate_failures do
     before do
-      create(:category, user: user, name: "Monthly Savings", category_type: :savings, savings_pool: savings_pool)
-      visit savings_pool_path(savings_pool)
+      create(:category, user: user, name: "Monthly Savings", category_type: :savings, pool: pool)
+      visit pool_path(pool)
     end
 
     it "shows contributing categories" do
@@ -136,8 +136,8 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
 
   describe "with only expense categories", :aggregate_failures do
     before do
-      create(:category, user: user, name: "Emergency Expenses", category_type: :expense, savings_pool: savings_pool)
-      visit savings_pool_path(savings_pool)
+      create(:category, user: user, name: "Emergency Expenses", category_type: :expense, pool: pool)
+      visit pool_path(pool)
     end
 
     it "shows empty state for contributing categories" do
@@ -156,7 +156,7 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
   end
 
   describe "with no connected categories", :aggregate_failures do
-    before { visit savings_pool_path(savings_pool) }
+    before { visit pool_path(pool) }
 
     it "shows empty state message" do
       expect(page).to have_content("No categories connected")
@@ -170,25 +170,25 @@ RSpec.describe "Savings Pools Show - Connected Categories", type: :system do
 
   describe "manage categories link", :aggregate_failures do
     before do
-      create(:category, user: user, category_type: :savings, savings_pool: savings_pool)
-      visit savings_pool_path(savings_pool)
+      create(:category, user: user, category_type: :savings, pool: pool)
+      visit pool_path(pool)
     end
 
     it "navigates to categories management page" do
       click_link "Manage Categories"
-      expect(page).to have_current_path(categories_savings_pool_path(savings_pool))
+      expect(page).to have_current_path(categories_pool_path(pool))
     end
   end
 
   describe "clickable category cards", :aggregate_failures do
     let!(:savings_category) do
-      create(:category, user: user, name: "Monthly Savings", category_type: :savings, savings_pool: savings_pool)
+      create(:category, user: user, name: "Monthly Savings", category_type: :savings, pool: pool)
     end
     let!(:expense_category) do
-      create(:category, user: user, name: "Medical Bills", category_type: :expense, savings_pool: savings_pool)
+      create(:category, user: user, name: "Medical Bills", category_type: :expense, pool: pool)
     end
 
-    before { visit savings_pool_path(savings_pool) }
+    before { visit pool_path(pool) }
 
     it "renders contributing category card as a link to the category show page" do
       expect(page).to have_link("Monthly Savings", href: category_path(savings_category))

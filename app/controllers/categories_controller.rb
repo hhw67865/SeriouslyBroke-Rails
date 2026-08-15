@@ -77,7 +77,7 @@ class CategoriesController < ApplicationController
   end
 
   def category_params
-    params.expect(category: [:name, :category_type, :color, :savings_pool_id])
+    params.expect(category: [:name, :category_type, :color, :pool_id])
   end
 
   def set_categories
