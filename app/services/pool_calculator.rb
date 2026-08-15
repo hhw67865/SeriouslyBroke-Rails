@@ -72,8 +72,26 @@ class PoolCalculator
     remaining = pool.target_amount.to_d - balance
     return 0.to_d if remaining <= 0
 
-    rate = pool.budgets.sum(0.to_d) { |budget| budget.amount.to_d }
+    rate = pool.budgets.sum(0.to_d) { |budget| per_period_rate(budget) }
     [rate, remaining].min
+  end
+
+  # A rule's amount is per-period or per-month depending on its basis, and Budget blesses
+  # both shapes without an anchor. Summing them raw mixes units: a $600-a-month rule would
+  # ask $600 every fortnight, more than twice the rate the user set, funding a four-month
+  # goal in under two. Normalise to a per-period figure before adding.
+  #
+  # The WHOLE month, not what is left of it, so the goal contributes the same amount every
+  # period regardless of when it is asked. Dividing by the periods REMAINING would make the
+  # ask lumpier as the month wears on — right for a dated bill catching up, wrong for a goal.
+  #
+  # `[periods, 1].max` because a user with no cadence configured has no boundaries at all:
+  # fall back to the full amount rather than dividing by zero.
+  def per_period_rate(budget)
+    return budget.amount.to_d if budget.basis_per_paycheck?
+
+    periods = pool.user.period_boundaries(from: today.beginning_of_month, to: today.end_of_month).count
+    budget.amount.to_d / [periods, 1].max
   end
 
   # The `sum` seed is the same type guarantee as #goal_required's, for the pool that holds

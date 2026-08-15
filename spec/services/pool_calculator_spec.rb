@@ -358,6 +358,47 @@ RSpec.describe PoolCalculator, type: :model do
       expect(vacation.calculator(today: today).required).to be_a(BigDecimal)
     end
 
+    # Budget blesses two dateless shapes and their amounts are in different units: a
+    # per_paycheck rule's amount IS the per-period rate, while a monthly rule's is a
+    # per-month figure. $600 a month is $300 a period for this biweekly user in a
+    # two-boundary February; summing the two bases raw would ask $600 a fortnight.
+    it "converts a monthly rate to a per-period figure" do
+      monthly_goal = create(:pool, :savings_pool, user: goal_user, account: account, target_amount: 2_400)
+      create(:pool_budget, :rate, pool: monthly_goal, amount: 600)
+
+      expect(monthly_goal.calculator(today: today).required).to eq(300)
+    end
+
+    # The whole month, not what is left of it. Asked on Feb 20 — the month's second and last
+    # boundary — the goal still contributes $300, not the $600 that dividing by the periods
+    # REMAINING would give. A goal wants a steady rate; the lumpier catch-up reading belongs
+    # to a dated bill.
+    it "divides a monthly rate by the whole month, not the periods left in it" do
+      monthly_goal = create(:pool, :savings_pool, user: goal_user, account: account, target_amount: 2_400)
+      create(:pool_budget, :rate, pool: monthly_goal, amount: 600)
+
+      expect(monthly_goal.calculator(today: Date.new(2026, 2, 20)).required).to eq(300)
+    end
+
+    # Both bases on one goal, each normalised before adding: $150 a period plus $600 a month.
+    it "adds rules of different bases in the same unit" do
+      create(:pool_budget, :rate, pool: vacation, amount: 600)
+
+      expect(vacation.calculator(today: today).required).to eq(450)
+    end
+
+    # A user with no cadence has no boundaries at all, so the monthly amount cannot be
+    # divided into periods. Falling back to the full amount is a wrong-but-safe answer;
+    # dividing by zero takes down every page that renders a requirement.
+    it "falls back to the full monthly amount for a user with no cadence configured" do
+      cadence_less = create(:user)
+      bank = create(:pool, :account, user: cadence_less)
+      goal = create(:pool, :savings_pool, user: cadence_less, account: bank, target_amount: 2_400)
+      create(:pool_budget, :rate, pool: goal, amount: 600)
+
+      expect(goal.calculator(today: today).required).to eq(600)
+    end
+
     # A savings pool with a deadline is not a dateless goal. The anchored maths spreads the
     # $600 across the 13 pay periods between today and Aug 1 — $46.15 a period — and must
     # keep winning; the dateless path would ask for the whole $600 now.
