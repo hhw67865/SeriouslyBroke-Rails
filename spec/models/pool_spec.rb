@@ -129,7 +129,7 @@ RSpec.describe Pool, type: :model do
       car = create(:pool, :budget_pool, user: user, account: account, name: "Car", priority: 3)
       food = create(:pool, :budget_pool, user: user, account: account, name: "Food", priority: 2)
 
-      expect(user.pools.budgets.by_priority.to_a).to eq([rent, food, car])
+      expect(user.pools.budget_pools.by_priority.to_a).to eq([rent, food, car])
     end
   end
 

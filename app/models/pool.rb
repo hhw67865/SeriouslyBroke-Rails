@@ -20,9 +20,11 @@ class Pool < ApplicationRecord
   # `account` association ("the account this pool sits inside").
   enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true
 
+  # Named `*_pools` so they can never be misread as the `budgets` association
+  # (`pool.budgets` holds Budget records; `Pool.budget_pools` holds Pool records).
   scope :accounts, -> { where(pool_type: :account) }
-  scope :budgets, -> { where(pool_type: :budget) }
-  scope :savings, -> { where(pool_type: :savings) }
+  scope :budget_pools, -> { where(pool_type: :budget) }
+  scope :savings_pools, -> { where(pool_type: :savings) }
   scope :by_priority, -> { order(:priority, :name) }
 
   attr_accessor :create_expense_category, :create_savings_category

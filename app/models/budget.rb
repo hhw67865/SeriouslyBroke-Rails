@@ -32,15 +32,7 @@ class Budget < ApplicationRecord
   private
 
   def exactly_one_owner
-    if !category_mode? && !pool_mode?
-      errors.add(:base, "must belong to either a category or a pool")
-      # The standalone budget form only renders per-attribute errors, and dropping
-      # `belongs_to :category`'s presence check took its inline "must exist" with
-      # it. Mirror it so the category-mode form keeps giving feedback.
-      # TODO(plan-3): remove along with the category mode and its form.
-      errors.add(:category, "must exist")
-    end
-
+    errors.add(:base, "must belong to either a category or a pool") if !category_mode? && !pool_mode?
     errors.add(:base, "cannot belong to both a category and a pool") if category_mode? && pool_mode?
   end
 

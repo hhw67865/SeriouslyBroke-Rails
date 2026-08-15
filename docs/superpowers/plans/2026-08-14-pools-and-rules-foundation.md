@@ -207,7 +207,7 @@ git commit -m "refactor/pools: renamed SavingsPool to Pool"
 
 **Interfaces:**
 - Consumes: `Pool` from Task 1
-- Produces: `Pool#pool_type` (enum `account`/`budget`/`savings`), `Pool#account` / `#account_id`, `Pool#child_pools`, `Pool#priority`, `Pool#total`, scopes `Pool.accounts` / `.budgets` / `.savings` / `.by_priority`, factory traits `:account` / `:budget_pool` / `:savings_pool`
+- Produces: `Pool#pool_type` (prefixed enum → `pool_type_account?` / `pool_type_budget?` / `pool_type_savings?`), `Pool#account` / `#account_id`, `Pool#child_pools`, `Pool#priority`, `Pool#total`, scopes `Pool.accounts` / `.budget_pools` / `.savings_pools` / `.by_priority`, factory traits `:account` / `:budget_pool` / `:savings_pool`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -315,8 +315,10 @@ In `app/models/pool.rb`, add below the existing associations:
   enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true
 
   scope :accounts, -> { where(pool_type: :account) }
-  scope :budgets, -> { where(pool_type: :budget) }
-  scope :savings, -> { where(pool_type: :savings) }
+  # NOT :budgets / :savings — `Pool.budgets` returning pools while `pool.budgets`
+  # returns Budget records is a foot-gun aimed at the calculator tasks.
+  scope :budget_pools, -> { where(pool_type: :budget) }
+  scope :savings_pools, -> { where(pool_type: :savings) }
   scope :by_priority, -> { order(:priority, :name) }
 
   validate :account_matches_pool_type

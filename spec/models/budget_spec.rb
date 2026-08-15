@@ -6,17 +6,9 @@ RSpec.describe Budget, type: :model do
   describe "associations" do
     # Dual-mode: a budget owns exactly one of category/pool, so neither is
     # required at the association level. `exactly_one_owner` enforces the pair.
+    it { is_expected.to belong_to(:category).optional }
     it { is_expected.to belong_to(:pool).optional }
     it { is_expected.to belong_to(:item).optional }
-
-    # `belong_to(:category).optional` cannot be used: an owner-less budget
-    # deliberately carries a mirrored "must exist" on :category (see
-    # Budget#exactly_one_owner), which the matcher reads as a presence
-    # validation. The pool-mode examples below prove it is genuinely optional by
-    # persisting a valid budget with no category at all.
-    it "declares category as an optional belongs_to" do
-      expect(described_class.reflect_on_association(:category).options[:optional]).to be(true)
-    end
   end
 
   describe "validations" do

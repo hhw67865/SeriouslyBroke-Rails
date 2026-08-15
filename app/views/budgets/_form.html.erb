@@ -6,6 +6,9 @@
 
 <div class="max-w-2xl mx-auto">
   <%= simple_form_for @budget, html: { class: "space-y-6" } do |f| %>
+    <%= f.error_notification %>
+    <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
