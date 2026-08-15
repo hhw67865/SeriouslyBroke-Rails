@@ -916,7 +916,7 @@ require "rails_helper"
 RSpec.describe "Home Navigation", type: :system do
   let(:user) { create(:user, :biweekly) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   it "lands on Home at the root" do
     visit root_path
@@ -1056,7 +1056,7 @@ RSpec.describe "Home Standing", type: :system do
   end
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   def envelope(name, amount, priority: 1)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
@@ -1121,7 +1121,7 @@ RSpec.describe "Home Attention", type: :system do
   end
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   it "lists a pool that can't be funded in time", :aggregate_failures do
     dentist = create(:pool, :budget_pool, user: user, account: checking, name: "Dentist", priority: 1)
@@ -1314,7 +1314,7 @@ RSpec.describe "Home Pools", type: :system do
   end
   let(:checking) { create(:pool, :account, user: user, name: "Checking", target_amount: 2_000) }
 
-  before { sign_in user }
+  before { sign_in user, scope: :user }
 
   it "groups pools under their account and shows the buffer", :aggregate_failures do
     pool = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries", priority: 1)
