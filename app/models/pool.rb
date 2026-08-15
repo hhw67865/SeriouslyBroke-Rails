@@ -58,7 +58,16 @@ class Pool < ApplicationRecord
   searchable :name, label: "Name"
   searchable :category, through: :categories, column: :name, label: "Category"
 
-  # Entries scoped to start_date and filtered by category type
+  # Entries scoped to start_date and filtered by category type.
+  #
+  # The `start_date..` filter is a deliberate divergence from PoolCalculator#balance, which
+  # dropped it: these three feed the savings-goal *timeline*, which is a story about a goal
+  # and rightly begins when the goal did, while the balance is all the money in the pool
+  # regardless of when it arrived. PoolsController#show therefore renders a timeline and a
+  # balance computed on different rules, on purpose — a pre-start entry counts toward the
+  # balance without appearing in the list above it.
+  # TODO(plan-3): revisit once savings-category entries become movements; the timeline will
+  # need a movement-aware source and this is the moment to decide if the cutoff survives.
   def contribution_entries
     entries.joins(item: :category).where(categories: { category_type: :savings }).where(date: start_date..)
   end
