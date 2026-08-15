@@ -63,6 +63,19 @@ RSpec.describe PoolCalculator, type: :model do
     end
   end
 
+  # Regression: account and budget pools legitimately have a nil target_amount (only
+  # savings pools validate its presence), which made remaining_amount raise
+  # NoMethodError and took the pools index down with it.
+  describe "pools with no target_amount", :aggregate_failures do
+    it "returns zero instead of raising" do
+      account = create(:pool, :account, user: user)
+
+      expect(account.target_amount).to be_nil
+      expect(account.calculator.remaining_amount).to eq(0)
+      expect(account.calculator.progress_percentage).to eq(0)
+    end
+  end
+
   describe "entries before pool start_date are excluded", :aggregate_failures do
     it "ignores contributions dated before the pool start_date" do
       create(:entry, item: savings_item, amount: 999.00, date: pool.start_date - 1.day)

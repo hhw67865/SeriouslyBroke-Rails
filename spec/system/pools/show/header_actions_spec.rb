@@ -55,12 +55,9 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       expect(Pool.exists?(pool_id)).to be(false)
     end
 
-    # Both target_amounts are set only so the pool pages render: account and budget pools
-    # normally leave target_amount nil, and PoolCalculator#remaining_amount cannot handle
-    # nil yet (Plan 2 rebuilds these views). Not what this example is testing.
     it "refuses to delete an account that still holds pools" do
-      checking = create(:pool, :account, user: user, name: "Checking", target_amount: 5_000)
-      create(:pool, :budget_pool, user: user, account: checking, name: "Groceries", target_amount: 500)
+      checking = create(:pool, :account, user: user, name: "Checking")
+      create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
       visit pool_path(checking)
 
       accept_confirm do

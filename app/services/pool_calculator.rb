@@ -32,6 +32,6 @@ class PoolCalculator
   end
 
   def remaining_amount
-    [pool.target_amount - current_balance, 0].max
+    [pool.target_amount.to_f - current_balance, 0].max
   end
 end
