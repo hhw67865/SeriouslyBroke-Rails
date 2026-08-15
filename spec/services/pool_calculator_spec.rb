@@ -251,7 +251,7 @@ RSpec.describe PoolCalculator, type: :model do
       it "gives the bad rule nothing and keeps the waterfall intact", :aggregate_failures do
         gas = create(:pool_budget, :rate, pool: car, amount: 80)
         broken = create(:pool_budget, pool: car, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
-        broken.update_column(:amount, -100)
+        broken.update_column(:amount, -100) # rubocop:disable Rails/SkipsModelValidations -- the point
         create(:pool_movement, from_pool: checking, to_pool: car, amount: 500)
         calc = car.calculator(today: today)
 

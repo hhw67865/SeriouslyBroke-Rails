@@ -29,7 +29,7 @@ RSpec.describe BudgetCalculator, type: :model do
   # validation on purpose: the guard being exercised is the calculator's, not the model's.
   def degenerate_insurance_rule(item:, amount:)
     rule = insurance_rule(item: item)
-    rule.update_column(:amount, amount)
+    rule.update_column(:amount, amount) # rubocop:disable Rails/SkipsModelValidations -- the point
     rule.reload
   end
 
