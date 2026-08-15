@@ -26,6 +26,7 @@ class Category < ApplicationRecord
   before_validation :destroy_budget_if_pool_linked
 
   validate :budget_only_for_expense
+  validate :income_must_land_in_an_account
 
   # Basic scopes
   scope :expenses, -> { where(category_type: :expense) }
@@ -60,6 +61,12 @@ class Category < ApplicationRecord
     CategoryCalculator.new(self, date, period: period)
   end
 
+  # Public on purpose: Entry#effective_pool and PoolCalculator both call it.
+  # category's pool -> the user's default account
+  def effective_pool
+    pool || user.default_account
+  end
+
   private
 
   def destroy_budget_if_not_expense
@@ -78,5 +85,13 @@ class Category < ApplicationRecord
 
   def budget_only_for_expense
     errors.add(:budget, "can only be set for expense categories") if budget.present? && !expense?
+  end
+
+  # Income lands in an account, never directly in an envelope: the allocation rules
+  # move it out of the account afterwards.
+  def income_must_land_in_an_account
+    return if pool.blank? || !income?
+
+    errors.add(:pool, "must be an account for income categories") unless pool.pool_type_account?
   end
 end

@@ -8,6 +8,36 @@ RSpec.describe Pool, type: :model do
     it { is_expected.to have_many(:categories).dependent(:nullify) }
     it { is_expected.to have_many(:items).through(:categories) }
     it { is_expected.to have_many(:entries).through(:items) }
+    it { is_expected.to have_many(:override_entries).dependent(:nullify) }
+  end
+
+  describe "destroying a pool an entry overrode to" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
+
+    # `checking` holds `groceries`, so restrict_with_error stops its destroy before the
+    # entries foreign key is ever reached. The override has to name a childless account
+    # for these to exercise the foreign key at all.
+    let(:second_account) { create(:pool, :account, user: user, name: "Second Account") }
+
+    # Without the nullify the entries foreign key raises and the destroy action 500s.
+    it "releases the override instead of raising", :aggregate_failures do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = create(:entry, item: create(:item, category: category), pool: second_account)
+
+      expect { second_account.destroy }.not_to raise_error
+      expect(entry.reload.pool).to be_nil
+    end
+
+    it "leaves the entry resolving through its category" do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = create(:entry, item: create(:item, category: category), pool: second_account)
+
+      second_account.destroy
+
+      expect(entry.reload.effective_pool).to eq(groceries)
+    end
   end
 
   describe "validations" do

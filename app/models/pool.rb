@@ -9,6 +9,11 @@ class Pool < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
 
+  # Entries that named this pool directly, overriding their category's. Nullified on
+  # destroy for the same reason categories are: the entry falls back down the chain
+  # rather than blocking the delete on a foreign key.
+  has_many :override_entries, class_name: "Entry", dependent: :nullify, inverse_of: :pool
+
   belongs_to :account, class_name: "Pool", optional: true
   has_many :child_pools,
            class_name: "Pool",

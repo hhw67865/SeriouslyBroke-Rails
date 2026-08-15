@@ -64,4 +64,125 @@ RSpec.describe Entry, type: :model do
       end
     end
   end
+
+  describe "#effective_pool" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
+
+    it "uses the entry's own pool when set" do
+      savings_account = create(:pool, :account, user: user, name: "Savings Account")
+      category = create(:category, :income, user: user, pool: checking)
+      entry = create(:entry, item: create(:item, category: category), pool: savings_account)
+
+      expect(entry.effective_pool).to eq(savings_account)
+    end
+
+    it "falls back to the category's pool" do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = create(:entry, item: create(:item, category: category))
+
+      expect(entry.effective_pool).to eq(groceries)
+    end
+
+    it "falls back to the user's default account when the category has no pool" do
+      user.update!(default_account: checking)
+      category = create(:category, :expense, user: user, pool: nil)
+      entry = create(:entry, item: create(:item, category: category))
+
+      expect(entry.effective_pool).to eq(checking)
+    end
+
+    it "is nil when nothing resolves" do
+      category = create(:category, :expense, user: user, pool: nil)
+      entry = create(:entry, item: create(:item, category: category))
+
+      expect(entry.effective_pool).to be_nil
+    end
+
+    # The four examples above cover the cells where the entry has no pool of its own,
+    # plus one where it does. These cover the rest of the entry-pool/category-pool/
+    # default-account space so no level of the chain can silently win out of turn.
+    describe "precedence between the three levels" do
+      let(:savings_account) { create(:pool, :account, user: user, name: "Savings Account") }
+
+      def entry_with(entry_pool:, category_pool:)
+        category = create(:category, :expense, user: user, pool: category_pool)
+        create(:entry, item: create(:item, category: category), pool: entry_pool)
+      end
+
+      it "prefers the entry's pool over both the category's pool and the default account" do
+        user.update!(default_account: checking)
+        entry = entry_with(entry_pool: savings_account, category_pool: groceries)
+
+        expect(entry.effective_pool).to eq(savings_account)
+      end
+
+      it "prefers the entry's pool over the default account when the category has no pool" do
+        user.update!(default_account: checking)
+        entry = entry_with(entry_pool: savings_account, category_pool: nil)
+
+        expect(entry.effective_pool).to eq(savings_account)
+      end
+
+      it "uses the entry's pool when neither the category nor the user names one" do
+        entry = entry_with(entry_pool: savings_account, category_pool: nil)
+
+        expect(entry.effective_pool).to eq(savings_account)
+      end
+
+      it "prefers the category's pool over the default account" do
+        user.update!(default_account: checking)
+        entry = entry_with(entry_pool: nil, category_pool: groceries)
+
+        expect(entry.effective_pool).to eq(groceries)
+      end
+    end
+  end
+
+  describe "pool ownership" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
+
+    it "accepts a pool belonging to the same user" do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = build(:entry, item: create(:item, category: category), pool: checking)
+
+      expect(entry).to be_valid
+    end
+
+    it "accepts no pool at all" do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = build(:entry, item: create(:item, category: category), pool: nil)
+
+      expect(entry).to be_valid
+    end
+
+    # `user` resolves through item -> category, so a half-filled entry would make the
+    # validator raise instead of reporting the missing item or category.
+    it "reports the missing item rather than raising", :aggregate_failures do
+      entry = build(:entry, item: nil, pool: checking)
+
+      expect { entry.valid? }.not_to raise_error
+      expect(entry.errors[:item]).to be_present
+    end
+
+    # With no category there is no user to compare against, so the check is skipped
+    # rather than guessed at — it must not raise, and must not invent a pool error.
+    it "skips the check rather than raising when the item has no category", :aggregate_failures do
+      entry = build(:entry, item: Item.new(name: "Unfiled"), pool: checking)
+
+      expect { entry.valid? }.not_to raise_error
+      expect(entry.errors[:pool]).to be_empty
+    end
+
+    it "rejects a pool belonging to another user", :aggregate_failures do
+      category = create(:category, :expense, user: user, pool: groceries)
+      entry = build(:entry, item: create(:item, category: category), pool: create(:pool, :account))
+
+      expect(entry).not_to be_valid
+      expect(entry.errors[:pool]).to include("must belong to the same user")
+    end
+  end
 end

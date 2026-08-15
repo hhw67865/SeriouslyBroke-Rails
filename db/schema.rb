@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -51,8 +51,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_090000) do
     t.datetime "date", null: false
     t.text "description"
     t.uuid "item_id", null: false
+    t.uuid "pool_id"
     t.datetime "updated_at", null: false
     t.index ["item_id"], name: "index_entries_on_item_id"
+    t.index ["pool_id"], name: "index_entries_on_pool_id"
   end
 
   create_table "items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -126,6 +128,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_090000) do
   add_foreign_key "categories", "pools"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
+  add_foreign_key "entries", "pools"
   add_foreign_key "items", "categories"
   add_foreign_key "pool_movements", "entries", column: "source_entry_id"
   add_foreign_key "pool_movements", "pools", column: "from_pool_id"

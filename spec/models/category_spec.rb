@@ -128,4 +128,67 @@ RSpec.describe Category, type: :model do
       expect(Budget.exists?(budget.id)).to be true
     end
   end
+
+  describe "income categories" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user) }
+
+    it "may point at an account pool" do
+      expect(build(:category, :income, user: user, pool: checking)).to be_valid
+    end
+
+    it "may point at no pool at all" do
+      expect(build(:category, :income, user: user, pool: nil)).to be_valid
+    end
+
+    it "may not point at a budget pool", :aggregate_failures do
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+      category = build(:category, :income, user: user, pool: groceries)
+
+      expect(category).not_to be_valid
+      expect(category.errors[:pool]).to include("must be an account for income categories")
+    end
+
+    it "may not point at a savings pool", :aggregate_failures do
+      vacation = create(:pool, :savings_pool, user: user, account: checking)
+      category = build(:category, :income, user: user, pool: vacation)
+
+      expect(category).not_to be_valid
+      expect(category.errors[:pool]).to include("must be an account for income categories")
+    end
+
+    it "does not constrain expense categories, which may point at a budget pool" do
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+
+      expect(build(:category, :expense, user: user, pool: groceries)).to be_valid
+    end
+
+    it "does not constrain savings categories, which may point at a savings pool" do
+      vacation = create(:pool, :savings_pool, user: user, account: checking)
+
+      expect(build(:category, :savings, user: user, pool: vacation)).to be_valid
+    end
+  end
+
+  describe "#effective_pool" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user) }
+
+    it "uses the category's own pool when set" do
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+      user.update!(default_account: checking)
+
+      expect(create(:category, :expense, user: user, pool: groceries).effective_pool).to eq(groceries)
+    end
+
+    it "falls back to the user's default account" do
+      user.update!(default_account: checking)
+
+      expect(create(:category, :expense, user: user, pool: nil).effective_pool).to eq(checking)
+    end
+
+    it "is nil when the category has no pool and the user has no default account" do
+      expect(create(:category, :expense, user: user, pool: nil).effective_pool).to be_nil
+    end
+  end
 end
