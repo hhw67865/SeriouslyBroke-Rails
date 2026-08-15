@@ -127,5 +127,14 @@ RSpec.describe User, type: :model do
 
       expect(user).to be_valid
     end
+
+    # Regression: `users.default_account_id` referencing a pool that `dependent: :destroy`
+    # is deleting used to raise InvalidForeignKey and block the whole cascade.
+    it "does not block destroying the user who points at it" do
+      user = create(:user)
+      user.update!(default_account: create(:pool, :account, user: user))
+
+      expect { user.destroy! }.to change(described_class, :count).by(-1)
+    end
   end
 end

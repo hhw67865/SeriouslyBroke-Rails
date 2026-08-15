@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_050000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_060000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -103,5 +103,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_050000) do
   add_foreign_key "items", "categories"
   add_foreign_key "pools", "pools", column: "account_id"
   add_foreign_key "pools", "users"
-  add_foreign_key "users", "pools", column: "default_account_id"
+  add_foreign_key "users", "pools", column: "default_account_id", on_delete: :nullify
 end
