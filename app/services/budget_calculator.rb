@@ -55,9 +55,10 @@ class BudgetCalculator
     return 0 if budget.anchor_date.nil?
     return elapsed_cycles if budget.item.nil?
     # Nothing is owed, so nothing can be outstanding. `positive?`, not `zero?`:
-    # #amount is validated for presence only, so zero divides by zero here and a
-    # negative gives a negative quotient — `floor` rounds toward -infinity and
-    # `min` only clamps downward, which would roll due_date back past its anchor.
+    # Budget now validates amount > 0, but a row written past that validation would
+    # divide by zero here, and a negative gives a negative quotient — `floor` rounds
+    # toward -infinity and `min` only clamps downward, which would roll due_date back
+    # past its anchor. Same reasoning as PoolCalculator's defensive clamp.
     return elapsed_cycles unless target.positive?
 
     [(paid_since_anchor / target).floor, elapsed_cycles].min

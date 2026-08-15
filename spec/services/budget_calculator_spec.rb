@@ -23,6 +23,16 @@ RSpec.describe BudgetCalculator, type: :model do
     )
   end
 
+  # Budget validates amount > 0, so a degenerate rule can no longer be created — but a row
+  # can still reach these code paths through a direct write, and the calculator has to
+  # answer rather than divide by zero or roll its own schedule backwards. Written past the
+  # validation on purpose: the guard being exercised is the calculator's, not the model's.
+  def degenerate_insurance_rule(item:, amount:)
+    rule = insurance_rule(item: item)
+    rule.update_column(:amount, amount)
+    rule.reload
+  end
+
   # A dated obligation with no fulfillment signal — the §4.4 `required` fixtures.
   def dated_rule(amount:, interval:, anchor:)
     create(:pool_budget, pool: car, amount: amount, interval_months: interval, anchor_date: anchor)
@@ -199,25 +209,25 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "is zero for a rule whose amount is zero, rather than dividing by it" do
       free = create(:item, category: category, name: "Free")
-      budget = insurance_rule(item: free, amount: 0)
+      budget = degenerate_insurance_rule(item: free, amount: 0)
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
     end
 
     it "falls back to elapsed cycles for a zero-amount rule that has been paid against" do
       free = create(:item, category: category, name: "Free")
-      budget = insurance_rule(item: free, amount: 0)
+      budget = degenerate_insurance_rule(item: free, amount: 0)
       create(:entry, item: free, amount: 50, date: Date.new(2026, 6, 2))
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
     end
 
-    # `amount` is validated for presence only, so a negative slips through. Dividing
-    # by it yields a negative quotient — `floor` rounds toward -infinity, and `min`
-    # can only clamp downward — which would roll due_date backwards past its anchor.
+    # Dividing by a negative amount yields a negative quotient — `floor` rounds toward
+    # -infinity, and `min` can only clamp downward — which would roll due_date backwards
+    # past its anchor. The model now rejects the sign; this pins the calculator's own guard.
     it "falls back to elapsed cycles for a negative-amount rule" do
       refund = create(:item, category: category, name: "Refund")
-      budget = insurance_rule(item: refund, amount: -800)
+      budget = degenerate_insurance_rule(item: refund, amount: -800)
       create(:entry, item: refund, amount: 400, date: Date.new(2026, 6, 2))
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
@@ -328,7 +338,7 @@ RSpec.describe BudgetCalculator, type: :model do
     # A degenerate amount must never send the schedule backwards in time.
     it "never rolls a zero-amount rule before its own anchor" do
       free = create(:item, category: category, name: "Free")
-      budget = insurance_rule(item: free, amount: 0)
+      budget = degenerate_insurance_rule(item: free, amount: 0)
       create(:entry, item: free, amount: 50, date: Date.new(2026, 6, 2))
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).due_date).to eq(Date.new(2026, 12, 1))
@@ -336,7 +346,7 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "never rolls a negative-amount rule backwards past its anchor" do
       refund = create(:item, category: category, name: "Refund")
-      budget = insurance_rule(item: refund, amount: -800)
+      budget = degenerate_insurance_rule(item: refund, amount: -800)
       create(:entry, item: refund, amount: 400, date: Date.new(2026, 6, 2))
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).due_date).to eq(Date.new(2026, 12, 1))

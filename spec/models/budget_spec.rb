@@ -14,6 +14,22 @@ RSpec.describe Budget, type: :model do
   describe "validations" do
     it { is_expected.to validate_presence_of(:amount) }
 
+    # A negative amount is not merely wrong-looking: PoolCalculator's waterfall does
+    # `remaining.clamp(0, budget.amount)`, and `clamp(0, negative)` raises. A zero amount
+    # is a rule that demands nothing, which is what deleting it is for.
+    describe "amount sign" do
+      it "rejects a negative amount", :aggregate_failures do
+        budget = build(:budget, amount: -50)
+
+        expect(budget).not_to be_valid
+        expect(budget.errors[:amount]).to include("must be greater than 0")
+      end
+
+      it "rejects a zero amount" do
+        expect(build(:budget, amount: 0)).not_to be_valid
+      end
+    end
+
     describe "category type validation" do
       let(:income_category) { create(:category, :income) }
 

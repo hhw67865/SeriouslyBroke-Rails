@@ -28,7 +28,11 @@ class PoolCalculator
     @allocated_balances ||= begin
       remaining = balance
       budgets_by_due_date.index_with do |budget|
-        taken = remaining.clamp(0, budget.amount)
+        # `clamp(0, negative)` raises ArgumentError, which would take down every caller of
+        # allocated_balances — reserve, free_amount, required, the whole pool page. Budget
+        # validates the sign, but a validation is an input rule and this is a rendering
+        # path: one bad row must not be able to turn a page into a 500.
+        taken = remaining.clamp(0, [budget.amount, 0].max)
         remaining -= taken
         taken
       end

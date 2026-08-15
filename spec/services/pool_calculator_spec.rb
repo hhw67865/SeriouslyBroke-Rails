@@ -207,6 +207,25 @@ RSpec.describe PoolCalculator, type: :model do
       end
     end
 
+    # `remaining.clamp(0, budget.amount)` raises ArgumentError whenever amount is negative,
+    # taking down allocated_balances, reserve, free_amount and required — the whole pool
+    # page. Budget now validates the sign, so this writes past the validation to prove the
+    # rendering path survives a degenerate row however it got there.
+    describe "#allocated_balances with a degenerate rule amount" do
+      it "gives the bad rule nothing and keeps the waterfall intact", :aggregate_failures do
+        gas = create(:pool_budget, :rate, pool: car, amount: 80)
+        broken = create(:pool_budget, pool: car, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+        broken.update_column(:amount, -100)
+        create(:pool_movement, from_pool: checking, to_pool: car, amount: 500)
+        calc = car.calculator(today: today)
+
+        expect(broken.reload.amount).to be_negative
+        expect(calc.allocated_balances[broken]).to eq(0)
+        expect(calc.allocated_balances[gas]).to eq(80.00)
+        expect(calc.free_amount).to eq(420.00)
+      end
+    end
+
     # `sort_by` is not stable in Ruby, so a bare due-date sort let two rules sharing a due
     # date swap fill order between calls — the same pool reporting different `required`
     # figures on consecutive page loads with no data change. Money must not be a coin flip.

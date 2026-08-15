@@ -7,7 +7,9 @@ class Budget < ApplicationRecord
 
   enum :basis, { monthly: 0, per_paycheck: 1 }, prefix: true
 
-  validates :amount, presence: true
+  # A rule that demands nothing is what deleting it is for, and a negative one is money
+  # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
+  validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :interval_months, numericality: { greater_than: 0 }, allow_nil: true
 
   validate :exactly_one_owner
