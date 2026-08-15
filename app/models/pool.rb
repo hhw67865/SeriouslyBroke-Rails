@@ -5,6 +5,7 @@ class Pool < ApplicationRecord
 
   belongs_to :user, touch: true
   has_many :categories, dependent: :nullify
+  has_many :budgets, dependent: :destroy
   has_many :items, through: :categories
   has_many :entries, through: :items
 

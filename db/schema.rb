@@ -10,18 +10,26 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_060000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_060001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
 
   create_table "budgets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.money "amount", scale: 2, null: false
-    t.uuid "category_id", null: false
+    t.date "anchor_date"
+    t.integer "basis", default: 0, null: false
+    t.uuid "category_id"
     t.datetime "created_at", null: false
+    t.integer "interval_months"
+    t.uuid "item_id"
+    t.uuid "pool_id"
     t.boolean "prorated", default: false, null: false
     t.datetime "updated_at", null: false
     t.index ["category_id"], name: "index_budgets_on_category_id"
+    t.index ["item_id"], name: "index_budgets_on_item_id"
+    t.index ["item_id"], name: "index_budgets_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
+    t.index ["pool_id"], name: "index_budgets_on_pool_id"
   end
 
   create_table "categories", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -97,6 +105,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_060000) do
   end
 
   add_foreign_key "budgets", "categories"
+  add_foreign_key "budgets", "items"
+  add_foreign_key "budgets", "pools"
   add_foreign_key "categories", "pools"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
