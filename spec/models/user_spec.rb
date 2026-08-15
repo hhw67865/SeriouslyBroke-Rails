@@ -11,6 +11,29 @@ RSpec.describe User, type: :model do
     it { is_expected.to have_many(:budgets).through(:categories) }
   end
 
+  # These two are a pair and must be read together: deleting one account pool and
+  # deleting a whole user want opposite behaviour from `child_pools`, so the
+  # cascade is sequenced on User rather than by relaxing Pool's protection.
+  describe "destroying a user that owns an account pool with envelopes inside it" do
+    let(:user) { create(:user) }
+    let!(:account) { create(:pool, :account, user: user) }
+    let!(:envelope) { create(:pool, :budget_pool, user: user, account: account) }
+
+    it "deletes the user, the account, and the envelopes inside it", :aggregate_failures do
+      expect { user.destroy! }.to change(described_class, :count).by(-1)
+      expect(Pool.where(id: [account.id, envelope.id])).to be_empty
+    end
+
+    # Counterweight to the example above: the cascade must not be bought by
+    # weakening `child_pools`' restrict_with_error, which is what stops a user
+    # deleting an account that still holds envelopes with money in them.
+    it "still refuses to delete that account pool on its own", :aggregate_failures do
+      expect(account.destroy).to be false
+      expect(account).to be_persisted
+      expect(Pool.exists?(account.id)).to be true
+    end
+  end
+
   describe "#toggle_theme!", :aggregate_failures do
     let(:user) { create(:user) }
 
