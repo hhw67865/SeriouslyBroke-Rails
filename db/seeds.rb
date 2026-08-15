@@ -2,8 +2,10 @@
 
 # Clear existing data
 Rails.logger.debug "Clearing existing data..."
-# Delete in the correct order to avoid foreign key violations
-[Entry, Item, Budget, Category, Pool, User].each do |model|
+# Delete in the correct order to avoid foreign key violations.
+# PoolMovement leads: its FKs to both pools and entries are non-cascading, so any movement
+# on the table makes Entry.delete_all and Pool.delete_all violate them.
+[PoolMovement, Entry, Item, Budget, Category, Pool, User].each do |model|
   Rails.logger.debug { "Deleting #{model.name} records..." }
   model.delete_all
 end
