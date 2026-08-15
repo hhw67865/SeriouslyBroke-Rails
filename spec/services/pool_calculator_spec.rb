@@ -33,7 +33,7 @@ RSpec.describe PoolCalculator, type: :model do
     end
 
     describe "date-scoped balance", :aggregate_failures do
-      it "returns correct balance as_of 2 months ago", pending: "savings-category contributions become movements in Plan 3" do
+      it "returns correct balance as_of 2 months ago" do
         calc = pool.calculator(as_of: (base_date - 2.months).end_of_month)
 
         expect(calc.contributions).to eq(500.00) # 200 + 300
@@ -42,7 +42,7 @@ RSpec.describe PoolCalculator, type: :model do
         expect(calc.progress_percentage).to eq(4) # 400/10000 * 100
       end
 
-      it "returns correct balance as_of 1 month ago", pending: "savings-category contributions become movements in Plan 3" do
+      it "returns correct balance as_of 1 month ago" do
         calc = pool.calculator(as_of: (base_date - 1.month).end_of_month)
 
         expect(calc.contributions).to eq(1000.00) # 200 + 300 + 500
@@ -51,7 +51,7 @@ RSpec.describe PoolCalculator, type: :model do
         expect(calc.progress_percentage).to eq(9) # 900/10000 * 100
       end
 
-      it "returns correct balance as_of current month end", pending: "savings-category contributions become movements in Plan 3" do
+      it "returns correct balance as_of current month end" do
         calc = pool.calculator(as_of: base_date.end_of_month)
 
         expect(calc.contributions).to eq(1400.00) # 200 + 300 + 500 + 400
@@ -60,7 +60,7 @@ RSpec.describe PoolCalculator, type: :model do
         expect(calc.progress_percentage).to eq(12) # 1150/10000 * 100 = 11.5, rounded to 12
       end
 
-      it "returns all-time balance with no as_of date", pending: "savings-category contributions become movements in Plan 3" do
+      it "returns all-time balance with no as_of date" do
         calc = pool.calculator
 
         expect(calc.current_balance).to eq(1150.00)

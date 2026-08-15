@@ -16,7 +16,8 @@ class PoolCalculator
   # movement ledger simply starts empty. `start_date` survives as a savings-goal display
   # attribute, not a balance filter. See the spec example that pins this.
   def balance
-    income_entries_total + movements_in_total - movements_out_total - expense_entries_total
+    income_entries_total + savings_entries_total +
+      movements_in_total - movements_out_total - expense_entries_total
   end
 
   # Retained for the savings-pool views; identical to #balance.
@@ -52,7 +53,7 @@ class PoolCalculator
     [pool.target_amount.to_f - balance, 0].max
   end
 
-  def contributions = movements_in_total
+  def contributions = movements_in_total + savings_entries_total
 
   def withdrawals = movements_out_total + expense_entries_total
 
@@ -78,6 +79,13 @@ class PoolCalculator
 
   def expense_entries_total
     scoped(Entry.expenses.merge(entries_for_pool)).sum(:amount)
+  end
+
+  # TODO(plan-3): delete once §6.1 step 5 converts savings-category entries to movements.
+  # Becomes a no-op the moment that migration runs (Entry.savings is then empty), so the
+  # removal is mechanical and cannot double-count during the cutover.
+  def savings_entries_total
+    scoped(Entry.savings.merge(entries_for_pool)).sum(:amount)
   end
 
   # One predicate rather than .or — Entry.incomes already carries the categories

@@ -127,7 +127,7 @@ RSpec.describe Pool, type: :model do
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
-    it "sums the account's own balance and its child pools", :aggregate_failures, pending: "savings-category contributions become movements in Plan 3" do
+    it "sums the account's own balance and its child pools", :aggregate_failures do
       checking = create(:pool, :account, user: user)
       groceries = create(:pool, :budget_pool, user: user, account: checking)
       vacation = create(:pool, :savings_pool, user: user, account: checking)
@@ -142,7 +142,7 @@ RSpec.describe Pool, type: :model do
       expect(checking.total).to eq(165)
     end
 
-    it "equals the pool's own balance when it has no child pools", pending: "savings-category contributions become movements in Plan 3" do
+    it "equals the pool's own balance when it has no child pools" do
       pool = create(:pool, :account, user: user)
 
       deposit(pool, 70)
@@ -150,9 +150,9 @@ RSpec.describe Pool, type: :model do
       expect(pool.total).to eq(70)
     end
 
-    # Replaces the coverage the two pending examples above used to give #total.
-    # Same structure, but funded the way the new PoolCalculator#balance reads money:
-    # income entries and movements, not savings-category entries.
+    # The envelope-native counterpart to the two examples above: same structure, funded the
+    # way PoolCalculator#balance will read money once Plan 3 lands — income entries and
+    # movements rather than savings-category entries. Both shapes must total the same.
     it "sums the account's own balance and its child pools, funded by movements", :aggregate_failures do
       checking, groceries, vacation = funded_account
 

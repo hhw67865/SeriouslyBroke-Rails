@@ -69,7 +69,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
       visit root_path(tab: "savings")
     end
 
-    it "shows pool balance, progress, and period flow", pending: "savings-category contributions become movements in Plan 3" do
+    it "shows pool balance, progress, and period flow" do
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
         expect(page).to have_content("House Fund")
