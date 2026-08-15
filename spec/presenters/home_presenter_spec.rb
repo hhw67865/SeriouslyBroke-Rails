@@ -12,44 +12,62 @@ RSpec.describe HomePresenter do
   let(:today) { Date.new(2026, 2, 6) }
   let(:presenter) { described_class.new(user: user, today: today) }
 
-  def envelope(name, priority:)
-    create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+  def envelope(name, priority:) = envelope_in(checking, name, priority: priority)
+
+  def envelope_in(account, name, priority:)
+    create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
   end
 
   def savings_goal(name, priority:, target: 1_200)
     create(:pool, :savings_pool, user: user, account: checking, name: name, target_amount: target, priority: priority)
   end
 
+  # A flat per-period rule: the catch-all envelope shape, and the one that makes
+  # `required` exactly the amount asked for.
+  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+
+  def bill(pool, amount:, due:) = create(:pool_budget, :one_time, pool: pool, amount: amount, anchor_date: due)
+
+  # Category names are unique per user, so both of these name themselves after the
+  # account — an example may fund two accounts.
+  def deposit(account, amount)
+    category = create(:category, :income, user: user, pool: account, name: "#{account.name} pay")
+    create(:entry, item: create(:item, category: category), amount: amount, date: today)
+  end
+
+  def overdraw(account, amount)
+    category = create(:category, :expense, user: user, pool: account, name: "#{account.name} fees")
+    create(:entry, item: create(:item, category: category), amount: amount, date: today)
+  end
+
   describe "#accounts" do
     it "returns only this user's accounts, by name", :aggregate_failures do
-      savings_account = create(:pool, :account, user: user, name: "Ally")
+      ally = create(:pool, :account, user: user, name: "Ally")
       envelope("Groceries", priority: 1)
       create(:pool, :account, user: create(:user), name: "Someone Else")
 
-      expect(presenter.accounts).to eq([savings_account, checking])
+      expect(presenter.accounts).to eq([ally, checking])
       expect(presenter.accounts.map(&:name)).to eq(["Ally", "Checking"])
     end
   end
 
   describe "#pools_for" do
     it "returns the account's own pools by priority then name, and no others", :aggregate_failures do
-      other_account = create(:pool, :account, user: user, name: "Ally")
+      ally = create(:pool, :account, user: user, name: "Ally")
       # Reverse alphabetical at a shared priority, so the name tie-break is visible.
       zoo = envelope("Zoo", priority: 1)
       apples = envelope("Apples", priority: 1)
       later = envelope("Later", priority: 2)
-      elsewhere = create(:pool, :budget_pool, user: user, account: other_account, name: "Elsewhere", priority: 0)
+      elsewhere = envelope_in(ally, "Elsewhere", priority: 0)
 
       expect(presenter.pools_for(checking)).to eq([apples, zoo, later])
-      expect(presenter.pools_for(other_account)).to eq([elsewhere])
+      expect(presenter.pools_for(ally)).to eq([elsewhere])
     end
   end
 
   describe "#status_for" do
     let(:dentist) do
-      pool = envelope("Dentist", priority: 1)
-      create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 14))
-      pool
+      envelope("Dentist", priority: 1).tap { |pool| bill(pool, amount: 300, due: Date.new(2026, 2, 14)) }
     end
 
     # The whole reason this method exists. Asserted in BOTH directions: the second
@@ -70,7 +88,7 @@ RSpec.describe HomePresenter do
 
     it "keeps distinct pools on distinct statuses", :aggregate_failures do
       quiet = envelope("Groceries", priority: 2)
-      create(:pool_budget, :per_paycheck_rate, pool: quiet, amount: 100)
+      rate(quiet, 100)
 
       expect(presenter.status_for(dentist)).not_to be(presenter.status_for(quiet))
       expect(presenter.status_for(quiet).state).not_to eq(:wont_make_it)
@@ -79,25 +97,24 @@ RSpec.describe HomePresenter do
 
   describe "#available" do
     it "is the account's unclaimed cash" do
-      income_category = create(:category, :income, user: user, pool: checking)
-      create(:entry, item: create(:item, category: income_category), amount: 2_400, date: today)
+      deposit(checking, 2_400)
 
       expect(presenter.available).to eq(2_400)
     end
 
-    # Documents a real consequence rather than asserting it is desirable: see the
-    # report for Task 4. An overdraft in one account reduces what Home says is
-    # available to fund envelopes that live in a different, healthy account.
-    it "nets an overdrawn account against a healthy one", :aggregate_failures do
+    # An overdrawn account is a debt to surface, not a source to spend from. Netting it
+    # would give a number true about net worth and false about what can be allocated,
+    # which is the only question this screen asks.
+    it "ignores an overdrawn account rather than netting it away", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
-      income_category = create(:category, :income, user: user, pool: checking)
-      create(:entry, item: create(:item, category: income_category), amount: 1_000, date: today)
-      overdraft = create(:category, :expense, user: user, pool: ally, name: "Ally fees")
-      create(:entry, item: create(:item, category: overdraft), amount: 400, date: today)
+      deposit(checking, 1_000)
+      overdraw(ally, 400)
 
+      # #buffer_for still tells the truth about the account itself — Tasks 6/7 render
+      # the overdraft from here. It is only the fundable total that excludes it.
       expect(presenter.buffer_for(checking)).to eq(1_000)
       expect(presenter.buffer_for(ally)).to eq(-400)
-      expect(presenter.available).to eq(600)
+      expect(presenter.available).to eq(1_000)
     end
 
     it "is a decimal zero, not an integer, for a user with nothing", :aggregate_failures do
@@ -109,19 +126,15 @@ RSpec.describe HomePresenter do
 
   describe "#total_required" do
     it "sums what every pool needs this period" do
-      groceries = envelope("Groceries", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
-      gas = envelope("Gas", priority: 2)
-      create(:pool_budget, :per_paycheck_rate, pool: gas, amount: 80)
+      rate(envelope("Groceries", priority: 1), 400)
+      rate(envelope("Gas", priority: 2), 80)
 
       expect(presenter.total_required).to eq(480)
     end
 
     it "counts savings goals alongside budget envelopes", :aggregate_failures do
-      groceries = envelope("Groceries", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
-      vacation = savings_goal("Vacation", priority: 2)
-      create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150)
+      rate(envelope("Groceries", priority: 1), 400)
+      rate(savings_goal("Vacation", priority: 2), 150)
 
       expect(presenter.total_required).to eq(550)
       expect(presenter.waterfall.map { |r| r[:pool].name }).to eq(["Groceries", "Vacation"])
@@ -136,15 +149,10 @@ RSpec.describe HomePresenter do
 
   describe "#waterfall" do
     before do
-      rent = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: rent, amount: 500)
-      food = envelope("Groceries", priority: 2)
-      create(:pool_budget, :per_paycheck_rate, pool: food, amount: 400)
-      vacation = envelope("Vacation", priority: 3)
-      create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150)
-
-      income_category = create(:category, :income, user: user, pool: checking)
-      create(:entry, item: create(:item, category: income_category), amount: 700, date: today)
+      rate(envelope("Rent", priority: 1), 500)
+      rate(envelope("Groceries", priority: 2), 400)
+      rate(envelope("Vacation", priority: 3), 150)
+      deposit(checking, 700)
     end
 
     it "fills top-down by priority and marks the cutoff", :aggregate_failures do
@@ -186,13 +194,9 @@ RSpec.describe HomePresenter do
       # Written in reverse alphabetical order on purpose: the pools query carries no
       # ORDER BY, so the database hands these back in insertion order and a sort on
       # priority alone would fund Zoo first for no reason the user can see.
-      zoo = envelope("Zoo", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: zoo, amount: 300)
-      apples = envelope("Apples", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: apples, amount: 300)
-
-      income_category = create(:category, :income, user: user, pool: checking)
-      create(:entry, item: create(:item, category: income_category), amount: 300, date: today)
+      rate(envelope("Zoo", priority: 1), 300)
+      rate(envelope("Apples", priority: 1), 300)
+      deposit(checking, 300)
 
       rows = presenter.waterfall
 
@@ -205,34 +209,88 @@ RSpec.describe HomePresenter do
   end
 
   describe "#waterfall with an overdrawn user" do
-    # `remaining.clamp(0.to_d, needed)` is the guard: a negative `remaining` would
-    # otherwise raise ArgumentError on `clamp(0, negative)` the way PoolCalculator's
-    # draft did, turning the whole Home screen into a 500 for the users most in need
-    # of reading it.
+    # `pot.clamp(0.to_d, needed)` is the guard: a negative pot would otherwise raise
+    # ArgumentError on `clamp(0, negative)` the way PoolCalculator's draft did, turning
+    # the whole Home screen into a 500 for the users most in need of reading it. The
+    # clamp in #account_pots means it never gets that far, and both hold.
     it "funds nothing and still states every ask", :aggregate_failures do
-      overdraft = create(:category, :expense, user: user, pool: checking, name: "Fees")
-      create(:entry, item: create(:item, category: overdraft), amount: 500, date: today)
-      rent = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: rent, amount: 300)
+      overdraw(checking, 500)
+      rate(envelope("Rent", priority: 1), 300)
 
       rows = presenter.waterfall
 
-      expect(presenter.available).to eq(-500)
+      expect(presenter.buffer_for(checking)).to eq(-500)
+      expect(presenter.available).to eq(0)
       expect(rows.pluck(:funded)).to eq([0])
       expect(rows.pluck(:short)).to eq([300])
-      # The overdraft is part of the gap: you have to climb out of it before a
-      # single envelope can be filled.
-      expect(presenter.shortfall).to eq(800)
+      expect(presenter.shortfall).to eq(300)
       expect(presenter).not_to be_covered
+    end
+  end
+
+  describe "#waterfall across accounts" do
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    # The ruling this pins: money stays in the account it is sitting in. A global pot
+    # would fund Checking's envelope out of Ally's cash — a transfer nobody can perform,
+    # since the spec dropped cross-account movement.
+    it "funds each envelope only from its own account", :aggregate_failures do
+      deposit(ally, 1_000)
+      # Checking gets nothing, so its envelope must go unfunded however rich Ally is.
+      rate(envelope_in(checking, "Rent", priority: 1), 800)
+      rate(envelope_in(ally, "Groceries", priority: 2), 400)
+
+      funded = presenter.waterfall.to_h { |r| [r[:pool].name, r[:funded]] }
+
+      expect(presenter.available).to eq(1_000)
+      expect(funded).to eq("Rent" => 0, "Groceries" => 400)
+    end
+
+    # Priority orders the whole screen, but each account's pot drains independently:
+    # a high-priority envelope in one account cannot starve a lower-priority one in
+    # another, because it was never able to spend that account's money.
+    it "drains each account's pot independently", :aggregate_failures do
+      deposit(checking, 300)
+      deposit(ally, 500)
+      rate(envelope_in(checking, "Rent", priority: 1), 900)
+      rate(envelope_in(ally, "Savings Top-up", priority: 2), 400)
+
+      rows = presenter.waterfall
+
+      expect(rows.map { |r| r[:pool].name }).to eq(["Rent", "Savings Top-up"])
+      expect(rows.to_h { |r| [r[:pool].name, [r[:funded], r[:short]]] })
+        .to eq("Rent" => [300, 600], "Savings Top-up" => [400, 0])
+    end
+
+    it "funds an account-less pool nothing at all", :aggregate_failures do
+      deposit(checking, 1_000)
+      # Savings pools may stay account-less until Plan 3's backfill, so this shape is
+      # reachable today — and must not help itself to whichever pot comes first.
+      orphan = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
+      rate(orphan, 200)
+
+      row = presenter.waterfall.find { |r| r[:pool] == orphan }
+
+      expect(row[:needed]).to eq(200)
+      expect(row[:funded]).to eq(0)
+      expect(presenter.available).to eq(1_000)
+    end
+
+    it "hands out the same money on a second call", :aggregate_failures do
+      deposit(checking, 500)
+      rate(envelope_in(checking, "Rent", priority: 1), 400)
+
+      # #account_pots is spent down as the waterfall fills, so a memoised hash would
+      # let the first call's leftovers starve the second.
+      expect(presenter.waterfall.pluck(:funded)).to eq([400])
+      expect(presenter.waterfall.pluck(:funded)).to eq([400])
     end
   end
 
   describe "#covered?" do
     it "is true when available meets the requirement", :aggregate_failures do
-      groceries = envelope("Groceries", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 100)
-      income_category = create(:category, :income, user: user, pool: checking)
-      create(:entry, item: create(:item, category: income_category), amount: 500, date: today)
+      rate(envelope("Groceries", priority: 1), 100)
+      deposit(checking, 500)
 
       expect(presenter).to be_covered
       expect(presenter.shortfall).to eq(0)
@@ -242,11 +300,10 @@ RSpec.describe HomePresenter do
   describe "#attention_pools" do
     it "returns only pools whose status needs attention" do
       quiet = envelope("Groceries", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: quiet, amount: 100)
+      rate(quiet, 100)
       create(:pool_movement, from_pool: checking, to_pool: quiet, amount: 100)
 
-      loud = envelope("Dentist", priority: 2)
-      create(:pool_budget, :one_time, pool: loud, amount: 300, anchor_date: Date.new(2026, 2, 14))
+      bill(envelope("Dentist", priority: 2), amount: 300, due: Date.new(2026, 2, 14))
 
       expect(presenter.attention_pools.map(&:name)).to eq(["Dentist"])
     end
@@ -256,8 +313,7 @@ RSpec.describe HomePresenter do
       # produce the answer: `all_pools` has no ORDER BY and Postgres hands rows back in
       # heap order, which a plain UPDATE relocates.
       [["Zoo", 2], ["Apples", 2], ["Urgent", 1]].each do |name, priority|
-        pool = envelope(name, priority: priority)
-        create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 14))
+        bill(envelope(name, priority: priority), amount: 300, due: Date.new(2026, 2, 14))
       end
 
       expect(presenter.attention_pools.map(&:name)).to eq(["Urgent", "Apples", "Zoo"])
@@ -266,15 +322,13 @@ RSpec.describe HomePresenter do
 
   describe "#structurally_underwater?" do
     it "is true when the rules need more than typical income" do
-      big = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: big, amount: 3_000)
+      rate(envelope("Rent", priority: 1), 3_000)
 
       expect(presenter).to be_structurally_underwater
     end
 
     it "is false when they fit" do
-      small = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: small, amount: 500)
+      rate(envelope("Rent", priority: 1), 500)
 
       expect(presenter).not_to be_structurally_underwater
     end
@@ -284,8 +338,7 @@ RSpec.describe HomePresenter do
     # so this must not fire, and a `>=` here would tell a user their budget is
     # impossible on the day it balances.
     it "is false when the rules land exactly on typical income", :aggregate_failures do
-      exact = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: exact, amount: 2_400)
+      rate(envelope("Rent", priority: 1), 2_400)
 
       expect(presenter.total_required).to eq(user.typical_income)
       expect(presenter).not_to be_structurally_underwater
@@ -293,8 +346,7 @@ RSpec.describe HomePresenter do
 
     it "is false when typical income is unset" do
       user.update!(typical_income: nil)
-      big = envelope("Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: big, amount: 3_000)
+      rate(envelope("Rent", priority: 1), 3_000)
 
       expect(presenter).not_to be_structurally_underwater
     end

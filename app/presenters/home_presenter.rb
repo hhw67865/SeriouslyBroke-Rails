@@ -27,8 +27,12 @@ class HomePresenter
   def buffer_for(account) = calculator_for(account).balance.to_d
 
   # Unclaimed cash across every account — what a distribution has to work with.
+  #
+  # Exactly the sum of what #waterfall has to hand out, because both are built from
+  # #account_pots. Computing the two separately let them drift: this figure is the
+  # headline the screen leads with, and the rows below it have to add up to it.
   def available
-    @available ||= accounts.sum(0.to_d) { |account| buffer_for(account) }
+    @available ||= account_pots.values.sum(0.to_d)
   end
 
   def total_required
@@ -59,12 +63,22 @@ class HomePresenter
 
   # Fills top-down by priority, exactly as a distribution would, so the user sees
   # who gets paid first and where the money ran out.
+  #
+  # Per account, not from one global figure. The spec dropped cross-account transfers —
+  # money stays where it is, and a user who physically moves it records that — so a single
+  # pot would have this screen predict a distribution nobody can perform: an envelope in
+  # Checking shown as funded out of cash sitting in Savings. With one account, which is the
+  # common case, the per-account bookkeeping is a no-op.
   def waterfall
-    remaining = available
+    pots = account_pots
     by_priority(all_pools).map do |pool|
       needed = required_for(pool)
-      funded = remaining.clamp(0.to_d, needed)
-      remaining -= funded
+      # A pool with no account has nothing to draw on and funds zero, rather than
+      # silently helping itself to the first account's pot. Savings pools stay
+      # account-less until Plan 3's backfill, so this is reachable today.
+      pot = pots.fetch(pool.account_id, 0.to_d)
+      funded = pot.clamp(0.to_d, needed)
+      pots[pool.account_id] = pot - funded
       { pool: pool, needed: needed, funded: funded, short: needed - funded }
     end
   end
@@ -74,6 +88,22 @@ class HomePresenter
   end
 
   private
+
+  # What each account can actually fund, keyed by account id.
+  #
+  # Clamped at zero, never netted. An overdrawn account is a debt to surface, not a source
+  # to spend from: letting a -$400 balance cancel $400 of a healthy account's cash gives a
+  # number that is true about net worth and false about what can be allocated, and this
+  # screen exists to answer the second question. The overdraft still has to be shown — it is
+  # the loudest state in the app — but as its own account's :overdrawn status, not as a
+  # quiet subtraction from somebody else's headline.
+  #
+  # Deliberately NOT memoised: #waterfall spends this hash down as it fills, so handing out
+  # a shared instance would have the second call to #waterfall see the first call's leftovers
+  # and report every envelope unfunded.
+  def account_pots
+    accounts.to_h { |account| [account.id, [buffer_for(account), 0.to_d].max] }
+  end
 
   # The in-memory twin of the `Pool.by_priority` scope, and the one place the tie-break
   # lives. Priority alone is not a total order: ties would fall through to database order,
