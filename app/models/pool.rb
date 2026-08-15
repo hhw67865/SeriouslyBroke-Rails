@@ -15,7 +15,9 @@ class Pool < ApplicationRecord
            dependent: :restrict_with_error,
            inverse_of: :account
 
-  enum :pool_type, { account: 0, budget: 1, savings: 2 }
+  # Prefixed so `pool_type_account?` ("is an account") can never be misread as the
+  # `account` association ("the account this pool sits inside").
+  enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true
 
   scope :accounts, -> { where(pool_type: :account) }
   scope :budgets, -> { where(pool_type: :budget) }
@@ -25,7 +27,7 @@ class Pool < ApplicationRecord
   attr_accessor :create_expense_category, :create_savings_category
 
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
-  validates :target_amount, presence: true, if: :savings?
+  validates :target_amount, presence: true, if: :pool_type_savings?
   validates :start_date, presence: true
 
   validate :account_matches_pool_type
@@ -62,19 +64,19 @@ class Pool < ApplicationRecord
   private
 
   def account_matches_pool_type
-    return errors.add(:account, "cannot be set on an account") if account? && account_id.present?
-    return if account?
+    return errors.add(:account, "cannot be set on an account") if pool_type_account? && account_id.present?
+    return if pool_type_account?
 
     return validate_account_present if account.blank?
 
-    errors.add(:account, "must be an account") unless account.account?
+    errors.add(:account, "must be an account") unless account.pool_type_account?
     errors.add(:account, "must belong to the same user") unless account.user_id == user_id
   end
 
   # Savings pools may stay account-less until Plan 3's data migration backfills them;
   # budget pools are new in this plan and must name an account from day one.
   def validate_account_present
-    errors.add(:account, "must be set for budget and savings pools") if budget?
+    errors.add(:account, "must be set for budget and savings pools") if pool_type_budget?
   end
 
   def set_default_start_date

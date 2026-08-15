@@ -309,7 +309,10 @@ In `app/models/pool.rb`, add below the existing associations:
   has_many :child_pools, class_name: "Pool", foreign_key: :account_id, dependent: :restrict_with_error,
                          inverse_of: :account
 
-  enum :pool_type, { account: 0, budget: 1, savings: 2 }
+  # prefix: true is load-bearing — an unprefixed `account?` ("is an account")
+  # sitting beside the `account` association ("its parent account") reads as its
+  # own opposite and inverts silently.
+  enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true
 
   scope :accounts, -> { where(pool_type: :account) }
   scope :budgets, -> { where(pool_type: :budget) }
@@ -332,7 +335,7 @@ the per-user name uniqueness the spec requires (§3.2):
 
 ```ruby
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
-  validates :target_amount, presence: true, if: :savings?
+  validates :target_amount, presence: true, if: :pool_type_savings?
   validates :start_date, presence: true
 ```
 
@@ -340,14 +343,21 @@ And add the private validator:
 
 ```ruby
   def account_matches_pool_type
-    if account?
+    if pool_type_account?
       errors.add(:account, "cannot be set on an account") if account_id.present?
       return
     end
 
-    return errors.add(:account, "must be set for budget and savings pools") if account.blank?
+    # Budget pools only. Savings pools are exempt until Plan 3's data migration
+    # creates accounts and backfills them — every existing row is a savings pool
+    # with account_id nil, so requiring it here invalidates the whole database.
+    # PLAN 3 OBLIGATION: tighten this to include savings once the backfill lands.
+    if account.blank?
+      errors.add(:account, "must be set for budget and savings pools") if pool_type_budget?
+      return
+    end
 
-    errors.add(:account, "must be an account") unless account.account?
+    errors.add(:account, "must be an account") unless account.pool_type_account?
     errors.add(:account, "must belong to the same user") unless account.user_id == user_id
   end
 ```
@@ -883,7 +893,7 @@ class Budget < ApplicationRecord
   end
 
   def pool_must_not_be_an_account
-    errors.add(:pool, "cannot be an account") if pool&.account?
+    errors.add(:pool, "cannot be an account") if pool&.pool_type_account?
   end
 
   # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §3.1
@@ -1375,7 +1385,7 @@ and Plan 2 both call it; the `private` below applies only to the validator:
   def income_must_land_in_an_account
     return if pool.blank? || !income?
 
-    errors.add(:pool, "must be an account for income categories") unless pool.account?
+    errors.add(:pool, "must be an account for income categories") unless pool.pool_type_account?
   end
 ```
 

@@ -16,7 +16,7 @@ RSpec.describe Pool, type: :model do
   end
 
   describe "pool_type" do
-    it { is_expected.to define_enum_for(:pool_type).with_values(account: 0, budget: 1, savings: 2) }
+    it { is_expected.to define_enum_for(:pool_type).with_values(account: 0, budget: 1, savings: 2).with_prefix }
 
     it "requires budget pools to name an account", :aggregate_failures do
       pool = build(:pool, :budget_pool, account: nil)
@@ -51,13 +51,67 @@ RSpec.describe Pool, type: :model do
     end
   end
 
-  describe "#total" do
-    it "sums the account's own balance and its child pools" do
+  describe "name uniqueness" do
+    it "rejects a second pool with the same name for the same user", :aggregate_failures do
       user = create(:user)
-      checking = create(:pool, :account, user: user)
-      create(:pool, :budget_pool, user: user, account: checking)
+      create(:pool, user: user, name: "Emergency Fund")
 
-      expect(checking.child_pools.count).to eq(1)
+      duplicate = build(:pool, user: user, name: "Emergency Fund")
+
+      expect(duplicate).not_to be_valid
+      expect(duplicate.errors[:name]).to include("has already been taken")
+    end
+
+    it "compares names case-insensitively" do
+      user = create(:user)
+      create(:pool, user: user, name: "Emergency Fund")
+
+      expect(build(:pool, user: user, name: "emergency fund")).not_to be_valid
+    end
+
+    it "allows the same name under a different user" do
+      create(:pool, user: create(:user), name: "Emergency Fund")
+
+      expect(build(:pool, user: create(:user), name: "Emergency Fund")).to be_valid
+    end
+  end
+
+  describe "#total" do
+    let(:user) { create(:user) }
+
+    # PoolCalculator#current_balance is (savings-category entries) - (expense-category
+    # entries), both dated on or after the pool's start_date.
+    def deposit(pool, amount)
+      category = create(:category, :savings, user: pool.user, pool: pool, name: "#{pool.name} In")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    def withdraw(pool, amount)
+      category = create(:category, :expense, user: pool.user, pool: pool, name: "#{pool.name} Out")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    it "sums the account's own balance and its child pools", :aggregate_failures do
+      checking = create(:pool, :account, user: user)
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+      vacation = create(:pool, :savings_pool, user: user, account: checking)
+
+      deposit(checking, 100) # unallocated cash
+      deposit(groceries, 60)
+      withdraw(groceries, 35) # groceries nets 25
+      deposit(vacation, 40)
+
+      expect(checking.child_pools).to contain_exactly(groceries, vacation)
+      expect(groceries.calculator.current_balance).to eq(25)
+      expect(checking.total).to eq(165)
+    end
+
+    it "equals the pool's own balance when it has no child pools" do
+      pool = create(:pool, :account, user: user)
+
+      deposit(pool, 70)
+
+      expect(pool.total).to eq(70)
     end
   end
 
