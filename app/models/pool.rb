@@ -8,10 +8,27 @@ class Pool < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
 
+  belongs_to :account, class_name: "Pool", optional: true
+  has_many :child_pools,
+           class_name: "Pool",
+           foreign_key: :account_id,
+           dependent: :restrict_with_error,
+           inverse_of: :account
+
+  enum :pool_type, { account: 0, budget: 1, savings: 2 }
+
+  scope :accounts, -> { where(pool_type: :account) }
+  scope :budgets, -> { where(pool_type: :budget) }
+  scope :savings, -> { where(pool_type: :savings) }
+  scope :by_priority, -> { order(:priority, :name) }
+
   attr_accessor :create_expense_category, :create_savings_category
 
-  validates :name, :target_amount, presence: true
+  validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
+  validates :target_amount, presence: true, if: :savings?
   validates :start_date, presence: true
+
+  validate :account_matches_pool_type
 
   after_initialize :set_default_start_date, if: :new_record?
   after_create :create_auto_categories
@@ -37,7 +54,28 @@ class Pool < ApplicationRecord
     PoolCalculator.new(self, as_of: as_of)
   end
 
+  # What the bank actually says: unallocated cash plus every pool inside it.
+  def total
+    calculator.current_balance + child_pools.sum { |pool| pool.calculator.current_balance }
+  end
+
   private
+
+  def account_matches_pool_type
+    return errors.add(:account, "cannot be set on an account") if account? && account_id.present?
+    return if account?
+
+    return validate_account_present if account.blank?
+
+    errors.add(:account, "must be an account") unless account.account?
+    errors.add(:account, "must belong to the same user") unless account.user_id == user_id
+  end
+
+  # Savings pools may stay account-less until Plan 3's data migration backfills them;
+  # budget pools are new in this plan and must name an account from day one.
+  def validate_account_present
+    errors.add(:account, "must be set for budget and savings pools") if budget?
+  end
 
   def set_default_start_date
     self.start_date ||= Date.current

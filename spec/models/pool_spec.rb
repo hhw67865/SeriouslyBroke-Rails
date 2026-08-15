@@ -15,6 +15,64 @@ RSpec.describe Pool, type: :model do
     it { is_expected.to validate_presence_of(:target_amount) }
   end
 
+  describe "pool_type" do
+    it { is_expected.to define_enum_for(:pool_type).with_values(account: 0, budget: 1, savings: 2) }
+
+    it "requires budget pools to name an account", :aggregate_failures do
+      pool = build(:pool, :budget_pool, account: nil)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:account]).to include("must be set for budget and savings pools")
+    end
+
+    it "forbids account pools from naming an account", :aggregate_failures do
+      user = create(:user)
+      checking = create(:pool, :account, user: user)
+      pool = build(:pool, :account, user: user, account: checking)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:account]).to include("cannot be set on an account")
+    end
+
+    it "requires the parent to be an account pool", :aggregate_failures do
+      user = create(:user)
+      groceries = create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user))
+      pool = build(:pool, :budget_pool, user: user, account: groceries)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:account]).to include("must be an account")
+    end
+
+    it "requires the parent to belong to the same user", :aggregate_failures do
+      pool = build(:pool, :budget_pool, user: create(:user), account: create(:pool, :account))
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:account]).to include("must belong to the same user")
+    end
+  end
+
+  describe "#total" do
+    it "sums the account's own balance and its child pools" do
+      user = create(:user)
+      checking = create(:pool, :account, user: user)
+      create(:pool, :budget_pool, user: user, account: checking)
+
+      expect(checking.child_pools.count).to eq(1)
+    end
+  end
+
+  describe ".by_priority" do
+    it "orders ascending by priority then name", :aggregate_failures do
+      user = create(:user)
+      account = create(:pool, :account, user: user)
+      rent = create(:pool, :budget_pool, user: user, account: account, name: "Rent", priority: 1)
+      car = create(:pool, :budget_pool, user: user, account: account, name: "Car", priority: 3)
+      food = create(:pool, :budget_pool, user: user, account: account, name: "Food", priority: 2)
+
+      expect(user.pools.budgets.by_priority.to_a).to eq([rent, food, car])
+    end
+  end
+
   describe "#timeline_entries" do
     it "includes contributions and withdrawals after start_date", :aggregate_failures do
       user = create(:user)

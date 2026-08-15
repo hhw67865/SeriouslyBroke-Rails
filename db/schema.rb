@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_032532) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_040000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -57,12 +57,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_032532) do
   end
 
   create_table "pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.uuid "account_id"
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.integer "pool_type", default: 2, null: false
+    t.integer "priority", default: 0, null: false
     t.date "start_date"
     t.money "target_amount", scale: 2
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.index ["account_id"], name: "index_pools_on_account_id"
+    t.index ["user_id", "priority"], name: "index_pools_on_user_id_and_priority"
     t.index ["user_id"], name: "index_pools_on_user_id"
   end
 
@@ -92,5 +97,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_032532) do
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
   add_foreign_key "items", "categories"
+  add_foreign_key "pools", "pools", column: "account_id"
   add_foreign_key "pools", "users"
 end
