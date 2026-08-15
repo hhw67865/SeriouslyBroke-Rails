@@ -55,8 +55,11 @@ class PoolsController < ApplicationController
 
   # DELETE /pools/1
   def destroy
-    @pool.destroy
-    redirect_to pools_path, notice: "Savings pool was successfully deleted."
+    if @pool.destroy
+      redirect_to pools_path, notice: "Savings pool was successfully deleted."
+    else
+      redirect_to pool_path(@pool), alert: @pool.errors[:base].to_sentence
+    end
   end
 
   private

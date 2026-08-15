@@ -22,7 +22,13 @@ RSpec.describe Pool, type: :model do
       pool = build(:pool, :budget_pool, account: nil)
 
       expect(pool).not_to be_valid
-      expect(pool.errors[:account]).to include("must be set for budget and savings pools")
+      expect(pool.errors[:account]).to include("must be set for budget pools")
+    end
+
+    # TODO(plan-3): once the account backfill lands, savings pools must require an account
+    # too and this example flips to `not_to be_valid`. It is deliberately red-on-tighten.
+    it "exempts savings pools from the account requirement until Plan 3 backfills accounts" do
+      expect(build(:pool, pool_type: :savings, account: nil)).to be_valid
     end
 
     it "forbids account pools from naming an account", :aggregate_failures do

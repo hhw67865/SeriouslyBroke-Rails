@@ -67,7 +67,7 @@ class Pool < ApplicationRecord
     return errors.add(:account, "cannot be set on an account") if pool_type_account? && account_id.present?
     return if pool_type_account?
 
-    return validate_account_present if account.blank?
+    return require_account_for_budget_pools if account.blank?
 
     errors.add(:account, "must be an account") unless account.pool_type_account?
     errors.add(:account, "must belong to the same user") unless account.user_id == user_id
@@ -75,8 +75,9 @@ class Pool < ApplicationRecord
 
   # Savings pools may stay account-less until Plan 3's data migration backfills them;
   # budget pools are new in this plan and must name an account from day one.
-  def validate_account_present
-    errors.add(:account, "must be set for budget and savings pools") if pool_type_budget?
+  # TODO(plan-3): tighten to include savings pools once the account backfill lands
+  def require_account_for_budget_pools
+    errors.add(:account, "must be set for budget pools") if pool_type_budget?
   end
 
   def set_default_start_date
