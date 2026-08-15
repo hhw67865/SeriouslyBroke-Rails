@@ -444,6 +444,58 @@ Deferred deliberately. Structure first.
 - **Percentage-based allocation.** Removed from the design entirely; rules plus
   priority cover every case raised.
 
+## 7a. Obligations carried forward from Plan 1
+
+Recorded here because Plan 1's execution ledger is scratch and will be deleted.
+Each is a decision deliberately deferred, not an oversight.
+
+### Plan 2 (allocation flow) must
+
+- **Validate `pay_anchor_date` presence when `pay_cadence` is set.** Without it
+  `User#pay_dates` returns `[]`, the `[count, 1].max` clamp reports "1 paycheck
+  before this bill", and the app demands the entire bill every paycheck. Highest
+  value item on this list.
+- **Fix `Entry`'s `searchable :pool`**, which resolves strictly through the
+  category — once the override param is exposed, an entry is findable under the
+  pool it overrode *away from* and not the one it landed in.
+- **Give `User` a path to pool-mode budgets.** `has_many :budgets, through:
+  :categories` reaches only category-mode rules, and `BudgetsController#set_budget`
+  depends on it.
+- **Permit `pool_type`, `account_id`, `priority`** in `pool_params`, and add the
+  type filter §5.6 assumes — the pools index and savings dashboard currently list
+  *all* pools, so they will render bank accounts with savings-goal chrome.
+- **Constrain `PoolMovement#source_entry` to the movement's user** — an ownership
+  hole that goes live with the paycheck-split writer.
+- **Validate `priority`** (non-negative) alongside the reorder UI.
+- **Preload `includes(from_pool: :account, to_pool: :account)`** in any view
+  rendering `crosses_accounts?` over a collection.
+- **Reconsider `dependent: :destroy` on `movements_out`** before reallocation
+  ships: in a chain `A → B → C`, destroying B correctly restores A but vaporises
+  C's inflow.
+- Decide whether `allocated` nets a partial payment out of a rule's target
+  (`BudgetCalculator#shortfall` currently does not — it over-reserves, the safe
+  direction).
+
+### Plan 3 (cutover) must
+
+- **Reverse §6.1 steps 2 and 4, or use `update_all`.** `Category#destroy_budget_if_pool_linked`
+  destroys a category's budget the moment a `pool_id` is assigned, so pointing
+  categories at pools *before* migrating budgets silently destroys every user's
+  budgets. **This is the step that loses data.**
+- **Tighten `Pool#account_matches_pool_type`** to require an account for savings
+  pools once the backfill lands (marked `TODO(plan-3)` in the model).
+- **Flip the `pools.pool_type` column default** from `2` (savings) to `1` (budget)
+  per §3 — the current default exists only to preserve pre-migration rows.
+- **Delete `PoolCalculator#savings_entries_total`** in the same commit as the
+  entry→movement conversion. It becomes a no-op first, so removal cannot
+  double-count during the cutover.
+- **Add `UNIQUE (user_id, lower(name))` on pools** once the backfill can dedupe.
+- **Rewrite `db/seeds.rb` teardown** for `PoolMovement` and the self-referential
+  `pools.account_id` FK.
+- Resolve `Pool#contribution_entries` / `#withdrawal_entries` / `#timeline_entries`,
+  which still filter on `start_date..` while `#balance` deliberately does not.
+- Merge the duplicate income validators on `Entry` and `Category`.
+
 ## 8. Testing
 
 Per the `system-test-writer` skill's page-based structure.
