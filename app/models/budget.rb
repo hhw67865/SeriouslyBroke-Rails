@@ -23,7 +23,9 @@ class Budget < ApplicationRecord
   def category_mode? = category_id.present? || category.present?
   def pool_mode? = pool_id.present? || pool.present?
 
-  def user = category_mode? ? category.user : pool.user
+  # nil-safe: an owner-less budget is exactly the state the form re-renders in
+  # after a failed submission.
+  def user = category&.user || pool&.user
 
   def calculator(today: Date.current)
     BudgetCalculator.new(self, today: today)
@@ -57,13 +59,23 @@ class Budget < ApplicationRecord
 
     return if anchor_date.present?
 
-    errors.add(:interval_months, "is required for a monthly rule with no due date") if interval_months.blank?
+    # Row 2 pins the anchorless monthly rate rule to a 1-month interval. Any
+    # N > 1 is row 3, which requires an anchor — without one the calculator reads
+    # the due date as the end of this month and demands N months of money now.
+    if interval_months.blank?
+      errors.add(:interval_months, "is required for a monthly rule with no due date")
+    elsif interval_months != 1
+      errors.add(:interval_months, "must be 1 for a monthly rule with no due date")
+    end
   end
 
   def item_must_belong_to_pool
     return if item.blank?
 
-    errors.add(:item, "must belong to a category in this pool") unless item.category&.pool_id == pool_id
+    # Objects, not ids: under `build` the pool is unsaved and `pool_id` is nil, so
+    # an id comparison equates every pool-less category with this pool and rejects
+    # the items that genuinely belong to it.
+    errors.add(:item, "must belong to a category in this pool") unless item.category&.pool == pool
   end
 
   # `where.not(id: nil)` renders as `id IS NOT NULL`, so an unsaved budget still

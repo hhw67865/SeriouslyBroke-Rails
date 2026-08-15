@@ -107,20 +107,13 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(Budget.count).to eq(1)
     end
 
+    # A budget with no owner fails on :base, which renders nowhere unless the form
+    # has an error_notification block. Without it the form silently does nothing.
     it "shows error for missing category" do
       fill_in "Amount", with: "500.00"
       click_button "Create Budget"
 
       expect(current_path).to eq(new_budget_path)
-      expect(page).to have_content("must belong to either a category or a pool")
-    end
-
-    # A budget with no owner fails on :base, which renders nowhere unless the form
-    # has an error_notification block. Without this the form silently does nothing.
-    it "surfaces base errors rather than failing silently" do
-      fill_in "Amount", with: "500.00"
-      click_button "Create Budget"
-
       expect(page).to have_css(".bg-status-danger-light", text: "must belong to either a category or a pool")
       expect(Budget.count).to eq(0)
     end

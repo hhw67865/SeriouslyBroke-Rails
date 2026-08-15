@@ -168,6 +168,60 @@ RSpec.describe Budget, type: :model do
       expect(budget).not_to be_valid
       expect(budget.errors[:interval_months]).to include("must be greater than 0")
     end
+
+    # The fifth shape. Not a row in the table: a multi-month interval with no
+    # anchor is row 3 missing its due date, and the calculator would read the due
+    # date as the end of this month and demand all N months of money at once.
+    it "rejects a multi-month interval with no anchor date", :aggregate_failures do
+      budget = build(
+        :budget,
+        pool: pool,
+        category: nil,
+        anchor_date: nil,
+        interval_months: 6,
+        basis: :monthly
+      )
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:interval_months]).to include("must be 1 for a monthly rule with no due date")
+    end
+
+    # The other combination that was unasserted in both directions: the existing
+    # per-paycheck rejection only exercises the anchor_date half of that guard.
+    it "rejects a per-paycheck rule with an interval", :aggregate_failures do
+      budget = build(
+        :budget,
+        pool: pool,
+        category: nil,
+        anchor_date: nil,
+        interval_months: 6,
+        basis: :per_paycheck
+      )
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:basis]).to include("per-paycheck rules cannot have a due date or interval")
+    end
+  end
+
+  describe "#user" do
+    let(:user) { create(:user) }
+
+    it "comes from the category in category mode" do
+      budget = build(:budget, category: create(:category, :expense, user: user))
+
+      expect(budget.user).to eq(user)
+    end
+
+    it "comes from the pool in pool mode" do
+      pool = create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user))
+
+      expect(build(:budget, :rate, pool: pool, category: nil).user).to eq(user)
+    end
+
+    # The state the form re-renders in after a failed submission.
+    it "is nil for an owner-less budget rather than raising" do
+      expect(build(:budget, pool: nil, category: nil).user).to be_nil
+    end
   end
 
   describe ":pool_budget factory" do
@@ -224,6 +278,27 @@ RSpec.describe Budget, type: :model do
       unsaved = Item.new(name: "Maintenance", category: category)
 
       expect(build(:budget, :recurring, pool: pool, category: nil, item: unsaved)).to be_valid
+    end
+
+    # Against an unsaved pool `pool_id` is nil, so an id comparison equated every
+    # pool-less category with this pool and let a stray item in.
+    it "rejects an item from a pool-less category even when the pool is unsaved", :aggregate_failures do
+      unsaved_pool = build(:pool, :budget_pool, user: user, account: account)
+      orphan = create(:item, category: create(:category, :expense, user: user, pool: nil))
+      budget = build(:budget, :recurring, pool: unsaved_pool, category: nil, item: orphan)
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:item]).to include("must belong to a category in this pool")
+    end
+
+    # The self-exclusion branch of `where.not(id: id)`. UUID PKs are assigned at
+    # insert, so every other example here runs the id-is-nil branch; only a
+    # persisted rule re-validating exercises this one. A wrong `where.not` would
+    # make a saved budget permanently unsavable.
+    it "lets a persisted rule keep the item it already owns" do
+      budget = create(:budget, :recurring, pool: pool, category: nil, item: item)
+
+      expect(budget).to be_valid
     end
   end
 end
