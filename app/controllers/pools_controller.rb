@@ -71,7 +71,7 @@ class PoolsController < ApplicationController
 
   def load_filtered_pools
     # Load savings pools without eager loading (calculator uses direct SQL)
-    pools = current_user.pools
+    pools = current_user.pools.savings_pools
 
     # Apply search using the new searchable system
     pools = apply_search(pools, { q: params[:q], field: params[:field] })

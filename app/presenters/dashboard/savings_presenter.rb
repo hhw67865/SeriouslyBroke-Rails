@@ -61,7 +61,7 @@ module Dashboard
     # === Pools Summary (period-aware) ===
 
     def pools_summary
-      @pools_summary ||= @user.pools.includes(categories: { items: :entries }).map do |pool|
+      @pools_summary ||= @user.pools.savings_pools.includes(categories: { items: :entries }).map do |pool|
         calc = pool.calculator(as_of: period_range.end)
         {
           id: pool.id,
