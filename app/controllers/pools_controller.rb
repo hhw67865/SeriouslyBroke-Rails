@@ -103,6 +103,13 @@ class PoolsController < ApplicationController
         :name,
         :target_amount,
         :start_date,
+        # A pool is an account, a budget envelope or a savings goal, and a non-account
+        # names the account it sits inside — neither is derivable from the other params,
+        # so both must be assignable or every pool created here is a savings goal in the
+        # default account-less shape. `priority` orders the funding waterfall.
+        :pool_type,
+        :account_id,
+        :priority,
         :create_expense_category,
         :create_savings_category
       ]

@@ -45,6 +45,19 @@ RSpec.describe Pool, type: :model do
     it { is_expected.to validate_presence_of(:target_amount) }
   end
 
+  # The buffer is not a special object: it is the money in an account no envelope has
+  # claimed. A target on an account is therefore the buffer target — a health marker,
+  # never a cap — so the target must be optional AND permitted on the same pool type.
+  describe "buffer target" do
+    it "allows a target on an account, as the buffer target" do
+      expect(build(:pool, :account, target_amount: 2_000)).to be_valid
+    end
+
+    it "still allows an account with no target" do
+      expect(build(:pool, :account, target_amount: nil)).to be_valid
+    end
+  end
+
   describe "pool_type" do
     it { is_expected.to define_enum_for(:pool_type).with_values(account: 0, budget: 1, savings: 2).with_prefix }
 

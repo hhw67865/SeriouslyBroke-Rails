@@ -46,8 +46,24 @@ class PoolCalculator
   # pool happens to be in the black. Plan 2's sweep step divides by this.
   def free_amount = [balance - reserve, 0.to_d].max
 
+  # A dateless savings goal is a rate rule plus a pool target: it funds at its rate
+  # until the balance reaches the target, then stops. No separate rule shape needed.
+  #
+  # Savings-only on purpose. A budget envelope with a target is not a goal — the target
+  # there is a display marker, and an envelope that stopped asking the moment it hit it
+  # would quietly under-fund the bill it exists to pay. Same for an account, whose target
+  # is the buffer marker: a health line, never a cap.
+  def goal_reached?
+    pool.pool_type_savings? && pool.target_amount.to_d.positive? && balance >= pool.target_amount.to_d
+  end
+
+  # `0.to_d`, not a bare `0`, on both branches: #required feeds a summing caller, and an
+  # Integer leaking out of the reached-goal path makes the return type depend on how well
+  # funded the pool is. The `sum` seed covers the same hole for a pool with no rules at all.
   def required
-    budgets_by_due_date.sum { |budget| budget.calculator(today: today).required(allocated_balances[budget]) }
+    return 0.to_d if goal_reached?
+
+    budgets_by_due_date.sum(0.to_d) { |budget| budget.calculator(today: today).required(allocated_balances[budget]) }
   end
 
   def progress_percentage
