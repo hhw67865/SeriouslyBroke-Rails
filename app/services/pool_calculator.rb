@@ -41,7 +41,10 @@ class PoolCalculator
 
   def reserve = allocated_balances.values.sum
 
-  def free_amount = [balance - reserve, 0].max
+  # `0.to_d`, not a bare `0`: on the overdrawn branch `max` returns the literal it was
+  # given, and an Integer leaking out here makes the return type depend on whether the
+  # pool happens to be in the black. Plan 2's sweep step divides by this.
+  def free_amount = [balance - reserve, 0.to_d].max
 
   def required
     budgets_by_due_date.sum { |budget| budget.calculator(today: today).required(allocated_balances[budget]) }
@@ -53,8 +56,11 @@ class PoolCalculator
     [(balance / pool.target_amount * 100).round, 100].min
   end
 
+  # `to_d`, not `to_f`: nil-safe in exactly the same way (`nil.to_d` is 0, and account and
+  # budget pools legitimately have no target) without routing a money value through binary
+  # floating point. Same `0.to_d` reasoning as #free_amount for the overfunded branch.
   def remaining_amount
-    [pool.target_amount.to_f - balance, 0].max
+    [pool.target_amount.to_d - balance, 0.to_d].max
   end
 
   def contributions = movements_in_total + savings_entries_total

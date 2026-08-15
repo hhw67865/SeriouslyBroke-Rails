@@ -83,6 +83,8 @@ RSpec.describe PoolCalculator, type: :model do
 
       expect(account.target_amount).to be_nil
       expect(account.calculator.remaining_amount).to eq(0)
+      # `nil.to_d` is 0, which is what makes the nil target safe without a guard.
+      expect(account.calculator.remaining_amount).to be_a(BigDecimal)
       expect(account.calculator.progress_percentage).to eq(0)
     end
   end
@@ -204,6 +206,40 @@ RSpec.describe PoolCalculator, type: :model do
 
         # gas $0 + insurance $260.00 + registration $12.86
         expect(car.calculator(today: today).required).to eq(272.86)
+      end
+    end
+
+    # `[BigDecimal, 0].max` returns the bare Integer literal on the negative branch, so the
+    # return type of both methods depended on whether the pool happened to be in the black.
+    # Plan 2's sweep step divides by #free_amount; money math must not change type under it.
+    describe "money types on the negative branch", :aggregate_failures do
+      it "returns a BigDecimal zero from #free_amount when the pool is overdrawn" do
+        create(:pool_budget, :rate, pool: car, amount: 80)
+        create(:entry, item: create(:item, category: car_category), amount: 50, date: today)
+        calc = car.calculator(today: today)
+
+        expect(calc.free_amount).to eq(0)
+        expect(calc.free_amount).to be_a(BigDecimal)
+      end
+
+      it "returns a BigDecimal zero from #remaining_amount when the goal is exceeded" do
+        goal = create(:pool, :savings_pool, user: envelope_user, account: checking, target_amount: 100)
+        create(:pool_movement, from_pool: checking, to_pool: goal, amount: 250)
+        calc = goal.calculator(today: today)
+
+        expect(calc.remaining_amount).to eq(0)
+        expect(calc.remaining_amount).to be_a(BigDecimal)
+      end
+
+      # The positive branch, pinned alongside the negative one so the pair proves the type
+      # no longer depends on which way the subtraction went.
+      it "returns a BigDecimal from #remaining_amount when the goal is unmet" do
+        goal = create(:pool, :savings_pool, user: envelope_user, account: checking, target_amount: 100)
+        create(:pool_movement, from_pool: checking, to_pool: goal, amount: 30.10)
+        calc = goal.calculator(today: today)
+
+        expect(calc.remaining_amount).to eq(69.90)
+        expect(calc.remaining_amount).to be_a(BigDecimal)
       end
     end
 
