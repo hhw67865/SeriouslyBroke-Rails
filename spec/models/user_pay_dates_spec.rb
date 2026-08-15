@@ -102,6 +102,24 @@ RSpec.describe User, type: :model do
       )
     end
 
+    # The other half of #semimonthly_days. Every example above anchors on day 1, which only
+    # ever exercises `first + 15`; an anchor past the 15th takes the `first - 15` branch and
+    # pays on the earlier day of the month first.
+    it "pays on the anchor day and 15 days earlier when the anchor is late in the month" do
+      user = create(:user, pay_cadence: :semimonthly, pay_anchor_date: Date.new(2026, 1, 20))
+
+      dates = user.pay_dates(from: Date.new(2026, 2, 1), to: Date.new(2026, 3, 31))
+
+      expect(dates).to eq(
+        [
+          Date.new(2026, 2, 5),
+          Date.new(2026, 2, 20),
+          Date.new(2026, 3, 5),
+          Date.new(2026, 3, 20)
+        ]
+      )
+    end
+
     it "gives a 3-paycheck month for biweekly pay" do
       user = create(:user, pay_cadence: :biweekly, pay_anchor_date: Date.new(2026, 1, 2))
 
