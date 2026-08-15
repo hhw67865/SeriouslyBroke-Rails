@@ -19,6 +19,15 @@ class HomePresenter
     by_priority(all_pools.select { |pool| pool.account_id == account.id })
   end
 
+  # Pools belonging to no account. #pools_for filters on account_id, so a view built as
+  # "for each account, render pools_for" would render these nowhere at all — while they
+  # still occupy a waterfall row and count toward #total_required. Savings pools stay
+  # account-less until Plan 3's backfill, so today this is the ordinary shape for a
+  # savings goal, not a rare edge: Tasks 6/7 need an unassigned group to put them in.
+  def orphan_pools
+    by_priority(all_pools.select { |pool| pool.account_id.nil? })
+  end
+
   # `.to_d`, not the raw balance: PoolCalculator#balance is five `sum(:amount)` calls, and
   # an account holding no entries at all makes every one of them return the Integer literal
   # 0. #available seeds its own sum so it is safe either way, but this is a public money
@@ -26,20 +35,38 @@ class HomePresenter
   # would truncate silently on exactly the accounts that are emptiest.
   def buffer_for(account) = calculator_for(account).balance.to_d
 
-  # Unclaimed cash across every account — what a distribution has to work with.
+  # Unclaimed cash across every account — an honest answer to "what do I have".
   #
-  # Exactly the sum of what #waterfall has to hand out, because both are built from
-  # #account_pots. Computing the two separately let them drift: this figure is the
-  # headline the screen leads with, and the rows below it have to add up to it.
+  # Note this is NOT `total_required - shortfall`: see #shortfall for why the gap is
+  # derived from the rows instead, and why the two can legitimately disagree.
   def available
     @available ||= account_pots.values.sum(0.to_d)
   end
 
+  # What every rule asks for this period — an honest answer to "what do I owe",
+  # regardless of which account the money would have to come from.
   def total_required
     @total_required ||= all_pools.sum(0.to_d) { |pool| required_for(pool) }
   end
 
-  def shortfall = [total_required - available, 0.to_d].max
+  # Derived from the waterfall rows, NOT from `total_required - available`.
+  #
+  # The two are not the same number once a user has more than one account, and only this
+  # one is actionable. `total_required - available` asks "is there enough money anywhere",
+  # which reads as covered while a bill sits in an account with nothing in it: Checking
+  # empty with rent due, Ally holding $1,000 and no envelopes, and the screen says you are
+  # fine above a row funded at zero. Summing the rows asks "will every envelope actually be
+  # filled", which is the only question a distribution can act on. It also puts an
+  # account-less pool's ask into the gap, where it belongs, instead of letting another
+  # account's cash silently absorb it.
+  #
+  # The difference between the two figures is money stranded in the wrong account. With one
+  # account they are always equal, so it only surfaces in the multi-account case — where the
+  # view owes the user an explanation of why subtracting the headlines gives another number.
+  #
+  # No `max` clamp is needed: every row's `short` is `needed - funded` where `funded` is
+  # clamped to at most `needed`, so no row can contribute a negative.
+  def shortfall = waterfall.sum(0.to_d) { |row| row[:short] }
 
   def covered? = shortfall.zero?
 
@@ -69,7 +96,22 @@ class HomePresenter
   # pot would have this screen predict a distribution nobody can perform: an envelope in
   # Checking shown as funded out of cash sitting in Savings. With one account, which is the
   # common case, the per-account bookkeeping is a no-op.
+  #
+  # Memoised because #shortfall and #covered? both derive from these rows, so a Home render
+  # asks for them three times over. The rows are a pure function of already-memoised inputs,
+  # but PoolCalculator#balance is not itself memoised — recomputing would be five aggregate
+  # queries per account, three times, for an identical answer.
   def waterfall
+    @waterfall ||= fill_waterfall
+  end
+
+  def structurally_underwater?
+    user.typical_income.present? && total_required > user.typical_income.to_d
+  end
+
+  private
+
+  def fill_waterfall
     pots = account_pots
     by_priority(all_pools).map do |pool|
       needed = required_for(pool)
@@ -83,12 +125,6 @@ class HomePresenter
     end
   end
 
-  def structurally_underwater?
-    user.typical_income.present? && total_required > user.typical_income.to_d
-  end
-
-  private
-
   # What each account can actually fund, keyed by account id.
   #
   # Clamped at zero, never netted. An overdrawn account is a debt to surface, not a source
@@ -98,9 +134,8 @@ class HomePresenter
   # the loudest state in the app — but as its own account's :overdrawn status, not as a
   # quiet subtraction from somebody else's headline.
   #
-  # Deliberately NOT memoised: #waterfall spends this hash down as it fills, so handing out
-  # a shared instance would have the second call to #waterfall see the first call's leftovers
-  # and report every envelope unfunded.
+  # Deliberately NOT memoised: #fill_waterfall spends this hash down as it fills, so handing
+  # out a shared instance would leave #available summing the leftovers rather than the cash.
   def account_pots
     accounts.to_h { |account| [account.id, [buffer_for(account), 0.to_d].max] }
   end

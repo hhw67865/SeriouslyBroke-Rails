@@ -42,12 +42,33 @@ RSpec.describe HomePresenter do
 
   describe "#accounts" do
     it "returns only this user's accounts, by name", :aggregate_failures do
+      # `checking` is forced FIRST so insertion order is Checking, Ally — the reverse of
+      # the expected answer. With Ally created first the rows come back alphabetically
+      # already, and dropping `.order(:name)` would still pass. Account order drives the
+      # Home screen's section order, so it has to be pinned rather than inherited from
+      # whatever Postgres hands back.
+      checking
       ally = create(:pool, :account, user: user, name: "Ally")
       envelope("Groceries", priority: 1)
       create(:pool, :account, user: create(:user), name: "Someone Else")
 
       expect(presenter.accounts).to eq([ally, checking])
       expect(presenter.accounts.map(&:name)).to eq(["Ally", "Checking"])
+    end
+  end
+
+  describe "#orphan_pools" do
+    it "returns account-less pools, by priority then name, and nothing else", :aggregate_failures do
+      envelope("Has An Account", priority: 1)
+      # Reverse alphabetical at a shared priority, so the name tie-break is visible.
+      zoo = create(:pool, user: user, name: "Zoo Fund", target_amount: 500, priority: 2)
+      apples = create(:pool, user: user, name: "Apples Fund", target_amount: 500, priority: 2)
+      urgent = create(:pool, user: user, name: "Urgent Fund", target_amount: 500, priority: 1)
+
+      expect(presenter.orphan_pools).to eq([urgent, apples, zoo])
+      # The complement of #pools_for: between them they must cover every pool, or a
+      # view that renders both still leaves something invisible.
+      expect(presenter.orphan_pools & presenter.pools_for(checking)).to be_empty
     end
   end
 
@@ -244,6 +265,25 @@ RSpec.describe HomePresenter do
 
       expect(presenter.available).to eq(1_000)
       expect(funded).to eq("Rent" => 0, "Groceries" => 400)
+      # The gap follows the rows, not `total_required - available` (1200 - 1000 = 200).
+      # Rent is unfundable in full, and the headline has to say so.
+      expect(presenter.shortfall).to eq(800)
+      expect(presenter).not_to be_covered
+    end
+
+    # The case that was green under both readings of #shortfall and is the whole reason
+    # the derived version won: nothing is wrong with the *total*, only with where it sits.
+    it "is not covered when the money is in an account with no envelopes", :aggregate_failures do
+      deposit(ally, 1_000)
+      rate(envelope_in(checking, "Rent", priority: 1), 300)
+
+      expect(presenter.total_required).to eq(300)
+      expect(presenter.available).to eq(1_000)
+      # `total_required - available` is -700, which clamps to 0 and reads "covered" —
+      # above a Rent row funded at zero.
+      expect(presenter.waterfall.pluck(:funded)).to eq([0])
+      expect(presenter.shortfall).to eq(300)
+      expect(presenter).not_to be_covered
     end
 
     # Priority orders the whole screen, but each account's pot drains independently:
@@ -260,6 +300,8 @@ RSpec.describe HomePresenter do
       expect(rows.map { |r| r[:pool].name }).to eq(["Rent", "Savings Top-up"])
       expect(rows.to_h { |r| [r[:pool].name, [r[:funded], r[:short]]] })
         .to eq("Rent" => [300, 600], "Savings Top-up" => [400, 0])
+      # 1300 required against 800 available would say 500. Only 600 is reachable.
+      expect(presenter.shortfall).to eq(600)
     end
 
     it "funds an account-less pool nothing at all", :aggregate_failures do
@@ -274,15 +316,20 @@ RSpec.describe HomePresenter do
       expect(row[:needed]).to eq(200)
       expect(row[:funded]).to eq(0)
       expect(presenter.available).to eq(1_000)
+      # An orphan can never be funded, so its ask belongs in the gap rather than being
+      # absorbed by Checking's cash — which `total_required - available` would do.
+      expect(presenter.shortfall).to eq(200)
+      expect(presenter).not_to be_covered
     end
 
-    it "hands out the same money on a second call", :aggregate_failures do
+    it "does not spend down the cash it reports as available", :aggregate_failures do
       deposit(checking, 500)
       rate(envelope_in(checking, "Rent", priority: 1), 400)
 
-      # #account_pots is spent down as the waterfall fills, so a memoised hash would
-      # let the first call's leftovers starve the second.
+      # #account_pots is spent down as the waterfall fills, so a memoised pots hash would
+      # leave #available summing the leftovers. Waterfall FIRST, then the headline.
       expect(presenter.waterfall.pluck(:funded)).to eq([400])
+      expect(presenter.available).to eq(500)
       expect(presenter.waterfall.pluck(:funded)).to eq([400])
     end
   end
