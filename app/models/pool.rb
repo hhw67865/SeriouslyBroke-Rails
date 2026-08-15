@@ -84,6 +84,10 @@ class Pool < ApplicationRecord
     PoolCalculator.new(self, as_of: as_of, today: today)
   end
 
+  def status(today: Date.current)
+    PoolStatus.new(self, today: today)
+  end
+
   # What the bank actually says: unallocated cash plus every pool inside it.
   def total
     calculator.current_balance + child_pools.sum { |pool| pool.calculator.current_balance }
