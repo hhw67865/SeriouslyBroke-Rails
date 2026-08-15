@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Computes what a single funding rule needs from the next paycheck.
+# Computes what a single funding rule needs from the next period.
 # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §4.1-4.2
 class BudgetCalculator
   attr_reader :budget, :today
@@ -26,7 +26,7 @@ class BudgetCalculator
   end
 
   def period_end
-    budget.basis_per_paycheck? ? period_end_date : today.end_of_month
+    budget.basis_per_paycheck? ? boundary_period_end : today.end_of_month
   end
 
   # The payment signal is the amount paid, never the number of entries. Counting
@@ -145,7 +145,11 @@ class BudgetCalculator
     today.day < anchor.day ? months - 1 : months
   end
 
-  def period_end_date
+  # The per-period-basis branch of #period_end: the day before the user's next declared
+  # boundary. Named for what it computes, not for its return type — a bare `_date` suffix
+  # would only restate that #period_end returns a Date too, and leave the two names
+  # indistinguishable at the call site.
+  def boundary_period_end
     next_boundary = user.period_boundaries(from: today + 1, to: today + 45).first
     next_boundary ? next_boundary - 1 : today.end_of_month
   end

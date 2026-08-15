@@ -32,7 +32,7 @@ class User < ApplicationRecord
   validates :typical_income, numericality: { greater_than: 0 }, allow_nil: true
   # Without an anchor a configured cadence yields no boundaries at all, and the
   # `[count, 1].max` clamp downstream then reports "1 period before this bill" —
-  # the app would demand the entire bill out of the next paycheck.
+  # the app would demand the entire bill out of the next period.
   validates :period_anchor_date,
             presence: { message: "is required when you set a period" },
             if: :period_cadence

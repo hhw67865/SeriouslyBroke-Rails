@@ -25,7 +25,7 @@ RSpec.describe User, type: :model do
       )
     end
 
-    it "starts from the first pay date on or after `from`" do
+    it "starts from the first boundary on or after `from`" do
       user = create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6))
 
       dates = user.period_boundaries(from: Date.new(2026, 2, 7), to: Date.new(2026, 3, 7))
@@ -87,7 +87,7 @@ RSpec.describe User, type: :model do
       expect(dates).to eq([Date.new(2026, 2, 28), Date.new(2026, 3, 31)])
     end
 
-    it "pays twice a month for semimonthly, 15 days apart" do
+    it "gives two boundaries a month for semimonthly, 15 days apart" do
       user = create(:user, period_cadence: :semimonthly, period_anchor_date: Date.new(2026, 1, 1))
 
       dates = user.period_boundaries(from: Date.new(2026, 2, 1), to: Date.new(2026, 3, 31))
@@ -104,8 +104,8 @@ RSpec.describe User, type: :model do
 
     # The other half of #semimonthly_days. Every example above anchors on day 1, which only
     # ever exercises `first + 15`; an anchor past the 15th takes the `first - 15` branch and
-    # pays on the earlier day of the month first.
-    it "pays on the anchor day and 15 days earlier when the anchor is late in the month" do
+    # puts the earlier day of the month first.
+    it "lands on the anchor day and 15 days earlier when the anchor is late in the month" do
       user = create(:user, period_cadence: :semimonthly, period_anchor_date: Date.new(2026, 1, 20))
 
       dates = user.period_boundaries(from: Date.new(2026, 2, 1), to: Date.new(2026, 3, 31))
@@ -120,7 +120,7 @@ RSpec.describe User, type: :model do
       )
     end
 
-    it "gives a 3-paycheck month for biweekly pay" do
+    it "gives a 3-boundary month for a biweekly period" do
       user = create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 1, 2))
 
       dates = user.period_boundaries(from: Date.new(2026, 1, 1), to: Date.new(2026, 1, 31))
@@ -157,8 +157,13 @@ RSpec.describe User, type: :model do
     # Pins the enum prefix. Nothing else in the suite calls a cadence predicate, so a
     # stale `:pay` prefix would survive every other example here — and a validation or
     # view calling a predicate that no longer exists is the exact shape of a Plan 1 bug.
-    it "prefixes its cadence predicates with `period`" do
-      expect(build(:user, :biweekly)).to be_period_biweekly
+    # Both directions: a predicate that answered true for every cadence would satisfy
+    # the positive assertion alone.
+    it "prefixes its cadence predicates with `period`", :aggregate_failures do
+      user = build(:user, :biweekly)
+
+      expect(user).to be_period_biweekly
+      expect(user).not_to be_period_weekly
     end
   end
 

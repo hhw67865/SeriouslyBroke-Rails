@@ -43,7 +43,7 @@ RSpec.describe BudgetCalculator, type: :model do
     create(:pool_budget, :one_time, pool: car, amount: amount, anchor_date: anchor, item: item)
   end
 
-  # A user who never told us when they get paid, so User#period_boundaries returns [].
+  # A user who never declared a period, so User#period_boundaries returns [].
   def cadence_less_rule(*traits, **attrs)
     other = create(:user)
     pool = create(:pool, :budget_pool, user: other, name: "Car")
@@ -71,13 +71,13 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 28))
     end
 
-    it "is the day before the next paycheck for a per-paycheck rule" do
+    it "is the day before the next period boundary for a per-paycheck rule" do
       budget = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 300)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 19))
     end
 
-    it "falls back to the end of the month when no pay cadence is configured" do
+    it "falls back to the end of the month when no period is configured" do
       budget = cadence_less_rule(:per_paycheck_rate, amount: 300)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 28))
@@ -280,7 +280,7 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 28))
     end
 
-    it "is the day before the next paycheck for a per-paycheck rate rule" do
+    it "is the day before the next period boundary for a per-paycheck rate rule" do
       budget = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 300)
 
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 19))
@@ -517,10 +517,10 @@ RSpec.describe BudgetCalculator, type: :model do
   end
 
   describe "#periods_until_due" do
-    it "counts every payday from today through the due date inclusive" do
+    it "counts every period boundary from today through the due date inclusive" do
       budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 3, 6))
 
-      # Feb 6, Feb 20, Mar 6 — both endpoints are paydays and both count.
+      # Feb 6, Feb 20, Mar 6 — both endpoints are boundaries and both count.
       expect(budget.calculator(today: today).periods_until_due).to eq(3)
     end
 
@@ -534,11 +534,11 @@ RSpec.describe BudgetCalculator, type: :model do
       item = create(:item, category: category, name: "Insurance")
       budget = insurance_rule(item: item)
 
-      # due Jun 1, today Jun 3 — an inverted range yields no paydays at all.
+      # due Jun 1, today Jun 3 — an inverted range yields no boundaries at all.
       expect(budget.calculator(today: Date.new(2026, 6, 3)).periods_until_due).to eq(1)
     end
 
-    it "clamps to one when the user has no pay cadence configured" do
+    it "clamps to one when the user has no period configured" do
       budget = cadence_less_rule(:one_time, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
       expect(budget.calculator(today: today).periods_until_due).to eq(1)
@@ -546,15 +546,15 @@ RSpec.describe BudgetCalculator, type: :model do
   end
 
   describe "#required" do
-    # Spec §4.4: Car pool, Feb 6, biweekly. Paydays Feb 6, Feb 20, Mar 6...
-    it "spreads an obligation across the paychecks before it is due" do
+    # Spec §4.4: Car pool, Feb 6, biweekly. Boundaries Feb 6, Feb 20, Mar 6...
+    it "spreads an obligation across the periods before it is due" do
       budget = dated_rule(amount: 600, interval: 6, anchor: Date.new(2026, 3, 1))
 
-      # 2 paydays in [Feb 6, Mar 1]: Feb 6 and Feb 20. Shortfall 600 - 500 = 100.
+      # 2 boundaries in [Feb 6, Mar 1]: Feb 6 and Feb 20. Shortfall 600 - 500 = 100.
       expect(budget.calculator(today: today).required(500)).to eq(50.00)
     end
 
-    it "demands the whole shortfall when the bill lands before the next paycheck" do
+    it "demands the whole shortfall when the bill lands before the next boundary" do
       budget = dated_rule(amount: 600, interval: 6, anchor: Date.new(2026, 2, 7))
 
       expect(budget.calculator(today: today).required(0)).to eq(600.00)
@@ -582,7 +582,7 @@ RSpec.describe BudgetCalculator, type: :model do
     it "spreads a distant obligation thinly" do
       budget = dated_rule(amount: 180, interval: 12, anchor: Date.new(2026, 8, 15))
 
-      # 14 paydays in [Feb 6, Aug 15]
+      # 14 boundaries in [Feb 6, Aug 15]
       expect(budget.calculator(today: today).required(0)).to eq(12.86)
     end
 
@@ -594,10 +594,10 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).required(0)).to be_a(BigDecimal)
     end
 
-    it "spreads a monthly rate rule over the paychecks left in the month" do
+    it "spreads a monthly rate rule over the periods left in the month" do
       budget = create(:pool_budget, :rate, pool: car, amount: 80)
 
-      # due Feb 28; paydays Feb 6 and Feb 20.
+      # due Feb 28; boundaries Feb 6 and Feb 20.
       expect(budget.calculator(today: today).required(0)).to eq(40.00)
     end
 
@@ -608,10 +608,10 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).required(0)).to eq(300.00)
     end
 
-    it "spreads a one-time goal across every payday before it" do
+    it "spreads a one-time goal across every boundary before it" do
       budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
-      # 13 paydays in [Feb 6, Aug 1]. 500 / 13 = 38.4615...
+      # 13 boundaries in [Feb 6, Aug 1]. 500 / 13 = 38.4615...
       expect(budget.calculator(today: today).required(0)).to eq(38.46)
     end
 
@@ -622,7 +622,7 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: Date.new(2026, 6, 3)).required(300)).to eq(500.00)
     end
 
-    it "demands the whole shortfall at once when no pay cadence is configured" do
+    it "demands the whole shortfall at once when no period is configured" do
       budget = cadence_less_rule(:one_time, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
       expect(budget.calculator(today: today).required(0)).to eq(500.00)
@@ -635,7 +635,7 @@ RSpec.describe BudgetCalculator, type: :model do
       registration = create(:item, category: category, name: "Registration")
       budget = one_time_rule(item: registration, anchor: Date.new(2026, 8, 1))
 
-      # 13 paydays in [Feb 6, Aug 1].
+      # 13 boundaries in [Feb 6, Aug 1].
       expect(budget.calculator(today: today).required(0)).to eq(38.46)
     end
 
@@ -681,7 +681,7 @@ RSpec.describe BudgetCalculator, type: :model do
       groceries = create(:category, :expense, user: user, name: "Groceries")
       budget = create(:budget, category: groceries, amount: 400)
 
-      # due Feb 28; paydays Feb 6 and Feb 20.
+      # due Feb 28; boundaries Feb 6 and Feb 20.
       expect(budget.calculator(today: today).required(0)).to eq(200.00)
     end
   end
