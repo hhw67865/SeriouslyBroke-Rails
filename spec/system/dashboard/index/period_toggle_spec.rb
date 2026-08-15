@@ -7,7 +7,7 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
 
   before do
     sign_in user, scope: :user
-    visit root_path
+    visit reports_path
   end
 
   describe "toggle display", :aggregate_failures do
@@ -30,14 +30,14 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
     it "clicking Year to Date adds period=ytd to URL" do
       click_link "Year to Date"
 
-      expect(page).to have_current_path(root_path(tab: "all", period: "ytd"))
+      expect(page).to have_current_path(reports_path(tab: "all", period: "ytd"))
     end
 
     it "clicking Monthly removes period param" do
-      visit root_path(tab: "expenses", period: "ytd")
+      visit reports_path(tab: "expenses", period: "ytd")
       click_link "Monthly"
 
-      expect(page).to have_current_path(root_path(tab: "expenses"))
+      expect(page).to have_current_path(reports_path(tab: "expenses"))
     end
 
     it "Year to Date toggle becomes active after clicking" do
@@ -53,7 +53,7 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
       click_link "Year to Date"
       within("nav[aria-label='Tabs']") { click_link "Income" }
 
-      expect(page).to have_current_path(root_path(tab: "income"))
+      expect(page).to have_current_path(reports_path(tab: "income"))
       expect(page).to have_css("a.bg-brand", text: "Monthly")
     end
 
@@ -61,7 +61,7 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
       click_link "Year to Date"
       within("nav[aria-label='Tabs']") { click_link "Savings" }
 
-      expect(page).to have_current_path(root_path(tab: "savings"))
+      expect(page).to have_current_path(reports_path(tab: "savings"))
       expect(page).to have_css("a.bg-brand", text: "Monthly")
     end
   end

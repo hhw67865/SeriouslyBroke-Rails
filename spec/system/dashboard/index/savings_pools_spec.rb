@@ -26,7 +26,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
     end
 
     it "shows current month pool balance on savings tab" do
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
@@ -36,7 +36,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
     end
 
     it "shows period In/Out for current month" do
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
@@ -60,7 +60,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
     end
 
     it "shows combined total across all pools" do
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       expect(page).to have_content("Total:")
       expect(page).to have_content("$1,500.00")
@@ -74,7 +74,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
       item = create(:item, category: cat, name: "Deposit")
       create(:entry, item: item, amount: 100.00, date: base_date + 1.day)
 
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) { expect(page).to have_content("funded") }
     end
@@ -85,7 +85,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
       item = create(:item, category: cat, name: "Deposit")
       create(:entry, item: item, amount: 50.00, date: base_date + 1.day)
 
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) { expect(page).to have_content("low") }
     end
@@ -99,7 +99,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
       create(:entry, item: savings_item, amount: 100.00, date: base_date + 1.day)
       create(:entry, item: expense_item, amount: 500.00, date: base_date + 2.days)
 
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) { expect(page).to have_content("negative") }
     end

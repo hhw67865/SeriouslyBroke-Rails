@@ -9,7 +9,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   before { sign_in user, scope: :user }
 
   describe "default tab", :aggregate_failures do
-    before { visit root_path }
+    before { visit reports_path }
 
     it "defaults to All tab" do
       all_link = find("nav[aria-label='Tabs'] a", text: "All")
@@ -20,7 +20,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   describe "with financial data", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
     it "shows the Money Flow section with income earned" do
@@ -52,7 +52,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   describe "Income Allocation bar — number accuracy", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
     it "shows income earned and remaining headers" do
@@ -78,7 +78,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   describe "Expense Sources bar — number accuracy", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
     it "shows total spent and amount covered by savings" do
@@ -102,7 +102,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expense_cat = create(:category, :expense, user: user, name: "Groceries")
       create(:entry, item: income_item, amount: 1000, date: base_date + 1.day)
       create(:entry, item: create(:item, category: expense_cat, name: "Food"), amount: 200, date: base_date + 2.days)
-      visit root_path
+      visit reports_path
     end
 
     it "is hidden when there are no pool-covered expenses" do
@@ -113,7 +113,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   describe "Net Savings stat card — number accuracy", :aggregate_failures do
     before do
       seed_mixed_financial_data
-      visit root_path
+      visit reports_path
     end
 
     it "shows net savings as contributions minus withdrawals" do
@@ -129,7 +129,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     it "renders a negative net change when withdrawals exceed contributions" do
       create(:entry, item: savings_item, amount: 100.00, date: base_date + 1.day)
       create(:entry, item: withdrawal_item, amount: 300.00, date: base_date + 2.days)
-      visit root_path
+      visit reports_path
 
       within_stat_card("Net Savings") { expect(page).to have_content("-$200.00") }
     end
@@ -144,7 +144,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       create(:entry, item: create(:item, category: small_cat, name: "Latte"), amount: 50, date: base_date + 1.day)
       create(:entry, item: create(:item, category: large_cat, name: "Monthly"), amount: 2000, date: base_date + 1.day)
       create(:entry, item: create(:item, category: medium_cat, name: "Food"), amount: 400, date: base_date + 1.day)
-      visit root_path
+      visit reports_path
     end
 
     it "orders top spending by amount descending" do

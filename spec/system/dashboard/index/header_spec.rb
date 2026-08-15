@@ -7,7 +7,7 @@ RSpec.describe "Dashboard Index - Header", type: :system do
 
   before do
     sign_in user, scope: :user
-    visit root_path
+    visit reports_path
   end
 
   describe "page header elements", :aggregate_failures do

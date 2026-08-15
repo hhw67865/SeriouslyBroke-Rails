@@ -9,7 +9,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
   before { sign_in user, scope: :user }
 
   describe "empty state", :aggregate_failures do
-    before { visit root_path(tab: "savings") }
+    before { visit reports_path(tab: "savings") }
 
     it "shows empty messages when no savings data" do
       expect(page).to have_content("No savings flow data available")
@@ -28,7 +28,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
       create(:entry, item: savings_item, amount: 500.00, date: base_date + 5.days)
       create(:entry, item: savings_item, amount: 300.00, date: base_date - 1.month + 5.days)
       create(:entry, item: withdrawal_item, amount: 100.00, date: base_date + 10.days)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
     end
 
     it "shows current month contributed and withdrawn totals" do
@@ -46,7 +46,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
       create(:entry, item: savings_item, amount: 200.00, date: base_date - 2.months + 1.day)
       create(:entry, item: savings_item, amount: 300.00, date: base_date - 1.month + 1.day)
       create(:entry, item: savings_item, amount: 400.00, date: base_date + 1.day)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
     end
 
     it "shows period contribution and total contributed through end of selected month" do
@@ -66,7 +66,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
       create(:entry, item: savings_item, amount: 1000.00, date: base_date - 1.month + 1.day)
       create(:entry, item: savings_item, amount: 600.00, date: base_date + 1.day)
       create(:entry, item: withdrawal_item, amount: 200.00, date: base_date + 5.days)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
     end
 
     it "shows pool balance, progress, and period flow" do
@@ -90,7 +90,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
     before do
       create(:entry, item: savings_item, amount: 250.00, date: base_date - 2.months + 1.day)
       create(:entry, item: savings_item, amount: 350.00, date: base_date + 1.day)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
     end
 
     it "counts contributions from before pool start_date in totals" do
@@ -107,7 +107,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
     before do
       create(:entry, item: savings_item, amount: 300.00, date: base_date)
       create(:entry, item: savings_item, amount: 250.00, date: base_date - 1.month)
-      visit root_path(tab: "savings", period: "ytd")
+      visit reports_path(tab: "savings", period: "ytd")
     end
 
     it "shows YTD in chart heading" do
@@ -131,7 +131,7 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
     before do
       create(:entry, item: emergency_item, amount: 500.00, date: base_date + 1.day)
       create(:entry, item: vacation_item, amount: 200.00, date: base_date + 2.days)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
     end
 
     it "shows tracked and untracked categories separately with links" do

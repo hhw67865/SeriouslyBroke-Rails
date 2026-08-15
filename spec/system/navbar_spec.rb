@@ -13,11 +13,11 @@ RSpec.describe "Navbar", type: :system do
   describe "main navigation", :aggregate_failures do
     it "shows all main navigation links" do
       # Check for navigation links anywhere on the page (sidebar or mobile nav)
-      expect(page).to have_link("Dashboard")
+      expect(page).to have_link("Home")
       expect(page).to have_link("Categories")
       expect(page).to have_link("Entries")
-      expect(page).to have_link("Savings Pools").or have_link("Savings")
-      expect(page).to have_link("Statistics")
+      expect(page).to have_link("Pools").or have_link("Savings")
+      expect(page).to have_link("Reports")
       expect(page).to have_link("Calendar")
     end
 
@@ -25,7 +25,7 @@ RSpec.describe "Navbar", type: :system do
       click_link "Categories"
       expect(page).to have_current_path(categories_path)
 
-      click_link "Dashboard"
+      click_link "Home"
       expect(page).to have_current_path(authenticated_root_path)
     end
   end
@@ -75,7 +75,7 @@ RSpec.describe "Navbar", type: :system do
       expect(page).to have_content(next_month_date.strftime("%B %Y")).or have_content(next_month_date.strftime("%b %Y"))
 
       # Navigate to another page
-      click_link "Dashboard"
+      click_link "Home"
       expect(page).to have_current_path(authenticated_root_path)
 
       # Month selection should still persist

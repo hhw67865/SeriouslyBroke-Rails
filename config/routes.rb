@@ -6,8 +6,11 @@ Rails.application.routes.draw do
 
   # Application routes (protected by authentication)
   authenticated :user do
-    root "dashboard#index", as: :authenticated_root
+    root "home#index", as: :authenticated_root
   end
+
+  # The former dashboard: still the backward-looking view, no longer the front door.
+  get "reports", to: "dashboard#index", as: :reports
 
   resources :pools do
     member do

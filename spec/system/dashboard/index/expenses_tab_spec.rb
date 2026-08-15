@@ -11,7 +11,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   before { sign_in user, scope: :user }
 
   describe "empty state", :aggregate_failures do
-    before { visit root_path(tab: "expenses") }
+    before { visit reports_path(tab: "expenses") }
 
     it "shows empty message when no expense data" do
       expect(page).to have_content("No budgeted expense data")
@@ -35,7 +35,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       create(:budget, category: groceries, amount: 500)
       create(:entry, item: groceries_item, amount: 150.00, date: base_date + 5.days)
       create(:entry, item: car_repair_item, amount: 200.00, date: base_date + 10.days)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
     end
 
     it "shows Monthly Budget section with only budgetable categories" do
@@ -72,7 +72,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before do
       create(:budget, category: expense_category, amount: 500)
       create(:entry, item: expense_item, amount: 150.00, date: base_date + 5.days)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
     end
 
     it "shows 'Show Total' button by default" do
@@ -97,7 +97,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before do
       create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
       create(:entry, item: dining_item, amount: 150.00, date: base_date + 2.days)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
     end
 
     it "shows tracked and total budgeted stats with category links" do
@@ -129,7 +129,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       # Dining: $400 spent on $300 budget → +$100 over
       create(:entry, item: dining_item, amount: 400, date: base_date + 3.days)
 
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
     end
 
     it "shows budget amount next to spent amount" do
@@ -170,7 +170,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       create(:budget, category: expense_category, amount: 200)
       create(:entry, item: expense_item, amount: 100.00, date: base_date)
       create(:entry, item: expense_item, amount: 120.00, date: base_date - 1.month)
-      visit root_path(tab: "expenses", period: "ytd")
+      visit reports_path(tab: "expenses", period: "ytd")
     end
 
     it "shows YTD Budgeted Spending heading" do
@@ -199,7 +199,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       create(:entry, item: groceries_item, amount: 200, date: Date.new(2026, 4, 10))
       create(:entry, item: rent_item, amount: 50, date: Date.new(2026, 4, 1))
       travel_to april15
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
     end
 
     it "shows prorated row with over-pace text and expected pace amount" do

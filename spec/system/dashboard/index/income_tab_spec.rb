@@ -9,7 +9,7 @@ RSpec.describe "Dashboard Index - Income Tab", type: :system do
   before { sign_in user, scope: :user }
 
   describe "empty state", :aggregate_failures do
-    before { visit root_path(tab: "income") }
+    before { visit reports_path(tab: "income") }
 
     it "shows empty message when no income data" do
       expect(page).to have_content("No income data available")
@@ -24,7 +24,7 @@ RSpec.describe "Dashboard Index - Income Tab", type: :system do
     before do
       create(:entry, item: income_item, amount: 3000.00, date: base_date + 1.day)
       create(:entry, item: income_item, amount: 2800.00, date: base_date - 1.month + 1.day)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
     end
 
     it "shows income chart heading" do
@@ -58,7 +58,7 @@ RSpec.describe "Dashboard Index - Income Tab", type: :system do
     before do
       create(:entry, item: salary_item, amount: 5000.00, date: base_date + 1.day)
       create(:entry, item: freelance_item, amount: 1000.00, date: base_date + 2.days)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
     end
 
     it "shows tracked and untracked categories separately with links" do
@@ -77,7 +77,7 @@ RSpec.describe "Dashboard Index - Income Tab", type: :system do
     before do
       create(:entry, item: income_item, amount: 1500.00, date: base_date)
       create(:entry, item: income_item, amount: 2000.00, date: base_date - 1.month)
-      visit root_path(tab: "income", period: "ytd")
+      visit reports_path(tab: "income", period: "ytd")
     end
 
     it "shows YTD in chart heading" do

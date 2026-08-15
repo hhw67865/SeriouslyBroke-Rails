@@ -7,7 +7,7 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
 
   before do
     sign_in user, scope: :user
-    visit root_path
+    visit reports_path
   end
 
   describe "tab display", :aggregate_failures do
@@ -28,7 +28,7 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
     it "navigates to Income tab" do
       click_link "Income"
 
-      expect(page).to have_current_path(root_path(tab: "income"))
+      expect(page).to have_current_path(reports_path(tab: "income"))
       income_link = find("nav[aria-label='Tabs'] a", text: "Income")
       expect(income_link[:class]).to include("border-brand")
     end
@@ -36,7 +36,7 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
     it "navigates to Savings tab" do
       click_link "Savings"
 
-      expect(page).to have_current_path(root_path(tab: "savings"))
+      expect(page).to have_current_path(reports_path(tab: "savings"))
       savings_link = find("nav[aria-label='Tabs'] a", text: "Savings")
       expect(savings_link[:class]).to include("border-brand")
     end
@@ -45,7 +45,7 @@ RSpec.describe "Dashboard Index - Tabs", type: :system do
       click_link "Income"
       click_link "Expenses"
 
-      expect(page).to have_current_path(root_path(tab: "expenses"))
+      expect(page).to have_current_path(reports_path(tab: "expenses"))
     end
   end
 end

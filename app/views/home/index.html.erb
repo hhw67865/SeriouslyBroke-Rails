@@ -1,0 +1,11 @@
+<% content_for :title, "Home" %>
+
+<%= page_header(title: "Home", subtitle: "Where your money stands") %>
+
+<div class="space-y-6">
+  <%= render "standing", presenter: @presenter %>
+  <%= render "attention", presenter: @presenter %>
+  <% @presenter.accounts.each do |account| %>
+    <%= render "account", presenter: @presenter, account: account %>
+  <% end %>
+</div>

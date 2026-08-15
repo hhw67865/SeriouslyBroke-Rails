@@ -22,7 +22,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "shows all expenses as tracked by default" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
@@ -31,7 +31,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "reduces tracked total and budget when a budgeted category is untracked" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
@@ -40,7 +40,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked category separately in breakdown" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       expect(page).to have_content("Groceries")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
@@ -49,7 +49,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows only expense categories in the tracked filter" do
       create(:category, :income, user: user, name: "Salary")
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       open_tracked_filter
       expect(page).to have_content("Groceries")
@@ -58,7 +58,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "toggles a category via the filter popover" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
       apply_tracked
@@ -70,7 +70,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "applies multiple toggle changes in a single submission" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
       toggle_tracked("Groceries")
@@ -85,7 +85,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked count badge" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       expect(find("summary")).to have_content("1")
     end
@@ -104,7 +104,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "reduces tracked income total when a category is untracked" do
       freelance.update!(tracked: false)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       within_stat_card("Tracked Income") { expect(page).to have_content("$5,000.00") }
       within_stat_card("Total Income") { expect(page).to have_content("$6,000.00") }
@@ -112,7 +112,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked category separately in breakdown" do
       freelance.update!(tracked: false)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       expect(page).to have_content("Salary")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
@@ -121,7 +121,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows only income categories in the tracked filter" do
       create(:category, :expense, user: user, name: "Groceries")
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       open_tracked_filter
       expect(page).to have_content("Salary")
@@ -145,14 +145,14 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "reduces tracked savings totals when a category is untracked" do
       vacation.update!(tracked: false)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       within_stat_card("Contributed") { expect(page).to have_content("$500.00") }
     end
 
     it "shows untracked category separately in breakdown" do
       vacation.update!(tracked: false)
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       expect(page).to have_content("Emergency Fund")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
@@ -161,7 +161,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows only savings categories in the tracked filter" do
       create(:category, :expense, user: user, name: "Groceries")
-      visit root_path(tab: "savings")
+      visit reports_path(tab: "savings")
 
       open_tracked_filter
       expect(page).to have_content("Emergency Fund")
