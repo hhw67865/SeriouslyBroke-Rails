@@ -467,12 +467,15 @@ RSpec.describe User, type: :model do
       expect(dates).to eq([Date.new(2026, 2, 20), Date.new(2026, 3, 6)])
     end
 
-    it "handles an anchor in the future" do
+    # An anchor is ONE occurrence of a repeating schedule, not its start, so the
+    # series extends backward from it too.
+    it "extends backward from an anchor in the future" do
       user = create(:user, pay_cadence: :biweekly, pay_anchor_date: Date.new(2026, 5, 1))
 
       dates = user.pay_dates(from: Date.new(2026, 4, 1), to: Date.new(2026, 5, 20))
 
-      expect(dates).to eq([Date.new(2026, 5, 1), Date.new(2026, 5, 15)])
+      expect(dates).to eq([Date.new(2026, 4, 3), Date.new(2026, 4, 17),
+                           Date.new(2026, 5, 1), Date.new(2026, 5, 15)])
     end
 
     it "returns [] when the range is inverted" do
@@ -1356,11 +1359,13 @@ In `app/models/entry.rb`:
   end
 ```
 
-In `app/models/category.rb`:
+In `app/models/category.rb`. **`effective_pool` must be public** — `PoolCalculator`
+and Plan 2 both call it; the `private` below applies only to the validator:
 
 ```ruby
   validate :income_must_land_in_an_account
 
+  # public
   def effective_pool
     pool || user.default_account
   end
@@ -1584,13 +1589,15 @@ class BudgetCalculator
     budget.item.entries.where(date: budget.anchor_date..).count
   end
 
-  # Whole intervals between the anchor and today, regardless of what was recorded.
+  # How many occurrences of this bill have already come due, regardless of what
+  # was recorded. Once today reaches the anchor, one occurrence has passed — so
+  # this is (whole intervals elapsed) + 1, never a bare division.
   def elapsed_cycles
     return 0 if today < budget.anchor_date
 
     months = ((today.year * 12) + today.month) - ((budget.anchor_date.year * 12) + budget.anchor_date.month)
     months -= 1 if today.day < budget.anchor_date.day
-    [months / budget.interval_months, 0].max
+    (months / budget.interval_months) + 1
   end
 
   def overdue?
@@ -1611,7 +1618,8 @@ class BudgetCalculator
 
   private
 
-  def user = budget.pool.user
+  # Budget#user resolves in both category and pool mode, so this never nils out.
+  def user = budget.user
 
   def pay_period_end
     next_payday = user.pay_dates(from: today + 1, to: today + 45).first
@@ -1812,12 +1820,23 @@ class PoolCalculator
   end
 
   # Entry.incomes / .expenses already join item: :category, so do not join again.
+  # An entry's own pool_id overrides its category's, so both must be honoured —
+  # otherwise Entry#pool is a column nothing reads.
   def income_entries_total
-    scoped(Entry.incomes.where(categories: { pool_id: pool.id })).sum(:amount)
+    scoped(Entry.incomes.merge(entries_for_pool)).sum(:amount)
   end
 
   def expense_entries_total
-    scoped(Entry.expenses.where(categories: { pool_id: pool.id })).sum(:amount)
+    scoped(Entry.expenses.merge(entries_for_pool)).sum(:amount)
+  end
+
+  # One predicate rather than .or — Entry.incomes already carries the categories
+  # join, and .or rejects relations whose joins differ structurally.
+  def entries_for_pool
+    Entry.where(
+      "entries.pool_id = :id OR (entries.pool_id IS NULL AND categories.pool_id = :id)",
+      id: pool.id
+    )
   end
 
   def movements_in_total = scoped(pool.movements_in).sum(:amount)
