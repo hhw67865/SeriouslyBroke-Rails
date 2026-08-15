@@ -33,26 +33,32 @@ class BudgetCalculator
   # rows treats a $1 payment and a $500 payment as the same event: a partial
   # payment would retire the whole obligation, and a bill settled in two
   # instalments would roll two cycles instead of one.
+  # Without an anchor there is no window to sum over: `where(date: nil..)` imposes
+  # no bound at all, so this would report every entry ever recorded against the
+  # item as payment toward the current cycle. A wrong answer, not an exception —
+  # and this is public API, reachable without going through #cycles_completed.
   def paid_since_anchor
-    return 0.to_d if budget.item.nil?
+    return 0.to_d if budget.item.nil? || budget.anchor_date.nil?
 
     budget.item.entries.where(date: budget.anchor_date..).sum(:amount).to_d
   end
 
   # Zero for an anchorless rule: with no anchor there is no cycle to have
-  # completed, and the entry scope would have no lower bound to sum from.
-  # Strictly this early return is now redundant — #elapsed_cycles is already 0
-  # without an anchor, so the `min` below floors the result at 0 anyway — but it
-  # states the rule directly and spares a meaningless unbounded SQL sum.
+  # completed. This early return is strictly redundant twice over — #elapsed_cycles
+  # is already 0 without an anchor so the `min` floors the result at 0, and
+  # #paid_since_anchor now guards the nil anchor itself — but it states the rule
+  # directly at the point the rule applies.
   #
   # The `min` keeps a prepayment from rolling a cycle that has not yet come due,
   # erring in the same conservative direction as #elapsed_cycles itself.
   def cycles_completed
     return 0 if budget.anchor_date.nil?
     return elapsed_cycles if budget.item.nil?
-    # Nothing is owed, so nothing can be outstanding — and #amount admits zero,
-    # which would otherwise divide by zero right here.
-    return elapsed_cycles if target.zero?
+    # Nothing is owed, so nothing can be outstanding. `positive?`, not `zero?`:
+    # #amount is validated for presence only, so zero divides by zero here and a
+    # negative gives a negative quotient — `floor` rounds toward -infinity and
+    # `min` only clamps downward, which would roll due_date back past its anchor.
+    return elapsed_cycles unless target.positive?
 
     [(paid_since_anchor / target).floor, elapsed_cycles].min
   end

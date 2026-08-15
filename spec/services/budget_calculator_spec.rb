@@ -203,6 +203,25 @@ RSpec.describe BudgetCalculator, type: :model do
 
       expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
     end
+
+    it "falls back to elapsed cycles for a zero-amount rule that has been paid against" do
+      free = create(:item, category: category, name: "Free")
+      budget = insurance_rule(item: free, amount: 0)
+      create(:entry, item: free, amount: 50, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
+
+    # `amount` is validated for presence only, so a negative slips through. Dividing
+    # by it yields a negative quotient — `floor` rounds toward -infinity, and `min`
+    # can only clamp downward — which would roll due_date backwards past its anchor.
+    it "falls back to elapsed cycles for a negative-amount rule" do
+      refund = create(:item, category: category, name: "Refund")
+      budget = insurance_rule(item: refund, amount: -800)
+      create(:entry, item: refund, amount: 400, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).cycles_completed).to eq(1)
+    end
   end
 
   describe "#paid_since_anchor" do
@@ -224,6 +243,17 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "is zero for a rule with no item to read a payment from" do
       expect(insurance_rule.calculator(today: Date.new(2026, 7, 1)).paid_since_anchor).to eq(0)
+    end
+
+    # Without an anchor there is no window to sum over, and an unbounded sum would
+    # quietly return every entry ever recorded against the item — a wrong answer
+    # dressed up as a real one, at a public entry point.
+    it "is zero for an anchorless rate rule that has an item" do
+      gas = create(:item, category: category, name: "Gas")
+      budget = create(:pool_budget, :rate, pool: car, amount: 80, item: gas)
+      create(:entry, item: gas, amount: 10, date: Date.new(2026, 2, 3))
+
+      expect(budget.calculator(today: today).paid_since_anchor).to eq(0)
     end
 
     it "is an exact decimal" do
@@ -293,6 +323,23 @@ RSpec.describe BudgetCalculator, type: :model do
       create(:entry, item: item, amount: 800, date: Date.new(2026, 6, 2))
 
       expect(budget.calculator(today: Date.new(2027, 1, 1))).to be_overdue
+    end
+
+    # A degenerate amount must never send the schedule backwards in time.
+    it "never rolls a zero-amount rule before its own anchor" do
+      free = create(:item, category: category, name: "Free")
+      budget = insurance_rule(item: free, amount: 0)
+      create(:entry, item: free, amount: 50, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).due_date).to eq(Date.new(2026, 12, 1))
+    end
+
+    it "never rolls a negative-amount rule backwards past its anchor" do
+      refund = create(:item, category: category, name: "Refund")
+      budget = insurance_rule(item: refund, amount: -800)
+      create(:entry, item: refund, amount: 400, date: Date.new(2026, 6, 2))
+
+      expect(budget.calculator(today: Date.new(2026, 7, 1)).due_date).to eq(Date.new(2026, 12, 1))
     end
 
     it "rolls once the bill is actually recorded on the item" do
