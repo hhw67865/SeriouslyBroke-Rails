@@ -16,6 +16,17 @@ class Pool < ApplicationRecord
            dependent: :restrict_with_error,
            inverse_of: :account
 
+  has_many :movements_in,
+           class_name: "PoolMovement",
+           foreign_key: :to_pool_id,
+           dependent: :destroy,
+           inverse_of: :to_pool
+  has_many :movements_out,
+           class_name: "PoolMovement",
+           foreign_key: :from_pool_id,
+           dependent: :destroy,
+           inverse_of: :from_pool
+
   # Prefixed so `pool_type_account?` ("is an account") can never be misread as the
   # `account` association ("the account this pool sits inside").
   enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_15_060001) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_15_070000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -64,6 +64,20 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_060001) do
     t.index ["category_id"], name: "index_items_on_category_id"
   end
 
+  create_table "pool_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.money "amount", scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.datetime "date", null: false
+    t.uuid "from_pool_id", null: false
+    t.uuid "source_entry_id"
+    t.uuid "to_pool_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["date"], name: "index_pool_movements_on_date"
+    t.index ["from_pool_id"], name: "index_pool_movements_on_from_pool_id"
+    t.index ["source_entry_id"], name: "index_pool_movements_on_source_entry_id"
+    t.index ["to_pool_id"], name: "index_pool_movements_on_to_pool_id"
+  end
+
   create_table "pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.uuid "account_id"
     t.datetime "created_at", null: false
@@ -111,6 +125,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_15_060001) do
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
   add_foreign_key "items", "categories"
+  add_foreign_key "pool_movements", "entries", column: "source_entry_id"
+  add_foreign_key "pool_movements", "pools", column: "from_pool_id"
+  add_foreign_key "pool_movements", "pools", column: "to_pool_id"
   add_foreign_key "pools", "pools", column: "account_id"
   add_foreign_key "pools", "users"
   add_foreign_key "users", "pools", column: "default_account_id", on_delete: :nullify

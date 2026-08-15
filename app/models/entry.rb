@@ -6,6 +6,8 @@ class Entry < ApplicationRecord
   belongs_to :item, touch: true
   accepts_nested_attributes_for :item
 
+  has_many :pool_movements, foreign_key: :source_entry_id, dependent: :destroy, inverse_of: :source_entry
+
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :date, presence: true
 
