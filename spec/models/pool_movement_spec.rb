@@ -103,6 +103,32 @@ RSpec.describe PoolMovement, type: :model do
     end
   end
 
+  # This table is the ledger of money movement, and `update_all` / `insert_all` / raw SQL
+  # all walk straight past a model validation. A self-transfer is meaningless in every
+  # case, so the database refuses it too.
+  # rubocop:disable Rails/SkipsModelValidations -- skipping the validation is the point
+  describe "database constraints" do
+    it "refuses a self-transfer written past the validation" do
+      movement = create(:pool_movement, from_pool: checking, to_pool: groceries)
+
+      expect { movement.update_column(:to_pool_id, movement.from_pool_id) }
+        .to raise_error(ActiveRecord::StatementInvalid, /pool_movements_distinct_pools/)
+    end
+
+    it "refuses a self-transfer inserted in bulk" do
+      expect do
+        described_class.insert_all!([{ from_pool_id: checking.id, to_pool_id: checking.id, amount: 10, date: Time.zone.now }])
+      end.to raise_error(ActiveRecord::StatementInvalid, /pool_movements_distinct_pools/)
+    end
+
+    it "still admits a legitimate movement written past the validation" do
+      movement = create(:pool_movement, from_pool: checking, to_pool: groceries)
+
+      expect { movement.update_column(:to_pool_id, car.id) }.not_to raise_error
+    end
+  end
+  # rubocop:enable Rails/SkipsModelValidations
+
   describe "#crosses_accounts?" do
     let(:savings_account) { create(:pool, :account, user: user, name: "Savings Account") }
     let(:vacation) { create(:pool, :savings_pool, user: user, account: savings_account) }
