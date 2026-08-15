@@ -312,18 +312,30 @@ RSpec.describe PoolCalculator, type: :model do
 
     before { create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150) }
 
+    # The whole progression, in order, because "a dateless goal is just a rate rule plus a
+    # pool target" is the reading this group exists to disprove. An ordinary rate rule is
+    # satisfied at its OWN amount — correct for a budget envelope, which is swept and topped
+    # back up every period, and wrong for a savings pool, which never sweeps: under that
+    # reading the second example below returned 0 and a $2,400 goal reported itself funded
+    # forever at $150. Each example is one period further along the same goal.
     it "asks for its rate while below the target" do
       expect(vacation.calculator(today: today).required).to eq(150)
     end
 
-    # Measured, not assumed: with $600 already in the pool the allocation waterfall hands
-    # the $150 rule its full amount, so its shortfall — and the pool's requirement — is
-    # zero for this period even though the goal is a long way off. That is the ordinary
-    # envelope rule, not the goal cutoff, and it is pinned here so the two are not confused.
-    it "stops asking for the period once the period's own rate is already in the pool" do
+    # $600 of $2,400 saved. The rule's amount is a contribution rate, not a per-period
+    # ceiling, so a part-funded goal keeps asking for the whole rate.
+    it "still asks for the full rate when partly funded" do
       create(:pool_movement, from_pool: account, to_pool: vacation, amount: 600)
 
-      expect(vacation.calculator(today: today).required).to eq(0)
+      expect(vacation.calculator(today: today).required).to eq(150)
+    end
+
+    # $100 short with a $150 rate: asking for the rate would overshoot the target the user
+    # set, so the final contribution is the remainder.
+    it "asks only for the remainder when less than a rate is left" do
+      create(:pool_movement, from_pool: account, to_pool: vacation, amount: 2_300)
+
+      expect(vacation.calculator(today: today).required).to eq(100)
     end
 
     it "stops asking once the balance reaches the target" do
@@ -338,6 +350,24 @@ RSpec.describe PoolCalculator, type: :model do
       expect(vacation.calculator(today: today).required).to eq(0)
     end
 
+    # `0.to_d`, not a bare `0`: #required feeds a summing caller, so a reached goal must not
+    # make the return type depend on how well funded the pool is.
+    it "returns a BigDecimal zero from the reached branch" do
+      create(:pool_movement, from_pool: account, to_pool: vacation, amount: 2_400)
+
+      expect(vacation.calculator(today: today).required).to be_a(BigDecimal)
+    end
+
+    # A savings pool with a deadline is not a dateless goal. The anchored maths spreads the
+    # $600 across the 13 pay periods between today and Aug 1 — $46.15 a period — and must
+    # keep winning; the dateless path would ask for the whole $600 now.
+    it "leaves an anchored savings goal to the scheduled maths" do
+      deadline_goal = create(:pool, :savings_pool, user: goal_user, account: account, target_amount: 2_400)
+      create(:pool_budget, :one_time, pool: deadline_goal, amount: 600)
+
+      expect(deadline_goal.calculator(today: today).required).to eq(46.15)
+    end
+
     it "does not apply the cutoff to budget pools" do
       envelope = create(:pool, :budget_pool, user: goal_user, account: account, target_amount: nil)
       create(:pool_budget, :per_paycheck_rate, pool: envelope, amount: 150)
@@ -345,8 +375,10 @@ RSpec.describe PoolCalculator, type: :model do
       expect(envelope.calculator(today: today).required).to eq(150)
     end
 
-    # `0.to_d`, not a bare `0`: #required feeds a summing caller, so the reached-goal
-    # branch must not make the return type depend on how well funded the pool is.
+    # The pair below is the pool-type discrimination, held at one identical balance so the
+    # only difference between the two answers is the pool's type. The nil-target envelope
+    # example above cannot do that job: with no target, #dateless_goal? is false for it
+    # whether or not the `pool_type_savings?` guard is there, so it fails zero mutations.
     it "stops asking, in BigDecimal, once a target below the rate is reached", :aggregate_failures do
       calc = pool_at_a_target_below_its_rate(:savings_pool).calculator(today: today)
 
@@ -362,12 +394,7 @@ RSpec.describe PoolCalculator, type: :model do
       expect(calc.required).to eq(50)
     end
 
-    # $100 target, $150 a period, $100 in the pool — the only shape in which the cutoff is
-    # observable at all. #required is already zero whenever the balance covers the rule's
-    # own amount, so a target above the rate can never show the cutoff working: measured,
-    # the three target-$2,400 examples above pass with the cutoff deleted outright, and the
-    # nil-target envelope example passes with the `pool_type_savings?` guard dropped. This
-    # pair is what actually pins both the cutoff and the pool type it discriminates on.
+    # $100 target, $150 a period, $100 in the pool.
     def pool_at_a_target_below_its_rate(trait)
       create(:pool, trait, user: goal_user, account: account, target_amount: 100).tap do |pool|
         create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 150)

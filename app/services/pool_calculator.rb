@@ -46,22 +46,40 @@ class PoolCalculator
   # pool happens to be in the black. Plan 2's sweep step divides by this.
   def free_amount = [balance - reserve, 0.to_d].max
 
-  # A dateless savings goal is a rate rule plus a pool target: it funds at its rate
-  # until the balance reaches the target, then stops. No separate rule shape needed.
+  # A dateless goal funds at its rate until the POOL reaches its target. A rate rule's
+  # usual "satisfied at my own amount" semantics do not apply here: an ordinary rule is
+  # satisfied once the envelope holds its amount, which is right for a budget envelope
+  # because a budget envelope is swept and topped back up every period. Savings pools
+  # never sweep, so that same reading would leave a $2,400 goal reporting itself funded
+  # forever at $150 — the rule's amount is a contribution RATE, not a per-period ceiling.
   #
-  # Savings-only on purpose. A budget envelope with a target is not a goal — the target
-  # there is a display marker, and an envelope that stopped asking the moment it hit it
-  # would quietly under-fund the bill it exists to pay. Same for an account, whose target
-  # is the buffer marker: a health line, never a cap.
-  def goal_reached?
-    pool.pool_type_savings? && pool.target_amount.to_d.positive? && balance >= pool.target_amount.to_d
+  # Savings-only, and dateless-only. A budget envelope's target is a display marker, and
+  # an account's is the buffer marker — a health line, never a cap. A savings pool that
+  # names an anchor_date has a deadline, and the anchored maths already spreads the goal
+  # across the periods remaining; that path must keep winning.
+  def dateless_goal?
+    pool.pool_type_savings? &&
+      pool.target_amount.to_d.positive? &&
+      pool.budgets.none? { |budget| budget.anchor_date.present? }
   end
 
-  # `0.to_d`, not a bare `0`, on both branches: #required feeds a summing caller, and an
-  # Integer leaking out of the reached-goal path makes the return type depend on how well
-  # funded the pool is. The `sum` seed covers the same hole for a pool with no rules at all.
+  # `min(rate, remaining)`: the final contribution is the remainder, not the rate. Asking
+  # for $150 when $40 would finish the goal overshoots the target the user set.
+  #
+  # `0.to_d`, not a bare `0`: #required feeds a summing caller, and an Integer leaking out
+  # of the reached-goal branch makes the return type depend on how well funded the pool is.
+  def goal_required
+    remaining = pool.target_amount.to_d - balance
+    return 0.to_d if remaining <= 0
+
+    rate = pool.budgets.sum(0.to_d) { |budget| budget.amount.to_d }
+    [rate, remaining].min
+  end
+
+  # The `sum` seed is the same type guarantee as #goal_required's, for the pool that holds
+  # no rules at all: an unseeded `sum` over an empty set returns the Integer literal 0.
   def required
-    return 0.to_d if goal_reached?
+    return goal_required if dateless_goal?
 
     budgets_by_due_date.sum(0.to_d) { |budget| budget.calculator(today: today).required(allocated_balances[budget]) }
   end
