@@ -53,9 +53,9 @@ class CategoriesController < ApplicationController
 
   def toggle_tracked
     if @category.update(tracked: !@category.tracked?)
-      redirect_back_or_to(root_path)
+      redirect_back_or_to(reports_path)
     else
-      redirect_back_or_to(root_path, alert: "Could not update category.")
+      redirect_back_or_to(reports_path, alert: "Could not update category.")
     end
   end
 
@@ -64,7 +64,7 @@ class CategoriesController < ApplicationController
       current_user.categories.find_by(id: id)&.update(tracked: attrs[:tracked] == "1")
     end
 
-    redirect_back_or_to(root_path)
+    redirect_back_or_to(reports_path)
   end
 
   private

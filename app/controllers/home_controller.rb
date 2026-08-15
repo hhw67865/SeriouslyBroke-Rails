@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 class HomeController < ApplicationController
-  # No `include DateContext`: ApplicationController already includes it, so re-including
-  # here would re-run the concern's `included do` block and register
-  # `before_action :set_selected_month_year` a second time on this controller. Home is
-  # anchored to today rather than to the sidebar's month scrubber, so it needs nothing
-  # from the concern beyond the helper methods shared/_date_selector calls.
+  # No `include DateContext`: it is already inherited from ApplicationController, and
+  # ActiveSupport::Concern's `append_features` bails out on an ancestor that already
+  # includes it, so a second include here would be a silent no-op — noise, nothing more.
+  # The concern stays in the chain because shared/_date_selector calls its
+  # `selected_month` / `selected_year` helpers on every page. Home itself is anchored to
+  # today rather than to that month scrubber, hence `Date.current` below.
   def index
     @presenter = HomePresenter.new(user: current_user, today: Date.current)
   end

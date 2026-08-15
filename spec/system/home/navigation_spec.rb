@@ -26,11 +26,16 @@ RSpec.describe "Home Navigation", type: :system do
     expect(page).to have_link("Reports", href: reports_path)
   end
 
-  it "replaces the old Dashboard entry rather than adding to it", :aggregate_failures do
+  # The negative half of each rename. Capybara.exact is unset in this project, so link
+  # text matches by substring: have_link("Pools") passes just as happily against
+  # "Savings Pools", and the positive assertions alone would survive a full revert.
+  it "replaces the old entries rather than adding to them", :aggregate_failures do
     visit root_path
 
     expect(page).to have_link("Home", href: root_path)
     expect(page).to have_no_link("Dashboard")
     expect(page).to have_link("Pools", href: pools_path)
+    expect(page).to have_no_link("Savings Pools")
+    expect(page).to have_no_link("Statistics")
   end
 end
