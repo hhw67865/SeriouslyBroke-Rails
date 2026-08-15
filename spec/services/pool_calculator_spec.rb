@@ -5,9 +5,9 @@ require "rails_helper"
 RSpec.describe PoolCalculator, type: :model do
   let(:user) { create(:user) }
 
-  # These fixtures build a pool balance out of savings-category entries, which is
-  # exactly what PoolCalculator#balance stopped counting. Scoped to this group so
-  # they no longer leak into the envelope examples below.
+  # These fixtures build a pool balance out of savings-category entries — the pre-envelope
+  # shape #balance still has to answer for until Plan 3 converts those entries to movements.
+  # Scoped to this group so they do not leak into the envelope examples below.
   describe "savings-pool balances" do
     let(:base_date) { Date.current.beginning_of_month }
     let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, start_date: base_date - 6.months) }
@@ -68,21 +68,10 @@ RSpec.describe PoolCalculator, type: :model do
       end
     end
 
-    describe "entries before pool start_date are excluded", :aggregate_failures do
-      it "ignores contributions dated before the pool start_date", pending: "savings-category contributions become movements in Plan 3" do
-        create(:entry, item: savings_item, amount: 999.00, date: pool.start_date - 1.day)
-
-        calc = pool.calculator
-        expect(calc.contributions).to eq(1400.00) # unchanged, pre-start entry excluded
-      end
-
-      it "ignores withdrawals dated before the pool start_date", pending: "savings-category contributions become movements in Plan 3" do
-        create(:entry, item: expense_item, amount: 999.00, date: pool.start_date - 1.day)
-
-        calc = pool.calculator
-        expect(calc.withdrawals).to eq(250.00) # unchanged
-      end
-    end
+    # The two "entries before pool start_date are excluded" examples that lived here were
+    # deleted, not un-pended: #balance deliberately stopped filtering on start_date, and the
+    # "counts entries and movements dated before the pool's start_date" example below pins
+    # the opposite semantic. They asserted a rule this branch permanently reversed.
   end
 
   # Regression: account and budget pools legitimately have a nil target_amount (only
