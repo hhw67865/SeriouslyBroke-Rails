@@ -662,7 +662,7 @@ git commit -m "feature/pools: added pool status vocabulary for the home screen"
 
 **Interfaces:**
 - Consumes: `PoolStatus`, `PoolCalculator`, `User#typical_income`
-- Produces: `HomePresenter.new(user:, today:)` with `#accounts`, `#pools_for(account)`, `#buffer_for(account)`, `#total_required`, `#available`, `#shortfall`, `#covered?`, `#attention_pools`, `#waterfall`, `#structurally_underwater?`
+- Produces: `HomePresenter.new(user:, today:)` with `#accounts`, `#pools_for(account)`, `#buffer_for(account)`, `#total_required`, `#available`, `#shortfall`, `#covered?`, `#attention_pools`, `#waterfall`, `#structurally_underwater?`, **`#status_for(pool)`**
 
 - [ ] **Step 1: Write the failing test**
 
@@ -838,8 +838,16 @@ class HomePresenter
 
   def covered? = shortfall.zero?
 
+  # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
+  # to Date.current, so a bare call in a partial would compute against a different day
+  # than this presenter whenever `today` is injected — and disagree silently.
+  def status_for(pool)
+    @statuses ||= {}
+    @statuses[pool.id] ||= pool.status(today: today)
+  end
+
   def attention_pools
-    all_pools.select { |pool| pool.status(today: today).needs_attention? }
+    all_pools.select { |pool| status_for(pool).needs_attention? }
   end
 
   # Fills top-down by priority, exactly as a distribution would, so the user sees
@@ -1209,7 +1217,7 @@ Check `custom.css` for the exact status-colour class names before using `text-st
   </div>
 
   <% presenter.attention_pools.each do |pool| %>
-    <% status = pool.status %>
+    <% status = presenter.status_for(pool) %>
     <div class="px-6 py-3 border-b border-gray-100">
       <div class="flex justify-between items-baseline">
         <span class="font-medium text-gray-900"><%= pool.name %></span>
@@ -1376,7 +1384,7 @@ Expected: FAIL — the partials are empty.
   </div>
 
   <% presenter.pools_for(account).each do |pool| %>
-    <%= render "pool_row", pool: pool %>
+    <%= render "pool_row", pool: pool, presenter: presenter %>
   <% end %>
 </div>
 ```
@@ -1386,7 +1394,7 @@ Expected: FAIL — the partials are empty.
 `app/views/home/_pool_row.html.erb`:
 
 ```erb
-<% status = pool.status %>
+<% status = presenter.status_for(pool) %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
      data-pool-name="<%= pool.name %>"
      data-expanded="<%= status.needs_attention? %>">
