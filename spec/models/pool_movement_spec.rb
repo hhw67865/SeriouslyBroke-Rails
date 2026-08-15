@@ -94,6 +94,21 @@ RSpec.describe PoolMovement, type: :model do
       expect(movement.errors[:to_pool]).to include("must belong to the same user")
     end
 
+    # Comparing the users is only half the guard: two pools that name no user at all read
+    # `nil == nil` and pass, so a movement between two ownerless pools was accepted.
+    it "rejects a movement between two pools that name no user", :aggregate_failures do
+      movement = described_class.new(
+        from_pool: Pool.new(pool_type: :account),
+        to_pool: Pool.new(pool_type: :account),
+        amount: 25.00,
+        date: Date.current
+      )
+
+      movement.valid?
+
+      expect(movement.errors[:to_pool]).to include("must belong to the same user")
+    end
+
     it "allows a movement between two unsaved pools of one user" do
       unsaved_user = build(:user)
       from_pool = build(:pool, :account, user: unsaved_user)

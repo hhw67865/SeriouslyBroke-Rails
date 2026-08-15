@@ -89,7 +89,9 @@ class Pool < ApplicationRecord
     return require_account_for_budget_pools if account.blank?
 
     errors.add(:account, "must be an account") unless account.pool_type_account?
-    errors.add(:account, "must belong to the same user") unless account.user_id == user_id
+    # Records, not ids: with neither the pool nor its parent saved both `user_id`s are nil,
+    # and `nil == nil` waves another user's account through.
+    errors.add(:account, "must belong to the same user") unless account.user == user
   end
 
   # Savings pools may stay account-less until Plan 3's data migration backfills them;

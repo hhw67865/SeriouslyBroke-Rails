@@ -128,6 +128,24 @@ RSpec.describe User, type: :model do
       expect(user).to be_valid
     end
 
+    # Both sides unsaved is the only shape that discriminates: with either one persisted the
+    # id comparison already rejects. Unsaved, `default_account.user_id` and `id` are both nil,
+    # so `nil == nil` waved through an account belonging to nobody.
+    it "rejects an unsaved account belonging to nobody", :aggregate_failures do
+      user = described_class.new(default_account: Pool.new(pool_type: :account))
+
+      user.valid?
+
+      expect(user.errors[:default_account]).to include("must be an account you own")
+    end
+
+    it "accepts an unsaved account the unsaved user owns" do
+      user = build(:user)
+      user.default_account = build(:pool, :account, user: user)
+
+      expect(user).to be_valid
+    end
+
     # Regression: `users.default_account_id` referencing a pool that `dependent: :destroy`
     # is deleting used to raise InvalidForeignKey and block the whole cascade.
     it "does not block destroying the user who points at it" do

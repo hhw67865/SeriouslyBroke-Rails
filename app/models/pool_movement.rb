@@ -37,9 +37,12 @@ class PoolMovement < ApplicationRecord
     errors.add(:to_pool, "must differ from the source pool") if from_pool == to_pool
   end
 
+  # Two pools that name no user at all compare `nil == nil` and read as sharing an owner,
+  # so an absent user is rejected outright rather than matched against another absent one.
   def pools_must_share_a_user
     return if from_pool.blank? || to_pool.blank?
 
-    errors.add(:to_pool, "must belong to the same user") unless from_pool.user == to_pool.user
+    owner = from_pool.user
+    errors.add(:to_pool, "must belong to the same user") if owner.blank? || owner != to_pool.user
   end
 end

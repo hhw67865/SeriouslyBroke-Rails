@@ -93,9 +93,11 @@ class User < ApplicationRecord
     pools.where.not(account_id: nil).destroy_all
   end
 
+  # Records, not ids: on an unsaved user holding an unsaved pool both ids are nil, and
+  # `nil == nil` accepted an account belonging to nobody.
   def default_account_is_own_account
     return if default_account.blank?
-    return if default_account.pool_type_account? && default_account.user_id == id
+    return if default_account.pool_type_account? && default_account.user == self
 
     errors.add(:default_account, "must be an account you own")
   end

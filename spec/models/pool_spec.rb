@@ -85,6 +85,23 @@ RSpec.describe Pool, type: :model do
       expect(pool).not_to be_valid
       expect(pool.errors[:account]).to include("must belong to the same user")
     end
+
+    # The id form of this check reads `nil == nil` when neither side is saved, so both the
+    # pool and its parent are built here — persisting either one makes the comparison
+    # discriminate on its own and the example stops testing anything.
+    it "requires the parent to belong to the same user when nothing is saved yet", :aggregate_failures do
+      pool = build(:pool, :budget_pool, user: build(:user), account: build(:pool, :account, user: build(:user)))
+
+      pool.valid?
+
+      expect(pool.errors[:account]).to include("must belong to the same user")
+    end
+
+    it "accepts a parent owned by the same unsaved user" do
+      owner = build(:user)
+
+      expect(build(:pool, :budget_pool, user: owner, account: build(:pool, :account, user: owner))).to be_valid
+    end
   end
 
   describe "name uniqueness" do
