@@ -129,6 +129,37 @@ RSpec.describe User, type: :model do
     end
   end
 
+  # A period is a RANGE — the caller that needs it deletes a period's distribution and would
+  # otherwise reach for a bare date equality, leaving a second split alongside the first.
+  describe "#period_containing" do
+    let(:biweekly) { create(:user, :biweekly) } # anchored Fri 6 Feb 2026, so Aug 7 and Aug 21
+
+    # Three days of the same period, one at each end and one in the middle, all answering with
+    # the same range: that is what "the period containing" has to mean.
+    it "runs from the boundary that opened it to the day before the next", :aggregate_failures do
+      expect(biweekly.period_containing(Date.new(2026, 8, 7))).to eq(Date.new(2026, 8, 7)..Date.new(2026, 8, 20))
+      expect(biweekly.period_containing(Date.new(2026, 8, 14))).to eq(Date.new(2026, 8, 7)..Date.new(2026, 8, 20))
+      expect(biweekly.period_containing(Date.new(2026, 8, 20))).to eq(Date.new(2026, 8, 7)..Date.new(2026, 8, 20))
+    end
+
+    # The opposite direction at one day's distance on either side, so a range built off the
+    # wrong boundary cannot pass: Aug 6 and Aug 21 each belong to a different period.
+    it "puts the days either side of a boundary in different periods", :aggregate_failures do
+      expect(biweekly.period_containing(Date.new(2026, 8, 6))).to eq(Date.new(2026, 7, 24)..Date.new(2026, 8, 6))
+      expect(biweekly.period_containing(Date.new(2026, 8, 21))).to eq(Date.new(2026, 8, 21)..Date.new(2026, 9, 3))
+    end
+
+    # A user who declared no period has no boundaries at all, so the calendar month stands in —
+    # the same fallback BudgetCalculator#period_end uses, chosen so the two cannot disagree.
+    it "falls back to the calendar month without a cadence" do
+      expect(create(:user).period_containing(Date.new(2026, 8, 20))).to eq(Date.new(2026, 8, 1)..Date.new(2026, 8, 31))
+    end
+
+    it "takes a Time as readily as a Date" do
+      expect(biweekly.period_containing(Time.zone.parse("2026-08-20 23:30"))).to eq(Date.new(2026, 8, 7)..Date.new(2026, 8, 20))
+    end
+  end
+
   describe "#typical_income" do
     it "is optional" do
       expect(build(:user, typical_income: nil)).to be_valid

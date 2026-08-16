@@ -45,6 +45,12 @@ class User < ApplicationRecord
 
   STRIDE_DAYS = { "weekly" => 7, "biweekly" => 14 }.freeze
 
+  # How far #period_containing looks either side of a date to find the boundaries around it.
+  # The longest cadence is monthly, so no period can exceed 31 days; 45 is the same window
+  # BudgetCalculator#boundary_period_end already searches, kept identical so the two cannot
+  # disagree about which boundary comes next.
+  PERIOD_WINDOW_DAYS = 45
+
   def toggle_theme!
     update(theme: light? ? :dark : :light)
   end
@@ -63,6 +69,23 @@ class User < ApplicationRecord
     when "semimonthly" then monthly_dates(semimonthly_days, from, to)
     else []
     end
+  end
+
+  # The whole period `date` falls in, as an inclusive Date range: from the boundary that
+  # opened it through the day before the next one. A period is a RANGE, and the one caller
+  # that needs it — replacing a period's distribution — must not reach for a bare date
+  # equality, or a re-run two days later would leave the first split in place and add a
+  # second on top of it.
+  #
+  # A user who declared no period has no boundaries at all, so the calendar month stands in.
+  # That is the same fallback BudgetCalculator#period_end uses for a monthly rule, chosen so
+  # the two answers agree rather than because a month is a period.
+  def period_containing(date)
+    date = date.to_date
+    opened_on = period_boundaries(from: date - PERIOD_WINDOW_DAYS, to: date).last
+    next_boundary = period_boundaries(from: date + 1, to: date + PERIOD_WINDOW_DAYS).first
+
+    (opened_on || date.beginning_of_month)..(next_boundary ? next_boundary - 1 : date.end_of_month)
   end
 
   private

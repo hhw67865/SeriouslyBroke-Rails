@@ -259,6 +259,30 @@ RSpec.describe PoolMovement, type: :model do
     end
   end
 
+  # `kind` exists so a distribution can be REPLACED without destroying anything it did not
+  # write, and the default is the whole protection: every path that does not name a kind —
+  # the entry-driven movements, Task 7's reallocation screen — must land outside what
+  # AllocationCommitter deletes.
+  describe "kind" do
+    it "defaults to a transfer", :aggregate_failures do
+      movement = create(:pool_movement, from_pool: checking, to_pool: groceries)
+
+      expect(movement.kind).to eq("transfer")
+      expect(movement).to be_kind_transfer
+    end
+
+    # Both directions of the scope on one fixture, so "collects the distribution" cannot pass
+    # by collecting everything: the transfer is excluded and the other two are not.
+    it "collects only the rows a distribution wrote", :aggregate_failures do
+      allocation = create(:pool_movement, from_pool: checking, to_pool: groceries, kind: :allocation)
+      sweep = create(:pool_movement, from_pool: groceries, to_pool: checking, kind: :sweep)
+      transfer = create(:pool_movement, from_pool: checking, to_pool: car)
+
+      expect(described_class.distributed).to contain_exactly(allocation, sweep)
+      expect(described_class.distributed).not_to include(transfer)
+    end
+  end
+
   describe "pool associations" do
     it "reaches a pool's movements from both ends", :aggregate_failures do
       inbound = create(:pool_movement, from_pool: checking, to_pool: groceries)
