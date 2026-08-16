@@ -609,26 +609,92 @@ RSpec.describe PoolCalculator, type: :model do
       expect(calc(car).period_closed?).to be(true)
       expect(calc(car).sweepable_amount).to eq(0)
       expect(calc(car).sweepable_amount).to be_a(BigDecimal)
+      # The one shape where #free_amount and #sweepable_amount are equal, and the reason they
+      # are not equal in general: here the rate rule allocates nothing, so the only claim on
+      # the balance is the live bill, which both readers reserve. Give the rate rule any
+      # allocation at all and the two must diverge by it — that is the sweep.
+      expect(calc(car).free_amount).to eq(0)
     end
 
     # The same shape with the anchored rule settled — a one-off dated Aug 1, now behind us.
     # A fulfilled bill reserves nothing, so the whole balance sweeps. Without this the
     # examples above pass against "any anchored rule reserves forever".
     #
-    # #free_amount is pinned alongside deliberately, and it DISAGREES: #allocated_balances
-    # still fills a fulfilled rule, so the pool reports $300 free while $900 sweeps. That is
-    # the measured behaviour of the two readers today, and this assertion is here so a later
-    # change to either one has to face the divergence rather than discover it in a ledger.
+    # The point of the #free_amount and #allocated_balances assertions is AGREEMENT about the
+    # settled rule: both readers now say it holds $0. Before fix round 2 the allocation still
+    # gave it $500, so #free_amount said $300 while #sweepable_amount said $900 — a $600 gap
+    # opened by a bill nobody owes any more.
+    #
+    # The two figures still differ, by exactly $100, and that difference is correct and must
+    # not be assertion-fudged away: it is the LIVE rate rule's allocation. #free_amount asks
+    # "what does no rule currently claim", #sweepable_amount asks "what belongs to a period
+    # that is over", and a closed envelope's rate-rule money is precisely the money the sweep
+    # exists to take. The pair below pins that the gap is the rate rule's $100 and nothing else.
     it "sweeps the whole balance once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
+      car = envelope(name: "Car")
+      rate = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      settled = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      fund(car, 900, on: last_period)
+
+      expect(calc(car).allocated_balances[settled]).to eq(0)
+      expect(calc(car).allocated_balances[rate]).to eq(100)
+      expect(calc(car).free_amount).to eq(800)
+      expect(calc(car).period_closed?).to be(true)
+      expect(calc(car).sweepable_amount).to eq(900)
+      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # #required is the claim fix round 2 rests on, in the direction where it holds: a settled
+    # rule's own contribution cannot move, because BudgetCalculator#shortfall returns `0.to_d`
+    # for a fulfilled rule BEFORE it looks at `allocated`, so the figure handed to it is
+    # already ignored. Amply funded, so nothing behind it in the fill order changes either.
+    # Measured at 0 both before and after the change.
+    it "does not change what a pool asks for when the settled rule stops holding money" do
       car = envelope(name: "Car")
       create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
       create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
       fund(car, 900, on: last_period)
 
-      expect(calc(car).free_amount).to eq(300)
-      expect(calc(car).period_closed?).to be(true)
-      expect(calc(car).sweepable_amount).to eq(900)
-      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
+      expect(calc(car).required).to eq(0)
+    end
+
+    # The redistribution, and the direction where #required DOES move. A settled one-off due
+    # Aug 1 sorts ahead of a live $400 bill due Sep 1, and the envelope holds only $300.
+    #
+    # Before: the settled rule took all $300, the live bill was allocated $0, and the pool
+    # asked for the whole $400 — a shortfall declared against money the envelope was already
+    # holding, because a bill nobody owes was sitting on it. After: the settled rule takes
+    # nothing, the live bill gets the $300, and the pool asks for the $100 it is actually
+    # missing.
+    #
+    # Both allocations are pinned, and they do not coincide ($0 vs $300), so the example
+    # cannot pass on a fixture where the fill order happens not to matter.
+    it "hands a settled rule's allocation to the live rule behind it", :aggregate_failures do
+      car = envelope(name: "Car")
+      settled = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      bill = create(:pool_budget, pool: car, amount: 400, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      fund(car, 300, on: last_period)
+
+      expect(calc(car).allocated_balances[settled]).to eq(0)
+      expect(calc(car).allocated_balances[bill]).to eq(300)
+      expect(calc(car).required).to eq(100)
+      expect(calc(car).required).to be_a(BigDecimal)
+    end
+
+    # The zero handed to a settled rule is summed by #reserve, so it is a BigDecimal, not a
+    # bare `0` — the same guarantee #balance carries, at the one shape that now produces
+    # nothing but skipped rules. A pool whose every rule is settled reserves nothing and is
+    # entirely free, and both figures have to survive being the emptiest answer in the class.
+    it "reserves a BigDecimal zero when every rule on the pool is settled", :aggregate_failures do
+      car = envelope(name: "Car")
+      settled = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      fund(car, 900, on: last_period)
+
+      expect(calc(car).allocated_balances[settled]).to be_a(BigDecimal)
+      expect(calc(car).reserve).to eq(0)
+      expect(calc(car).reserve).to be_a(BigDecimal)
+      expect(calc(car).free_amount).to eq(900)
+      expect(calc(car).free_amount).to be_a(BigDecimal)
     end
 
     # Mixed bases on one envelope: the per-paycheck rule's period ended Aug 6, the monthly

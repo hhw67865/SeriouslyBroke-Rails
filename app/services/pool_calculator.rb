@@ -31,10 +31,29 @@ class PoolCalculator
   alias current_balance balance
 
   # Earliest due date fills first: the money you need soonest must actually be there.
+  #
+  # A SETTLED obligation holds nothing, and skips the fill without consuming `remaining` — so
+  # the rules behind it in the order receive what it used to hold. It previously kept its whole
+  # amount forever, which put two readers of the same pool at odds: #free_amount subtracted a
+  # paid bill's allocation while #sweepable_amount (which already excludes settled rules) did
+  # not, so Home could render `$300.00 left · last period` on a row the next distribution
+  # empties by $900. A screen disagreeing with the action it is offering is the same defect as
+  # rendering `$0` for a closed envelope.
+  #
+  # This cannot move the settled rule's own #required: BudgetCalculator#shortfall returns
+  # `0.to_d` for a fulfilled rule BEFORE it looks at `allocated`, so the figure we hand it is
+  # already ignored. It does move the pool's #required, downward, when a live rule behind it
+  # picks up the freed money — that rule is now genuinely funded, and reporting a shortfall
+  # against money the envelope is holding was the same lie one level down.
+  #
+  # `0.to_d`, not a bare `0`: #reserve sums these values, and the whole class's type guarantee
+  # (see #balance) is that a money reader never changes shape with how the pool is funded.
   def allocated_balances
     @allocated_balances ||= begin
       remaining = balance
       budgets_by_due_date.index_with do |budget|
+        next 0.to_d if fulfilled?(budget)
+
         # `clamp(0, negative)` raises ArgumentError, which would take down every caller of
         # allocated_balances — reserve, free_amount, required, the whole pool page. Budget
         # validates the sign, but a validation is an input rule and this is a rendering
@@ -235,9 +254,13 @@ class PoolCalculator
   # next occurrence to fund. A recurring dated bill therefore reserves in every period, which
   # is correct: the money is genuinely spoken for. What is no longer correct is letting that
   # stop the rest of the envelope from sweeping.
-  def live_anchored?(budget)
-    budget.anchor_date.present? && !budget.calculator(today: today).fulfilled?
-  end
+  def live_anchored?(budget) = budget.anchor_date.present? && !fulfilled?(budget)
+
+  # One spelling of "settled", for the two readers that ask. #allocated_balances asks it to
+  # decide whether the rule holds any of the balance; #live_anchored? asks it to decide whether
+  # the rule's holding survives a sweep. A second spelling would let those two answers drift,
+  # and they are the pair whose disagreement this fix exists to close.
+  def fulfilled?(budget) = budget.calculator(today: today).fulfilled?
 
   # The last day money entered this pool — the period #period_closed? is actually asking about.
   #

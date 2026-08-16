@@ -327,6 +327,39 @@ RSpec.describe PoolStatus, type: :model do
       expect(status.due_on).to eq(Date.new(2026, 2, 28))
     end
 
+    # The user-facing half of PoolCalculator's "a settled rule holds nothing" fix. A paid-off
+    # $200 one-off sorts ahead of the live $600 rule and used to keep its allocation forever,
+    # starving the live rule of $200 the envelope was actually holding — so this pool read
+    # `behind $107.69` while carrying enough to be exactly on schedule. It now reads on track.
+    #
+    # The pair below is that change isolated: same balance, same live rule, same fill order,
+    # differing only in whether the LEADING rule is settled. The control still reads
+    # `behind $107.69`, so this cannot pass against an allocation that stopped filling
+    # earliest-due-first, or against a :behind branch that has simply gone quiet.
+    it "stops reading behind once the rule ahead of it is settled", :aggregate_failures do
+      pool = envelope("Car")
+      create(:pool_budget, :one_time, pool: pool, amount: 200, anchor_date: Date.new(2026, 1, 15))
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 600)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:on_track)
+      expect(status.amount).to eq(600)
+    end
+
+    it "still reads behind when the rule ahead of it is merely unpaid", :aggregate_failures do
+      pool = envelope("Car")
+      create(:pool_budget, pool: pool, amount: 200, interval_months: 6, anchor_date: Date.new(2026, 2, 28))
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 600)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:behind)
+      expect(status.amount).to be_within(0.01).of(107.69)
+    end
+
     # periods_in_cycle divides by its own return value, so both shapes that make
     # it zero have to be pinned or the guard is asserted by nothing.
     it "does not fire for a one-time rule, which has no interval to spread over" do
