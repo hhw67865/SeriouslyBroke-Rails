@@ -73,6 +73,58 @@ module DistributionsHelper
     number_with_precision(line.funded, precision: 2, delimiter: "")
   end
 
+  # How many recipients get named before a sentence stops being something a person would say
+  # aloud. Past three, the two that moved most and a total for the rest — never "and 1 other",
+  # which is longer than the name it replaces.
+  NAMED_RECIPIENTS = 3
+
+  # WHERE THE MONEY WENT, on the row that moved it. The companion to the consequence line: that
+  # one is about a later period, this one is about the split on the screen right now.
+  #
+  # It exists because the waterfall re-runs beneath an edit, so envelopes the user never touched
+  # change their figures. A screen that moves money without saying where is the one thing that
+  # would make the cascade worse than no cascade.
+  def distribution_redirect_sentence(redirect)
+    return distribution_redirect_buffer_only(redirect) if redirect.buffer_only?
+
+    "#{distribution_redirect_lead(redirect)}: #{distribution_redirect_destinations(redirect).to_sentence}."
+  end
+
+  def distribution_redirect_lead(redirect)
+    return "That frees #{number_to_currency(redirect.moved)}" if redirect.freed?
+
+    "That takes #{number_to_currency(-redirect.moved)} more"
+  end
+
+  # The answer said as an answer rather than as a list of one. "$300.00 to your buffer" restates
+  # the lead and leaves out the half that matters — that nothing below was waiting for it — and
+  # a user told only the first half concludes the money vanished.
+  def distribution_redirect_buffer_only(redirect)
+    return "#{distribution_redirect_lead(redirect)}, and nothing below it was waiting — it stays in your buffer." if
+      redirect.freed?
+
+    "#{distribution_redirect_lead(redirect)}, out of your buffer."
+  end
+
+  # The buffer is always named last and never truncated: it is where the money stops, and a
+  # sentence that trails off before reaching it has not answered the question.
+  def distribution_redirect_destinations(redirect)
+    named, rest = distribution_redirect_split(redirect.recipients)
+    preposition = redirect.freed? ? "to" : "from"
+
+    parts = named.map { |pool, amount| "#{number_to_currency(amount)} #{preposition} #{pool.name}" }
+    parts << "#{number_to_currency(rest.sum(0.to_d, &:last))} across #{pluralize(rest.size, "other")}" if rest.any?
+    parts << "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.buffer.positive?
+    parts
+  end
+
+  # Name them all up to the limit, otherwise the two that moved most and a summary for the rest.
+  def distribution_redirect_split(recipients)
+    return [recipients, []] if recipients.size <= NAMED_RECIPIENTS
+
+    [recipients.first(2), recipients.drop(2)]
+  end
+
   # THE SENTENCE THIS TASK EXISTS FOR: what an override costs the user later, naming the
   # mechanism and not only the number.
   #

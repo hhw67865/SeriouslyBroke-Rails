@@ -134,6 +134,16 @@
             <%= distribution_line_detail(line) %>
             <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
           </p>
+          <%# WHERE THE MONEY WENT, said on the row that moved it and nowhere else. The cascade
+              re-fills every envelope below an edit, so rows nobody touched change their figures;
+              this is the sentence that keeps that from being money moving for reasons the screen
+              does not state. NOW first, then the consequence's LATER — that is the order the two
+              questions arrive in. Grey, because it is a statement of fact rather than a caution. %>
+          <% if line.redirect %>
+            <p class="mt-1 text-xs text-gray-500" data-redirect="<%= line.pool.name %>">
+              ↳ <%= distribution_redirect_sentence(line.redirect) %>
+            </p>
+          <% end %>
           <%# Only where the per-period ask actually moved (spec §5). A row edited in a way that
               changes nothing downstream — a dateless goal, a rate envelope whose leftover is
               swept and topped back up either way — says nothing, because there is nothing to

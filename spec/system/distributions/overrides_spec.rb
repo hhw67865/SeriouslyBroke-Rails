@@ -108,6 +108,58 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_no_content("isn't there")
     end
 
+    # WHERE THE MONEY WENT, said on the row that moved it. The recipient's own figures are pinned
+    # before and after — `$200.00 of $400.00` → `$400.00` — so the example cannot pass on a
+    # fixture where they coincide, and the sentence's `$200.00` is checked against a row that
+    # visibly gained exactly that.
+    #
+    # The line belongs to Rent and to nothing else: Groceries changed its number without anybody
+    # typing in it, and a clause there would name the wrong actor.
+    it "says where the freed money went, on the row that freed it" do
+      fill_in "Amount for Rent", with: "200"
+      click_on "Update figures"
+
+      within("[data-redirect='Rent']") do
+        expect(page).to have_content(
+          "That frees $300.00: $200.00 to Groceries and $100.00 to your buffer.",
+          normalize_ws: true
+        )
+      end
+      expect(page).to have_no_css("[data-redirect='Groceries']")
+    end
+
+    # The case a user would otherwise read as the money vanishing: Groceries is the last row, so
+    # cutting it frees money nothing below is waiting for. Said as an answer rather than as a
+    # list of one — paired with the example above, where the same edit shape names a recipient.
+    it "says so when the freed money reaches nothing and stays in the buffer" do
+      fill_in "Amount for Groceries", with: "50"
+      click_on "Update figures"
+
+      within("[data-redirect='Groceries']") do
+        expect(page).to have_content(
+          "That frees $150.00, and nothing below it was waiting — it stays in your buffer.",
+          normalize_ws: true
+        )
+      end
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $150.00", normalize_ws: true) }
+    end
+
+    # The other direction: an override ABOVE the proposal takes its extra out of the envelopes
+    # below, and "where did my money go" has the same force asked in reverse. The preposition is
+    # the only thing that changes, which is exactly the shape a one-sided implementation gets
+    # wrong.
+    it "says where the money came from when the edit takes more" do
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$200.00 of $400.00") }
+
+      fill_in "Amount for Rent", with: "800"
+      click_on "Update figures"
+
+      within("[data-redirect='Rent']") do
+        expect(page).to have_content("That takes $200.00 more: $200.00 from Groceries.", normalize_ws: true)
+      end
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$0.00 of $400.00") }
+    end
+
     def expect_split(groceries:, buffer:)
       within("[data-row-amount='Groceries']") { expect(page).to have_content(groceries) }
       within("#distribution-buffer") { expect(page).to have_content(buffer, normalize_ws: true) }
@@ -302,6 +354,25 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_no_css("[data-consequence]")
     end
 
+    # THE CASE THAT MOTIVATES THE SENTENCE. The rescue above happens to a row the user never
+    # touched, and its own label still reads `won't make it` because that is where the envelope
+    # stands TODAY — so the only thing on the screen that can say the bill is now made is the
+    # line on the row that made it, and it has to name Rent by name.
+    it "names the row its freed money rescued" do
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$800.00 of $1,000.00") }
+
+      fill_in "Amount for Groceries", with: "0"
+      click_on "Update figures"
+
+      expect_redirect("Groceries", "That frees $400.00: $200.00 to Rent and $200.00 to your buffer.")
+      expect_rent_funded_in_full
+      expect(page).to have_no_css("[data-redirect='Rent']")
+    end
+
+    def expect_redirect(pool, sentence)
+      within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
+    end
+
     # `$1,000.00` and not `$1,000.00 of $1,000.00`: the pairing is what pins that the bill is
     # made rather than that a figure happens to appear on the row.
     def expect_rent_funded_in_full
@@ -340,6 +411,29 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_no_css("[data-consequence='Groceries']")
       # The paired positive: the same render DOES print one, on the row whose ask really moves.
       expect(page).to have_css("[data-consequence='Rent']")
+    end
+
+    # ATTRIBUTION. Two edits at once, and each row's sentence is measured against the split with
+    # ITS OWN edit undone and the other left in place — not against the untouched proposal, which
+    # would credit each of them with the other's money.
+    #
+    # The two answers are not merely different sizes, they point in opposite DIRECTIONS: against
+    # the untouched proposal Vacation went from $0.00 to $50.00 and would read "that takes $50.00
+    # more", when what it actually did was give up the $100.00 Rent's edit had just sent it.
+    it "attributes each edit to itself when two rows are edited at once" do
+      fill_in "Amount for Rent", with: "200"
+      fill_in "Amount for Vacation", with: "50"
+      click_on "Update figures"
+
+      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries, $50.00 to Vacation, and $50.00 to your buffer.")
+      expect_redirect("Vacation", "That frees $50.00, and nothing below it was waiting — it stays in your buffer.")
+      # Against the untouched proposal this row would have read "takes $50.00 more" — the wrong
+      # direction, not merely the wrong size.
+      within("[data-redirect='Vacation']") { expect(page).to have_no_content("takes") }
+    end
+
+    def expect_redirect(pool, sentence)
+      within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
     end
 
     it "says nothing about a dateless goal" do

@@ -54,7 +54,8 @@ class DistributionPresenter
     :period_closed,
     :due_on,
     :periods_left,
-    :consequence
+    :consequence,
+    :redirect
   ) do
     def short = needed - funded
 
@@ -141,6 +142,40 @@ class DistributionPresenter
     # date by the time the next period opens also reports one period left, and saying "the last
     # period before Mar 1" about a date that has already gone is the opposite of the truth.
     def last_period? = periods_left == 1 && due_on.present? && due_on >= opens_on
+  end
+
+  # WHERE THE MONEY WENT — the other half of an edit, and the half the cascade made necessary.
+  #
+  # Consequence says what an edit costs the envelope LATER. This says what the edit did to the
+  # rest of the split NOW. Cutting one row re-runs the waterfall beneath it, so envelopes the
+  # user never touched change their figures; unexplained, that is money moving on screen for
+  # reasons the screen does not state, which is the one real objection to cascading at all.
+  #
+  # IT BELONGS TO THE ROW THAT WAS EDITED, never to the rows that received. A clause on each
+  # recipient would be noise, would shout at rows nobody touched, and would double-count the
+  # moment two rows are edited at once — each recipient would carry a share of both edits with
+  # no way to tell whose it was.
+  #
+  # `moved` is signed: positive when the edit freed money, negative when it took more. Both
+  # directions are real — an override above the proposal takes its extra out of the envelopes
+  # below, and "where did my money go" has the same force asked in reverse.
+  #
+  # `recipients` is `[pool, amount]` in descending order of amount, holding MAGNITUDES; `buffer`
+  # likewise. `|moved| == Σ recipients + buffer` is an identity of two fills over one `available`
+  # and is therefore not asserted anywhere.
+  Redirect = Data.define(:moved, :recipients, :buffer) do
+    def freed? = moved.positive?
+
+    # Nothing below was waiting for it. The case the plan singled out, because it is the one
+    # where a user who is told nothing concludes the money vanished.
+    def buffer_only? = recipients.empty?
+  end
+
+  # One fill reduced to the two things the redirect arithmetic asks of it: what each envelope
+  # got, and what was left over. A value rather than a live calculator, for Line's reason — it
+  # is read outside the transaction that built it.
+  Fill = Data.define(:funded, :leftover) do
+    def for(pool) = funded.fetch(pool.id, 0.to_d)
   end
 
   # The one moment this screen describes. Built inside the transaction, read outside it.
@@ -318,10 +353,15 @@ class DistributionPresenter
   # row. Keyed by pool id, so a line and an alert can never disagree about how one pool is doing.
   def capture(fresh, committer)
     standings = envelopes.to_h { |pool| [pool.id, standing_for(pool)] }
-    baseline = baseline_funding(fresh)
-    lines = fresh.rows.map { |row| line_for(row, fresh, standings, baseline) }
+    @baseline = baseline_fill(fresh)
+    @live = fill_of(fresh)
+    lines = fresh.rows.map { |row| line_for(row, fresh, standings) }
 
     snapshot_from(fresh, committer, standings, lines)
+  end
+
+  def fill_of(calculator)
+    Fill.new(funded: calculator.rows.to_h { |row| [row.pool.id, row.funded] }, leftover: calculator.leftover)
   end
 
   # What each envelope would have received HAD NOTHING BEEN EDITED, keyed by pool id: a second
@@ -334,13 +374,38 @@ class DistributionPresenter
   # edit nobody made to it.
   #
   # Built ONLY when something is actually overridden (`fresh.overrides`, the coerced set, not
-  # the raw params — a form submitting nothing but blanks overrides nothing). Empty otherwise,
-  # and #line_for then falls back to the row's own funding, which is provably the same number.
-  def baseline_funding(fresh)
-    return {} if fresh.overrides.empty?
+  # the raw params — a form submitting nothing but blanks overrides nothing). Nil otherwise, and
+  # #line_for then falls back to the live fill, which is provably the same numbers.
+  def baseline_fill(fresh)
+    return nil if fresh.overrides.empty?
 
-    AllocationCalculator.new(user: user, account: fresh.account, today: today)
-      .rows.to_h { |row| [row.pool.id, row.funded] }
+    fill_of(AllocationCalculator.new(user: user, account: fresh.account, today: today))
+  end
+
+  # The same distribution WITH ONE EDIT UNDONE — the counterfactual a redirect sentence is
+  # measured against, and the only honest way to attribute a cascade to the edit that caused it.
+  #
+  # With a single override that is exactly the baseline fill, already built, so the ordinary case
+  # costs nothing extra. With several, each edited row gets its own fill holding the OTHERS in
+  # place: "what this edit did, given everything else you have typed". Comparing every edited row
+  # against the untouched baseline instead would credit each of them with all the others' money.
+  # `@baseline || @live` rather than a bare `@baseline`, and this is not defensive tidiness:
+  # #baseline_fill is nil when nothing is overridden, and this method was safe only because its
+  # caller happened to check `overridden?` first. Measured — calling it unguarded raised
+  # `undefined method 'for' for nil` and took the whole screen down with a 500. With no override
+  # to undo, "the same distribution with this edit undone" IS the live fill, so the fallback is
+  # the right answer rather than a shrug: #redirect_for then measures zero and says nothing.
+  def without_override(pool, fresh)
+    return @baseline || @live if fresh.overrides.size <= 1
+
+    fill_of(
+      AllocationCalculator.new(
+        user: user,
+        account: fresh.account,
+        today: today,
+        overrides: fresh.overrides.except(pool.id.to_s)
+      )
+    )
   end
 
   # `total_allocated` and `leftover` come straight off the calculator again. They were summed
@@ -406,10 +471,10 @@ class DistributionPresenter
   # `sweeps.fetch(pool, 0.to_d)`, because #sweeps holds only the envelopes with something to
   # give. Keyed by the Pool record, exactly as AllocationCommitter reads it, so the amount the
   # row prints is the amount the movement will carry.
-  def line_for(row, fresh, standings, baseline)
+  def line_for(row, fresh, standings)
     pool = row.pool
     swept = fresh.sweeps.fetch(pool, 0.to_d)
-    proposed = baseline.fetch(pool.id, row.funded)
+    proposed = (@baseline || @live).for(pool)
     overridden = fresh.overridden?(pool)
 
     Line.new(
@@ -419,15 +484,51 @@ class DistributionPresenter
       funded: row.funded,
       overridden: overridden,
       swept: swept,
+      # LEFT AS THE STANDING TODAY, deliberately, and a red label beside a funded box is not the
+      # contradiction it looks like: today the money genuinely has not moved. With the redirect
+      # sentence below it naming what this distribution is about to do, the row reads "here is
+      # where you stand, and this split fixes it" — which is the sentence the screen is for. Do
+      # not "fix" this by projecting the status; the projection already exists, on the row that
+      # was edited, as Consequence#standing.
       status: standings.fetch(pool.id),
       period_closed: pool.calculator(today: today).period_closed?,
-      # A consequence is only ever computed for a row the USER typed in. The cascade moves the
+      # Both sentences are only ever computed for a row the USER typed in. The cascade moves the
       # funding of rows below an override without anybody editing them, and "you're moving $200
       # onto your next period" about a row the waterfall reached on its own names the wrong
-      # actor — the edit that caused it is two rows up, and it already has a line of its own.
+      # actor — the edit that caused it is two rows up, and it says so there.
       consequence: overridden ? consequence_for(pool, row.funded, proposed, swept) : nil,
+      redirect: overridden ? redirect_for(pool, fresh) : nil,
       **schedule_for(pool)
     )
+  end
+
+  # What this one edit did to everything else, or nil when it moved nothing — which is the
+  # ordinary shape of an override the account could not honour (ask $350 with $185 left and the
+  # row still receives $185, so no other row and no buffer figure changes).
+  def redirect_for(pool, fresh)
+    without = without_override(pool, fresh)
+    moved = without.for(pool) - @live.for(pool)
+    return nil if moved.zero?
+
+    Redirect.new(
+      moved: moved,
+      recipients: recipients_of(pool, fresh, without, moved),
+      buffer: (@live.leftover - without.leftover) * (moved.positive? ? 1 : -1)
+    )
+  end
+
+  # The other rows this edit moved money to (or took it from), largest first. Signs are folded
+  # away here rather than in the view: a row that GAINED when the edit freed money and a row that
+  # LOST when the edit took more are the same sentence with one preposition changed, and the copy
+  # should not have to know which.
+  def recipients_of(pool, fresh, without, moved)
+    direction = moved.positive? ? 1 : -1
+
+    fresh.rows
+      .reject { |row| row.pool.id == pool.id }
+      .map { |row| [row.pool, (@live.for(row.pool) - without.for(row.pool)) * direction] }
+      .select { |_recipient, amount| amount.positive? }
+      .sort_by { |_recipient, amount| -amount }
   end
 
   # The row's own schedule clause, as the two members that carry it. Split out only because
