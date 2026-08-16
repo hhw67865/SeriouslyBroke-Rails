@@ -7,6 +7,27 @@
 # lands on the same figures every time.
 srand(20_260_815)
 
+# THE ZONE EVERY DATE IN THIS FILE IS WRITTEN IN, and it has to be set before the first
+# record is saved.
+#
+# `entries.date` and `pool_movements.date` are DATETIME columns, so ActiveRecord casts the
+# Date handed to `date:` through `Time.zone` — which in a rake process is the application
+# default, UTC, because config/application.rb never sets one. Every date-bounded query in the
+# app resolves in the REQUEST zone instead: ApplicationController wraps each request in
+# `Time.use_zone(current_user.timezone)`, and `User#period_datetimes_containing` widens its
+# range with `Date#beginning_of_day`, which reads that zone.
+#
+# So the two halves disagreed by the UTC offset. The demo user's $2,600 paycheck, seeded
+# `date: today` on the day the period opened, was stored as 00:00 UTC and read back as 20:00
+# the PREVIOUS evening in New York — four hours before its own period began. The distribution
+# screen dutifully reported `Income this period $0.00` beside it. The app was right; these
+# seeds were the half speaking the wrong zone.
+#
+# A local rather than a constant: seeds.rb is `load`ed, and `bin/ci` runs it more than once
+# in a session, so a constant here would warn about being reinitialised.
+demo_timezone = "America/New_York"
+Time.zone = demo_timezone
+
 # Clear existing data
 Rails.logger.debug "Clearing existing data..."
 # Delete in the correct order to avoid foreign key violations.
@@ -23,7 +44,7 @@ user1 = User.create!(
   email: "demo@example.com",
   password: "password123",
   name: "Demo User",
-  timezone: "America/New_York"
+  timezone: demo_timezone
 )
 
 # Define category structure with color schemes
@@ -509,6 +530,14 @@ user1.update!(period_cadence: :biweekly, period_anchor_date: today, typical_inco
 
 checking = user1.pools.create!(name: "Checking", pool_type: :account, target_amount: 2_000)
 
+# The account the demo NOMINATES, and the only seeded value `users.default_account_id` has
+# ever had. It matters because /distributions/new opened on the wrong account: the controller
+# fell back to `accounts.by_priority.first` — `[priority, name]` — every account here is
+# priority 0, so the tie broke on the NAME and the screen this data exists for lost to "Ally
+# Savings", which holds one envelope funded in full. Checking is where the pay lands and where
+# the six row states live, so the demo says so rather than leaving it to alphabetical order.
+user1.update!(default_account: checking)
+
 # Four of the five savings pools move into the account. The fifth is left where it was, on
 # purpose: an account-less savings pool is the ordinary shape until Plan 3's backfill, and
 # it is the only way to see Home's "No account" band — a pool nothing can fund, owed but
@@ -516,10 +545,12 @@ checking = user1.pools.create!(name: "Checking", pool_type: :account, target_amo
 #
 # Priorities put them BELOW the envelopes rather than at the default 0: priority is the
 # order a distribution fills, and a savings goal funded ahead of rent is not a budget
-# anybody runs.
-pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 8 + index) }
+# anybody runs. 10 and up, leaving 1-9 to the envelopes — Checking now holds eight of them
+# and the other two accounts one each, and a savings goal sharing a number with an envelope
+# would let `by_priority`'s name tie-break decide which of the two fills first.
+pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 10 + index) }
 orphan_pool = pools[4]
-orphan_pool.update!(priority: 12)
+orphan_pool.update!(priority: 14)
 Budget.create!(pool: orphan_pool, amount: 150, basis: :per_paycheck)
 
 # The tracking half charges Health, Gifts and Education to three of these pools as
@@ -540,12 +571,23 @@ end
 # with no pool, so they are income in the reports and cash in no account — this is the one
 # deposit Checking can see.
 #
-# $2,600 and not more, deliberately: after Rent, Dining and Groceries are moved out this
-# leaves Checking holding $600 against $741.43 of rules, so the demo screen is SHORT. That
-# is the branch this app exists for — the standing band's stranded-cash clause ("$X of that
-# sits in accounts with nothing left to fund") is only ever reached on a short period with
-# more than one account, and with a covered demo it could not be seen at all. The gap is
-# kept small so the rest of the screen still reads as a working budget rather than a crisis.
+# $2,600 and not more, deliberately: after Rent, Dining, Groceries and the two closed
+# envelopes below are moved out this leaves Checking holding $330, which the sweep lifts to
+# $455 of Available against $943.43 of rules — so the demo screen is SHORT. That is the
+# branch this app exists for — the standing band's stranded-cash clause ("$X of that sits in
+# accounts with nothing left to fund") is only ever reached on a short period with more than
+# one account, and with a covered demo it could not be seen at all.
+#
+# THE COST OF THAT CHOICE, stated because the screen prints it: DistributionPresenter derives
+# `buffer_carried` as `available - income - swept`, which is `balance - income` — an
+# all-time balance minus one period's pay. Checking has no income before this period, so
+# every dollar it has ever moved into an envelope lands in that line and it reads
+# -$2,270.00. The two facts cannot both be had: short means `balance < rules - swept`, so
+# `carried < rules - swept - income`, and with $943.43 of rules against a $2,600 paycheck
+# that bound is -$1,781.57 whatever the ledger says. Only rules exceeding income would lift
+# it, and those trip HomePresenter#structurally_underwater? against a $2,400 typical income —
+# a different and worse lie about this household. Left short, and the line left honest.
+Rails.logger.debug "Creating the paycheck this period's distribution hands out..."
 paycheck = user1.categories.create!(name: "Paycheck", category_type: :income, color: "#66BB6A", pool: checking)
 paycheck.items.create!(name: "Direct Deposit").entries.create!(
   amount: 2_600,
@@ -557,8 +599,13 @@ envelope = lambda do |name, priority|
   user1.pools.create!(name: name, pool_type: :budget, account: checking, priority: priority)
 end
 
-fund = lambda do |pool, amount|
-  PoolMovement.create!(from_pool: checking, to_pool: pool, amount: amount, date: Time.current)
+# `on:` defaults to now, which is what the six envelopes below want: money moved THIS period,
+# so their rate rules are still live and nothing sweeps out from under the states they exist
+# to show. The two closed envelopes further down pass a date in the period before, because
+# PoolCalculator#period_closed? measures from `last_funded_on` and an envelope funded today
+# is by definition current.
+fund = lambda do |pool, amount, on: Time.current|
+  PoolMovement.create!(from_pool: checking, to_pool: pool, amount: amount, date: on)
 end
 
 # on track — a bill accumulating on schedule. Funded in full already, so it asks for
@@ -617,6 +664,69 @@ Budget.create!(pool: groceries, amount: 400, basis: :per_paycheck)
 fund.call(groceries, 400)
 
 # ---------------------------------------------------------------------------------------
+# TWO envelopes whose rate period has already ROLLED — the money in them belongs to the
+# period before this one, and the next distribution takes it back.
+#
+# Nothing above produces that shape. Every envelope so far was funded today, and
+# PoolCalculator#period_closed? measures BudgetCalculator#period_end from `last_funded_on`
+# rather than from today, so an envelope funded inside the current period is current by
+# definition. With no closed envelope anywhere in the demo, three shipped features rendered
+# only in specs: the `Swept back from …` line in the distribution screen's sources breakdown,
+# the ` · last period` suffix HomeHelper#pool_status_label appends to a Home row, and the
+# per-row `· $X swept back` clause on the waterfall.
+#
+# Funded 20 days ago, which on a biweekly cadence anchored to today is two boundaries back:
+# the rate period containing that payment ended on the boundary a fortnight ago, and both
+# envelopes have been living off the remainder since. That is the ordinary life of a rate
+# envelope, not a special case — which is the point of demonstrating it with the household's
+# real spending rather than with a pool called `closed_envelope`.
+# ---------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the two envelopes whose period has already rolled..."
+
+# The plain case: one rate rule, nothing dated, so the WHOLE remainder sweeps. $120 went in
+# last period, $45 of it was spent, and the $75 still sitting there is money the next
+# distribution reclaims before it tops the envelope back up to $120.
+supplies = envelope.call("Household Supplies", 7)
+Budget.create!(pool: supplies, amount: 120, basis: :per_paycheck)
+supplies_spending = user1.categories.create!(
+  name: "Household Supplies Spending",
+  category_type: :expense,
+  color: "#90A4AE",
+  pool: supplies
+)
+supplies_spending.items.create!(name: "Cleaning & Paper Goods").entries.create!(
+  amount: 45,
+  date: today - 16.days,
+  description: "Detergent, paper towels, bin bags"
+)
+fund.call(supplies, 120, on: today - 20.days)
+
+# The MIXED case, and the one the partial sweep exists for: a live dated bill sharing an
+# envelope with a rate rule. The vet visit's reserve stays put and only the rate money goes,
+# because PoolCalculator#sweepable_amount subtracts what the dated rules are still holding
+# rather than emptying the envelope.
+#
+# $150 in last period, $34 of pet food out of it, $180 owed to the vet in three weeks. The
+# rate rule is due first so it fills first (#allocated_balances is earliest-due-first), the
+# vet keeps the rest, and the sweep is exactly the rate rule's share — which is the sentence
+# the feature was built to make visible.
+pet_care = envelope.call("Pet Care", 8)
+Budget.create!(pool: pet_care, amount: 50, basis: :per_paycheck)
+Budget.create!(pool: pet_care, amount: 180, anchor_date: today + 20.days)
+pet_spending = user1.categories.create!(
+  name: "Pet Care Spending",
+  category_type: :expense,
+  color: "#A1887F",
+  pool: pet_care
+)
+pet_spending.items.create!(name: "Pet Food").entries.create!(
+  amount: 34,
+  date: today - 12.days,
+  description: "Kibble and litter"
+)
+fund.call(pet_care, 150, on: today - 20.days)
+
+# ---------------------------------------------------------------------------------------
 # A SECOND account, with an envelope of its own.
 #
 # One account made three of this plan's hardest pieces of arithmetic invisible in the data
@@ -653,22 +763,87 @@ ally_transfers.items.create!(name: "Transfer In").entries.create!(
   description: "Moved to Ally Savings"
 )
 
-# Priority 7, after Checking's six envelopes and before the savings goals, so the waterfall
+# Priority 9, below Checking's eight envelopes and above the savings goals, so the waterfall
 # renders the two pots draining independently: this row is funded IN FULL out of Ally while
 # a row above it, in Checking, is left part-funded. That inversion — a lower-priority pool
 # getting everything while a higher-priority one goes short — is correct, is the whole point
 # of per-account pots, and is impossible to see with one account.
 #
 # A rate rule rather than a dated one on purpose: a dated bill with nothing in it reads
-# `behind`, which Car Insurance already demonstrates, and a seventh loud row would add noise
+# `behind`, which Car Insurance already demonstrates, and another loud row would add noise
 # instead of a new state. Left unfunded so it still ASKS for money — a satisfied envelope is
 # rejected from the waterfall and would take the second pot off the screen with it.
 holiday_gifts = user1.pools.create!(
   name: "Holiday Gifts",
   pool_type: :budget,
   account: ally,
-  priority: 7
+  priority: 9
 )
 Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_paycheck)
+
+# ---------------------------------------------------------------------------------------
+# A THIRD account, and the only one in the RED.
+#
+# AllocationCalculator#available is deliberately not clamped at zero, and both screens that
+# read it branch on the negative: the distribution screen swaps its headline for "Nothing to
+# distribute" and prints the buffer in `text-status-danger`, and Home's standing band adds a
+# per-account line for every one of #overdrawn_accounts. No demo account reached that state,
+# so an app whose whole premise is that falling out of budget must be VISIBLE had no screen
+# on which you could see it happen.
+#
+# It has to be a third account rather than a state applied to one of the two above, and the
+# arithmetic is what forces that. `available = balance + sweeps`, and #fill clamps every row
+# against it — so an account with a negative available funds NOTHING, and every row on it
+# reads "$0.00 of $X". Making Checking negative would therefore delete the partial waterfall
+# and its cutoff; making Ally negative would take its pot to zero in Home's #account_pots and
+# silence the stranded-cash clause that account exists for. Neither state survives being
+# stacked on the other, so the third one carries it.
+#
+# The story is the household's freelance income, which the tracking half already has three
+# items of: a side gig gets its own account, and the quarterly estimated tax payment left it
+# before the last invoice was paid. That is an ordinary, recoverable and entirely legible way
+# to be in the red — which matters, because an account that looks broken for no reason
+# teaches the wrong lesson.
+# ---------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the overdrawn third account..."
+
+side_gig = user1.pools.create!(name: "Side Gig Checking", pool_type: :account, target_amount: 1_000)
+
+side_gig_income = user1.categories.create!(
+  name: "Side Gig Income",
+  category_type: :income,
+  color: "#26C6DA",
+  pool: side_gig
+)
+side_gig_invoices = side_gig_income.items.create!(name: "Client Invoice")
+# Two invoices, one in each period, and the SECOND is why this account is worth looking at:
+# the sources breakdown still prints a real "Income this period" line above a negative
+# Available, so the screen reads as "money came in and it was not enough" rather than as an
+# empty account. `buffer_carried` is the account's own -$700 before that $400 landed.
+side_gig_invoices.entries.create!(amount: 900, date: today - 24.days, description: "Invoice #114 paid")
+side_gig_invoices.entries.create!(amount: 400, date: today, description: "Invoice #117 paid")
+
+estimated_taxes = user1.categories.create!(
+  name: "Estimated Taxes",
+  category_type: :expense,
+  color: "#78909C",
+  pool: side_gig
+)
+estimated_taxes.items.create!(name: "Federal Estimate").entries.create!(
+  amount: 1_600,
+  date: today - 3.days,
+  description: "Q3 estimated tax payment"
+)
+
+# Left unfunded, so it still asks: an envelope with nothing to ask for is rejected from the
+# waterfall, and a negative Available with no row under it would state the overdraft without
+# showing what it costs.
+quarterly_taxes = user1.pools.create!(
+  name: "Quarterly Taxes",
+  pool_type: :budget,
+  account: side_gig,
+  priority: 9
+)
+Budget.create!(pool: quarterly_taxes, amount: 200, basis: :per_paycheck)
 
 Rails.logger.debug "Seed data created successfully!"
