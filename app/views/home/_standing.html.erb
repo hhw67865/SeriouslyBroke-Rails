@@ -1,3 +1,45 @@
-<%# Placeholder: the standing band (available, required, shortfall, waterfall).
-    Task 6 fills this in; `presenter` is a HomePresenter. Deliberately renders
-    nothing so Task 5 ships the route without pretending the screen is done. %>
+<%# The standing band: where you stand this period, in one sentence.
+    Local: `presenter` (HomePresenter). See the UI design spec §4.1. %>
+<div class="bg-white border border-gray-200 rounded p-6">
+  <% if presenter.covered? %>
+    <h2 class="text-2xl font-semibold text-gray-900">You're covered this period</h2>
+    <p class="mt-2 text-sm text-gray-600">
+      <%= number_to_currency(presenter.available - presenter.total_required) %> stays in your buffer.
+    </p>
+  <% else %>
+    <h2 class="text-2xl font-semibold text-status-danger">
+      <%= number_to_currency(presenter.shortfall) %> short this period
+    </h2>
+    <p class="mt-2 text-sm text-gray-600">
+      You need <strong><%= number_to_currency(presenter.total_required) %></strong> to stay on schedule.
+      You have <strong><%= number_to_currency(presenter.available) %></strong>.
+    </p>
+
+    <%# Only when the two figures above cannot be subtracted to reach the gap — money sitting
+        in an account whose own pools are already funded. Zero on a single account, so this
+        stays silent for most users (principle 3: a consequence only when there is one). %>
+    <% if presenter.stranded_cash.positive? %>
+      <p class="mt-1 text-sm text-gray-600">
+        <%= number_to_currency(presenter.stranded_cash) %> of that sits in accounts with nothing left
+        to fund, so it can't close the gap — the shortfall is what your pools miss, account by account.
+      </p>
+    <% end %>
+  <% end %>
+
+  <%# An overdraft is money already spent, so it is neither part of #available nor part of
+      #shortfall. It has to be said here or the figures above read as the whole truth. %>
+  <% presenter.overdrawn_accounts.each do |account| %>
+    <p class="mt-4 rounded bg-status-danger-light px-3 py-2 text-sm font-medium text-status-danger">
+      <%= account.name %> is <%= pool_status_label(presenter.status_for(account)) %> — already spent,
+      and none of the figures above count it.
+    </p>
+  <% end %>
+
+  <%# Deliberately a dead link: the sacrifice view that answers this is Plan 2c. %>
+  <% if presenter.structurally_underwater? %>
+    <%= link_to("Your budget doesn't fit your income",
+                "#",
+                class: "mt-4 inline-flex items-center gap-2 px-4 py-2 rounded border " \
+                       "border-status-danger text-status-danger text-sm font-medium") %>
+  <% end %>
+</div>

@@ -1,3 +1,66 @@
-<%# Placeholder: the attention band (presenter.attention_pools).
-    Task 6 fills this in; `presenter` is a HomePresenter. Deliberately renders
-    nothing so Task 5 ships the route without pretending the screen is done. %>
+<%# The attention band: what needs you, then where the money actually went.
+    Local: `presenter` (HomePresenter). See the UI design spec §4.2.
+
+    Overdrawn accounts lead the list. They are the loudest state in the app and no other
+    band can report them — see HomePresenter#overdrawn_accounts. Envelopes follow in the
+    priority order the user already ranked them in. %>
+<% problems = presenter.overdrawn_accounts + presenter.attention_pools %>
+<% rows = presenter.waterfall %>
+
+<%# The cutoff marks where the cash ran out, which is AFTER the last pool that received any
+    of it: a pool funded $355 of $400 did get money, and the spec's §4.2 waterfall draws the
+    line beneath it. So it goes before the first pool that got nothing — or at the end, when
+    the money ran out part-way through the last row and nothing below it exists. %>
+<% cutoff = rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length %>
+
+<section class="bg-white border border-gray-200 rounded" aria-labelledby="attention-heading">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <h3 id="attention-heading" class="text-sm font-semibold text-gray-900">
+      <% if problems.any? %>
+        <%= pluralize(problems.size, "thing") %> need<%= "s" if problems.one? %> you
+      <% else %>
+        Nothing needs you
+      <% end %>
+    </h3>
+  </div>
+
+  <% problems.each do |pool| %>
+    <% status = presenter.status_for(pool) %>
+    <div class="px-6 py-3 border-b border-gray-100 <%= "bg-status-danger-light" if status.state == :overdrawn %>">
+      <div class="flex justify-between items-baseline">
+        <span class="font-medium text-gray-900"><%= pool.name %></span>
+        <span class="text-sm text-status-danger"><%= pool_status_label(status) %></span>
+      </div>
+    </div>
+  <% end %>
+
+  <%# Only when there is a gap to explain. Rendering the waterfall on a covered period would
+      report a consequence nobody is living with (principle 3). %>
+  <% unless presenter.covered? %>
+    <div class="px-6 py-4 border-t border-gray-200" aria-labelledby="waterfall-heading">
+      <%# Sentence case, not the `uppercase` treatment this codebase gives short labels like
+          "Current Balance": that renders as WHERE YOUR MONEY WENT, which shouts a whole
+          sentence — and it is the literal copy the design spec asks for. %>
+      <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500 mb-2">Where your money went</p>
+
+      <%# Two groups rather than a flag inside one loop: the cutoff is then written once and
+          renders correctly at either edge — before every row when the first pool got nothing,
+          and after the last row when the money ran out inside it. %>
+      <% [rows.first(cutoff), rows.drop(cutoff)].each_with_index do |group, index| %>
+        <% if index == 1 %>
+          <div class="border-t-2 border-dashed border-status-danger my-2 pt-2 text-sm text-status-danger font-medium">
+            — ran out here · <%= number_to_currency(presenter.shortfall) %> unfunded —
+          </div>
+        <% end %>
+        <% group.each do |row| %>
+          <div class="flex justify-between text-sm py-1">
+            <span class="text-gray-900"><%= row[:pool].name %></span>
+            <span class="text-gray-600">
+              <%= number_to_currency(row[:funded]) %> of <%= number_to_currency(row[:needed]) %>
+            </span>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  <% end %>
+</section>

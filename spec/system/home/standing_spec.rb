@@ -1,0 +1,91 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+RSpec.describe "Home Standing", type: :system do
+  let(:user) do
+    create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
+  end
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+  before { sign_in user, scope: :user }
+
+  def envelope(name, amount, priority: 1)
+    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    pool
+  end
+
+  def deposit(amount, into: checking)
+    category = create(:category, :income, user: user, pool: into)
+    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+  end
+
+  it "says you're covered when the money is there", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "You're covered")
+    expect(page).to have_content("$600.00")
+    expect(page).to have_no_content("short this period")
+    expect(page).to have_no_content("overdrawn")
+  end
+
+  it "states the gap when you're short", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(150)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "$250.00 short")
+    expect(page).to have_content("You need $400.00")
+    expect(page).to have_content("You have $150.00")
+    expect(page).to have_no_content("You're covered")
+    # Single account: shortfall IS total_required - available, so nothing to explain.
+    expect(page).to have_no_content("can't close the gap")
+  end
+
+  # With more than one account the two headline figures cannot be subtracted to reach the
+  # shortfall — the difference is cash sitting where this period's pools cannot reach it.
+  it "explains the arithmetic when money is stranded in another account", :aggregate_failures do
+    envelope("Rent", 400)
+    deposit(1_000, into: create(:pool, :account, user: user, name: "Ally"))
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "$400.00 short")
+    expect(page).to have_content("You need $400.00")
+    expect(page).to have_content("You have $1,000.00")
+    expect(page).to have_content("$1,000.00 of that sits in accounts with nothing left to fund")
+  end
+
+  # An overdraft is excluded from both headline figures by design, so the band has to name
+  # it or a user $400 down reads "You're covered" and nothing else.
+  it "names an overdrawn account beside the figures that exclude it", :aggregate_failures do
+    groceries = envelope("Groceries", 400)
+    create(:pool_movement, from_pool: checking, to_pool: groceries, amount: 400)
+
+    visit root_path
+
+    expect(page).to have_content("Checking is overdrawn $400.00")
+    expect(page).to have_content("none of the figures above count it")
+  end
+
+  it "shows the structural warning only when rules exceed typical income" do
+    envelope("Rent", 3_000)
+
+    visit root_path
+
+    expect(page).to have_link("Your budget doesn't fit your income")
+  end
+
+  it "hides the structural warning when the budget fits" do
+    envelope("Groceries", 400)
+
+    visit root_path
+
+    expect(page).to have_no_link("Your budget doesn't fit your income")
+  end
+end

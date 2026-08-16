@@ -70,6 +70,36 @@ class HomePresenter
 
   def covered? = shortfall.zero?
 
+  # Accounts that have gone below zero, loudest state first on the attention list.
+  #
+  # Nothing else on this screen can say this. #account_pots clamps a negative balance to
+  # zero, so an overdraft never reaches #available; and #shortfall is summed from the
+  # waterfall rows, so it is not a funding gap either — a user $500 down with a $300 rule
+  # correctly reads `short $300`, not `short $800`. Both choices are right, and together
+  # they mean real debt renders NOWHERE unless a band asks for it by name. #buffer_for
+  # still reports the -$500, so the data was never lost, only unspoken for.
+  #
+  # These are exactly the accounts whose PoolStatus is :overdrawn — an account holds no
+  # anchored rules, so :overdue, :wont_make_it and :behind cannot fire on one — which lets
+  # Home render them with the same row vocabulary as any other problem.
+  def overdrawn_accounts
+    accounts.select { |account| buffer_for(account).negative? }
+  end
+
+  # Cash this period's envelopes cannot reach: the exact difference between #shortfall and
+  # the `total_required - available` subtraction a reader can perform on the standing band.
+  #
+  #   shortfall                  = total_required - Σ min(required_a, pot_a)
+  #   total_required - available = total_required - Σ pot_a
+  #   difference                 = Σ (pot_a - min(required_a, pot_a))
+  #                              = Σ max(0, pot_a - required_a)
+  #
+  # — whatever an account holds beyond what its own pools ask for, which is money that
+  # cannot close the gap because the gap is somewhere else. Never negative, so the standing
+  # band can explain itself only when this is positive; with a single account it is zero
+  # whenever there is a shortfall, and the two figures agree exactly.
+  def stranded_cash = shortfall + available - total_required
+
   # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
   # to Date.current, so a bare call in a partial would compute against a different day
   # than this presenter whenever `today` is injected — and disagree silently.

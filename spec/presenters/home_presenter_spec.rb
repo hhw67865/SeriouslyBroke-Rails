@@ -344,6 +344,71 @@ RSpec.describe HomePresenter do
     end
   end
 
+  describe "#overdrawn_accounts" do
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    it "names the accounts below zero and no others", :aggregate_failures do
+      deposit(ally, 500)
+      overdraw(checking, 400)
+
+      expect(presenter.overdrawn_accounts.map(&:name)).to eq(["Checking"])
+      expect(presenter.status_for(presenter.overdrawn_accounts.first).state).to eq(:overdrawn)
+    end
+
+    it "is empty when every account is in the black" do
+      deposit(checking, 10)
+
+      expect(presenter.overdrawn_accounts).to be_empty
+    end
+
+    # The whole reason this reader exists. Both headline figures are right to leave the
+    # overdraft out — #available because you cannot spend it, #shortfall because a $300
+    # rule is $300 short, not $800 — and between them a real $500 debt would render
+    # nowhere at all. #buffer_for has always known; nothing was asking it.
+    it "reports a debt that neither headline figure contains", :aggregate_failures do
+      overdraw(checking, 500)
+      rate(envelope("Rent", priority: 1), 300)
+
+      expect(presenter.available).to eq(0)
+      expect(presenter.shortfall).to eq(300)
+      expect(presenter.buffer_for(checking)).to eq(-500)
+      expect(presenter.overdrawn_accounts.map(&:name)).to eq(["Checking"])
+    end
+  end
+
+  describe "#stranded_cash" do
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    it "is zero on a single account, where the two figures already agree", :aggregate_failures do
+      deposit(checking, 150)
+      rate(envelope("Groceries", priority: 1), 400)
+
+      expect(presenter.shortfall).to eq(presenter.total_required - presenter.available)
+      expect(presenter.stranded_cash).to eq(0)
+    end
+
+    it "is the cash this period's pools cannot reach", :aggregate_failures do
+      deposit(ally, 1_000)
+      rate(envelope_in(checking, "Rent", priority: 1), 400)
+
+      expect(presenter.shortfall).to eq(400)
+      # What a reader subtracting the standing band's two figures would get instead.
+      expect(presenter.total_required - presenter.available).to eq(-600)
+      expect(presenter.stranded_cash).to eq(1_000)
+    end
+
+    it "counts only the surplus of an account that funds pools of its own", :aggregate_failures do
+      deposit(checking, 100)
+      deposit(ally, 500)
+      rate(envelope_in(checking, "Rent", priority: 1), 400)
+      rate(envelope_in(ally, "Groceries", priority: 2), 200)
+
+      # Checking funds 100 of 400; Ally funds its 200 and keeps 300 nothing can use.
+      expect(presenter.shortfall).to eq(300)
+      expect(presenter.stranded_cash).to eq(300)
+    end
+  end
+
   describe "#attention_pools" do
     it "returns only pools whose status needs attention" do
       quiet = envelope("Groceries", priority: 1)
