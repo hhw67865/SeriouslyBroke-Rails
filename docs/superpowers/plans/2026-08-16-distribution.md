@@ -132,14 +132,14 @@ The row label gains ` · last period` when `period_closed?`. Update spec §7.2 t
 
 **Files:** create `app/services/allocation_calculator.rb`, `spec/services/allocation_calculator_spec.rb`
 
-**Interfaces produced:** `AllocationCalculator.new(user:, account:, today:)` with `#sweeps`, `#available`, `#rows`, `#total_allocated`, `#leftover`, `#short?`
+**Interfaces produced:** `AllocationCalculator.new(user:, account:, today:)` with `#sweeps`, `#total_swept`, `#available`, `#rows`, `#total_allocated`, `#leftover`, `#short?`. `Row` is namespaced inside the class as `AllocationCalculator::Row`.
 
 Five steps, in order, mirroring spec §5:
 
-1. **Sweep** — `account.child_pools.select { |pool| pool.calculator(today: today).period_closed? }`, each contributing `sweepable_amount`. (`period_closed?` lives on the calculator, not on `Pool`, because it needs a `today`.)
-2. **Available** — the account's current balance **plus** the sweeps (the sweep money is already inside the account's total, but not in its unallocated buffer).
-3. **Required** — `pool.calculator(today:).required` per envelope in this account.
-4. **Fill** — top-down by `[priority, name]`, `funded = remaining.clamp(0.to_d, needed)`.
+1. **Sweep** — every `account.child_pools`' `sweepable_amount`, keeping the positive ones. No second gate: `sweepable_amount` already returns `0.to_d` unless the period is closed, and a `period_closed?` filter beside it is a second reader free to disagree with the first. `#sweeps` is keyed by the `Pool` record, so Task 3 has its `from_pool` without a second lookup.
+2. **Available** — the account's current balance **plus** the sweeps (the sweep money is already inside the account's total, but not in its unallocated buffer). **Not clamped at zero.** A single account has no sibling overdraft to cancel against, so clamping would only hide a real negative; Task 4 renders a negative `#available` and `#leftover` rather than assuming a floor.
+3. **Required** — `pool.calculator(today: today, net_of_sweep: true).required` per envelope in this account. The sweep is not materialised until Task 3, so a plain `#required` reads a balance that still holds the leftover and the envelope reports itself already part-funded — measured at $315 against a $400 rule, short by exactly its own sweep, every period. Not recoverable by adding the sweep back onto `required`: on a mixed envelope the live ask is $0 while the correct ask is $100.
+4. **Fill** — top-down by `[priority, name]`, `funded = remaining.clamp(0.to_d, needed)`. Clamp `needed` at zero first — `goal_required` returns `[rate, remaining].min`, so a negative rule amount reaches `clamp(0.to_d, -150)`, which raises `ArgumentError` and 500s the whole distribution screen.
 5. **Leftover** — what stays in the account buffer.
 
 ```ruby
@@ -147,6 +147,8 @@ Row = Struct.new(:pool, :needed, :funded, keyword_init: true) do
   def short = needed - funded
 end
 ```
+
+`net_of_sweep:` derives its amount from a plain twin calculator, never from `self` — computing it on `self` recurses, since `sweepable_amount` reaches `anchored_reserve` and then `balance`. **A `net_of_sweep` calculator must never be asked for `sweepable_amount` or `period_closed?`**: post-sweep it re-derives a second, smaller sweep ($400, then $100 on the mixed envelope). Task 3 reads both in one method and is where that footgun points.
 
 **One account per proposal.** Cross-account transfers are out of scope (spec §5), so a distribution is scoped to the account whose money is being distributed. `#rows` excludes zero-need pools, matching Home's waterfall.
 
@@ -244,6 +246,19 @@ Spec §4.2 — deferred from Plan 2a because every fix is a write path. Each pro
 `HomePresenter#fix_candidates_for(pool)` returns pools in the same account with enough free money, richest first, **excluding any pool whose own status needs attention** — proposing to rob an envelope that is itself behind is not a fix.
 
 A problem with **no** candidate says so plainly rather than offering a dead button. That case is reachable and must be asserted.
+
+### Home adopts the post-sweep view
+
+`HomePresenter#waterfall` is a near-duplicate of `AllocationCalculator#fill` — same `[priority, name]` order, same clamp, same reject-after-fill, same row shape — and it differs in two ways: it spans accounts, and **it does not sweep**. So a closed envelope reads `needs $315` on Home and `needs $400` on the distribution screen: a screen disagreeing with the action it is offering, the same defect class as rendering `$0` for an envelope that still holds its money.
+
+Home takes the distribution's view, because that is what will actually happen when the user presses the button. Both halves move together:
+
+- `#waterfall` and `#total_required` compute `required` with `net_of_sweep: true`.
+- `#available` gains `Σ sweepable_amount` across the pools it already counts.
+
+**`#shortfall` and `#covered?` must not move at all.** Required and available both rise by the same swept total, so their difference is invariant — Home says $315 against $500 available, the distribution says $400 against $585, and both are $185 clear. Assert that invariance directly on a fixture with a closed envelope: it is the property that proves the two screens are answering the same question, and if it fails, one of the two halves was changed without the other.
+
+Sweeps cross no account boundary, so Home may sum `sweepable_amount` over every pool it renders, orphans included, without the per-account scoping `AllocationCalculator` needs.
 
 ---
 
