@@ -59,6 +59,18 @@
         Showing your edits. Nothing has been saved — confirming is what writes the split.
       </p>
     <% end %>
+
+    <%# WHERE THE MONEY WENT, once. With TWO OR MORE rows edited this replaces the per-row
+        destination sentences entirely, because per-row answers are each true against their own
+        counterfactual and do not sum — they overstate the buffer and, worse, silently miss a row
+        that either edit alone would have funded. One decomposition against the untouched
+        proposal names every recipient exactly once and adds up. With one edit it is nil and the
+        row carries its own sentence instead. See DistributionPresenter::Redirect. %>
+    <% if presenter.redirect %>
+      <p class="mt-2 text-xs text-gray-600" id="distribution-redirect">
+        <%= distribution_redirect_sentence(presenter.redirect) %>
+      </p>
+    <% end %>
   </div>
 
   <%# Red pools with no row of their own: an overdue bill whose envelope already holds the money

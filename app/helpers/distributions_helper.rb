@@ -90,44 +90,41 @@ module DistributionsHelper
     "#{distribution_redirect_lead(redirect)}: #{distribution_redirect_destinations(redirect).to_sentence}."
   end
 
+  # "That" for one row's own edit, "Your edits" for the aggregate above the table. The subject is
+  # the only thing that changes: the arithmetic underneath is the same subtraction, taken against
+  # a different baseline (see DistributionPresenter::Redirect).
   def distribution_redirect_lead(redirect)
-    return "That frees #{number_to_currency(redirect.moved)}" if redirect.freed?
+    subject = redirect.aggregate? ? "Your edits" : "That"
+    return "#{subject} free#{"s" unless redirect.aggregate?} #{number_to_currency(redirect.moved)}" if redirect.freed?
 
-    "That takes #{number_to_currency(-redirect.moved)} more"
+    "#{subject} take#{"s" unless redirect.aggregate?} #{number_to_currency(-redirect.moved)} more"
   end
 
   # The answer said as an answer rather than as a list of one. "$300.00 to your buffer" restates
   # the lead and leaves out the half that matters — that nothing below was waiting for it — and
   # a user told only the first half concludes the money vanished.
   def distribution_redirect_buffer_only(redirect)
-    return "#{distribution_redirect_lead(redirect)}, and nothing below it was waiting — it stays in your buffer." if
-      redirect.freed?
+    return "#{distribution_redirect_lead(redirect)}, out of your buffer." unless redirect.freed?
 
-    "#{distribution_redirect_lead(redirect)}, out of your buffer."
+    subject = redirect.aggregate? ? "them" : "it"
+    "#{distribution_redirect_lead(redirect)}, and nothing below #{subject} was waiting — " \
+      "it stays in your buffer."
   end
 
   # The buffer is always named last and never truncated: it is where the money stops, and a
   # sentence that trails off before reaching it has not answered the question.
+  #
+  # Every figure here carries its own number, and it can: there is exactly ONE of these sentences
+  # on the screen at a time (one row's, or one aggregate), computed against one baseline, so the
+  # parts sum to the lead and nothing on the screen can be added to anything else.
   def distribution_redirect_destinations(redirect)
     named, rest = distribution_redirect_split(redirect.recipients)
     preposition = redirect.freed? ? "to" : "from"
 
     parts = named.map { |pool, amount| "#{number_to_currency(amount)} #{preposition} #{pool.name}" }
     parts << "#{number_to_currency(rest.sum(0.to_d, &:last))} across #{pluralize(rest.size, "other")}" if rest.any?
-    parts << distribution_redirect_buffer_clause(redirect, preposition) if redirect.buffer?
+    parts << "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.buffer?
     parts
-  end
-
-  # WITH A FIGURE ONLY WHILE IT CAN BE THE WHOLE TRUTH. Each edited row's buffer share is
-  # measured against its own counterfactual, and those residuals overlap — two rows can honestly
-  # claim $250 and $50 of a buffer that moved $250. Two visible figures summing past what the
-  # screen moved is the "where did it go" question this sentence exists to close, asked back. So
-  # once a second row is edited the destination stays and the figure goes: "the rest" is exactly
-  # true under this edit's counterfactual and cannot be added to anything.
-  def distribution_redirect_buffer_clause(redirect, preposition)
-    return "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.exact_buffer?
-
-    "the rest #{preposition} your buffer"
   end
 
   # Name them all up to the limit, otherwise the two that moved most and a summary for the rest.

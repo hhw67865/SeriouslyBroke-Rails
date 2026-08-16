@@ -155,28 +155,34 @@ class DistributionPresenter
   # user never touched change their figures; unexplained, that is money moving on screen for
   # reasons the screen does not state, which is the one real objection to cascading at all.
   #
-  # IT BELONGS TO THE ROW THAT WAS EDITED, never to the rows that received. A clause on each
-  # recipient would be noise, would shout at rows nobody touched, and would double-count the
-  # moment two rows are edited at once — each recipient would carry a share of both edits with
-  # no way to tell whose it was.
+  # ONE EDIT PUTS IT ON ITS ROW; TWO OR MORE GET A SINGLE LINE ABOVE THE TABLE, and that split is
+  # the whole design rather than a presentation choice.
   #
-  # `moved` is signed: positive when the edit freed money, negative when it took more. Both
-  # directions are real — an override above the proposal takes its extra out of the envelopes
-  # below, and "where did my money go" has the same force asked in reverse.
+  # A per-row sentence is measured against #without_override — this split with that one edit
+  # undone — which is exactly right for one edit and DOES NOT COMPOSE. Two per-row answers are
+  # each true in isolation and do not sum, which is the one thing a money screen may not do:
+  #
+  #   they OVERSTATE the buffer, because each row's share is measured against a different
+  #   counterfactual and the residual overlaps — two rows honestly claiming $300 apiece of a
+  #   buffer that moved $500;
+  #
+  #   and they UNDERSTATE the envelopes, which is worse because it is silent. Where either edit
+  #   ALONE would have funded a row, both per-row deltas compute to zero and that row is named by
+  #   nobody, while it visibly gains money on the same screen. Two edits with an unfunded row
+  #   below them is this feature's central case, not a corner.
+  #
+  # The aggregate is computed ONCE against the untouched proposal: one decomposition, one
+  # baseline, `|moved| == Σ recipients + buffer` guaranteed, and every recipient named exactly
+  # once whether one edit funded it or three did between them.
+  #
+  # `moved` is signed: positive when the edits freed money on net, negative when they took more.
+  # Both directions are real — an override above the proposal takes its extra out of the
+  # envelopes below, and "where did my money go" has the same force asked in reverse.
   #
   # `recipients` is `[pool, amount]` in descending order of amount, holding MAGNITUDES; `buffer`
-  # likewise. `|moved| == Σ recipients + buffer` holds by construction — two fills spending one
-  # `available` — so it is asserted against the SCREEN's own before-and-after figures rather than
-  # against itself.
-  #
-  # `exact_buffer` is false once a SECOND row is edited, and the buffer clause then drops its
-  # figure ("the rest to your buffer"). Each row's buffer share is true under its own
-  # counterfactual, but the buffer is the RESIDUAL and residuals overlap: two rows can honestly
-  # claim $250 and $50 of a buffer that moved $250, and two visible figures summing past what the
-  # screen moved is the "where did it go" question this sentence exists to close, asked back. The
-  # named envelopes keep their figures — they overlap only in contrived shapes, and they are the
-  # part that answers the question.
-  Redirect = Data.define(:moved, :recipients, :buffer, :exact_buffer) do
+  # likewise. The identity is asserted against the SCREEN's own before-and-after figures rather
+  # than against itself, which would be `x == x`.
+  Redirect = Data.define(:moved, :recipients, :buffer, :aggregate) do
     def freed? = moved.positive?
 
     # Nothing below was waiting for it. The case the plan singled out, because it is the one
@@ -185,7 +191,7 @@ class DistributionPresenter
 
     def buffer? = buffer.positive?
 
-    def exact_buffer? = exact_buffer
+    def aggregate? = aggregate
   end
 
   # One fill reduced to the two things the redirect arithmetic asks of it: what each envelope
@@ -207,7 +213,8 @@ class DistributionPresenter
     :lines,
     :short,
     :replaced,
-    :alerts
+    :alerts,
+    :redirect
   )
 
   attr_reader :user, :account, :today, :overrides
@@ -292,6 +299,10 @@ class DistributionPresenter
   # rather than per row: the edited rows already carry their own consequence line, and a screen
   # that never mentions the edits at all after a reload reads as if they had been discarded.
   def overridden? = lines.any?(&:overridden?)
+
+  # The aggregate destination sentence, or nil when fewer than two rows were edited (the row
+  # carries its own then) or when the edits cancelled out. See Redirect.
+  delegate :redirect, to: :snapshot
 
   # `[pool, amount]` pairs in fill order, for the sources line that names them.
   #
@@ -388,9 +399,10 @@ class DistributionPresenter
     standings = envelopes.to_h { |pool| [pool.id, standing_for(pool)] }
     @baseline = baseline_fill(fresh)
     @live = fill_of(fresh)
-    lines = fresh.rows.map { |row| line_for(row, fresh, standings) }
+    edited = fresh.rows.select { |row| fresh.overridden?(row.pool) }
+    lines = fresh.rows.map { |row| line_for(row, fresh, standings, edited.size) }
 
-    snapshot_from(fresh, committer, standings, lines)
+    snapshot_from(fresh, committer, standings, lines, aggregate_redirect(fresh, edited))
   end
 
   def fill_of(calculator)
@@ -422,6 +434,13 @@ class DistributionPresenter
   # costs nothing extra. With several, each edited row gets its own fill holding the OTHERS in
   # place: "what this edit did, given everything else you have typed". Comparing every edited row
   # against the untouched baseline instead would credit each of them with all the others' money.
+  #
+  # MEMOISED PER POOL. It used to be called twice for every edited row — once by the consequence
+  # and once by the destination sentence — so N edits cost 2N extra fills, each a full pass over
+  # every envelope. The destination sentence no longer calls it at all (with two or more edits it
+  # is the aggregate, which reads @baseline), so the memo is what holds the cost at ONE fill per
+  # edited row rather than at whatever the next caller happens to make it.
+  #
   # `@baseline || @live` rather than a bare `@baseline`, and this is not defensive tidiness:
   # #baseline_fill is nil when nothing is overridden, and this method was safe only because its
   # caller happened to check `overridden?` first. Measured — calling it unguarded raised
@@ -431,7 +450,7 @@ class DistributionPresenter
   def without_override(pool, fresh)
     return @baseline || @live if fresh.overrides.size <= 1
 
-    fill_of(
+    (@without ||= {})[pool.id] ||= fill_of(
       AllocationCalculator.new(
         user: user,
         account: fresh.account,
@@ -446,7 +465,7 @@ class DistributionPresenter
   # not know about them then, so its own totals described a split nobody was going to write.
   # With the override inside the fill there is one set of figures, and taking them from anywhere
   # but their source would be the second reader all over again.
-  def snapshot_from(fresh, committer, standings, lines)
+  def snapshot_from(fresh, committer, standings, lines, redirect)
     Snapshot.new(
       available: fresh.available,
       carried: opening_buffer(fresh),
@@ -458,7 +477,8 @@ class DistributionPresenter
       lines: lines,
       short: fresh.short?,
       replaced: committer.replaced,
-      alerts: alerts_from(standings, lines)
+      alerts: alerts_from(standings, lines),
+      redirect: redirect
     )
   end
 
@@ -504,7 +524,7 @@ class DistributionPresenter
   # `sweeps.fetch(pool, 0.to_d)`, because #sweeps holds only the envelopes with something to
   # give. Keyed by the Pool record, exactly as AllocationCommitter reads it, so the amount the
   # row prints is the amount the movement will carry.
-  def line_for(row, fresh, standings)
+  def line_for(row, fresh, standings, edits)
     pool = row.pool
     swept = fresh.sweeps.fetch(pool, 0.to_d)
     overridden = fresh.overridden?(pool)
@@ -528,7 +548,12 @@ class DistributionPresenter
       # onto your next period" about a row the waterfall reached on its own names the wrong
       # actor — the edit that caused it is two rows up, and it says so there.
       consequence: overridden ? consequence_for(pool, row.funded, fresh, swept) : nil,
-      redirect: overridden ? redirect_for(pool, fresh) : nil,
+      # ONE EDIT ONLY. With two or more the destination sentence moves above the table as a
+      # single aggregate (see Redirect): two per-row decompositions do not sum, and showing both
+      # forms at once would put three descriptions of one movement on one screen. The consequence
+      # line stays per row either way — it is about what THIS row's edit costs THIS envelope
+      # later, which is per-row by nature and composes fine.
+      redirect: overridden && edits == 1 ? redirect_for(pool, fresh) : nil,
       **schedule_for(pool)
     )
   end
@@ -538,14 +563,52 @@ class DistributionPresenter
   # row still receives $185, so no other row and no buffer figure changes).
   def redirect_for(pool, fresh)
     without = without_override(pool, fresh)
-    moved = without.for(pool) - @live.for(pool)
+
+    build_redirect(
+      without.for(pool) - @live.for(pool),
+      fresh.rows.reject { |row| row.pool.id == pool.id },
+      without,
+      aggregate: false
+    )
+  end
+
+  # EVERY EDIT AT ONCE, against the untouched proposal — the only baseline against which a
+  # decomposition is guaranteed to sum. `moved` is what the edited rows gave up between them;
+  # every other row's change and the buffer's are what became of it, and the three are the same
+  # subtraction rearranged rather than three independent measurements.
+  #
+  # Keyed off the edited ROWS and not off `overrides.size`, which counts an override naming a
+  # pool the proposal has no row for — a hand-built URL would otherwise switch a single-edit
+  # screen to the aggregate form and take the row's own sentence away.
+  def aggregate_redirect(fresh, edited)
+    return nil if edited.size < 2
+
+    edited_ids = edited.to_set { |row| row.pool.id }
+
+    build_redirect(
+      edited.sum(0.to_d) { |row| @baseline.for(row.pool) - @live.for(row.pool) },
+      fresh.rows.reject { |row| edited_ids.include?(row.pool.id) },
+      @baseline,
+      aggregate: true
+    )
+  end
+
+  # `moved.zero?` is nil rather than a sentence, and it means two different true things depending
+  # on where it came from: for one row, an override the account could not honour (ask $350 with
+  # $185 left and the row still receives $185); for the aggregate, edits that cancelled out on
+  # net. The second can still hide a reshuffle below — one edit freeing exactly what another took,
+  # with a row between them gaining and the buffer losing the same figure — which this says
+  # nothing about. Named as a gap rather than papered over: the rows and the buffer line still
+  # show it, and no lead reading "your edits free $0.00" is worth the coverage.
+  def build_redirect(moved, others, without, aggregate:)
     return nil if moved.zero?
 
+    direction = moved.positive? ? 1 : -1
     Redirect.new(
       moved: moved,
-      recipients: recipients_of(pool, fresh, without, moved),
-      buffer: (@live.leftover - without.leftover) * (moved.positive? ? 1 : -1),
-      exact_buffer: fresh.overrides.size <= 1
+      recipients: recipients_of(others, without, direction),
+      buffer: (@live.leftover - without.leftover) * direction,
+      aggregate: aggregate
     )
   end
 
@@ -553,11 +616,8 @@ class DistributionPresenter
   # away here rather than in the view: a row that GAINED when the edit freed money and a row that
   # LOST when the edit took more are the same sentence with one preposition changed, and the copy
   # should not have to know which.
-  def recipients_of(pool, fresh, without, moved)
-    direction = moved.positive? ? 1 : -1
-
-    fresh.rows
-      .reject { |row| row.pool.id == pool.id }
+  def recipients_of(others, without, direction)
+    others
       .map { |row| [row.pool, (@live.for(row.pool) - without.for(row.pool)) * direction] }
       .select { |_recipient, amount| amount.positive? }
       .sort_by { |_recipient, amount| -amount }

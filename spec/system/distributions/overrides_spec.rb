@@ -428,42 +428,38 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_css("[data-consequence='Rent']")
     end
 
-    # ATTRIBUTION. Two edits at once, and each row's sentence is measured against the split with
-    # ITS OWN edit undone and the other left in place — not against the untouched proposal, which
-    # would credit each of them with the other's money.
+    # TWO EDITS GET ONE LINE ABOVE THE TABLE, and the per-row sentences go away entirely.
     #
-    # The two answers are not merely different sizes, they point in opposite DIRECTIONS: against
-    # the untouched proposal Vacation went from $0.00 to $50.00 and would read "that takes $50.00
-    # more", when what it actually did was give up the $100.00 Rent's edit had just sent it.
-    it "attributes each edit to itself when two rows are edited at once" do
+    # $300 freed by Rent less the $50 Vacation took back is $250, and it is accounted for down to
+    # the cent: $200 to Groceries and $50 to the buffer. Two per-row decompositions could not do
+    # that — each is measured against a different counterfactual and they do not sum.
+    it "replaces the per-row sentences with one line that adds up" do
       fill_in "Amount for Rent", with: "200"
       fill_in "Amount for Vacation", with: "50"
       click_on "Update figures"
 
-      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries, $50.00 to Vacation, and the rest to your buffer.")
-      expect_redirect("Vacation", "That frees $50.00, and nothing below it was waiting — it stays in your buffer.")
-      # Against the untouched proposal this row would have read "takes $50.00 more" — the wrong
-      # direction, not merely the wrong size.
-      within("[data-redirect='Vacation']") { expect(page).to have_no_content("takes") }
+      within("#distribution-redirect") do
+        expect(page).to have_content(
+          "Your edits free $250.00: $200.00 to Groceries and $50.00 to your buffer.",
+          normalize_ws: true
+        )
+      end
+      expect(page).to have_no_css("[data-redirect]")
     end
 
-    # NEITHER ROW PUTS A FIGURE ON THE BUFFER once a second row is edited. Each row's share is
-    # true under its own counterfactual and the two overlap — Rent's is $50.00 and Vacation's is
-    # $50.00 against a buffer that moved $50.00 in total — so two visible figures would sum past
-    # what the screen moved. Paired with the single-edit example above, where the figure IS
-    # printed, so the suppression is a rule firing rather than a clause that never renders.
-    it "does not let two edited rows each put a figure on the buffer" do
+    # The figures the line names, against the rows that rendered them: Groceries $200.00 of
+    # $400.00 → $400.00 (+$200.00) and the buffer $415.00 → $50.00 out of $415.00 → $0.00
+    # (+$50.00). $250.00 = $200.00 + $50.00, from three independent renderings.
+    it "adds up to what the screen actually moved" do
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$200.00 of $400.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$415.00 → $0.00", normalize_ws: true) }
+
       fill_in "Amount for Rent", with: "200"
       fill_in "Amount for Vacation", with: "50"
       click_on "Update figures"
 
-      # $415 → $50 is the one true buffer figure, and it is on the buffer line where it belongs.
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$400.00") }
       within("#distribution-buffer") { expect(page).to have_content("$415.00 → $50.00", normalize_ws: true) }
-      within("[data-redirect='Rent']") { expect(page).to have_content("the rest to your buffer") }
-      within("[data-redirect='Vacation']") { expect(page).to have_content("it stays in your buffer") }
-      # The string a per-edit figure would have produced on BOTH rows, summing to $100 against a
-      # $50 move.
-      expect(page).to have_no_content("$50.00 to your buffer")
     end
 
     it "says nothing about a dateless goal" do
@@ -505,7 +501,10 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Dentist", with: "250"
       click_on "Update figures"
 
-      within("[data-redirect='Dentist']") { expect(page).to have_content("That frees $50.00") }
+      # The destination sentence is the aggregate above the table now — two edits — and it is
+      # the CONSEQUENCE that had to change baseline. It is still per row, and still measured
+      # against this row's own counterfactual.
+      expect(page).to have_no_css("[data-redirect]")
       within("[data-consequence='Dentist']") do
         expect(page).to have_content("You're moving $50.00 onto your next period", normalize_ws: true)
         # The untouched-proposal reading, in both of its halves: the opposite direction, and a
@@ -525,10 +524,23 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Dentist", with: "200"
       click_on "Update figures"
 
-      within("[data-redirect='Dentist']") { expect(page).to have_content("That frees $100.00") }
       within("[data-consequence='Dentist']") do
         expect(page).to have_content("You're moving $100.00 onto your next period", normalize_ws: true)
       end
+    end
+
+    # The aggregate on the same fixture, for the arithmetic: Rent gives up $300 and Dentist
+    # $50, and with no row below them the whole $250 net stays in the buffer — $0.00 → $250.00
+    # on the buffer line, pinned independently.
+    it "accounts for both edits in one line" do
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $0.00", normalize_ws: true) }
+
+      fill_in "Amount for Rent", with: "200"
+      fill_in "Amount for Dentist", with: "250"
+      click_on "Update figures"
+
+      expect_aggregate("Your edits free $250.00, and nothing below them was waiting — it stays in your buffer.")
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $250.00", normalize_ws: true) }
     end
   end
 
@@ -562,6 +574,66 @@ RSpec.describe "Distribution Overrides", type: :system do
         # No rule with a date, so there is no date to name and the clause stays off.
         expect(page).to have_no_content("the last period before")
       end
+    end
+  end
+
+  # THE SHAPE THAT KILLED THE PER-ROW DECOMPOSITION, reproduced. Three rate envelopes and $900:
+  # Rent and Utilities ask $400 each and Dining Out $200, so the money runs out inside Dining Out
+  # at $100.
+  #
+  # Cut Rent and Utilities to $100 apiece and Dining Out fills to $200. Neither per-row sentence
+  # could say so: EITHER edit alone would have funded Dining Out in full, so each row's
+  # counterfactual shows Dining Out at $200 already and computes a delta of ZERO — the row
+  # visibly gains $100 on screen and nobody claims it. Meanwhile both rows' buffer shares came
+  # out at $300 apiece against a buffer that moved $500.
+  #
+  # One decomposition against the untouched proposal has neither problem, and the three figures
+  # it names are pinned here against three independent renderings.
+  describe "two edits with an envelope below them", :aggregate_failures do
+    before do
+      rate_envelope("Rent", 400, priority: 1)
+      rate_envelope("Utilities", 400, priority: 2)
+      rate_envelope("Dining Out", 200, priority: 3)
+      deposit(900, on: Date.current)
+      visit new_distribution_path
+    end
+
+    it "names the envelope neither edit could have claimed on its own" do
+      within("[data-row-amount='Dining Out']") { expect(page).to have_content("$100.00 of $200.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$0.00 → $0.00", normalize_ws: true) }
+
+      fill_in "Amount for Rent", with: "100"
+      fill_in "Amount for Utilities", with: "100"
+      click_on "Update figures"
+
+      expect_aggregate("Your edits free $600.00: $100.00 to Dining Out and $500.00 to your buffer.")
+      within("[data-row-amount='Dining Out']") { expect(page).to have_content("$200.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$0.00 → $500.00", normalize_ws: true) }
+    end
+
+    # The over-claim half, asserted as an absence with the aggregate beside it: two per-row lines
+    # printed "$300.00 ... your buffer" apiece against a $500 move, and each claimed nothing below
+    # was waiting while Dining Out gained $100 on the same screen.
+    it "prints one line rather than two that do not sum" do
+      fill_in "Amount for Rent", with: "100"
+      fill_in "Amount for Utilities", with: "100"
+      click_on "Update figures"
+
+      expect(page).to have_css("#distribution-redirect")
+      expect(page).to have_no_css("[data-redirect]")
+      expect(page).to have_no_content("nothing below it was waiting")
+      expect(page).to have_no_content("$300.00")
+    end
+
+    # The other half of the switch, on the same fixture: one edit keeps its row sentence and no
+    # aggregate appears. Without this, "two get an aggregate" would pass on a screen that always
+    # showed one.
+    it "keeps the row sentence when only one row is edited" do
+      fill_in "Amount for Rent", with: "100"
+      click_on "Update figures"
+
+      expect_redirect("Rent", "That frees $300.00: $100.00 to Dining Out and $200.00 to your buffer.")
+      expect(page).to have_no_css("#distribution-redirect")
     end
   end
 
@@ -616,6 +688,10 @@ RSpec.describe "Distribution Overrides", type: :system do
 
   def expect_redirect(pool, sentence)
     within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
+  end
+
+  def expect_aggregate(sentence)
+    within("#distribution-redirect") { expect(page).to have_content(sentence, normalize_ws: true) }
   end
 
   # A bill: an anchored rule with a due date. `rule` goes straight to the budget factory, so an

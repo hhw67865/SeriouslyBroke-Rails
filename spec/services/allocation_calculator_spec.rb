@@ -205,6 +205,40 @@ RSpec.describe AllocationCalculator, type: :model do
     end
   end
 
+  # A NEGATIVE OVERRIDE, which is bad input the screen deliberately carries through so it fails
+  # PoolMovement's `amount > 0` loudly rather than vanishing from a split it was meant to change
+  # (see #row_for). What it must NOT do on the way there is inflate the money the screen says is
+  # left: `Σ funded` counts the -$50 and reports the buffer $50 higher than the account holds,
+  # and the buffer line is the one figure here that must never overstate.
+  #
+  # Both directions on one fixture: Groceries takes its $200 and the account is left with the
+  # $100 it actually has, not the $150 a raw sum reports. The row keeps the negative, because the
+  # commit has to see it.
+  describe "a negative override" do
+    let!(:groceries) { rate_envelope("Groceries", 200, priority: 1) }
+    let!(:water) { rate_envelope("Water", 300, priority: 2) }
+
+    before { deposit(300) }
+
+    def overridden(amount)
+      described_class.new(user: user, account: checking, today: today, overrides: { water.id => amount })
+    end
+
+    it "keeps it on the row but never counts it as money leaving", :aggregate_failures do
+      expect(row_for(water, from: overridden(-50)).funded).to eq(-50)
+      expect(row_for(groceries, from: overridden(-50)).funded).to eq(200)
+      expect(overridden(-50).total_allocated).to eq(200)
+      expect(overridden(-50).leftover).to eq(100) # $150 if the -$50 were summed in
+    end
+
+    # The paired positive, same fixture with the sign flipped, so "never counts it" cannot pass
+    # on a #total_allocated that has stopped counting anything.
+    it "counts a positive override in full", :aggregate_failures do
+      expect(overridden(50).total_allocated).to eq(250)
+      expect(overridden(50).leftover).to eq(50)
+    end
+  end
+
   describe "the fill" do
     # `[priority, name]`, and the tie-break is the half that goes wrong quietly. Both pools sit
     # at priority 1, Zebra is created FIRST and carries the LOWER uuid, so insertion order and
