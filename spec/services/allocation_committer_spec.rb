@@ -37,6 +37,13 @@ RSpec.describe AllocationCommitter, type: :model do
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
+  # Money leaving the user's life, which is an Entry and never a movement — the one way the
+  # world can change between two commits in a direction no replacement puts back.
+  def spend(amount, from: checking, on: today)
+    category = create(:category, :expense, user: user, pool: from)
+    create(:entry, item: create(:item, category: category), amount: amount, date: on)
+  end
+
   # Memoised per account: every reference inside one example is the SAME proposal, which is
   # how a screen holds it, and — after a commit — the stale snapshot Amendment A is about.
   def proposal(account: checking)
@@ -96,7 +103,6 @@ RSpec.describe AllocationCommitter, type: :model do
       expect(checking.total).to eq(585)
       expect(balance(groceries)).to eq(400)
       expect(balance(checking)).to eq(185)
-      expect(balance(checking) + balance(groceries)).to eq(checking.total)
     end
 
     # The buffer lands exactly where the proposal said the money not handed out would be, and
@@ -146,6 +152,29 @@ RSpec.describe AllocationCommitter, type: :model do
     expect(checking.total).to eq(600)
   end
 
+  # The zero-skip's PRODUCTION shape, and the one an override cannot stand in for: #fill drops
+  # rows whose NEED is zero but keeps a row whose FUNDING is zero — the envelope below the
+  # point the money ran out. $585 against $400 + $300 + $200 of asks funds [400, 185, 0].
+  # Unskipped, Zinc's $0 line fails `amount > 0` and rolls back the whole distribution: one
+  # envelope getting nothing would leave every envelope unfunded.
+  describe "an envelope the money never reached" do
+    let!(:groceries) { rate_envelope("Groceries", 400, funded: 85) }
+    let!(:water) { rate_envelope("Water", 300) }
+    let!(:zinc) { rate_envelope("Zinc", 200) }
+
+    before { deposit(585) }
+
+    it "writes no line for it and funds the envelopes above it", :aggregate_failures do
+      expect(proposal.rows.map(&:funded)).to eq([400, 185, 0]) # Zinc HAS a row; it is funded nothing
+
+      commit
+
+      expect(PoolMovement.kind_allocation.map(&:to_pool)).to eq([groceries, water])
+      expect([balance(groceries), balance(water), balance(zinc)]).to eq([400, 185, 0])
+      expect(checking.total).to eq(585)
+    end
+  end
+
   # One transaction, and the sweep is what proves it: sweeps are written FIRST, so a bad
   # allocation has to take an already-saved row back out with it.
   describe "a failure part-way through" do
@@ -164,6 +193,33 @@ RSpec.describe AllocationCommitter, type: :model do
       expect(PoolMovement.count).to eq(1) # the Jul 12 funding transfer, and nothing else
       expect(balance(groceries)).to eq(85)
       expect(balance(checking)).to eq(500)
+      expect(checking.total).to eq(585)
+    end
+
+    # Amendment F: one shape for both outcomes, so a caller reading a total off a failure gets
+    # the same TYPE it would off a success. `sum` over no movements is where a bare Integer 0
+    # would leak into whatever Task 6 renders beside the errors.
+    it "reports BigDecimal totals on a failure too", :aggregate_failures do
+      result = commit(overrides: { water.id => -50 })
+
+      expect(result.allocated).to eq(0)
+      expect(result.allocated).to be_a(BigDecimal)
+      expect(result.swept).to eq(0)
+      expect(result.swept).to be_a(BigDecimal)
+    end
+
+    # An outer transaction is what makes `requires_new: true` load-bearing: without it the
+    # inner block opens no savepoint, `ActiveRecord::Rollback` is swallowed, and the outer
+    # transaction COMMITS the sweep and the good allocation while this class reports a
+    # failure. A committed partial split described as a failure is the worst thing here can
+    # produce, and no assertion inside the block could see it — the ledger is read after the
+    # outer transaction has closed.
+    it "writes nothing when a caller wraps the commit in its own transaction", :aggregate_failures do
+      result = ActiveRecord::Base.transaction { commit(overrides: { water.id => -50 }) }
+
+      expect(result.success?).to be(false)
+      expect(PoolMovement.distributed).to be_empty
+      expect([balance(groceries), balance(water), balance(checking)]).to eq([85, 0, 500])
       expect(checking.total).to eq(585)
     end
 
@@ -278,6 +334,44 @@ RSpec.describe AllocationCommitter, type: :model do
       expect(checking.total).to eq(1_000)
     end
 
+    # The DELETION's rollback, and the only example that can assert it: every other failure
+    # here runs on a period with no previous distribution, so `destroy_all` matches nothing
+    # and a deletion hoisted out of the transaction looks identical. A re-run carrying a
+    # mistyped negative override is the likeliest way to meet it — the very scenario
+    # replacement exists for — and hoisted, it destroys the previous split, writes nothing in
+    # its place, and reports a failure over a period that has just been emptied.
+    it "keeps the previous split when the re-run fails", :aggregate_failures do
+      commit
+      first_run = PoolMovement.distributed.where(date: today).pluck(:id)
+
+      result = commit(overrides: { water.id => -50 })
+
+      expect(result.success?).to be(false)
+      expect(PoolMovement.where(id: first_run).count).to eq(3)
+      expect([balance(groceries), balance(water), balance(checking)]).to eq([400, 350, 250])
+      expect(checking.total).to eq(1_000)
+    end
+
+    # The committer is not single-use: #call resets its memos, so a second call re-reads the
+    # ledger rather than re-committing the first call's snapshot.
+    #
+    # $800 spent between the two calls is what makes this measurable, and nothing weaker
+    # would: the deletion restores exactly the world the first snapshot described, so on an
+    # unchanged ledger a memoised committer writes the identical split and looks right. With
+    # the money gone there is $150 to hand out, not $700 — memoised, the second call funds
+    # Groceries $400 and Water $300 out of an account that has $65 in it and leaves the buffer
+    # at -$550. Measured both ways; the reset is what stands between them.
+    it "re-reads the ledger on a second call rather than re-committing its snapshot", :aggregate_failures do
+      committer = described_class.new(proposal)
+      committer.call
+      spend(800)
+
+      committer.call
+
+      expect([balance(groceries), balance(water), balance(checking)]).to eq([150, 50, 0])
+      expect(checking.total).to eq(200)
+    end
+
     # The other half of the deletion, and the reason `kind` exists at all: a deletion asserted
     # only by what disappears is half an assertion. Both survivors sit in the blast radius of
     # a looser rule — one by kind, one by date.
@@ -368,15 +462,30 @@ RSpec.describe AllocationCommitter, type: :model do
       commit(account: ally)
     end
 
-    it "replaces only the account it was given", :aggregate_failures do
-      ally_rows = PoolMovement.distributed.where(to_pool: [ally, holiday]).pluck(:id)
-      checking_rows = PoolMovement.distributed.where(to_pool: [checking, groceries]).pluck(:id)
+    def rows_for(*pools) = PoolMovement.distributed.where(to_pool: pools).pluck(:id)
+
+    it "replaces Checking's rows and keeps Ally's", :aggregate_failures do
+      ally_rows = rows_for(ally, holiday)
+      checking_rows = rows_for(checking, groceries)
       expect([ally_rows.size, checking_rows.size]).to eq([2, 2])
 
       commit
 
       expect(PoolMovement.where(id: ally_rows).count).to eq(2)
       expect(PoolMovement.where(id: checking_rows)).to be_empty
+    end
+
+    # The same statement from the other side, because "replaces only the account it was given"
+    # asserted in one direction is satisfied by a committer that simply never touches Ally.
+    it "replaces Ally's rows and keeps Checking's", :aggregate_failures do
+      ally_rows = rows_for(ally, holiday)
+      checking_rows = rows_for(checking, groceries)
+
+      commit(account: ally)
+
+      expect(PoolMovement.where(id: checking_rows).count).to eq(2)
+      expect(PoolMovement.where(id: ally_rows)).to be_empty
+      expect(balance(holiday)).to eq(700)
     end
 
     # Both accounts are whole, and neither took anything from the other: two distributions on

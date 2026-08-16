@@ -36,16 +36,33 @@ class AllocationCommitter
   def initialize(proposal, overrides: {})
     @proposal = proposal
     @overrides = overrides.to_h { |pool_id, amount| [pool_id.to_s, amount.to_d] }
-    @errors = []
-    @lines = []
   end
 
   # ONE transaction, and the sweeps are what make it load-bearing: they are written first, so
-  # a bad allocation has to take an already-saved sweep back out with it. Every line is
-  # attempted rather than stopping at the first bad one, so a form comes back with all of its
-  # bad lines marked at once.
+  # a bad allocation has to take an already-saved sweep back out with it. The DELETION is
+  # inside it too, and that is the half with no compensating write to give it away: hoisted
+  # out, a failed re-run destroys the previous split, writes nothing in its place and still
+  # reports `success? == false`.
+  #
+  # `requires_new: true`, and it is not decoration. A `transaction` block inside an already
+  # open transaction opens no savepoint by default, so `ActiveRecord::Rollback` is swallowed
+  # and the OUTER transaction commits: the sweeps and the valid allocations land, the bad line
+  # does not, and this class reports a failure over a half-written split — the one outcome it
+  # exists to prevent. No caller wraps #call today; Task 6's controller committing alongside
+  # anything else is one line away from it.
+  #
+  # Every line is attempted rather than stopping at the first bad one, so a form comes back
+  # with all of its bad lines marked at once.
+  #
+  # The three memos are reset here rather than in #initialize, so a second #call replaces its
+  # own split from a proposal built against the ledger as it stands. Left memoised, the second
+  # call would delete this period's rows and re-commit the FIRST call's snapshot — exactly the
+  # staleness this class exists to defend against.
   def call
-    ActiveRecord::Base.transaction do
+    @errors = []
+    @lines = []
+    @live_proposal = nil
+    ActiveRecord::Base.transaction(requires_new: true) do
       previous_distribution.destroy_all
       @lines = movements
       @lines.each { |movement| record_failure(movement) unless movement.save }
@@ -103,12 +120,20 @@ class AllocationCommitter
     end
   end
 
-  # A $0 allocation is not an event, and `PoolMovement` would refuse it anyway. Only an exact
-  # zero is skipped: a NEGATIVE override is bad input the user has to see, and it fails the
-  # amount validation loudly rather than vanishing from a split it was meant to change.
+  # A $0 allocation is not an event, and `PoolMovement` would refuse it anyway. This is NOT an
+  # override-only case: #fill rejects rows whose NEED is zero but keeps a row whose FUNDING is
+  # zero — the envelope below the point the money ran out, which is the ordinary shape of a
+  # short period. Left unskipped, that line fails `amount > 0` and rolls the whole
+  # distribution back, so one envelope getting nothing would leave every envelope unfunded.
+  #
+  # Only an exact zero is skipped: a NEGATIVE override is bad input the user has to see, and
+  # it fails the amount validation loudly rather than vanishing from a split it was meant to
+  # change. The key is stringified for the same reason it is stringified on the way in — a
+  # lookup that misses is an override silently not applied, which is money not moved with
+  # nothing said about it.
   def allocation_movements
     live_proposal.rows.filter_map do |row|
-      amount = overrides.fetch(row.pool.id, row.funded)
+      amount = overrides.fetch(row.pool.id.to_s, row.funded)
       next if amount.zero?
 
       build(from: account, to: row.pool, amount: amount, kind: :allocation)
