@@ -545,9 +545,12 @@ user1.update!(default_account: checking)
 #
 # Priorities put them BELOW the envelopes rather than at the default 0: priority is the
 # order a distribution fills, and a savings goal funded ahead of rent is not a budget
-# anybody runs. 10 and up, leaving 1-9 to the envelopes — Checking now holds eight of them
-# and the other two accounts one each, and a savings goal sharing a number with an envelope
-# would let `by_priority`'s name tie-break decide which of the two fills first.
+# anybody runs. 10 and up, leaving 1-9 to the envelopes — Checking holds eight of them, Ally
+# two and Side Gig Checking one — and a savings goal sharing a number with an envelope would
+# let `by_priority`'s name tie-break decide which of the two fills first. These four sit
+# INSIDE Checking, so that tie would be a real one. The numbers shared across accounts are
+# not: 8 by Pet Care and Renters Insurance, 9 by Holiday Gifts and Quarterly Taxes, and every
+# fill on both screens drains one account at a time.
 pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 10 + index) }
 orphan_pool = pools[4]
 orphan_pool.update!(priority: 14)
@@ -571,22 +574,22 @@ end
 # with no pool, so they are income in the reports and cash in no account — this is the one
 # deposit Checking can see.
 #
-# $2,600 and not more, deliberately: after Rent, Dining, Groceries and the two closed
-# envelopes below are moved out this leaves Checking holding $330, which the sweep lifts to
-# $455 of Available against $943.43 of rules — so the demo screen is SHORT. That is the
-# branch this app exists for — the standing band's stranded-cash clause ("$X of that sits in
-# accounts with nothing left to fund") is only ever reached on a short period with more than
-# one account, and with a covered demo it could not be seen at all.
+# $2,600 and not more, deliberately: after Rent, Dining and Groceries are funded out of it
+# this period, and with $270 already moved out in the period before, Checking holds $330 —
+# which the sweep lifts to $455 of Available against $943.43 of rules, so the demo screen is
+# SHORT. That is the branch this app exists for — the standing band's stranded-cash clause
+# ("$X of that sits in accounts with nothing left to fund") is only ever reached on a short
+# period with more than one account, and with a covered demo it could not be seen at all.
 #
-# THE COST OF THAT CHOICE, stated because the screen prints it: DistributionPresenter derives
-# `buffer_carried` as `available - income - swept`, which is `balance - income` — an
-# all-time balance minus one period's pay. Checking has no income before this period, so
-# every dollar it has ever moved into an envelope lands in that line and it reads
-# -$2,270.00. The two facts cannot both be had: short means `balance < rules - swept`, so
-# `carried < rules - swept - income`, and with $943.43 of rules against a $2,600 paycheck
-# that bound is -$1,781.57 whatever the ledger says. Only rules exceeding income would lift
-# it, and those trip HomePresenter#structurally_underwater? against a $2,400 typical income —
-# a different and worse lie about this household. Left short, and the line left honest.
+# ONE ARTEFACT OF THAT, stated because the screen prints it: `Buffer carried over` reads
+# -$270.00. DistributionPresenter measures it as the account's balance the instant before the
+# period opened, which is honest arithmetic over a ledger whose earliest event is the funding
+# of the two closed envelopes — this demo is a slice of one period, not a history, so Checking
+# has no income before it. Correcting it means one deposit dated in the period before, and it
+# has to land between $270 (the point the opening buffer stops being negative) and $488.43
+# (the point Available reaches the rules and the screen stops being short). Left as it is
+# rather than invented, because the number is small, the breakdown adds up in front of the
+# reader, and the alternative is a deposit chosen to make a screen look right.
 Rails.logger.debug "Creating the paycheck this period's distribution hands out..."
 paycheck = user1.categories.create!(name: "Paycheck", category_type: :income, color: "#66BB6A", pool: checking)
 paycheck.items.create!(name: "Direct Deposit").entries.create!(
@@ -599,11 +602,11 @@ envelope = lambda do |name, priority|
   user1.pools.create!(name: name, pool_type: :budget, account: checking, priority: priority)
 end
 
-# `on:` defaults to now, which is what the six envelopes below want: money moved THIS period,
-# so their rate rules are still live and nothing sweeps out from under the states they exist
-# to show. The two closed envelopes further down pass a date in the period before, because
-# PoolCalculator#period_closed? measures from `last_funded_on` and an envelope funded today
-# is by definition current.
+# `on:` defaults to now, which is what Rent, Dining Out and Groceries want: money moved THIS
+# period, so their rate rules are still live and nothing sweeps out from under the states they
+# exist to show. Only the two closed envelopes further down pass a date in the period before,
+# because PoolCalculator#period_closed? measures from `last_funded_on` and an envelope funded
+# today is by definition current.
 fund = lambda do |pool, amount, on: Time.current|
   PoolMovement.create!(from_pool: checking, to_pool: pool, amount: amount, date: on)
 end
@@ -780,6 +783,61 @@ holiday_gifts = user1.pools.create!(
   priority: 9
 )
 Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_paycheck)
+
+# overdue AND ASKING FOR NOTHING — the one shape the distribution screen's alerts band exists
+# for, and the one shape no demo account could produce.
+#
+# The annual premium was set aside a fortnight ago, on time; the policy renewed six days ago
+# and the payment has simply not been made yet. So the envelope holds the whole $180,
+# BudgetCalculator#shortfall is zero, the rule asks for nothing and AllocationCalculator#fill
+# rejects the row — while PoolStatus still reads `overdue`, because a cycle rolls when a bill
+# is PAID and nothing has been paid against the item.
+#
+# HERE, IN ALLY, AND NOT IN CHECKING, which is the whole point. Checking is short, so its
+# screen is expanded already and this pool would ride along as decoration — visible, but not
+# demonstrating anything. Ally is COVERED: without the band its screen collapses to a headline,
+# one summary line and a confirm button, over the top of a bill that is already late. That is
+# the case DistributionPresenter#expanded? was built for and the only one where it is the alert
+# that opens the table. It also puts the covered-but-expanded copy on a real screen — "Every
+# envelope gets what it asked for, but something below still needs you" — which nothing else in
+# this demo reaches.
+#
+# Deliberately NOT folded into the Utilities envelope in Checking. That one is the `overdue`
+# ROW — late and UNFUNDED, so it still asks — and the distinction this band draws is exactly
+# between a red pool with a row and a red pool without one. One envelope cannot be both.
+#
+# An annual premium rather than a monthly one because this is the savings account: a bill you
+# put money aside for over the year and settle once is what a pot like this is for, and $180 is
+# what renters insurance costs the household that pays $1,500 in rent upstairs.
+renters_insurance = user1.pools.create!(
+  name: "Renters Insurance",
+  pool_type: :budget,
+  account: ally,
+  priority: 8
+)
+insurance_bills = user1.categories.create!(
+  name: "Insurance Bills",
+  category_type: :expense,
+  color: "#4DB6AC",
+  pool: renters_insurance
+)
+Budget.create!(
+  pool: renters_insurance,
+  item: insurance_bills.items.create!(name: "Renters Policy"),
+  amount: 180,
+  interval_months: 12,
+  anchor_date: today - 6.days
+)
+# Out of Ally, not Checking — `fund` moves from Checking by construction and this envelope
+# lives in the other account. A fortnight ago, because "funded on time" means the money was
+# there before the renewal date; it changes nothing about the sweep, since an envelope with no
+# rate rule is never `period_closed?` whenever it was funded.
+PoolMovement.create!(
+  from_pool: ally,
+  to_pool: renters_insurance,
+  amount: 180,
+  date: today - 14.days
+)
 
 # ---------------------------------------------------------------------------------------
 # A THIRD account, and the only one in the RED.
