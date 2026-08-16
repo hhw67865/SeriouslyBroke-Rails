@@ -121,7 +121,7 @@ The row label gains ` · last period` when `period_closed?`. Update spec §7.2 t
 
 Five steps, in order, mirroring spec §5:
 
-1. **Sweep** — `account.child_pools.select(&:period_closed?)`, each contributing `sweepable_amount`.
+1. **Sweep** — `account.child_pools.select { |pool| pool.calculator(today: today).period_closed? }`, each contributing `sweepable_amount`. (`period_closed?` lives on the calculator, not on `Pool`, because it needs a `today`.)
 2. **Available** — the account's current balance **plus** the sweeps (the sweep money is already inside the account's total, but not in its unallocated buffer).
 3. **Required** — `pool.calculator(today:).required` per envelope in this account.
 4. **Fill** — top-down by `[priority, name]`, `funded = remaining.clamp(0.to_d, needed)`.
