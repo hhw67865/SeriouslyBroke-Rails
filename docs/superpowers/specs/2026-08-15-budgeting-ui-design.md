@@ -428,6 +428,13 @@ the `pay_anchor_date` presence validation and `pool_params` widening belong in
 **2a**; `searchable :pool` and the `User → pool-mode budgets` path belong in
 **2d** and **2c** respectively.
 
+Plan 2a leaves one of its own, recorded in the same place under **Plan 2c must**:
+`users.typical_income` has a column, a validation and a reader
+(`HomePresenter#structurally_underwater?`) but **no writer anywhere in the app** —
+no form field, no permitted param, no controller. Until 2c gives it one, §9's
+structural check is permanently false in production and the button that opens the
+sacrifice view can never render.
+
 ## 12. Testing
 
 Per the `system-test-writer` skill's page-based structure.

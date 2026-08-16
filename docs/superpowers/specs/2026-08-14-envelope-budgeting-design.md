@@ -476,6 +476,19 @@ Each is a decision deliberately deferred, not an oversight.
   (`BudgetCalculator#shortfall` currently does not — it over-reserves, the safe
   direction).
 
+### Plan 2c (budget page & structural check) must
+
+- **Give `users.typical_income` a form field, a permitted param and a controller.**
+  The column exists, `User` validates it, and `HomePresenter#structurally_underwater?`
+  reads it — but nothing in the app can WRITE it. It is set by specs and seeds and
+  nowhere else, so in production it is nil for every user, the structural check is
+  permanently `false`, and the §9 warning branch on Home's standing band is
+  unreachable code. That branch is the entry point to the sacrifice view, so both
+  the check and the view it opens are dead until this lands. UI spec §8 puts the
+  field on the Budget page beside the "Your rules need / You typically bring in"
+  block, which is the right home for it: the figure is user-declared and never
+  inferred (§3), and it belongs next to the total it is compared against.
+
 ### Plan 3 (cutover) must
 
 - **Reverse §6.1 steps 2 and 4, or use `update_all`.** `Category#destroy_budget_if_pool_linked`
