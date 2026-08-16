@@ -110,6 +110,25 @@ class ReallocationPresenter
     def state_changed? = status_after.state != status_before.state
   end
 
+  # THE ORDER MONEY IS OFFERED IN, and the ONE place it lives. Home's fix button ranks the same set
+  # by calling this rather than sorting its own way (it used to sort richest-first), because a
+  # button reading "take it from House Down Payment" that opens a screen ranking the buffer first
+  # is a screen disagreeing with the button that opened it — the defect class this plan has hit in
+  # every task where two readers answered one question.
+  #
+  # THE ACCOUNT COMES FIRST. It is the buffer, the money no envelope has claimed (spec §7.1), and
+  # the source spec §4.2's "this has to come from money you already have" most often means. Idle
+  # cash costs nothing to move; a savings goal is money the user decided to protect, and richest-
+  # first proposed exactly that — a $950 down payment while $330 of buffer sat unoffered.
+  #
+  # Then `[priority, name]`, the order the user ranked their envelopes in. It is a TOTAL order —
+  # `Pool` validates name uniqueness per user — so it is also the tie-break: priority alone would
+  # fall through to database order, which is the defect Plan 1 shipped in its allocation waterfall.
+  #
+  # A class method rather than an instance one because it is a property of the pool, not of any one
+  # proposed movement, and Home holds no ReallocationPresenter when it ranks its candidates.
+  def self.source_order(pool) = [pool.pool_type_account? ? 0 : 1, pool.priority, pool.name]
+
   attr_reader :user, :to_pool, :from_pool, :amount, :today
 
   # `amount` arrives as the form's String and is coerced ONCE, here. nil for a blank box rather
@@ -142,9 +161,9 @@ class ReallocationPresenter
   # an account stands in as its own container, which is the part a second implementation gets
   # wrong, and it is the same reader the write path is refused by.
   #
-  # The account comes first — it is the buffer, the money no envelope has claimed (spec §7.1),
-  # and the source spec §4.2's "this has to come from money you already have" most often means.
-  # Then the envelopes in the order the user ranked them.
+  # Ranked by ::source_order — the account first, then the envelopes in the order the user ranked
+  # them. Home's fix button calls that same method rather than sorting its own way, so the button
+  # and the screen it opens cannot name different sources.
   def sources
     return [] if to_pool.nil?
 
@@ -320,7 +339,7 @@ class ReallocationPresenter
   def same_account_pools
     user.pools.includes(:budgets, :account).reject { |pool| pool == to_pool }
       .reject { |pool| PoolMovement.new(from_pool: pool, to_pool: to_pool).crosses_accounts? }
-      .sort_by { |pool| [pool.pool_type_account? ? 0 : 1, pool.priority, pool.name] }
+      .sort_by { |pool| self.class.source_order(pool) }
   end
 
   def accounts = @accounts ||= all_pools.select(&:pool_type_account?).sort_by(&:name)

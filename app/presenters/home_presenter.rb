@@ -19,11 +19,11 @@ class HomePresenter
   Fix = Data.define(:pool, :amount, :candidate) do
     def source = candidate&.pool
 
-    # Whether moving money is the right kind of answer at all. `amount` is PoolStatus#amount, and
-    # the four attention states guard their own figure positive — except :overdue, whose amount is
-    # a bill's unpaid remainder and could in principle round to nothing. A "Take $0.00 from
-    # Checking" button is worse than no band, so the view renders nothing at all here.
-    def actionable? = amount.positive?
+    # WHETHER MOVING MONEY IN WOULD CHANGE ANYTHING, and it is a real branch rather than a guard.
+    # `amount` is PoolStatus#funding_gap, which is zero for an overdue bill whose envelope already
+    # holds the money — the demo's Renters Insurance. That pool needs paying, not funding, and the
+    # view says so instead of offering a button that would double-fund it.
+    def needs_money? = amount.positive?
 
     # PLAIN DIGITS FOR THE QUERY STRING, for ReallocationPresenter#amount_value's reason one screen
     # later: `BigDecimal("300").to_s` is "0.3e3", which reaches the link as `amount=0.3e3`. It is
@@ -85,6 +85,16 @@ class HomePresenter
   # #ask_calculator_for). Home used to read the live balance while the distribution screen read
   # the post-sweep one, so a closed envelope said `needs $315` here and `needs $400` there: a
   # screen disagreeing with the action it is offering. Both halves move or neither does.
+  #
+  # #shortfall IS NOT INVARIANT ACROSS THIS CHANGE, and the tempting claim that it must be is
+  # false — do not restore it. Required and available rise by the same amount only while a closed
+  # envelope's leftover is no larger than what its rule re-asks for. #sweepable_amount takes the
+  # WHOLE leftover; the post-sweep ask rises only to the rule's own figure. An envelope holding
+  # $150 against a $100 rate rule therefore adds $150 to available and $100 to required, and the
+  # gap correctly CLOSES by the $50 of surplus that was unspendable while it sat in the envelope.
+  # Measured on the demo seeds: Pet Care's $50 sweep against a $25 rise took the shortfall from
+  # $713.43 to $688.43. The property that DOES hold in both shapes, and the one the specs pin, is
+  # exact agreement with AllocationCalculator per account — see spec/system/home/fixes_spec.rb.
   #
   # Note this is NOT `total_required - shortfall`: see #shortfall for why the gap is
   # derived from the rows instead, and why the two can legitimately disagree.
@@ -252,20 +262,17 @@ class HomePresenter
     user.typical_income.present? && total_required > user.typical_income.to_d
   end
 
-  # WHAT THIS PROBLEM IS SHORT BY, and it is deliberately the figure the row beside it already
-  # prints: `overdrawn $80.00` offers to move $80.00, `behind $385.00` offers $385.00.
+  # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE — PoolStatus#funding_gap, not #amount.
   #
-  # PoolStatus#amount is DEFINED as the number its state is about, so this is one reader rather
-  # than a second opinion — and a fix button naming a different figure from the label six pixels
-  # to its left is a screen asking the reader to reconcile two numbers.
+  # The two coincide on :overdrawn, :behind and :wont_make_it, and those are the only attention
+  # states whose ROW prints a figure at all (`overdrawn $80.00`, `behind $385.00`; the other two
+  # print a date), so the button and the label beside it still name one number.
   #
-  # It is the money gap in three of the four attention states by construction (:overdrawn is
-  # `-balance`, :wont_make_it is the rule's own shortfall against what it holds, :behind is
-  # `expected - allocated`). :overdue is the one that is not: that state is about a DATE and a
-  # missing payment, so its figure is the bill's unpaid remainder — which is still what has to be
-  # in the envelope before the bill can be paid, and still the right amount to move, but the state
-  # itself will not clear until the payment is recorded. The reallocation screen says as much: its
-  # Gain sentence prints no state change on an overdue destination.
+  # They diverge on :overdue, and taking #amount there was a measured defect: the demo's Renters
+  # Insurance holds every penny of a $180 premium that has simply not been paid, and Home offered
+  # "Take $180.00 from Ally Savings buffer" — a real mistake proposed to fix an imaginary problem,
+  # which would have left the envelope holding $360 against a $180 bill. #funding_gap returns zero
+  # there, and the band says what the bill actually needs instead. See _attention.html.erb.
   #
   # `.round(2)` so the THREE places this figure lands cannot disagree: the button's label (rounded
   # by number_to_currency), the link's `amount=` (rounded by Fix#amount_param) and the damage
@@ -273,15 +280,26 @@ class HomePresenter
   # demo's Car Insurance, whose :behind amount is $553.84615384615… — the preview was computed
   # against the repeating figure while the button next to it moved $553.85. Display-identical
   # either way; the point is that the link and its own preview describe one move.
-  def fix_amount_for(pool) = status_for(pool).amount.round(2)
+  def fix_amount_for(pool) = status_for(pool).funding_gap.round(2)
 
-  # POOLS IN THE SAME ACCOUNT WITH ENOUGH FREE MONEY, RICHEST FIRST.
+  # POOLS IN THE SAME ACCOUNT WITH ENOUGH FREE MONEY, IN THE ORDER THE REALLOCATION SCREEN OFFERS
+  # THEM.
   #
   # `free_amount` — balance less what EVERY rule holds — and not the other two readers, which
   # answer different questions and coincide with this one only at zero (amendment B). Task 7 gates
   # a USER-INITIATED move on the source's balance, because there the app states the damage rather
   # than forbidding the move; here the app is PROPOSING, so it must not propose robbing an envelope
   # that is counting on the money. Two thresholds for two different acts, deliberately.
+  #
+  # THAT GATE IS ALSO WHY A FIX'S DAMAGE SENTENCE IS USUALLY JUST A BALANCE ARROW, which is a
+  # property of gating on `free_amount` rather than an oversight, and worth knowing before anyone
+  # tries to make the preview say more. `free = max(balance − Σ rule amounts, 0)`, so a move of
+  # `amount ≤ free` leaves every rule still taking its full amount: nothing can slip and #required
+  # cannot change. Task 7 found the same shape in its own brief (see Candidate) and corrected its
+  # gate to the balance, because a USER's move should be allowed and costed. A SUGGESTION is the
+  # other way round — the app proposing a move should propose one that costs nothing — so the gate
+  # stays and the quiet sentence is the right trade. The one shape that escapes it is a dateless
+  # savings goal near its target, whose #goal_required reads the balance directly.
   #
   # A pool whose own status needs attention is excluded outright: proposing to rob an envelope that
   # is itself behind is not a fix. That takes an overdrawn account out with it, which is right —
@@ -290,14 +308,14 @@ class HomePresenter
   # `PoolMovement#crosses_accounts?` decides "same account", not a `account_id ==` of my own: an
   # account sits inside no other account and stands in as its own container, which is the part a
   # second implementation gets wrong, and it is the same reader the write path is refused by. It
-  # also means an ACCOUNT is a candidate for the envelopes inside it — the buffer, the money no
-  # envelope has claimed, and what spec §4.2's "money you already have" most often means.
+  # also means an ACCOUNT is a candidate for the envelopes inside it.
   #
-  # THE SORT KEY IS A TRIPLE, not a bare `-free` (amendment D). Two pools with equal free money
-  # would otherwise fall through to `user.pools`' order, which carries no ORDER BY — so the same
-  # problem would offer different fixes on consecutive loads with no data change, which is the
-  # defect Plan 1 shipped in its allocation waterfall. `[priority, name]` is this branch's
-  # established tie-break for pools and is what #by_priority already uses.
+  # THE ORDER IS ASKED OF ReallocationPresenter, NOT DECIDED HERE. It used to be richest-first with
+  # a `[priority, name]` tie-break of its own, and on the demo that proposed a $950 house down
+  # payment four times over while $330 of Checking buffer sat unoffered — the screen the button
+  # opens ranks the buffer first, so the button and its own destination named different sources.
+  # ::source_order is the one place that ranking lives; it is a total order (Pool validates name
+  # uniqueness per user), so it is also the tie-break amendment D asks for.
   def fix_candidates_for(pool)
     (@fix_candidates ||= {})[pool.id] ||= compute_fix_candidates(pool)
   end
@@ -325,7 +343,7 @@ class HomePresenter
     return [] unless amount.positive?
 
     fundable_by(pool).select { |source| free_amount_for(source) >= amount }
-      .sort_by { |source| [-free_amount_for(source), source.priority, source.name] }
+      .sort_by { |source| ReallocationPresenter.source_order(source) }
   end
 
   def fundable_by(pool)

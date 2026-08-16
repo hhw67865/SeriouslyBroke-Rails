@@ -20,8 +20,7 @@ RSpec.describe "Home Fixes", type: :system do
 
     # Checking holds $810 of unclaimed cash and Dentist needs $300 it will never reach in time.
     # The account is a legitimate source — it stands in as its own container (PoolMovement) and the
-    # buffer is the money no envelope has claimed — and at $810 free it is also the richest thing
-    # in the account, so "richest first" and "the buffer first" happen to agree here.
+    # buffer is the money no envelope has claimed.
     it "names a source that can cover it, and says what the move would cost", :aggregate_failures do
       visit root_path
 
@@ -65,30 +64,35 @@ RSpec.describe "Home Fixes", type: :system do
     # $200 free against a $300 ask. Task 7 would let a user take it and state the damage; a
     # SUGGESTION must not propose robbing an envelope that is counting on the money.
     #
-    # Both directions on one screen: Car is refused, Checking is offered, and Car's $1,000 is
-    # pinned so the negative cannot be passing because Car is empty.
+    # Both directions on one screen and in the candidate SET, which is where the rule lives — only
+    # the head of the list gets a button, so "no link from Car" alone would pass for any pool that
+    # merely ranks second. Car's $1,000 is pinned so the negative cannot be passing because Car is
+    # empty.
     it "leaves out a pool whose money its own rules are holding", :aggregate_failures do
       visit root_path
 
-      within(problem_row("Dentist")) do
-        expect(page).to have_no_link(text: /from Car/)
-        expect(page).to have_link("Take $300.00 from Checking buffer")
-      end
+      within(problem_row("Dentist")) { expect(page).to have_link("Take $300.00 from Checking buffer") }
+      candidates = HomePresenter.new(user: user).fix_candidates_for(dentist)
+      expect(candidates).not_to include(car)
+      expect(candidates).to include(checking)
       expect(balance_of("Car")).to eq(1_000)
       expect(Pool.find(car.id).calculator.free_amount).to eq(200)
     end
 
-    # A pool in trouble on its own terms is excluded outright, however rich it is: Vet holds $1,500
-    # with only $200 of it spoken for, which makes it far and away the richest source in the
-    # account — and it is overdue, so proposing to rob it is not a fix.
+    # A pool in trouble on its own terms is excluded outright, however well placed it is: Vet holds
+    # $1,500 with only $200 of it spoken for and sits at priority 0 — so under the shared ordering
+    # it would be the head of the list — and it is overdue, so proposing to rob it is not a fix.
     #
-    # The positive halves matter as much as the negative: Vet really is a problem (it has its own
-    # row saying so), it really would have won on free money alone, and Dentist still gets a button.
-    describe "a richer pool that is itself overdue" do
-      let(:vet) { create(:pool, :budget_pool, user: user, account: checking, name: "Vet", priority: 8) }
+    # Checking is deliberately spent down to $210, below the $300 ask, so the account cannot mask
+    # the question. What is offered instead is Cushion, the next envelope that qualifies.
+    #
+    # The positive halves matter as much as the negative: Vet really is a problem (its own row says
+    # so), it really would have outranked Cushion, and Dentist still gets a button.
+    describe "a well-placed pool that is itself overdue" do
+      let(:vet) { create(:pool, :budget_pool, user: user, account: checking, name: "Vet", priority: 0) }
 
       before do
-        deposit(1_500)
+        deposit(900)
         fund(vet, 1_500)
         dated_rule(vet, "Vet Bill", 200, due_in: -10)
         visit root_path
@@ -98,24 +102,83 @@ RSpec.describe "Home Fixes", type: :system do
         within(problem_row("Vet")) { expect(page).to have_content("overdue") }
         within(problem_row("Dentist")) do
           expect(page).to have_no_link(text: /from Vet/)
-          expect(page).to have_link("Take $300.00 from Checking buffer")
+          expect(page).to have_link("Take $300.00 from Cushion")
         end
-        # $1,300 free is more than Checking's $810: nothing but the status exclusion kept it out.
+        expect(HomePresenter.new(user: user).fix_candidates_for(dentist)).not_to include(Pool.find(vet.id))
+        # It had the money and the rank: $1,300 free, and ahead of Cushion in the shared ordering.
+        # Nothing but the status exclusion kept it out.
         expect(Pool.find(vet.id).calculator.free_amount).to eq(1_300)
+        expect(ReallocationPresenter.source_order(vet) <=> ReallocationPresenter.source_order(pool("Cushion")))
+          .to eq(-1)
+        expect(balance_of("Checking")).to eq(210)
       end
     end
 
-    # AMENDMENT D. Two pools with identical free money must not reorder between renders, so the
-    # tie falls to `[priority, name]` — the same key #by_priority uses.
+    # THE ORDER COMES FROM THE SCREEN THE BUTTON OPENS, and this is the fixture where the old
+    # richest-first rule and Task 7's ranking give different answers: House Fund is a savings goal
+    # holding $2,000 with no rules against it, so `free_amount` reports the lot and it beats the
+    # $810 buffer on money alone. It is also money the user decided to protect, while the buffer is
+    # idle cash — and, decisively, `ReallocationPresenter#sources` ranks the buffer first, so a
+    # button naming House Fund would open a screen that disagrees with it.
+    describe "a savings goal richer than the buffer" do
+      before do
+        deposit(2_000)
+        house = create(
+          :pool,
+          :savings_pool,
+          user: user,
+          account: checking,
+          name: "House Fund",
+          target_amount: 50_000,
+          priority: 8
+        )
+        fund(house, 2_000)
+        visit root_path
+      end
+
+      it "offers the buffer, not the richer goal", :aggregate_failures do
+        within(problem_row("Dentist")) do
+          expect(page).to have_link("Take $300.00 from Checking buffer")
+          expect(page).to have_no_link(text: /from House Fund/)
+        end
+        # Pinned so the negative cannot be passing because House Fund is poor or ineligible: it has
+        # more free money than the buffer and it IS in Home's candidate set, just not first.
+        expect(Pool.find(pool("House Fund").id).calculator.free_amount).to eq(2_000)
+        expect(HomePresenter.new(user: user).fix_candidates_for(dentist).map(&:name))
+          .to include("House Fund")
+      end
+
+      # THE ASSERTION THAT KEEPS THE TWO FROM DRIFTING. Home filters harder than the reallocation
+      # screen does — it drops pools in attention and pools without enough free money — so the two
+      # lists are not equal. What must hold is that Home's surviving candidates appear in the
+      # SCREEN'S OWN ORDER, head included. Both sides are computed independently here: `ranked`
+      # from ReallocationPresenter's sort over its own list, `candidates` from HomePresenter's
+      # filter. Diverge the two sort keys and this fails.
+      it "ranks its candidates exactly as the reallocation screen ranks them", :aggregate_failures do
+        expect(page).to have_css("[data-problem-pool='Dentist']")
+        candidates = HomePresenter.new(user: user).fix_candidates_for(dentist)
+        ranked = ReallocationPresenter.new(user: user, to_pool: dentist).sources.map(&:pool)
+
+        expect(candidates).to eq(ranked & candidates)
+        expect(candidates.first).to eq(ranked.first)
+        expect(candidates.size).to be > 1
+      end
+    end
+
+    # AMENDMENT D, now carried by ReallocationPresenter::source_order's `[priority, name]` tail.
+    # Two envelopes at the same priority must not reorder between renders.
     #
     # The names are assigned AFTER the ids exist and deliberately against them: the pool with the
     # smaller id is called "Zebra Fund", so a read that fell through to id order would offer Zebra
-    # and a name-ordered one offers Apple. Both pools are pinned at $900 so the example cannot be
-    # passing because one is richer.
-    describe "two sources holding identical free money" do
+    # and a name-ordered one offers Apple.
+    #
+    # The buffer is deliberately spent down to $10 — below the $300 ask — so the account is not a
+    # candidate and the envelope ordering is the thing being observed. The tied pair sit at
+    # priority 0 so they outrank Cushion (priority 6, $500 free), which is the only other survivor.
+    describe "two sources tied on priority" do
       let(:tied) do
-        deposit(1_800)
-        ["Tie A", "Tie B"].map { |name| envelope(name, priority: 9, funded: 900) }.sort_by(&:id)
+        deposit(1_000)
+        ["Tie A", "Tie B"].map { |name| envelope(name, priority: 0, funded: 900) }.sort_by(&:id)
       end
 
       before do
@@ -124,13 +187,54 @@ RSpec.describe "Home Fixes", type: :system do
         visit root_path
       end
 
-      it "breaks a tie on free money by name, not by id", :aggregate_failures do
+      it "breaks a tie by name, not by id", :aggregate_failures do
         within(problem_row("Dentist")) do
           expect(page).to have_link("Take $300.00 from Apple Fund")
           expect(page).to have_no_link(text: /from Zebra Fund/)
         end
         expect(tied.map { |pool| Pool.find(pool.id).calculator.free_amount }).to eq([900, 900])
         expect(tied.first.reload.name).to eq("Zebra Fund")
+        # The buffer really is out of the running, so the pair are being ranked against each other.
+        expect(balance_of("Checking")).to eq(10)
+      end
+    end
+
+    # RULING 4. An overdue bill fires on a DATE and a missing payment, so an envelope holding every
+    # penny of it is still red — and offering to move money in would have the user make a real
+    # mistake to fix an imaginary problem. PoolStatus#funding_gap is the gate.
+    #
+    # BOTH DIRECTIONS ON ONE SCREEN, which is the whole point: Water is overdue and empty and keeps
+    # its button; Council Tax is overdue and fully funded and loses it, saying why. A gate asserted
+    # in one direction only would pass on an app that had simply stopped offering fixes to overdue
+    # bills, which is the opposite defect.
+    describe "an overdue bill" do
+      before do
+        deposit(200)
+        dated_rule(envelope("Water", priority: 8), "Water Bill", 150, due_in: -10)
+        dated_rule(envelope("Council Tax", priority: 9, funded: 200), "Council Bill", 200, due_in: -10)
+        visit root_path
+      end
+
+      it "keeps its button while the envelope is short", :aggregate_failures do
+        within(problem_row("Water")) do
+          expect(page).to have_content("overdue")
+          expect(page).to have_link("Take $150.00 from Checking buffer")
+          expect(page).to have_no_content("needs paying, not funding")
+        end
+        expect(balance_of("Water")).to eq(0)
+      end
+
+      it "loses its button once the money is already there, and says why", :aggregate_failures do
+        within(problem_row("Council Tax")) do
+          expect(page).to have_content("overdue")
+          expect(page).to have_content("Its money is already there — this needs paying, not funding.")
+          expect(page).to have_no_link(text: /\ATake/)
+          expect(page).to have_no_content("This has to come from money you already have.")
+        end
+        # The envelope holds the whole bill, and a source that could have funded it exists — so the
+        # missing button is the gap being zero, not a shortage of candidates.
+        expect(balance_of("Council Tax")).to eq(200)
+        expect(Pool.find(checking.id).calculator.free_amount).to eq(810)
       end
     end
 
@@ -177,21 +281,30 @@ RSpec.describe "Home Fixes", type: :system do
     # can put the money back. `PoolMovement#containing_account` is what makes the account its own
     # container on both ends, which is why this works without a second notion of "same account".
     #
-    # $900 spent straight out of Checking against $810 of buffer leaves it $90 down. Cushion's $500
-    # is the richest thing left — Checking itself is excluded as the destination, and every other
-    # envelope's money is held by a rule.
-    it "fixes an overdrawn account out of an envelope inside it", :aggregate_failures do
-      category = create(:category, :expense, user: user, pool: checking, name: "Big Spend")
-      create(:entry, item: create(:item, category: category), amount: 900, date: Date.current)
-
-      visit root_path
-
-      within(problem_row("Checking")) do
-        expect(page).to have_content("overdrawn $90.00")
-        expect(page).to have_link("Take $90.00 from Cushion")
-        expect(page).to have_content("Cushion $500.00 → $410.00")
+    # $900 spent straight out of Checking against $810 of buffer leaves it $90 down. Checking itself
+    # is the destination, so it is excluded as a source; two envelopes have $90 spare — Car ($200
+    # free, priority 2) and Cushion ($500 free, priority 6) — and the user's own ranking decides,
+    # not the money. Richest-first would have taken from Cushion; the shared ordering takes from the
+    # envelope the user ranked higher, and the reallocation screen would offer the same one first.
+    describe "an overdrawn account" do
+      before do
+        category = create(:category, :expense, user: user, pool: checking, name: "Big Spend")
+        create(:entry, item: create(:item, category: category), amount: 900, date: Date.current)
+        visit root_path
       end
-      expect(balance_of("Checking")).to eq(-90)
+
+      it "is fixed out of an envelope inside it, ranked by the user's own priorities",
+         :aggregate_failures do
+           within(problem_row("Checking")) do
+             expect(page).to have_content("overdrawn $90.00")
+             expect(page).to have_link("Take $90.00 from Car")
+             expect(page).to have_content("Car $1,000.00 → $910.00")
+             expect(page).to have_no_link(text: /from Cushion/)
+           end
+           expect(balance_of("Checking")).to eq(-90)
+           expect(HomePresenter.new(user: user).fix_candidates_for(Pool.find(checking.id)).map(&:name))
+             .to eq(["Car", "Cushion"])
+         end
     end
   end
 

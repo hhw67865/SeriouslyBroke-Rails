@@ -66,6 +66,32 @@ class PoolStatus
 
   def needs_attention? = ATTENTION_STATES.include?(state)
 
+  # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE, which is not always #amount.
+  #
+  # #amount is the figure the STATE is about — the number the row prints. This is the figure an
+  # ACTION is about, and the two differ on exactly one state, because :overdue is the one state
+  # that is not a reading of the balance at all. It fires on a DATE and a missing payment, so its
+  # amount is the bill's unpaid remainder: an envelope holding every penny of a $180 premium that
+  # simply has not been paid yet reads `overdue · was Aug 10` and reports `amount` $180, while the
+  # money is sitting right there. Home offered "Take $180.00 from Ally Savings buffer" against it —
+  # inviting a real mistake to fix an imaginary problem. What that bill needs is paying, not
+  # funding, and #shortfall_for says so by returning zero.
+  #
+  # The other three attention states coincide with #amount by construction and are NOT re-derived
+  # here: :overdrawn is `-balance`, :wont_make_it is already `shortfall_for(unreachable_budget)`,
+  # and :behind is `expected - allocated`. Only the divergence is written down; a second copy of
+  # the case statement above would be a second reader free to drift from it.
+  #
+  # Zero for every quiet state, so a caller cannot mistake a healthy pool's BALANCE (which #amount
+  # returns there) for a gap. That was measured: an owed savings goal reported a $545.00 "gap" that
+  # was its own balance.
+  def funding_gap
+    return 0.to_d unless needs_attention?
+    return shortfall_for(overdue_budget) if state == :overdue
+
+    amount
+  end
+
   private
 
   # The tail of the same precedence chain: what a pool with no live problem is doing. Split
