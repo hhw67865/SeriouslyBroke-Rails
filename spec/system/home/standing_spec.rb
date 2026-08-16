@@ -74,6 +74,25 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_no_content("can't close the gap")
   end
 
+  # The other half of the clause above, and the reason it is gated on the FIGURE rather than
+  # on there being an orphan at all: a pool with no account whose own requirement is already
+  # zero — a dateless goal sitting at target, a fulfilled anchored rule, or as here a goal
+  # with no rule on it yet — leaves the figures reconciling exactly. Gated on `orphan_pools.any?`
+  # this printed "$0.00 of what you need belongs to 1 pool with no account": accurate, and
+  # about a cause that is not live. It is still a problem, and the band below still says so.
+  it "stays silent about a pool with no account that needs nothing this period", :aggregate_failures do
+    create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
+    envelope("Rent", 400)
+    deposit(100)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "$300.00 short")
+    expect(page).to have_no_content("with no account")
+    expect(page).to have_no_content("$0.00 of what you need")
+    expect(page).to have_content("Old Goal")
+  end
+
   # With more than one account the two headline figures cannot be subtracted to reach the
   # shortfall — the difference is cash sitting where this period's pools cannot reach it.
   it "explains the arithmetic when money is stranded in another account", :aggregate_failures do

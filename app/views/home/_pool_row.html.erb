@@ -1,0 +1,62 @@
+<%# One pool: a single quiet line unless something is wrong with it. Spec §4.3-4.4.
+    Locals: `pool`, `presenter` (HomePresenter), and optionally `orphan` (default false).
+
+    `data-expanded` is the auto-expand rule: anything needing attention opens itself, so
+    trouble is never hidden behind a chevron. Both states render server-side; the
+    click-to-toggle interaction is Plan 2b, which is why there is no chevron yet.
+
+    Status through `presenter.status_for`, never `pool.status` — PoolStatus defaults to
+    Date.current and a bare call here would compute against a different day than the rest
+    of the screen, silently.
+
+    The row says only how the pool itself stands, in the §4.4 vocabulary. It does NOT
+    repeat `pool_problem_label`'s "no account" wording the attention band uses: that band
+    is a flat list where each row has to carry its own context, while here the group header
+    already says where the money lives, and saying it again on every row would print the
+    same sentence five times under a heading that just said it. %>
+<% status = presenter.status_for(pool) %>
+<% orphan = local_assigns.fetch(:orphan, false) %>
+<%# An orphan is a problem whatever its own status says — nothing can fund it — so it opens
+    with the rest of the trouble rather than reading as a quiet line under a loud heading. %>
+<% problem = status.needs_attention? || orphan %>
+<% rules = presenter.dated_rules_for(pool) %>
+<div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
+     data-pool-name="<%= pool.name %>"
+     data-expanded="<%= problem %>">
+  <div class="flex justify-between items-baseline gap-4">
+    <span class="font-medium text-gray-900"><%= pool.name %></span>
+    <span class="text-sm <%= problem ? "text-status-danger font-medium" : "text-gray-500" %>">
+      <%= pool_status_label(status) %>
+      <%# The date only where the label has not already said one. `on track` and
+          `left to spend` are the two quiet states, and only the first has a date to add. %>
+      <% if status.due_on.present? && !status.needs_attention? %>
+        · <%= status.due_on.strftime("%b %-d") %>
+      <% end %>
+    </span>
+  </div>
+
+  <% if problem %>
+    <div class="mt-2 pl-4 space-y-1" data-role="pool-detail">
+      <% rules.each do |budget, due_on| %>
+        <div class="flex justify-between text-xs text-gray-600 gap-4">
+          <span><%= budget.item&.name || "Rule" %></span>
+          <span><%= number_to_currency(budget.amount) %> · <%= due_on.strftime("%b %-d") %></span>
+        </div>
+      <% end %>
+
+      <%# Expanded with no dated rule to show is a real state, not a corner: an orphan
+          savings goal may hold none at all, and a rate envelope goes :overdrawn on rules
+          that never carry a date. An empty box under a red line would leave the loudest
+          row on the screen as the only one explaining nothing. %>
+      <% if rules.empty? %>
+        <p class="text-xs text-gray-600">
+          <% if orphan %>
+            No account holds this pool, so no distribution can reach it — give it one.
+          <% else %>
+            No dated rules — this pool refills at its rate each period.
+          <% end %>
+        </p>
+      <% end %>
+    </div>
+  <% end %>
+</div>

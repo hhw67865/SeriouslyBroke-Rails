@@ -1,3 +1,39 @@
-<%# Placeholder: one account band (buffer, its pools, orphan pools).
-    Task 7 fills this in; locals are `presenter` (HomePresenter) and `account`
-    (a Pool of type account). Deliberately renders nothing for now. %>
+<%# One account and the pools that live inside it. See the UI design spec §4.3.
+    Locals: `presenter` (HomePresenter), `account` (a Pool of type account).
+
+    The header carries the account's buffer — `current_buffer_for`, the cash sitting there
+    right now, NOT the presenter's #projected_buffer, which is a period-wide figure the
+    standing band already states. A target on an account is the buffer marker (a health
+    line, never a cap), so it is only shown when the user set one. %>
+<% buffer = presenter.current_buffer_for(account) %>
+<section class="bg-white border border-gray-200 rounded" data-pool-group="<%= account.name %>">
+  <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
+    <%# Not the `uppercase` eyebrow the brief drafted and this codebase gives short labels
+        like "Current Balance": an account name is a proper noun the user typed, and
+        rendering "Ally Savings" as ALLY SAVINGS shouts a name back at them. Same weight as
+        the attention band's heading, since both are the title of a band. %>
+    <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
+    <%# An overdraft is the loudest thing in the app and this is the row that owns the
+        number, so it says so here too rather than leaving the standing band's sentence as
+        the only place a negative buffer is visible. %>
+    <span class="text-sm <%= buffer.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
+      buffer <strong><%= number_to_currency(buffer) %></strong>
+      <% if account.target_amount.present? %>
+        <span class="<%= buffer.negative? ? "text-status-danger" : "text-gray-400" %>">
+          of <%= number_to_currency(account.target_amount) %>
+        </span>
+      <% end %>
+    </span>
+  </div>
+
+  <% pools = presenter.pools_for(account) %>
+  <% pools.each do |pool| %>
+    <%= render "pool_row", pool: pool, presenter: presenter %>
+  <% end %>
+
+  <%# Said plainly rather than left as an empty card: an account with no envelopes is a
+      setup state, and a blank panel reads as something that failed to load. %>
+  <% if pools.empty? %>
+    <p class="px-6 py-3 text-sm text-gray-500">No pools in this account yet.</p>
+  <% end %>
+</section>

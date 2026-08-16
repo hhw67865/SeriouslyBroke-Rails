@@ -33,12 +33,23 @@ class HomePresenter
     by_priority(all_pools.select { |pool| pool.account_id.nil? })
   end
 
+  # ONE account's buffer as it stands right now: the cash sitting in it that no envelope
+  # has taken yet. Money moved into a pool has left the account, so the account's balance
+  # IS its buffer.
+  #
+  # Named for the moment it describes, because #projected_buffer is the same concept at a
+  # different one — after this period's funding, across every account. They used to be
+  # `buffer` and `buffer_for`: two different quantities four characters apart, and neither
+  # derivable from the other. Σ current_buffer_for is NOT #projected_buffer — the
+  # difference is what the waterfall will spend, and an overdrawn account is clamped out of
+  # #available before the sum — so a reader who guessed got a plausible wrong number.
+  #
   # `.to_d`, not the raw balance: PoolCalculator#balance is five `sum(:amount)` calls, and
   # an account holding no entries at all makes every one of them return the Integer literal
   # 0. #available seeds its own sum so it is safe either way, but this is a public money
   # reader and Task 8's views divide by it for the buffer bar — Integer division there
   # would truncate silently on exactly the accounts that are emptiest.
-  def buffer_for(account) = calculator_for(account).balance.to_d
+  def current_buffer_for(account) = calculator_for(account).balance.to_d
 
   # Unclaimed cash across every account — an honest answer to "what do I have".
   #
@@ -70,14 +81,14 @@ class HomePresenter
   #
   # A reader CAN subtract the standing band's two figures, and the answer is not this one:
   #
-  #   (total_required - available) - shortfall = orphan_required - buffer
+  #   (total_required - available) - shortfall = orphan_required - projected_buffer
   #
   # Two causes, either of which can be alone: cash sitting in an account whose own pools are
-  # already funded (#buffer), and money owed by a pool no account can fund (#orphan_required).
+  # already funded (#projected_buffer), and money owed by a pool no account can fund (#orphan_required).
   # A single-account user with every pool assigned has neither, and the figures reconcile
   # exactly; a single account plus one savings goal — the ordinary shape until Plan 3's
   # backfill — has the second. The standing band owes an explanation whenever either is
-  # non-zero, and gating on #buffer alone suppresses it on exactly the second case.
+  # non-zero, and gating on #projected_buffer alone suppresses it on exactly the second case.
   #
   # No `max` clamp is needed: every row's `short` is `needed - funded` where `funded` is
   # clamped to at most `needed`, so no row can contribute a negative.
@@ -91,14 +102,14 @@ class HomePresenter
   # zero, so an overdraft never reaches #available; and #shortfall is summed from the
   # waterfall rows, so it is not a funding gap either — a user $500 down with a $300 rule
   # correctly reads `short $300`, not `short $800`. Both choices are right, and together
-  # they mean real debt renders NOWHERE unless a band asks for it by name. #buffer_for
+  # they mean real debt renders NOWHERE unless a band asks for it by name. #current_buffer_for
   # still reports the -$500, so the data was never lost, only unspoken for.
   #
   # These are exactly the accounts whose PoolStatus is :overdrawn — an account holds no
   # anchored rules, so :overdue, :wont_make_it and :behind cannot fire on one — which lets
   # Home render them with the same row vocabulary as any other problem.
   def overdrawn_accounts
-    accounts.select { |account| buffer_for(account).negative? }
+    accounts.select { |account| current_buffer_for(account).negative? }
   end
 
   # Cash still sitting in accounts once the waterfall has funded everything it can reach:
@@ -115,7 +126,7 @@ class HomePresenter
   # Never `available - total_required`: an account-less pool counts toward #total_required
   # but can never be funded, so that subtraction reports a NEGATIVE buffer on a covered
   # period — "-$400.00 stays in your buffer" — for a user whose accounts are in order.
-  def buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
+  def projected_buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
 
   # What the account-less pools ask for this period: the part of #total_required that no
   # waterfall row can ever fund, and the second reason the standing band's figures do not
@@ -132,6 +143,27 @@ class HomePresenter
   def status_for(pool)
     @statuses ||= {}
     @statuses[pool.id] ||= pool.status(today: today)
+  end
+
+  # The dated rules behind a pool, earliest due first, each paired with the due date its
+  # row prints. What an expanded row shows: a pool needing attention owes the user the
+  # rules that put it there.
+  #
+  # Here rather than in the partial for the same reason as #status_for, one level down:
+  # `budget.calculator` defaults to Date.current, so a view building its own calculators
+  # would date these rules against a different day than every other figure on the screen
+  # whenever `today` is injected — and disagree silently.
+  #
+  # Anchorless rules are excluded because they have no date to print; a row whose rules are
+  # all anchorless renders its own explanation instead (see _pool_row). The sort key is the
+  # triple PoolStatus#anchored_budgets already uses — `pool.budgets` carries no ORDER BY, so
+  # without it two rules sharing a due date could swap places between page loads. Memoised
+  # because BudgetCalculator#due_date re-runs its paid_since_anchor SUM on every call.
+  def dated_rules_for(pool)
+    (@dated_rules ||= {})[pool.id] ||= pool.budgets
+      .select { |budget| budget.anchor_date.present? }
+      .map { |budget| [budget, calculator_for_budget(budget).due_date] }
+      .sort_by { |budget, due_on| [due_on, -budget.amount, budget.id] }
   end
 
   # Sorted for the same reason #waterfall is. This is a rendered list, and `all_pools`
@@ -199,7 +231,7 @@ class HomePresenter
   # Deliberately NOT memoised: #fill_waterfall spends this hash down as it fills, so handing
   # out a shared instance would leave #available summing the leftovers rather than the cash.
   def account_pots
-    accounts.to_h { |account| [account.id, [buffer_for(account), 0.to_d].max] }
+    accounts.to_h { |account| [account.id, [current_buffer_for(account), 0.to_d].max] }
   end
 
   # The in-memory twin of the `Pool.by_priority` scope, and the one place the tie-break
@@ -216,6 +248,12 @@ class HomePresenter
   # run the whole lot twice for every envelope on the screen, and two calculators over the
   # same pool could in principle disagree. Same reasoning as PoolStatus#pool_calculator.
   def calculator_for(pool) = (@calculators ||= {})[pool.id] ||= pool.calculator(today: today)
+
+  # Keyed by the record, not by id: an unsaved rule has no id, and `nil` as a cache key
+  # would hand every such rule the first one's calculator.
+  def calculator_for_budget(budget)
+    (@budget_calculators ||= {})[budget] ||= budget.calculator(today: today)
+  end
 
   def required_for(pool) = (@required ||= {})[pool.id] ||= calculator_for(pool).required
 

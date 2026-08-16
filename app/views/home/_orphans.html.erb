@@ -1,0 +1,26 @@
+<%# The pools that belong to no account. Local: `presenter` (HomePresenter).
+
+    A group of their own, because HomePresenter#pools_for filters on account_id: a band
+    built purely as "for each account, render its pools" renders these NOWHERE — and an
+    account-less savings pool is the ordinary shape until Plan 3's backfill, not a rare
+    edge. The heading is what they are, said once, so the rows below can speak the same
+    §4.4 vocabulary as every other row.
+
+    Silent when there are none: an empty "No account" heading invents a problem out of a
+    healthy screen (principle 3). %>
+<% pools = presenter.orphan_pools %>
+<% if pools.any? %>
+  <section class="bg-white border border-status-danger rounded" data-pool-group="No account">
+    <div class="px-6 py-3 border-b border-gray-200 bg-status-danger-light flex justify-between items-baseline gap-4">
+      <h3 class="text-sm font-semibold text-status-danger">No account</h3>
+      <%# Not a shortfall and not a buffer — the money these ask for may be sitting in
+          Checking right now with nowhere to go. Money does not fix this one; assigning
+          the pool does, which is why the line says that instead of naming a figure. %>
+      <span class="text-sm text-status-danger">nothing can fund these until you assign one</span>
+    </div>
+
+    <% pools.each do |pool| %>
+      <%= render "pool_row", pool: pool, presenter: presenter, orphan: true %>
+    <% end %>
+  </section>
+<% end %>

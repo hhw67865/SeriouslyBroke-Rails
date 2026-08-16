@@ -3,11 +3,11 @@
 <div class="bg-white border border-gray-200 rounded p-6">
   <% if presenter.covered? %>
     <h2 class="text-2xl font-semibold text-gray-900">You're covered this period</h2>
-    <%# `presenter.buffer`, not `available - total_required`: an account-less pool counts in
+    <%# `presenter.projected_buffer`, not `available - total_required`: an account-less pool counts in
         the requirement and can never be funded, so the subtraction prints a negative buffer
         at a user whose accounts are perfectly in order. %>
     <p class="mt-2 text-sm text-gray-600">
-      <%= number_to_currency(presenter.buffer) %> stays in your buffer.
+      <%= number_to_currency(presenter.projected_buffer) %> stays in your buffer.
     </p>
   <% else %>
     <h2 class="text-2xl font-semibold text-status-danger">
@@ -24,13 +24,19 @@
         fund. Gating on the buffer alone stayed silent on the second — which is the ordinary
         screen for a single account with a savings goal. Silent when neither applies, since a
         consequence is only worth stating when there is one (principle 3). %>
-    <% if presenter.buffer.positive? %>
+    <% if presenter.projected_buffer.positive? %>
       <p class="mt-1 text-sm text-gray-600">
-        <%= number_to_currency(presenter.buffer) %> of that sits in accounts with nothing left
+        <%= number_to_currency(presenter.projected_buffer) %> of that sits in accounts with nothing left
         to fund, so it can't close the gap — the shortfall is what your pools miss, account by account.
       </p>
     <% end %>
-    <% if presenter.orphan_pools.any? %>
+    <%# On `orphan_required`, not on `orphan_pools.any?`. An orphan whose own requirement is
+        already zero — a dateless goal sitting at target, a fulfilled anchored rule — makes
+        the clause render "$0.00 of what you need belongs to 1 pool with no account". The
+        figure is accurate and the cause is not live, which is exactly the reading each
+        clause is gated to prevent. The pool is still a problem, and the attention band and
+        the pools band both still name it; it is just not part of what you need. %>
+    <% if presenter.orphan_required.positive? %>
       <p class="mt-1 text-sm text-gray-600">
         <%= number_to_currency(presenter.orphan_required) %> of what you need belongs to
         <%= pluralize(presenter.orphan_pools.size, "pool") %> with no account, listed below.

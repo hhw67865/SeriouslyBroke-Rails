@@ -28,6 +28,12 @@ RSpec.describe HomePresenter do
 
   def bill(pool, amount:, due:) = create(:pool_budget, :one_time, pool: pool, amount: amount, anchor_date: due)
 
+  # A rule that rolls: its due date moves with the cycles that have gone by, which is what
+  # makes it depend on which day the calculator is asked about.
+  def rolling(pool, amount:, anchor:)
+    create(:pool_budget, pool: pool, amount: amount, interval_months: 1, anchor_date: anchor)
+  end
+
   # Category names are unique per user, so both of these name themselves after the
   # account — an example may fund two accounts.
   def deposit(account, amount)
@@ -116,6 +122,54 @@ RSpec.describe HomePresenter do
     end
   end
 
+  describe "#dated_rules_for" do
+    # An expanded row prints one line per dated rule, earliest first. An anchorless rule has
+    # no date to print, so it is not one of these lines — and a row whose rules are ALL
+    # anchorless renders its own sentence instead of an empty box.
+    it "returns the anchored rules earliest due first, and nothing else", :aggregate_failures do
+      utilities = envelope("Utilities", priority: 1)
+      electric = bill(utilities, amount: 90, due: Date.new(2026, 3, 1))
+      water = bill(utilities, amount: 40, due: Date.new(2026, 2, 20))
+      rate(utilities, 25)
+
+      expect(presenter.dated_rules_for(utilities)).to eq(
+        [
+          [water, Date.new(2026, 2, 20)],
+          [electric, Date.new(2026, 3, 1)]
+        ]
+      )
+    end
+
+    it "is empty for a pool funded only at a rate" do
+      groceries = envelope("Groceries", priority: 1)
+      rate(groceries, 400)
+
+      expect(presenter.dated_rules_for(groceries)).to be_empty
+    end
+
+    # The same hazard as #status_for, one level down: `budget.calculator` defaults to
+    # Date.current, so a partial building its own would date these rules against a different
+    # day than every other figure on the screen. Asserted in BOTH directions — the second
+    # expectation proves a bare `budget.calculator` genuinely disagrees on this data.
+    it "dates a rolling rule against the injected day, not Date.current", :aggregate_failures do
+      utilities = envelope("Utilities", priority: 1)
+      rule = rolling(utilities, amount: 120, anchor: Date.new(2026, 1, 1))
+
+      travel_to(Date.new(2026, 6, 9)) do
+        expect(presenter.dated_rules_for(utilities)).to eq([[rule, Date.new(2026, 3, 1)]])
+        expect(rule.calculator.due_date).to eq(Date.new(2026, 7, 1))
+      end
+    end
+
+    it "memoises per pool so a row does not rebuild its rules" do
+      utilities = envelope("Utilities", priority: 1)
+      bill(utilities, amount: 90, due: Date.new(2026, 3, 1))
+      first_call = presenter.dated_rules_for(utilities)
+
+      expect(presenter.dated_rules_for(utilities)).to be(first_call)
+    end
+  end
+
   describe "#available" do
     it "is the account's unclaimed cash" do
       deposit(checking, 2_400)
@@ -131,17 +185,17 @@ RSpec.describe HomePresenter do
       deposit(checking, 1_000)
       overdraw(ally, 400)
 
-      # #buffer_for still tells the truth about the account itself — Tasks 6/7 render
+      # #current_buffer_for still tells the truth about the account itself — Tasks 6/7 render
       # the overdraft from here. It is only the fundable total that excludes it.
-      expect(presenter.buffer_for(checking)).to eq(1_000)
-      expect(presenter.buffer_for(ally)).to eq(-400)
+      expect(presenter.current_buffer_for(checking)).to eq(1_000)
+      expect(presenter.current_buffer_for(ally)).to eq(-400)
       expect(presenter.available).to eq(1_000)
     end
 
     it "is a decimal zero, not an integer, for a user with nothing", :aggregate_failures do
       expect(presenter.available).to eq(0)
       expect(presenter.available).to be_a(BigDecimal)
-      expect(presenter.buffer_for(checking)).to be_a(BigDecimal)
+      expect(presenter.current_buffer_for(checking)).to be_a(BigDecimal)
     end
   end
 
@@ -240,7 +294,7 @@ RSpec.describe HomePresenter do
 
       rows = presenter.waterfall
 
-      expect(presenter.buffer_for(checking)).to eq(-500)
+      expect(presenter.current_buffer_for(checking)).to eq(-500)
       expect(presenter.available).to eq(0)
       expect(rows.pluck(:funded)).to eq([0])
       expect(rows.pluck(:short)).to eq([300])
@@ -368,19 +422,19 @@ RSpec.describe HomePresenter do
     # The whole reason this reader exists. Both headline figures are right to leave the
     # overdraft out — #available because you cannot spend it, #shortfall because a $300
     # rule is $300 short, not $800 — and between them a real $500 debt would render
-    # nowhere at all. #buffer_for has always known; nothing was asking it.
+    # nowhere at all. #current_buffer_for has always known; nothing was asking it.
     it "reports a debt that neither headline figure contains", :aggregate_failures do
       overdraw(checking, 500)
       rate(envelope("Rent", priority: 1), 300)
 
       expect(presenter.available).to eq(0)
       expect(presenter.shortfall).to eq(300)
-      expect(presenter.buffer_for(checking)).to eq(-500)
+      expect(presenter.current_buffer_for(checking)).to eq(-500)
       expect(presenter.overdrawn_accounts.map(&:name)).to eq(["Checking"])
     end
   end
 
-  describe "#buffer" do
+  describe "#projected_buffer" do
     let(:ally) { create(:pool, :account, user: user, name: "Ally") }
 
     it "is what stays put once every reachable pool is funded", :aggregate_failures do
@@ -388,7 +442,7 @@ RSpec.describe HomePresenter do
       rate(envelope("Groceries", priority: 1), 100)
 
       expect(presenter).to be_covered
-      expect(presenter.buffer).to eq(400)
+      expect(presenter.projected_buffer).to eq(400)
     end
 
     # The bug the orphan ruling would otherwise introduce: an account-less pool counts in
@@ -401,7 +455,7 @@ RSpec.describe HomePresenter do
       expect(presenter.total_required).to eq(500)
       expect(presenter.available - presenter.total_required).to eq(-400)
       expect(presenter).to be_covered
-      expect(presenter.buffer).to eq(100)
+      expect(presenter.projected_buffer).to eq(100)
     end
 
     it "is zero when a single account is short, where the two figures already agree", :aggregate_failures do
@@ -409,7 +463,7 @@ RSpec.describe HomePresenter do
       rate(envelope("Groceries", priority: 1), 400)
 
       expect(presenter.shortfall).to eq(presenter.total_required - presenter.available)
-      expect(presenter.buffer).to eq(0)
+      expect(presenter.projected_buffer).to eq(0)
     end
 
     it "is the cash this period's pools cannot reach", :aggregate_failures do
@@ -419,7 +473,7 @@ RSpec.describe HomePresenter do
       expect(presenter.shortfall).to eq(400)
       # What a reader subtracting the standing band's two figures would get instead.
       expect(presenter.total_required - presenter.available).to eq(-600)
-      expect(presenter.buffer).to eq(1_000)
+      expect(presenter.projected_buffer).to eq(1_000)
     end
 
     it "counts only the surplus of an account that funds pools of its own", :aggregate_failures do
@@ -430,7 +484,7 @@ RSpec.describe HomePresenter do
 
       # Checking funds 100 of 400; Ally funds its 200 and keeps 300 nothing can use.
       expect(presenter.shortfall).to eq(300)
-      expect(presenter.buffer).to eq(300)
+      expect(presenter.projected_buffer).to eq(300)
     end
   end
 
@@ -444,7 +498,7 @@ RSpec.describe HomePresenter do
       expect(presenter.orphan_required).to eq(200)
       # Exactly what a reader subtracting the two headline figures is left holding.
       expect((presenter.total_required - presenter.available) - presenter.shortfall)
-        .to eq(presenter.orphan_required - presenter.buffer)
+        .to eq(presenter.orphan_required - presenter.projected_buffer)
     end
 
     it "is zero when every pool has an account", :aggregate_failures do
