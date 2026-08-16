@@ -225,6 +225,17 @@ An override that leaves an envelope unable to recover uses the **won't make it**
 
 **This task adds no writes.** The override is held in the form and applied at confirm.
 
+**Overrides live in `AllocationCalculator`, applied inside the fill.** An override replaces that
+row's `needed`; `remaining` then carries on down as it always does, so money freed by cutting a
+high row reaches the next unfunded envelope by the existing mechanism rather than by new code.
+`AllocationCommitter` stops substituting overrides of its own and writes exactly what the
+proposal says — otherwise the split is decided in two places, the fill is already over by the
+time the override lands, and freed money cannot flow.
+
+The cutoff marker, the unfunded total and the buffer are three views of one fill and must move
+together. A screen that reports `$488.43 unfunded` while holding $35 the user just freed is
+contradicting itself.
+
 ---
 
 ## Task 6: Confirm
