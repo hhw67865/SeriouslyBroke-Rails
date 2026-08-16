@@ -2,10 +2,11 @@
 
 require "rails_helper"
 
-# A strong-parameter list is a wire contract, and no system test can reach this one: the
-# pool form renders no pool_type, account or priority field yet. Without these examples the
-# widening is asserted in neither direction — a param silently dropped back to its default
-# looks exactly like a param that was never sent.
+# A strong-parameter list is a wire contract, and the form is only one client of it. The
+# form now renders pool_type, account and priority, and system specs drive them — but these
+# examples pin the contract itself, at the layer where a param silently dropped back to its
+# default looks exactly like a param that was never sent, and independently of whatever
+# fields the view happens to render this week.
 RSpec.describe "Pools", type: :request do
   let(:user) { create(:user) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }

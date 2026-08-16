@@ -16,8 +16,13 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       expect(page).to have_content("Emergency Fund")
     end
 
+    # Scoped to the breadcrumb nav because the sidebar renders a link labelled exactly
+    # "Pools" to the same path and `Capybara.exact` is unset — unscoped, this passed with
+    # the breadcrumb deleted outright. The sibling example below is scoped the same way.
     it "shows breadcrumbs" do
-      expect(page).to have_link("Pools", href: pools_path)
+      within("nav[aria-label='Breadcrumb']") do
+        expect(page).to have_link("Pools", href: pools_path)
+      end
       expect(page).to have_content("Emergency Fund")
     end
   end
