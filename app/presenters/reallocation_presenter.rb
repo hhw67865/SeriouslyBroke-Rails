@@ -148,8 +148,21 @@ class ReallocationPresenter
   def sources
     return [] if to_pool.nil?
 
-    @sources ||= same_account_pools.map { |pool| candidate_for(pool) }
+    @sources ||= same_account_pools.map { |pool| source_for(pool) }
   end
+
+  # ONE ROW, for a caller that already knows which source it means — Home's fix button, which
+  # renders exactly one candidate and must not pay for the other twelve. #sources builds a Candidate
+  # for every pool in the account, and an affordable one costs four calculators over that pool.
+  #
+  # The SAME #candidate_for the list is built from, so this is not a second answer to "what would
+  # this move cost" (amendment A): Home prints the damage through the same PoolMovementsHelper
+  # sentence this screen does, off the same Data object.
+  #
+  # No same-account check here, deliberately. That question belongs to #sources, which is the list
+  # of what may be OFFERED; this is a lookup by a caller that has already chosen. A caller passing a
+  # pool from another account gets an honest reading of a move the write path would then refuse.
+  def source_for(pool) = (@source_for ||= {})[pool.id] ||= candidate_for(pool)
 
   def gain
     return nil if to_pool.nil? || !requested?

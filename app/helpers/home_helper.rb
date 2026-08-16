@@ -75,6 +75,32 @@ module HomeHelper
   # problem, not a funding one (HomePresenter#fill_waterfall says why it is not a shortfall),
   # and a pool can be both unassigned and overdrawn — so the status is still said when it
   # has one.
+  # THE FIX BUTTON'S OWN LABEL — spec §4.2's `[ Take $300 from Rent ]`.
+  #
+  # Named through `reallocation_pool_name`, which is this app's one answer to what a pool is
+  # CALLED when it is one end of a movement: an account stands in for its buffer, so the button
+  # reads "Take $300.00 from Checking buffer" and the screen it opens says the same. "Checking"
+  # alone would name the whole account, envelopes included, which is not the money being taken.
+  def fix_button_label(fix)
+    "Take #{number_to_currency(fix.amount)} from #{reallocation_pool_name(fix.source)}"
+  end
+
+  # WHY THIS PROBLEM HAS NO BUTTON, and never merely that it has none (amendment C). A row that
+  # falls silent here reads as a rendering that failed rather than as an answer.
+  #
+  # Every sibling in the account was asked and none of them has this much spare, which is worth
+  # saying with both the account's name and the figure, so the reader can see what would have had
+  # to be there. The other no-button case — a pool with no account — never reaches this method:
+  # HomePresenter#fix_for returns nil for it and the band prints the setup step instead.
+  #
+  # `pool.account || pool` for the container, matching PoolMovement#containing_account: an account
+  # sits inside no other account and stands in as its own, so an overdrawn Checking asks its own
+  # envelopes and its sentence names itself.
+  def fix_gap_sentence(fix)
+    container = fix.pool.account || fix.pool
+    "Nothing in #{container.name} has #{number_to_currency(fix.amount)} spare to move."
+  end
+
   def pool_problem_label(status, orphan: false)
     return pool_status_label(status) unless orphan
     return "no account · #{pool_status_label(status)}" if status.needs_attention?

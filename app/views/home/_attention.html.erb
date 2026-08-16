@@ -61,13 +61,60 @@
 
   <% problems.each do |pool| %>
     <% status = presenter.status_for(pool) %>
-    <div class="px-6 py-3 border-b border-gray-100 <%= "bg-status-danger-light" if status.state == :overdrawn %>">
+    <% fix = presenter.fix_for(pool) %>
+    <div class="px-6 py-3 border-b border-gray-100 <%= "bg-status-danger-light" if status.state == :overdrawn %>"
+         data-problem-pool="<%= pool.name %>">
       <div class="flex justify-between items-baseline">
         <span class="font-medium text-gray-900"><%= pool.name %></span>
         <span class="text-sm text-status-danger">
           <%= pool_problem_label(status, orphan: orphans.include?(pool)) %>
         </span>
       </div>
+
+      <%# THE FIX (spec §4.2). Every problem gains a specific, clickable answer naming a source
+          that can genuinely cover it — or, when nothing can, says so in words rather than
+          offering a dead button.
+
+          THREE BRANCHES, NOT TWO, because "no movement can help this" and "no source was found"
+          are different answers. A pool with no account is the first: no account's money can
+          reach it whatever anyone moves, and it has no gap to name either — PoolStatus#amount is
+          that pool's own BALANCE in the quiet states an owed orphan reaches, which read
+          "Retirement Supplement … $545.00" on the demo seeds. HomePresenter#fix_for returns nil
+          for it, and the band prints the step that DOES fix it.
+
+          Silent only when the problem is not one money can be moved at at all: PoolStatus#amount
+          is positive on every state that reaches this list except, in principle, :overdue, whose
+          figure is a bill's unpaid remainder. "Take $0.00 from Checking" is worse than nothing.
+
+          The consequence line is PoolMovementsHelper's, off ReallocationPresenter::Candidate —
+          the same sentence, from the same Data object, that the screen this button opens will
+          print half a second later. There is one answer to "what would this move cost". %>
+      <% if fix.nil? %>
+        <p class="text-sm text-gray-600 mt-2">Assign it to an account before any money can reach it.</p>
+      <% elsif fix.actionable? %>
+        <% fix_path = { to_pool_id: pool.id, amount: fix.amount_param } %>
+        <div class="mt-2">
+          <% if fix.source %>
+            <p class="text-sm text-gray-600 mb-2">This has to come from money you already have.</p>
+            <div class="flex flex-wrap gap-2">
+              <%= link_to fix_button_label(fix),
+                          new_pool_movement_path(**fix_path, from_pool_id: fix.source.id),
+                          class: "btn btn-primary" %>
+              <%# No `from_pool_id`: the reallocation screen takes any subset of the three, so this
+                  arrives with the destination and the amount filled in and every source still to
+                  choose from — including the ones this band declined to propose. %>
+              <%= link_to "Take from another pool…",
+                          new_pool_movement_path(**fix_path),
+                          class: "btn btn-secondary" %>
+            </div>
+            <p class="text-sm mt-2 <%= reallocation_damage_class(fix.candidate) %>">
+              <%= reallocation_pool_name(fix.source) %> <%= reallocation_damage_sentence(fix.candidate) %>
+            </p>
+          <% else %>
+            <p class="text-sm text-gray-600"><%= fix_gap_sentence(fix) %></p>
+          <% end %>
+        </div>
+      <% end %>
     </div>
   <% end %>
 
