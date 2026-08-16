@@ -16,6 +16,20 @@ RSpec.describe "Home Fixes", type: :system do
   describe "the fix a problem offers" do
     include_context "with a Checking account to reallocate in"
 
+    # THE PERIOD HAS TO BE SHORT BEFORE THE MONEY REACHES DENTIST, or every example below would be
+    # measuring the wrong branch. Dentist is priority 1 in that fixture, so the waterfall funds its
+    # whole $300 out of Checking's $960 post-sweep pot — and a problem the next distribution solves
+    # by itself is deliberately given no button (see the last describe in this file). This example
+    # group is about which SOURCE a genuine problem is offered, so the problem has to be genuine.
+    #
+    # A $5,000 tuition bill at priority 0 is the household's own answer to "what comes first", and
+    # it takes the pot before anything below it: `required` spreads it over the five biweekly
+    # boundaries before its due date, so it asks $1,000 against a $960 pot and Dentist gets nothing.
+    # It never becomes a problem row of its own (a bill with periods left to run is `on_track`) and
+    # it is never a candidate (nothing funded it, so `free_amount` is zero), so it changes no other
+    # figure in this file.
+    before { dated_rule(envelope("Tuition", priority: 0), "Autumn Term", 5_000, due_in: 60) }
+
     def problem_row(name) = find("[data-problem-pool='#{name}']")
 
     # Checking holds $810 of unclaimed cash and Dentist needs $300 it will never reach in time.
@@ -462,6 +476,128 @@ RSpec.describe "Home Fixes", type: :system do
         home = HomePresenter.new(user: user)
         expect(home.available).to eq(0)
         expect(home.available).to be_a(BigDecimal)
+      end
+    end
+  end
+
+  # ────────────────────────────────────────────────────────────────────────────────────────────
+  # THE LAST REASON A PROBLEM HAS NO BUTTON: the next distribution already solves it.
+  #
+  # Ruling 4 said do not offer money to a bill that already has it. This is the same principle one
+  # step out — do not offer money to a bill that is ABOUT to have it. The move is not free: the
+  # source loses money it was holding for its own rule, so proposing it is the app talking the user
+  # into an unnecessary loss.
+  #
+  # A DEDICATED FIXTURE, because both directions have to be on ONE screen at figures that DIFFER —
+  # an example where "funded in full" and "funded in part" coincided would pass either way.
+  #
+  #   Checking $400 · no sweeps, so the pot is exactly $400
+  #   1 Dentist  $300 due in 3 days, empty  →  funded $300 of $300  ·  short $0    → COVERED
+  #   2 Roof     $500 due in 3 days, empty  →  funded $100 of $500  ·  short $400  → still short
+  #   3 Cushion  a savings goal holding $700, no rules — asks nothing, and is the source Roof needs
+  describe "a problem the next distribution already solves" do
+    let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+    before do
+      sign_in user, scope: :user
+      deposit(1_100)
+      bill(envelope("Dentist", priority: 1), "Dental Work", 300)
+      bill(envelope("Roof", priority: 2), "Roof Repair", 500)
+      cushion
+      visit root_path
+    end
+
+    def problem_row(name) = find("[data-problem-pool='#{name}']")
+
+    def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
+
+    def deposit(amount)
+      category = create(:category, :income, user: user, pool: checking)
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    def envelope(name, priority:)
+      create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+    end
+
+    # Due inside three days with a biweekly cadence anchored today: no boundary falls between
+    # tomorrow and the due date, so the rule is unreachable and the pool reads `won't make it`.
+    def bill(pool, item_name, amount)
+      category = create(:category, :expense, user: user, pool: pool)
+      create(
+        :pool_budget,
+        pool: pool,
+        item: create(:item, category: category, name: item_name),
+        amount: amount,
+        interval_months: nil,
+        anchor_date: Date.current + 3
+      )
+    end
+
+    def cushion
+      pool = create(
+        :pool,
+        :savings_pool,
+        user: user,
+        account: checking,
+        name: "Cushion",
+        target_amount: 5_000,
+        priority: 3
+      )
+      create(:pool_movement, from_pool: checking, to_pool: pool, amount: 700, date: Date.current)
+      pool
+    end
+
+    # THE TWO DIRECTIONS, ON ONE SCREEN, AT DIFFERENT FIGURES. Dentist's $300 arrives in full, so
+    # it says so and offers nothing; Roof gets $100 of its $500 and keeps a real button. Both rows
+    # are still red — the states are unchanged and the band still counts them as problems.
+    it "drops the button on a pool the waterfall funds in full", :aggregate_failures do
+      within(problem_row("Dentist")) do
+        expect(page).to have_content("won't make it")
+        expect(page).to have_content("Its money is coming — the next distribution funds this in full.")
+        expect(page).to have_no_link(text: /\ATake/)
+        expect(page).to have_no_content("This has to come from money you already have.")
+      end
+      expect(waterfall_section).to have_content("$300.00 of $300.00")
+    end
+
+    it "keeps the button on a pool the waterfall funds only in part", :aggregate_failures do
+      within(problem_row("Roof")) do
+        expect(page).to have_content("won't make it")
+        expect(page).to have_link("Take $500.00 from Cushion")
+        expect(page).to have_no_content("the next distribution funds this in full")
+      end
+      expect(waterfall_section).to have_content("$100.00 of $500.00")
+    end
+
+    # THE BRANCH READS THE PROPOSAL THE DISTRIBUTION SCREEN WOULD RENDER, not a second answer to
+    # "will this be funded". Asserted against AllocationCalculator directly — the object that
+    # screen is built on — so the two figures the branch turns on are pinned to it rather than to
+    # Home's own copy of the fill. `short` is zero on exactly the pool that lost its button and
+    # positive on exactly the pool that kept one.
+    it "turns on the same figures the distribution screen would show", :aggregate_failures do
+      expect(page).to have_css("[data-problem-pool='Roof']")
+      rows = AllocationCalculator.new(user: user, account: Pool.find(checking.id)).rows.index_by { |r| r.pool.name }
+
+      expect(rows.fetch("Dentist").short).to eq(0)
+      expect(rows.fetch("Roof").short).to eq(400)
+      expect(rows.fetch("Roof").short).to be_a(BigDecimal)
+    end
+
+    # The two branches must not be one branch wearing two labels. Roof needs $500 and holds nothing,
+    # so PoolStatus#funding_gap is $500 on BOTH pools' terms — what separates them is the waterfall
+    # alone. Pinned so a future edit cannot satisfy this file by folding ruling 4 and this one
+    # together.
+    it "separates this from the money-already-there case", :aggregate_failures do
+      home = HomePresenter.new(user: user)
+      dentist = user.pools.find_by!(name: "Dentist")
+
+      expect(home.fix_for(dentist).amount).to eq(300)
+      expect(home.fix_for(dentist)).to be_needs_money
+      expect(home.fix_for(dentist)).to be_covered
+      within(problem_row("Dentist")) do
+        expect(page).to have_no_content("this needs paying, not funding")
       end
     end
   end

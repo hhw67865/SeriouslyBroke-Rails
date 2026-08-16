@@ -75,9 +75,9 @@
           that can genuinely cover it — or, when nothing can, says so in words rather than
           offering a dead button.
 
-          FOUR BRANCHES, AND EACH IS A DIFFERENT ANSWER RATHER THAN THE SAME ONE SAID FOUR WAYS.
-          Three of them decline to offer a button, and they decline for reasons that send the
-          reader to three different places, so collapsing them would be the same defect as a
+          FIVE BRANCHES, AND EACH IS A DIFFERENT ANSWER RATHER THAN THE SAME ONE SAID FIVE WAYS.
+          Four of them decline to offer a button, and they decline for reasons that send the
+          reader to four different places, so collapsing them would be the same defect as a
           silent row:
 
           1. NO ACCOUNT. No account's money can reach this pool whatever anyone moves, and it has
@@ -90,8 +90,13 @@
              rather than funding — the same sentence the distribution screen's alerts band prints
              about the same pool, in the same voice. Offering to move money in here would have
              the user make a real mistake to fix an imaginary problem.
-          3. NOTHING CAN COVER IT. Every sibling was asked; see HomeHelper#fix_gap_sentence.
-          4. A SOURCE — the button, and its consequence.
+          3. THE MONEY IS COMING. Same principle one step out: the waterfall below this row funds
+             this pool's whole ask, so a move today would rob one envelope to solve something the
+             next distribution solves by itself. Read off that same waterfall rather than
+             recomputed, so the two bands cannot contradict each other — see
+             HomePresenter#covered_by_waterfall?.
+          4. NOTHING CAN COVER IT. Every sibling was asked; see HomeHelper#fix_gap_sentence.
+          5. A SOURCE — the button, and its consequence.
 
           The consequence line is PoolMovementsHelper's, off ReallocationPresenter::Candidate —
           the same sentence, from the same Data object, that the screen this button opens will
@@ -101,6 +106,8 @@
         <p class="text-sm text-gray-600 mt-2">Assign it to an account before any money can reach it.</p>
       <% elsif !fix.needs_money? %>
         <p class="text-sm text-gray-600 mt-2">Its money is already there — this needs paying, not funding.</p>
+      <% elsif fix.covered? %>
+        <p class="text-sm text-gray-600 mt-2">Its money is coming — the next distribution funds this in full.</p>
       <% else %>
         <% fix_path = { to_pool_id: pool.id, amount: fix.amount_param } %>
         <div class="mt-2">

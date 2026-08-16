@@ -16,8 +16,12 @@ class HomePresenter
   #
   # nil `candidate` is the no-fix case and is REACHABLE — see #fix_candidates_for. The view says
   # so in words rather than rendering a dead button.
-  Fix = Data.define(:pool, :amount, :candidate) do
+  Fix = Data.define(:pool, :amount, :candidate, :covered) do
     def source = candidate&.pool
+
+    # The next distribution funds this pool's whole ask, so there is nothing for a move to do.
+    # See HomePresenter#covered_by_waterfall?.
+    def covered? = covered
 
     # WHETHER MOVING MONEY IN WOULD CHANGE ANYTHING, and it is a real branch rather than a guard.
     # `amount` is PoolStatus#funding_gap, which is zero for an overdue bill whose envelope already
@@ -363,8 +367,50 @@ class HomePresenter
   # concern on this plan (amendment E).
   def build_fix(pool)
     amount = fix_amount_for(pool)
+    return Fix.new(pool: pool, amount: amount, candidate: nil, covered: true) if covered_by_waterfall?(pool)
+
     source = fix_candidates_for(pool).first
-    Fix.new(pool: pool, amount: amount, candidate: source && damage_reader(pool, source, amount).source_for(source))
+    Fix.new(
+      pool: pool,
+      amount: amount,
+      candidate: source && damage_reader(pool, source, amount).source_for(source),
+      covered: false
+    )
+  end
+
+  # WHETHER THE NEXT DISTRIBUTION ALREADY SOLVES THIS, so the band does not talk the user into a
+  # move they do not need to make. Ruling 4 said do not offer money to a bill that already has it;
+  # this is the same principle one step out — do not offer money to a bill that is ABOUT to have
+  # it. The move is not free: the source loses money it was holding for its own rule.
+  #
+  # READ OFF #waterfall, WHICH IS THE PROPOSAL THIS SCREEN IS ALREADY RENDERING, and deliberately
+  # not a fresh AllocationCalculator. Two reasons, and the second is the load-bearing one:
+  #
+  #   The waterfall band sits a few inches below this row on the same screen. A second reader here
+  #   could say "the next distribution funds this in full" above a row reading `$0.00 of $300.00`
+  #   — a screen contradicting itself in two adjacent bands, which is the exact defect class
+  #   `ReallocationPresenter.source_order` was extracted to close one ruling ago.
+  #
+  #   And "the same proposal the distribution screen would render" is now a property this task
+  #   PROVED rather than assumed: #waterfall computes `required` with `net_of_sweep: true` and
+  #   #account_pots adds the sweeps, and spec/system/home/fixes_spec.rb pins
+  #   `home.shortfall == proposal.rows.sum(&:short)` and `home.available == proposal.available`
+  #   against AllocationCalculator, per account, in both sweep shapes. Reaching for a fresh
+  #   proposal would be a THIRD reader on one screen.
+  #
+  # NO ROW MEANS NOT COVERED, which is the safe direction and the right one for both shapes that
+  # reach it. An ACCOUNT is never a waterfall row (#fill_waterfall spans #all_pools, which excludes
+  # them), and a distribution does not repay an overdraft — it funds envelopes OUT of the account —
+  # so an overdrawn account keeps its button. A pool asking for nothing is rejected from the rows
+  # too, and that pool is already handled one branch earlier by PoolStatus#funding_gap.
+  def covered_by_waterfall?(pool)
+    row = waterfall_rows_by_pool[pool.id]
+
+    row.present? && row[:short].zero?
+  end
+
+  def waterfall_rows_by_pool
+    @waterfall_rows_by_pool ||= waterfall.index_by { |row| row[:pool].id }
   end
 
   def damage_reader(pool, source, amount)
