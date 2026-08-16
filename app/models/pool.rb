@@ -86,12 +86,17 @@ class Pool < ApplicationRecord
     contribution_entries.or(withdrawal_entries)
   end
 
-  def calculator(as_of: nil, today: Date.current, net_of_sweep: false)
-    PoolCalculator.new(self, as_of: as_of, today: today, net_of_sweep: net_of_sweep)
+  def calculator(as_of: nil, today: Date.current, net_of_sweep: false, pending: PoolCalculator::Pending.none)
+    PoolCalculator.new(self, as_of: as_of, today: today, net_of_sweep: net_of_sweep, pending: pending)
   end
 
-  def status(today: Date.current)
-    PoolStatus.new(self, today: today)
+  # `pending:` threads straight through to the calculator underneath, exactly as it does here:
+  # a status is a reading of a balance, so a status of a pool that has not yet received this
+  # distribution's money is a status of the wrong balance. It is what lets the distribution
+  # screen ask "does this envelope still make it if I fund $200 instead of $500" in the app's
+  # own vocabulary rather than inventing a second one.
+  def status(today: Date.current, pending: PoolCalculator::Pending.none)
+    PoolStatus.new(self, today: today, pending: pending)
   end
 
   # What the bank actually says: unallocated cash plus every pool inside it.

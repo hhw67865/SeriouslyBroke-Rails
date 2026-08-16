@@ -101,6 +101,63 @@ RSpec.describe "Distributions", type: :request do
     end
   end
 
+  # THE OVERRIDE PARAMS, and specifically the shapes only a hand-built URL produces. This screen
+  # is a GET anyone can link to, `overrides` is an open hash keyed by pool id, and both of the
+  # shapes below are 500s on the obvious implementation — `"1".permit!` is a NoMethodError and
+  # `["1"].to_d` is another. Nothing a browser submits can reach either, which is exactly why no
+  # system example can cover them.
+  # $300 of income against a $400 ask, so the proposal is short and the waterfall renders its
+  # boxes — which is what makes `value="300.00"` a reading of the row the override was meant to
+  # change, rather than of a summary line that would move for other reasons too.
+  describe "GET /distributions/new with overrides", :aggregate_failures do
+    let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
+
+    before do
+      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(
+        :entry,
+        item: create(:item, category: create(:category, :income, user: user, pool: checking)),
+        amount: 300,
+        date: Date.current
+      )
+    end
+
+    # The positive half: a well-formed override is applied, so the three refusals below are
+    # refusals of bad input rather than of every override.
+    it "applies a well-formed override" do
+      get new_distribution_path(account_id: checking.id, overrides: { groceries.id => "120" })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('value="120.00"')
+    end
+
+    it "ignores a scalar where a hash of overrides was expected" do
+      get new_distribution_path(account_id: checking.id, overrides: "1")
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('value="300.00"')
+    end
+
+    it "ignores an override whose value is not a scalar" do
+      get new_distribution_path(account_id: checking.id, overrides: { groceries.id => ["1"] })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('value="300.00"')
+    end
+
+    # An id that names no row on this account has no line to edit — the same rule
+    # AllocationCommitter#amount_for states, reached here through a pool that belongs to
+    # somebody else entirely.
+    it "ignores an override naming a pool the account does not hold" do
+      stranger = create(:pool, :budget_pool, user: create(:user), name: "Not Yours")
+
+      get new_distribution_path(account_id: checking.id, overrides: { stranger.id => "5" })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('value="300.00"')
+    end
+  end
+
   def deposit(amount, into:)
     category = create(:category, :income, user: user, pool: into)
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)

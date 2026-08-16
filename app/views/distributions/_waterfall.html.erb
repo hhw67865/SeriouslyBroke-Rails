@@ -13,7 +13,11 @@
     falls back to the row count and draws "ran out here · $0.00 unfunded" under the last row of a
     screen where nothing ran out — which is exactly what this table now renders whenever an
     overdue bill opened it on a covered period. Same guard, and the same reason, as Home's. %>
-<% cutoff = presenter.short? ? (rows.index { |line| line.funded.zero? && line.short? } || rows.length) : nil %>
+<%# `proposed` and `unfunded`, NOT `funded` and `short?`. The cutoff is a statement about the
+    ACCOUNT running dry, and an override is not the account running dry — a row the user typed
+    a zero into would otherwise drag the "ran out here" line up above envelopes the cash
+    comfortably reached, blaming the bank for a choice the user made. %>
+<% cutoff = presenter.short? ? (rows.index { |line| line.proposed.zero? && line.unfunded.positive? } || rows.length) : nil %>
 
 <section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
   <div class="px-6 py-4 border-b border-gray-200">
@@ -30,6 +34,29 @@
       <p class="mt-1 text-sm text-gray-600">
         Every envelope gets what it asked for, but something below still needs you — so the whole
         split is shown rather than a single line.
+      </p>
+    <% end %>
+
+    <%# AMENDMENT D / SPEC §5, IN WORDS ON THE SCREEN. An override and a rule change are easy to
+        confuse and must not look alike: one is "put in $200 this once", the other changes every
+        future period and happens somewhere else entirely. The box below looks like a settings
+        field, so the screen has to say which of the two it is before the user types in it —
+        and it says so whether or not anything has been edited yet, because the moment it
+        matters is the moment before the first edit. %>
+    <p class="mt-3 rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+      Every amount below is editable.
+      <span class="font-semibold text-gray-900">An edit here is a one-off for this distribution
+      only — it does not change the rule.</span>
+      The envelope goes on asking for the same amount every period; what you leave out is pushed
+      onto the periods that are left. To change the rule itself, edit the envelope's budget.
+    </p>
+
+    <%# Said once, above the table, when something HAS been edited. Each edited row carries its
+        own consequence line, but a row whose consequence is silent (a rate envelope, a dateless
+        goal) would otherwise come back from the reload looking untouched. %>
+    <% if presenter.overridden? %>
+      <p class="mt-2 text-xs text-status-warning" id="distribution-override-note">
+        Showing your edits. Nothing has been saved — confirming is what writes the split.
       </p>
     <% end %>
   </div>
@@ -50,41 +77,95 @@
     </div>
   <% end %>
 
-  <ol>
-    <% rows.each_with_index do |line, index| %>
-      <%= render "cutoff", presenter: presenter if index == cutoff %>
-      <li class="px-6 py-3 border-b border-gray-100" data-pool-name="<%= line.pool.name %>">
-        <div class="flex items-baseline justify-between gap-4">
-          <span class="text-gray-900">
-            <span class="text-xs text-gray-400"><%= index + 1 %></span>
-            <span class="font-medium"><%= line.pool.name %></span>
-          </span>
-          <span class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
-            <%= distribution_line_amount(line) %>
-          </span>
-        </div>
-        <p class="mt-0.5 text-xs text-gray-500">
-          <%= distribution_line_detail(line) %>
-          <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
-        </p>
-      </li>
-    <% end %>
-    <%# The money ran out INSIDE the last row — every envelope got something, one of them not
-        enough — so there is no row to draw the line above and it belongs at the end. %>
-    <%= render "cutoff", presenter: presenter if cutoff == rows.length %>
-  </ol>
+  <%# ONE FORM ROUND THE WHOLE TABLE, and it is a GET back to this same screen. The consequence
+      of an override is a real recomputation over the ledger — periods_until_due, the sweep the
+      confirm will take, the pool's own PoolStatus — so it is answered by the server that owns
+      those readers rather than re-derived in JavaScript, where it would be a second, silently
+      divergent copy of the schedule maths.
 
-  <%# The buffer line, the waterfall's last row: what is left once every envelope above has
-      taken what it could. Two moments, arrow between them, because the LEVEL matters less than
-      the direction (spec §7.1) — a buffer falling every period is the slow bleed this line
-      exists to catch. Negative is a true statement about an account in trouble and is printed
-      as one rather than floored at zero. %>
-  <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
-    <span class="text-sm font-medium text-gray-900">
-      Stays in buffer<span class="text-gray-500"><%= buffer_target_clause(presenter) %></span>
-    </span>
-    <span class="tabular-nums text-sm <%= presenter.leftover.negative? ? "text-status-danger" : "text-gray-900" %>">
-      <%= number_to_currency(presenter.buffer_carried) %> → <%= number_to_currency(presenter.leftover) %>
-    </span>
-  </div>
+      NOTHING HERE WRITES (amendment E): the override lives in the query string and in these
+      boxes until Task 6's confirm submits the same fields to `create`. The field names are
+      `overrides[<pool id>]` because that is exactly what AllocationCommitter consumes. %>
+  <%= form_with url: new_distribution_path, method: :get do %>
+    <%# Without this the reload falls back to "the account the pay landed in" and an override
+        typed on a second account would come back describing the first one. %>
+    <%= hidden_field_tag :account_id, presenter.account.id %>
+
+    <ol>
+      <% rows.each_with_index do |line, index| %>
+        <%= render "cutoff", presenter: presenter if index == cutoff %>
+        <li class="px-6 py-3 border-b border-gray-100" data-pool-name="<%= line.pool.name %>">
+          <div class="flex items-baseline justify-between gap-4">
+            <span class="text-gray-900">
+              <span class="text-xs text-gray-400"><%= index + 1 %></span>
+              <span class="font-medium"><%= line.pool.name %></span>
+            </span>
+            <span class="flex items-center gap-3">
+              <%# The readout keeps its place and its colour: the box holds one number, and
+                  `$200.00 of $500.00` is the half of the sentence a bare box cannot carry. %>
+              <span class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
+                <%= distribution_line_amount(line) %>
+              </span>
+              <label class="sr-only" for="override-<%= line.pool.id %>">Amount for <%= line.pool.name %></label>
+              <%# `min: 0` refuses a negative before it is submitted. A negative override is
+                  bad input rather than a shape with a meaning — AllocationCommitter deliberately
+                  lets it through to fail PoolMovement's own validation loudly, which is the right
+                  behaviour for a commit and the wrong one for a box you are still typing in. %>
+              <%= number_field_tag "overrides[#{line.pool.id}]",
+                                   distribution_override_value(line),
+                                   id: "override-#{line.pool.id}",
+                                   step: "0.01",
+                                   min: "0",
+                                   class: "form-input w-28 py-1 text-right tabular-nums " \
+                                          "#{"border-status-warning" if line.overridden?}" %>
+            </span>
+          </div>
+          <p class="mt-0.5 text-xs text-gray-500">
+            <%= distribution_line_detail(line) %>
+            <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
+          </p>
+          <%# Only where the per-period ask actually moved (spec §5). A row edited in a way that
+              changes nothing downstream — a dateless goal, a rate envelope whose leftover is
+              swept and topped back up either way — says nothing, because there is nothing to
+              say. See DistributionPresenter::Consequence#worth_saying?. %>
+          <% if line.consequence %>
+            <p class="mt-1 text-xs <%= line.consequence.unrecoverable? ? "text-status-danger" : "text-status-warning" %>"
+               data-consequence="<%= line.pool.name %>">
+              ↳ <%= distribution_consequence_sentence(line.consequence) %>
+            </p>
+          <% end %>
+        </li>
+      <% end %>
+      <%# The money ran out INSIDE the last row — every envelope got something, one of them not
+          enough — so there is no row to draw the line above and it belongs at the end. %>
+      <%= render "cutoff", presenter: presenter if cutoff == rows.length %>
+    </ol>
+
+    <%# The buffer line, the waterfall's last row: what is left once every envelope above has
+        taken what it could. Two moments, arrow between them, because the LEVEL matters less than
+        the direction (spec §7.1) — a buffer falling every period is the slow bleed this line
+        exists to catch. Negative is a true statement about an account in trouble and is printed
+        as one rather than floored at zero.
+
+        INSIDE the form, and it moves with the boxes above it: money an override leaves out of an
+        envelope does not evaporate, it stays here, and money an override adds comes from here.
+        That is `Σ pools == your bank balance` shown before it is written. %>
+    <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
+      <span class="text-sm font-medium text-gray-900">
+        Stays in buffer<span class="text-gray-500"><%= buffer_target_clause(presenter) %></span>
+      </span>
+      <span class="tabular-nums text-sm <%= presenter.leftover.negative? ? "text-status-danger" : "text-gray-900" %>">
+        <%= number_to_currency(presenter.buffer_carried) %> → <%= number_to_currency(presenter.leftover) %>
+      </span>
+    </div>
+
+    <%# The recompute. An explicit button rather than a submit-on-blur: the figures below change
+        as a result of pressing it, and a page that re-renders under the cursor while the user is
+        still deciding is the shape that makes people distrust a screen about their money.
+        Task 6's confirm goes to the LEFT of this, as the primary action. %>
+    <div class="flex items-center justify-between gap-4 border-t border-gray-200 px-6 py-4">
+      <p class="text-xs text-gray-500">Edits are applied when you confirm — nothing has moved yet.</p>
+      <button type="submit" class="btn btn-secondary">Update figures</button>
+    </div>
+  <% end %>
 </section>

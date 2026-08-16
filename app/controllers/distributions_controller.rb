@@ -8,10 +8,36 @@ class DistributionsController < ApplicationController
     account = distribution_account
     return redirect_to(root_path, alert: "Set up an account before distributing.") if account.nil?
 
-    @presenter = DistributionPresenter.new(user: current_user, account: account, today: Date.current)
+    @presenter = DistributionPresenter.new(
+      user: current_user,
+      account: account,
+      today: Date.current,
+      overrides: override_params
+    )
   end
 
   private
+
+  # The edits the user typed into the waterfall, exactly as AllocationCommitter consumes them:
+  # `{pool_id => amount}`, keyed by pool id because a row's position is not stable across a
+  # re-derived proposal. Nothing is written here and nothing is cast here — the committer owns
+  # the coercion, and a second `.to_d` on this side is a second answer to "what did they mean by
+  # an empty box".
+  #
+  # Two guards, both against shapes only a hand-built URL produces: `overrides=1` arrives as a
+  # String and has no #permit!, and `overrides[x][]=1` arrives as an Array, which #to_d does not
+  # answer to — either one is a 500 on a GET anyone can link to. Values that are not strings are
+  # dropped rather than rescued, so the row simply keeps its proposed figure.
+  #
+  # `permit!` is safe precisely because the keys are pool ids and nothing here mass-assigns:
+  # every key is looked up against THIS account's own rows (AllocationCommitter#amount_for), so
+  # an id belonging to someone else names no row and is ignored.
+  def override_params
+    raw = params[:overrides]
+    return {} unless raw.is_a?(ActionController::Parameters)
+
+    raw.permit!.to_h.select { |_pool_id, amount| amount.is_a?(String) }
+  end
 
   # OWNERSHIP LIVES HERE. AllocationCalculator takes a `user` and an `account` and never checks
   # that the two belong together — it is arithmetic over whatever account it is handed — so a

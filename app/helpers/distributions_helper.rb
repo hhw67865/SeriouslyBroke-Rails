@@ -50,4 +50,61 @@ module DistributionsHelper
 
     "#{number_to_currency(line.funded)} of #{number_to_currency(line.needed)}"
   end
+
+  # What goes IN the box. Plain digits with two decimals and no currency symbol and no
+  # thousands delimiter, because the box is an input the user types into and a `number_field`
+  # holding "$1,419.00" is a field the browser refuses to read back — it reports empty, which
+  # AllocationCommitter coerces to zero, which is an envelope silently funded nothing.
+  def distribution_override_value(line)
+    number_with_precision(line.funded, precision: 2, delimiter: "")
+  end
+
+  # THE SENTENCE THIS TASK EXISTS FOR: what an override costs the user later, naming the
+  # mechanism and not only the number.
+  #
+  # Two shapes, because the two situations are different problems. The ordinary one is a trade —
+  # money moved onto a later period, and that later period says how much more it will want. The
+  # other is an envelope that can no longer make its date, and there the next period's figure is
+  # beside the point: it is a period that falls after the bill was due. That one speaks in the
+  # app's existing row vocabulary (spec §4.4) rather than in a sentence of its own, because it
+  # is an existing state and not a new one.
+  def distribution_consequence_sentence(consequence)
+    return distribution_unrecoverable_sentence(consequence) if consequence.unrecoverable?
+
+    "#{distribution_moving_clause(consequence)} #{distribution_next_period_clause(consequence)}"
+  end
+
+  # Which direction the money went. Both directions are real: a user who types a bigger figure
+  # than the proposal is covering a later period early, and telling them they are "moving
+  # -$300.00 onto your next period" is a sentence with no reading.
+  def distribution_moving_clause(consequence)
+    return "You're moving #{number_to_currency(consequence.moving)} onto your next period." if consequence.moving_later?
+
+    "You're covering #{number_to_currency(-consequence.moving)} early."
+  end
+
+  # "Feb 20 will need $800.00 instead of $500.00, the last period before Mar 1."
+  #
+  # The trailing clause is what makes the number mean something — $800 instead of $500 is
+  # alarming or routine depending entirely on whether anything comes after it — and it is
+  # printed only when the projection actually says so (Consequence#last_period?).
+  def distribution_next_period_clause(consequence)
+    figures = "#{consequence.opens_on.strftime("%b %-d")} will need " \
+              "#{number_to_currency(consequence.next_ask)} instead of #{number_to_currency(consequence.baseline_ask)}"
+    return "#{figures}." unless consequence.last_period?
+
+    "#{figures}, the last period before #{consequence.due_on.strftime("%b %-d")}."
+  end
+
+  # The red case, in the state the app already has for it. `pool_status_label` is HomeHelper's
+  # one row vocabulary and the Standing is exactly what it consumes, so this row reads
+  # "won't make it · Mar 1" in the same words and the same red as everywhere else in the app.
+  # No "you're moving it onto your next period" clause here, and its absence is the point: there
+  # is no next period that can help, which is the whole of what this state means. Naming one
+  # would be the reassuring half of a sentence whose other half is that the bill cannot be paid.
+  def distribution_unrecoverable_sentence(consequence)
+    "#{pool_status_label(consequence.standing)} — the " \
+      "#{number_to_currency(consequence.standing.amount)} still missing has no period left to " \
+      "arrive in, so nothing after this distribution can fix it."
+  end
 end

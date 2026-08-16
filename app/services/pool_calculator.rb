@@ -10,6 +10,35 @@ class PoolCalculator
   # this rather than crash a confirm.
   class NetOfSweepError < StandardError; end
 
+  # THE MOVEMENTS A SCREEN IS PROPOSING AND HAS NOT WRITTEN — one distribution's whole effect
+  # on one pool, which is how the distribution screen asks "and what would this envelope be
+  # asking for next period if I funded it $200 instead of $500".
+  #
+  # Three members rather than one signed number, because the ledger's two movements answer two
+  # different questions here and a net figure can only answer the first:
+  #
+  #   #net is what the BALANCE does — the allocation in less the sweep out — and it is the only
+  #   part #balance needs.
+  #
+  #   #funded_on is what the CLOCK does. #period_closed? measures a rate rule's period from the
+  #   day the money arrived, and a projection whose money has no arrival date reads the pool's
+  #   LAST real funding instead. On a never-funded envelope that is nil, so the period is not
+  #   closed, so nothing is swept, so the projection reports a rate envelope funded $100 as
+  #   asking $300 next period — when the truth is that its leftover is swept back and it asks
+  #   for its full rate again either way. Measured on exactly that shape; see the spec example
+  #   "says nothing about an envelope that is swept and topped back up".
+  #
+  # `funded.positive?` guards the date rather than `net`: a sweep bigger than the allocation is
+  # still a funding event, and a $0 override is not one — AllocationCommitter writes no
+  # allocation at all for it, so it must not make a closed rate period look live.
+  Pending = Data.define(:funded, :swept, :on) do
+    def self.none = new(funded: 0.to_d, swept: 0.to_d, on: nil)
+
+    def net = funded - swept
+
+    def funded_on = funded.positive? ? on : nil
+  end
+
   attr_reader :pool, :today
 
   # `net_of_sweep:` answers a different question about the same pool: not "what is in this
@@ -34,11 +63,24 @@ class PoolCalculator
   # misplaced $100, and the caller most likely to make it is a committer holding a plain and a
   # flagged calculator in the same method. Ask a plain calculator what to sweep; ask this one
   # what to fund.
-  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false)
+  # `pending:` is the SAME KIND of thing as `net_of_sweep:` and is deliberately built in the
+  # same shape: an adjustment to the BALANCE, so every reader derived from the balance —
+  # #allocated_balances, #reserve, #free_amount, #sweepable_amount, #required — inherits it
+  # unchanged and no reader has to learn about it. See Pending for what it carries and why it
+  # is a value rather than a number.
+  #
+  # It answers "what would this pool hold once the distribution now on screen had happened",
+  # which is the question the override consequence asks: fund Rent $200 instead of $500 and the
+  # envelope carries $300 less into the next period, so the next period's ask is larger.
+  #
+  # Default `Pending.none`, so every existing caller is untouched and this cannot change a
+  # number on any screen that does not ask for it.
+  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false, pending: Pending.none)
     @pool = pool
     @as_of = as_of
     @today = today
     @net_of_sweep = net_of_sweep
+    @pending = pending
   end
 
   # Deliberately start-date-agnostic. The balance this replaces filtered entries to
@@ -83,8 +125,8 @@ class PoolCalculator
   # hazard honest rather than adding a new class of it. The rule it rests on, which Task 2 and
   # Task 3 carry: anything that writes movements builds fresh calculators afterward.
   def balance
-    @balance ||= (income_entries_total + savings_entries_total +
-      movements_in_total - movements_out_total - expense_entries_total - sweep_adjustment).to_d
+    @balance ||= (income_entries_total + savings_entries_total + movements_in_total + @pending.net -
+      movements_out_total - expense_entries_total - sweep_adjustment).to_d
   end
 
   # Retained for the savings-pool views; identical to #balance.
@@ -326,10 +368,19 @@ class PoolCalculator
   #
   # Built inside #balance's memo, so it costs one extra pass over the pool's aggregates and
   # only on the calculators that asked for it.
+  #
+  # `pending:` IS PASSED THROUGH, and it has to be, on both of its members. The twin exists to
+  # answer "what would the next distribution take back", and the next distribution takes it back
+  # from the balance the pool will actually be holding — including whatever this screen is
+  # proposing to put in, and measured from the day that money arrives. Dropped here, a
+  # projection of next period's ask would sweep the OLD balance and then subtract it from the
+  # new one: on a rate envelope funded $400 the twin would sweep $85 (last period's leftover)
+  # instead of $400, and the projection would report the envelope already funded and asking for
+  # nothing.
   def sweep_adjustment
     return 0.to_d unless @net_of_sweep
 
-    self.class.new(pool, as_of: @as_of, today: today).sweepable_amount
+    self.class.new(pool, as_of: @as_of, today: today, pending: @pending).sweepable_amount
   end
 
   # The body of #period_closed?, split out only so the memo above it stays one line of
@@ -408,7 +459,8 @@ class PoolCalculator
     @last_funded_on = [
       scoped(pool.movements_in).maximum(:date),
       scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date),
-      scoped(Entry.savings.merge(entries_for_pool)).maximum(:date)
+      scoped(Entry.savings.merge(entries_for_pool)).maximum(:date),
+      @pending.funded_on
     ].compact.max&.to_date
   end
 

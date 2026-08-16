@@ -103,6 +103,20 @@ class AllocationCommitter
   # the screen knows whether to say it is REPLACING a split rather than writing the first one.
   def replaced = @replaced ||= []
 
+  # WHAT THIS ROW WILL ACTUALLY MOVE: the user's override where they typed one, the proposal's
+  # own figure where they did not.
+  #
+  # Public, and that is the point. The distribution screen has to show the figure this class is
+  # going to write, and the only way to guarantee the two agree is for the screen to ask this
+  # class rather than to re-implement `overrides.fetch(pool_id, funded)` beside it. Two spellings
+  # of "did the user override this row" is a screen that promises one split and a commit that
+  # writes another, with nothing on either side able to detect the difference.
+  #
+  # `row`, not a pool id, because the fallback is the row's own figure: an override keyed to a
+  # pool with no row has no row to edit and is ignored, which is the same rule #live_proposal's
+  # comment states about a re-derived proposal.
+  def amount_for(row) = overrides.fetch(row.pool.id.to_s, row.funded)
+
   private
 
   def account = proposal.account
@@ -165,7 +179,7 @@ class AllocationCommitter
   # nothing said about it.
   def allocation_movements
     live_proposal.rows.filter_map do |row|
-      amount = overrides.fetch(row.pool.id.to_s, row.funded)
+      amount = amount_for(row)
       next if amount.zero?
 
       build(from: account, to: row.pool, amount: amount, kind: :allocation)

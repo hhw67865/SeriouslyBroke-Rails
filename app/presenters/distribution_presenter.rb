@@ -22,15 +22,53 @@ class DistributionPresenter
   # ledger WITH the split back in place — half the row describing one world and half the other,
   # which is the exact confusion this screen exists to remove.
   #
-  # `short` is derived rather than stored for AllocationCalculator::Row's reason: it is
-  # `needed - funded` by definition, and a stored field is a second place for it to be wrong.
+  # `short` and `unfunded` are both derived rather than stored, for AllocationCalculator::Row's
+  # reason: each is a subtraction of two members that are already here, and a stored field is a
+  # second place for the same number to be wrong.
   #
   # `status` holds a Standing, NOT a PoolStatus — see Standing for why that distinction is the
   # whole of this class's safety rather than a tidiness.
-  Line = Data.define(:pool, :needed, :funded, :swept, :status, :period_closed, :due_on, :periods_left) do
-    def short = needed - funded
+  #
+  # `proposed` is what the WATERFALL would hand this envelope; `funded` is what it will actually
+  # get once the user's override is applied, and with no override the two are the same number.
+  # Both are kept because the screen asks two different questions of them and answering either
+  # with the other tells a lie:
+  #
+  #   #unfunded (needed − proposed) is WHAT THE CASH COULD NOT COVER. It is what the cutoff line
+  #   is about — "ran out here" is a fact about the account running dry, and folding the user's
+  #   own edits into it would blame the bank for a choice the user made two rows up.
+  #
+  #   #short (needed − funded) is WHAT THIS ENVELOPE ENDS UP MISSING, which is what its own row
+  #   has to say and what its consequence line is computed from.
+  #
+  # Both are clamped at zero rather than left signed. Under the proposal alone `funded` can
+  # never exceed `needed` (#fill clamps it), so the clamp is a no-op on an untouched screen —
+  # but an override CAN exceed it, and a signed #short would let one over-funded envelope
+  # cancel another envelope's shortfall inside #shortfall's sum, reporting an account that
+  # covered everything while a row below it got nothing.
+  Line = Data.define(
+    :pool,
+    :needed,
+    :proposed,
+    :funded,
+    :swept,
+    :status,
+    :period_closed,
+    :due_on,
+    :periods_left,
+    :consequence
+  ) do
+    def short = [needed - funded, 0.to_d].max
 
     def short? = short.positive?
+
+    def unfunded = [needed - proposed, 0.to_d].max
+
+    # Whether the user typed something different into this row's box. Compared by VALUE, so a
+    # box submitted with exactly the proposal's own figure in it — which is what every
+    # untouched box submits, because the screen renders the proposal into it — is correctly not
+    # an override, and no consequence is computed for it.
+    def overridden? = funded != proposed
 
     def swept? = swept.positive?
 
@@ -66,6 +104,51 @@ class DistributionPresenter
     def red? = RED_STATES.include?(state)
   end
 
+  # WHAT AN OVERRIDE COSTS YOU LATER — the sentence this screen exists to be able to say, and
+  # the only thing on it that is about a period other than this one.
+  #
+  # `next_ask` and `baseline_ask` are both REAL RECOMPUTATIONS at the next period's opening
+  # date: what the row will ask for having been funded the user's figure, against what it would
+  # have asked for having been funded the proposal's. They are NOT `baseline + shortfall`, and
+  # the two coincide only when one period remains — $300 underfunded with three periods left is
+  # $100 a period, not $300, and a subtraction would overstate it by triple.
+  #
+  # `standing` is the pool's OWN status (PoolStatus, through Standing) taken as of TODAY with
+  # the override's money already in the envelope: "would this envelope still make it". Today
+  # rather than next period, because :wont_make_it asks whether any boundary is left between
+  # tomorrow and the due date, and the distribution being edited is the one happening now.
+  #
+  # `opens_on` is the date the sentence names ("Feb 20 will need …"), `due_on`/`periods_left`
+  # come from the rule as it will stand THEN, so "it's the last period before Mar 1" is read off
+  # the projection rather than asserted about it.
+  Consequence = Data.define(:moving, :next_ask, :baseline_ask, :opens_on, :due_on, :periods_left, :standing) do
+    # The gate, and the whole of it: state the consequence ONLY when the per-period ask actually
+    # changes (spec §5). A dateless goal funds at a fixed rate, so underfunding it once leaves
+    # next period's rate exactly where it was and this is false — and so is a rate envelope,
+    # whose leftover is swept back and topped up to the full rate again regardless.
+    #
+    # OR unrecoverable, because an envelope that can no longer make its date is a consequence
+    # even in the arithmetic corner where the next ask happens to land on the same figure.
+    def worth_saying? = next_ask != baseline_ask || unrecoverable?
+
+    # The one red case (spec §5, amendment C): the override left the envelope unable to recover,
+    # which is :wont_make_it — a state PoolStatus already produces, in the red the app already
+    # draws it in. Not a new state and not a new colour; read off #standing rather than
+    # re-derived here, so the sentence and the row label can never disagree.
+    def unrecoverable? = standing.state == :wont_make_it
+
+    # Money pushed onto later periods (positive) or covered early (negative). Signed rather
+    # than two members: it is one subtraction, and a second field would be a second place for
+    # its sign to be wrong.
+    def moving_later? = moving.positive?
+
+    # "…the last period before Mar 1", and only when that is true of the projection. The date
+    # guard is not decoration: `periods_until_due` floors at 1, so a bill already past its due
+    # date by the time the next period opens also reports one period left, and saying "the last
+    # period before Mar 1" about a date that has already gone is the opposite of the truth.
+    def last_period? = periods_left == 1 && due_on.present? && due_on >= opens_on
+  end
+
   # The one moment this screen describes. Built inside the transaction, read outside it.
   Snapshot = Data.define(
     :available,
@@ -81,12 +164,18 @@ class DistributionPresenter
     :alerts
   )
 
-  attr_reader :user, :account, :today
+  attr_reader :user, :account, :today, :overrides
 
-  def initialize(user:, account:, today: Date.current)
+  # `overrides` arrives exactly as the form submitted it — `{pool_id => amount}`, both sides
+  # strings — and is NOT coerced here. It is handed straight to AllocationCommitter, which
+  # already owns the coercion and already owns the "override or the proposal's own figure"
+  # decision (#amount_for), and this screen reads its answer back. One override path, and the
+  # thing that reads it is the thing that will write it.
+  def initialize(user:, account:, today: Date.current, overrides: {})
     @user = user
     @account = account
     @today = today
+    @overrides = overrides
   end
 
   delegate :available, :total_swept, :total_allocated, :leftover, :lines, :replaced, to: :snapshot
@@ -127,7 +216,17 @@ class DistributionPresenter
   # What the envelopes below the cutoff miss, summed from the rows for HomePresenter#shortfall's
   # reason: only the rows can say WHICH envelope is starved, and `needed - available` answers a
   # different question.
-  def shortfall = lines.sum(0.to_d, &:short)
+  #
+  # #unfunded, NOT #short: this figure sits on the cutoff line and in the waterfall's header,
+  # both of which are sentences about the account running out of money. An override is not the
+  # account running out of money — it is the user choosing — so the user's edits stay out of
+  # this number and appear on their own row's consequence line and in the buffer figure instead.
+  def shortfall = lines.sum(0.to_d, &:unfunded)
+
+  # True on any row the user has actually changed. The screen says so once, above the table,
+  # rather than per row: the edited rows already carry their own consequence line, and a screen
+  # that never mentions the edits at all after a reload reads as if they had been discarded.
+  def overridden? = lines.any?(&:overridden?)
 
   # `[pool, amount]` pairs in fill order, for the sources line that names them.
   #
@@ -204,10 +303,10 @@ class DistributionPresenter
   # snapshot built lazily would compute half its figures here and half after the rollback, off
   # a ledger where the split is back.
   def build_snapshot
-    committer = AllocationCommitter.new(proposal)
+    committer = AllocationCommitter.new(proposal, overrides: overrides)
     snapshot = nil
     ActiveRecord::Base.transaction(requires_new: true) do
-      snapshot = capture(committer.replace_previous_distribution, committer.replaced)
+      snapshot = capture(committer.replace_previous_distribution, committer)
       raise ActiveRecord::Rollback
     end
     snapshot
@@ -220,20 +319,35 @@ class DistributionPresenter
   # Standings are taken for EVERY envelope in the account, not only the ones with a row: the
   # density switch has to see a red pool that is asking for nothing, which by definition has no
   # row. Keyed by pool id, so a line and an alert can never disagree about how one pool is doing.
-  def capture(fresh, replaced)
+  def capture(fresh, committer)
     standings = envelopes.to_h { |pool| [pool.id, standing_for(pool)] }
-    lines = fresh.rows.map { |row| line_for(row, fresh.sweeps, standings) }
+    lines = fresh.rows.map { |row| line_for(row, fresh.sweeps, standings, committer) }
+
+    snapshot_from(fresh, committer, standings, lines)
+  end
+
+  # `total_allocated` and `leftover` are summed from the LINES rather than read off the
+  # calculator's own #total_allocated / #leftover, because the calculator does not know about
+  # the overrides and those two figures are the ones that have to match the ledger the confirm
+  # will write. The account ends the distribution holding `available − Σ allocations`, and every
+  # allocation is AllocationCommitter#amount_for's answer — so summing the same answers is the
+  # only way `Σ pools == your bank balance` can be shown on screen before it is written.
+  #
+  # They agree with the calculator's own figures exactly when nothing is overridden, which is
+  # every screen Task 4 pinned.
+  def snapshot_from(fresh, committer, standings, lines)
+    allocated = lines.sum(0.to_d, &:funded)
     Snapshot.new(
       available: fresh.available,
       carried: opening_buffer(fresh),
       income: income_this_period_from(fresh),
       sweeps: fresh.sweeps.to_a,
       total_swept: fresh.total_swept,
-      total_allocated: fresh.total_allocated,
-      leftover: fresh.leftover,
+      total_allocated: allocated,
+      leftover: fresh.available - allocated,
       lines: lines,
       short: fresh.short?,
-      replaced: replaced,
+      replaced: committer.replaced,
       alerts: alerts_from(standings, lines)
     )
   end
@@ -280,29 +394,96 @@ class DistributionPresenter
   # `sweeps.fetch(pool, 0.to_d)`, because #sweeps holds only the envelopes with something to
   # give. Keyed by the Pool record, exactly as AllocationCommitter reads it, so the amount the
   # row prints is the amount the movement will carry.
-  def line_for(row, sweeps, standings)
+  def line_for(row, sweeps, standings, committer)
     pool = row.pool
     rule = next_dated_rule(pool)
+    swept = sweeps.fetch(pool, 0.to_d)
+    funded = committer.amount_for(row)
     Line.new(
       pool: pool,
       needed: row.needed,
-      funded: row.funded,
-      swept: sweeps.fetch(pool, 0.to_d),
+      proposed: row.funded,
+      funded: funded,
+      swept: swept,
       status: standings.fetch(pool.id),
       period_closed: pool.calculator(today: today).period_closed?,
       due_on: rule&.due_date,
-      periods_left: rule&.periods_until_due
+      periods_left: rule&.periods_until_due,
+      consequence: consequence_for(row, funded, swept)
     )
   end
 
   # A PoolStatus, read down to values while the transaction is still open. See Standing: the
   # readers below are `case` expressions rather than memos, so anything that calls them later
   # calls them against a ledger where this period's split is back.
-  def standing_for(pool)
-    status = pool.status(today: today)
+  #
+  # `pending:` is how the SAME reader answers the projected question. There is one
+  # definition of how a pool is doing in this app and this is it; the override case differs only
+  # in which balance it is asked about.
+  def standing_for(pool, pending: PoolCalculator::Pending.none)
+    status = pool.status(today: today, pending: pending)
 
     Standing.new(state: status.state, amount: status.amount, due_on: status.due_on, target: status.target)
   end
+
+  # The consequence of one override, or nil — nil both when the user changed nothing and when
+  # what they changed moves nothing downstream. See Consequence#worth_saying?: a screen that
+  # always prints a line and a screen that never prints one are equally wrong, and the gate
+  # between them is a comparison of two real recomputations.
+  #
+  # `pending` is THIS DISTRIBUTION'S WHOLE EFFECT on the envelope — the allocation in, less the
+  # sweep out. Both halves matter: the sweep is written by the same confirm, so a projection
+  # that added the funding without removing the leftover would credit the envelope with money
+  # it is about to hand back.
+  def consequence_for(row, funded, swept)
+    return nil if funded == row.funded
+
+    consequence = build_consequence(row, pending(funded, swept), pending(row.funded, swept))
+    consequence if consequence.worth_saying?
+  end
+
+  def build_consequence(row, chosen, baseline)
+    rule = next_dated_rule(row.pool, on: next_period_start)
+    Consequence.new(
+      moving: baseline.funded - chosen.funded,
+      next_ask: projected_ask(row.pool, chosen),
+      baseline_ask: projected_ask(row.pool, baseline),
+      opens_on: next_period_start,
+      due_on: rule&.due_date,
+      periods_left: rule&.periods_until_due,
+      standing: standing_for(row.pool, pending: chosen)
+    )
+  end
+
+  # The two movements this distribution would put through one pool, dated the day it happens.
+  # Built here rather than inside PoolCalculator because only this class knows which of them the
+  # confirm is actually going to write: `funded` is AllocationCommitter#amount_for's answer and
+  # `swept` is AllocationCalculator#sweeps'.
+  def pending(funded, swept) = PoolCalculator::Pending.new(funded: funded, swept: swept, on: today)
+
+  # What this envelope will ask for at the START OF THE NEXT PERIOD, having had `pending` moved
+  # through it by the distribution on screen.
+  #
+  # PoolCalculator#required, which is the SAME reader AllocationCalculator#fill uses to compute
+  # this period's `needed` — so "will need $800 instead of $500" is the row's own figure asked
+  # about a later day, not a second definition of an ask. It divides by
+  # BudgetCalculator#periods_until_due, which is what makes an underfunding spread across the
+  # periods that remain rather than landing whole on the next one.
+  #
+  # `net_of_sweep: true` for AllocationCalculator#ask_calculator_for's reason, and it is
+  # load-bearing here in a way that is easy to miss: a rate envelope's leftover is swept back at
+  # the next distribution and the envelope is topped up to its full rate again, so underfunding
+  # it now changes NOTHING about next period's ask. Without the flag the projection would report
+  # a well-funded rate envelope as asking for nothing and print a consequence on every one of
+  # them.
+  def projected_ask(pool, pending)
+    pool.calculator(today: next_period_start, net_of_sweep: true, pending: pending).required
+  end
+
+  # The day the next period opens, off User#period_containing rather than a cadence of its own —
+  # the same reader the header prints, so the date in the sentence and the date in the subtitle
+  # cannot name different periods.
+  def next_period_start = @next_period_start ||= period.last + 1
 
   # The rule whose schedule the row prints: the earliest-due dated rule, with the same
   # `[due_date, -amount, id]` tie-break HomePresenter#dated_rules_for uses — `pool.budgets`
@@ -314,10 +495,16 @@ class DistributionPresenter
   #
   # Anchorless rules are excluded because they have no date to print — a rate envelope's ask
   # is due every period by definition, and the row says so with its rate instead.
-  def next_dated_rule(pool)
+  #
+  # `on:` is the day the schedule is read from, defaulting to the day being distributed. The
+  # consequence line asks for it as of the NEXT period's opening, because both the date it names
+  # and the count of periods behind "it's the last period before Mar 1" are statements about
+  # where the rule will stand then — and a recurring rule's #due_date rolls, so asking today
+  # and reporting it as next period's would be a different bill.
+  def next_dated_rule(pool, on: today)
     pool.budgets
       .select { |budget| budget.anchor_date.present? }
-      .map { |budget| [budget, budget.calculator(today: today)] }
+      .map { |budget| [budget, budget.calculator(today: on)] }
       .min_by { |budget, calculator| [calculator.due_date, -budget.amount, budget.id] }
       &.last
   end

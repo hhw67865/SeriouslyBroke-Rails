@@ -10,9 +10,16 @@ class PoolStatus
 
   attr_reader :pool, :today
 
-  def initialize(pool, today: Date.current)
+  # `pending:` is PoolCalculator's, passed straight down and never read here — see
+  # #pool_calculator. Every state this class decides is a reading of the balance or of what the
+  # balance leaves a rule holding, so adjusting the balance is the whole of what "how would this
+  # pool be doing if the distribution on screen went through" means. :wont_make_it in particular
+  # is exactly that question: a rule with a shortfall and no boundary left before its due date,
+  # where the shortfall is what the funding did or did not close.
+  def initialize(pool, today: Date.current, pending: PoolCalculator::Pending.none)
     @pool = pool
     @today = today
+    @pending = pending
   end
 
   def state
@@ -93,7 +100,7 @@ class PoolStatus
   # figure that does not exist. Changing either side does not automatically change the other.
   def saving? = pool.pool_type_savings? && anchored_budgets.empty?
 
-  def pool_calculator = @pool_calculator ||= pool.calculator(today: today)
+  def pool_calculator = @pool_calculator ||= pool.calculator(today: today, pending: @pending)
 
   # Memoized per rule. BudgetCalculator#due_date re-runs the paid_since_anchor SUM every
   # time it is asked, and a single #state + #due_on asks several times per rule — six
