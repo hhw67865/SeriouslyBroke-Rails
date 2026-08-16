@@ -21,6 +21,13 @@ RSpec.describe "Home Standing", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
+  # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
+  def orphan(name, amount)
+    pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
+    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    pool
+  end
+
   it "says you're covered when the money is there", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(1_000)
@@ -59,6 +66,20 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("You need $400.00")
     expect(page).to have_content("You have $1,000.00")
     expect(page).to have_content("$1,000.00 of that sits in accounts with nothing left to fund")
+  end
+
+  # A pool no account can fund is owed but is not a gap, so the period stays covered — and
+  # the buffer must be what is actually left in the accounts. `available - total_required`
+  # would print "-$400.00 stays in your buffer" at a user whose accounts are in order.
+  it "keeps the buffer honest when a pool belongs to no account", :aggregate_failures do
+    orphan("Old Goal", 500)
+    deposit(100)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "You're covered")
+    expect(page).to have_content("$100.00 stays in your buffer")
+    expect(page).to have_no_content("-$")
   end
 
   # An overdraft is excluded from both headline figures by design, so the band has to name

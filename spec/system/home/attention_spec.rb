@@ -21,6 +21,13 @@ RSpec.describe "Home Attention", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
+  # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
+  def orphan(name, amount)
+    pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
+    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    pool
+  end
+
   def attention_section = find("section[aria-labelledby='attention-heading']")
 
   def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
@@ -81,7 +88,76 @@ RSpec.describe "Home Attention", type: :system do
       expect(page).to have_content("1 thing needs you")
       expect(page).to have_content("overdrawn $400.00")
       expect(page).to have_no_content("Nothing needs you")
+      # The light-danger fill is the only thing separating this row from any other, and a
+      # state's single visual differentiator that nothing asserts is a state nothing pins.
+      expect(page).to have_css("div.bg-status-danger-light", text: "overdrawn $400.00")
     end
+  end
+
+  # A pool attached to no account cannot be funded from anywhere, so it is deliberately not
+  # a waterfall row and not part of the shortfall — it is a setup problem, and this list is
+  # the only place it gets said. Savings pools stay account-less until Plan 3's backfill.
+  it "names a pool that belongs to no account", :aggregate_failures do
+    orphan("Old Goal", 200)
+    envelope("Rent", 400)
+    deposit(100)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("Old Goal")
+      expect(page).to have_content("no account — nothing can fund it")
+    end
+    # $300 short on Rent alone: the orphan's $200 is owed but is not a funding gap, and it
+    # must not drag the cutoff above a row that money did reach.
+    expect(page).to have_content("$300.00 short this period")
+    expect(waterfall_section).to have_no_content("Old Goal")
+  end
+
+  it "counts more than one problem in the heading", :aggregate_failures do
+    groceries = envelope("Groceries", 400)
+    create(:pool_movement, from_pool: checking, to_pool: groceries, amount: 400)
+    orphan("Old Goal", 200)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("2 things need you")
+      expect(page).to have_no_content("thing needs you")
+    end
+  end
+
+  # The state that is short with nothing flagged: every rate envelope reads `left_to_spend`,
+  # so no pool needs attention while the period is genuinely $300 down. "Nothing needs you"
+  # here would be the exact lie this band exists to prevent.
+  it "never says nothing needs you while the money runs out", :aggregate_failures do
+    envelope("Rent", 400)
+    deposit(100)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("Nothing is flagged, but you're still short")
+      expect(page).to have_no_content("Nothing needs you")
+      expect(page).to have_content("Where your money went")
+    end
+  end
+
+  # Each account drains its own pot, so there is no single moment the money ran out: a line
+  # here would print above rows that were funded in full out of another account's cash.
+  it "draws no cutoff when the user has more than one account", :aggregate_failures do
+    ally = create(:pool, :account, user: user, name: "Ally")
+    envelope("Rent", 400)
+    deposit(100)
+    spare = create(:pool, :budget_pool, user: user, account: ally, name: "Gas", priority: 2)
+    create(:pool_budget, :per_paycheck_rate, pool: spare, amount: 200)
+    deposit(500, into: ally)
+
+    visit root_path
+
+    expect(waterfall_section).to have_content("$100.00 of $400.00")
+    expect(waterfall_section).to have_content("$200.00 of $200.00")
+    expect(waterfall_section).to have_no_content("ran out here")
   end
 
   # The other cutoff branch: the money ran out inside the LAST row, so no pool sits below

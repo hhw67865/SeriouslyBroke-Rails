@@ -20,10 +20,15 @@ class HomePresenter
   end
 
   # Pools belonging to no account. #pools_for filters on account_id, so a view built as
-  # "for each account, render pools_for" would render these nowhere at all — while they
-  # still occupy a waterfall row and count toward #total_required. Savings pools stay
-  # account-less until Plan 3's backfill, so today this is the ordinary shape for a
-  # savings goal, not a rare edge: Tasks 6/7 need an unassigned group to put them in.
+  # "for each account, render pools_for" would render these nowhere at all. Savings pools
+  # stay account-less until Plan 3's backfill, so today this is the ordinary shape for a
+  # savings goal, not a rare edge.
+  #
+  # These no longer appear in #waterfall or #shortfall (see #fill_waterfall). An orphan is
+  # a SETUP problem, not a funding one — the money may be sitting in Checking already and
+  # simply have nowhere to go, and the fix is assigning the pool, not finding more cash —
+  # so Home surfaces them in the attention list, by name, as their own kind of problem.
+  # They stay in #total_required: the user does genuinely owe that money.
   def orphan_pools
     by_priority(all_pools.select { |pool| pool.account_id.nil? })
   end
@@ -56,9 +61,12 @@ class HomePresenter
   # which reads as covered while a bill sits in an account with nothing in it: Checking
   # empty with rent due, Ally holding $1,000 and no envelopes, and the screen says you are
   # fine above a row funded at zero. Summing the rows asks "will every envelope actually be
-  # filled", which is the only question a distribution can act on. It also puts an
-  # account-less pool's ask into the gap, where it belongs, instead of letting another
-  # account's cash silently absorb it.
+  # filled", which is the only question a distribution can act on.
+  #
+  # An account-less pool is NOT in this figure — the rows it sums exclude them. A gap means
+  # money you need and do not have, and an orphan's money may be sitting in Checking right
+  # now with nowhere to go; counting it here made a setup problem masquerade as a shortfall.
+  # See #orphan_pools.
   #
   # The difference between the two figures is money stranded in the wrong account. With one
   # account they are always equal, so it only surfaces in the multi-account case — where the
@@ -86,19 +94,22 @@ class HomePresenter
     accounts.select { |account| buffer_for(account).negative? }
   end
 
-  # Cash this period's envelopes cannot reach: the exact difference between #shortfall and
-  # the `total_required - available` subtraction a reader can perform on the standing band.
+  # Cash still sitting in accounts once the waterfall has funded everything it can reach:
+  # `available` minus every row's funding, so `Σ max(0, pot_a - required_a)`. One number,
+  # two readings, which is why it is one method:
   #
-  #   shortfall                  = total_required - Σ min(required_a, pot_a)
-  #   total_required - available = total_required - Σ pot_a
-  #   difference                 = Σ (pot_a - min(required_a, pot_a))
-  #                              = Σ max(0, pot_a - required_a)
+  #   covered → this is the buffer, money that simply stays put.
+  #   short   → this is money that CANNOT close the gap, because the gap is in another
+  #             account. It is the whole difference between #shortfall and the
+  #             `total_required - available` subtraction a reader can perform on the
+  #             standing band, and it is exactly zero whenever a single-account user is
+  #             short — the pot drains until it is empty — so the band only explains
+  #             itself when this is positive.
   #
-  # — whatever an account holds beyond what its own pools ask for, which is money that
-  # cannot close the gap because the gap is somewhere else. Never negative, so the standing
-  # band can explain itself only when this is positive; with a single account it is zero
-  # whenever there is a shortfall, and the two figures agree exactly.
-  def stranded_cash = shortfall + available - total_required
+  # Never `available - total_required`: an account-less pool counts toward #total_required
+  # but can never be funded, so that subtraction reports a NEGATIVE buffer on a covered
+  # period — "-$400.00 stays in your buffer" — for a user whose accounts are in order.
+  def buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
 
   # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
   # to Date.current, so a bare call in a partial would compute against a different day
@@ -141,13 +152,19 @@ class HomePresenter
 
   private
 
+  # Account-less pools are not rows here at all.
+  #
+  # They used to be, funded at zero, which put their ask into #shortfall. That was wrong in
+  # both directions. A gap means money you need and do not have, but an orphan's money may
+  # be sitting in Checking already with nowhere to go — a setup problem whose fix is
+  # assigning the pool, not finding more cash. And a row funded at zero at priority 1 drags
+  # the "ran out here" cutoff above rows that were funded in full, on a screen whose entire
+  # job is showing where the money went. #orphan_pools names them on the attention list
+  # instead, and #total_required still counts what they ask for.
   def fill_waterfall
     pots = account_pots
-    by_priority(all_pools).map do |pool|
+    by_priority(all_pools.reject { |pool| pool.account_id.nil? }).map do |pool|
       needed = required_for(pool)
-      # A pool with no account has nothing to draw on and funds zero, rather than
-      # silently helping itself to the first account's pot. Savings pools stay
-      # account-less until Plan 3's backfill, so this is reachable today.
       pot = pots.fetch(pool.account_id, 0.to_d)
       funded = pot.clamp(0.to_d, needed)
       pots[pool.account_id] = pot - funded

@@ -1,25 +1,38 @@
 <%# The attention band: what needs you, then where the money actually went.
     Local: `presenter` (HomePresenter). See the UI design spec §4.2.
 
-    Overdrawn accounts lead the list. They are the loudest state in the app and no other
-    band can report them — see HomePresenter#overdrawn_accounts. Envelopes follow in the
-    priority order the user already ranked them in. %>
-<% problems = presenter.overdrawn_accounts + presenter.attention_pools %>
+    Three kinds of problem, in descending loudness: an overdrawn account (no other band can
+    report it — see HomePresenter#overdrawn_accounts), a pool attached to no account at all
+    (nothing can fund it, and it is deliberately absent from the waterfall below), then the
+    envelopes whose own status needs attention, in the priority order the user ranked them
+    in. `uniq` because a pool can be both unassigned and overdrawn. %>
+<% orphans = presenter.orphan_pools %>
+<% problems = (presenter.overdrawn_accounts + orphans + presenter.attention_pools).uniq %>
 <% rows = presenter.waterfall %>
 
 <%# The cutoff marks where the cash ran out, which is AFTER the last pool that received any
     of it: a pool funded $355 of $400 did get money, and the spec's §4.2 waterfall draws the
     line beneath it. So it goes before the first pool that got nothing — or at the end, when
-    the money ran out part-way through the last row and nothing below it exists. %>
-<% cutoff = rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length %>
+    the money ran out part-way through the last row and nothing below it exists.
+
+    Only ever with a single account. Each account drains its own pot, so with several there
+    is no single moment the money ran out: a pool in Ally funded at zero would print the line
+    above rows in Checking that were funded in full. The per-row figures carry it instead.
+    Grouping the waterfall by account is the real answer and belongs to a later plan. %>
+<% cutoff = presenter.accounts.one? ? (rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length) : nil %>
 
 <section class="bg-white border border-gray-200 rounded" aria-labelledby="attention-heading">
   <div class="px-6 py-4 border-b border-gray-200">
     <h3 id="attention-heading" class="text-sm font-semibold text-gray-900">
       <% if problems.any? %>
         <%= pluralize(problems.size, "thing") %> need<%= "s" if problems.one? %> you
-      <% else %>
+      <% elsif presenter.covered? %>
         Nothing needs you
+      <% else %>
+        <%# Real state, not a corner: every rate envelope reads `left_to_spend`, so a period
+            can be short with no pool flagged. "Nothing needs you" above a gap is the exact
+            failure this band exists to prevent. %>
+        Nothing is flagged, but you're still short
       <% end %>
     </h3>
   </div>
@@ -29,7 +42,9 @@
     <div class="px-6 py-3 border-b border-gray-100 <%= "bg-status-danger-light" if status.state == :overdrawn %>">
       <div class="flex justify-between items-baseline">
         <span class="font-medium text-gray-900"><%= pool.name %></span>
-        <span class="text-sm text-status-danger"><%= pool_status_label(status) %></span>
+        <span class="text-sm text-status-danger">
+          <%= pool_problem_label(status, orphan: orphans.include?(pool)) %>
+        </span>
       </div>
     </div>
   <% end %>
@@ -45,8 +60,10 @@
 
       <%# Two groups rather than a flag inside one loop: the cutoff is then written once and
           renders correctly at either edge — before every row when the first pool got nothing,
-          and after the last row when the money ran out inside it. %>
-      <% [rows.first(cutoff), rows.drop(cutoff)].each_with_index do |group, index| %>
+          and after the last row when the money ran out inside it. A nil cutoff (several
+          accounts) leaves one group, and no line. %>
+      <% groups = cutoff ? [rows.first(cutoff), rows.drop(cutoff)] : [rows] %>
+      <% groups.each_with_index do |group, index| %>
         <% if index == 1 %>
           <div class="border-t-2 border-dashed border-status-danger my-2 pt-2 text-sm text-status-danger font-medium">
             — ran out here · <%= number_to_currency(presenter.shortfall) %> unfunded —

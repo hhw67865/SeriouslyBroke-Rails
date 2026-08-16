@@ -3,8 +3,11 @@
 <div class="bg-white border border-gray-200 rounded p-6">
   <% if presenter.covered? %>
     <h2 class="text-2xl font-semibold text-gray-900">You're covered this period</h2>
+    <%# `presenter.buffer`, not `available - total_required`: an account-less pool counts in
+        the requirement and can never be funded, so the subtraction prints a negative buffer
+        at a user whose accounts are perfectly in order. %>
     <p class="mt-2 text-sm text-gray-600">
-      <%= number_to_currency(presenter.available - presenter.total_required) %> stays in your buffer.
+      <%= number_to_currency(presenter.buffer) %> stays in your buffer.
     </p>
   <% else %>
     <h2 class="text-2xl font-semibold text-status-danger">
@@ -16,11 +19,12 @@
     </p>
 
     <%# Only when the two figures above cannot be subtracted to reach the gap — money sitting
-        in an account whose own pools are already funded. Zero on a single account, so this
-        stays silent for most users (principle 3: a consequence only when there is one). %>
-    <% if presenter.stranded_cash.positive? %>
+        in an account whose own pools are already funded. Exactly zero for a single-account
+        user who is short, so this stays silent for most people (principle 3: a consequence
+        only when there is one). %>
+    <% if presenter.buffer.positive? %>
       <p class="mt-1 text-sm text-gray-600">
-        <%= number_to_currency(presenter.stranded_cash) %> of that sits in accounts with nothing left
+        <%= number_to_currency(presenter.buffer) %> of that sits in accounts with nothing left
         to fund, so it can't close the gap — the shortfall is what your pools miss, account by account.
       </p>
     <% end %>

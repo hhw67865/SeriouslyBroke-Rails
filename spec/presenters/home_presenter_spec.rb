@@ -304,22 +304,26 @@ RSpec.describe HomePresenter do
       expect(presenter.shortfall).to eq(600)
     end
 
-    it "funds an account-less pool nothing at all", :aggregate_failures do
+    # The reversal of Task 4's ruling. An orphan used to sit here funded at zero, which put
+    # its ask into #shortfall: a setup problem — the money may be in Checking already, with
+    # nowhere to go — reported as money the user does not have. It also dragged the cutoff
+    # line above rows funded in full, since an orphan at priority 1 has `funded == 0`.
+    it "leaves an account-less pool out of the rows entirely", :aggregate_failures do
       deposit(checking, 1_000)
       # Savings pools may stay account-less until Plan 3's backfill, so this shape is
       # reachable today — and must not help itself to whichever pot comes first.
       orphan = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
       rate(orphan, 200)
+      rate(envelope_in(checking, "Rent", priority: 2), 400)
 
-      row = presenter.waterfall.find { |r| r[:pool] == orphan }
-
-      expect(row[:needed]).to eq(200)
-      expect(row[:funded]).to eq(0)
+      expect(presenter.waterfall.map { |r| r[:pool].name }).to eq(["Rent"])
       expect(presenter.available).to eq(1_000)
-      # An orphan can never be funded, so its ask belongs in the gap rather than being
-      # absorbed by Checking's cash — which `total_required - available` would do.
-      expect(presenter.shortfall).to eq(200)
-      expect(presenter).not_to be_covered
+      # Still owed — the Budget page needs the honest total — but not a funding gap.
+      expect(presenter.total_required).to eq(600)
+      expect(presenter.shortfall).to eq(0)
+      expect(presenter).to be_covered
+      # Which leaves the attention list as the one place it is spoken for.
+      expect(presenter.orphan_pools).to eq([orphan])
     end
 
     it "does not spend down the cash it reports as available", :aggregate_failures do
@@ -376,15 +380,36 @@ RSpec.describe HomePresenter do
     end
   end
 
-  describe "#stranded_cash" do
+  describe "#buffer" do
     let(:ally) { create(:pool, :account, user: user, name: "Ally") }
 
-    it "is zero on a single account, where the two figures already agree", :aggregate_failures do
+    it "is what stays put once every reachable pool is funded", :aggregate_failures do
+      deposit(checking, 500)
+      rate(envelope("Groceries", priority: 1), 100)
+
+      expect(presenter).to be_covered
+      expect(presenter.buffer).to eq(400)
+    end
+
+    # The bug the orphan ruling would otherwise introduce: an account-less pool counts in
+    # #total_required and can never be funded, so `available - total_required` prints a
+    # negative buffer at a user whose accounts are in perfect order.
+    it "is never negative because of a pool no account can fund", :aggregate_failures do
+      deposit(checking, 100)
+      rate(create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1), 500)
+
+      expect(presenter.total_required).to eq(500)
+      expect(presenter.available - presenter.total_required).to eq(-400)
+      expect(presenter).to be_covered
+      expect(presenter.buffer).to eq(100)
+    end
+
+    it "is zero when a single account is short, where the two figures already agree", :aggregate_failures do
       deposit(checking, 150)
       rate(envelope("Groceries", priority: 1), 400)
 
       expect(presenter.shortfall).to eq(presenter.total_required - presenter.available)
-      expect(presenter.stranded_cash).to eq(0)
+      expect(presenter.buffer).to eq(0)
     end
 
     it "is the cash this period's pools cannot reach", :aggregate_failures do
@@ -394,7 +419,7 @@ RSpec.describe HomePresenter do
       expect(presenter.shortfall).to eq(400)
       # What a reader subtracting the standing band's two figures would get instead.
       expect(presenter.total_required - presenter.available).to eq(-600)
-      expect(presenter.stranded_cash).to eq(1_000)
+      expect(presenter.buffer).to eq(1_000)
     end
 
     it "counts only the surplus of an account that funds pools of its own", :aggregate_failures do
@@ -405,7 +430,7 @@ RSpec.describe HomePresenter do
 
       # Checking funds 100 of 400; Ally funds its 200 and keeps 300 nothing can use.
       expect(presenter.shortfall).to eq(300)
-      expect(presenter.stranded_cash).to eq(300)
+      expect(presenter.buffer).to eq(300)
     end
   end
 

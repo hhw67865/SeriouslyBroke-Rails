@@ -29,23 +29,6 @@ module ApplicationHelper
     end
   end
 
-  # Wording for each PoolStatus state. See the UI design spec §4.4.
-  #
-  # `strftime("%b %-d")` rather than `l(date, format: :short)`: both are available, but no
-  # view in this app formats a date through I18n, and the locale's :short is zero-padded —
-  # it renders "Mar 01" where the spec's row vocabulary reads "Mar 1". Same format string
-  # as WeeklyCalendarPresenter#range_label.
-  def pool_status_label(status)
-    case status.state
-    when :overdrawn then "overdrawn #{number_to_currency(status.amount)}"
-    when :overdue then "overdue · was #{status.due_on.strftime("%b %-d")}"
-    when :wont_make_it then "won't make it · #{status.due_on.strftime("%b %-d")}"
-    when :behind then "behind #{number_to_currency(status.amount)}"
-    when :left_to_spend then "#{number_to_currency(status.amount)} left"
-    else "#{number_to_currency(status.amount)} · on track"
-    end
-  end
-
   # Standardized Page Header Helpers
   def page_header(title:, subtitle: nil, breadcrumbs: nil, search: nil, actions: nil)
     render "shared/page_header",

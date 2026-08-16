@@ -2,7 +2,7 @@
 
 require "rails_helper"
 
-RSpec.describe ApplicationHelper, type: :helper do
+RSpec.describe HomeHelper, type: :helper do
   # The row vocabulary of the UI design spec §4.4. Home's system specs reach two of these
   # six states; the rest are exercised here so a wording or formatting change cannot slip
   # through, and so Task 7's pool rows inherit tested copy.
