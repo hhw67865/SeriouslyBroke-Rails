@@ -154,7 +154,13 @@ Rules:
 - **One transaction.** Any validation failure rolls back everything and returns a result object carrying the errors — never a partial split.
 - **Sweeps are movements too**, `from: envelope, to: account`, so the ledger explains the money's whole journey.
 - **Zero-amount lines are skipped** — `PoolMovement` validates `amount > 0`, and a $0 allocation is not an event.
-- **Idempotence within a period:** re-running a distribution for a period that already has one **replaces** it. Delete that period's movements and write fresh ones in the same transaction. Group them by a `distributed_at` timestamp within the period rather than inventing a new table.
+- **Idempotence within a period:** re-running a distribution for a period that already has one **replaces** it, in the same transaction.
+
+  This needs a column the table does not have. `pool_movements` carries only `from_pool_id`, `to_pool_id`, `amount`, `date` and `source_entry_id` — nothing distinguishes a distribution allocation from a sweep or from a manual reallocation, so "delete this period's distribution" would silently destroy reallocations the user made in the same period.
+
+  **Add `kind` (`allocation` | `sweep` | `transfer`), defaulting to `transfer`** so existing rows and the reallocation path in Task 7 are untouched. Replacement then deletes exactly the `allocation` and `sweep` rows whose `date` falls in the period.
+
+  Replacement rather than refusal is deliberate: a user who mistyped an override needs to redo the split, not be locked out of it.
 
 Assert: a rollback on one bad row leaves zero movements; a re-run replaces rather than doubles; sweeps and allocations both appear; the movement amounts sum to the proposal.
 
