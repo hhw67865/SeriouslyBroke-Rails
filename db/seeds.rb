@@ -1,5 +1,12 @@
 # frozen_string_literal: true
 
+# The tracking half of these seeds sprinkles `rand` through its entries, and several of
+# those categories are linked to pools — so the balance, and therefore the Home row STATE,
+# of a seeded pool changed on every replant. A demo screen you cannot reproduce is a demo
+# screen nobody can review against. Seeded once here, deliberately, so `db:seed:replant`
+# lands on the same figures every time.
+srand(20_260_815)
+
 # Clear existing data
 Rails.logger.debug "Clearing existing data..."
 # Delete in the correct order to avoid foreign key violations.
@@ -130,8 +137,8 @@ entertainment_items = [
 # Link some expense categories to savings pools (pool-covered expenses)
 # These represent irregular expenses funded by savings pools, not budgets
 Rails.logger.debug "Linking expense categories to savings pools..."
-expense_categories.find { |c| c.name == "Health" }.update!(pool: pools[0])           # Health → Emergency Fund
-expense_categories.find { |c| c.name == "Education" }.update!(pool: pools[4])        # Education → Retirement Supplement
+expense_categories.find { |c| c.name == "Health" }.update!(pool: pools[0]) # Health → Emergency Fund
+expense_categories.find { |c| c.name == "Education" }.update!(pool: pools[4]) # Education → Retirement Supplement
 expense_categories.find { |c| c.name == "Gifts & Donations" }.update!(pool: pools[1]) # Gifts → Vacation to Europe
 
 # Create budgets only for budgetable expense categories (not pool-linked)
@@ -472,5 +479,134 @@ months.each do |month_start|
     end
   end
 end
+
+# ---------------------------------------------------------------------------------------
+# Envelope budgeting: the data Home is built to explain.
+#
+# Before this section the demo user had five savings pools and NO account, so Home opened on
+# "You're covered this period · $0.00 stays in your buffer" above five rows reading "nothing
+# can fund it". Every figure was correct — an account-less pool can genuinely be funded by
+# nothing — and it was still a screen no real user should ever see, because the app had never
+# been seeded with the shape it exists to render.
+#
+# So: one account, the savings pools moved inside it, a declared period, a typical income,
+# and one budget pool in each of the six row states from the UI design spec §4.4. Every
+# figure below is deliberate; see the comment on each pool for how its state arises.
+# ---------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the budgeting account, its envelopes and one pool per row state..."
+
+# The user's OWN today, not `Date.current`. Every request runs inside the user's timezone
+# (ApplicationController sets it), so Home computes against the New York date while a seed
+# run late in the evening computes against the UTC one — a day apart. Seeded with the UTC
+# date, the Dentist bill below anchored a day late and the period boundary landed INSIDE
+# its window, so the pool the state exists to demonstrate rendered as something else
+# entirely on the very screen this data exists for.
+today = Time.find_zone!(user1.timezone).today
+
+# The anchor is today, so today is a period boundary. That is what makes the Dentist bill
+# below genuinely unreachable: no boundary falls between tomorrow and its due date.
+user1.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_400)
+
+checking = user1.pools.create!(name: "Checking", pool_type: :account, target_amount: 2_000)
+
+# Four of the five savings pools move into the account. The fifth is left where it was, on
+# purpose: an account-less savings pool is the ordinary shape until Plan 3's backfill, and
+# it is the only way to see Home's "No account" band — a pool nothing can fund, owed but
+# never a shortfall — on a real screen.
+#
+# Priorities put them BELOW the envelopes rather than at the default 0: priority is the
+# order a distribution fills, and a savings goal funded ahead of rent is not a budget
+# anybody runs.
+pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 7 + index) }
+orphan_pool = pools[4]
+orphan_pool.update!(priority: 11)
+Budget.create!(pool: orphan_pool, amount: 150, basis: :per_paycheck)
+
+# The tracking half charges Health, Gifts and Education to three of these pools as
+# "pool-covered" expenses and never funds them, which left all three reading `overdrawn` on
+# Home — three of the loudest rows on the screen, caused by nothing the budgeting half did
+# and drowning out the states this data exists to show. A lump contribution puts each back
+# in the black, which is what a user spending out of a savings pool would have done first.
+{ "Emergency Fund" => 1_200, "Vacation" => 900, "Retirement" => 1_000 }.each do |category_name, amount|
+  category = savings_categories.find { |c| c.name == category_name }
+  category.items.first.entries.create!(
+    amount: amount,
+    date: today,
+    description: "Lump contribution to #{category.pool.name}"
+  )
+end
+
+# What the account actually holds. The tracking half's salary entries belong to categories
+# with no pool, so they are income in the reports and cash in no account — this is the one
+# deposit Checking can see.
+paycheck = user1.categories.create!(name: "Paycheck", category_type: :income, color: "#66BB6A", pool: checking)
+paycheck.items.create!(name: "Direct Deposit").entries.create!(
+  amount: 3_200,
+  date: today,
+  description: "Paycheck deposited to Checking"
+)
+
+envelope = lambda do |name, priority|
+  user1.pools.create!(name: name, pool_type: :budget, account: checking, priority: priority)
+end
+
+fund = lambda do |pool, amount|
+  PoolMovement.create!(from_pool: checking, to_pool: pool, amount: amount, date: Time.current)
+end
+
+# on track — a bill accumulating on schedule. Funded in full already, so it asks for
+# nothing this period and its row reads as the quietest thing on the screen.
+rent = envelope.call("Rent", 1)
+Budget.create!(pool: rent, amount: 1_500, interval_months: 1, anchor_date: today + 2.months)
+fund.call(rent, 1_500)
+
+# overdue — the date passed with no payment recorded against the item. An item is what makes
+# a rule payable, and therefore what makes it late: without one the app assumes it was paid.
+utilities = envelope.call("Utilities", 2)
+utility_bills = user1.categories.create!(
+  name: "Utility Bills",
+  category_type: :expense,
+  color: "#FFD54F",
+  pool: utilities
+)
+Budget.create!(
+  pool: utilities,
+  item: utility_bills.items.create!(name: "Electric Bill"),
+  amount: 120,
+  interval_months: 1,
+  anchor_date: today - 10.days
+)
+
+# won't make it — $300 due in three days with no period boundary between tomorrow and then.
+# No amount of future funding reaches it; only moving money already held can.
+dentist = envelope.call("Dentist", 3)
+Budget.create!(pool: dentist, amount: 300, anchor_date: today + 3.days)
+
+# behind — a six-monthly premium with nothing in it yet. Reachable, but the steady schedule
+# says it should already hold part of the $1,200, and that lag is what the row names.
+car_insurance = envelope.call("Car Insurance", 4)
+Budget.create!(pool: car_insurance, amount: 1_200, interval_months: 6, anchor_date: today + 3.months)
+
+# overdrawn — $100 in the envelope and $180 spent out of it. The debt is real and belongs to
+# the envelope, not to the account, which is why Checking stays healthy above it.
+dining = envelope.call("Dining Out", 5)
+Budget.create!(pool: dining, amount: 150, basis: :per_paycheck)
+dining_spending = user1.categories.create!(
+  name: "Dining Out Spending",
+  category_type: :expense,
+  color: "#81C784",
+  pool: dining
+)
+dining_item = dining_spending.items.create!(name: "Restaurants")
+[[110, 6], [70, 2]].each do |amount, days_ago|
+  dining_item.entries.create!(amount: amount, date: today - days_ago.days, description: "Dinner out")
+end
+fund.call(dining, 100)
+
+# left to spend — a rate envelope, topped back up every period. The only state that shows a
+# number you may actually spend.
+groceries = envelope.call("Groceries", 6)
+Budget.create!(pool: groceries, amount: 400, basis: :per_paycheck)
+fund.call(groceries, 400)
 
 Rails.logger.debug "Seed data created successfully!"
