@@ -90,6 +90,9 @@
     <%# Without this the reload falls back to "the account the pay landed in" and an override
         typed on a second account would come back describing the first one. %>
     <%= hidden_field_tag :account_id, presenter.account.id %>
+    <%# Carried forward only when the user asked for the table. Without it, clearing the last
+        edit on a comfortable period collapses the table out from under the boxes mid-edit. %>
+    <%= hidden_field_tag :expand, 1 if presenter.expand_requested? %>
 
     <ol>
       <% rows.each_with_index do |line, index| %>
@@ -126,8 +129,8 @@
                                    step: "0.01",
                                    min: "0",
                                    placeholder: distribution_override_placeholder(line),
-                                   class: "form-input w-28 py-1 text-right tabular-nums " \
-                                          "#{"border-status-warning" if line.overridden?}" %>
+                                   class: class_names("form-input w-28 py-1 text-right tabular-nums",
+                                                      "border-status-warning" => line.overridden?) %>
             </span>
           </div>
           <p class="mt-0.5 text-xs text-gray-500">

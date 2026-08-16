@@ -115,16 +115,35 @@ RSpec.describe "Distribution Overrides", type: :system do
     #
     # The line belongs to Rent and to nothing else: Groceries changed its number without anybody
     # typing in it, and a clause there would name the wrong actor.
+    # THE SENTENCE'S ARITHMETIC, CHECKED AGAINST THE SCREEN rather than against itself.
+    # `|moved| == Σ recipients + buffer` holds by construction inside the presenter — two fills
+    # spending one `available` — so asserting it there would be `x == x`. Each of the three
+    # figures the sentence names is pinned against an independently rendered one: Rent's box
+    # (placeholder $500.00 → value $200.00, so $300.00 freed), Groceries' own row ($200.00 of
+    # $400.00 → $400.00, so $200.00 gained) and the buffer line ($0.00 → $100.00). $300.00 =
+    # $200.00 + $100.00, and all three literals differ, so no two of them can stand in for each
+    # other.
     it "says where the freed money went, on the row that freed it" do
+      expect_untouched_split
+
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-redirect='Rent']") do
-        expect(page).to have_content(
-          "That frees $300.00: $200.00 to Groceries and $100.00 to your buffer.",
-          normalize_ws: true
-        )
-      end
+      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries and $100.00 to your buffer.")
+      expect_edited_split
+    end
+
+    def expect_untouched_split
+      expect(page).to have_field("Amount for Rent", with: "", placeholder: "500.00")
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$200.00 of $400.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $0.00", normalize_ws: true) }
+    end
+
+    def expect_edited_split
+      expect(page).to have_field("Amount for Rent", with: "200.00")
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$400.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $100.00", normalize_ws: true) }
+      # The line belongs to the row that moved the money and to nothing else.
       expect(page).to have_no_css("[data-redirect='Groceries']")
     end
 
@@ -266,9 +285,9 @@ RSpec.describe "Distribution Overrides", type: :system do
 
       within("[data-consequence='Rent']") do
         # $1,000 − $50 = $950 over the three periods left from +14 is $316.67, against $250 had
-        # the proposal stood. `$550.00` is what a subtraction would have printed.
+        # the proposal stood.
         expect(page).to have_content("#{next_period} will need $316.67 instead of $250.00", normalize_ws: true)
-        # What a subtraction would have printed: the $200 held back added onto the current ask.
+        # What a subtraction would have printed: the $200 held back added onto the $250 ask.
         expect(page).to have_no_content("$450.00")
         # Three periods remain, so this is NOT the last one and the clause must stay off. Paired
         # with the example above, which is the same helper printing it.
@@ -369,10 +388,6 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_no_css("[data-redirect='Rent']")
     end
 
-    def expect_redirect(pool, sentence)
-      within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
-    end
-
     # `$1,000.00` and not `$1,000.00 of $1,000.00`: the pairing is what pins that the bill is
     # made rather than that a figure happens to appear on the row.
     def expect_rent_funded_in_full
@@ -425,15 +440,30 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Vacation", with: "50"
       click_on "Update figures"
 
-      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries, $50.00 to Vacation, and $50.00 to your buffer.")
+      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries, $50.00 to Vacation, and the rest to your buffer.")
       expect_redirect("Vacation", "That frees $50.00, and nothing below it was waiting — it stays in your buffer.")
       # Against the untouched proposal this row would have read "takes $50.00 more" — the wrong
       # direction, not merely the wrong size.
       within("[data-redirect='Vacation']") { expect(page).to have_no_content("takes") }
     end
 
-    def expect_redirect(pool, sentence)
-      within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
+    # NEITHER ROW PUTS A FIGURE ON THE BUFFER once a second row is edited. Each row's share is
+    # true under its own counterfactual and the two overlap — Rent's is $50.00 and Vacation's is
+    # $50.00 against a buffer that moved $50.00 in total — so two visible figures would sum past
+    # what the screen moved. Paired with the single-edit example above, where the figure IS
+    # printed, so the suppression is a rule firing rather than a clause that never renders.
+    it "does not let two edited rows each put a figure on the buffer" do
+      fill_in "Amount for Rent", with: "200"
+      fill_in "Amount for Vacation", with: "50"
+      click_on "Update figures"
+
+      # $415 → $50 is the one true buffer figure, and it is on the buffer line where it belongs.
+      within("#distribution-buffer") { expect(page).to have_content("$415.00 → $50.00", normalize_ws: true) }
+      within("[data-redirect='Rent']") { expect(page).to have_content("the rest to your buffer") }
+      within("[data-redirect='Vacation']") { expect(page).to have_content("it stays in your buffer") }
+      # The string a per-edit figure would have produced on BOTH rows, summing to $100 against a
+      # $50 move.
+      expect(page).to have_no_content("$50.00 to your buffer")
     end
 
     it "says nothing about a dateless goal" do
@@ -444,6 +474,61 @@ RSpec.describe "Distribution Overrides", type: :system do
       within("[data-pool-name='Vacation']") { expect(page).to have_field("Amount for Vacation", with: "50.00") }
       expect(page).to have_no_css("[data-consequence='Vacation']")
       expect(page).to have_css("[data-consequence='Rent']")
+    end
+  end
+
+  # THE CRITICAL THE REVIEW FOUND BY PROBING, and the shape neither of the two-edit examples
+  # above could reach: their second edit lands on a dateless goal, whose consequence is suppressed
+  # anyway, so the fixture hid the defect. Both edited rows here are DATED bills, so both speak
+  # twice — and the two sentences on the second row have to agree with each other.
+  #
+  # Rent asks $500 and Dentist $300 out of $700, so Dentist starts at $200 of $300. Cutting Rent
+  # to $200 funds Dentist in FULL, and Dentist's true counterfactual is therefore $300 — cutting
+  # it to $250 WITHHOLDS $50. Measured against the untouched proposal instead it looked like a
+  # $50 gain, and the row read "That frees $50.00…" directly above "You're covering $50.00
+  # early…": two sentences on one row pointing opposite ways.
+  describe "two dated bills edited at once", :aggregate_failures do
+    let(:due_on) { Date.current + 20 }
+
+    before do
+      dated_envelope("Rent", 2_000, anchor_date: due_on, funded: 1_000, priority: 1)
+      dated_envelope("Dentist", 1_200, anchor_date: due_on, funded: 600, priority: 2)
+      deposit(2_100, on: Date.current - 14)
+      deposit(200, on: Date.current)
+      visit new_distribution_path
+    end
+
+    it "makes both of the second row's sentences agree in direction" do
+      within("[data-row-amount='Dentist']") { expect(page).to have_content("$200.00 of $300.00") }
+
+      fill_in "Amount for Rent", with: "200"
+      fill_in "Amount for Dentist", with: "250"
+      click_on "Update figures"
+
+      within("[data-redirect='Dentist']") { expect(page).to have_content("That frees $50.00") }
+      within("[data-consequence='Dentist']") do
+        expect(page).to have_content("You're moving $50.00 onto your next period", normalize_ws: true)
+        # The untouched-proposal reading, in both of its halves: the opposite direction, and a
+        # baseline ask from a world in which neither edit exists.
+        expect(page).to have_no_content("covering")
+        expect(page).to have_no_content("$400.00")
+      end
+    end
+
+    # The same root cause LOSING a sentence rather than reversing one: $200 is exactly what the
+    # untouched proposal gave Dentist, so measured against that the edit looks like no edit at
+    # all and the `funded == baseline` early return fires — the row then says what it frees and
+    # nothing about what it costs later, which amendment B forbids. Its true counterfactual is
+    # $300, so it is withholding $100.
+    it "still states the consequence when the edit matches the untouched figure" do
+      fill_in "Amount for Rent", with: "200"
+      fill_in "Amount for Dentist", with: "200"
+      click_on "Update figures"
+
+      within("[data-redirect='Dentist']") { expect(page).to have_content("That frees $100.00") }
+      within("[data-consequence='Dentist']") do
+        expect(page).to have_content("You're moving $100.00 onto your next period", normalize_ws: true)
+      end
     end
   end
 
@@ -480,7 +565,58 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
   end
 
+  # SPEC §5 says every line is editable, and the all-clear density renders no lines — which is not
+  # a contradiction (that density is a headline, one summary line and a button) but does leave
+  # someone who simply wants to put more into savings on a comfortable period with nothing to type
+  # in. One more term in the density switch, and nothing is remembered: a fresh visit collapses
+  # again, so the density is still the data's decision everywhere the user has not overruled it.
+  describe "a comfortable period", :aggregate_failures do
+    before do
+      rate_envelope("Groceries", 400, priority: 1)
+      goal("Vacation", target: 2_400, rate: 150, priority: 2)
+      deposit(2_400, on: Date.current)
+      visit new_distribution_path
+    end
+
+    # The default half. The absence of boxes is paired with the summary line, so it cannot pass on
+    # a screen that failed to render at all.
+    it "collapses, with no boxes and a way in" do
+      expect(page).to have_css("#distribution-summary")
+      expect(page).to have_no_css("#distribution-waterfall")
+      expect(page).to have_no_field("Amount for Groceries")
+      expect(page).to have_link("Show every envelope")
+    end
+
+    it "opens the full table with its boxes when asked" do
+      click_on "Show every envelope"
+
+      expect(page).to have_css("#distribution-waterfall")
+      expect(page).to have_no_css("#distribution-summary")
+      expect(page).to have_field("Amount for Vacation", with: "", placeholder: "150.00")
+    end
+
+    # The request has to survive the form, or clearing the last edit collapses the table out from
+    # under the boxes mid-edit. Asserted through a full edit cycle rather than on the link alone.
+    it "stays open through an edit and through clearing it again" do
+      click_on "Show every envelope"
+      fill_in "Amount for Vacation", with: "40"
+      click_on "Update figures"
+
+      expect(page).to have_field("Amount for Vacation", with: "40.00")
+
+      fill_in "Amount for Vacation", with: ""
+      click_on "Update figures"
+
+      expect(page).to have_css("#distribution-waterfall")
+      expect(page).to have_field("Amount for Vacation", with: "", placeholder: "150.00")
+    end
+  end
+
   private
+
+  def expect_redirect(pool, sentence)
+    within("[data-redirect='#{pool}']") { expect(page).to have_content(sentence, normalize_ws: true) }
+  end
 
   # A bill: an anchored rule with a due date. `rule` goes straight to the budget factory, so an
   # example that needs a due date which never rolls says `interval_months: nil` in its own words

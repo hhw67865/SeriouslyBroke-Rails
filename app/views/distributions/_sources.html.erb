@@ -91,5 +91,15 @@
       <% end %>
       <%= number_to_currency(presenter.leftover) %> stays in your buffer<%= buffer_target_clause(presenter) %>.
     </p>
+    <%# THE WAY IN on a period that does not need the table (spec §5's "every line is editable",
+        which the all-clear density otherwise has no line to offer). Nothing is remembered: the
+        link carries the request, a fresh visit collapses again, so the density is still chosen by
+        the data everywhere except where the user has explicitly asked otherwise. %>
+    <p class="mt-3">
+      <%= link_to "Show every envelope",
+                  new_distribution_path(account_id: presenter.account.id, expand: 1),
+                  class: "text-sm font-medium text-brand hover:text-brand-dark underline",
+                  id: "distribution-expand" %>
+    </p>
   <% end %>
 </div>

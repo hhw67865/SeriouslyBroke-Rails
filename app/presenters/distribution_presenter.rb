@@ -36,17 +36,21 @@ class DistributionPresenter
   # the freed money now cascades, so a cutoff computed off the old fill would sit above
   # envelopes that had just been funded by the edit.
   #
-  # `proposed` is what this envelope WOULD have received had nothing been edited, taken from a
-  # second fill with no overrides at all. It answers two questions and only two: how much a row
-  # the user edited is moving (Consequence#moving), and what next period would have asked had
-  # the proposal stood (Consequence#baseline_ask). It is NOT how the screen decides a row was
-  # edited — with the money cascading, a row below an override changes its `funded` without
-  # anybody typing in it, so `overridden` is carried from AllocationCalculator#overridden?
-  # instead.
+  # THERE IS DELIBERATELY NO `proposed` MEMBER. The row briefly carried what this envelope would
+  # have received had nothing been edited at all, and it was a trap rather than a fact: it is the
+  # obvious thing to measure an edit against and it is the WRONG thing, because two rows edited at
+  # once each have to answer for their own money and not for the other's. Both sentences compare
+  # against #without_override — this distribution with one edit undone and the others left in
+  # place — and #consequence_for records the contradiction the untouched figure produced. Once
+  # both had moved, nothing read the member; it is gone rather than left as a second answer
+  # waiting to be picked up.
+  #
+  # `overridden` is likewise NOT `funded != <anything>`: with the money cascading, a row below an
+  # override changes its funding without anybody typing in it, so it is carried from
+  # AllocationCalculator#overridden?.
   Line = Data.define(
     :pool,
     :needed,
-    :proposed,
     :funded,
     :overridden,
     :swept,
@@ -161,14 +165,27 @@ class DistributionPresenter
   # below, and "where did my money go" has the same force asked in reverse.
   #
   # `recipients` is `[pool, amount]` in descending order of amount, holding MAGNITUDES; `buffer`
-  # likewise. `|moved| == Σ recipients + buffer` is an identity of two fills over one `available`
-  # and is therefore not asserted anywhere.
-  Redirect = Data.define(:moved, :recipients, :buffer) do
+  # likewise. `|moved| == Σ recipients + buffer` holds by construction — two fills spending one
+  # `available` — so it is asserted against the SCREEN's own before-and-after figures rather than
+  # against itself.
+  #
+  # `exact_buffer` is false once a SECOND row is edited, and the buffer clause then drops its
+  # figure ("the rest to your buffer"). Each row's buffer share is true under its own
+  # counterfactual, but the buffer is the RESIDUAL and residuals overlap: two rows can honestly
+  # claim $250 and $50 of a buffer that moved $250, and two visible figures summing past what the
+  # screen moved is the "where did it go" question this sentence exists to close, asked back. The
+  # named envelopes keep their figures — they overlap only in contrived shapes, and they are the
+  # part that answers the question.
+  Redirect = Data.define(:moved, :recipients, :buffer, :exact_buffer) do
     def freed? = moved.positive?
 
     # Nothing below was waiting for it. The case the plan singled out, because it is the one
     # where a user who is told nothing concludes the money vanished.
     def buffer_only? = recipients.empty?
+
+    def buffer? = buffer.positive?
+
+    def exact_buffer? = exact_buffer
   end
 
   # One fill reduced to the two things the redirect arithmetic asks of it: what each envelope
@@ -199,11 +216,16 @@ class DistributionPresenter
   # strings — and is NOT coerced here. It goes onto the PROPOSAL, which owns the coercion and
   # applies the figures inside its own fill; this screen then reads the fill's answer back.
   # One override path, and the thing that reads it is the thing that will write it.
-  def initialize(user:, account:, today: Date.current, overrides: {})
+  # `expanded:` is the user ASKING for the full table on a period that does not need it. The
+  # all-clear density renders no rows at all (spec §5: headline, one line, one button), which is
+  # right — and it also leaves someone who simply wants to put more into savings on a comfortable
+  # period with nothing to type in. One more term in the density switch, not a second screen.
+  def initialize(user:, account:, today: Date.current, overrides: {}, expanded: false)
     @user = user
     @account = account
     @today = today
     @overrides = overrides
+    @expanded = expanded
   end
 
   delegate :available, :total_swept, :total_allocated, :leftover, :lines, :replaced, to: :snapshot
@@ -232,11 +254,22 @@ class DistributionPresenter
   #
   # `alerts` as well as the rows, for exactly that reason: the trigger has to see the pools that
   # have no row, or it cannot fire on the case that motivates it.
-  # `overridden?` is in the switch for a reason the other three are not: an override can make
-  # the screen ALL CLEAR — type a zero into the only starved row and nothing is short any more —
-  # and collapsing then takes the boxes off the screen, leaving no way to undo what was just
-  # typed. An edit in progress is data too.
-  def expanded? = short? || overridden? || alerts.any? || lines.any? { |line| line.status.red? }
+  # `overridden?` is in the switch for a reason the data terms are not: an override can make the
+  # screen ALL CLEAR — type a zero into the only starved row and nothing is short any more — and
+  # collapsing then takes the boxes off the screen, leaving no way to undo what was just typed.
+  # An edit in progress is data too.
+  #
+  # `@expanded` is the one term that is not data at all: it is the user asking. Spec §5 chooses
+  # the density by the DATA and never by a setting, and this does not break that rule — nothing
+  # is remembered, nothing is stored, and a fresh visit collapses again. It only answers the gap
+  # the two-density design leaves: a comfortable period renders no rows, so there is nothing to
+  # type in even when the user wants to put more into savings.
+  def expanded? = @expanded || short? || overridden? || alerts.any? || lines.any? { |line| line.status.red? }
+
+  # Whether the user ASKED for the table, as opposed to the data having demanded it. A different
+  # question from #expanded? and read in one place only: the form carries it forward, so clearing
+  # the last edit on a comfortable period does not collapse the table out from under the boxes.
+  def expand_requested? = @expanded
 
   # Red-state envelopes with NO row of their own — the ones #expanded? exists for, and the ones
   # nothing else on this screen can say. A red pool that HAS a row is already named by that row's
@@ -474,13 +507,11 @@ class DistributionPresenter
   def line_for(row, fresh, standings)
     pool = row.pool
     swept = fresh.sweeps.fetch(pool, 0.to_d)
-    proposed = (@baseline || @live).for(pool)
     overridden = fresh.overridden?(pool)
 
     Line.new(
       pool: pool,
       needed: row.needed,
-      proposed: proposed,
       funded: row.funded,
       overridden: overridden,
       swept: swept,
@@ -496,7 +527,7 @@ class DistributionPresenter
       # funding of rows below an override without anybody editing them, and "you're moving $200
       # onto your next period" about a row the waterfall reached on its own names the wrong
       # actor — the edit that caused it is two rows up, and it says so there.
-      consequence: overridden ? consequence_for(pool, row.funded, proposed, swept) : nil,
+      consequence: overridden ? consequence_for(pool, row.funded, fresh, swept) : nil,
       redirect: overridden ? redirect_for(pool, fresh) : nil,
       **schedule_for(pool)
     )
@@ -513,7 +544,8 @@ class DistributionPresenter
     Redirect.new(
       moved: moved,
       recipients: recipients_of(pool, fresh, without, moved),
-      buffer: (@live.leftover - without.leftover) * (moved.positive? ? 1 : -1)
+      buffer: (@live.leftover - without.leftover) * (moved.positive? ? 1 : -1),
+      exact_buffer: fresh.overrides.size <= 1
     )
   end
 
@@ -567,10 +599,24 @@ class DistributionPresenter
   # account could not honour: type $350 with $185 of cash left and the row still receives $185,
   # so nothing downstream moves and there is nothing to say. The row says the rest itself, in
   # red, as `$185.00 of $350.00`.
-  def consequence_for(pool, funded, proposed, swept)
-    return nil if funded == proposed
+  #
+  # MEASURED AGAINST #without_override, THE SAME COUNTERFACTUAL THE REDIRECT LINE USES, and this
+  # was a real defect until the review probed for it. Fed the untouched `proposed` instead, the
+  # two sentences on one row could point in OPPOSITE directions: with Rent cut to $200 funding
+  # Dentist in full, cutting Dentist $300 → $250 withholds $50, but against the untouched fill
+  # Dentist looked like it had GAINED $50 — so the row read "That frees $50.00…" above
+  # "You're covering $50.00 early…", and the "$400.00" it quoted was next period's ask in a
+  # world where neither edit exists, which is not the world the screen is showing.
+  #
+  # The same substitution also LOST a consequence: an override set to exactly the untouched
+  # figure tripped the `funded == baseline` early return, so the row said what it freed and
+  # nothing about what it costs later — which amendment B forbids. Neither shape is reachable
+  # with only one row edited, which is why no example caught it.
+  def consequence_for(pool, funded, fresh, swept)
+    baseline = without_override(pool, fresh).for(pool)
+    return nil if funded == baseline
 
-    consequence = build_consequence(pool, pending(funded, swept), pending(proposed, swept))
+    consequence = build_consequence(pool, pending(funded, swept), pending(baseline, swept))
     consequence if consequence.worth_saying?
   end
 
@@ -589,8 +635,8 @@ class DistributionPresenter
 
   # The two movements this distribution would put through one pool, dated the day it happens.
   # Built here rather than inside PoolCalculator because only this class knows which of them the
-  # confirm is actually going to write: `funded` is AllocationCommitter#amount_for's answer and
-  # `swept` is AllocationCalculator#sweeps'.
+  # confirm is actually going to write: both come from AllocationCalculator — `funded` from the
+  # fill (the override applied, then clamped to the cash), `swept` from #sweeps.
   def pending(funded, swept) = PoolCalculator::Pending.new(funded: funded, swept: swept, on: today)
 
   # What this envelope will ask for at the START OF THE NEXT PERIOD, having had `pending` moved

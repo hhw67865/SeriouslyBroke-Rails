@@ -151,7 +151,7 @@ RSpec.describe "Distributions", type: :request do
     end
 
     # An id that names no row on this account has no line to edit — the same rule
-    # AllocationCommitter#amount_for states, reached here through a pool that belongs to
+    # AllocationCalculator#fill states, reached here through a pool that belongs to
     # somebody else entirely.
     it "ignores an override naming a pool the account does not hold" do
       stranger = create(:pool, :budget_pool, user: create(:user), name: "Not Yours")

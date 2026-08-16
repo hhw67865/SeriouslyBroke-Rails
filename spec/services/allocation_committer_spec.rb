@@ -321,15 +321,28 @@ RSpec.describe AllocationCommitter, type: :model do
     # An override naming a pool with no line has no line to edit. Reachable whenever the
     # ledger moved between render and confirm, and silent by design — but asserted, so the
     # choice is visible rather than incidental.
+    #
+    # THE CASH IS DELIBERATELY SCARCE. This example used to deposit another $415, funding both
+    # rows in full out of $1,000 against $700 of asks — so Gas's $175 could have been consumed on
+    # the way to being discarded and every assertion would still have passed. Without it the
+    # account has $385 against $700 of asks and the money runs out inside Groceries, whose $385
+    # is the figure that can tell.
+    #
+    # Gas is FIRST in fill order — `by_priority` is `[priority, name]` and every priority here is
+    # 0, so it sorts ahead of Groceries and Water — which is the worst case: a row for it would
+    # take its $175 off the top and leave Groceries $210.
     it "ignores an override for a pool the proposal has no row for", :aggregate_failures do
-      deposit(415) # $1,000 in all, so both rows are funded in full and Gas is the only one left out
       gas = rate_envelope("Gas", 200, funded: 200, on: this_period)
       expect(proposal.rows.map(&:pool)).to eq([groceries, water])
 
       commit(overrides: { gas.id => 175 })
 
-      expect(PoolMovement.kind_allocation.map(&:to_pool)).to contain_exactly(groceries, water)
+      expect(PoolMovement.kind_allocation.map(&:to_pool)).to eq([groceries])
+      expect(balance(groceries)).to eq(385) # $210 if Gas had consumed its override
+      expect(balance(water)).to eq(0)
       expect(balance(gas)).to eq(200)
+      expect(balance(checking)).to eq(0)
+      expect(checking.total).to eq(585)
     end
   end
 

@@ -114,8 +114,20 @@ module DistributionsHelper
 
     parts = named.map { |pool, amount| "#{number_to_currency(amount)} #{preposition} #{pool.name}" }
     parts << "#{number_to_currency(rest.sum(0.to_d, &:last))} across #{pluralize(rest.size, "other")}" if rest.any?
-    parts << "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.buffer.positive?
+    parts << distribution_redirect_buffer_clause(redirect, preposition) if redirect.buffer?
     parts
+  end
+
+  # WITH A FIGURE ONLY WHILE IT CAN BE THE WHOLE TRUTH. Each edited row's buffer share is
+  # measured against its own counterfactual, and those residuals overlap — two rows can honestly
+  # claim $250 and $50 of a buffer that moved $250. Two visible figures summing past what the
+  # screen moved is the "where did it go" question this sentence exists to close, asked back. So
+  # once a second row is edited the destination stays and the figure goes: "the rest" is exactly
+  # true under this edit's counterfactual and cannot be added to anything.
+  def distribution_redirect_buffer_clause(redirect, preposition)
+    return "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.exact_buffer?
+
+    "the rest #{preposition} your buffer"
   end
 
   # Name them all up to the limit, otherwise the two that moved most and a summary for the rest.

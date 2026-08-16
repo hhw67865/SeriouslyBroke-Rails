@@ -115,7 +115,16 @@ class AllocationCalculator
     @rows ||= fill
   end
 
-  def total_allocated = rows.sum(0.to_d, &:funded)
+  # MONEY THAT WILL ACTUALLY LEAVE THE ACCOUNT, which is not quite `Σ funded`: a negative row —
+  # only reachable from a negative override, which #row_for deliberately carries through so it
+  # fails PoolMovement's validation loudly — is money that never moves, because the movement is
+  # refused and the whole commit rolls back.
+  #
+  # Summed raw it made #leftover LARGER than the account holds: a -$50 row rendered the buffer
+  # $50 high, and the buffer line is the one figure on this screen that must never overstate.
+  # It is not an over-allocation and the commit still fails, but a user reading a buffer that is
+  # not there is the failure mode §7.3 exists to prevent, stated in the other direction.
+  def total_allocated = rows.sum(0.to_d) { |row| [row.funded, 0.to_d].max }
 
   # What stays in the account buffer. Derived from #available rather than recomputed, so the
   # proposal cannot hand out more than it said it had.

@@ -12,7 +12,11 @@ class DistributionsController < ApplicationController
       user: current_user,
       account: account,
       today: Date.current,
-      overrides: override_params
+      overrides: override_params,
+      # The user asking for the full table on a period that does not need one. A bare presence
+      # check, not a boolean cast: the link either carries the parameter or it does not, and
+      # `expand=0` is not a shape anything on this screen produces.
+      expanded: params[:expand].present?
     )
   end
 
@@ -20,9 +24,9 @@ class DistributionsController < ApplicationController
 
   # The edits the user typed into the waterfall, exactly as AllocationCommitter consumes them:
   # `{pool_id => amount}`, keyed by pool id because a row's position is not stable across a
-  # re-derived proposal. Nothing is written here and nothing is cast here — the committer owns
-  # the coercion, and a second `.to_d` on this side is a second answer to "what did they mean by
-  # an empty box".
+  # re-derived proposal. Nothing is written here and nothing is cast here — AllocationCalculator
+  # owns the coercion, and a second `.to_d` on this side is a second answer to "what did they
+  # mean by an empty box".
   #
   # Two guards, both against shapes only a hand-built URL produces: `overrides=1` arrives as a
   # String and has no #permit!, and `overrides[x][]=1` arrives as an Array, which #to_d does not
@@ -30,8 +34,9 @@ class DistributionsController < ApplicationController
   # dropped rather than rescued, so the row simply keeps its proposed figure.
   #
   # `permit!` is safe precisely because the keys are pool ids and nothing here mass-assigns:
-  # every key is looked up against THIS account's own rows (AllocationCommitter#amount_for), so
-  # an id belonging to someone else names no row and is ignored.
+  # every key is looked up against THIS account's own rows (AllocationCalculator#fill, which
+  # rejects on the ENVELOPE'S ask before an override is consulted), so an id belonging to
+  # someone else names no row and is ignored.
   def override_params
     raw = params[:overrides]
     return {} unless raw.is_a?(ActionController::Parameters)
