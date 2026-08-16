@@ -20,9 +20,8 @@ class PoolStatus
                elsif overdue_budget then :overdue
                elsif unreachable_budget then :wont_make_it
                elsif behind_amount.positive? then :behind
-               elsif anchored_budgets.empty? then :left_to_spend
                else
-                 :on_track
+                 quiet_state
                end
   end
 
@@ -50,9 +49,44 @@ class PoolStatus
   # ran the five balance queries twice and the two objects could in principle disagree.
   def balance = @balance ||= pool_calculator.balance
 
+  # What the goal is, for the one state measured against one. Zero where the concept does not
+  # apply: an account's target is a buffer marker and a budget envelope's is a display marker,
+  # and neither is a thing being saved toward.
+  #
+  # `.to_d`, not the raw column — `target_amount` is nil on every pool that is not a savings
+  # pool, and this is read straight into a currency helper.
+  def target = pool.target_amount.to_d
+
   def needs_attention? = ATTENTION_STATES.include?(state)
 
   private
+
+  # The tail of the same precedence chain: what a pool with no live problem is doing. Split
+  # out only because the seventh state pushed #state past rubocop's complexity limit — the
+  # order here is as load-bearing as the order above it, and :saving must stay first.
+  def quiet_state
+    return :saving if saving?
+    return :left_to_spend if anchored_budgets.empty?
+
+    :on_track
+  end
+
+  # The seventh state's guard, and the reason it sits immediately above :left_to_spend.
+  #
+  # A savings pool with no dated rule could previously reach NO state but :left_to_spend —
+  # every state above it needs an anchored rule, and that branch is the fall-through for
+  # having none — so a vacation fund rendered "$424.00 left". That is a spendable number for
+  # money that is not spendable, which inverts the design's second principle on every savings
+  # row at once.
+  #
+  # Placed BELOW the four attention states on purpose: a goal $50 in the red is overdrawn
+  # first and saving second. Placed ABOVE :left_to_spend because both guards hold for exactly
+  # this pool — after it, this could never fire at all.
+  #
+  # Dateless only. A savings pool that names an anchor has a deadline, and the anchored maths
+  # already spreads it across the periods remaining; that vocabulary keeps winning. Same
+  # condition, and the same reasoning, as PoolCalculator#dateless_goal?.
+  def saving? = pool.pool_type_savings? && anchored_budgets.empty?
 
   def pool_calculator = @pool_calculator ||= pool.calculator(today: today)
 

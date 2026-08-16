@@ -19,7 +19,12 @@
     is no single moment the money ran out: a pool in Ally funded at zero would print the line
     above rows in Checking that were funded in full. The per-row figures carry it instead.
     Grouping the waterfall by account is the real answer and belongs to a later plan. %>
-<% cutoff = presenter.accounts.one? ? (rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length) : nil %>
+<%# `covered?` in the guard as well as `accounts.one?`: the waterfall now renders on a covered
+    period too (see below), and there the index finds nothing, falls back to `rows.length`,
+    and draws "ran out here · $0.00 unfunded" under the last row of a screen where nothing
+    ran out at all. There is no cutoff when the money reached everything. %>
+<% single_account_shortfall = presenter.accounts.one? && !presenter.covered? %>
+<% cutoff = single_account_shortfall ? (rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length) : nil %>
 
 <section class="bg-white border border-gray-200 rounded" aria-labelledby="attention-heading">
   <div class="px-6 py-4 border-b border-gray-200">
@@ -49,9 +54,17 @@
     </div>
   <% end %>
 
-  <%# Only when there is a gap to explain. Rendering the waterfall on a covered period would
-      report a consequence nobody is living with (principle 3). %>
-  <% unless presenter.covered? %>
+  <%# Whenever there is a gap OR something needs you.
+
+      It used to be the gap alone, and that suppressed the plan on exactly the screen that
+      needed it: `won't make it · Aug 18` rendered under "You're covered this period" with no
+      way to see that this period's distribution funds the bill in full. PoolStatus describes
+      the pool NOW, the waterfall describes the plan, and showing the warning while hiding its
+      own resolution is the worst combination of the two.
+
+      Still silent when nothing is short and nothing is flagged, which is principle 3 intact:
+      there is no consequence to report on a screen with no problems on it. %>
+  <% if !presenter.covered? || problems.any? %>
     <div class="px-6 py-4 border-t border-gray-200" aria-labelledby="waterfall-heading">
       <%# Sentence case, not the `uppercase` treatment this codebase gives short labels like
           "Current Balance": that renders as WHERE YOUR MONEY WENT, which shouts a whole

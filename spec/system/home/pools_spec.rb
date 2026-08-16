@@ -70,6 +70,22 @@ RSpec.describe "Home Pools", type: :system do
     expect(row("Rent")).to have_content("$2,000.00 · on track")
   end
 
+  # Principle 2 on the row that used to break it: a savings pool with no dated rule could
+  # reach no state but `left to spend`, so a vacation fund rendered "$424.00 left" — a
+  # spendable number for money that is not spendable.
+  it "shows a savings pool saving toward its target, never as money to spend", :aggregate_failures do
+    goal = create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
+    deposit(500)
+    fund(goal, 424)
+
+    visit root_path
+
+    expect(row("Vacation")).to have_content("$424.00 of $2,400.00")
+    expect(row("Vacation")).to have_no_content("left")
+    # Accumulating on plan is not trouble, so it stays one quiet line.
+    expect(row("Vacation")["data-expanded"]).to eq("false")
+  end
+
   it "auto-expands a pool that needs attention", :aggregate_failures do
     one_off("Dentist", amount: 300, due: Date.current + 3.days)
 
@@ -124,8 +140,8 @@ RSpec.describe "Home Pools", type: :system do
     # And it must not be filed under an account it does not belong to.
     expect(group("Checking")).to have_no_content("Old Goal")
     expect(group("No account")).to have_no_content("Groceries")
-    # Its own status is quiet — a goal at $0 of $5,000 with no dated rule reads
-    # `left to spend` — so only the "nothing can fund it" half makes this a problem, and
+    # Its own status is quiet — a goal at $0 of $5,000 with no dated rule reads `saving` —
+    # so only the "nothing can fund it" half makes this a problem, and
     # the row still has to open with the rest of the trouble rather than sit collapsed
     # under a red heading.
     expect(row("Old Goal")["data-expanded"]).to eq("true")

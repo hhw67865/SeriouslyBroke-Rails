@@ -39,7 +39,7 @@
     <div class="mt-2 pl-4 space-y-1" data-role="pool-detail">
       <% rules.each do |budget, due_on| %>
         <div class="flex justify-between text-xs text-gray-600 gap-4">
-          <span><%= budget.item&.name || "Rule" %></span>
+          <span><%= pool_rule_label(budget) %></span>
           <span><%= number_to_currency(budget.amount) %> · <%= due_on.strftime("%b %-d") %></span>
         </div>
       <% end %>

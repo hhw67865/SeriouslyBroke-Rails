@@ -15,6 +15,10 @@ RSpec.describe PoolStatus, type: :model do
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount)
   end
 
+  def goal(name, target: 2_400)
+    create(:pool, :savings_pool, user: user, account: checking, name: name, target_amount: target)
+  end
+
   def spend(pool, amount, name: "Something")
     category = create(:category, :expense, user: user, name: "#{pool.name} spend", pool: pool)
     create(:entry, item: create(:item, category: category, name: name), amount: amount, date: today)
@@ -168,6 +172,38 @@ RSpec.describe PoolStatus, type: :model do
 
       expect(status.state).to eq(:wont_make_it)
       expect(status.amount).to eq(580)
+    end
+
+    # The two pairs the seventh state adds. Only these two are OBSERVABLE: `saving?` requires
+    # `anchored_budgets.empty?`, and :overdue, :wont_make_it and :behind every one of them
+    # require an anchored rule, so no pool can satisfy :saving and any of those three at once
+    # — a swap there changes no result and would be asserted by nothing. :overdrawn and
+    # :left_to_spend are the two that CAN both hold, so they are the two pinned here.
+
+    # overdrawn vs saving: a savings pool with no dated rule AND a negative balance. Money
+    # already spent outranks money being put away, or a goal $50 in the red reads as healthy.
+    it "reports overdrawn ahead of saving", :aggregate_failures do
+      pool = goal("Vacation")
+      fund(pool, 100)
+      spend(pool, 150)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdrawn)
+      expect(status.amount).to eq(50)
+    end
+
+    # saving vs left_to_spend: a savings pool with no dated rule satisfies BOTH guards, which
+    # is exactly why :saving has to sit before :left_to_spend — placed after it, it could
+    # never fire at all.
+    it "reports saving ahead of left_to_spend", :aggregate_failures do
+      pool = goal("Vacation")
+      fund(pool, 424)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:saving)
+      expect(status.state).not_to eq(:left_to_spend)
     end
   end
 
@@ -327,6 +363,54 @@ RSpec.describe PoolStatus, type: :model do
     end
   end
 
+  # The seventh state, added after Home was seen on a screen: a savings pool with no dated
+  # rule could reach NO state but :left_to_spend, so a vacation fund rendered "$424.00 left"
+  # — a spendable number for money that is not spendable, which is design principle 2
+  # inverted on every savings row at once.
+  describe ":saving" do
+    it "fires for a savings pool with no dated rule, and reports what it holds", :aggregate_failures do
+      pool = goal("Vacation")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 150)
+      fund(pool, 424)
+
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:saving)
+      expect(status.amount).to eq(424)
+      expect(status.target).to eq(2_400)
+      # Quiet: accumulating on plan is not a problem, and the auto-expand rule keys off this.
+      expect(status.needs_attention?).to be(false)
+    end
+
+    # The other direction. A budget envelope's balance IS spendable — that is the whole
+    # distinction — so the new guard must not swallow the state it was carved out of.
+    it "does not fire for a budget envelope funded at a rate", :aggregate_failures do
+      pool = envelope("Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      fund(pool, 400)
+
+      expect(pool.status(today: today).state).to eq(:left_to_spend)
+      expect(pool.status(today: today).state).not_to eq(:saving)
+    end
+
+    # A dated savings pool already had a vocabulary that works — the anchored maths spreads
+    # the goal across the periods left — and this guard must not take it away.
+    it "does not fire for a savings pool with a dated rule", :aggregate_failures do
+      pool = goal("Roof")
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 600)
+
+      expect(pool.status(today: today).state).to eq(:on_track)
+      expect(pool.status(today: today).state).not_to eq(:saving)
+    end
+
+    it "reports no target for a savings pool that names none" do
+      pool = create(:pool, :savings_pool, user: user, account: checking, name: "Rainy Day", target_amount: 0)
+
+      expect(pool.status(today: today).target).to eq(0)
+    end
+  end
+
   describe ":left_to_spend" do
     it "fires for a pool with only rate rules", :aggregate_failures do
       pool = envelope("Groceries")
@@ -357,9 +441,10 @@ RSpec.describe PoolStatus, type: :model do
       end
     end
 
-    it "is false for on_track and left_to_spend", :aggregate_failures do
+    it "is false for on_track, left_to_spend and saving", :aggregate_failures do
       expect(described_class::ATTENTION_STATES).not_to include(:on_track)
       expect(described_class::ATTENTION_STATES).not_to include(:left_to_spend)
+      expect(described_class::ATTENTION_STATES).not_to include(:saving)
     end
 
     # The constant examples above never call the method; these do, in both directions.

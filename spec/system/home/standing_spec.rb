@@ -38,6 +38,24 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("$600.00")
     expect(page).to have_no_content("short this period")
     expect(page).to have_no_content("overdrawn")
+    # Every pool here has an account, so the covered branch's own orphan clause must not fire.
+    expect(page).to have_no_content("of what you need belongs to")
+  end
+
+  # Being covered is true of the ACCOUNTS. It says nothing about a pool no account can reach,
+  # and the covered branch used to say nothing either — so a user was told they were fine
+  # while $200 of what they owe this period could not be funded at all. Same figure, same
+  # gate and the same fix as the short branch; only the framing changes.
+  it "names the unfundable part even when you're covered", :aggregate_failures do
+    orphan("Old Goal", 200)
+    envelope("Rent", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "You're covered")
+    expect(page).to have_content("$600.00 stays in your buffer")
+    expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
   end
 
   it "states the gap when you're short", :aggregate_failures do

@@ -9,6 +9,19 @@
     <p class="mt-2 text-sm text-gray-600">
       <%= number_to_currency(presenter.projected_buffer) %> stays in your buffer.
     </p>
+
+    <%# Covered is a statement about the ACCOUNTS. It says nothing about a pool no account can
+        reach, and this branch used to say nothing either — so a user was told they were fine
+        while part of what they owe this period could not be funded at all. Same figure and
+        the same gate as the short branch below; only the framing changes. Silent when no
+        orphan is asking for anything, since a clause with no live cause is noise. %>
+    <% if presenter.orphan_required.positive? %>
+      <p class="mt-1 text-sm text-gray-600">
+        Even so, <%= number_to_currency(presenter.orphan_required) %> of what you need belongs to
+        <%= pluralize(presenter.orphan_pools.size, "pool") %> with no account, listed below.
+        Being covered can't fix that — giving it an account can.
+      </p>
+    <% end %>
   <% else %>
     <h2 class="text-2xl font-semibold text-status-danger">
       <%= number_to_currency(presenter.shortfall) %> short this period

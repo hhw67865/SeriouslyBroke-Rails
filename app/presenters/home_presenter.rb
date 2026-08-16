@@ -208,15 +208,28 @@ class HomePresenter
   # the "ran out here" cutoff above rows that were funded in full, on a screen whose entire
   # job is showing where the money went. #orphan_pools names them on the attention list
   # instead, and #total_required still counts what they ask for.
+  # A pool that asks for nothing is not a row either, and the reason is what it looked like on
+  # a screen: "$0.00 of $0.00", and below the "ran out here" line, which reads as money DENIED
+  # rather than money not wanted. This band answers where the money went; a pool with no ask
+  # is not part of that story, and the pools band below already shows it.
+  #
+  # Rejected after the fill, never before it, so the pot still drains in strict priority
+  # order. Arithmetic-neutral either way — a zero-need row contributes 0 to `needed`, `funded`
+  # and `short` alike, so #shortfall, #projected_buffer and #orphan_required cannot move.
   def fill_waterfall
     pots = account_pots
-    by_priority(all_pools.reject { |pool| pool.account_id.nil? }).map do |pool|
-      needed = required_for(pool)
-      pot = pots.fetch(pool.account_id, 0.to_d)
-      funded = pot.clamp(0.to_d, needed)
-      pots[pool.account_id] = pot - funded
-      { pool: pool, needed: needed, funded: funded, short: needed - funded }
-    end
+    fundable = by_priority(all_pools.reject { |pool| pool.account_id.nil? })
+    fundable.map { |pool| waterfall_row(pool, pots) }.reject { |row| row[:needed].zero? }
+  end
+
+  # Spends `pots` down as it goes, which is why the caller maps in priority order and rejects
+  # afterwards: each row is funded out of what the rows above it left behind.
+  def waterfall_row(pool, pots)
+    needed = required_for(pool)
+    pot = pots.fetch(pool.account_id, 0.to_d)
+    funded = pot.clamp(0.to_d, needed)
+    pots[pool.account_id] = pot - funded
+    { pool: pool, needed: needed, funded: funded, short: needed - funded }
   end
 
   # What each account can actually fund, keyed by account id.

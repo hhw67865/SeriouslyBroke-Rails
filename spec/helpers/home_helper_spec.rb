@@ -5,12 +5,13 @@ require "rails_helper"
 RSpec.describe HomeHelper, type: :helper do
   # `needs_attention?` is answered from PoolStatus's own constant rather than a hand-set
   # flag, so a double can never claim a combination the real object cannot produce.
-  def status(state, amount: 0, due_on: nil)
+  def status(state, amount: 0, due_on: nil, target: nil)
     instance_double(
       PoolStatus,
       state: state,
       amount: amount,
       due_on: due_on,
+      target: target,
       needs_attention?: PoolStatus::ATTENTION_STATES.include?(state)
     )
   end
@@ -46,6 +47,24 @@ RSpec.describe HomeHelper, type: :helper do
       expect(helper.pool_status_label(status(:left_to_spend, amount: 240))).to eq("$240.00 left")
     end
 
+    # The seventh state. Both forms read as accumulation; neither reads as money to spend,
+    # which is the whole reason it exists (principle 2).
+    it "names progress toward a target when saving" do
+      expect(helper.pool_status_label(status(:saving, amount: 424, target: 2_400)))
+        .to eq("$424.00 of $2,400.00")
+    end
+
+    it "names what has been put away when a savings pool has no target" do
+      expect(helper.pool_status_label(status(:saving, amount: 424, target: 0))).to eq("$424.00 saved")
+    end
+
+    # The word this state was carved out to avoid, asserted directly: a substring check on
+    # "$424.00" alone would pass against the label it replaced.
+    it "never says a savings balance is left to spend", :aggregate_failures do
+      expect(helper.pool_status_label(status(:saving, amount: 424, target: 2_400))).not_to include("left")
+      expect(helper.pool_status_label(status(:saving, amount: 424, target: 0))).not_to include("left")
+    end
+
     it "stays quiet on track" do
       expect(helper.pool_status_label(status(:on_track, amount: 1_000))).to eq("$1,000.00 · on track")
     end
@@ -56,6 +75,45 @@ RSpec.describe HomeHelper, type: :helper do
       label = helper.pool_status_label(status(:overdue, amount: 10, due_on: Date.new(2026, 3, 5)))
 
       expect(label).to eq("overdue · was Mar 5")
+    end
+  end
+
+  # What an expanded row calls each rule. An item names itself; an item-less rule used to
+  # render the literal word "Rule", which on screen reads as missing data rather than as
+  # information. The row already prints the amount and the date on the other side, so what is
+  # missing from the line is the rule's SHAPE — how often it comes round.
+  describe "#pool_rule_label" do
+    it "uses the item's name when the rule has one" do
+      budget = build(:pool_budget, item: build(:item, name: "Electric Bill"), anchor_date: Date.new(2026, 3, 1))
+
+      expect(helper.pool_rule_label(budget)).to eq("Electric Bill")
+    end
+
+    it "names a monthly rule by its cadence" do
+      budget = build(:pool_budget, interval_months: 1, anchor_date: Date.new(2026, 3, 1))
+
+      expect(helper.pool_rule_label(budget)).to eq("Monthly")
+    end
+
+    it "names a multi-month rule by its interval" do
+      budget = build(:pool_budget, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+
+      expect(helper.pool_rule_label(budget)).to eq("Every 6 months")
+    end
+
+    it "names a rule that never rolls a one-off" do
+      budget = build(:pool_budget, :one_time, anchor_date: Date.new(2026, 3, 1))
+
+      expect(helper.pool_rule_label(budget)).to eq("One-off")
+    end
+
+    # A per-period rule carries no anchor, so no expanded row can reach it today — but it is
+    # the one shape whose blank interval does NOT mean "never rolls", and reading it as a
+    # one-off would be silently wrong the day something asks.
+    it "names a per-period rule by its cadence, not as a one-off" do
+      budget = build(:pool_budget, :per_paycheck_rate)
+
+      expect(helper.pool_rule_label(budget)).to eq("Per period")
     end
   end
 

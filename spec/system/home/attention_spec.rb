@@ -74,6 +74,40 @@ RSpec.describe "Home Attention", type: :system do
     expect(page).to have_no_content("ran out here")
   end
 
+  # Seen on the screen: `won't make it · Aug 18` sat under "You're covered this period" with
+  # the waterfall hidden, because the waterfall only rendered when short. PoolStatus describes
+  # the pool NOW; the waterfall describes the plan. Showing the warning while suppressing its
+  # own resolution is the worst combination of the two, so the plan renders whenever anything
+  # needs you — the status stays right about the present, untouched.
+  it "shows where the money goes when a pool needs you on a covered period", :aggregate_failures do
+    dentist = create(:pool, :budget_pool, user: user, account: checking, name: "Dentist", priority: 1)
+    create(:pool_budget, :one_time, pool: dentist, amount: 300, anchor_date: Date.current + 3.days)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_content("You're covered")
+    expect(waterfall_section).to have_content("$300.00 of $300.00")
+    # Nothing ran out, so the cutoff must stay away — it used to render at the end of the
+    # list with a "$0.00 unfunded" label the moment the waterfall was shown on a covered period.
+    expect(waterfall_section).to have_no_content("ran out here")
+  end
+
+  # A pool that asked for nothing rendered "$0.00 of $0.00", and below the cutoff that reads
+  # as money denied rather than money not wanted.
+  it "leaves a pool that asks for nothing out of the waterfall", :aggregate_failures do
+    settled = envelope("Rent", 300)
+    deposit(500)
+    create(:pool_movement, from_pool: checking, to_pool: settled, amount: 300)
+    envelope("Groceries", 400, priority: 2)
+
+    visit root_path
+
+    expect(waterfall_section).to have_content("Groceries")
+    expect(waterfall_section).to have_no_content("Rent")
+    expect(waterfall_section).to have_no_content("$0.00 of $0.00")
+  end
+
   # An overdrawn account reaches neither #available (clamped at zero) nor #shortfall
   # (summed from the waterfall rows), so unless a band names it, a real $400 debt is
   # invisible on the one screen that exists to say where you stand.

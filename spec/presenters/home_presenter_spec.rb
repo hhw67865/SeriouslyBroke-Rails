@@ -380,6 +380,28 @@ RSpec.describe HomePresenter do
       expect(presenter.orphan_pools).to eq([orphan])
     end
 
+    # Seen on the screen, not in a spec: a pool that asks for nothing rendered "$0.00 of
+    # $0.00" — and below the red "ran out here" line that reads as "this got nothing because
+    # the money ran out" when the truth is "this needed nothing". The waterfall answers where
+    # the money went, and a pool with no ask is not part of that story.
+    #
+    # Arithmetic-neutral by construction: a zero-need row contributes 0 to `needed`, `funded`
+    # and `short`, so #shortfall, #projected_buffer and #orphan_required cannot move — which
+    # the expectations below pin rather than assume.
+    it "leaves out a pool that asks for nothing this period", :aggregate_failures do
+      deposit(checking, 500)
+      # Funded in full already, so its `required` is zero — the commonest way to reach this.
+      settled = envelope("Rent", priority: 1)
+      rate(settled, 300)
+      create(:pool_movement, from_pool: checking, to_pool: settled, amount: 300)
+      rate(envelope("Groceries", priority: 2), 400)
+
+      expect(presenter.waterfall.map { |r| r[:pool].name }).to eq(["Groceries"])
+      expect(presenter.total_required).to eq(400)
+      expect(presenter.shortfall).to eq(200)
+      expect(presenter.projected_buffer).to eq(0)
+    end
+
     it "does not spend down the cash it reports as available", :aggregate_failures do
       deposit(checking, 500)
       rate(envelope_in(checking, "Rent", priority: 1), 400)
