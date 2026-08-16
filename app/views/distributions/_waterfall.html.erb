@@ -196,10 +196,15 @@
     <%# The recompute. An explicit button rather than a submit-on-blur: the figures below change
         as a result of pressing it, and a page that re-renders under the cursor while the user is
         still deciding is the shape that makes people distrust a screen about their money.
-        Task 6's confirm goes to the LEFT of this, as the primary action. %>
+        The confirm sits to the LEFT of it, as the primary action — and inside the same form, so
+        it submits the boxes as they stand rather than only the edits already applied. See
+        _confirm for why that matters and what it costs. %>
     <div class="flex items-center justify-between gap-4 border-t border-gray-200 px-6 py-4">
       <p class="text-xs text-gray-500">Edits are applied when you confirm — nothing has moved yet.</p>
-      <button type="submit" class="btn btn-secondary">Update figures</button>
+      <span class="flex items-center gap-3">
+        <%= render "confirm", presenter: presenter, standalone: false %>
+        <button type="submit" class="btn btn-secondary">Update figures</button>
+      </span>
     </div>
   <% end %>
 </section>

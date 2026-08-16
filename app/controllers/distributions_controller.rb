@@ -3,12 +3,70 @@
 class DistributionsController < ApplicationController
   # GET /distributions/new
   #
-  # The proposal only. Confirming it is `create`, which Task 6 owns.
+  # The proposal only. Confirming it is #create.
   def new
     account = distribution_account
     return redirect_to(root_path, alert: "Set up an account before distributing.") if account.nil?
 
-    @presenter = DistributionPresenter.new(
+    @presenter = presenter_for(account)
+  end
+
+  # POST /distributions
+  #
+  # THE SPLIT. Everything above this line describes what would happen; this is the line that
+  # makes it happen, and it is the only request in the app that moves money between pools.
+  #
+  # THE PROPOSAL CARRIES THE OVERRIDES AND THE COMMITTER WRITES WHAT IT SAYS. The plan's
+  # original wording — "calls AllocationCommitter with the overrides" — describes an
+  # AllocationCommitter that no longer exists: it took an `overrides:` keyword and substituted
+  # those figures onto an already-finished fill, which decided the split in two places and meant
+  # money freed by cutting a high row could never reach the envelope below it. There is one
+  # split now, decided inside AllocationCalculator#fill, and #proposal_for is the same
+  # construction the screen renders from — so what is written is what was shown.
+  #
+  # NOTHING WRAPS #call. AllocationCommitter opens `transaction(requires_new: true)` precisely
+  # because a caller's own transaction would otherwise swallow its rollback and commit a
+  # half-written split under a `success? == false` result. It does not need help here, and
+  # anything added around this line would be that shape.
+  #
+  # A failure re-renders the SAME screen with the errors above it, rather than redirecting: the
+  # user's edits are in the query the form submitted, so the boxes come back holding what they
+  # typed and the row that was refused is still on screen next to the reason.
+  def create
+    account = distribution_account
+    return redirect_to(root_path, alert: "Set up an account before distributing.") if account.nil?
+
+    committer = AllocationCommitter.new(proposal_for(account))
+    result = committer.call
+    return redirect_to(root_path, notice: confirmation_for(result, committer, account)) if result.success?
+
+    @errors = result.errors
+    @presenter = presenter_for(account)
+    render :new, status: :unprocessable_content
+  end
+
+  private
+
+  # `account.calculator` is built HERE, after the write, and that is the whole reason the
+  # buffer figure in the sentence is trustworthy: PoolCalculator memoises, so the proposal's
+  # own calculators have been stale since the first movement saved. A fresh one reads the
+  # ledger the user is about to see on Home, so the flash and Home cannot disagree.
+  def confirmation_for(result, committer, account)
+    helpers.distribution_confirmation(
+      result,
+      # Amendment D: a redistribution REPLACED the previous split, and the screen said so before
+      # confirming. Saying "distributed" afterwards would contradict the banner the user just
+      # consented to. #replaced is what the committer actually deleted, not a re-derived guess.
+      replaced: committer.replaced.any?,
+      buffer: account.calculator.balance
+    )
+  end
+
+  # One construction, both actions. The screen and the confirm read the same params through the
+  # same coercion, so a proposal that renders one split and writes another has nowhere to come
+  # from.
+  def presenter_for(account)
+    DistributionPresenter.new(
       user: current_user,
       account: account,
       today: Date.current,
@@ -20,7 +78,13 @@ class DistributionsController < ApplicationController
     )
   end
 
-  private
+  # What the committer writes. `overrides` go on the PROPOSAL (amendment A) — the committer has
+  # no override path of its own to disagree with this one.
+  def proposal_for(account)
+    AllocationCalculator.new(
+      user: current_user, account: account, today: Date.current, overrides: override_params
+    )
+  end
 
   # The edits the user typed into the waterfall, exactly as AllocationCommitter consumes them:
   # `{pool_id => amount}`, keyed by pool id because a row's position is not stable across a
@@ -52,7 +116,13 @@ class DistributionsController < ApplicationController
     raw.permit!.to_h.select { |_pool_id, amount| amount.is_a?(String) }
   end
 
-  # OWNERSHIP LIVES HERE. AllocationCalculator takes a `user` and an `account` and never checks
+  # OWNERSHIP LIVES HERE, FOR BOTH ACTIONS. Amendment E: #new only renders another user's
+  # balances, while #create would WRITE movements out of their account — so the write path is
+  # scoped through exactly the same lookup rather than through one of its own. A second scope
+  # here would be a second answer to "whose account is this", and the two would disagree on the
+  # one request where it matters.
+  #
+  # AllocationCalculator takes a `user` and an `account` and never checks
   # that the two belong together — it is arithmetic over whatever account it is handed — so a
   # bare `Pool.find(params[:account_id])` would hand a signed-in user another user's balances,
   # envelope names and buffer. Scoped through `current_user.pools`, an id that is not theirs

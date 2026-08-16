@@ -19,6 +19,12 @@ class AllocationCommitter
 
     def swept = total_for(:kind_sweep?)
 
+    # HOW MANY ENVELOPES RECEIVED MONEY, which is not `movements.size`: the sweeps in that
+    # list came the other way, out of envelopes and into the account, so counting them would
+    # tell the user they funded envelopes they took money back from. Named for the count it
+    # is, beside two readers that are amounts.
+    def envelopes_funded = movements.count(&:kind_allocation?)
+
     private
 
     def total_for(predicate) = movements.select(&predicate).sum(0.to_d, &:amount)

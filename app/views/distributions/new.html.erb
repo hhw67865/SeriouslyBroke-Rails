@@ -9,6 +9,13 @@
                           "#{@presenter.period.last.strftime("%b %-d")}") %>
 
 <div class="space-y-6">
+  <%# A refused confirm, at the top: everything below it has gone back to being a proposal, and
+      that is not visible from the figures alone. Only #create sets this, so a screen that has
+      never been confirmed carries nothing. %>
+  <% if @errors.present? %>
+    <%= render "errors", errors: @errors %>
+  <% end %>
+
   <%# Only when this period has been distributed before. A banner that fired on every visit
       would say nothing, and this one has to be believed the one time it matters. %>
   <% if @presenter.redistribution? %>
@@ -23,5 +30,13 @@
       a collapsed screen either starves the bottom rows or calls a late bill fine. %>
   <% if @presenter.expanded? %>
     <%= render "waterfall", presenter: @presenter %>
+  <% else %>
+    <%# The all-clear density's ONE button (spec §5). The waterfall carries its own, beside the
+        recompute, so this branch is the whole of the collapsed screen's action — without it a
+        comfortable period is a screen with nothing to press. %>
+    <div class="flex items-center justify-between gap-4">
+      <p class="text-xs text-gray-500">Nothing has moved yet.</p>
+      <%= render "confirm", presenter: @presenter, standalone: true %>
+    </div>
   <% end %>
 </div>

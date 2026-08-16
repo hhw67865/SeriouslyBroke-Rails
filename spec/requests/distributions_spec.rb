@@ -23,6 +23,9 @@ RSpec.describe "Distributions", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("Checking")
+      # The paired negative for the failed-confirm banner below: it belongs to #create alone, and
+      # a screen nobody has confirmed carries no errors at all.
+      expect(response.body).not_to include("This split wasn't written")
     end
 
     # The plan's ruling: with no account named, open on the one this period's pay landed in. Both
@@ -175,6 +178,109 @@ RSpec.describe "Distributions", type: :request do
       expect(response).to have_http_status(:ok)
       expect(override_field(groceries)).to include('placeholder="300.00"')
       expect(override_field(groceries)).not_to include("value=")
+    end
+  end
+
+  # CONFIRMING. Two things live here that no browser test can reach: the ownership of a WRITE
+  # path (amendment E), and a negative override — the waterfall's boxes carry `min="0"`, so
+  # Chrome refuses to submit one and the only way to the validation behind it is a request built
+  # by hand. Which is exactly the shape that matters: the client guard is a convenience, and the
+  # refusal has to live at the write.
+  describe "POST /distributions", :aggregate_failures do
+    let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
+
+    before do
+      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      deposit(1_000, into: checking)
+    end
+
+    # The positive half. Without it every refusal below would also pass on an action that
+    # refused everything, or on a route that does not exist.
+    it "writes the split for an account the signed-in user owns" do
+      post distributions_path(account_id: checking.id)
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq("Distributed $400.00 into 1 envelope. $600.00 stays in your buffer.")
+      expect(PoolMovement.kind_allocation.pluck(:amount)).to eq([400])
+    end
+
+    # The whole point, and it is worth more here than on the GET: that one renders another
+    # person's balances, this one would MOVE THEIR MONEY. Both halves asserted — the 404, and
+    # the ledger that stayed empty behind it.
+    it "refuses another user's account" do
+      stranger = create(:pool, :account, user: create(:user), name: "Someone Elses Bank")
+      create(:pool, :budget_pool, user: stranger.user, account: stranger, name: "Their Rent")
+
+      post distributions_path(account_id: stranger.id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(PoolMovement.count).to eq(0)
+    end
+
+    # An envelope's id is a valid pool id belonging to the right user. Filled by
+    # AllocationCalculator it has no child pools to fund and its own balance stands in as a
+    # buffer, so the write would be about a thing that is not an account.
+    it "refuses one of the user's own pools that is not an account" do
+      post distributions_path(account_id: groceries.id)
+
+      expect(response).to have_http_status(:not_found)
+      expect(PoolMovement.count).to eq(0)
+    end
+
+    it "sends a user with no account back home with a reason" do
+      groceries.destroy!
+      checking.destroy!
+
+      post distributions_path
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:alert]).to eq("Set up an account before distributing.")
+    end
+
+    # A NEGATIVE OVERRIDE IS CARRIED THROUGH TO THE WRITE RATHER THAN FLOORED — Task 3's ruling,
+    # kept alive by AllocationCalculator#row_for — so it fails PoolMovement's `amount > 0`
+    # loudly instead of vanishing from a split it was meant to change. The re-render says so and
+    # the ledger is untouched: an error message with a half-written ledger behind it is the worst
+    # outcome available on this screen.
+    it "re-renders with the error and writes nothing" do
+      post distributions_path(account_id: checking.id, overrides: { groceries.id => "-50" })
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("Groceries: Amount must be greater than 0")
+      expect(response.body).to include("This split wasn't written")
+      # The box comes back holding what they typed, which is what makes re-rendering the right
+      # answer rather than a redirect: the row that was refused is on screen beside the reason.
+      expect(override_field(groceries)).to include('value="-50.00"')
+      expect(PoolMovement.count).to eq(0)
+    end
+
+    # AMENDMENT B, AND THE GUARD IT NAMES. The deletion of the previous split is inside the
+    # committer's transaction, and that transaction is `requires_new: true` — hoist either and a
+    # failing re-run destroys a good split, writes nothing in its place and still reports a
+    # failure. The rows are compared BY ID, so a deletion followed by an identical rewrite could
+    # not pass this either.
+    it "leaves the previous split intact when a re-run fails" do
+      post distributions_path(account_id: checking.id)
+      written = PoolMovement.order(:id).pluck(:id, :amount)
+
+      post distributions_path(account_id: checking.id, overrides: { groceries.id => "-50" })
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(PoolMovement.order(:id).pluck(:id, :amount)).to eq(written)
+      expect(written.map(&:last)).to eq([400])
+    end
+
+    # The other direction of the replacement: a re-run that SUCCEEDS replaces its own split
+    # rather than adding to it, and says so. Paired with the first example's "Distributed …",
+    # which is the same sentence on a period that had never been distributed.
+    it "says it replaced the previous split when a re-run succeeds" do
+      post distributions_path(account_id: checking.id)
+      post distributions_path(account_id: checking.id)
+
+      expect(flash[:notice]).to eq(
+        "Replaced this period's split — distributed $400.00 into 1 envelope. $600.00 stays in your buffer."
+      )
+      expect(PoolMovement.kind_allocation.pluck(:amount)).to eq([400])
     end
   end
 

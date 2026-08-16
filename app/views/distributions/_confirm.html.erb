@@ -1,0 +1,41 @@
+<%# THE BUTTON THAT SPLITS THE PAYCHECK — the one control in this app that moves money between
+    pools. Locals: `presenter` (DistributionPresenter), `standalone` (boolean).
+
+    Two shapes, one label, because the screen has two densities (spec §5) and the button belongs
+    to both: the all-clear screen is "headline, one summary line, one button", and the waterfall
+    puts it beside the recompute. The copy lives here once so the two cannot drift.
+
+    THE EXPANDED SHAPE IS A SUBMITTER INSIDE THE WATERFALL'S OWN FORM, and that is the whole
+    point of it. The boxes are that form's fields, so confirming submits WHAT THE USER HAS
+    TYPED — including an edit they never pressed "Update figures" on. A separate form carrying
+    the already-applied overrides as hidden fields would have been simpler and would silently
+    write $500 into an envelope the user had just typed 200 into, which is the screen and the
+    ledger disagreeing about money on the one screen where that is unforgivable. The form itself
+    stays a GET to `new` (its `method`/`action` are unchanged); `formaction` and `formmethod`
+    move only THIS button's submission.
+
+    THE TOKEN RIDES ON THE BUTTON, not in a hidden field, and the reason is the same GET form: a
+    hidden `authenticity_token` would be serialised into the query string every time someone
+    pressed "Update figures", putting the session's CSRF token in the URL bar, the browser
+    history and the server log. A submit button's own name/value pair is submitted only when
+    that button is the one clicked, so the token exists for the POST and for nothing else.
+    Turbo also sends the token as a header, so this is what keeps the POST working with
+    JavaScript off rather than the only guard. %>
+<% if standalone %>
+  <%= form_with url: distributions_path, method: :post do %>
+    <%# Without this the write falls back to "the account the pay landed in", which is a
+        different account the moment a second paycheck arrives mid-period. %>
+    <%= hidden_field_tag :account_id, presenter.account.id %>
+    <button type="submit" class="btn btn-primary" id="confirm-distribution">Confirm distribution</button>
+  <% end %>
+<% else %>
+  <button type="submit"
+          class="btn btn-primary"
+          id="confirm-distribution"
+          formaction="<%= distributions_path %>"
+          formmethod="post"
+          name="authenticity_token"
+          value="<%= form_authenticity_token %>">
+    Confirm distribution
+  </button>
+<% end %>
