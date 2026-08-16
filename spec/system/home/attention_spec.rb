@@ -28,7 +28,15 @@ RSpec.describe "Home Attention", type: :system do
     pool
   end
 
+  # The opposite of `orphan` above: same account-less shape, no rule, so it asks for nothing
+  # this period. A savings goal in exactly this state is what every user of this app has.
+  def quiet_orphan(name, priority: 1)
+    create(:pool, user: user, name: name, target_amount: 5_000, priority: priority)
+  end
+
   def attention_section = find("section[aria-labelledby='attention-heading']")
+
+  def orphan_section = find("[data-pool-group='No account']")
 
   def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
 
@@ -162,6 +170,66 @@ RSpec.describe "Home Attention", type: :system do
     # must not drag the cutoff above a row that money did reach.
     expect(page).to have_content("$300.00 short this period")
     expect(waterfall_section).to have_no_content("Old Goal")
+  end
+
+  # The screen every user with savings goals actually opened on: five account-less goals,
+  # none of them asking for a penny, counted as five problems above "You're covered this
+  # period". An account-less savings pool is the ordinary shape until Plan 3's backfill, so
+  # this was the common case, not an edge — and a band that calls a healthy screen five
+  # problems teaches the user to stop reading it.
+  #
+  # Three goals rather than one: the heading pluralises, so a single quiet orphan could pass
+  # a "1 thing needs you" check by accident of wording.
+  it "does not count a quiet pool with no account as a problem", :aggregate_failures do
+    3.times { |i| quiet_orphan("Goal #{i}", priority: i + 1) }
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("Nothing needs you")
+      expect(page).to have_no_content("Goal 0")
+      expect(page).to have_no_content("things need you")
+    end
+    # Dropped from the COUNT, not from the screen: the band whose heading is "these have no
+    # account" still lists all three, which is where that fact belongs.
+    expect(orphan_section.text).to match(/Goal 0.*Goal 1.*Goal 2/m)
+  end
+
+  # The other side of the same rule, so it cannot be satisfied by an app that simply stopped
+  # counting orphans. This goal asks for $200 a period and no account can ever send it, which
+  # is a real problem with a real fix, and it must still be named.
+  it "still counts a pool with no account that is asking for money", :aggregate_failures do
+    orphan("Owed Goal", 200)
+    quiet_orphan("Quiet Goal", priority: 2)
+    deposit(1_000)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("1 thing needs you")
+      expect(page).to have_content("Owed Goal")
+      expect(page).to have_content("no account — nothing can fund it")
+      expect(page).to have_no_content("Quiet Goal")
+    end
+  end
+
+  # An orphan in trouble on its own terms reaches the list through #attention_pools, so
+  # narrowing the orphan term to those that are owed money must not silence it. Overdrawn
+  # is guarded on the balance alone, which is the one state a pool with no rules can reach.
+  it "still counts a pool with no account that is overdrawn", :aggregate_failures do
+    stranded = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
+    category = create(:category, :expense, user: user, pool: stranded, name: "Old Goal spend")
+    create(:entry, item: create(:item, category: category), amount: 80, date: Date.current)
+
+    visit root_path
+
+    within(attention_section) do
+      expect(page).to have_content("1 thing needs you")
+      # Both halves: the status it has, and the fact that nothing can reach it.
+      expect(page).to have_content("no account · overdrawn $80.00")
+    end
   end
 
   it "counts more than one problem in the heading", :aggregate_failures do

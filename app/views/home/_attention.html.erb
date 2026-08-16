@@ -2,12 +2,29 @@
     Local: `presenter` (HomePresenter). See the UI design spec §4.2.
 
     Three kinds of problem, in descending loudness: an overdrawn account (no other band can
-    report it — see HomePresenter#overdrawn_accounts), a pool attached to no account at all
-    (nothing can fund it, and it is deliberately absent from the waterfall below), then the
-    envelopes whose own status needs attention, in the priority order the user ranked them
-    in. `uniq` because a pool can be both unassigned and overdrawn. %>
+    report it — see HomePresenter#overdrawn_accounts), a pool with no account that is
+    actually asking for money this period (nothing can fund it, and it is deliberately
+    absent from the waterfall below), then the envelopes whose own status needs attention,
+    in the priority order the user ranked them in. `uniq` because a pool can be both
+    unassigned and overdrawn.
+
+    `orphan_pools_owed`, NOT `orphan_pools` — the middle term is the one that changed and
+    this is why. Every orphan used to count here regardless of status, so a healthy user
+    with five account-less savings goals opened the root route on "You're covered this
+    period" above "5 things need you", with five rows saying nothing can fund goals that
+    were asking for nothing. An account-less savings pool is the ORDINARY shape until Plan
+    3's backfill, so that was not an edge; it was the common screen.
+
+    `orphan_pools_owed` is exactly the set whose ask #orphan_required is made of, so this
+    heading now counts the same pools the standing band's clause above already names — one
+    set, said twice, rather than two sets a reader has to reconcile. And it loses nothing:
+    an orphan that is ALSO in trouble on its own terms (overdrawn, overdue, behind) is
+    already in `attention_pools` and still counted, still labelled "no account · …" by
+    `pool_problem_label`. What drops out is only the quiet orphan asking for nothing — and
+    the orphans band below still lists every one of them under a heading that says these
+    have no account, which is where "these have no account" belongs. %>
 <% orphans = presenter.orphan_pools %>
-<% problems = (presenter.overdrawn_accounts + orphans + presenter.attention_pools).uniq %>
+<% problems = (presenter.overdrawn_accounts + presenter.orphan_pools_owed + presenter.attention_pools).uniq %>
 <% rows = presenter.waterfall %>
 
 <%# The cutoff marks where the cash ran out, which is AFTER the last pool that received any
