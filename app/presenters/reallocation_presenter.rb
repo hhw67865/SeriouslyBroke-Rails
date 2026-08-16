@@ -208,13 +208,26 @@ class ReallocationPresenter
   # the database after the write.
   def outgoing = PoolCalculator::Pending.new(funded: 0.to_d, swept: requested, on: today)
 
+  # BUILT BARE, THEN ASKED. The row is constructed with no holder and no damage, and the two
+  # branches below are chosen by asking the ROW ITSELF whether it can make the move — so
+  # `Candidate#affordable?` is the ONE spelling of the affordability gate in this file.
+  #
+  # It used to be two: this method computed the damage behind an independently written
+  # `requested? && balance.positive? && requested <= balance`, beside the row's own predicate.
+  # They agreed, and that is the problem — diverge them and the screen either states damage on a
+  # disabled row or refuses one silently, with nothing to say which is right. Same argument as
+  # reaching for PoolMovement#crosses_accounts? rather than re-deriving "same account" here: one
+  # method, not two that agree today.
+  #
+  # `Data#with` rather than a second constructor call, so the ten members are written once and a
+  # new member cannot be added to one branch and forgotten in the other. It also stops the two
+  # readers being computed where nothing renders them: a holder only ever explains a DISABLED row,
+  # and damage only ever describes an affordable one.
   def candidate_for(pool)
     calculator = calculator_for(pool)
-    balance = calculator.balance
-
-    Candidate.new(
+    candidate = Candidate.new(
       pool: pool,
-      pool_balance: balance,
+      pool_balance: calculator.balance,
       free: calculator.free_amount,
       status: pool.status(today: today),
       # The ` · last period` marker (spec §7.2), and it earns its place on this screen more than
@@ -223,18 +236,20 @@ class ReallocationPresenter
       # already on its way out. Plain calculator, which is the only kind that may be asked.
       period_closed: calculator.period_closed?,
       requested: requested,
-      holder: holder_for(pool),
-      damage: damage_for(pool, balance),
+      holder: nil,
+      damage: nil,
       selected: pool == from_pool
     )
+
+    return candidate.with(holder: holder_for(pool)) unless candidate.affordable?
+    return candidate unless requested?
+
+    candidate.with(damage: damage_for(pool))
   end
 
-  # Nothing to state on a source that cannot make the move — it says why instead — and nothing to
-  # state before an amount has been typed. Both are the same rule: the damage is a fact about a
-  # move, and there is no move yet.
-  def damage_for(pool, balance)
-    return nil unless requested? && balance.positive? && requested <= balance
-
+  # What the move costs this source. Only ever called for a row that can make it and an amount
+  # that exists — see #candidate_for, which owns both gates.
+  def damage_for(pool)
     after = pool.calculator(today: today, pending: outgoing)
     Damage.new(
       balance_before: calculator_for(pool).balance,

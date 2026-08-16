@@ -41,6 +41,24 @@ class PoolMovement < ApplicationRecord
   # write, by one method rather than by two that agree today.
   validate :must_not_cross_accounts, on: :reallocation
 
+  # THE FLOOR THE REALLOCATION SCREEN IS BUILT AROUND, ENFORCED WHERE IT COSTS MONEY.
+  #
+  # That screen disables a source that does not hold the amount — but a disabled control is a
+  # RENDERING, and this is the write. A tab rendered while Car held $1,000 and submitted after Car
+  # was spent down, or a hand-edited `from_pool_id`, would otherwise write the move and leave the
+  # source overdrawn: `Σ pools` would still equal the bank balance, but one envelope would be
+  # holding money the app had already spent, which is the state the whole screen exists to avoid
+  # creating on purpose.
+  #
+  # Ownership is mirrored at the write (the controller's scoped lookup) and so is same-account
+  # (above); this was the one constraint the screen was built around that lived only in the view.
+  #
+  # `:reallocation`-only, for #must_not_cross_accounts' reason and one more: an ALLOCATION legally
+  # empties the account it comes from, and a SWEEP is derived from the source's own balance, so a
+  # blanket version of this would put a live balance query in front of every movement a
+  # distribution writes to re-answer a question those paths have already answered.
+  validate :source_must_hold_it, on: :reallocation
+
   scope :for_entry, ->(entry) { where(source_entry: entry) }
 
   # The two kinds a distribution writes, and the only two it may delete when it replaces
@@ -77,6 +95,26 @@ class PoolMovement < ApplicationRecord
 
     errors.add(:to_pool, "must be in the same account — moving money between accounts isn't supported yet") if
       crosses_accounts?
+  end
+
+  # A FRESH calculator, deliberately: the question is what the source holds at the instant before
+  # this row is inserted, which is the whole point of re-checking here rather than trusting what a
+  # screen measured. PoolCalculator memoises, so anything held from the render would answer about
+  # the balance that made the row look affordable in the first place.
+  #
+  # `balance`, not `free_amount`: what a rule has CLAIMED is a warning the screen states, not a
+  # refusal (spec §4.2 — robbing one envelope to save another is the workflow). What the envelope
+  # does not HOLD is the refusal.
+  def source_must_hold_it
+    return if from_pool.blank? || amount.blank?
+
+    held = from_pool.calculator.balance
+    return if amount <= held
+
+    errors.add(
+      :amount,
+      "is more than #{from_pool.name} holds — it has #{ActiveSupport::NumberHelper.number_to_currency(held)}"
+    )
   end
 
   # Two pools that name no user at all compare `nil == nil` and read as sharing an owner,

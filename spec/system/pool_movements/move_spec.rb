@@ -2,169 +2,19 @@
 
 require "rails_helper"
 
-# Task 7: moving money between two envelopes when life happens — one movement, from, to, amount,
-# inside one account.
+# Task 7, THE WRITE: moving money between two envelopes when life happens — one movement, from, to,
+# amount, inside one account.
 #
 # THE INVARIANT IS `Σ pools == your bank balance`, and a reallocation cannot change it: the money
-# stays in the account, so the bank holds exactly what it held. Every total below is pinned
-# against the LITERAL deposit the fixture planted ($3,000) rather than against a sum of the app's
-# own parts — `Pool#total` IS that sum, so summing the parts against it is `x == x` and passes
-# after any write whatsoever.
+# stays in the account, so the bank holds exactly what it held. Every total below is pinned against
+# the LITERAL $3,000 deposit the fixture planted rather than against a sum of the app's own parts —
+# `Pool#total` IS that sum, so summing the parts against it is `x == x` and passes after any write
+# whatsoever.
 #
 # `Capybara.exact` is unset, so `have_content("$300.00")` also matches "$1,300.00" and matches the
-# sidebar. Every figure below is scoped to the row that owns it.
-#
-# The fixture, all figures exact, and every envelope but Coffee funded today so nothing sweeps:
-#
-#   Checking buffer   $810   no rules                        free $810
-#   Dentist             $0   $300 due in 3 days, unreachable free   $0   won't make it
-#   Car             $1,000   $800 Maintenance due in 56 days free $200   on track
-#   Insurance         $400   $400 Premium due in 3 days      free   $0   on track
-#   Gas                $40   $150 a period rate rule         free   $0
-#   Rent              $100   $2,000 Rent Bill due in 40 days free   $0
-#   Cushion           $500   savings goal, no rules          free $500
-#   Coffee            $150   $100 a period, funded a fortnight ago — its period has CLOSED
-#   Ally / Holiday      $0   a second account entirely
+# sidebar. Every figure below is scoped to the row or the sentence that owns it.
 RSpec.describe "Pool Movements Move", type: :system do
-  let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let(:dentist) { pool("Dentist") }
-  let(:car) { pool("Car") }
-
-  before do
-    sign_in user, scope: :user
-    deposit(3_000)
-    dated_rule(envelope("Dentist", priority: 1), "Dental Work", 300, due_in: 3)
-    dated_rule(envelope("Car", priority: 2, funded: 1_000), "Maintenance", 800, due_in: 56)
-    dated_rule(envelope("Insurance", priority: 3, funded: 400), "Premium", 400, due_in: 3)
-    rate_rule(envelope("Gas", priority: 4, funded: 40), 150)
-    dated_rule(envelope("Rent", priority: 5, funded: 100), "Rent Bill", 2_000, due_in: 40)
-    savings("Cushion", funded: 500)
-    closed_envelope("Coffee", rate: 100, funded: 150)
-    other_account
-  end
-
-  # THE STATE BEFORE ANY AMOUNT IS TYPED. Without it every assertion below would also pass on a
-  # screen that had already moved the money, or that had quietly dropped half its rows.
-  describe "the screen, before an amount is entered", :aggregate_failures do
-    before { visit new_pool_movement_path(to_pool_id: dentist.id) }
-
-    # SAME-ACCOUNT ONLY (spec §5), asserted in both directions on one screen: Checking's own
-    # envelopes are offered, and an envelope in a second account is not — which is not the same as
-    # a screen that simply failed to render its list.
-    it "offers this account's pools and no others" do
-      expect(page).to have_css("[data-source='Car']")
-      expect(page).to have_css("[data-source='Checking']")
-      expect(page).to have_css("[data-source='Cushion']")
-      expect(page).to have_no_css("[data-source='Holiday']")
-      expect(page).to have_no_css("[data-source='Dentist']")
-    end
-
-    # Nothing to state yet, and both halves matter: the sources are on screen, so the absence of
-    # the two sentences is a decision rather than an empty page.
-    it "states no damage and no gain until there is a move to describe" do
-      expect(page).to have_no_css("#reallocation-gain")
-      expect(page).to have_no_css("[data-damage]")
-      expect(page).to have_css("[data-source]", minimum: 5)
-    end
-  end
-
-  describe "the damage statement", :aggregate_failures do
-    before { visit new_pool_movement_path(to_pool_id: dentist.id, amount: 300) }
-
-    # SPEC §5'S OWN LINE, rebuilt: `Car $1,340 → $1,122 — Maintenance slips to $494/$800`. The
-    # per-period figure is a real recomputation of PoolCalculator#required — $100 of shortfall
-    # over the 5 period boundaries between today and the due date — and NOT $300 divided by
-    # anything, which is what makes $20.00 rather than $60.00 the right answer.
-    it "names the rule that slips and what the envelope will ask for" do
-      within("[data-damage='Car']") do
-        expect(page).to have_content("$1,000.00 → $700.00")
-        expect(page).to have_content("its Maintenance rule slips to $700.00 of $800.00")
-        expect(page).to have_content("asks $20.00 a period instead of $0.00")
-      end
-    end
-
-    # THE OPPOSITE DIRECTION, on the same screen. A savings goal with no rules holds nothing back,
-    # so the move takes only free money: nothing slips and nothing asks for more, and the line
-    # says so by not saying it (spec §5: state the consequence only when there is one).
-    it "says nothing about a rule or a period when neither moves" do
-      within("[data-damage='Cushion']") do
-        expect(page).to have_content("$500.00 → $200.00")
-        expect(page).to have_no_content("slips to")
-        expect(page).to have_no_content("a period instead of")
-      end
-    end
-
-    # The red case, in the state the app already has for it rather than a new one. Taking $300 of
-    # Insurance's $400 leaves $300 owed on a bill with no period boundary left before it is due.
-    it "says when the move leaves the source unable to make its date" do
-      within("[data-damage='Insurance']") do
-        expect(page).to have_content("its Premium rule slips to $100.00 of $400.00")
-        expect(page).to have_content("becomes won't make it")
-      end
-      expect(page).to have_css("[data-damage='Insurance'].text-status-danger")
-      expect(page).to have_css("[data-damage='Cushion'].text-gray-500")
-    end
-
-    # WHY `net_of_sweep:` IS ON BOTH RECOMPUTATIONS. Coffee's rate period closed a fortnight ago,
-    # so the next distribution takes its whole leftover back and tops the envelope up to its full
-    # rate either way — taking $100 out of it costs NOTHING per period. Read through a plain
-    # calculator the row would say "asks $50.00 a period instead of $0.00", a cost the very next
-    # distribution erases. The rule's allocation still slips, and that is true and worth saying.
-    it "says nothing about a period when the leftover was going to be swept anyway" do
-      visit new_pool_movement_path(to_pool_id: dentist.id, amount: 100)
-
-      within("[data-source='Coffee']") { expect(page).to have_content("$150.00 left · last period") }
-      within("[data-damage='Coffee']") do
-        expect(page).to have_content("$150.00 → $50.00")
-        expect(page).to have_content("its Per period rule slips to $50.00 of $100.00")
-        expect(page).to have_no_content("a period instead of")
-      end
-    end
-
-    # WHAT THE COST BUYS, and the destination's own row vocabulary on both sides of the move.
-    it "states what the destination gains" do
-      within("#reallocation-gain") do
-        expect(page).to have_content("Dentist $0.00 → $300.00")
-        expect(page).to have_content("won't make it")
-        expect(page).to have_content("becomes $300.00 · on track")
-      end
-    end
-  end
-
-  # "SHOWN BUT DISABLED, WITH THE REASON" (amendment D). Both directions on one screen, and the
-  # enabled half is what makes the disabled half mean something: a row that had simply vanished
-  # would satisfy every negative assertion here.
-  describe "a source that cannot make the move", :aggregate_failures do
-    before { visit new_pool_movement_path(to_pool_id: dentist.id, amount: 300) }
-
-    it "disables it and says how little is in it" do
-      expect(page).to have_css("[data-source='Gas'] input[type=radio][disabled]")
-      within("[data-source-reason='Gas']") do
-        expect(page).to have_content("Can't make this move — only $40.00 in it")
-      end
-    end
-
-    # The other reason, which is a different sentence because it sends the user somewhere else:
-    # the envelope is thin because a dated bill is already holding what is in it.
-    it "names the bill that is holding the money" do
-      within("[data-source-reason='Rent']") do
-        expect(page).to have_content("only $100.00 in it")
-        expect(page).to have_content("its Rent Bill rule is due")
-        expect(page).to have_content("is holding $100.00")
-      end
-    end
-
-    # The paired positive: a source that CAN make the move is enabled, states what it holds and
-    # what of that is free, and carries no refusal.
-    it "leaves an affordable source enabled and says what it holds" do
-      expect(page).to have_css("[data-source='Car'] input[type=radio]:not([disabled])")
-      within("[data-source-reason='Car']") do
-        expect(page).to have_content("$1,000.00 in it · $200.00 of it free")
-        expect(page).to have_no_content("Can't make this move")
-      end
-    end
-  end
+  include_context "with a Checking account to reallocate in"
 
   describe "moving the money", :aggregate_failures do
     before do
@@ -197,20 +47,41 @@ RSpec.describe "Pool Movements Move", type: :system do
       expect(bank_balance).to eq(3_000)
     end
 
-    # THE PREVIEW WAS TRUE. The left side was computed before the write through
-    # PoolCalculator's `pending:`; the right side is read out of the database afterwards. Two
-    # independent routes to the same figures, which is the whole point of building the damage
-    # statement out of the same readers the ledger will produce.
+    # THE PREVIEW WAS TRUE. The left side was computed before the write through PoolCalculator's
+    # `pending:`; the right side is read out of the database afterwards. Two independent routes to
+    # the same figures, which is the whole point of building the damage statement out of the same
+    # readers the ledger will produce.
     it "leaves the envelopes exactly where the screen said it would" do
       expect(balance_of("Car")).to eq(700)
       within("[data-pool-name='Car']") { expect(page).to have_content("$700.00") }
       within("[data-pool-name='Dentist']") { expect(page).to have_content("$300.00") }
     end
+
+    # AMENDMENT G, ASSERTED BY TYPE. Money is BigDecimal from a `money` column and `eq(300)` passes
+    # for the Integer just as happily, so no figure above can tell the two apart.
+    #
+    # The post-write side is the WEAKER half and is named as such: every pool here now has a
+    # movement whose amount comes back from Postgres as a BigDecimal, so these read as BigDecimal
+    # almost by construction. `bank_balance` is the one that earns its place — `Pool#total` runs a
+    # second, Ruby-side sum over the account's children, which is its own chance to leak. The
+    # genuinely empty shape is asserted on Dentist in new/sources_spec.rb, before money reaches it.
+    #
+    # The screen assertion anchors the ledger reading to the page it is about, and it is also what
+    # keeps this body from touching Capybara not at all — the shape that wedged the driver in
+    # new/sources_spec.rb (see spec/support/reallocation_context.rb). Safe here only by accident:
+    # this describe's `before` ends in an `await`, which settles the page where a bare `visit` does
+    # not.
+    it "reports money as BigDecimal rather than Integer" do
+      expect(page).to have_css("h1", text: "Home")
+      expect(balance_of("Car")).to be_a(BigDecimal)
+      expect(bank_balance).to be_a(BigDecimal)
+      expect(PoolMovement.where(from_pool: car, to_pool: dentist).sole.amount).to be_a(BigDecimal)
+    end
   end
 
-  # AMENDMENT A, IN BOTH DIRECTIONS. A redistribution replaces the period's own rows and must
-  # leave a hand-made move alone: a user who moves $50 between envelopes and then redistributes
-  # still has their $50 move.
+  # AMENDMENT A, IN BOTH DIRECTIONS. A redistribution replaces the period's own rows and must leave
+  # a hand-made move alone: a user who moves $50 between envelopes and then redistributes still has
+  # their $50 move.
   #
   # THE MOVE HAS TO TOUCH THE ACCOUNT or this example proves nothing, and that was measured rather
   # than reasoned: AllocationCommitter#previous_distribution matches on `from_pool: account OR
@@ -246,32 +117,65 @@ RSpec.describe "Pool Movements Move", type: :system do
     end
   end
 
-  # NOTHING IS WRITTEN AND THE SCREEN SAYS WHY. Three refusals, each reaching the server by a
+  # NOTHING IS WRITTEN AND THE SCREEN SAYS WHY. Four refusals, each reaching the server by a
   # different route, and each paired against the move that does succeed above.
+  #
+  # THE PAGE ASSERTION COMES FIRST IN EVERY ONE OF THEM, and that ordering is the whole of their
+  # reliability. `click_on` returns as soon as the click is dispatched, so reading the database
+  # straight after it — which `expect { click }.not_to change(PoolMovement, :count)` does — can
+  # measure the ledger before the request has landed and pass on a move that was about to be
+  # written. A Capybara predicate blocks until the response is on screen; only then is the ledger
+  # a settled thing to read.
   describe "refusals", :aggregate_failures do
     it "refuses a blank amount and writes nothing" do
       visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id)
-      expect { click_on "Move the money" }.not_to(change(PoolMovement, :count))
+      click_on "Move the money"
+
       expect(page).to have_css("#reallocation-errors", text: "Nothing moved")
       expect(page).to have_content("Amount can't be blank")
+      expect(PoolMovement.where(to_pool: dentist)).not_to exist
     end
 
     # The browser's own refusal of a zero, before anything is submitted: a zero move is not an
-    # event (amendment E) and the box says so rather than the server having to.
+    # event (amendment E) and the box says so rather than the server having to. `have_current_path`
+    # is the synchronising half here — there is no response to wait for, so what has to be shown is
+    # that no request was made at all.
     it "refuses a zero amount in the box" do
       visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id)
       fill_in "How much", with: "0"
-      expect { click_on "Move the money" }.not_to(change(PoolMovement, :count))
+      click_on "Move the money"
+
       expect(page).to have_css("input#move-amount:invalid")
+      expect(page).to have_current_path(%r{/pool_movements/new})
+      expect(PoolMovement.where(to_pool: dentist)).not_to exist
     end
 
     # SPEC §5 AT THE WRITE. The source list never offers Holiday, so this reaches `create` the only
     # way it can — a hand-edited field — and is refused by PoolMovement's own #crosses_accounts?.
     it "refuses a source in another account" do
       visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id, amount: 300)
-      expect { submit_with_source(pool("Holiday")) }.not_to(change(PoolMovement, :count))
+      submit_with_source(pool("Holiday"))
+
       expect(page).to have_content("must be in the same account")
+      expect(PoolMovement.where(to_pool: dentist)).not_to exist
       expect(balance_of("Dentist")).to eq(0)
+    end
+
+    # THE AFFORDABILITY FLOOR AT THE WRITE, which until this round lived only in the view. A
+    # disabled radio is a rendering: a tab opened while Gas held more, or a hand-edited
+    # `from_pool_id`, would have written the move and left Gas overdrawn by $260 — measured, by
+    # deleting the validation and watching the flash read "Gas -$260.00". Both directions in one
+    # session: the same screen, the same amount, one source refused and one taken.
+    it "refuses a source that does not hold the amount, and takes one that does" do
+      visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id, amount: 300)
+      submit_with_source(pool("Gas"))
+      expect(page).to have_content("Amount is more than Gas holds — it has $40.00")
+      expect(balance_of("Gas")).to eq(40)
+
+      find_by_id("from-#{car.id}").click
+      click_on "Move the money"
+      expect(page).to have_content("Moved $300.00 from Car to Dentist")
+      expect(balance_of("Car")).to eq(700)
     end
   end
 
@@ -288,175 +192,15 @@ RSpec.describe "Pool Movements Move", type: :system do
       expect(page).to have_content("Where it comes from")
     end
 
+    # Page first, ledger second — see the refusals block for why every one of these is ordered
+    # that way.
     it "does not move money out of one" do
       visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id, amount: 300)
-      expect { submit_with_source(stranger_pool) }.not_to(change(PoolMovement, :count))
+      submit_with_source(stranger_pool)
+
       expect(page).to have_content("We couldn't find that envelope")
+      expect(PoolMovement.where(to_pool: dentist)).not_to exist
       expect(balance_of("Dentist")).to eq(0)
     end
-  end
-
-  describe "the form itself", :aggregate_failures do
-    # THE LINK SHAPE TASK 8 WILL USE, arriving with both ends and the amount already chosen: the
-    # boxes come back holding them and the move is one click away.
-    it "arrives prefilled from a link" do
-      visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id, amount: 300)
-      expect(page).to have_select("Envelope", selected: "Dentist")
-      expect(page).to have_field("How much", with: "300.00")
-      expect(find_by_id("from-#{car.id}")).to be_checked
-    end
-
-    # MEASURED IN A BROWSER, NOT REASONED ABOUT. `shared/_date_selector` — the month scrubber in
-    # the sidebar chrome — re-emits every scalar query parameter as a hidden field in each of its
-    # two forms, so a field whose id is the bare param name shares that id with two hidden inputs.
-    # `label for=` and `getElementById` both reach the hidden one first: before the fix,
-    # `document.getElementById("amount")` on this page returned a hidden input carrying "300"
-    # rather than the box the user types in. Every example above passed either way, because
-    # Capybara filters invisible elements and landed on the right one by luck.
-    it "does not share a DOM id with the page chrome" do
-      visit new_pool_movement_path(to_pool_id: dentist.id, amount: 300)
-
-      expect(duplicate_dom_ids).to include("amount", "to_pool_id")
-      expect(duplicate_dom_ids).not_to include("move-amount", "move-to-pool")
-      expect(page).to have_css("input#move-amount[type=number]", count: 1)
-      expect(page).to have_field("How much", with: "300.00")
-    end
-
-    it "recomputes when the destination and amount are typed in" do
-      visit new_pool_movement_path
-      select "Dentist", from: "Envelope"
-      fill_in "How much", with: "300"
-      click_on "Update figures"
-      within("[data-damage='Car']") { expect(page).to have_content("$1,000.00 → $700.00") }
-    end
-
-    # HTML'S IMPLICIT SUBMISSION. Enter in a number field activates the FIRST submit button in
-    # tree order — so with the move button first, the most natural keystroke there is in a numeric
-    # box would move the money on a screen whose entire purpose is stating the cost first. The
-    # distribution screen shipped exactly that defect and it wrote a $2,900 split on a keypress.
-    # Both halves on one keystroke: nothing was written, and the recompute that should have
-    # happened did.
-    it "recomputes rather than moving money when Enter is pressed in the amount box" do
-      visit new_pool_movement_path(to_pool_id: dentist.id, from_pool_id: car.id)
-      fill_in "How much", with: "300"
-      find_field("How much").send_keys(:enter)
-
-      expect(page).to have_css("[data-damage='Car']")
-      expect(PoolMovement.where(from_pool: car, to_pool: dentist)).not_to exist
-      expect(balance_of("Dentist")).to eq(0)
-    end
-  end
-
-  private
-
-  # A SYNCHRONISATION POINT, NOT AN EXPECTATION: a hook doing two round trips has to wait for the
-  # first to land, and Capybara's predicates are what block until it does.
-  def await(content)
-    return if page.has_content?(content)
-
-    raise "expected the page to show #{content.inspect} before the next step"
-  end
-
-  # The one route a cross-account or foreign source can reach `create` by, since the screen never
-  # renders a radio for either: the real form, with one field's value hand-edited. Clicked first,
-  # because changing a radio's value does not check it.
-  def submit_with_source(target)
-    find_by_id("from-#{car.id}").click
-    page.execute_script("document.getElementById('from-#{car.id}').value = '#{target.id}'")
-    click_on "Move the money"
-  end
-
-  # Task 6's write path, called directly: this file is about what a reallocation does to a
-  # distribution, not about the distribution screen, which has its own spec.
-  def distribute
-    proposal = AllocationCalculator.new(user: user, account: checking, today: Date.current)
-    AllocationCommitter.new(proposal).call
-  end
-
-  # Every id that appears more than once in the rendered document, sidebar chrome included.
-  def duplicate_dom_ids
-    page.evaluate_script(<<~JS)
-      (() => {
-        const seen = new Set(), duplicated = new Set();
-        document.querySelectorAll("[id]").forEach((element) => {
-          if (seen.has(element.id)) { duplicated.add(element.id); }
-          seen.add(element.id);
-        });
-        return Array.from(duplicated);
-      })()
-    JS
-  end
-
-  def pool(name) = user.pools.find_by!(name: name)
-
-  def balance_of(name) = Pool.find(pool(name).id).calculator.balance
-
-  # WHAT THE BANK WOULD SAY: the account's own cash plus every pool inside it, compared against
-  # the literal deposit the fixture planted and never against a sum of its own parts.
-  def bank_balance = Pool.find(checking.id).total
-
-  def envelope(name, priority:, funded: 0)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    fund(pool, funded)
-    pool
-  end
-
-  def savings(name, funded:)
-    pool = create(
-      :pool,
-      :savings_pool,
-      user: user,
-      account: checking,
-      name: name,
-      target_amount: 5_000,
-      priority: 6
-    )
-    fund(pool, funded)
-    pool
-  end
-
-  def fund(pool, amount)
-    return if amount.zero?
-
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: Date.current)
-  end
-
-  # A one-time dated rule with a payable item, so BudgetCalculator has a real fulfilment signal
-  # and `interval_months: nil` keeps :behind out of the picture — a cycle it has no interval to
-  # spread over cannot put the pool behind schedule, which keeps every figure here exact.
-  def dated_rule(pool, item_name, amount, due_in:)
-    category = create(:category, :expense, user: user, pool: pool)
-    create(
-      :pool_budget,
-      pool: pool,
-      item: create(:item, category: category, name: item_name),
-      amount: amount,
-      interval_months: nil,
-      anchor_date: Date.current + due_in
-    )
-  end
-
-  def rate_rule(pool, amount)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
-  end
-
-  # An envelope funded a fortnight ago — one biweekly boundary back — so its rate period has closed
-  # and PoolCalculator#period_closed? is true. The whole of its leftover is what the next
-  # distribution sweeps back, which is the shape `net_of_sweep:` exists for.
-  def closed_envelope(name, rate:, funded:)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: 7)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14)
-    pool
-  end
-
-  def other_account
-    ally = create(:pool, :account, user: user, name: "Ally")
-    create(:pool, :budget_pool, user: user, account: ally, name: "Holiday", priority: 1)
-  end
-
-  def deposit(amount)
-    category = create(:category, :income, user: user, pool: checking)
-    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 end

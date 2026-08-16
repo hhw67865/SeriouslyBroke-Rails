@@ -97,5 +97,27 @@ RSpec.describe "Navbar", type: :system do
       # Should show current month again for new session
       expect(page).to have_content(current_date.strftime("%B %Y")).or have_content(current_date.strftime("%b %Y"))
     end
+
+    # INVALID HTML, AND A SILENT TRAP FOR EVERY OTHER SCREEN. This partial renders FOUR forms on
+    # every page — two here, twice over, because _sidebar renders both the `sidebar` and the
+    # `mobile` variant — and each one emits a hidden field per preserved query parameter plus
+    # `month` and `year`. Written with ids, `month`, `year` and every scalar param appeared four
+    # times over as ids on every page in the app.
+    #
+    # `label for=` and `document.getElementById` both resolve to the FIRST match in a document, so
+    # any screen naming a form field after its own query parameter got one of these hidden inputs
+    # rather than the box the user types in. Measured on the reallocation screen:
+    # `getElementById("amount")` returned `<input type="hidden" name="amount" value="300">`.
+    #
+    # Both directions, because dropping the ids must not drop the FIELDS: the parameter is still
+    # carried across a month arrow, which is the whole reason these hidden inputs exist.
+    it "carries query parameters across a month change without duplicating a DOM id" do
+      visit categories_path(q: "Rent", field: "name")
+
+      expect(duplicate_dom_ids).to be_empty
+      expect(page).to have_css("form input[type=hidden][name=q]", visible: :all)
+      find("button[title='Next month']").click
+      expect(page).to have_current_path(/q=Rent/)
+    end
   end
 end
