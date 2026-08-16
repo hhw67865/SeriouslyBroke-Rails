@@ -207,7 +207,25 @@ class AllocationCalculator
   end
 
   # The plain calculator: what this pool holds RIGHT NOW. The sweep is read from here.
-  def calculator_for(pool) = (@calculators ||= {})[pool.id] ||= pool.calculator(today: today)
+  def calculator_for(pool)
+    (@calculators ||= {})[pool.id] ||= pool.calculator(today: today, terms: ledger.terms_for(pool))
+  end
+
+  # ONE LEDGER FOR THE WHOLE PROPOSAL — the envelopes and the account they are funded from,
+  # which is every pool this class reads a balance of.
+  #
+  # LAZY, AND THAT IS THE LOAD-BEARING WORD RATHER THAN A HABIT. AllocationCommitter DELETES this
+  # period's distributed rows and only then builds the proposal it writes; a ledger built at
+  # construction time would be safe there only by luck, but a ledger built when the first balance
+  # is read is safe by the same rule the rest of this class already lives by — everything here is
+  # memoised at first read and the whole object is a snapshot from that moment on. Built eagerly
+  # and reused across a write, the re-derivation would read the PRE-deletion world and the
+  # replacement would silently write nothing at all. The committer's own re-run examples are what
+  # hold this: see "does not undo the split when the proposal was rendered after it".
+  #
+  # `envelopes` is read here rather than `account.child_pools` again, so the ledger and the fill
+  # cannot be built over different sets.
+  def ledger = @ledger ||= PoolBalanceLedger.new(envelopes + [account])
 
   # The post-sweep calculator: what this pool would need if its sweep had already happened.
   # The ask is read from here, and from here only.
@@ -223,10 +241,20 @@ class AllocationCalculator
   # sweep subtracts `0.to_d` and this is provably the same object's answer as the plain
   # calculator's — so a conditional would buy a handful of queries at the price of a second
   # path through the money.
+  #
+  # THE SAME `terms:` AS THE PLAIN CALCULATOR, and this is where most of the batching is actually
+  # won. A `net_of_sweep` calculator builds a plain twin of itself inside its own balance (see
+  # PoolCalculator#sweep_adjustment), so this one object is TWO sets of five aggregates — and
+  # PoolCalculator threads the terms into the twin for exactly that reason. Both read the same
+  # pool over the same unwritten ledger, so there is one right set of figures for all three
+  # objects to share.
   def ask_calculator_for(pool)
-    (@ask_calculators ||= {})[pool.id] ||= pool.calculator(today: today, net_of_sweep: true)
+    (@ask_calculators ||= {})[pool.id] ||=
+      pool.calculator(today: today, net_of_sweep: true, terms: ledger.terms_for(pool))
   end
 
   # The account is not one of its own envelopes, so it gets its own memo rather than a row.
-  def account_calculator = @account_calculator ||= account.calculator(today: today)
+  def account_calculator
+    @account_calculator ||= account.calculator(today: today, terms: ledger.terms_for(account))
+  end
 end

@@ -16,10 +16,22 @@ class PoolStatus
   # pool be doing if the distribution on screen went through" means. :wont_make_it in particular
   # is exactly that question: a rule with a shortfall and no boundary left before its due date,
   # where the shortfall is what the funding did or did not close.
-  def initialize(pool, today: Date.current, pending: PoolCalculator::Pending.none)
+  # `terms:` is PoolCalculator's, passed straight down and never read here either — a status is a
+  # reading of a balance, and this only changes who ran the five queries that balance is made of.
+  # It defaults to nothing, so a status built anywhere else is untouched.
+  #
+  # IT IS HERE BECAUSE THE MEASUREMENT PUT IT HERE, and that is a correction to Task 1's brief
+  # rather than something it asked for. With the four named callers batched, Home still ran 264
+  # queries against 440, and 124 of those were unbatched balance aggregates: one PoolStatus per
+  # pool per screen, each building a calculator of its own. Home renders a status for every pool
+  # the user has, the distribution screen for every envelope in the account, and the reallocation
+  # screen for every source AND a projected one per affordable row. Leaving this class out would
+  # have batched the cheaper half of all three screens.
+  def initialize(pool, today: Date.current, pending: PoolCalculator::Pending.none, terms: nil)
     @pool = pool
     @today = today
     @pending = pending
+    @terms = terms
   end
 
   def state
@@ -126,7 +138,7 @@ class PoolStatus
   # figure that does not exist. Changing either side does not automatically change the other.
   def saving? = pool.pool_type_savings? && anchored_budgets.empty?
 
-  def pool_calculator = @pool_calculator ||= pool.calculator(today: today, pending: @pending)
+  def pool_calculator = @pool_calculator ||= pool.calculator(today: today, pending: @pending, terms: @terms)
 
   # Memoized per rule. BudgetCalculator#due_date re-runs the paid_since_anchor SUM every
   # time it is asked, and a single #state + #due_on asks several times per rule — six

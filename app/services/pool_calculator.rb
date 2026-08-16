@@ -75,12 +75,40 @@ class PoolCalculator
   #
   # Default `Pending.none`, so every existing caller is untouched and this cannot change a
   # number on any screen that does not ask for it.
-  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false, pending: Pending.none)
+  # `terms:` IS THE SAME FIVE AGGREGATES, ALREADY RUN — a `{income:, savings:, expense:,
+  # movements_in:, movements_out:}` hash from PoolBalanceLedger, which computes them for a whole
+  # set of pools in five grouped queries instead of five per calculator. When it is present the
+  # five `*_total` readers return the injected figures and NO aggregate runs here; when it is
+  # absent this class queries exactly as it always has.
+  #
+  # It is a COST keyword and not a money one, which is the whole of why it is safe: the ledger
+  # reproduces #income_entries_total's scoping and the other four's line for line, including the
+  # entries-for-pool predicate and the `as_of` bound, so an injected calculator and a plain one
+  # over the same pool are the same numbers. That is asserted in both directions — the default
+  # pinned equal to today's figures, and a deliberately wrong term pinned as visibly MOVING the
+  # balance, because a keyword that is inert when set is worth nothing.
+  #
+  # `nil` rather than an empty hash for "not batched": an empty hash is a ledger that answered
+  # for a pool it does not know, and that must not read as "run your own queries" — it reads as
+  # a KeyError instead (see #term).
+  #
+  # SAME `as_of` OR NOTHING. The ledger bounds its terms by `as_of` itself, so a caller handing
+  # terms from one moment to a calculator asking about another gets a balance from neither. One
+  # ledger per `as_of`; PoolBalanceLedger carries its own for exactly this reason.
+  # rubocop:disable Metrics/ParameterLists -- the fifth keyword, and the disable is stated rather
+  # than the limit raised for the whole app: Plan 2b's review already named this signature as a
+  # class that has stopped being one idea (four orthogonal axes, now five), and a global Max of 6
+  # would spread that permission to every other method instead of marking it here. `terms:` is
+  # also the one axis that is not a QUESTION about the pool — as_of, today, net_of_sweep and
+  # pending each change what is being asked, while this only changes who ran the query.
+  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false, pending: Pending.none, terms: nil)
+    # rubocop:enable Metrics/ParameterLists
     @pool = pool
     @as_of = as_of
     @today = today
     @net_of_sweep = net_of_sweep
     @pending = pending
+    @terms = terms
   end
 
   # Deliberately start-date-agnostic. The balance this replaces filtered entries to
@@ -377,10 +405,20 @@ class PoolCalculator
   # new one: on a rate envelope funded $400 the twin would sweep $85 (last period's leftover)
   # instead of $400, and the projection would report the envelope already funded and asking for
   # nothing.
+  #
+  # `terms:` IS PASSED THROUGH FOR THE SAME REASON, and it is the difference between batching
+  # this class and not batching it. The twin reads the SAME pool over the SAME ledger world — it
+  # differs from `self` in nothing but the flag it drops — so injecting the figures already in
+  # hand is not an optimisation of a different question, it is the same question asked twice.
+  # Dropped here, every `net_of_sweep` calculator quietly runs its own five aggregates inside its
+  # own balance, and those calculators are the majority on every screen this task measures: the
+  # ask on Home, the ask in the fill, both asks behind a reallocation's damage. It would have
+  # undone most of the saving while every figure still agreed, which is the shape a measurement
+  # catches and a test does not.
   def sweep_adjustment
     return 0.to_d unless @net_of_sweep
 
-    self.class.new(pool, as_of: @as_of, today: today, pending: @pending).sweepable_amount
+    self.class.new(pool, as_of: @as_of, today: today, pending: @pending, terms: @terms).sweepable_amount
   end
 
   # The body of #period_closed?, split out only so the memo above it stays one line of
@@ -475,22 +513,36 @@ class PoolCalculator
     end
   end
 
+  # THE FIVE AGGREGATES, EACH BEHIND THE SAME GATE. `term` returns the injected figure when this
+  # calculator was handed a ledger's terms and otherwise runs the block, so the query and the
+  # batched answer sit in one place per term and cannot describe different scopes.
+  #
+  # `fetch` without a default, deliberately: a terms hash missing a key is a ledger that does not
+  # compute what this class needs, and the loud KeyError is the only honest answer. A `0.to_d`
+  # default here would report an envelope holding nothing — a wrong number, silently, on the one
+  # path this whole keyword exists to make cheaper.
+  def term(name)
+    return @terms.fetch(name) if @terms
+
+    yield
+  end
+
   # Entry.incomes / .expenses already join item: :category, so do not join again.
   # An entry's own pool_id overrides its category's, so both must be honoured —
   # otherwise Entry#pool is a column nothing reads.
   def income_entries_total
-    scoped(Entry.incomes.merge(entries_for_pool)).sum(:amount)
+    term(:income) { scoped(Entry.incomes.merge(entries_for_pool)).sum(:amount) }
   end
 
   def expense_entries_total
-    scoped(Entry.expenses.merge(entries_for_pool)).sum(:amount)
+    term(:expense) { scoped(Entry.expenses.merge(entries_for_pool)).sum(:amount) }
   end
 
   # TODO(plan-3): delete once §6.1 step 5 converts savings-category entries to movements.
   # Becomes a no-op the moment that migration runs (Entry.savings is then empty), so the
   # removal is mechanical and cannot double-count during the cutover.
   def savings_entries_total
-    scoped(Entry.savings.merge(entries_for_pool)).sum(:amount)
+    term(:savings) { scoped(Entry.savings.merge(entries_for_pool)).sum(:amount) }
   end
 
   # One predicate rather than .or — Entry.incomes already carries the categories
@@ -502,9 +554,9 @@ class PoolCalculator
     )
   end
 
-  def movements_in_total = scoped(pool.movements_in).sum(:amount)
+  def movements_in_total = term(:movements_in) { scoped(pool.movements_in).sum(:amount) }
 
-  def movements_out_total = scoped(pool.movements_out).sum(:amount)
+  def movements_out_total = term(:movements_out) { scoped(pool.movements_out).sum(:amount) }
 
   def scoped(relation)
     @as_of ? relation.where(date: ..@as_of) : relation

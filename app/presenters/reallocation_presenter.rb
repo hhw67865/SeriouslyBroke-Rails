@@ -217,13 +217,18 @@ class ReallocationPresenter
 
   private
 
+  # `terms` is read ONCE into a local and handed to all four readers. The destination's five
+  # aggregates do not depend on which question is being asked of them — before or after, balance
+  # or status — so asking the ledger four times would be four identical hashes and four more
+  # chances for one of the four to be built without them.
   def build_gain(pending)
+    terms = ledger.terms_for(to_pool)
     Gain.new(
       pool: to_pool,
       balance_before: calculator_for(to_pool).balance,
-      balance_after: to_pool.calculator(today: today, pending: pending).balance,
-      status_before: to_pool.status(today: today),
-      status_after: to_pool.status(today: today, pending: pending)
+      balance_after: to_pool.calculator(today: today, pending: pending, terms: terms).balance,
+      status_before: to_pool.status(today: today, terms: terms),
+      status_after: to_pool.status(today: today, pending: pending, terms: terms)
     )
   end
 
@@ -261,7 +266,7 @@ class ReallocationPresenter
       pool: pool,
       pool_balance: calculator.balance,
       free: calculator.free_amount,
-      status: pool.status(today: today),
+      status: pool.status(today: today, terms: ledger.terms_for(pool)),
       # The ` · last period` marker (spec §7.2), and it earns its place on this screen more than
       # on any other: an envelope whose rate period has closed is about to hand its leftover back
       # to the buffer anyway, so a user reaching for it should know they are taking money that was
@@ -282,21 +287,23 @@ class ReallocationPresenter
   # What the move costs this source. Only ever called for a row that can make it and an amount
   # that exists — see #candidate_for, which owns both gates.
   def damage_for(pool)
-    after = pool.calculator(today: today, pending: outgoing)
+    after = pool.calculator(today: today, pending: outgoing, terms: ledger.terms_for(pool))
     Damage.new(
       balance_before: calculator_for(pool).balance,
       balance_after: after.balance,
       ask_before: ask_of(pool, PoolCalculator::Pending.none),
       ask_after: ask_of(pool, outgoing),
       slip: slip_for(pool, after),
-      status_after: pool.status(today: today, pending: outgoing)
+      status_after: pool.status(today: today, pending: outgoing, terms: ledger.terms_for(pool))
     )
   end
 
   # PoolCalculator#required, asked about the same day with the balance this move would leave.
   # `net_of_sweep: true` for the reason on Damage.
   def ask_of(pool, pending)
-    pool.calculator(today: today, net_of_sweep: true, pending: pending).required
+    pool.calculator(
+      today: today, net_of_sweep: true, pending: pending, terms: ledger.terms_for(pool)
+    ).required
   end
 
   # The rule that visibly took the damage: the one whose allocation fell furthest.
@@ -363,5 +370,18 @@ class ReallocationPresenter
   # One calculator per pool, for HomePresenter#calculator_for's reason: #free_amount,
   # #allocated_balances and #balance are all asked of the same pool on one render, and each
   # fresh calculator is five aggregate queries that memoise nothing for the next one.
-  def calculator_for(pool) = (@calculators ||= {})[pool.id] ||= pool.calculator(today: today)
+  def calculator_for(pool)
+    (@calculators ||= {})[pool.id] ||= pool.calculator(today: today, terms: ledger.terms_for(pool))
+  end
+
+  # ONE LEDGER FOR THE SOURCES LIST. #sources builds a Candidate for every pool in the account
+  # and an affordable one costs four calculators over that pool — the plain one, the one holding
+  # the move's `pending`, and the two `net_of_sweep` asks the damage compares, each of which
+  # builds a plain twin of its own inside its balance. That is the widest per-pool fan-out in the
+  # app, and it is why this screen was 269 queries at the end of Plan 2b.
+  #
+  # Over #all_pools rather than over the sources: `to_pool` is deliberately NOT a source (it is
+  # the other end of the move) and #build_gain reads its balance twice, so a ledger scoped to the
+  # offer list would raise on the destination — which is the right failure and the wrong set.
+  def ledger = @ledger ||= PoolBalanceLedger.new(all_pools)
 end

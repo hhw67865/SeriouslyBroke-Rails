@@ -216,7 +216,7 @@ class HomePresenter
   # than this presenter whenever `today` is injected — and disagree silently.
   def status_for(pool)
     @statuses ||= {}
-    @statuses[pool.id] ||= pool.status(today: today)
+    @statuses[pool.id] ||= pool.status(today: today, terms: ledger.terms_for(pool))
   end
 
   # Whether this pool's money belongs to a period that has already ended — what the row marks
@@ -546,7 +546,26 @@ class HomePresenter
   # and each `pool.calculator` is five balance queries plus a per-rule sort — Home would
   # run the whole lot twice for every envelope on the screen, and two calculators over the
   # same pool could in principle disagree. Same reasoning as PoolStatus#pool_calculator.
-  def calculator_for(pool) = (@calculators ||= {})[pool.id] ||= pool.calculator(today: today)
+  #
+  # THE FIVE QUERIES ARE NOW ONE LEDGER'S SHARE OF FIVE. The memo above only ever stopped this
+  # screen building the same calculator twice; it did nothing about the other seventeen pools,
+  # each paying five aggregates of its own. Home is the widest iteration in the app — every pool
+  # the user has, plus every account — so it is the screen the batching was built for.
+  def calculator_for(pool)
+    (@calculators ||= {})[pool.id] ||= pool.calculator(today: today, terms: ledger.terms_for(pool))
+  end
+
+  # ONE LEDGER FOR THE WHOLE SCREEN, over exactly the pools this screen asks about.
+  #
+  # #reachable_pools rather than #all_pools: accounts are pools too and Home reads their balances
+  # for the buffer band, so a ledger scoped to the envelopes alone would leave every account
+  # unbatched — correct, since #terms_for hands back nil for a pool it does not know and the
+  # calculator then runs its own five, but it is the whole buffer band paying full price.
+  #
+  # Lazy, like everything else here. Home writes nothing, so there is no deletion for a snapshot
+  # to fall the wrong side of; the laziness is only so a presenter built and never rendered costs
+  # nothing.
+  def ledger = @ledger ||= PoolBalanceLedger.new(reachable_pools)
 
   # Keyed by the record, not by id: an unsaved rule has no id, and `nil` as a cache key
   # would hand every such rule the first one's calculator.
@@ -567,8 +586,17 @@ class HomePresenter
   # A SECOND MEMO rather than a flag on #calculator_for, because the two calculators answer
   # different questions and the flagged one may not be asked either of the sweep's own questions —
   # #period_closed? and #sweepable_amount raise on it, and this screen asks both.
+  #
+  # `terms:` HERE TOO, and this is the half of Home the brief's caller list did not name — stated
+  # as an extension rather than folded in quietly. Threading only #calculator_for took Home from
+  # 440 queries to 364 on the demo seeds; these calculators are the expensive ones, because a
+  # `net_of_sweep` calculator is TWO sets of five aggregates (it builds a plain twin of itself
+  # inside its own balance, see PoolCalculator#sweep_adjustment) and #total_required asks one of
+  # every pool the user has. Same ledger, same pool, same `as_of` — the terms are identical by
+  # construction, and #calculator_for's own memo already proves the two objects may share them.
   def ask_calculator_for(pool)
-    (@ask_calculators ||= {})[pool.id] ||= pool.calculator(today: today, net_of_sweep: true)
+    (@ask_calculators ||= {})[pool.id] ||=
+      pool.calculator(today: today, net_of_sweep: true, terms: ledger.terms_for(pool))
   end
 
   # `[required, 0.to_d].max`, THE GUARD AllocationCalculator#fill ALREADY HAD AND THIS SCREEN DID

@@ -578,7 +578,7 @@ class DistributionPresenter
       # not "fix" this by projecting the status; the projection already exists, on the row that
       # was edited, as Consequence#standing.
       status: standings.fetch(pool.id),
-      period_closed: pool.calculator(today: today).period_closed?,
+      period_closed: pool.calculator(today: today, terms: ledger.terms_for(pool)).period_closed?,
       # Both sentences are only ever computed for a row the USER typed in. The cascade moves the
       # funding of rows below an override without anybody editing them, and "you're moving $200
       # onto your next period" about a row the waterfall reached on its own names the wrong
@@ -713,7 +713,7 @@ class DistributionPresenter
   # definition of how a pool is doing in this app and this is it; the override case differs only
   # in which balance it is asked about.
   def standing_for(pool, pending: PoolCalculator::Pending.none)
-    status = pool.status(today: today, pending: pending)
+    status = pool.status(today: today, pending: pending, terms: ledger.terms_for(pool))
 
     Standing.new(state: status.state, amount: status.amount, due_on: status.due_on, target: status.target)
   end
@@ -788,8 +788,26 @@ class DistributionPresenter
   # a well-funded rate envelope as asking for nothing and print a consequence on every one of
   # them.
   def projected_ask(pool, pending)
-    pool.calculator(today: next_period_start, net_of_sweep: true, pending: pending).required
+    pool.calculator(
+      today: next_period_start, net_of_sweep: true, pending: pending, terms: ledger.terms_for(pool)
+    ).required
   end
+
+  # ONE LEDGER FOR THE SCREEN'S OWN CALCULATORS — the row's ` · last period` marker and the two
+  # projected asks behind every consequence line, which are four calculators per edited row and a
+  # `net_of_sweep` twin inside each of the two.
+  #
+  # `today:` VARIES ACROSS THESE CALLERS AND `as_of:` DOES NOT, which is the whole reason one
+  # ledger can serve them: the five terms are a reading of the ledger, so they depend on the pool
+  # and on `as_of` alone. `today` chooses which period a RULE is measured in and moves no term
+  # here. #opening_buffer is the one reader on this screen with an `as_of` of its own, and it
+  # stays unbatched over its single pool — a second ledger for one account would be five queries
+  # either way.
+  #
+  # Built lazily and therefore INSIDE #build_snapshot's transaction, after the deletion, like
+  # every other figure on this screen. A ledger built in #initialize would be the one thing here
+  # measured against a world where this period's split still exists.
+  def ledger = @ledger ||= PoolBalanceLedger.new(envelopes)
 
   # The day the next period opens, off User#period_containing rather than a cadence of its own —
   # the same reader the header prints, so the date in the sentence and the date in the subtitle

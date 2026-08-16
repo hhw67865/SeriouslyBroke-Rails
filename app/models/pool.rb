@@ -86,8 +86,20 @@ class Pool < ApplicationRecord
     contribution_entries.or(withdrawal_entries)
   end
 
-  def calculator(as_of: nil, today: Date.current, net_of_sweep: false, pending: PoolCalculator::Pending.none)
-    PoolCalculator.new(self, as_of: as_of, today: today, net_of_sweep: net_of_sweep, pending: pending)
+  # `terms:` threads straight through to the calculator underneath and DEFAULTS TO NOTHING, which
+  # is what keeps this method the unbatched single-pool door it has always been: a model
+  # validation, a controller confirmation sentence and `#total` below all ask about one pool, and
+  # one pool is five queries whether they are grouped or not. Only the callers that ITERATE pools
+  # build a PoolBalanceLedger and pass its terms down here — see HomePresenter#calculator_for.
+  #
+  # A keyword here rather than those callers reaching for `PoolCalculator.new` themselves, so
+  # this stays the one place a calculator is built from a pool. A second construction path is how
+  # a keyword ends up honoured on one screen and forgotten on the next.
+  def calculator(as_of: nil, today: Date.current, net_of_sweep: false, pending: PoolCalculator::Pending.none,
+                 terms: nil)
+    PoolCalculator.new(
+      self, as_of: as_of, today: today, net_of_sweep: net_of_sweep, pending: pending, terms: terms
+    )
   end
 
   # `pending:` threads straight through to the calculator underneath, exactly as it does here:
@@ -95,8 +107,10 @@ class Pool < ApplicationRecord
   # distribution's money is a status of the wrong balance. It is what lets the distribution
   # screen ask "does this envelope still make it if I fund $200 instead of $500" in the app's
   # own vocabulary rather than inventing a second one.
-  def status(today: Date.current, pending: PoolCalculator::Pending.none)
-    PoolStatus.new(self, today: today, pending: pending)
+  # `terms:` threads down the same way and for the same reason, and defaults to nothing here too:
+  # a view or a controller asking one pool how it is doing pays five queries either way.
+  def status(today: Date.current, pending: PoolCalculator::Pending.none, terms: nil)
+    PoolStatus.new(self, today: today, pending: pending, terms: terms)
   end
 
   # What the bank actually says: unallocated cash plus every pool inside it.
