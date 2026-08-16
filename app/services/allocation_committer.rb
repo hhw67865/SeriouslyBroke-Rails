@@ -62,14 +62,46 @@ class AllocationCommitter
     @errors = []
     @lines = []
     @live_proposal = nil
+    @replaced = []
     ActiveRecord::Base.transaction(requires_new: true) do
-      previous_distribution.destroy_all
+      replace_previous_distribution
       @lines = movements
       @lines.each { |movement| record_failure(movement) unless movement.save }
       raise ActiveRecord::Rollback if @errors.any?
     end
     result
   end
+
+  # The period as if its distribution had not happened: this period's `allocation` and `sweep`
+  # rows are DELETED, and only then is a fresh proposal built over what is left. Returns that
+  # proposal; the rows it deleted are in #replaced.
+  #
+  # Public because the distribution SCREEN needs the same answer as the action underneath it.
+  # Once a period has been committed its envelopes are funded, so a proposal computed against
+  # the ledger as it stands asks for nothing — the screen would read "nothing to distribute"
+  # over a button that replaces the whole split. Confirming does exactly what this method
+  # does, so the screen runs it inside a transaction it rolls back and the action runs it for
+  # real. One code path, so the two cannot drift.
+  #
+  # THIS DESTROYS ROWS. A caller that only wants to look must wrap it in
+  # `ActiveRecord::Base.transaction(requires_new: true)` and `raise ActiveRecord::Rollback` —
+  # and `requires_new` is not optional there either: a plain nested `transaction` opens no
+  # savepoint, so the Rollback is swallowed and the deletion COMMITS. That is a screen
+  # silently destroying the user's last split, which is the loudest failure in this plan.
+  #
+  # Not guarded by a `transaction_open?` check, deliberately: under
+  # `use_transactional_fixtures` every example already runs inside one, so the guard would be
+  # green in the tests and untested where it matters. The rule is stated here and both callers
+  # are one file away.
+  def replace_previous_distribution
+    @replaced = previous_distribution.destroy_all
+    live_proposal
+  end
+
+  # What #replace_previous_distribution deleted — the last split for this period, in memory
+  # after its rows are gone. Empty when the period had never been distributed, which is how
+  # the screen knows whether to say it is REPLACING a split rather than writing the first one.
+  def replaced = @replaced ||= []
 
   private
 
@@ -158,11 +190,10 @@ class AllocationCommitter
 
   # A period is a RANGE, and `date` is a datetime column: bounded by dates alone the last day
   # would end at its own midnight and a distribution written later that day would survive its
-  # own replacement.
-  def period
-    range = proposal.user.period_containing(proposal.today)
-    range.first.beginning_of_day..range.last.end_of_day
-  end
+  # own replacement. The widening moved onto User so the distribution screen's income query —
+  # `entries.date` is a datetime too — cannot disagree with this one about where the period
+  # ends.
+  def period = proposal.user.period_datetimes_containing(proposal.today)
 
   # Named by the envelope, which is the line the user recognises: the account is on every
   # line and identifies none of them. "The side that is not the account" reads both

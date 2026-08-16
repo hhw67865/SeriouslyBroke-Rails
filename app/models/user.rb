@@ -88,6 +88,20 @@ class User < ApplicationRecord
     (opened_on || date.beginning_of_month)..(next_boundary ? next_boundary - 1 : date.end_of_month)
   end
 
+  # The same period as a range of TIMESTAMPS, for querying the two columns that are
+  # datetimes rather than dates: `pool_movements.date` and `entries.date`. Bounded by the
+  # dates alone the last day would end at its own midnight, so a movement written at noon on
+  # the closing day falls outside its own period — AllocationCommitter needed that to replace
+  # a split it wrote hours earlier, and DistributionPresenter needs it to count a paycheck
+  # deposited on the same day. One widening, in one place, because the two queries have to
+  # agree about where the period ends or the screen and the write path describe different
+  # periods.
+  def period_datetimes_containing(date)
+    range = period_containing(date)
+
+    range.first.beginning_of_day..range.last.end_of_day
+  end
+
   private
 
   # The anchor is one occurrence of the series, not its start, so the schedule

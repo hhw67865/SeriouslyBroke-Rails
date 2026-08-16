@@ -279,6 +279,21 @@ class PoolCalculator
 
   def withdrawals = movements_out_total + expense_entries_total
 
+  # Income that landed in this pool inside `range` — the distribution screen's "income this
+  # period", and the only part of #balance that screen can name separately.
+  #
+  # Here rather than in the presenter because "which entries belong to this pool" is one
+  # question with one answer (#entries_for_pool: the entry's own pool_id, else its category's),
+  # and a presenter rebuilding that predicate would be a second one — free to disagree with
+  # the balance the same figure is subtracted from. Through #scoped for the same reason every
+  # other entry reader is: an `as_of` calculator must not report income it has not reached yet.
+  #
+  # `.to_d` because an empty `sum(:amount)` is the Integer literal 0, and this is subtracted
+  # from a BigDecimal available to produce the buffer line.
+  def income_within(range)
+    scoped(Entry.incomes.merge(entries_for_pool)).where(date: range).sum(:amount).to_d
+  end
+
   private
 
   # The two readers that answer "what does the next distribution take back", refusing the one

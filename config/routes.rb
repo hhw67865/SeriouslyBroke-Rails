@@ -37,6 +37,10 @@ Rails.application.routes.draw do
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
+  # `new` proposes the split; `create` confirms it and is Task 6's — the action does not exist
+  # yet, and nothing on the screen posts to it, so the route is inert until then.
+  resources :distributions, only: [:new, :create]
+
   resource :account, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode

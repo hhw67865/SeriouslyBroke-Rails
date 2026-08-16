@@ -1,0 +1,60 @@
+<%# The full waterfall. Local: `presenter` (DistributionPresenter). See the UI design spec §5.
+
+    Rendered only when something is short, and then in full with no collapse — the density is
+    the data's decision, not a setting's.
+
+    The cutoff marks where the cash ran out, which is AFTER the last envelope that received any
+    of it: a pool funded $355 of $400 did get money. So the line goes before the first envelope
+    that got nothing, or at the end when the money ran out inside the last row. Same rule and
+    the same reasoning as Home's waterfall; there is no multi-account caveat here, because a
+    distribution is scoped to one account by definition. %>
+<% rows = presenter.lines %>
+<% cutoff = rows.index { |line| line.funded.zero? && line.short? } || rows.length %>
+
+<section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <h3 id="waterfall-heading" class="text-sm font-semibold text-gray-900">Where your money goes</h3>
+    <p class="mt-1 text-sm text-status-danger">
+      <%= number_to_currency(presenter.shortfall) %> of what your envelopes asked for isn't there.
+      Every row is shown, in the order the money reaches them.
+    </p>
+  </div>
+
+  <ol>
+    <% rows.each_with_index do |line, index| %>
+      <%= render "cutoff", presenter: presenter if index == cutoff %>
+      <li class="px-6 py-3 border-b border-gray-100" data-pool-name="<%= line.pool.name %>">
+        <div class="flex items-baseline justify-between gap-4">
+          <span class="text-gray-900">
+            <span class="text-xs text-gray-400"><%= index + 1 %></span>
+            <span class="font-medium"><%= line.pool.name %></span>
+          </span>
+          <span class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
+            <%= distribution_line_amount(line) %>
+          </span>
+        </div>
+        <p class="mt-0.5 text-xs text-gray-500">
+          <%= distribution_line_detail(line) %>
+          <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
+        </p>
+      </li>
+    <% end %>
+    <%# The money ran out INSIDE the last row — every envelope got something, one of them not
+        enough — so there is no row to draw the line above and it belongs at the end. %>
+    <%= render "cutoff", presenter: presenter if cutoff == rows.length %>
+  </ol>
+
+  <%# The buffer line, the waterfall's last row: what is left once every envelope above has
+      taken what it could. Two moments, arrow between them, because the LEVEL matters less than
+      the direction (spec §7.1) — a buffer falling every period is the slow bleed this line
+      exists to catch. Negative is a true statement about an account in trouble and is printed
+      as one rather than floored at zero. %>
+  <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
+    <span class="text-sm font-medium text-gray-900">
+      Stays in buffer<span class="text-gray-500"><%= buffer_target_clause(presenter) %></span>
+    </span>
+    <span class="tabular-nums text-sm <%= presenter.leftover.negative? ? "text-status-danger" : "text-gray-900" %>">
+      <%= number_to_currency(presenter.buffer_carried) %> → <%= number_to_currency(presenter.leftover) %>
+    </span>
+  </div>
+</section>

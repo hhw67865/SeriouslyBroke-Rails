@@ -1,0 +1,23 @@
+<% content_for :title, "Distribute" %>
+
+<%= page_header(title: "Distribute",
+                subtitle: "#{@presenter.account.name} · #{@presenter.period.first.strftime("%b %-d")} – " \
+                          "#{@presenter.period.last.strftime("%b %-d")}") %>
+
+<div class="space-y-6">
+  <%# Only when this period has been distributed before. A banner that fired on every visit
+      would say nothing, and this one has to be believed the one time it matters. %>
+  <% if @presenter.redistribution? %>
+    <%= render "replacement", presenter: @presenter %>
+  <% end %>
+
+  <%= render "sources", presenter: @presenter %>
+
+  <%# THE DENSITY SWITCH, chosen by the data and never by a setting (spec §5). Everything is
+      funded → the card above has said so in one line and there is nothing here to decide.
+      Anything short → the full waterfall, uncollapsed, because a single confirm over a
+      collapsed short distribution lets someone quietly starve the bottom rows. %>
+  <% if @presenter.short? %>
+    <%= render "waterfall", presenter: @presenter %>
+  <% end %>
+</div>

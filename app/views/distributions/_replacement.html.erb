@@ -1,0 +1,14 @@
+<%# This period has already been distributed. Local: `presenter` (DistributionPresenter).
+
+    Confirming REPLACES that split rather than adding to it, and every figure below is already
+    the as-if-undistributed one — so without this line the screen would silently propose
+    handing out money the user has already handed out, and a user who cannot see that their
+    last split is about to be discarded cannot consent to discarding it. %>
+<div class="rounded border border-status-warning bg-status-warning-light px-6 py-4">
+  <p class="text-sm font-semibold text-status-warning">You've already distributed this period</p>
+  <p class="mt-1 text-sm text-gray-700">
+    That split — <%= pluralize(presenter.replaced.size, "movement") %>,
+    <%= number_to_currency(presenter.replaced_total) %> moved — is shown below as if it had never
+    happened, because confirming replaces it rather than adding to it.
+  </p>
+</div>

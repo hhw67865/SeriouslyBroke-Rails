@@ -1,0 +1,65 @@
+<%# The headline and where the money came from. Local: `presenter` (DistributionPresenter).
+    See the UI design spec §5.
+
+    The breakdown is not decoration: "where did this number come from" is the first question a
+    screen proposing to move $2,867 has to answer, and the three lines are the only place the
+    swept money is visible as having come out of an envelope rather than out of thin air. %>
+<div class="bg-white border border-gray-200 rounded p-6">
+  <% if presenter.available.positive? %>
+    <h2 class="text-2xl font-semibold text-gray-900">
+      Distribute <%= number_to_currency(presenter.available) %>
+    </h2>
+  <% else %>
+    <%# #available is deliberately NOT clamped at zero (Task 2): one account has no sibling
+        overdraft to cancel against, so a floor would hide a real negative. "Distribute
+        -$200.00" is not an instruction anyone can follow, so the headline says the true thing
+        instead and the breakdown below still prints the figure. %>
+    <h2 class="text-2xl font-semibold text-status-danger">Nothing to distribute</h2>
+    <p class="mt-1 text-sm text-status-danger">
+      <%= presenter.account.name %> is <%= number_to_currency(-presenter.available) %> in the red,
+      sweeps included — nothing can be funded until money arrives.
+    </p>
+  <% end %>
+
+  <dl id="distribution-sources" class="mt-4 max-w-md space-y-1 text-sm">
+    <div class="flex justify-between gap-4">
+      <dt class="text-gray-600">Buffer carried over</dt>
+      <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.buffer_carried) %></dd>
+    </div>
+    <div class="flex justify-between gap-4">
+      <dt class="text-gray-600">Income this period</dt>
+      <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.income_this_period) %></dd>
+    </div>
+    <%# Named pools, not a bare "swept back": the money left an envelope the user recognises,
+        and with no sweep this line would read "Swept back from" followed by nothing. %>
+    <% if presenter.sweeps.any? %>
+      <div class="flex justify-between gap-4">
+        <dt class="text-gray-600">
+          Swept back from <%= presenter.swept_pools.map(&:name).to_sentence %>
+        </dt>
+        <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.total_swept) %></dd>
+      </div>
+    <% end %>
+    <div class="flex justify-between gap-4 border-t border-gray-200 pt-1 font-semibold">
+      <dt class="text-gray-900">Available</dt>
+      <dd class="tabular-nums <%= presenter.available.negative? ? "text-status-danger" : "text-gray-900" %>">
+        <%= number_to_currency(presenter.available) %>
+      </dd>
+    </div>
+  </dl>
+
+  <%# The all-clear density's ONE summary line. The waterfall does not render at all on this
+      branch, so this sentence is the whole of what the screen has to say — hence the buffer
+      figure in it, which the short branch prints as the waterfall's last row instead. %>
+  <% if presenter.covered? %>
+    <p id="distribution-summary" class="mt-4 text-sm text-gray-700">
+      <% if presenter.lines.empty? %>
+        Nothing is asking for money this period —
+      <% else %>
+        <%= pluralize(presenter.lines.size, "envelope") %> funded in full,
+        <%= number_to_currency(presenter.total_allocated) %> out —
+      <% end %>
+      <%= number_to_currency(presenter.leftover) %> stays in your buffer<%= buffer_target_clause(presenter) %>.
+    </p>
+  <% end %>
+</div>
