@@ -108,6 +108,22 @@ RSpec.describe "Home Attention", type: :system do
     expect(waterfall_section).to have_no_content("$0.00 of $0.00")
   end
 
+  # "Something needs you" is NOT the same question as "is there a plan to show". Two of the
+  # three kinds of problem — an overdrawn account and an account-less pool — have no waterfall
+  # row at all, and the zero-need reject can empty the list outright. This is the fixture below
+  # exactly: one problem, no rows, and the band rendered its heading over nothing, which on a
+  # money screen reads as data that failed to load. The other direction is the covered-period
+  # example above, where there are rows and the plan does render.
+  it "shows no plan when the problems have no waterfall rows", :aggregate_failures do
+    groceries = envelope("Groceries", 400)
+    create(:pool_movement, from_pool: checking, to_pool: groceries, amount: 400)
+
+    visit root_path
+
+    expect(page).to have_content("1 thing needs you")
+    expect(page).to have_no_content("Where your money goes")
+  end
+
   # An overdrawn account reaches neither #available (clamped at zero) nor #shortfall
   # (summed from the waterfall rows), so unless a band names it, a real $400 debt is
   # invisible on the one screen that exists to say where you stand.

@@ -18,7 +18,7 @@
     <% if presenter.orphan_required.positive? %>
       <p class="mt-1 text-sm text-gray-600">
         Even so, <%= number_to_currency(presenter.orphan_required) %> of what you need belongs to
-        <%= pluralize(presenter.orphan_pools.size, "pool") %> with no account, listed below.
+        <%= pluralize(presenter.orphan_pools_owed.size, "pool") %> with no account, listed below.
         Being covered can't fix that — giving it an account can.
       </p>
     <% end %>
@@ -52,7 +52,7 @@
     <% if presenter.orphan_required.positive? %>
       <p class="mt-1 text-sm text-gray-600">
         <%= number_to_currency(presenter.orphan_required) %> of what you need belongs to
-        <%= pluralize(presenter.orphan_pools.size, "pool") %> with no account, listed below.
+        <%= pluralize(presenter.orphan_pools_owed.size, "pool") %> with no account, listed below.
         Money can't close that — giving it an account can.
       </p>
     <% end %>

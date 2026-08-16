@@ -137,6 +137,18 @@ class HomePresenter
   # band says so in those words instead of folding it into the gap.
   def orphan_required = total_required - waterfall.sum(0.to_d) { |row| row[:needed] }
 
+  # The orphans #orphan_required is actually made of, which is NOT every orphan.
+  #
+  # The standing band prints that figure and a count of these in one sentence, so the two have
+  # to describe the same set or the reader divides one by the other and gets an answer about
+  # pools that are asking for nothing: "$200.00 … belongs to 2 pools with no account" reads as
+  # roughly $100 each when one of the two owns the whole $200. Same defect as gating the clause
+  # on `orphan_pools.any?` — a figure and its explanation drifting apart — one clause later.
+  #
+  # Every orphan is still a problem and still named, by the attention band and by the pools
+  # band. It is only the arithmetic this sentence claims that narrows to these.
+  def orphan_pools_owed = orphan_pools.select { |pool| required_for(pool).positive? }
+
   # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
   # to Date.current, so a bare call in a partial would compute against a different day
   # than this presenter whenever `today` is injected — and disagree silently.

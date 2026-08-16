@@ -63,8 +63,14 @@
       own resolution is the worst combination of the two.
 
       Still silent when nothing is short and nothing is flagged, which is principle 3 intact:
-      there is no consequence to report on a screen with no problems on it. %>
-  <% if !presenter.covered? || problems.any? %>
+      there is no consequence to report on a screen with no problems on it.
+
+      And `rows.any?` first, because "something needs you" is NOT the same question as "is
+      there a plan to show". Two of the three kinds of problem — an overdrawn account and an
+      account-less pool — have no waterfall row at all, and the zero-need reject can empty the
+      list outright, so this heading could render over nothing. On a money screen an empty
+      headed band reads as data that failed to load. %>
+  <% if rows.any? && (!presenter.covered? || problems.any?) %>
     <div class="px-6 py-4 border-t border-gray-200" aria-labelledby="waterfall-heading">
       <%# Sentence case, not the `uppercase` treatment this codebase gives short labels like
           "Current Balance": that renders as WHERE YOUR MONEY WENT, which shouts a whole

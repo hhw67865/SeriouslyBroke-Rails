@@ -78,6 +78,30 @@ RSpec.describe HomePresenter do
     end
   end
 
+  describe "#orphan_pools_owed" do
+    # The set #orphan_required is summed from, which is NOT every orphan: the standing band
+    # prints the figure and this count in one sentence, and a reader who divides them has to
+    # get an answer about the same pools the figure came from.
+    it "returns only the account-less pools asking for something", :aggregate_failures do
+      owed = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
+      rate(owed, 200)
+      # A goal with no rule on it yet asks for nothing this period, so it owns none of the figure.
+      create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 2)
+      rate(envelope("Rent", priority: 3), 400)
+
+      expect(presenter.orphan_pools_owed).to eq([owed])
+      expect(presenter.orphan_pools.size).to eq(2)
+      expect(presenter.orphan_required).to eq(200)
+    end
+
+    it "is empty when no account-less pool asks for anything", :aggregate_failures do
+      create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 1)
+
+      expect(presenter.orphan_pools_owed).to be_empty
+      expect(presenter.orphan_required).to eq(0)
+    end
+  end
+
   describe "#pools_for" do
     it "returns the account's own pools by priority then name, and no others", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")

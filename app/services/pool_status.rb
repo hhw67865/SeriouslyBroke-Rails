@@ -84,8 +84,13 @@ class PoolStatus
   # this pool — after it, this could never fire at all.
   #
   # Dateless only. A savings pool that names an anchor has a deadline, and the anchored maths
-  # already spreads it across the periods remaining; that vocabulary keeps winning. Same
-  # condition, and the same reasoning, as PoolCalculator#dateless_goal?.
+  # already spreads it across the periods remaining; that vocabulary keeps winning.
+  #
+  # Close to PoolCalculator#dateless_goal? but deliberately NOT the same condition: that one
+  # adds `target_amount.to_d.positive?`, because it divides toward a target and a goal of zero
+  # would have it ask for money forever. This is a display state, and a savings pool with no
+  # target set is still saving — it renders "$424.00 saved" instead of progress toward a
+  # figure that does not exist. Changing either side does not automatically change the other.
   def saving? = pool.pool_type_savings? && anchored_budgets.empty?
 
   def pool_calculator = @pool_calculator ||= pool.calculator(today: today)

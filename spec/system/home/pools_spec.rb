@@ -43,6 +43,21 @@ RSpec.describe "Home Pools", type: :system do
 
   def fund(pool, amount) = create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount)
 
+  def spend(pool, amount)
+    category = create(:category, :expense, user: user, pool: pool, name: "#{pool.name} spend")
+    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+  end
+
+  # A rule the user actually pays: an item is the only fulfilment signal BudgetCalculator
+  # accepts, and therefore the only way a rule can be late.
+  def payable(name, amount:, due:, interval: 1, priority: 1)
+    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+    category = create(:category, :expense, user: user, pool: pool, name: "#{name} bills")
+    item = create(:item, category: category, name: "#{name} Bill")
+    create(:pool_budget, pool: pool, item: item, amount: amount, interval_months: interval, anchor_date: due)
+    pool
+  end
+
   # The two buffers are deliberately different numbers here: $1,000 in with $100 already
   # moved into the envelope leaves the account holding $900 NOW, and the $300 the rule still
   # wants this period leaves $600 AFTER the distribution. A band printing the other one is a
@@ -98,6 +113,63 @@ RSpec.describe "Home Pools", type: :system do
     expect(row("Dentist")).to have_css("[data-role='pool-detail']")
     expect(row("Dentist")).to have_content("$300.00")
     expect(row("Dentist")).to have_content((Date.current + 3.days).strftime("%b %-d"))
+  end
+
+  # The two states that render a date the user has to act on. Both were pinned at the label
+  # and state layers and neither had ever been seen through a real row, which is where the
+  # date and the rule beneath it actually meet.
+  it "shows an overdue pool with the date that passed and the rule behind it", :aggregate_failures do
+    payable("Utilities", amount: 120, due: Date.current - 10.days)
+
+    visit root_path
+
+    expect(row("Utilities")).to have_content("overdue · was #{(Date.current - 10.days).strftime("%b %-d")}")
+    expect(row("Utilities")["data-expanded"]).to eq("true")
+    expect(row("Utilities")).to have_content("Utilities Bill")
+    expect(row("Utilities")).to have_content("$120.00 · #{(Date.current - 10.days).strftime("%b %-d")}")
+  end
+
+  it "shows a behind pool with the rule it is behind on", :aggregate_failures do
+    pool = create(:pool, :budget_pool, user: user, account: checking, name: "Car Insurance", priority: 1)
+    create(:pool_budget, pool: pool, amount: 1_200, interval_months: 6, anchor_date: Date.current + 3.months)
+
+    visit root_path
+
+    # The lag is a function of how many boundaries fall inside the cycle, so the figure is
+    # matched by shape rather than pinned to a date arithmetic this example does not own.
+    expect(row("Car Insurance")).to have_content(/behind \$\d[\d,]*\.\d\d/)
+    expect(row("Car Insurance")["data-expanded"]).to eq("true")
+    expect(row("Car Insurance")).to have_content("Every 6 months")
+    expect(row("Car Insurance")).to have_content("$1,200.00 · #{(Date.current + 3.months).strftime("%b %-d")}")
+  end
+
+  # `rules.empty?` does NOT imply a rate rule exists. A pool with no rules at all and a
+  # negative balance reaches :overdrawn — the only state guarded on the balance alone — and
+  # expands, so the fallback sentence has to be true of what is actually there. Both halves,
+  # because a sentence that is right in one shape and false in the other is pinned by neither.
+  it "explains an overdrawn rate envelope by its rate", :aggregate_failures do
+    deposit(200)
+    dining = envelope("Dining Out", rate: 150)
+    fund(dining, 100)
+    spend(dining, 180)
+
+    visit root_path
+
+    expect(row("Dining Out")).to have_content("overdrawn $80.00")
+    expect(row("Dining Out")).to have_content("refills at its rate")
+    expect(row("Dining Out")).to have_no_content("nothing funds it")
+  end
+
+  it "says so plainly when an overdrawn pool has no rules at all", :aggregate_failures do
+    mystery = create(:pool, :budget_pool, user: user, account: checking, name: "Mystery", priority: 1)
+    spend(mystery, 80)
+
+    visit root_path
+
+    expect(row("Mystery")).to have_content("overdrawn $80.00")
+    expect(row("Mystery")).to have_content("nothing funds it")
+    # The refill promise would be a flat untruth here: nothing refills this pool.
+    expect(row("Mystery")).to have_no_content("refills at its rate")
   end
 
   it "leaves a quiet pool collapsed", :aggregate_failures do
