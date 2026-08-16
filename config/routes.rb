@@ -37,8 +37,12 @@ Rails.application.routes.draw do
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
-  # `new` proposes the split; `create` confirms it and is Task 6's — the action does not exist
-  # yet, and nothing on the screen posts to it, so the route is inert until then.
+  # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
+  # the period as if its distribution had not happened, which it does by DELETING this period's
+  # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite
+  # being safe by HTTP's definition (every link to it carries `data-turbo-prefetch="false"`).
+  # `create` CONFIRMS it, and is the only request in this app that moves money between pools: it
+  # locks the account, replaces any previous split for the period, and writes the movements.
   resources :distributions, only: [:new, :create]
 
   # Moving money between two envelopes in one account (spec §5). `new` states the damage, `create`

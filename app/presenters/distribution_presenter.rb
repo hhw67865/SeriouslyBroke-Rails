@@ -312,6 +312,25 @@ class DistributionPresenter
   # screen saying money could not be found while holding money that could have funded it.
   def shortfall = lines.sum(0.to_d, &:short)
 
+  # WHERE THE MONEY RAN OUT, or nil when nothing is short. One rule, shared with Home's band
+  # (Waterfall.cutoff); only the gate is this screen's, and it is the simple one — a distribution
+  # is scoped to one account by definition, so there is no per-account caveat here.
+  #
+  # Read off the SAME fill as everything else on this card. An override re-runs the waterfall
+  # below it, so the money genuinely does reach further down when a high row is cut — a cutoff
+  # computed against the un-overridden proposal would sit above envelopes the edit had just
+  # funded, and the unfunded total beside it would refuse to move while the buffer grew.
+  #
+  # `nil` unless something is actually short: with every envelope funded the index finds nothing,
+  # falls back to the row count and draws "ran out here · $0.00 unfunded" under the last row of a
+  # screen where nothing ran out — which is what this table renders whenever an overdue bill
+  # opens it on a covered period.
+  def cutoff
+    return nil unless short?
+
+    Waterfall.cutoff(lines) { |line| [line.funded, line.short] }
+  end
+
   # True on any row the user has actually changed. The screen says so once, above the table,
   # rather than per row: the edited rows already carry their own consequence line, and a screen
   # that never mentions the edits at all after a reload reads as if they had been discarded.
@@ -777,8 +796,9 @@ class DistributionPresenter
   # cannot name different periods.
   def next_period_start = @next_period_start ||= period.last + 1
 
-  # The rule whose schedule the row prints: the earliest-due dated rule, with the same
-  # `[due_date, -amount, id]` tie-break HomePresenter#dated_rules_for uses — `pool.budgets`
+  # The rule whose schedule the row prints: the earliest-due dated rule, by
+  # BudgetCalculator#due_order — the one place that `[due_date, -amount, id]` key lives, shared
+  # with the fill order itself and with the two other presenters that name a rule. `pool.budgets`
   # carries no ORDER BY, so without it two rules sharing a date could swap between page loads.
   #
   # Returns a BudgetCalculator, not a Budget, so the date and the count come from ONE object.
@@ -797,7 +817,7 @@ class DistributionPresenter
     pool.budgets
       .select { |budget| budget.anchor_date.present? }
       .map { |budget| [budget, budget.calculator(today: on)] }
-      .min_by { |budget, calculator| [calculator.due_date, -budget.amount, budget.id] }
+      .min_by { |_budget, calculator| calculator.due_order }
       &.last
   end
 end

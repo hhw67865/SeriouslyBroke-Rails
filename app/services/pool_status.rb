@@ -141,13 +141,13 @@ class PoolStatus
   # unpaid, reading `overdue $X · Feb 1` or `overdue $Y · Feb 3` at random between page
   # loads with no data change.
   #
-  # Same key and same reasoning as PoolCalculator#budgets_by_due_date, which already guards
-  # this: earliest due date first, because the most urgent rule is the one worth naming;
-  # `-amount` breaks a tie toward the larger obligation; `id` makes even identical rows
-  # deterministic. The brief mandates a singular rule, so which one it is has to be stable.
+  # Same key as PoolCalculator#budgets_by_due_date, because it IS that key:
+  # BudgetCalculator#due_order, asked of the memoised calculator this class already holds.
+  # Earliest due date first, because the most urgent rule is the one worth naming. The brief
+  # mandates a singular rule, so which one it is has to be stable.
   def anchored_budgets
     @anchored_budgets ||= pool.budgets.select { |b| b.anchor_date.present? }
-      .sort_by { |b| [calculator_for(b).due_date, -b.amount, b.id] }
+      .sort_by { |b| calculator_for(b).due_order }
   end
 
   def overdue_budget

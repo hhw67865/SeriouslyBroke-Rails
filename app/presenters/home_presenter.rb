@@ -97,8 +97,22 @@ class HomePresenter
   # $150 against a $100 rate rule therefore adds $150 to available and $100 to required, and the
   # gap correctly CLOSES by the $50 of surplus that was unspendable while it sat in the envelope.
   # Measured on the demo seeds: Pet Care's $50 sweep against a $25 rise took the shortfall from
-  # $713.43 to $688.43. The property that DOES hold in both shapes, and the one the specs pin, is
-  # exact agreement with AllocationCalculator per account — see spec/system/home/fixes_spec.rb.
+  # $713.43 to $688.43.
+  #
+  # WHAT DOES HOLD, EXACTLY, AND THE ONE ACCOUNT WHERE IT DOES NOT. The SHORTFALL agrees with
+  # AllocationCalculator per account in every shape, and the specs pin it. This figure agrees with
+  # `AllocationCalculator#available` only while that account's available is NON-NEGATIVE, and the
+  # difference is deliberate on both sides: #account_pots clamps at zero because Home AGGREGATES
+  # across accounts, where an unclamped negative would let one overdrawn account cancel another's
+  # surplus, while the distribution screen is per-account and has no sibling to cancel against, so
+  # it states the overdraft. Measured on the demo seeds, per account:
+  #
+  #   Ally Savings 820.00 = 820.00 · Checking 455.00 = 455.00 · Health Savings 400.00 = 400.00
+  #   Side Gig Checking — Home 0.00, the distribution screen -300.00
+  #
+  # It is a divergence with a stated reason rather than a drift, so it is PINNED rather than left
+  # latent — see the overdrawn example in spec/system/home/fixes_spec.rb, which asserts both
+  # figures and the shortfall's continued agreement on the same fixture.
   #
   # Note this is NOT `total_required - shortfall`: see #shortfall for why the gap is
   # derived from the rows instead, and why the two can legitimately disagree.
@@ -224,15 +238,17 @@ class HomePresenter
   # whenever `today` is injected — and disagree silently.
   #
   # Anchorless rules are excluded because they have no date to print; a row whose rules are
-  # all anchorless renders its own explanation instead (see _pool_row). The sort key is the
-  # triple PoolStatus#anchored_budgets already uses — `pool.budgets` carries no ORDER BY, so
-  # without it two rules sharing a due date could swap places between page loads. Memoised
-  # because BudgetCalculator#due_date re-runs its paid_since_anchor SUM on every call.
+  # all anchorless renders its own explanation instead (see _pool_row). The sort key is
+  # BudgetCalculator#due_order, the same one PoolStatus#anchored_budgets and the fill order
+  # itself use — `pool.budgets` carries no ORDER BY, so without it two rules sharing a due date
+  # could swap places between page loads. Memoised because BudgetCalculator#due_date re-runs its
+  # paid_since_anchor SUM on every call, which is also why the date this has already computed is
+  # handed to #due_order rather than left for it to ask again.
   def dated_rules_for(pool)
     (@dated_rules ||= {})[pool.id] ||= pool.budgets
       .select { |budget| budget.anchor_date.present? }
       .map { |budget| [budget, calculator_for_budget(budget).due_date] }
-      .sort_by { |budget, due_on| [due_on, -budget.amount, budget.id] }
+      .sort_by { |budget, due_on| calculator_for_budget(budget).due_order(due_on) }
   end
 
   # Sorted for the same reason #waterfall is. This is a rendered list, and `all_pools`
@@ -260,6 +276,24 @@ class HomePresenter
   # queries per account, three times, for an identical answer.
   def waterfall
     @waterfall ||= fill_waterfall
+  end
+
+  # WHERE THE MONEY RAN OUT, or nil when there is no such moment. The rule itself is Waterfall's
+  # — the distribution screen draws the same line off the same reader — and only the GATE is
+  # Home's, because it is genuinely different here.
+  #
+  # `accounts.one?`: each account drains its own pot, so with several there is no single moment
+  # the money ran out — a pool in Ally funded at zero would print the line above rows in Checking
+  # that were funded in full. Grouping the waterfall by account is the real answer and belongs to
+  # a later plan; until then the per-row figures carry it.
+  #
+  # `covered?`: the waterfall renders on a covered period too, and there the index finds nothing,
+  # falls back to `rows.length` and draws "ran out here · $0.00 unfunded" under the last row of a
+  # screen where nothing ran out at all.
+  def cutoff
+    return nil unless accounts.one? && !covered?
+
+    Waterfall.cutoff(waterfall) { |row| [row[:funded], row[:short]] }
   end
 
   def structurally_underwater?
@@ -394,9 +428,10 @@ class HomePresenter
   #   And "the same proposal the distribution screen would render" is now a property this task
   #   PROVED rather than assumed: #waterfall computes `required` with `net_of_sweep: true` and
   #   #account_pots adds the sweeps, and spec/system/home/fixes_spec.rb pins
-  #   `home.shortfall == proposal.rows.sum(&:short)` and `home.available == proposal.available`
-  #   against AllocationCalculator, per account, in both sweep shapes. Reaching for a fresh
-  #   proposal would be a THIRD reader on one screen.
+  #   `home.shortfall == proposal.rows.sum(&:short)` against AllocationCalculator, per account, in
+  #   both sweep shapes — and `home.available == proposal.available` wherever that available is
+  #   non-negative, which is the whole of the scope that claim holds over (see #available).
+  #   Reaching for a fresh proposal would be a THIRD reader on one screen.
   #
   # NO ROW MEANS NOT COVERED, which is the safe direction and the right one for both shapes that
   # reach it. An ACCOUNT is never a waterfall row (#fill_waterfall spans #all_pools, which excludes
@@ -536,7 +571,28 @@ class HomePresenter
     (@ask_calculators ||= {})[pool.id] ||= pool.calculator(today: today, net_of_sweep: true)
   end
 
-  def required_for(pool) = (@required ||= {})[pool.id] ||= ask_calculator_for(pool).required
+  # `[required, 0.to_d].max`, THE GUARD AllocationCalculator#fill ALREADY HAD AND THIS SCREEN DID
+  # NOT, and it is the same reachable shape rather than a defensive flourish.
+  # PoolCalculator#goal_required returns `[rate, remaining].min`, so a savings goal carrying a
+  # rule with a negative amount asks for a negative figure — and #waterfall_row's
+  # `pot.clamp(0.to_d, needed)` raises ArgumentError on it. Measured, not assumed:
+  # `BigDecimal("100").clamp(BigDecimal("0"), BigDecimal("-150"))` raises, and the example in
+  # spec/system/home/attention_spec.rb reproduces it through `update_column` past Budget's
+  # validation, exactly as AllocationCalculator's own does. Home is the root route, so this took
+  # out the whole app rather than one screen.
+  #
+  # HERE RATHER THAN AT #waterfall_row's CLAMP, because #total_required reads the same figure and
+  # a negative there quietly UNDERSTATES what the user owes — a wrong number is worse than a
+  # crash on a money screen. One floor, every Home reader.
+  #
+  # NOT pushed down into PoolCalculator#required, which would make the two floors one function
+  # and is the wrong trade on this branch: spec/services/allocation_calculator_spec.rb pins
+  # `calculator.required == -150` on exactly this fixture, deliberately, so the raw reader stays
+  # raw and each READ path floors where it clamps. The two now agree because they are the same
+  # expression over the same `net_of_sweep` reader, not because they were merged.
+  def required_for(pool)
+    (@required ||= {})[pool.id] ||= [ask_calculator_for(pool).required, 0.to_d].max
+  end
 
   # `:account` is eager-loaded for #fundable_by, which asks PoolMovement#crosses_accounts? once
   # per candidate per problem — a lazy association there is one SELECT per pool per row.

@@ -25,6 +25,30 @@ class BudgetCalculator
     budget.anchor_date + (cycles_completed * budget.interval_months).months
   end
 
+  # WHICH RULE COMES FIRST — the one place that key lives, and it decides more than an order.
+  #
+  # It picks the rule a row NAMES (`overdue $180 · Feb 1` rather than `· Feb 3`), the rule that
+  # `allocated_balances` fills first and therefore the one that SLIPS when money leaves, and the
+  # rule the reallocation screen calls the holder. It was written out four times over —
+  # PoolCalculator#budgets_by_due_date, PoolStatus#anchored_budgets, HomePresenter#dated_rules_for,
+  # DistributionPresenter#next_dated_rule and ReallocationPresenter#holder_for — which is the same
+  # shape `ReallocationPresenter.source_order` was extracted out of one ruling ago.
+  #
+  # A TRIPLE, NOT A BARE DUE DATE, and every term earns its place: `sort_by`/`min_by` are not
+  # stable and `pool.budgets` carries no ORDER BY, so two rules sharing a due date could swap
+  # between page loads — the same pool reporting different #required figures with no data change.
+  # `-target` breaks that tie toward the larger obligation, because the bigger bill is the one you
+  # can least afford to be short on; `budget.id` makes even identical amounts deterministic.
+  #
+  # `-target` rather than `-budget.amount`: identical ordering, and it keeps the money hazard out
+  # of the key — an in-memory record assigned `amount: 180` holds the Integer, so the raw column
+  # mixes Integer and BigDecimal across a comparison depending on where the row came from.
+  #
+  # `on:` is the due date when the caller has ALREADY computed it. #due_date re-runs
+  # #paid_since_anchor's SUM on every call, and HomePresenter#dated_rules_for prints the date it
+  # sorted by — asking twice would double that query for every dated rule on the screen.
+  def due_order(on = due_date) = [on, -target, budget.id]
+
   def period_end
     budget.basis_per_paycheck? ? boundary_period_end : today.end_of_month
   end
@@ -106,7 +130,7 @@ class BudgetCalculator
   end
 
   # A settled rule has no funding gap, so this reports zero rather than a raw
-  # `target - allocated`. Both this and #required are public and Task 8 may render
+  # `target - allocated`. Both this and #required are public and Home renders
   # either; a paid bill showing "$500 still needed" is the same lie in reverse.
   #
   # `0.to_d` rather than a bare `0`: on the overfunded path `max` returns the

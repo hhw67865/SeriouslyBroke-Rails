@@ -14,7 +14,13 @@
                       request.path.start_with?(link[:path]) && link[:path] != "#"
                     end
       %>
-      <%= link_to link[:path], 
+      <%# `data:` is optional and per link. Only Distribute carries one today, and it carries
+          `turbo_prefetch: false` because turbo-rails prefetches links on hover and
+          `/distributions/new` is a GET that takes write locks: DistributionPresenter's snapshot
+          deletes this period's split, holds the row locks on both pools of every deleted row for
+          the whole snapshot, and rolls back. Hovering the nav item would fire that. %>
+      <%= link_to link[:path],
+          data: link[:data],
           class: class_names(
             "flex items-center px-3 py-2.5 text-base font-medium rounded-md transition-colors",
             "border-l-2",

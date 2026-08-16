@@ -9,15 +9,11 @@
     the same reasoning as Home's waterfall; there is no multi-account caveat here, because a
     distribution is scoped to one account by definition. %>
 <% rows = presenter.lines %>
-<%# `nil` unless something is actually short. With every envelope funded the index finds nothing,
-    falls back to the row count and draws "ran out here · $0.00 unfunded" under the last row of a
-    screen where nothing ran out — which is exactly what this table now renders whenever an
-    overdue bill opened it on a covered period. Same guard, and the same reason, as Home's. %>
-<%# Read off the SAME fill as everything else on this card. An override re-runs the waterfall
-    below it, so the money genuinely does reach further down when a high row is cut — a cutoff
-    computed against the un-overridden proposal would sit above envelopes the edit had just
-    funded, and the unfunded total beside it would refuse to move while the buffer grew. %>
-<% cutoff = presenter.short? ? (rows.index { |line| line.funded.zero? && line.short? } || rows.length) : nil %>
+<%# ASKED, NOT DECIDED HERE. "Which envelope was denied money" is a money-shaped rule, and it used
+    to be spelled out in this line and again in home/_attention.html.erb — two readers of one
+    decision, in ERB, where nothing can test either half on its own. DistributionPresenter#cutoff
+    carries the gate; Waterfall.cutoff carries the rule, for both screens. %>
+<% cutoff = presenter.cutoff %>
 
 <section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
   <div class="px-6 py-4 border-b border-gray-200">

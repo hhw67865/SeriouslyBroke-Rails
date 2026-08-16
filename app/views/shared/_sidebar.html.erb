@@ -52,8 +52,21 @@
                 title: "Main",
                 links: [
                   { name: "Home", path: root_path, icon: "home" },
+                  # THE ONLY WAY INTO THE DISTRIBUTION SCREEN, and it is here because it is an
+                  # ACTION on the household's money rather than a report on it — beside Home and
+                  # Entries, not under Analysis. Until this link existed the headline feature of
+                  # the plan shipped dark: nothing in `app/` outside the distributions controller
+                  # and its own views named the route, so the only way to split a paycheck was to
+                  # type the URL. Home's waterfall band links here too; that band is conditional
+                  # and this is not.
+                  {
+                    name: "Distribute",
+                    path: new_distribution_path,
+                    icon: "arrows-right-left",
+                    data: { turbo_prefetch: false }
+                  },
                   { name: "Entries", path: entries_path, icon: "document-text" }
-                ] 
+                ]
             %>
             
             <%# Management Section %>

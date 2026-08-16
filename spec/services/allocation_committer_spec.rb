@@ -549,6 +549,103 @@ RSpec.describe AllocationCommitter, type: :model do
     end
   end
 
+  # ──────────────────────────────────────────────────────────────────────────────────────────
+  # TWO CONFIRMS AT ONCE, which is the one way found to break spec §7.3's "the account can never
+  # be over-allocated". Everything else in this class is re-derived inside the write transaction,
+  # which is strong against a STALE proposal and says nothing about a CONCURRENT one.
+  describe "a confirm arriving while another is still open" do
+    let!(:groceries) { rate_envelope("Groceries", 400, funded: 85) }
+
+    before { deposit(585) }
+
+    # THE NEXT-BEST THING, and it runs in the ordinary transactional world: the lock is taken
+    # before the deletion, which is what makes it taken before anything is READ. A lock acquired
+    # after `destroy_all` would leave the whole window this defends against open.
+    #
+    # Read off the statements the commit actually issued, in order, rather than off the source —
+    # both indexes come from one recorded stream, so neither side is the other restated.
+    it "locks the account before it deletes the previous split", :aggregate_failures do
+      commit
+      statements = []
+      recorder = ->(_name, _start, _finish, _id, payload) { statements << payload[:sql] }
+
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") { commit }
+
+      lock_at = statements.index { |sql| sql.include?("FOR UPDATE") }
+      delete_at = statements.index { |sql| sql.start_with?("DELETE FROM \"pool_movements\"") }
+      expect(lock_at).not_to be_nil
+      expect(delete_at).not_to be_nil
+      expect(lock_at).to be < delete_at
+      expect(statements[lock_at]).to include("\"pools\"")
+    end
+
+    # THE RACE ITSELF, forced rather than hoped for.
+    #
+    # Two connections cannot see each other's uncommitted rows, so this cannot run inside the
+    # suite's per-example transaction — the fixture would be invisible to the second thread — and
+    # the group opts out on both sides (`use_transactional_tests` and DatabaseCleaner's own
+    # strategy, see spec/support/database_cleaner.rb).
+    #
+    # The interleaving is deterministic, not timing-dependent: the racer signals the instant it
+    # has finished READING the ledger, and the first commit holds its transaction open until that
+    # signal arrives. Without the lock the signal comes in milliseconds and the racer is provably
+    # stale; with the lock it never comes at all, because `call` blocks on `account.lock!` before
+    # it reads anything — so the first commit waits out its timeout and then releases, and the
+    # racer re-reads a ledger that already holds the split.
+    #
+    # MEASURED WITH THE LOCK REMOVED: two allocations and two sweeps, Groceries $715 against a
+    # $400 rule, Checking -$130. `Σ pools` still held at $585 — conservation is not what breaks —
+    # while the account was over-allocated by $130, which is the §7.3 state this plan calls
+    # devastating. Every other example in this file passed unchanged.
+    describe "with both commits genuinely overlapping", :truncation do
+      self.use_transactional_tests = false
+
+      # A fresh committer on its own connection, wired to say when it has read the ledger. The
+      # singleton override wraps the LAST read before the first save — `movements` builds every
+      # line out of the live proposal — so the signal marks exactly the moment a second confirm
+      # would be committing figures the first one has already invalidated.
+      def racing_commit(account_id, user_id, read_signal)
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            account = Pool.find(account_id)
+            proposal = AllocationCalculator.new(user: User.find(user_id), account: account, today: today)
+            committer = described_class.new(proposal)
+            committer.define_singleton_method(:movements) { super().tap { read_signal.push(:read) } }
+            committer.call
+          end
+        end
+      end
+
+      # Both commits, with the second guaranteed to be running while the first's transaction is
+      # still open. Returns the finished racer (nil if it never finished) and whether it managed
+      # to READ the ledger before that transaction closed — the second is the lock's whole story,
+      # and `false` is the answer only a lock can give.
+      def race
+        signal = Queue.new
+        racer = read_early = nil
+        ActiveRecord::Base.transaction do
+          commit
+          racer = racing_commit(checking.id, user.id, signal)
+          read_early = !signal.pop(timeout: 2).nil?
+        end
+        [racer.join(10), read_early]
+      end
+
+      it "leaves exactly one split and an account that is not over-allocated", :aggregate_failures do
+        finished, read_early = race
+
+        expect(finished).to be_a(Thread) # it completed rather than deadlocking
+        expect(read_early).to be(false) # it was still at the lock while the first commit ran
+        expect(PoolMovement.kind_allocation.count).to eq(1)
+        expect(PoolMovement.kind_sweep.count).to eq(1)
+        expect(balance(groceries)).to eq(400) # $715 with the lock removed
+        expect(balance(checking)).to eq(185) # -$130 with the lock removed
+        expect(balance(checking)).to be >= 0 # spec §7.3
+        expect(checking.total).to eq(585)
+      end
+    end
+  end
+
   # The `money` column keeps an Integer for in-memory records and an empty `sum` returns the
   # Integer literal 0, so the account with nothing in it is the one that changes TYPE.
   # Asserted by type rather than by value: `eq(0)` passes happily on an Integer.

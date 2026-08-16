@@ -363,8 +363,8 @@ class PoolCalculator
   # not a stylistic choice: #sweepable_amount reads #balance (through #anchored_reserve), so
   # computing it on `self` would recurse until the stack ran out. The plain twin also keeps
   # one reader of the sweep — the figure subtracted here is the same figure the proposal
-  # lists as `swept back from Groceries` and the same one Task 3 will write as a movement,
-  # because all three are `sweepable_amount` on an unflagged calculator.
+  # lists as `swept back from Groceries` and the same one AllocationCommitter writes as a
+  # `sweep` movement, because all three are `sweepable_amount` on an unflagged calculator.
   #
   # Built inside #balance's memo, so it costs one extra pass over the pool's aggregates and
   # only on the calculators that asked for it.
@@ -464,14 +464,14 @@ class PoolCalculator
     ].compact.max&.to_date
   end
 
-  # The sort key is a triple, not a bare due date. `sort_by` is not stable and `pool.budgets`
-  # carries no ORDER BY, so two rules sharing a due date could swap fill order between calls —
-  # the same pool reporting different #required figures on consecutive loads with no data
-  # change. `-amount` breaks the tie toward the larger obligation (the bigger bill is the one
-  # you can least afford to be short on); `id` makes even identical amounts deterministic.
+  # The sort key is a triple, not a bare due date, and it is BudgetCalculator#due_order's — the
+  # one place that rule lives, shared with PoolStatus#anchored_budgets and the three presenters
+  # that name a rule. `sort_by` is not stable and `pool.budgets` carries no ORDER BY, so two
+  # rules sharing a due date could otherwise swap fill order between calls: the same pool
+  # reporting different #required figures on consecutive loads with no data change.
   def budgets_by_due_date
     @budgets_by_due_date ||= pool.budgets.includes(:item, :pool).sort_by do |budget|
-      [budget.calculator(today: today).due_date, -budget.amount, budget.id]
+      budget.calculator(today: today).due_order
     end
   end
 

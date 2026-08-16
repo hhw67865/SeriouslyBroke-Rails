@@ -11,7 +11,8 @@ class AllocationCommitter
   # One shape for both outcomes, so a caller cannot read a success off a failure by accident:
   # a failure carries no movements and a success carries no errors, and every reader answers
   # on either. `0.to_d` seeds both totals — an empty commit is the emptiest possible sum and
-  # exactly where a bare Integer 0 would leak out into whatever Task 6 renders.
+  # exactly where a bare Integer 0 would leak out into the confirmation flash and the errors
+  # band the distributions controller renders beside it.
   Result = Data.define(:movements, :errors) do
     def success? = errors.empty?
 
@@ -68,12 +69,38 @@ class AllocationCommitter
   # own split from a proposal built against the ledger as it stands. Left memoised, the second
   # call would delete this period's rows and re-commit the FIRST call's snapshot — exactly the
   # staleness this class exists to defend against.
+  #
+  # `account.lock!` IS THE FIRST STATEMENT INSIDE THE TRANSACTION, before the deletion and
+  # therefore before anything is read, and it is what makes the split safe against a SECOND
+  # CONFIRM rather than only against a stale one.
+  #
+  # Every figure below is re-derived inside this transaction, which is strong against staleness
+  # and says nothing about concurrency: under READ COMMITTED two overlapping POSTs on a
+  # never-distributed period both find nothing to delete, both read unfunded envelopes, and both
+  # write a full split. MEASURED, with the lock removed and the two commits interleaved by hand
+  # (see the racing example in this class's spec): Groceries ended at $715 against a $400 rule
+  # and Checking at -$130 against $585 of income. `Σ pools` still equalled the bank balance —
+  # conservation is not the property that breaks — but the account was over-allocated by $130,
+  # which is the state spec §7.3 exists to forbid.
+  #
+  # The confirm path is deliberately built to work with JavaScript off (that is why the CSRF
+  # token rides on the button's own name/value), so Turbo disabling the submitter is not the
+  # defence: with JS off a double-click submits twice, and two tabs reach it either way.
+  #
+  # It also serialises the distribution SCREEN against the write. Every row
+  # #replace_previous_distribution destroys `touch`es the account, so the presenter's
+  # delete-compute-rollback already holds an exclusive lock on this row for the whole of its
+  # snapshot; a commit arriving mid-render now waits for it instead of reading around it.
+  #
+  # `lock!` rather than `with_lock`, because the transaction is already open and the rollback
+  # semantics above depend on its being THIS one.
   def call
     @errors = []
     @lines = []
     @live_proposal = nil
     @replaced = []
     ActiveRecord::Base.transaction(requires_new: true) do
+      account.lock!
       replace_previous_distribution
       @lines = movements
       @lines.each { |movement| record_failure(movement) unless movement.save }

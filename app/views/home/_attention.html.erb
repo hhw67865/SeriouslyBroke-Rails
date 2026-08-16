@@ -29,19 +29,13 @@
 
 <%# The cutoff marks where the cash ran out, which is AFTER the last pool that received any
     of it: a pool funded $355 of $400 did get money, and the spec's §4.2 waterfall draws the
-    line beneath it. So it goes before the first pool that got nothing — or at the end, when
-    the money ran out part-way through the last row and nothing below it exists.
+    line beneath it.
 
-    Only ever with a single account. Each account drains its own pot, so with several there
-    is no single moment the money ran out: a pool in Ally funded at zero would print the line
-    above rows in Checking that were funded in full. The per-row figures carry it instead.
-    Grouping the waterfall by account is the real answer and belongs to a later plan. %>
-<%# `covered?` in the guard as well as `accounts.one?`: the waterfall now renders on a covered
-    period too (see below), and there the index finds nothing, falls back to `rows.length`,
-    and draws "ran out here · $0.00 unfunded" under the last row of a screen where nothing
-    ran out at all. There is no cutoff when the money reached everything. %>
-<% single_account_shortfall = presenter.accounts.one? && !presenter.covered? %>
-<% cutoff = single_account_shortfall ? (rows.index { |row| row[:funded].zero? && row[:short].positive? } || rows.length) : nil %>
+    ASKED, NOT DECIDED HERE. That rule and its `|| rows.length` fallback used to be written out
+    in this line and again in distributions/_waterfall.html.erb — one money-shaped decision with
+    two readers, both in ERB. HomePresenter#cutoff carries the gate this band needs (one account,
+    and something actually short); Waterfall.cutoff carries the rule, for both screens. %>
+<% cutoff = presenter.cutoff %>
 
 <section class="bg-white border border-gray-200 rounded" aria-labelledby="attention-heading">
   <div class="px-6 py-4 border-b border-gray-200">
@@ -161,7 +155,34 @@
           appeared on a short screen, where a shortfall reads like something that already
           happened to you; it now renders on covered screens too, above a plan that plainly
           has not run. The design spec is being corrected to match. %>
-      <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500 mb-2">Where your money goes</p>
+      <%# THE TWO BANDS ANSWER DIFFERENT QUESTIONS AND MUST SAY SO. The rows above offer
+          `Take $553.85` — PoolStatus#funding_gap, the whole cumulative hole, read from the live
+          balance. The rows below print `$35.00 of $171.43` — #required, THIS period's share of
+          it, post-sweep. Both figures are right and both are wanted (see
+          HomePresenter#fix_amount_for), and on the demo they sit inches apart on one screen with
+          nothing telling the reader they are measured over different spans. That is the bridge,
+          and it belongs in the band's own framing rather than as a seventh clause on every row:
+          "the whole hole" above, "what this paycheck puts in it" below. %>
+      <div class="flex items-baseline justify-between gap-4 mb-2">
+        <div>
+          <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500">Where your money goes</p>
+          <p class="text-xs text-gray-500">
+            This period's share — what the next distribution puts in, not the whole gap.
+          </p>
+        </div>
+        <%# THE ACTION THIS BAND IS DESCRIBING, one click away. Home tells a user "the next
+            distribution funds this in full" and, until this link existed, gave them no way to
+            reach it: `new_distribution_path` appeared nowhere in `app/` outside the distributions
+            controller and its own views, so the only way to split a paycheck was to type the URL.
+            The sidebar carries the same link for the screens where this band does not render.
+
+            `turbo_prefetch: false` because this GET takes write locks — see
+            shared/_nav_section.html.erb, where the same link says why at length. %>
+        <%= link_to "Distribute this paycheck",
+                    new_distribution_path,
+                    class: "btn btn-secondary",
+                    data: { turbo_prefetch: false } %>
+      </div>
 
       <%# Two groups rather than a flag inside one loop: the cutoff is then written once and
           renders correctly at either edge — before every row when the first pool got nothing,

@@ -294,6 +294,92 @@ RSpec.describe "Home Attention", type: :system do
     expect(page).to have_content("ran out here")
   end
 
+  # A savings goal whose rule carries a NEGATIVE amount — written past Budget's validation
+  # deliberately, exactly as allocation_calculator_spec's twin does, because the shape being
+  # defended against is a row that reached the table some other way and that is precisely what a
+  # validation cannot promise.
+  def broken_goal(name, amount)
+    pool = create(
+      :pool, :savings_pool, user: user, account: checking, name: name, target_amount: 2_400, priority: 2
+    )
+    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount.abs)
+    pool.budgets.first.update_column(:amount, amount) # rubocop:disable Rails/SkipsModelValidations
+    pool
+  end
+
+  # A RULE WHOSE AMOUNT IS NEGATIVE, and Home is the ROOT ROUTE — this took out the whole app
+  # rather than one screen.
+  #
+  # PoolCalculator#goal_required returns `[rate, remaining].min`, so a savings goal carrying a
+  # negative rule asks for a negative figure, and HomePresenter#waterfall_row's
+  # `pot.clamp(0.to_d, needed)` raises ArgumentError on it — `BigDecimal("100").clamp(0, -150)`
+  # raises. AllocationCalculator#fill was guarded for exactly this in Task 2 and Home's
+  # near-duplicate was not, which is what a plan splitting one rule over two files costs.
+  #
+  # `update_column` writes past Budget's validation deliberately, exactly as
+  # allocation_calculator_spec's twin does: the shape being defended against is a row that reached
+  # the table some other way, which is precisely what a validation cannot promise.
+  #
+  # BOTH SIDES OF THE GUARD, and they are independent: the raw reader is still negative (that is
+  # the input), while the SCREEN renders and #total_required counts the bad rule as zero rather
+  # than subtracting $150 from what the user owes — a wrong total is worse than a crash on a money
+  # screen, and only the floor prevents both.
+  it "renders when a rule's amount is negative", :aggregate_failures do
+    vacation = broken_goal("Vacation", -150)
+    envelope("Rent", 400)
+    deposit(100)
+
+    visit root_path
+
+    expect(page).to have_content("$300.00 short this period")
+    expect(waterfall_section).to have_content("$100.00 of $400.00")
+    expect(Pool.find(vacation.id).calculator.required).to eq(-150)
+    expect(HomePresenter.new(user: user).total_required).to eq(400)
+  end
+
+  # FINDING 4: THE TWO BANDS ANSWER DIFFERENT QUESTIONS AND NOW SAY SO.
+  #
+  # The problem row offers PoolStatus#funding_gap — the whole cumulative hole, read from the live
+  # balance. The waterfall row prints #required — THIS period's share of it, post-sweep. Both are
+  # right (see HomePresenter#fix_amount_for) and neither figure changes; what was missing was
+  # anything on the screen saying they are measured over different spans. On the demo they read
+  # `Take $553.85` and `$35.00 of $171.43` inches apart.
+  #
+  # Car Insurance is $1,200 every six months due six biweekly boundaries out, so this period's
+  # share is a stable $171.43 whatever day the suite runs — while the steady-schedule gap depends
+  # on how many boundaries fall inside a six-month cycle on that calendar, so it is READ rather
+  # than pinned to a second literal. Rent takes the pot first, which is what keeps Car's row short
+  # and therefore keeps its button: a pool the waterfall funds in full is deliberately offered no
+  # move at all.
+  describe "the whole gap above, this period's share below" do
+    before do
+      envelope("Rent", 1_000, priority: 0)
+      car = create(:pool, :budget_pool, user: user, account: checking, name: "Car Insurance", priority: 1)
+      create(:pool_budget, pool: car, amount: 1_200, interval_months: 6, anchor_date: Date.current + 84)
+      deposit(1_100)
+      visit root_path
+    end
+
+    def gap = user.pools.find_by!(name: "Car Insurance").status.funding_gap.round(2)
+
+    it "prints both figures for one envelope, inches apart", :aggregate_failures do
+      expect(gap).to be > 171.43 # the whole hole really is bigger than this period's share
+      within(find("[data-problem-pool='Car Insurance']")) do
+        expect(page).to have_link("Take #{number_to_currency(gap)} from Checking buffer")
+      end
+      within(waterfall_section) { expect(page).to have_content("$100.00 of $171.43") }
+    end
+
+    # The bridge. A BAND LABEL, not a seventh clause on every row — said once, above the rows.
+    it "labels the band so the two are not read as two answers to one question", :aggregate_failures do
+      within(waterfall_section) do
+        expect(page).to have_content("This period's share — what the next distribution puts in, not the whole gap.")
+      end
+      expect(waterfall_section.text.scan("This period's share").size).to eq(1)
+      expect(find("[data-problem-pool='Car Insurance']")).to have_no_content("This period's share")
+    end
+  end
+
   # The cutoff sits where the money ran out, and a pool funded $200 of $500 did receive
   # money: it belongs ABOVE the line, with only the pools that got nothing below it.
   it "draws the cutoff beneath the last pool that got any money", :aggregate_failures do

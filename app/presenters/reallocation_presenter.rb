@@ -321,11 +321,15 @@ class ReallocationPresenter
   # never explains a shortage it is not causing. Rate rules are deliberately absent: they hold
   # money too, and #free_amount already subtracts them, but "only $40.00 free" is the whole of
   # what there is to say about a grocery budget — a date is the part that changes the answer.
+  #
+  # "Earliest due first" is BudgetCalculator#due_order, the same key `allocated_balances` filled
+  # in: this names the rule at the FRONT of that order, and the rule that slips is at the back.
+  # Two spellings of one key would let the sentence name a rule the fill never favoured.
   def holder_for(pool)
     dated = calculator_for(pool).allocated_balances.select do |budget, allocated|
       budget.anchor_date.present? && allocated.positive?
     end
-    budget, allocated = dated.min_by { |b, _| [b.calculator(today: today).due_date, -b.amount, b.id] }
+    budget, allocated = dated.min_by { |b, _| b.calculator(today: today).due_order }
     return nil if budget.nil?
 
     Holder.new(budget: budget, allocated: allocated, due_on: budget.calculator(today: today).due_date)

@@ -477,6 +477,33 @@ RSpec.describe "Home Fixes", type: :system do
         expect(home.available).to eq(0)
         expect(home.available).to be_a(BigDecimal)
       end
+
+      # THE ONE ACCOUNT STATE WHERE THE TWO SCREENS DELIBERATELY DISAGREE, pinned rather than left
+      # latent. `HomePresenter#account_pots` clamps at zero because Home AGGREGATES across
+      # accounts, where an unclamped negative would let one overdrawn account cancel another's
+      # surplus; `AllocationCalculator#available` is deliberately unclamped because the
+      # distribution screen is per-account and has no sibling to cancel against. Both are argued
+      # and neither is going to change — and an unpinned deliberate difference is indistinguishable
+      # from a bug the next time someone reads it.
+      #
+      # Checking is $350 down and Coffee's closed $150 comes back to it: -$200 on the distribution
+      # screen, $0 here. Measured on the demo seeds too, where Side Gig Checking reads $0.00 on
+      # Home and -$300.00 on `/distributions/new`, while the other three accounts agree exactly.
+      #
+      # THE SHORTFALL STILL AGREES, which is the property that holds in every shape and the one
+      # worth having: both sides compute it independently — Home fills across accounts,
+      # AllocationCalculator spends one account's pot — and nothing about this divergence moves it.
+      it "clamps its own available while the distribution screen states the overdraft",
+         :aggregate_failures do
+           expect(page).to have_content("Checking is overdrawn $350.00")
+           proposal = AllocationCalculator.new(user: user, account: Pool.find(checking.id))
+           home = HomePresenter.new(user: user)
+
+           expect(proposal.available).to eq(-200)
+           expect(home.available).to eq(0)
+           expect(home.shortfall).to eq(proposal.rows.sum(0.to_d, &:short))
+           expect(home.shortfall).to eq(400)
+         end
     end
   end
 
