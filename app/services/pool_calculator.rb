@@ -5,10 +5,29 @@
 class PoolCalculator
   attr_reader :pool, :today
 
-  def initialize(pool, as_of: nil, today: Date.current)
+  # `net_of_sweep:` answers a different question about the same pool: not "what is in this
+  # envelope" but "what would be in it once the next distribution has taken back what belongs
+  # to a period that is over". It is a property of the BALANCE, so every reader built on the
+  # balance — #allocated_balances, #reserve, #free_amount, #required — inherits it unchanged.
+  #
+  # It exists because #required reads the live balance while the sweep is not materialised
+  # until the distribution is confirmed, so a swept envelope's leftover is still sitting in it
+  # when the proposal asks what it needs. Groceries holding $85 of last period's money against
+  # a $400 rate rule asks for $315, the sweep then takes the $85 away, and the envelope starts
+  # the period at $315 — short by exactly its own leftover, silently, every period.
+  #
+  # Default `false`, so every existing caller is untouched and this cannot change a number on
+  # any screen that does not ask for it.
+  #
+  # NOT for the sweep itself. #sweepable_amount and #period_closed? on a `net_of_sweep`
+  # calculator are meaningless — the sweep it names has already been subtracted, and asking
+  # again re-derives a second, smaller one from what the dated rules no longer hold. Ask a
+  # plain calculator what to sweep; ask this one what to fund.
+  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false)
     @pool = pool
     @as_of = as_of
     @today = today
+    @net_of_sweep = net_of_sweep
   end
 
   # Deliberately start-date-agnostic. The balance this replaces filtered entries to
@@ -48,7 +67,7 @@ class PoolCalculator
   # Task 3 carry: anything that writes movements builds fresh calculators afterward.
   def balance
     @balance ||= (income_entries_total + savings_entries_total +
-      movements_in_total - movements_out_total - expense_entries_total).to_d
+      movements_in_total - movements_out_total - expense_entries_total - sweep_adjustment).to_d
   end
 
   # Retained for the savings-pool views; identical to #balance.
@@ -242,6 +261,23 @@ class PoolCalculator
   def withdrawals = movements_out_total + expense_entries_total
 
   private
+
+  # What `net_of_sweep:` takes off the balance, and zero for every other calculator.
+  #
+  # Derived from a PLAIN calculator over the same pool rather than from `self`, and that is
+  # not a stylistic choice: #sweepable_amount reads #balance (through #anchored_reserve), so
+  # computing it on `self` would recurse until the stack ran out. The plain twin also keeps
+  # one reader of the sweep — the figure subtracted here is the same figure the proposal
+  # lists as `swept back from Groceries` and the same one Task 3 will write as a movement,
+  # because all three are `sweepable_amount` on an unflagged calculator.
+  #
+  # Built inside #balance's memo, so it costs one extra pass over the pool's aggregates and
+  # only on the calculators that asked for it.
+  def sweep_adjustment
+    return 0.to_d unless @net_of_sweep
+
+    self.class.new(pool, as_of: @as_of, today: today).sweepable_amount
+  end
 
   # The body of #period_closed?, split out only so the memo above it stays one line of
   # bookkeeping rather than wrapping four guards. Named `compute_` rather than the near-

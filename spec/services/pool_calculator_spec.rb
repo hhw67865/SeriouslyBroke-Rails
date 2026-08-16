@@ -782,5 +782,60 @@ RSpec.describe PoolCalculator, type: :model do
       expect(calc(dining).sweepable_amount).to eq(0)
       expect(calc(dining).sweepable_amount).to be_a(BigDecimal)
     end
+
+    # `net_of_sweep:` — what this pool would need if the sweep had already happened. It exists
+    # because #required reads the LIVE balance while the sweep is only materialised when the
+    # user confirms the distribution, so a swept envelope's leftover is still sitting in it at
+    # the moment it is asked what it needs.
+    describe "net_of_sweep" do
+      # The default is asserted as an EQUALITY WITH TODAY'S NUMBERS, not merely as "something
+      # sensible": every caller in the app builds a calculator without this keyword, and the
+      # keyword must be incapable of moving any of their figures.
+      #
+      # Then the same envelope with the keyword, at figures that differ in both readers
+      # (balance 85 → 0, required 315 → 400), so neither direction can pass on a coincidence.
+      it "changes nothing unless it is asked for", :aggregate_failures do
+        groceries = envelope(name: "Groceries")
+        create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+        fund(groceries, 85, on: last_period)
+
+        expect(calc(groceries).balance).to eq(85)
+        expect(calc(groceries).free_amount).to eq(0)
+        expect(calc(groceries).required).to eq(315)
+        expect(calc(groceries).sweepable_amount).to eq(85)
+
+        post_sweep = groceries.calculator(today: today, net_of_sweep: true)
+        expect(post_sweep.balance).to eq(0)
+        expect(post_sweep.required).to eq(400)
+      end
+
+      # The negative direction, at the same shape and the same $85: this money belongs to the
+      # live period, so there is no sweep to net off and the flagged calculator must answer
+      # exactly what the plain one does. Without this the example above passes against a
+      # keyword that simply zeroes the balance.
+      it "subtracts nothing from a pool with nothing to sweep", :aggregate_failures do
+        groceries = envelope(name: "Groceries")
+        create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+        fund(groceries, 85, on: this_period)
+
+        post_sweep = groceries.calculator(today: today, net_of_sweep: true)
+        expect(calc(groceries).sweepable_amount).to eq(0)
+        expect(post_sweep.balance).to eq(85)
+        expect(post_sweep.required).to eq(315)
+      end
+
+      # The subtraction is the one place a BigDecimal balance meets a figure that could be a
+      # bare Integer, and an entry-less envelope is where every `sum(:amount)` behind it
+      # returns the Integer literal 0.
+      it "keeps the balance a BigDecimal on an envelope holding nothing", :aggregate_failures do
+        fresh = envelope(name: "Fresh")
+        create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+
+        post_sweep = fresh.calculator(today: today, net_of_sweep: true)
+        expect(post_sweep.balance).to eq(0)
+        expect(post_sweep.balance).to be_a(BigDecimal)
+        expect(post_sweep.required).to be_a(BigDecimal)
+      end
+    end
   end
 end

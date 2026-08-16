@@ -86,8 +86,8 @@ class Pool < ApplicationRecord
     contribution_entries.or(withdrawal_entries)
   end
 
-  def calculator(as_of: nil, today: Date.current)
-    PoolCalculator.new(self, as_of: as_of, today: today)
+  def calculator(as_of: nil, today: Date.current, net_of_sweep: false)
+    PoolCalculator.new(self, as_of: as_of, today: today, net_of_sweep: net_of_sweep)
   end
 
   def status(today: Date.current)
