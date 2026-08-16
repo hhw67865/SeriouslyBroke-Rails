@@ -1,0 +1,194 @@
+<% content_for :title, "Move money" %>
+
+<%# MOVING MONEY BETWEEN TWO ENVELOPES — spec §5's reallocation, and the single-row twin of the
+    distribution screen. The subtitle is the invariant said in words: both pools sit inside one
+    account, so nothing here changes what the bank holds. %>
+<%= page_header(title: "Move money",
+                subtitle: "One movement inside one account — your bank balance doesn't change") %>
+
+<div class="max-w-3xl space-y-6">
+  <%# THE MOVE WAS REFUSED. Above everything else, because the screen below it is a proposal
+      again and there is nothing in the figures to say so. The second sentence is the fact that
+      makes the first safe: one row, so a refusal happens before the INSERT and there is no
+      half-written state to recover from. %>
+  <% if @errors.present? %>
+    <div id="reallocation-errors" class="rounded border border-status-danger bg-status-danger-light px-6 py-4">
+      <p class="text-sm font-semibold text-status-danger">Nothing moved</p>
+      <p class="mt-1 text-sm text-gray-700">
+        The ledger is exactly as it was. Fix the line below and try again.
+      </p>
+      <ul class="mt-2 list-disc space-y-0.5 pl-5 text-sm text-status-danger">
+        <% @errors.each do |error| %>
+          <li><%= error %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%# ONE FORM, TWO DESTINATIONS, exactly as the waterfall does it. The GET recomputes the damage
+      against the ledger — `required`, `allocated_balances` and the pool's own PoolStatus are
+      server-side readers, and a JavaScript copy of the schedule maths would be a second answer
+      free to disagree with the one that writes. The POST submitter below carries the same fields,
+      so what is written is what was shown. %>
+  <%= form_with url: new_pool_movement_path, method: :get do %>
+    <div class="bg-white border border-gray-200 rounded p-6 space-y-4">
+      <h3 class="text-sm font-semibold text-gray-900">Where it's going</h3>
+
+      <div>
+        <%# EXPLICIT IDS, not the param names, and this was measured on screen rather than
+            reasoned about. `shared/_date_selector` — the month scrubber in the sidebar chrome —
+            re-emits every scalar query parameter as `hidden_field_tag key, value` in EACH of its
+            two forms, so a field whose id is the bare param name lands on a page holding three
+            elements with that id. `label for=` and `getElementById` both reach the hidden one
+            first: `document.getElementById("amount")` on this page returned
+            `<input type="hidden" name="amount" value="300">`, not the box the user types in.
+            Naming them here costs nothing and leaves the shared partial alone. %>
+        <%= label_tag "move-to-pool", "Envelope", class: "form-label" %>
+        <%# Grouped by account, and an account appears inside its own group as its buffer: the
+            money no envelope has claimed (spec §7.1) is a real end of a real movement — it is
+            where a sweep sends a closed envelope's leftover. %>
+        <%= select_tag :to_pool_id,
+                       grouped_options_for_select(
+                         reallocation_destination_options(@presenter.destination_groups),
+                         @presenter.to_pool&.id
+                       ),
+                       include_blank: "Choose an envelope",
+                       id: "move-to-pool",
+                       class: "form-select" %>
+      </div>
+
+      <div>
+        <%= label_tag "move-amount", "How much", class: "form-label" %>
+        <%# `min` refuses a zero or a negative before it is submitted. Neither is an event
+            (amendment E) and PoolMovement refuses both anyway — this only keeps the user from
+            having to be told so. %>
+        <%= number_field_tag(
+              :amount,
+              @presenter.amount_value,
+              id: "move-amount",
+              step: "0.01",
+              min: "0.01",
+              placeholder: "0.00",
+              class: "form-input w-40 text-right tabular-nums"
+            ) %>
+      </div>
+
+      <%# WHAT THE MOVE BUYS. Only once both ends of it are known — before then there is no
+          arrival to describe, and a line printed over an empty form would be describing nothing. %>
+      <% if @presenter.gain %>
+        <p id="reallocation-gain" class="text-sm text-gray-700">
+          <%= reallocation_gain_sentence(@presenter.gain) %>
+        </p>
+      <% end %>
+    </div>
+
+    <% if @presenter.to_pool %>
+      <section id="reallocation-sources" class="bg-white border border-gray-200 rounded"
+               aria-labelledby="sources-heading">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 id="sources-heading" class="text-sm font-semibold text-gray-900">Where it comes from</h3>
+          <p class="mt-1 text-sm text-gray-600">
+            Only pools in the same account — money that has to physically move between banks is a
+            change you record, not one this screen makes.
+          </p>
+        </div>
+
+        <% if @presenter.sources.empty? %>
+          <p class="px-6 py-4 text-sm text-gray-600">
+            <% if @presenter.to_pool.account.nil? && !@presenter.to_pool.pool_type_account? %>
+              <%= @presenter.to_pool.name %> isn't in an account, so no money can reach it. Give it
+              an account first.
+            <% else %>
+              Nothing else sits in this account, so there's nothing to move from.
+            <% end %>
+          </p>
+        <% end %>
+
+        <% @presenter.sources.each do |candidate| %>
+          <%# SHOWN BUT DISABLED, WITH THE REASON (amendment D). A source that cannot afford the
+              move is rendered exactly like one that can — same row, same status, same figure —
+              and differs only in that its control is dead and the line beneath it says why. A row
+              that simply vanished would leave the user hunting for an envelope they can see on
+              Home. %>
+          <div class="px-6 py-3 border-b border-gray-100 <%= "bg-gray-50" unless candidate.affordable? %>"
+               data-source="<%= candidate.pool.name %>">
+            <% radio_id = "from-#{candidate.pool.id}" %>
+            <div class="flex items-baseline justify-between gap-4">
+              <span class="flex items-baseline gap-2">
+                <%= radio_button_tag(
+                      :from_pool_id,
+                      candidate.pool.id,
+                      candidate.selected?,
+                      id: radio_id,
+                      disabled: !candidate.affordable?,
+                      class: "form-checkbox"
+                    ) %>
+                <%= label_tag(
+                      radio_id,
+                      reallocation_pool_name(candidate.pool),
+                      class: reallocation_source_label_class(candidate)
+                    ) %>
+              </span>
+              <%# The pool's own status, in the app's one row vocabulary (spec §4.4) — the same
+                  words Home prints, so the user is choosing between rows they already know. %>
+              <span class="text-sm text-gray-600">
+                <%= pool_status_label(candidate.status, period_closed: candidate.period_closed) %>
+              </span>
+            </div>
+
+            <p class="mt-0.5 text-xs <%= candidate.affordable? ? "text-gray-500" : "text-status-warning" %>"
+               data-source-reason="<%= candidate.pool.name %>">
+              <% if candidate.affordable? %>
+                <%= reallocation_holding_clause(candidate) %>
+              <% else %>
+                Can't make this move — <%= reallocation_reason(candidate) %>
+              <% end %>
+            </p>
+
+            <%# THE DAMAGE, on every source that could actually make the move, so the choice
+                between them is a comparison rather than a guess.
+
+                Three colours for three different things, and the middle one is the whole point of
+                the screen: grey when the move only takes money no rule was holding, amber when it
+                reaches past that into a rule's reserve, red when it pushes the envelope into a
+                different state altogether. %>
+            <% if candidate.damage %>
+              <p class="mt-1 text-xs <%= reallocation_damage_class(candidate) %>"
+                 data-damage="<%= candidate.pool.name %>">
+                ↳ <%= reallocation_damage_sentence(candidate) %>
+              </p>
+            <% end %>
+          </div>
+        <% end %>
+      </section>
+    <% end %>
+
+    <%# "UPDATE FIGURES" IS FIRST IN DOM ORDER AND `flex-row-reverse` PUTS IT BACK ON THE RIGHT.
+        HTML's implicit submission activates THE FIRST SUBMIT BUTTON IN TREE ORDER when Enter is
+        pressed in a number field — so with the move button first, typing an amount and pressing
+        Enter would MOVE THE MONEY, on a screen whose whole purpose is stating the cost before
+        that happens. The distribution screen shipped exactly that defect and it wrote a $2,900
+        split on a keypress. Enter recomputes; the example "recomputes rather than moving money
+        when Enter is pressed in the amount box" is what holds it. Do not reorder these two
+        without moving the reverse with them.
+
+        The token rides on the button rather than in a hidden field, for _confirm's reason: this
+        form is a GET, and a hidden `authenticity_token` would be serialised into the query string
+        on every recompute — into the URL bar, the history and the logs. %>
+    <div class="flex items-center justify-between gap-4">
+      <p class="text-xs text-gray-500">Nothing moves until you press the button.</p>
+      <span class="flex flex-row-reverse items-center gap-3">
+        <button type="submit" class="btn btn-secondary">Update figures</button>
+        <button type="submit"
+                class="btn btn-primary"
+                id="confirm-move"
+                formaction="<%= pool_movements_path %>"
+                formmethod="post"
+                name="authenticity_token"
+                value="<%= form_authenticity_token %>">
+          Move the money
+        </button>
+      </span>
+    </div>
+  <% end %>
+</div>

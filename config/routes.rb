@@ -41,6 +41,12 @@ Rails.application.routes.draw do
   # yet, and nothing on the screen posts to it, so the route is inert until then.
   resources :distributions, only: [:new, :create]
 
+  # Moving money between two envelopes in one account (spec §5). `new` states the damage, `create`
+  # writes the single `transfer` movement. Both take `to_pool_id`, `from_pool_id` and `amount` as
+  # flat params rather than a nested `pool_movement[…]` hash, because ONE form serves both: the GET
+  # recomputes the damage against the ledger and a submitter inside it POSTs the same fields.
+  resources :pool_movements, only: [:new, :create]
+
   resource :account, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode

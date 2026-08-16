@@ -26,6 +26,21 @@ class PoolMovement < ApplicationRecord
   validate :pools_must_differ
   validate :pools_must_share_a_user
 
+  # SPEC §5 PUTS CROSS-ACCOUNT TRANSFERS OUT OF SCOPE, and this is where that scope is enforced
+  # for the one path that has to honour it: Task 7's reallocation screen, which saves on the
+  # `:reallocation` context.
+  #
+  # On a context rather than unconditionally, because the model deliberately supports the
+  # movement it refuses here — "model support exists, UI deferred" is the spec's own wording, and
+  # #crosses_accounts? exists to answer the question rather than to forbid the answer. Making it
+  # a plain validation would retire that support and take the entry-driven movements with it.
+  #
+  # Here rather than in the controller so the constraint and the reader that expresses it live
+  # together: ReallocationPresenter builds its source list by asking every candidate movement the
+  # same #crosses_accounts?, so a pool the screen refuses to offer is a pool the save refuses to
+  # write, by one method rather than by two that agree today.
+  validate :must_not_cross_accounts, on: :reallocation
+
   scope :for_entry, ->(entry) { where(source_entry: entry) }
 
   # The two kinds a distribution writes, and the only two it may delete when it replaces
@@ -53,6 +68,15 @@ class PoolMovement < ApplicationRecord
     return if from_pool.blank? || to_pool.blank?
 
     errors.add(:to_pool, "must differ from the source pool") if from_pool == to_pool
+  end
+
+  # Both ends must be present before the question means anything: `containing_account(nil)` is a
+  # NoMethodError, and a movement missing an end already fails `belongs_to`'s own presence check.
+  def must_not_cross_accounts
+    return if from_pool.blank? || to_pool.blank?
+
+    errors.add(:to_pool, "must be in the same account — moving money between accounts isn't supported yet") if
+      crosses_accounts?
   end
 
   # Two pools that name no user at all compare `nil == nil` and read as sharing an owner,
