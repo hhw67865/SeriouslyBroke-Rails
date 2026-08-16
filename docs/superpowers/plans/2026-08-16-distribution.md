@@ -271,6 +271,18 @@ One movement: from, to, amount. Same-account only (spec §5). The screen states 
 
 A source that cannot afford it is shown but disabled, with the reason.
 
+**"Cannot afford" means the envelope does not hold the money — not that a rule has claimed it.**
+Gating on `free_amount` (balance less what *every* rule holds) makes the damage statement above
+unreachable: a move inside `free_amount` leaves every allocation untouched, so nothing can slip
+and no ask can change. The spec's own example is the proof — Car at $1,340 with a $628 bill due
+first and an $800 Maintenance rule reports `free_amount` of **$0.00**, and §4.2's "Take $300 from
+Rent" is the same shape.
+
+So the gate is the balance, and `free_amount` informs the *warning* rather than the refusal.
+Robbing one envelope to save another is the workflow this screen exists for; the app's job is to
+state the damage, not to forbid the move. Task 8's fix candidates are where "do not rob an
+envelope that is itself behind" belongs, because there the app is the one proposing.
+
 Route: `resources :pool_movements, only: [:new, :create]`.
 
 ---
