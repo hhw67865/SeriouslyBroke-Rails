@@ -38,7 +38,7 @@ class PoolsController < ApplicationController
     @pool = current_user.pools.new(pool_params)
 
     if @pool.save
-      redirect_to pool_path(@pool), notice: "Savings pool was successfully created."
+      redirect_to pool_path(@pool), notice: "Pool was successfully created."
     else
       render :new, status: :unprocessable_content
     end
@@ -47,7 +47,7 @@ class PoolsController < ApplicationController
   # PATCH/PUT /pools/1
   def update
     if @pool.update(pool_params)
-      redirect_to pool_path(@pool), notice: "Savings pool was successfully updated."
+      redirect_to pool_path(@pool), notice: "Pool was successfully updated."
     else
       render :edit, status: :unprocessable_content
     end
@@ -56,7 +56,7 @@ class PoolsController < ApplicationController
   # DELETE /pools/1
   def destroy
     if @pool.destroy
-      redirect_to pools_path, notice: "Savings pool was successfully deleted."
+      redirect_to pools_path, notice: "Pool was successfully deleted."
     else
       redirect_to pool_path(@pool), alert: @pool.errors[:base].to_sentence
     end

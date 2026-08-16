@@ -17,7 +17,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
     end
 
     it "shows breadcrumbs" do
-      expect(page).to have_link("Savings Pools", href: pools_path)
+      expect(page).to have_link("Pools", href: pools_path)
       expect(page).to have_content("Emergency Fund")
     end
   end
@@ -31,7 +31,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       click_link "Edit"
 
       expect(page).to have_current_path(edit_pool_path(pool))
-      expect(page).to have_content("Edit Savings Pool")
+      expect(page).to have_content("Edit Pool")
     end
   end
 
@@ -51,7 +51,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       end
 
       expect(page).to have_current_path(pools_path)
-      expect(page).to have_content("Savings pool was successfully deleted")
+      expect(page).to have_content("Pool was successfully deleted")
       expect(Pool.exists?(pool_id)).to be(false)
     end
 
@@ -72,11 +72,11 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
   describe "breadcrumb navigation", :aggregate_failures do
     it "navigates back to savings pools index" do
       within("nav[aria-label='Breadcrumb']") do
-        click_link "Savings Pools"
+        click_link "Pools"
       end
 
       expect(page).to have_current_path(pools_path)
-      expect(page).to have_content("Track your financial goals and savings progress")
+      expect(page).to have_content("Accounts and budget envelopes live on Home")
     end
   end
 end

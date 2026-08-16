@@ -1,7 +1,13 @@
-<%# Clean Savings Pools Index - Easy on the Eyes %>
+<%# The savings-goal index. It lists `current_user.pools.savings_pools` and nothing else —
+    a deliberate filter (domain spec §7a), because every card and the show page below it are
+    built out of progress-toward-a-target, which is a concept only a savings goal has. So the
+    heading keeps the pool type in it rather than being widened to "Pools": a page titled for
+    all three kinds while listing one of them would be a new untruth, not a fix for an old
+    one. The subtitle says where the other two live instead.
+    The buttons say "Pool" because the form they open now creates any of the three. %>
 <%= page_header(
     title: "Savings Pools",
-    subtitle: "Track your financial goals and savings progress",
+    subtitle: "Your savings goals and their progress. Accounts and budget envelopes live on Home.",
     search: show_search_form? ? {
       enabled: true,
       url: pools_path,
@@ -18,7 +24,7 @@
     } : nil,
     actions: [
       {
-        label: "New Savings Pool",
+        label: "New Pool",
         url: new_pool_path,
         class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
       }
@@ -42,12 +48,13 @@
     </div>
     <h3 class="text-xl font-medium text-gray-900 mb-3">No savings pools yet</h3>
     <p class="text-gray-600 mb-8 max-w-md mx-auto">
-      Start building your financial future by creating your first savings pool.
+      Start building your financial future by creating your first savings pool. Give it an
+      account to sit inside, and every period's money can reach it.
     </p>
-    <%= link_to new_pool_path, 
+    <%= link_to new_pool_path,
         class: "inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded text-white bg-brand hover:bg-brand-dark transition-colors duration-200" do %>
       <%= heroicon "plus", options: { class: "h-5 w-5 mr-2" } %>
-      Create Your First Goal
+      Create Your First Pool
     <% end %>
   </div>
 <% end %>

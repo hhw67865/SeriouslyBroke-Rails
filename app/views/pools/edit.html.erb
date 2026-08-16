@@ -1,9 +1,10 @@
-<%# Edit Savings Pool Page using standardized page header %>
+<%# This is where Home's "give it an account" sends the user, for a pool of any kind — so
+    the title says "Pool", not "Savings Pool". %>
 <%= page_header(
-    title: "Edit Savings Pool",
+    title: "Edit Pool",
     subtitle: "Update details for #{@pool.name}",
     breadcrumbs: [
-      { label: "Savings Pools", url: pools_path },
+      { label: "Pools", url: pools_path },
       { label: @pool.name, url: pool_path(@pool) },
       { label: "Edit" }
     ]

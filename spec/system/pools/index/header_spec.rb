@@ -13,11 +13,14 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
   describe "page header elements", :aggregate_failures do
     it "shows correct title and subtitle" do
       expect(page).to have_content("Savings Pools")
-      expect(page).to have_content("Track your financial goals and savings progress")
+      # This page lists savings pools and nothing else, so the subtitle has to say where the
+      # other two kinds of pool are — otherwise a user who just made an envelope here looks
+      # for it on the page they made it from and does not find it.
+      expect(page).to have_content("Accounts and budget envelopes live on Home")
     end
 
     it "shows create button" do
-      expect(page).to have_link("New Savings Pool")
+      expect(page).to have_link("New Pool")
     end
   end
 
@@ -35,10 +38,10 @@ RSpec.describe "Savings Pools Index - Header", type: :system do
 
   describe "create button navigation", :aggregate_failures do
     it "navigates to new savings pool page" do
-      click_link "New Savings Pool"
+      click_link "New Pool"
 
       expect(page).to have_current_path(new_pool_path)
-      expect(page).to have_content("New Savings Pool")
+      expect(page).to have_content("New Pool")
     end
   end
 end

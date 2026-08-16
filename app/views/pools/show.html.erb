@@ -1,4 +1,7 @@
-<%# Professional Savings Goal Show Page %>
+<%# The pool detail page. Reached for a pool of ANY kind — it is where creating one lands
+    you — so the chrome that only makes sense for a savings goal is now gated on there being
+    a target to measure against, rather than rendering a 0% bar toward $0.00 at every
+    envelope and account. %>
 <%
   calculator = @pool.calculator
   progress = calculator.progress_percentage
@@ -9,9 +12,9 @@
 
 <%= page_header(
     title: @pool.name,
-    subtitle: "Savings pool details and progress",
+    subtitle: pool_kind_subtitle(@pool),
     breadcrumbs: [
-      { label: "Savings Pools", url: pools_path },
+      { label: "Pools", url: pools_path },
       { label: @pool.name }
     ],
     actions: [
@@ -25,7 +28,7 @@
         url: pool_path(@pool),
         method: :delete,
         class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-status-danger text-white text-sm font-medium hover:opacity-90 shadow-sm transition",
-        confirm: "Are you sure you want to delete this savings pool? This action cannot be undone."
+        confirm: "Are you sure you want to delete this pool? This action cannot be undone."
       }
     ]
 ) %>
@@ -33,8 +36,13 @@
 <div class="max-w-6xl mx-auto">
 
   <% cache [@pool, selected_date] do %>
-  <%# Hero Progress Section %>
+  <%# Hero Progress Section. Everything measured AGAINST A TARGET is gated on there being
+      one: an envelope and an account carry no target_amount, and a full-width bar reading
+      "0% complete · Getting Started · Target Goal $0.00" is not a neutral default — it is
+      the page telling a user their new envelope has achieved nothing toward a figure they
+      never set. Current Balance is true of all three kinds and always renders. %>
   <div class="bg-white rounded shadow-sm border border-gray-100 p-8 mb-8">
+    <% if target_amount.present? %>
     <%# Progress Visualization %>
     <div class="mb-8">
       <div class="flex justify-between items-center mb-3">
@@ -81,9 +89,10 @@
         </div>
       <% end %>
     </div>
+    <% end %>
 
     <%# Key Metrics %>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="<%= target_amount.present? ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "grid grid-cols-1 gap-6" %>">
       <div class="text-center">
         <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Balance</div>
         <div class="text-2xl md:text-3xl font-bold <%= current_balance >= 0 ? "text-gray-900" : "text-status-danger" %>">
@@ -91,21 +100,23 @@
         </div>
       </div>
 
-      <div class="text-center">
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Target Goal</div>
-        <div class="text-2xl md:text-3xl font-bold text-gray-900">
-          <%= number_to_currency(target_amount) %>
+      <% if target_amount.present? %>
+        <div class="text-center">
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Target Goal</div>
+          <div class="text-2xl md:text-3xl font-bold text-gray-900">
+            <%= number_to_currency(target_amount) %>
+          </div>
         </div>
-      </div>
 
-      <div class="text-center">
-        <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-          <%= progress >= 100 ? "Excess Saved" : "Still Needed" %>
+        <div class="text-center">
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            <%= progress >= 100 ? "Excess Saved" : "Still Needed" %>
+          </div>
+          <div class="text-2xl md:text-3xl font-bold text-brand">
+            <%= number_to_currency(remaining) %>
+          </div>
         </div>
-        <div class="text-2xl md:text-3xl font-bold text-brand">
-          <%= number_to_currency(remaining) %>
-        </div>
-      </div>
+      <% end %>
     </div>
   </div>
 

@@ -18,14 +18,14 @@ RSpec.describe "Savings Pools Index - Empty State", type: :system do
     end
 
     it "provides link to create first savings pool" do
-      expect(page).to have_link("Create Your First Goal")
+      expect(page).to have_link("Create Your First Pool")
     end
 
     it "navigates to new savings pool page when clicking create link" do
-      click_link "Create Your First Goal"
+      click_link "Create Your First Pool"
 
       expect(page).to have_current_path(new_pool_path)
-      expect(page).to have_content("New Savings Pool")
+      expect(page).to have_content("New Pool")
     end
   end
 

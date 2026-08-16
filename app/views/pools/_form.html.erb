@@ -1,15 +1,77 @@
-<%# Savings Pool Form - SimpleForm with brand styling %>
+<%# Pool form. A pool is a bank ACCOUNT, a budget ENVELOPE or a savings GOAL, and the last
+    two live inside an account. Local: `pool`.
+
+    This form used to render `name`, `target_amount` and `start_date` alone, with a submit
+    button reading "Create Savings Pool". `pools.pool_type` defaults to 2 (savings) and
+    `account_id` is nullable, so every pool anybody could make here was an account-less
+    savings goal — while Home told those same users, in three separate places, to give their
+    pools an account. There was no field on earth to do it with. `pool_params` has permitted
+    `pool_type`, `account_id` and `priority` since Plan 2a; this is the form catching up. %>
 <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
   <%= simple_form_for pool, html: { class: "space-y-6" } do |f| %>
-    
-    <%# Goal Name %>
+    <%= f.error_notification %>
+    <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+
+    <%# Name %>
     <div>
       <%= f.input :name,
-          label: "Savings Pool Name",
+          label: "Pool Name",
           input_html: {
-            placeholder: "e.g., Emergency Fund, Vacation, New Car"
+            placeholder: "e.g., Checking, Groceries, Emergency Fund"
           },
-                      hint: "Give your savings pool a descriptive name" %>
+          hint: "What this is called on Home" %>
+    </div>
+
+    <%# What kind of pool. First, because it decides what every field below it means. %>
+    <div>
+      <%= f.input :pool_type,
+          as: :select,
+          collection: [
+            ["Bank account", "account"],
+            ["Budget envelope", "budget"],
+            ["Savings goal", "savings"]
+          ],
+          include_blank: false,
+          label: "What kind of pool is this?",
+          hint: "An account holds real money. An envelope is refilled out of an account every " \
+                "period. A goal accumulates inside an account toward a target." %>
+    </div>
+
+    <%# Which account holds it.
+        Said plainly rather than rendered as an empty select: a user with no accounts yet is
+        not looking at a field they forgot to fill in, they are looking at a step they have
+        not taken. An empty dropdown is the same dead end Home was sending them to. %>
+    <% accounts = assignable_accounts_for(pool) %>
+    <div>
+      <% if accounts.any? %>
+        <%= f.association :account,
+            collection: accounts,
+            label_method: :name,
+            value_method: :id,
+            include_blank: "No account — nothing can fund this pool",
+            label: "Account it sits inside",
+            hint: "Envelopes must name one. A bank account leaves this blank — it is where the " \
+                  "money already is." %>
+      <% else %>
+        <label class="form-label">Account it sits inside</label>
+        <div class="rounded border border-status-warning bg-status-warning-light p-4">
+          <p class="text-sm text-status-warning">
+            <strong>You have no bank accounts yet.</strong>
+            Nothing can fund an envelope or a goal until an account holds it — so make this one a
+            <strong>Bank account</strong> above, then come back and put your envelopes inside it.
+          </p>
+        </div>
+      <% end %>
+    </div>
+
+    <%# Funding order. %>
+    <div>
+      <%= f.input :priority,
+          as: :integer,
+          label: "Funding Priority",
+          input_html: { min: 0, step: 1 },
+          hint: "Lower numbers are funded first when a period's money runs out. Ties are broken " \
+                "by name." %>
     </div>
 
     <%# Target Amount %>
@@ -22,8 +84,9 @@
             step: 0.01,
             min: 0.01
           },
-          hint: "How much money do you want to save for this goal?" %>
-  </div>
+          hint: "Required on a savings goal — the figure you are saving toward. On an account it " \
+                "is your buffer marker, a health line and never a cap. Optional on an envelope." %>
+    </div>
 
     <%# Start Date %>
     <div>
@@ -31,25 +94,25 @@
           as: :date,
           html5: true,
           label: "Start Date",
-          hint: "Only expenses and savings after this date will count towards the goal" %>
+          hint: "Where a savings goal's timeline begins. It does not filter the balance." %>
     </div>
 
     <%# Progress Indicator (for existing goals) %>
-    <% if pool.persisted? %>
+    <% if pool.persisted? && pool.target_amount.present? %>
       <div class="bg-gray-50 rounded p-4 border-l-4 border-brand">
         <h4 class="text-sm font-medium text-gray-900 mb-2">Current Progress</h4>
         <% calculator = pool.calculator %>
         <% progress = calculator.progress_percentage %>
         <% current_balance = calculator.current_balance %>
-        
+
         <div class="flex justify-between text-sm text-gray-600 mb-2">
           <span>Progress toward goal</span>
           <span class="font-medium"><%= progress %>%</span>
         </div>
         <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
-          <div class="h-2 rounded-full bg-brand transition-all duration-300" 
+          <div class="h-2 rounded-full bg-brand transition-all duration-300"
                style="width: <%= [progress, 100].min %>%;"></div>
-  </div>
+        </div>
 
         <div class="grid grid-cols-2 gap-4 text-sm">
           <div>
@@ -64,9 +127,9 @@
               <%= number_to_currency(calculator.remaining_amount) %>
             </span>
           </div>
-  </div>
-  </div>
-<% end %>
+        </div>
+      </div>
+    <% end %>
 
     <%# Auto-create categories (only on new records) %>
     <% unless pool.persisted? %>
@@ -86,7 +149,7 @@
       </div>
     <% end %>
 
-    <%# Goal Information Box %>
+    <%# How it works %>
     <div class="bg-status-info-light rounded p-4 border border-status-info">
       <div class="flex items-start">
         <div class="flex-shrink-0">
@@ -96,10 +159,10 @@
           <h4 class="text-sm font-medium text-status-info">How it works</h4>
           <div class="mt-1 text-sm text-status-info">
             <ul class="list-disc list-inside space-y-1">
-              <li>After creating your goal, connect categories to track progress</li>
-              <li>Savings categories will <strong>add money</strong> to your goal</li>
-              <li>Expense categories will <strong>subtract money</strong> from your goal</li>
-              <li>Track your net progress toward your target amount</li>
+              <li>Money arrives in an <strong>account</strong>, then fills the pools inside it in priority order</li>
+              <li>A pool with no account can never be funded — Home says so on every one</li>
+              <li>Connect categories to a pool to track what it spends and receives</li>
+              <li>Savings categories <strong>add money</strong>; expense categories <strong>subtract</strong> it</li>
             </ul>
           </div>
         </div>
@@ -109,12 +172,12 @@
     <%# Form Actions %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-gray-200">
       <%= link_to "Cancel",
-pools_path,
-          class: "btn btn-secondary" %>
+                  pools_path,
+                  class: "btn btn-secondary" %>
 
-      <%= f.submit pool.persisted? ? "Update Savings Pool" : "Create Savings Pool",
+      <%= f.submit pool.persisted? ? "Update Pool" : "Create Pool",
           class: "btn btn-primary" %>
     </div>
-    
+
   <% end %>
 </div>
