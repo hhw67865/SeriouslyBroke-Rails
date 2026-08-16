@@ -240,6 +240,66 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  # The reader `User has_many :budgets, through: :categories` cannot be. Every example here
+  # is a pair: what the relation must REACH, and what it must not — a scope that returns
+  # everything passes every "finds it" assertion ever written.
+  describe ".for_user" do
+    let(:user) { create(:user) }
+    let(:pool) { create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user)) }
+
+    let(:stranger) { create(:user) }
+    let(:stranger_pool) do
+      create(:pool, :budget_pool, user: stranger, account: create(:pool, :account, user: stranger))
+    end
+
+    let!(:category_rule) { create(:budget, category: create(:category, :expense, user: user)) }
+    let!(:pool_rule) { create(:budget, :rate, pool: pool, category: nil) }
+    let!(:stranger_category_rule) { create(:budget, category: create(:category, :expense, user: stranger)) }
+    let!(:stranger_pool_rule) { create(:budget, :rate, pool: stranger_pool, category: nil) }
+
+    it "returns both modes and nobody else's" do
+      expect(described_class.for_user(user)).to contain_exactly(category_rule, pool_rule)
+    end
+
+    # The half the association already reached, asserted so the union cannot be
+    # "pool-mode instead of" rather than "pool-mode as well as".
+    it "still reaches the category-mode rules the association reached" do
+      expect(user.budgets).to contain_exactly(category_rule)
+    end
+
+    it "reaches a pool-mode rule the association misses", :aggregate_failures do
+      expect(described_class.for_user(user)).to include(pool_rule)
+      expect(user.budgets).not_to include(pool_rule)
+    end
+
+    it "excludes another user's rules in both modes", :aggregate_failures do
+      expect(described_class.for_user(user)).not_to include(stranger_category_rule)
+      expect(described_class.for_user(user)).not_to include(stranger_pool_rule)
+    end
+
+    # What BudgetsController#set_budget does with it. Findability is the point of the
+    # scope; raising on a stranger's id is the point of it still being a scope.
+    it "finds a pool-mode rule by id" do
+      expect(described_class.for_user(user).find(pool_rule.id)).to eq(pool_rule)
+    end
+
+    it "raises RecordNotFound for another user's category-mode rule" do
+      expect { described_class.for_user(user).find(stranger_category_rule.id) }
+        .to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "raises RecordNotFound for another user's pool-mode rule" do
+      expect { described_class.for_user(user).find(stranger_pool_rule.id) }
+        .to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    # `.or` refuses relations of differing structure, so the scope has to stay composable
+    # for the Budget page — which groups these by account and by pool.
+    it "chains with further conditions" do
+      expect(described_class.for_user(user).where(pool_id: pool.id)).to contain_exactly(pool_rule)
+    end
+  end
+
   describe ":pool_budget factory" do
     # Guards the interface later tasks build on: every shape trait must produce a
     # valid record under `build`, where associations are not yet persisted.

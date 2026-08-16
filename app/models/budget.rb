@@ -7,6 +7,25 @@ class Budget < ApplicationRecord
 
   enum :basis, { monthly: 0, per_paycheck: 1 }, prefix: true
 
+  # EVERY RULE A USER OWNS, IN ONE RELATION — the reader `User has_many :budgets, through:
+  # :categories` cannot be. That association walks the category link only, so it reaches
+  # category-mode rules and nothing else, and every pool-mode rule — which is every rule the
+  # Budget page manages — is invisible to it. `current_user.budgets.find` therefore answered
+  # RecordNotFound for rules the user plainly owns.
+  #
+  # Two `where`s OR-ed rather than a join, because a rule has exactly one owner (see
+  # #exactly_one_owner) and the two owners live on different tables: a join would have to be
+  # a LEFT OUTER pair and would then need a DISTINCT to undo itself. Sub-SELECTs keep it one
+  # statement over the same `budgets` rows the association returns.
+  #
+  # Scoped by the OWNER's user, not by a `user_id` on this table — a budget carries no user
+  # column, and inventing one would give the invariant two places to be wrong.
+  scope :for_user,
+        lambda { |user|
+          where(category_id: user.categories.select(:id))
+            .or(where(pool_id: user.pools.select(:id)))
+        }
+
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
   validates :amount, presence: true, numericality: { greater_than: 0 }

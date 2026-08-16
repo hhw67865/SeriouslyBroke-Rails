@@ -25,6 +25,7 @@ class PoolMovement < ApplicationRecord
 
   validate :pools_must_differ
   validate :pools_must_share_a_user
+  validate :source_entry_must_share_the_user
 
   # SPEC §5 PUTS CROSS-ACCOUNT TRANSFERS OUT OF SCOPE, and this is where that scope is enforced
   # for the one path that has to honour it: Task 7's reallocation screen, which saves on the
@@ -125,4 +126,32 @@ class PoolMovement < ApplicationRecord
     owner = from_pool.user
     errors.add(:to_pool, "must belong to the same user") if owner.blank? || owner != to_pool.user
   end
+
+  # SPEC §7a — the third ownership edge on this table, and the one that had no guard.
+  #
+  # `source_entry` is what makes a distribution replaceable (see the `kind` enum), and the
+  # column is a bare foreign key to `entries` with no user on it. Nothing but this stopped a
+  # movement between MY pools from naming SOMEONE ELSE'S paycheck as its cause: the money
+  # would move correctly — `Σ pools` still equals the bank balance, so the invariant would
+  # never notice — while "replace this period's distribution" keyed off a stranger's entry.
+  #
+  # Compared against `from_pool.user` alone because #pools_must_share_a_user already refuses a
+  # movement whose two ends disagree, so one end is the whole answer; checking both would
+  # report the same defect twice under a different name.
+  #
+  # Records, not ids, for the reason every guard on this class uses records: under `build`
+  # nothing is persisted and every id is nil, so `nil == nil` waves a foreign entry through.
+  # An entry that names no user at all is rejected outright rather than matched against a
+  # pool that names none either — the same both-nil hole #pools_must_share_a_user closes.
+  def source_entry_must_share_the_user
+    return if source_entry.blank? || from_pool.blank?
+
+    owner = from_pool.user
+    errors.add(:source_entry, "must belong to the same user") if owner.blank? || owner != source_entry_owner
+  end
+
+  # `Entry#user` delegates through `item` without `allow_nil`, so it raises on a half-built
+  # entry. A validation must return an ANSWER for every record it is handed, including the
+  # invalid ones — a NoMethodError out of `valid?` is not a rejection.
+  def source_entry_owner = source_entry.item&.category&.user
 end

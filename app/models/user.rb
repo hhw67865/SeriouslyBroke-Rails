@@ -51,6 +51,15 @@ class User < ApplicationRecord
   # disagree about which boundary comes next.
   PERIOD_WINDOW_DAYS = 45
 
+  # EVERY funding rule this user owns, both modes. `budgets` above is the category-mode half
+  # only — it is kept because a category's own screens ask exactly that question — so this is
+  # deliberately a second, WIDER reader rather than a redefinition of the first.
+  #
+  # Delegating to Budget.for_user rather than spelling the union again: one place decides what
+  # "a user's rules" means, so a screen and the controller lookup guarding it cannot disagree
+  # about which rules exist.
+  def all_budgets = Budget.for_user(self)
+
   def toggle_theme!
     update(theme: light? ? :dark : :light)
   end

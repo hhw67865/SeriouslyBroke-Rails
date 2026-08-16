@@ -116,6 +116,86 @@ RSpec.describe PoolMovement, type: :model do
 
       expect(build(:pool_movement, from_pool: from_pool, to_pool: to_pool)).to be_valid
     end
+
+    # SPEC §7a. The column is a bare foreign key to `entries` with no user on it, so nothing
+    # but this stops a movement between MY pools from naming a STRANGER'S paycheck as its
+    # cause. The money would still land correctly — Σ pools would equal the bank balance
+    # either way — while "replace this period's distribution" keyed off the wrong entry.
+    describe "source_entry ownership" do
+      let(:own_income) do
+        create(:entry, item: create(:item, category: create(:category, :income, user: user)), pool: checking)
+      end
+
+      it "accepts an entry belonging to the pools' owner", :aggregate_failures do
+        movement = build(:pool_movement, from_pool: checking, to_pool: groceries, source_entry: own_income)
+
+        expect(movement).to be_valid
+        expect(movement.errors[:source_entry]).to be_empty
+      end
+
+      it "accepts no source entry at all — the column is optional" do
+        expect(build(:pool_movement, from_pool: checking, to_pool: groceries, source_entry: nil)).to be_valid
+      end
+
+      it "rejects an entry belonging to another user", :aggregate_failures do
+        movement = build(:pool_movement, from_pool: checking, to_pool: groceries, source_entry: create(:entry, :income))
+
+        expect(movement).not_to be_valid
+        expect(movement.errors[:source_entry]).to include("must belong to the same user")
+      end
+
+      # Under `build` nothing is persisted and every id is nil, so an id comparison reads
+      # `nil == nil` and waves the foreign entry through.
+      it "rejects an unsaved entry belonging to another unsaved user", :aggregate_failures do
+        unsaved_user = build(:user)
+        from_pool = build(:pool, :account, user: unsaved_user)
+        to_pool = build(:pool, :budget_pool, user: unsaved_user, account: from_pool)
+        foreign = build(:entry, item: build(:item, category: build(:category, :income, user: build(:user))))
+        movement = build(:pool_movement, from_pool: from_pool, to_pool: to_pool, source_entry: foreign)
+
+        expect(movement).not_to be_valid
+        expect(movement.errors[:source_entry]).to include("must belong to the same user")
+      end
+
+      it "accepts an unsaved entry belonging to the same unsaved user" do
+        unsaved_user = build(:user)
+        from_pool = build(:pool, :account, user: unsaved_user)
+        to_pool = build(:pool, :budget_pool, user: unsaved_user, account: from_pool)
+        own = build(:entry, item: build(:item, category: build(:category, :income, user: unsaved_user)))
+
+        expect(build(:pool_movement, from_pool: from_pool, to_pool: to_pool, source_entry: own)).to be_valid
+      end
+
+      # The both-nil hole #pools_must_share_a_user closes, on the third edge: an entry
+      # naming no user must not match pools naming none either.
+      it "rejects an entry that names no user when the pools name none", :aggregate_failures do
+        movement = described_class.new(
+          from_pool: Pool.new(pool_type: :account),
+          to_pool: Pool.new(pool_type: :budget),
+          source_entry: Entry.new(amount: 10, date: Date.current),
+          amount: 25.00,
+          date: Date.current
+        )
+
+        movement.valid?
+
+        expect(movement.errors[:source_entry]).to include("must belong to the same user")
+      end
+
+      # A validation must return an ANSWER for every record it is handed. `Entry#user`
+      # delegates through `item` without `allow_nil`, so reaching for it raises on a
+      # half-built entry — and a NoMethodError out of `valid?` is not a rejection.
+      it "answers rather than raising when the entry has no item" do
+        movement = build(
+          :pool_movement,
+          from_pool: checking,
+          to_pool: groceries,
+          source_entry: Entry.new(amount: 10, date: Date.current)
+        )
+
+        expect { movement.valid? }.not_to raise_error
+      end
+    end
   end
 
   # This table is the ledger of money movement, and `update_all` / `insert_all` / raw SQL
@@ -242,16 +322,19 @@ RSpec.describe PoolMovement, type: :model do
     end
   end
 
+  # `create(:entry, :income)` builds its own user, so these two used to name a STRANGER'S
+  # paycheck as the cause of this user's movement — the §7a hole below, which they were
+  # silently exercising. They now fund the movement from the pools' own owner.
   describe "grouping by source entry" do
+    let(:income) { create(:entry, item: create(:item, category: create(:category, :income, user: user)), pool: checking) }
+
     it "is destroyed with its source entry" do
-      income = create(:entry, :income)
       create(:pool_movement, from_pool: checking, to_pool: groceries, source_entry: income)
 
       expect { income.destroy }.to change(described_class, :count).by(-1)
     end
 
     it "collects the movements funded by one entry" do
-      income = create(:entry, :income)
       allocation = create(:pool_movement, from_pool: checking, to_pool: groceries, source_entry: income)
       create(:pool_movement, from_pool: checking, to_pool: car)
 

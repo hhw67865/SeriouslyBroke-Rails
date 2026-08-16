@@ -11,6 +11,31 @@ RSpec.describe User, type: :model do
     it { is_expected.to have_many(:budgets).through(:categories) }
   end
 
+  # The wider reader beside the narrow one. Both are asserted here, against the SAME
+  # fixtures, so "all_budgets is just budgets" can never pass unnoticed.
+  describe "#all_budgets" do
+    let(:user) { create(:user) }
+    let(:account) { create(:pool, :account, user: user) }
+    let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
+
+    let!(:category_rule) { create(:budget, category: create(:category, :expense, user: user)) }
+    let!(:pool_rule) { create(:budget, :rate, pool: pool, category: nil) }
+    let!(:stranger_rule) { create(:budget, category: create(:category, :expense)) }
+
+    it "returns every rule the user owns, in both modes" do
+      expect(user.all_budgets).to contain_exactly(category_rule, pool_rule)
+    end
+
+    it "is wider than #budgets, which reaches only the category-mode half", :aggregate_failures do
+      expect(user.budgets).to contain_exactly(category_rule)
+      expect(user.all_budgets).to include(pool_rule)
+    end
+
+    it "excludes another user's rules" do
+      expect(user.all_budgets).not_to include(stranger_rule)
+    end
+  end
+
   # These two are a pair and must be read together: deleting one account pool and
   # deleting a whole user want opposite behaviour from `child_pools`, so the
   # cascade is sequenced on User rather than by relaxing Pool's protection.
