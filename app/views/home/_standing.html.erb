@@ -18,14 +18,23 @@
       You have <strong><%= number_to_currency(presenter.available) %></strong>.
     </p>
 
-    <%# Only when the two figures above cannot be subtracted to reach the gap — money sitting
-        in an account whose own pools are already funded. Exactly zero for a single-account
-        user who is short, so this stays silent for most people (principle 3: a consequence
-        only when there is one). %>
+    <%# Whenever the two figures above cannot be subtracted to reach the headline. There are
+        exactly two reasons (see HomePresenter#shortfall), and each says its own half: cash in
+        an account whose pools are already funded, and money owed by a pool no account can
+        fund. Gating on the buffer alone stayed silent on the second — which is the ordinary
+        screen for a single account with a savings goal. Silent when neither applies, since a
+        consequence is only worth stating when there is one (principle 3). %>
     <% if presenter.buffer.positive? %>
       <p class="mt-1 text-sm text-gray-600">
         <%= number_to_currency(presenter.buffer) %> of that sits in accounts with nothing left
         to fund, so it can't close the gap — the shortfall is what your pools miss, account by account.
+      </p>
+    <% end %>
+    <% if presenter.orphan_pools.any? %>
+      <p class="mt-1 text-sm text-gray-600">
+        <%= number_to_currency(presenter.orphan_required) %> of what you need belongs to
+        <%= pluralize(presenter.orphan_pools.size, "pool") %> with no account, listed below.
+        Money can't close that — giving it an account can.
       </p>
     <% end %>
   <% end %>

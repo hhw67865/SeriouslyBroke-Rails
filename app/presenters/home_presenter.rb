@@ -68,9 +68,16 @@ class HomePresenter
   # now with nowhere to go; counting it here made a setup problem masquerade as a shortfall.
   # See #orphan_pools.
   #
-  # The difference between the two figures is money stranded in the wrong account. With one
-  # account they are always equal, so it only surfaces in the multi-account case — where the
-  # view owes the user an explanation of why subtracting the headlines gives another number.
+  # A reader CAN subtract the standing band's two figures, and the answer is not this one:
+  #
+  #   (total_required - available) - shortfall = orphan_required - buffer
+  #
+  # Two causes, either of which can be alone: cash sitting in an account whose own pools are
+  # already funded (#buffer), and money owed by a pool no account can fund (#orphan_required).
+  # A single-account user with every pool assigned has neither, and the figures reconcile
+  # exactly; a single account plus one savings goal — the ordinary shape until Plan 3's
+  # backfill — has the second. The standing band owes an explanation whenever either is
+  # non-zero, and gating on #buffer alone suppresses it on exactly the second case.
   #
   # No `max` clamp is needed: every row's `short` is `needed - funded` where `funded` is
   # clamped to at most `needed`, so no row can contribute a negative.
@@ -100,16 +107,24 @@ class HomePresenter
   #
   #   covered → this is the buffer, money that simply stays put.
   #   short   → this is money that CANNOT close the gap, because the gap is in another
-  #             account. It is the whole difference between #shortfall and the
-  #             `total_required - available` subtraction a reader can perform on the
-  #             standing band, and it is exactly zero whenever a single-account user is
-  #             short — the pot drains until it is empty — so the band only explains
-  #             itself when this is positive.
+  #             account. It is ONE of the two reasons the standing band's figures do not
+  #             subtract to the headline — see #shortfall for the algebra and
+  #             #orphan_required for the other — and it is exactly zero whenever a
+  #             single-account user is short, because the pot drains until it is empty.
   #
   # Never `available - total_required`: an account-less pool counts toward #total_required
   # but can never be funded, so that subtraction reports a NEGATIVE buffer on a covered
   # period — "-$400.00 stays in your buffer" — for a user whose accounts are in order.
   def buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
+
+  # What the account-less pools ask for this period: the part of #total_required that no
+  # waterfall row can ever fund, and the second reason the standing band's figures do not
+  # subtract to its own headline. Derived from the rows rather than by re-summing the
+  # orphans, so it cannot drift from whatever #fill_waterfall decided to leave out.
+  #
+  # Money does not fix this one — assigning the pool to an account does — which is why the
+  # band says so in those words instead of folding it into the gap.
+  def orphan_required = total_required - waterfall.sum(0.to_d) { |row| row[:needed] }
 
   # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
   # to Date.current, so a bare call in a partial would compute against a different day

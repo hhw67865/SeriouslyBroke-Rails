@@ -50,7 +50,27 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("You need $400.00")
     expect(page).to have_content("You have $150.00")
     expect(page).to have_no_content("You're covered")
-    # Single account: shortfall IS total_required - available, so nothing to explain.
+    # Single account, every pool assigned: shortfall IS total_required - available, and
+    # neither explanation may fire on a screen whose figures already reconcile.
+    expect(page).to have_no_content("can't close the gap")
+    expect(page).to have_no_content("with no account")
+  end
+
+  # The figures a reader can subtract must reach the headline, or be told why not. Here
+  # $600 - $100 implies a $500 gap under a $300 headline, and the missing $200 is a pool
+  # no account can fund — with the buffer at zero, as it always is when one account is
+  # short, so gating the explanation on the buffer alone said nothing at all.
+  it "reconciles the figures when a pool no account can fund is part of what you owe", :aggregate_failures do
+    orphan("Old Goal", 200)
+    envelope("Rent", 400)
+    deposit(100)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "$300.00 short")
+    expect(page).to have_content("You need $600.00")
+    expect(page).to have_content("You have $100.00")
+    expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
     expect(page).to have_no_content("can't close the gap")
   end
 

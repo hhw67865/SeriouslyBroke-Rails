@@ -434,6 +434,28 @@ RSpec.describe HomePresenter do
     end
   end
 
+  describe "#orphan_required" do
+    it "is what the account-less pools ask for", :aggregate_failures do
+      deposit(checking, 100)
+      rate(envelope_in(checking, "Rent", priority: 2), 400)
+      rate(create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1), 200)
+
+      expect(presenter.total_required).to eq(600)
+      expect(presenter.orphan_required).to eq(200)
+      # Exactly what a reader subtracting the two headline figures is left holding.
+      expect((presenter.total_required - presenter.available) - presenter.shortfall)
+        .to eq(presenter.orphan_required - presenter.buffer)
+    end
+
+    it "is zero when every pool has an account", :aggregate_failures do
+      deposit(checking, 100)
+      rate(envelope("Rent", priority: 1), 400)
+
+      expect(presenter.orphan_required).to eq(0)
+      expect(presenter.total_required - presenter.available).to eq(presenter.shortfall)
+    end
+  end
+
   describe "#attention_pools" do
     it "returns only pools whose status needs attention" do
       quiet = envelope("Groceries", priority: 1)
