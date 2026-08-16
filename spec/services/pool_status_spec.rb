@@ -275,6 +275,52 @@ RSpec.describe PoolStatus, type: :model do
 
       expect(pool.status(today: today).state).to eq(:wont_make_it)
     end
+
+    # #unreachable_budget gates on `shortfall_for(budget).positive?`, which reads
+    # #allocated_balances — so this state moves with the same "a settled rule holds nothing"
+    # change that moved :behind. A settled $200 one-off dated Jan 15 sorts ahead of the live
+    # $300 bill due Feb 14 and used to keep $200 of the envelope's $300, leaving the live bill
+    # $100 and a $200 shortfall no remaining period could close. It now gets the full $300.
+    #
+    # Measured across the change: :wont_make_it $200 (allocations 200/100) -> :on_track $300
+    # (allocations 0/300). Both rules are one-offs, so :behind cannot catch the fall-through
+    # (#periods_in_cycle is 0 without an interval) and the state lands on :on_track.
+    it "stops firing once the rule ahead of it is settled", :aggregate_failures do
+      pool = envelope("Dentist")
+      settled = create(:pool_budget, :one_time, pool: pool, amount: 200, anchor_date: Date.new(2026, 1, 15))
+      bill = create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 14))
+      fund(pool, 300)
+
+      calc = pool.calculator(today: today)
+      status = pool.status(today: today)
+
+      expect(calc.allocated_balances[settled]).to eq(0)
+      expect(calc.allocated_balances[bill]).to eq(300)
+      expect(status.state).to eq(:on_track)
+      expect(status.amount).to eq(300)
+    end
+
+    # The control, and the half that keeps the example above meaning something: the leading
+    # rule is merely UNPAID rather than settled — a one-off dated Feb 10, still ahead of Feb 14
+    # in the fill order, still holding its $200. Same balance, same live bill, same order; only
+    # settled-ness varies. This state must NOT move, and measured it does not: :wont_make_it
+    # $200 before and after, on allocations of 200/100 that differ from the treatment's 0/300.
+    it "still fires when the rule ahead of it is merely unpaid", :aggregate_failures do
+      pool = envelope("Dentist")
+      unpaid = create(:pool_budget, :one_time, pool: pool, amount: 200, anchor_date: Date.new(2026, 2, 10))
+      bill = create(:pool_budget, :one_time, pool: pool, amount: 300, anchor_date: Date.new(2026, 2, 14))
+      fund(pool, 300)
+
+      calc = pool.calculator(today: today)
+      status = pool.status(today: today)
+
+      expect(calc.allocated_balances[unpaid]).to eq(200)
+      expect(calc.allocated_balances[bill]).to eq(100)
+      expect(status.state).to eq(:wont_make_it)
+      # Names the live bill, not the rule ahead of it: that one is fully allocated, so its own
+      # shortfall is 0 and #unreachable_budget's `find` skips past it.
+      expect(status.due_on).to eq(Date.new(2026, 2, 14))
+    end
   end
 
   describe ":behind" do

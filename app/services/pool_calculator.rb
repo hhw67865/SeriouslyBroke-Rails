@@ -259,8 +259,22 @@ class PoolCalculator
   # One spelling of "settled", for the two readers that ask. #allocated_balances asks it to
   # decide whether the rule holds any of the balance; #live_anchored? asks it to decide whether
   # the rule's holding survives a sweep. A second spelling would let those two answers drift,
-  # and they are the pair whose disagreement this fix exists to close.
-  def fulfilled?(budget) = budget.calculator(today: today).fulfilled?
+  # and they are the pair whose disagreement fix round 2 existed to close — so the memo goes
+  # BEHIND the one spelling rather than beside it.
+  #
+  # Memoised because those two readers ask about the same rule on the same render, and
+  # BudgetCalculator#fulfilled? does not memo its own #paid_since_anchor: each call is a fresh
+  # calculator running a fresh SUM over the item's entries. Two SUMs per dated rule per pool,
+  # on Home, which renders every pool the user has.
+  #
+  # `fetch` with a block, not `||=`. FALSE is the answer for every live rule — the common case
+  # by far, and the one the memo most needs to hold — and `||=` re-runs on a false hit, which
+  # is the same trap #period_closed? and #last_funded_on already dodge with `defined?`. A hash
+  # keyed on the rule needs the key?-aware form instead.
+  def fulfilled?(budget)
+    @fulfilled ||= {}
+    @fulfilled.fetch(budget) { @fulfilled[budget] = budget.calculator(today: today).fulfilled? }
+  end
 
   # The last day money entered this pool — the period #period_closed? is actually asking about.
   #
