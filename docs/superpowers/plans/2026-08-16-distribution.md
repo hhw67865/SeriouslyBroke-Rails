@@ -236,6 +236,17 @@ The cutoff marker, the unfunded total and the buffer are three views of one fill
 together. A screen that reports `$488.43 unfunded` while holding $35 the user just freed is
 contradicting itself.
 
+**Where the freed money went is stated once, not per row, as soon as more than one row is
+edited.** Per-row counterfactuals — each row measured with its own edit undone and the others
+left in place — are right for the *consequence* ("what this edit costs this envelope later")
+and cannot decompose the *destination*: each sentence is true alone and they do not sum. Two
+edits freeing $300 each into a buffer that moved $500 print $600 between them, while a row that
+either edit alone would have funded is claimed by neither, because both deltas compute to zero.
+
+One edit keeps its row sentence. Two or more get a single aggregate line above the table,
+computed against the untouched proposal — one decomposition, one baseline, guaranteed to sum,
+every recipient named exactly once.
+
 ---
 
 ## Task 6: Confirm
