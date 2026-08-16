@@ -16,11 +16,17 @@
     <%# An overdraft is the loudest thing in the app and this is the row that owns the
         number, so it says so here too rather than leaving the standing band's sentence as
         the only place a negative buffer is visible. %>
+    <%# "now", and "target" rather than "of". The standing band prints a buffer too — the
+        period-wide figure left AFTER this period's funding — so without the two time words
+        one screen said "buffer" of two different quantities and left the reader to guess.
+        And "of $2,000.00" reads as a denominator without saying what it measures: a target
+        on an account is the buffer marker the user set, a health line and never a cap, so
+        the label has to say the word. %>
     <span class="text-sm <%= buffer.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
-      buffer <strong><%= number_to_currency(buffer) %></strong>
+      buffer now <strong><%= number_to_currency(buffer) %></strong>
       <% if account.target_amount.present? %>
         <span class="<%= buffer.negative? ? "text-status-danger" : "text-gray-400" %>">
-          of <%= number_to_currency(account.target_amount) %>
+          · target <%= number_to_currency(account.target_amount) %>
         </span>
       <% end %>
     </span>

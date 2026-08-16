@@ -60,7 +60,7 @@ RSpec.describe "Home Standing", type: :system do
     visit root_path
 
     expect(page).to have_css("h2", text: "You're covered")
-    expect(page).to have_content("$600.00 stays in your buffer")
+    expect(page).to have_content("$600.00 stays in your buffer after this period")
     expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
     expect(page).to have_no_content("2 pools with no account")
     # Both are still problems and both are still named — it is only the arithmetic the
@@ -158,7 +158,7 @@ RSpec.describe "Home Standing", type: :system do
     visit root_path
 
     expect(page).to have_css("h2", text: "You're covered")
-    expect(page).to have_content("$100.00 stays in your buffer")
+    expect(page).to have_content("$100.00 stays in your buffer after this period")
     expect(page).to have_no_content("-$")
   end
 

@@ -62,6 +62,13 @@ RSpec.describe "Home Pools", type: :system do
   # moved into the envelope leaves the account holding $900 NOW, and the $300 the rule still
   # wants this period leaves $600 AFTER the distribution. A band printing the other one is a
   # plausible wrong figure, which is the whole reason the readers are named for their moment.
+  #
+  # And the COPY has to carry that distinction too, which is what this pins. Both figures
+  # used to be introduced by the bare word "buffer" on one screen — "$600.00 stays in your
+  # buffer" above "buffer $900.00 of $2,000.00" — so the reader had no way to tell which
+  # moment either described, or whether one was a breakdown of the other. Each assertion
+  # below includes the time word, so dropping it fails here rather than passing on a
+  # substring of the old wording.
   it "groups pools under their account and shows the buffer", :aggregate_failures do
     deposit(1_000)
     fund(envelope("Groceries", rate: 400), 100)
@@ -71,9 +78,10 @@ RSpec.describe "Home Pools", type: :system do
     expect(page).to have_content("Checking")
     expect(group("Checking")).to have_content("Groceries")
     expect(group("Checking")).to have_content("$100.00 left")
-    expect(group("Checking")).to have_content("buffer $900.00")
-    expect(group("Checking")).to have_content("of $2,000.00")
-    expect(page).to have_content("$600.00 stays in your buffer")
+    expect(group("Checking")).to have_content("buffer now $900.00")
+    # "target", not "of": a bare "of $2,000.00" never said what the figure measures.
+    expect(group("Checking")).to have_content("target $2,000.00")
+    expect(page).to have_content("$600.00 stays in your buffer after this period")
   end
 
   it "shows a balance on an on-track pool" do
@@ -238,7 +246,7 @@ RSpec.describe "Home Pools", type: :system do
 
     visit root_path
 
-    expect(group("Checking")).to have_content("buffer -$400.00")
+    expect(group("Checking")).to have_content("buffer now -$400.00")
     expect(group("Checking")).to have_css(".text-status-danger", text: "-$400.00")
   end
 end

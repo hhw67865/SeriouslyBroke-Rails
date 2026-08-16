@@ -6,8 +6,14 @@
     <%# `presenter.projected_buffer`, not `available - total_required`: an account-less pool counts in
         the requirement and can never be funded, so the subtraction prints a negative buffer
         at a user whose accounts are perfectly in order. %>
+    <%# "after this period" is not padding. The account headers below print a buffer too —
+        `current_buffer_for`, the cash sitting there RIGHT NOW — and one screen carrying the
+        same word over two different quantities leaves the reader to guess which is which,
+        or worse, to read one as a breakdown of the other. The methods were renamed to
+        distinguish the two moments (#projected_buffer vs #current_buffer_for); this is the
+        same distinction said in the copy a user actually reads. %>
     <p class="mt-2 text-sm text-gray-600">
-      <%= number_to_currency(presenter.projected_buffer) %> stays in your buffer.
+      <%= number_to_currency(presenter.projected_buffer) %> stays in your buffer after this period.
     </p>
 
     <%# Covered is a statement about the ACCOUNTS. It says nothing about a pool no account can

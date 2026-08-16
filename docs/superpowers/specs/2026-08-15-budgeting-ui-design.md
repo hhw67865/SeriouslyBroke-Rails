@@ -110,12 +110,19 @@ or, when covered:
 
 ```
 You're covered through Feb 19
-$1,199 stays in your buffer.
+$1,199 stays in your buffer after this period.
 ```
 
 `$1,668` is `sum(pool.required)` across all pools. This is the answer to *"how
 much do I need this period to not go negative"* — stated, never derived by the
 reader.
+
+**"after this period" is load-bearing.** §4.3's account headers print a buffer
+too, and it is a *different quantity*: the cash in that one account right now,
+before this period's funding leaves it. Both figures are correct, neither is
+derivable from the other, and the bare word "buffer" over the two of them on one
+screen invites the reader to treat the per-account figures as a breakdown of this
+one. The headers say `buffer now`; this sentence says `after this period`.
 
 ### 4.2 Needs you — problems, each carrying its fix
 
@@ -149,9 +156,19 @@ Reordering changes who gets funded first and takes effect immediately.
 
 ### 4.3 Pools
 
-Grouped by account, buffer shown per account. **Collapsed by default; anything
-short, overdrawn or overdue auto-expands**, so trouble is never hidden behind a
-chevron. A healthy envelope is one quiet line.
+Grouped by account, buffer shown per account:
+
+```
+Checking                       buffer now $900.00 · target $2,000.00
+```
+
+`buffer now` is the cash sitting in that account today — see §4.1 for why the
+time word cannot be dropped. `target` is the account's buffer marker (§7.1), a
+health line and never a cap, and it is named rather than written as a bare
+`of $2,000.00`, which reads as a denominator without saying what it measures.
+
+**Collapsed by default; anything short, overdrawn or overdue auto-expands**, so
+trouble is never hidden behind a chevron. A healthy envelope is one quiet line.
 
 ### 4.4 The row vocabulary
 
