@@ -65,6 +65,12 @@
                     icon: "arrows-right-left",
                     data: { turbo_prefetch: false }
                   },
+                  # THE RULES THEMSELVES, between the action that spends them and the ledger that
+                  # records what was spent — a rule is neither a report nor a category, and until
+                  # this link existed §8's page had no way in but the URL. `/budget` is a prefix
+                  # of `/budgets/:id/edit`, so a rule's own form highlights this item too, which
+                  # is right: rule editing is what this page owns.
+                  { name: "Budget", path: budget_page_path, icon: "adjustments-horizontal" },
                   { name: "Entries", path: entries_path, icon: "document-text" }
                 ]
             %>

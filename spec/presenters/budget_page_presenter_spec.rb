@@ -1,0 +1,205 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+RSpec.describe BudgetPagePresenter do
+  let(:user) do
+    create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6), typical_income: 2_400)
+  end
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let(:today) { Date.new(2026, 2, 6) }
+  let(:presenter) { described_class.new(user: user, today: today) }
+
+  def envelope(name, priority: 1, account: checking)
+    create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
+  end
+
+  # A flat per-period rule: no anchor, so no date to be due on.
+  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+
+  # A rule that rolls: its due date moves with the cycles gone by, which is what makes it
+  # answer something other than its own anchor.
+  def rolling(pool, amount:, anchor:, every: 1)
+    create(:pool_budget, pool: pool, amount: amount, interval_months: every, anchor_date: anchor)
+  end
+
+  def category_rule(name, amount)
+    create(:budget, category: create(:category, :expense, user: user, name: name), amount: amount)
+  end
+
+  def names(rules) = rules.map { |rule| rule.budget.id }
+
+  describe "#pool_groups" do
+    it "puts each rule under the pool it fills", :aggregate_failures do
+      groceries = envelope("Groceries")
+      rent = envelope("Rent", priority: 2)
+      groceries_rule = rate(groceries, 400)
+      rent_rule = rate(rent, 1_500)
+
+      expect(presenter.pool_groups.map(&:pool)).to eq([groceries, rent])
+      expect(names(presenter.pool_groups.first.rules)).to eq([groceries_rule.id])
+      expect(names(presenter.pool_groups.last.rules)).to eq([rent_rule.id])
+    end
+
+    # PRIORITY FIRST, NAME AS THE TIE-BREAK, on a fixture where all three candidate orders
+    # disagree. Insertion order is Zebra, Alpha, Middle — the exact reverse of the answer — and
+    # name order alone is Alpha, Middle, Zebra. `pools` carries no ORDER BY, so without the key
+    # the order is whatever Postgres hands back, and a plain UPDATE relocates a row in the heap:
+    # renaming a pool would reshuffle the fill order with no change to what actually fills first.
+    it "orders pools by priority and then by name" do
+      ["Zebra", "Alpha"].each { |name| rate(envelope(name, priority: 2), 100) }
+      rate(envelope("Middle", priority: 1), 100)
+
+      expect(presenter.pool_groups.map { |group| group.pool.name }).to eq(["Middle", "Alpha", "Zebra"])
+    end
+
+    # BudgetCalculator#due_order breaks a shared due date toward the LARGER obligation, because
+    # the bigger bill is the one you can least afford to be short on. Insertion order says the
+    # $100 rule first, so a sort that fell through to it would pass a bare "both rules render".
+    it "orders rules within a pool by due order, larger amount first on a tie", :aggregate_failures do
+      pool = envelope("Pet Care")
+      small = rolling(pool, amount: 100, anchor: Date.new(2026, 3, 1))
+      large = rolling(pool, amount: 500, anchor: Date.new(2026, 3, 1))
+
+      expect(names(presenter.pool_groups.first.rules)).to eq([large.id, small.id])
+      expect(small.created_at).to be < large.created_at
+    end
+
+    it "orders an earlier due date ahead of a larger amount" do
+      pool = envelope("Pet Care")
+      later = rolling(pool, amount: 900, anchor: Date.new(2026, 4, 1))
+      sooner = rolling(pool, amount: 100, anchor: Date.new(2026, 3, 1))
+
+      expect(names(presenter.pool_groups.first.rules)).to eq([sooner.id, later.id])
+    end
+
+    it "leaves out a pool with no rule at all, and another user's rules", :aggregate_failures do
+      envelope("Empty")
+      rate(envelope("Groceries"), 400)
+      stranger = create(:user)
+      rate(create(:pool, :budget_pool, user: stranger, name: "Their Rent"), 900)
+
+      expect(presenter.pool_groups.map { |group| group.pool.name }).to eq(["Groceries"])
+      expect(presenter.pool_groups.first.rules.size).to eq(1)
+    end
+  end
+
+  describe "a group's own reading" do
+    it "reports the pool's balance and its status against the ledger", :aggregate_failures do
+      pool = envelope("Groceries")
+      rate(pool, 400)
+      create(:pool_movement, from_pool: checking, to_pool: pool, amount: 250, date: today)
+      group = presenter.pool_groups.first
+
+      expect(group.balance).to eq(250)
+      expect(group.balance).to be_a(BigDecimal)
+      expect(group.status.state).to eq(:left_to_spend)
+    end
+
+    # A pool with no money in any term must not turn a money figure into an Integer: five empty
+    # `sum(:amount)` calls each answer the literal 0, and this page divides nothing but prints
+    # everything.
+    it "reports a decimal zero for an untouched envelope", :aggregate_failures do
+      rate(envelope("Groceries"), 400)
+
+      expect(presenter.pool_groups.first.balance).to eq(0)
+      expect(presenter.pool_groups.first.balance).to be_a(BigDecimal)
+    end
+
+    it "states the pool's priority position" do
+      rate(envelope("Groceries", priority: 4), 400)
+
+      expect(presenter.pool_groups.first.priority).to eq(4)
+    end
+  end
+
+  describe "a rule's due date" do
+    # THE NEXT OCCURRENCE, NOT THE ANCHOR. A recurring bill's anchor is its FIRST occurrence —
+    # printing the column would show a date in the past as the next thing to pay.
+    it "is the calculator's next occurrence for a recurring rule", :aggregate_failures do
+      pool = envelope("Car Insurance")
+      budget = rolling(pool, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6)
+      rule = presenter.pool_groups.first.rules.first
+
+      expect(rule.due_on).to eq(Date.new(2026, 3, 1))
+      expect(rule.due_on).not_to eq(budget.anchor_date)
+      expect(rule).to be_anchored
+    end
+
+    # An anchorless rate rule is never due. BudgetCalculator#due_date answers the end of the
+    # period for one, which is a real number for the maths and a lie on screen.
+    it "is nil for an anchorless rate rule", :aggregate_failures do
+      rate(envelope("Groceries"), 400)
+      rule = presenter.pool_groups.first.rules.first
+
+      expect(rule.due_on).to be_nil
+      expect(rule).not_to be_anchored
+    end
+  end
+
+  describe "#orphan_rules" do
+    it "collects a category-mode rule and says why", :aggregate_failures do
+      budget = category_rule("Shopping", 200)
+      rate(envelope("Groceries"), 400)
+
+      expect(names(presenter.orphan_rules)).to eq([budget.id])
+      expect(presenter.orphan_rules.first.reason).to eq(:category)
+      expect(names(presenter.pool_groups.first.rules)).not_to include(budget.id)
+    end
+
+    it "collects a rule on an account-less pool and says why", :aggregate_failures do
+      # A SAVINGS pool: `Pool#account_matches_pool_type` refuses an account-less budget pool
+      # outright, and an account-less savings goal is the ordinary shape until Plan 3's backfill.
+      stranded = create(:pool, :savings_pool, user: user, account: nil, name: "Retirement")
+      budget = rate(stranded, 150)
+
+      expect(names(presenter.orphan_rules)).to eq([budget.id])
+      expect(presenter.orphan_rules.first.reason).to eq(:no_account)
+      expect(presenter.pool_groups).to be_empty
+    end
+
+    it "leaves a rule that does fill an envelope out of the orphans", :aggregate_failures do
+      budget = rate(envelope("Groceries"), 400)
+
+      expect(presenter.orphan_rules).to be_empty
+      expect(names(presenter.pool_groups.first.rules)).to eq([budget.id])
+    end
+
+    # Ordered by owner name and then by due order, on a fixture where insertion order is the
+    # reverse. `all_budgets` carries no ORDER BY, so an unsorted list renders in heap order.
+    it "orders orphans by owner name and then by due order", :aggregate_failures do
+      zebra = category_rule("Zebra", 100)
+      alpha_small = create(:budget, category: create(:category, :expense, user: user, name: "Alpha"), amount: 50)
+
+      expect(names(presenter.orphan_rules)).to eq([alpha_small.id, zebra.id])
+      expect(alpha_small.created_at).to be > zebra.created_at
+    end
+
+    it "leaves another user's category-mode rule out" do
+      create(:budget, category: create(:category, :expense, user: create(:user)), amount: 300)
+
+      expect(presenter.orphan_rules).to be_empty
+    end
+  end
+
+  describe "#no_rules?" do
+    it "is true for a user with no rules anywhere" do
+      envelope("Groceries")
+
+      expect(presenter).to be_no_rules
+    end
+
+    it "is false once any rule exists, including one no distribution reaches", :aggregate_failures do
+      category_rule("Shopping", 200)
+
+      expect(presenter).not_to be_no_rules
+      expect(presenter.pool_groups).to be_empty
+    end
+
+    it "is false for a rule in the fill order" do
+      rate(envelope("Groceries"), 400)
+
+      expect(presenter).not_to be_no_rules
+    end
+  end
+end

@@ -1,8 +1,21 @@
-<%# Budget Form Partial - matches Categories design patterns %>
-<%= page_header(
-    title: @budget.persisted? ? "Edit Budget" : "New Budget",
-    subtitle: @budget.category ? "Set spending limits for #{@budget.category.name}" : "Set spending limits for this category"
-) %>
+<%# Budget Form Partial - matches Categories design patterns
+
+    MODE-AWARE, and it has to be. A rule belongs to a category OR a pool (Budget#exactly_one_owner)
+    and this one form serves both, but until the Budget page existed nothing linked a pool-mode
+    rule here, so the form only ever spoke about categories. It offered a pool-mode rule a category
+    picker — a control whose every option makes the record invalid ("cannot belong to both") — and
+    called the pool's own funding rule a spending limit. Now that §8's page links every rule to
+    this form, that is user-reachable, so each mode is asked about the owner it actually has.
+
+    The pool branch omits `prorated` deliberately: it spreads a monthly category cap across the
+    days of the month (CategoryCalculator#prorated_active?) and nothing reads it for a pool-mode
+    rule, so offering it would be a switch that does nothing. %>
+<% pool_mode = @budget.pool_mode? %>
+<% subtitle = "Set spending limits for #{@budget.category&.name || "this category"}" %>
+<% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode %>
+<% cancel_path = @budget.category ? category_path(@budget.category) : categories_path %>
+<% cancel_path = budget_page_path if pool_mode %>
+<%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
 
 <div class="max-w-2xl mx-auto">
   <%= simple_form_for @budget, html: { class: "space-y-6" } do |f| %>
@@ -12,17 +25,18 @@
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
-        <%# Category Selection (only for new budgets without category_id) %>
-        <% unless @budget.category_id %>
+        <% if pool_mode %>
+          <%# The pool a rule fills is not editable here — the page that lists rules groups them
+              by pool, so moving one is a re-parenting the list itself should own. Submitted back
+              so the record keeps its owner; `budget_params` scopes it through current_user. %>
           <div>
-            <%= f.association :category,
-                collection: current_user.categories.expenses.budgetable.order(:name),
-                label_method: :name,
-                value_method: :id,
-                include_blank: "Select an expense category",
-                label: "Category" %>
+            <label class="form-label">Pool</label>
+            <div class="form-input flex items-center bg-gray-50">
+              <%= @budget.pool.name %>
+            </div>
+            <%= f.hidden_field :pool_id %>
           </div>
-        <% else %>
+        <% elsif @budget.category_id %>
           <%# Show category name for existing budgets %>
           <div>
             <label class="form-label">Category</label>
@@ -31,43 +45,56 @@
             </div>
             <%= f.hidden_field :category_id %>
           </div>
+        <% else %>
+          <%# Category Selection (only for new budgets without category_id) %>
+          <div>
+            <%= f.association :category,
+                collection: current_user.categories.expenses.budgetable.order(:name),
+                label_method: :name,
+                value_method: :id,
+                include_blank: "Select an expense category",
+                label: "Category" %>
+          </div>
         <% end %>
 
         <%# Budget Amount %>
         <div>
           <%= f.input :amount,
               as: :decimal,
-              label: "Budget Amount",
+              label: pool_mode ? "Rule Amount" : "Budget Amount",
               input_html: {
                 placeholder: "0.00",
                 step: 0.01,
                 min: 0
               },
-              hint: "Enter the maximum amount you want to spend in this category" %>
+              hint: pool_mode ? "What this rule asks for #{budget_rule_basis(@budget)} — the schedule itself is set on the pool." :
+                "Enter the maximum amount you want to spend in this category" %>
         </div>
 
-        <%# Prorated toggle %>
-        <div>
-          <div class="flex items-center gap-2 mb-2">
-            <%= f.check_box :prorated, class: "form-checkbox" %>
-            <%= f.label :prorated, "Prorate daily", class: "form-label mb-0 cursor-pointer" %>
+        <% unless pool_mode %>
+          <%# Prorated toggle %>
+          <div>
+            <div class="flex items-center gap-2 mb-2">
+              <%= f.check_box :prorated, class: "form-checkbox" %>
+              <%= f.label :prorated, "Prorate daily", class: "form-label mb-0 cursor-pointer" %>
+            </div>
+            <p class="form-hint">
+              Spread the budget evenly across the month so you can see if you're on pace day-to-day. Turn off for expenses that happen in one-time chunks (like rent or subscriptions).
+            </p>
           </div>
-          <p class="form-hint">
-            Spread the budget evenly across the month so you can see if you're on pace day-to-day. Turn off for expenses that happen in one-time chunks (like rent or subscriptions).
-          </p>
-        </div>
+        <% end %>
 
       </div>
     </div>
 
     <%# Action Buttons %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-      <%= link_to "Cancel",
-          @budget.category ? category_path(@budget.category) : categories_path,
-          class: "btn btn-secondary" %>
+      <%# Back where the rule is listed, which for a pool-mode rule is the Budget page and never
+          the pool page — the same destination BudgetsController#owner_path sends a save to. %>
+      <%= link_to "Cancel", cancel_path, class: "btn btn-secondary" %>
 
       <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",
           class: "btn btn-primary" %>
     </div>
   <% end %>
-</div> 
+</div>

@@ -1,0 +1,27 @@
+<% content_for :title, "Budget" %>
+
+<%= page_header(title: "Budget", subtitle: "The rules that fill your envelopes") %>
+
+<div class="space-y-6">
+  <% if @presenter.no_rules? %>
+    <%= render "empty" %>
+  <% else %>
+    <%# The fill order itself: pool by pool, top to bottom, exactly as a distribution spends. %>
+    <% @presenter.pool_groups.each do |group| %>
+      <%= render "pool_group", group: group %>
+    <% end %>
+
+    <%# Rules exist but none of them fills an envelope — every one is an orphan. Said plainly
+        rather than left as a gap above the orphan band, which would read as a section that
+        failed to render. %>
+    <% if @presenter.pool_groups.empty? %>
+      <section class="bg-white border border-gray-200 rounded px-6 py-4">
+        <p class="text-sm text-gray-500">
+          Nothing is in the fill order yet — none of your rules is attached to a pool an account can reach.
+        </p>
+      </section>
+    <% end %>
+
+    <%= render "orphans", presenter: @presenter %>
+  <% end %>
+</div>

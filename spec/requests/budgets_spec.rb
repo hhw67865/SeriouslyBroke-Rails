@@ -103,17 +103,28 @@ RSpec.describe "Budgets", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    # `pool_id` is not in the permitted list, so pool-mode is not writable through this
-    # controller at all — which is WHY the hole above has no pool-mode twin. Pinned rather
-    # than argued: strong parameters drop it silently, and a later task widening the list
-    # would otherwise reopen the same hole on the other owner with nothing watching.
-    it "ignores a pool_id entirely — pool-mode is not writable here", :aggregate_failures do
-      own = create(:category, :expense, user: user)
+    # AMENDMENT B, TRIPPED ON PURPOSE. This slot and its PATCH twin used to pin `budget[pool_id]`
+    # as INERT, and they were correct while the parameter was unpermitted — that was the whole
+    # point of writing them. The Budget page's edit form submits a pool-mode rule's own pool back,
+    # so the permitted list is widened, and at that moment "whose pool is this" becomes exactly
+    # the question `category_id` already had to answer. The inert pair is gone because the fact it
+    # asserted stopped being true; these are its both-direction replacements.
+    it "refuses a stranger's pool and writes nothing", :aggregate_failures do
+      expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: stranger_pool.id } } }
+        .not_to change(Budget, :count)
+      expect(response).to have_http_status(:not_found)
+      expect(stranger_pool.budgets.reload).to be_empty
+    end
 
-      post budgets_path, params: { budget: { amount: "40.00", category_id: own.id, pool_id: stranger_pool.id } }
+    # The same line as the income-category example above, drawn on the other owner: this pool is
+    # the user's OWN, so the controller must let it through and `Budget` must answer. A
+    # `.budget_pools` in the lookup would 404 a record the user can see on their own screen.
+    it "answers the user's own account with a 422, not a 404", :aggregate_failures do
+      own_account = create(:pool, :account, user: user)
 
-      expect(own.reload.budget).to be_present
-      expect(own.budget.pool_id).to be_nil
+      expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: own_account.id } } }
+        .not_to change(Budget, :count)
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
@@ -121,10 +132,13 @@ RSpec.describe "Budgets", type: :request do
   # AFTER the row has already changed, so "it 302s to the pool" and "the amount moved" are
   # two different facts and both are asserted.
   describe "PATCH /budgets/:id" do
-    it "updates a pool-mode rule and returns to its pool", :aggregate_failures do
+    # THE BUDGET PAGE, NOT THE POOL PAGE. The pool page was a floor while nothing else could
+    # render a pool-mode rule; §8's page is where every rule now lives and is the page the Edit
+    # link was clicked from.
+    it "updates a pool-mode rule and returns to the Budget page", :aggregate_failures do
       patch budget_path(pool_rule), params: { budget: { amount: "275.00" } }
 
-      expect(response).to redirect_to(pool_path(pool))
+      expect(response).to redirect_to(budget_page_path)
       expect(pool_rule.reload.amount).to eq(275)
     end
 
@@ -166,18 +180,30 @@ RSpec.describe "Budgets", type: :request do
       expect(category_rule.reload.category).to eq(category)
     end
 
-    it "ignores a pool_id on update — the rule keeps its category owner", :aggregate_failures do
-      patch budget_path(category_rule), params: { budget: { amount: "175.00", pool_id: stranger_pool.id } }
+    # The pool-mode half of the re-parenting pair above, and the reach direction for `pool_id`:
+    # the assignment has to actually happen, or "it refuses a stranger's pool" would pass against
+    # a parameter that was silently dropped.
+    it "re-parents a pool-mode rule onto another of the user's own pools", :aggregate_failures do
+      own_pool = create(:pool, :budget_pool, user: user, account: pool.account, name: "Dining Out")
 
-      expect(category_rule.reload.pool_id).to be_nil
-      expect(category_rule.category).to eq(category)
+      patch budget_path(pool_rule), params: { budget: { pool_id: own_pool.id } }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(pool_rule.reload.pool).to eq(own_pool)
+    end
+
+    it "refuses to re-parent onto a stranger's pool and leaves the rule alone", :aggregate_failures do
+      patch budget_path(pool_rule), params: { budget: { pool_id: stranger_pool.id } }
+
+      expect(response).to have_http_status(:not_found)
+      expect(pool_rule.reload.pool).to eq(pool)
     end
   end
 
   describe "DELETE /budgets/:id" do
-    it "deletes a pool-mode rule and returns to its pool", :aggregate_failures do
+    it "deletes a pool-mode rule and returns to the Budget page", :aggregate_failures do
       expect { delete budget_path(pool_rule) }.to change(Budget, :count).by(-1)
-      expect(response).to redirect_to(pool_path(pool))
+      expect(response).to redirect_to(budget_page_path)
     end
 
     # The category-mode branch of #owner_path had NO passing twin anywhere before this: no view

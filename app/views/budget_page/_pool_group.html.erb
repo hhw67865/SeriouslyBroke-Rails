@@ -1,0 +1,26 @@
+<%# One pool and the rules that fill it. Local: `group` (BudgetPagePresenter::Group).
+
+    The header says how the pool is doing in the app's ONE row vocabulary
+    (`HomeHelper#pool_status_label`, spec §4.4) — the same words, the same red, as Home and the
+    distribution screen. A second vocabulary here would have two screens describe one envelope
+    differently on the same afternoon.
+
+    `priority` is stated because this page is where funding priority is set (Task 5 makes it
+    draggable); the number is what decides who gets filled first when the money runs out. %>
+<% status = group.status %>
+<section class="bg-white border border-gray-200 rounded" data-pool-group="<%= group.pool.name %>">
+  <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
+    <div class="flex items-baseline gap-3">
+      <h3 class="text-sm font-semibold text-gray-900"><%= group.pool.name %></h3>
+      <span class="text-xs text-gray-400">priority <%= group.priority %></span>
+    </div>
+    <span class="text-sm <%= status.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>">
+      <%= pool_status_label(status) %>
+      <span class="text-gray-400"><%= budget_group_balance(group) %></span>
+    </span>
+  </div>
+
+  <% group.rules.each do |rule| %>
+    <%= render "rule_row", rule: rule %>
+  <% end %>
+</section>

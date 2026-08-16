@@ -37,6 +37,11 @@ Rails.application.routes.draw do
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
+  # The rules page (spec §8): every funding rule, grouped by the pool it fills. Named
+  # `budget_page` rather than taking the bare `budget` name — `budget_path` is already the member
+  # route of `resources :budgets` above, and Rails refuses a duplicate route name outright.
+  get "budget" => "budget_page#show", as: :budget_page
+
   # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
   # the period as if its distribution had not happened, which it does by DELETING this period's
   # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite

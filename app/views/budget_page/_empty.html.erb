@@ -1,0 +1,17 @@
+<%# THE FIRST SCREEN EVERY REAL USER MEETS: no rules at all.
+
+    ONE sentence, and it names only what exists today. §8's bottom half is suggestions derived
+    from entry history, and they are not built yet — a sentence promising them would be the page
+    telling a brand-new user to wait for something that will never arrive. It points at the two
+    places a rule is actually created instead.
+
+    A frame rather than a blank page: an empty screen reads as something that failed to load. %>
+<section class="bg-white border border-gray-200 rounded px-6 py-8 text-center">
+  <h3 class="text-sm font-semibold text-gray-900">No funding rules yet</h3>
+  <p class="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
+    A rule claims part of every paycheck for one envelope — add one from a
+    <%= link_to "pool", pools_path, class: "text-brand-dark hover:text-brand underline" %> or a
+    <%= link_to "category", categories_path, class: "text-brand-dark hover:text-brand underline" %>
+    and it appears here, in the order the money fills.
+  </p>
+</section>

@@ -57,6 +57,12 @@ class BudgetsController < ApplicationController
   # written, on precisely the rules the widened reader just made reachable. Widening a
   # reader must not open a crash path behind it.
   #
+  # THE POOL-MODE DESTINATION IS THE BUDGET PAGE, not `pool_path`. The pool page was a floor
+  # while nothing else could render a pool-mode rule; §8's page is where every rule the user
+  # owns now lives, and it is the page the Edit link was clicked FROM. Returning to the pool
+  # would answer a rule change with a screen that says nothing about rules. Category-mode
+  # rules still go back to their category, which is still the only screen that renders one.
+  #
   # #destroy takes the path BEFORE the delete, and that ordering is DEFENSIVE, NOT LOAD-BEARING
   # — an earlier version of this comment claimed otherwise and was wrong. Measured: a destroyed
   # Budget is frozen but keeps its `category_id`/`pool_id`, and the owner row is not touched by
@@ -65,7 +71,7 @@ class BudgetsController < ApplicationController
   # survives a future `dependent:` or callback that does start clearing the link — but nothing
   # today depends on the order, and no example fails if it is reversed.
   def owner_path(budget)
-    budget.category ? category_path(budget.category) : pool_path(budget.pool)
+    budget.category ? category_path(budget.category) : budget_page_path
   end
 
   def set_category
@@ -87,18 +93,31 @@ class BudgetsController < ApplicationController
   # `set_category` scopes harder because it answers a different question: which categories may
   # be OFFERED the form, not which a save may name.
   #
-  # `find`, so a stranger's id raises RecordNotFound and arrives as the same 404 #set_budget
-  # gives. Skipped when blank, because a blank category is the pool-mode edit form submitting
-  # its empty picker and an owner-less create re-rendering — both of which Budget already
-  # answers (#exactly_one_owner), and neither of which is a stranger's id.
+  # `pool_id` IS NOW PERMITTED, and the same line is drawn on it. The Budget page links every
+  # pool-mode rule to this form, so the form submits the rule's own pool back — and the moment
+  # the parameter is permitted, "whose pool is this" becomes exactly the question `category_id`
+  # already had to answer. Two request examples pinned `pool_id` as inert while it was
+  # unpermitted; widening the list trips them by design, and they are rewritten into the
+  # both-direction ownership pair below.
   #
-  # `pool_id` is deliberately absent from the permitted list, so pool-mode is not writable
-  # through this controller at all and the identical hole cannot exist on the other owner.
-  # Two request examples pin that, so widening the list later cannot reopen it unwatched.
+  # `current_user.pools` and nothing more, for the same reason as categories: ownership is the
+  # controller's question, while "not an account", "the right shape" and "the item belongs to
+  # this pool" are Budget's own validations. Scoping to `.budget_pools` here would turn a user
+  # naming their OWN account into a 404 — their record vanishing — where the model gives a
+  # legible 422.
   def budget_params
-    permitted = params.expect(budget: [:amount, :category_id, :prorated])
-    return permitted if permitted[:category_id].blank?
+    permitted = params.expect(budget: [:amount, :category_id, :pool_id, :prorated])
+    permitted = scoped_owner(permitted, :category_id, current_user.categories)
+    scoped_owner(permitted, :pool_id, current_user.pools)
+  end
 
-    permitted.merge(category_id: current_user.categories.find(permitted[:category_id]).id)
+  # `find`, so a stranger's id raises RecordNotFound and arrives as the same 404 #set_budget
+  # gives. Skipped when blank, because a blank owner is the other mode's form submitting its
+  # empty picker and an owner-less create re-rendering — both of which Budget already answers
+  # (#exactly_one_owner), and neither of which is a stranger's id.
+  def scoped_owner(permitted, key, scope)
+    return permitted if permitted[key].blank?
+
+    permitted.merge(key => scope.find(permitted[key]).id)
   end
 end
