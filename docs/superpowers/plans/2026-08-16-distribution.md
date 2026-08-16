@@ -193,6 +193,20 @@ The sources breakdown is required — buffer carried, income this period, swept 
 
 Route: `resources :distributions, only: [:new, :create]`.
 
+### A period that has already been distributed
+
+Task 3 found this and could not fix it from where it stood. Once a period's split has been committed, the envelopes are funded, so a freshly computed proposal asks for **nothing** — the screen would say "nothing to distribute" while the confirm button underneath it replaces the whole split and re-writes it. The screen would be stale and the action correct, which is the wrong way round.
+
+The screen shows the period **as if its distribution had not happened**, because that is exactly what confirming does: `AllocationCommitter` deletes the period's `allocation` and `sweep` rows and only then computes the proposal it writes.
+
+Get that from **one code path shared with the committer**, not a second one. Inside a transaction: delete the period's distributed rows, compute the proposal, `raise ActiveRecord::Rollback`. The committer runs the same delete-then-compute for real; the screen runs it and throws the deletion away. Extract the inner "delete this period's distribution, then build a fresh `AllocationCalculator`" step so both callers reach the same code, and the screen cannot drift from the action.
+
+**Do not** instead teach `AllocationCalculator` or `PoolCalculator` to exclude a set of movements. That is a second answer to "what does this period look like undistributed", free to disagree with the committer's — the failure mode this plan has hit in every task where two readers answered one question.
+
+A redistributed period must be **labelled as one**. Confirming replaces rather than adds, and a user who cannot see that their last split is about to be discarded cannot consent to it.
+
+Assert both directions on the same screen: an undistributed period proposes its split, and a distributed period proposes the *same* split again rather than an empty one — pinned at the same figures, so a screen that quietly recomputed to zero cannot pass.
+
 ---
 
 ## Task 5: Overrides and their consequences
