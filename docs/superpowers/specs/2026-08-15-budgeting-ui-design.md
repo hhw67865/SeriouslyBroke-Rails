@@ -205,6 +205,13 @@ does — **the same screen at two densities, chosen by the data, not by a settin
   confirm button on a short distribution would let someone quietly starve the
   bottom three envelopes.
 
+  "Overdue" here means the red states — `overdue` and `won't make it` — on any
+  pool the screen renders, and it applies **even when the pool is asking for
+  nothing**: an overdue bill that is already funded is rejected from the
+  waterfall's rows, and collapsing the screen to "all clear, one button" over
+  the top of it would be a lie. `behind` is amber and common; including it would
+  collapse the two densities into one.
+
 ```
 Distribute $2,867
   Buffer carried over            $382
