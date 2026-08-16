@@ -517,9 +517,9 @@ checking = user1.pools.create!(name: "Checking", pool_type: :account, target_amo
 # Priorities put them BELOW the envelopes rather than at the default 0: priority is the
 # order a distribution fills, and a savings goal funded ahead of rent is not a budget
 # anybody runs.
-pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 7 + index) }
+pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 8 + index) }
 orphan_pool = pools[4]
-orphan_pool.update!(priority: 11)
+orphan_pool.update!(priority: 12)
 Budget.create!(pool: orphan_pool, amount: 150, basis: :per_paycheck)
 
 # The tracking half charges Health, Gifts and Education to three of these pools as
@@ -539,9 +539,16 @@ end
 # What the account actually holds. The tracking half's salary entries belong to categories
 # with no pool, so they are income in the reports and cash in no account — this is the one
 # deposit Checking can see.
+#
+# $2,600 and not more, deliberately: after Rent, Dining and Groceries are moved out this
+# leaves Checking holding $600 against $741.43 of rules, so the demo screen is SHORT. That
+# is the branch this app exists for — the standing band's stranded-cash clause ("$X of that
+# sits in accounts with nothing left to fund") is only ever reached on a short period with
+# more than one account, and with a covered demo it could not be seen at all. The gap is
+# kept small so the rest of the screen still reads as a working budget rather than a crisis.
 paycheck = user1.categories.create!(name: "Paycheck", category_type: :income, color: "#66BB6A", pool: checking)
 paycheck.items.create!(name: "Direct Deposit").entries.create!(
-  amount: 3_200,
+  amount: 2_600,
   date: today,
   description: "Paycheck deposited to Checking"
 )
@@ -608,5 +615,60 @@ fund.call(dining, 100)
 groceries = envelope.call("Groceries", 6)
 Budget.create!(pool: groceries, amount: 400, basis: :per_paycheck)
 fund.call(groceries, 400)
+
+# ---------------------------------------------------------------------------------------
+# A SECOND account, with an envelope of its own.
+#
+# One account made three of this plan's hardest pieces of arithmetic invisible in the data
+# anybody develops against, and each of them is load-bearing:
+#
+#   - Per-account pots. #fill_waterfall drains each account separately so the screen never
+#     predicts a distribution nobody can perform; with one account that whole mechanism is a
+#     no-op and any bug in it renders identically to correct code.
+#   - The stranded-cash clause. "$X of that sits in accounts with nothing left to fund" is
+#     exactly zero for a single-account user who is short, because their one pot drains
+#     until it is empty. It could not be seen at all.
+#   - The suppressed cutoff. "— ran out here —" is deliberately NOT drawn once there are
+#     several accounts, since there is no single moment the money ran out. The suppression
+#     was the one branch of that rule nobody could look at.
+#
+# Deliberately UNDER-spent relative to its balance: Ally holds more than its envelope wants,
+# so cash is left stranded in an account whose own pools are already funded — which is the
+# shape the standing band's clause exists to explain, and the shape a single account cannot
+# produce.
+# ---------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the second account and the envelope inside it..."
+
+ally = user1.pools.create!(name: "Ally Savings", pool_type: :account, target_amount: 5_000)
+
+ally_transfers = user1.categories.create!(
+  name: "Ally Transfers",
+  category_type: :income,
+  color: "#42A5F5",
+  pool: ally
+)
+ally_transfers.items.create!(name: "Transfer In").entries.create!(
+  amount: 1_000,
+  date: today,
+  description: "Moved to Ally Savings"
+)
+
+# Priority 7, after Checking's six envelopes and before the savings goals, so the waterfall
+# renders the two pots draining independently: this row is funded IN FULL out of Ally while
+# a row above it, in Checking, is left part-funded. That inversion — a lower-priority pool
+# getting everything while a higher-priority one goes short — is correct, is the whole point
+# of per-account pots, and is impossible to see with one account.
+#
+# A rate rule rather than a dated one on purpose: a dated bill with nothing in it reads
+# `behind`, which Car Insurance already demonstrates, and a seventh loud row would add noise
+# instead of a new state. Left unfunded so it still ASKS for money — a satisfied envelope is
+# rejected from the waterfall and would take the second pot off the screen with it.
+holiday_gifts = user1.pools.create!(
+  name: "Holiday Gifts",
+  pool_type: :budget,
+  account: ally,
+  priority: 7
+)
+Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_paycheck)
 
 Rails.logger.debug "Seed data created successfully!"
