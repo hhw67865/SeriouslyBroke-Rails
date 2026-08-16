@@ -243,6 +243,36 @@ RSpec.describe PoolCalculator, type: :model do
       end
     end
 
+    # The shape the `[x, 0.to_d].max` idiom above never covered: `max` only coerces when
+    # the clamp FIRES, and `[0, BigDecimal("0")].max` returns the Integer. An empty
+    # `sum(:amount)` over a `money` column returns Integer 0 too, so a pool holding
+    # nothing at all — a fresh envelope, the first thing Plan 2b's sweep will meet —
+    # answered every money question in the wrong type. Value AND type on each reader:
+    # `eq(0)` passes against the Integer that caused this.
+    describe "money types on a pool with no entries at all", :aggregate_failures do
+      it "answers in BigDecimal from an empty ledger" do
+        create(:pool_budget, :rate, pool: car, amount: 80)
+        calc = car.calculator(today: today)
+
+        expect(calc.balance).to eq(0)
+        expect(calc.balance).to be_a(BigDecimal)
+        expect(calc.reserve).to eq(0)
+        expect(calc.reserve).to be_a(BigDecimal)
+        expect(calc.free_amount).to eq(0)
+        expect(calc.free_amount).to be_a(BigDecimal)
+      end
+
+      # And with no rules either, so #reserve sums an empty hash rather than a hash of
+      # clamped zeroes. Two different Integer sources, one per example.
+      it "answers in BigDecimal with no rules to reserve against" do
+        calc = car.calculator(today: today)
+
+        expect(calc.allocated_balances).to be_empty
+        expect(calc.reserve).to be_a(BigDecimal)
+        expect(calc.free_amount).to be_a(BigDecimal)
+      end
+    end
+
     # `remaining.clamp(0, budget.amount)` raises ArgumentError whenever amount is negative,
     # taking down allocated_balances, reserve, free_amount and required — the whole pool
     # page. Budget now validates the sign, so this writes past the validation to prove the

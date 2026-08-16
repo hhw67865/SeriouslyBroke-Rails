@@ -472,4 +472,31 @@ RSpec.describe PoolStatus, type: :model do
       expect(status.state).to eq(:left_to_spend)
     end
   end
+
+  # Both readers run straight off PoolCalculator#balance, which is five `sum(:amount)`
+  # calls over a `money` column — and an empty sum returns the Integer literal 0. An
+  # entry-less pool is the ordinary shape (a fresh envelope, a goal nobody has funded
+  # yet), and it is precisely the shape that answered in the wrong type. `eq(0)` alone
+  # passes against the Integer, so the type is asserted beside the value on each quiet
+  # state that reads the raw balance.
+  describe "money types on a pool with no entries at all", :aggregate_failures do
+    it "reports a BigDecimal balance and amount on a rate envelope" do
+      pool = envelope("Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:left_to_spend)
+      expect(status.balance).to eq(0)
+      expect(status.balance).to be_a(BigDecimal)
+      expect(status.amount).to eq(0)
+      expect(status.amount).to be_a(BigDecimal)
+    end
+
+    it "reports a BigDecimal amount on an unfunded savings goal" do
+      status = goal("Vacation").status(today: today)
+
+      expect(status.state).to eq(:saving)
+      expect(status.amount).to be_a(BigDecimal)
+    end
+  end
 end

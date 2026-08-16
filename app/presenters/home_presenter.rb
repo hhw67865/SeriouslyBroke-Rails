@@ -44,11 +44,11 @@ class HomePresenter
   # difference is what the waterfall will spend, and an overdrawn account is clamped out of
   # #available before the sum — so a reader who guessed got a plausible wrong number.
   #
-  # `.to_d`, not the raw balance: PoolCalculator#balance is five `sum(:amount)` calls, and
-  # an account holding no entries at all makes every one of them return the Integer literal
-  # 0. #available seeds its own sum so it is safe either way, but this is a public money
-  # reader and Task 8's views divide by it for the buffer bar — Integer division there
-  # would truncate silently on exactly the accounts that are emptiest.
+  # `.to_d` was this method's own guard while PoolCalculator#balance could hand back the
+  # Integer literal 0 — five `sum(:amount)` calls, all empty on an account with no entries.
+  # #balance now coerces at its own source, so this is belt to its braces rather than the
+  # only thing standing between a buffer bar and Integer division on exactly the accounts
+  # that are emptiest. Kept because this is the public money reader the views divide by.
   def current_buffer_for(account) = calculator_for(account).balance.to_d
 
   # Unclaimed cash across every account — an honest answer to "what do I have".

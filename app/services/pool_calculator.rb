@@ -15,9 +15,16 @@ class PoolCalculator
   # `pool.start_date..`; a pool's balance is all the money in it, with no cutoff — the
   # movement ledger simply starts empty. `start_date` survives as a savings-goal display
   # attribute, not a balance filter. See the spec example that pins this.
+  #
+  # `.to_d` on the RESULT, and it is not decoration: every term here is a `sum(:amount)`
+  # over a `money` column, and an empty sum returns the Integer literal 0 rather than a
+  # BigDecimal zero. A pool holding nothing at all — a fresh envelope, the first shape a
+  # sweep meets — made all five Integers, so #balance, #reserve, #free_amount and
+  # PoolStatus#balance/#amount all changed TYPE on exactly the pools that are emptiest.
+  # Coerced once here so every reader downstream inherits the guarantee.
   def balance
-    income_entries_total + savings_entries_total +
-      movements_in_total - movements_out_total - expense_entries_total
+    (income_entries_total + savings_entries_total +
+      movements_in_total - movements_out_total - expense_entries_total).to_d
   end
 
   # Retained for the savings-pool views; identical to #balance.
@@ -39,12 +46,22 @@ class PoolCalculator
     end
   end
 
-  def reserve = allocated_balances.values.sum
+  # Seeded, for the pool that holds no rules at all: an unseeded `sum` over an empty set
+  # returns the Integer literal 0. And `remaining.clamp(0, ...)` hands back the bare `0`
+  # low bound whenever the balance is negative, so even a non-empty set can be all
+  # Integers. Same guarantee as #balance's, one level up.
+  def reserve = allocated_balances.values.sum(0.to_d)
 
-  # `0.to_d`, not a bare `0`: on the overdrawn branch `max` returns the literal it was
-  # given, and an Integer leaking out here makes the return type depend on whether the
-  # pool happens to be in the black. Plan 2's sweep step divides by this.
-  def free_amount = [balance - reserve, 0.to_d].max
+  # `.to_d` on the SUBTRACTION, not on the clamp bound. `[x, 0.to_d].max` only coerces
+  # when the clamp actually FIRES — `[0, BigDecimal("0")].max` returns the Integer — so
+  # seeding the bound alone left every entry-less pool reporting an Integer here, which is
+  # the one shape Plan 2b's sweep divides by first. The `max` stays: this must never go
+  # below zero.
+  #
+  # Belt to #balance's braces: with both operands now coerced at their own source this
+  # cannot fire, and it is kept because this is the reader the sweep divides BY — the one
+  # place in the class where the guarantee has to hold locally rather than by inheritance.
+  def free_amount = [(balance - reserve).to_d, 0.to_d].max
 
   # A dateless goal funds at its rate until the POOL reaches its target. A rate rule's
   # usual "satisfied at my own amount" semantics do not apply here: an ordinary rule is
