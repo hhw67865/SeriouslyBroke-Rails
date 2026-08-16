@@ -1,7 +1,11 @@
 <% content_for :title, "Distribute" %>
 
-<%= page_header(title: "Distribute",
-                subtitle: "#{@presenter.account.name} · #{@presenter.period.first.strftime("%b %-d")} – " \
+<%# The page header names the ACCOUNT and the period; the headline below it names the amount.
+    It used to say "Distribute" directly above `Distribute $600.00`, which spent the largest type
+    on the screen saying the same word twice and left the account — the thing a user with more
+    than one of them needs to see — in a subtitle. %>
+<%= page_header(title: @presenter.account.name,
+                subtitle: "Distribution · #{@presenter.period.first.strftime("%b %-d")} – " \
                           "#{@presenter.period.last.strftime("%b %-d")}") %>
 
 <div class="space-y-6">
@@ -13,11 +17,11 @@
 
   <%= render "sources", presenter: @presenter %>
 
-  <%# THE DENSITY SWITCH, chosen by the data and never by a setting (spec §5). Everything is
-      funded → the card above has said so in one line and there is nothing here to decide.
-      Anything short → the full waterfall, uncollapsed, because a single confirm over a
-      collapsed short distribution lets someone quietly starve the bottom rows. %>
-  <% if @presenter.short? %>
+  <%# THE DENSITY SWITCH, chosen by the data and never by a setting (spec §5). Nothing short and
+      nothing red → the card above has said so in one line and there is nothing here to decide.
+      Anything short OR overdue → the full waterfall, uncollapsed, because a single confirm over
+      a collapsed screen either starves the bottom rows or calls a late bill fine. %>
+  <% if @presenter.expanded? %>
     <%= render "waterfall", presenter: @presenter %>
   <% end %>
 </div>

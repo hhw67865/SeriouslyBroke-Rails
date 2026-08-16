@@ -183,9 +183,15 @@ class AllocationCommitter
   #
   # Every distribution row touches the account itself — sweeps arrive there, allocations leave
   # from there — so the two-sided match needs no join through the envelopes.
+  # `order(:id)` is not cosmetic. Every destroy here `touch`es both of its pools, and the
+  # distribution SCREEN holds this deletion open inside a transaction for the whole of its
+  # snapshot — so two renders of the same period taking the same `pools` rows in different orders
+  # deadlock, and a `create` can block behind a page view. Unordered, the order is heap order,
+  # which a plain UPDATE changes. One fixed order for every caller costs nothing and makes the
+  # lock sequence deterministic.
   def previous_distribution
     in_period = PoolMovement.distributed.where(date: period)
-    in_period.where(from_pool: account).or(in_period.where(to_pool: account))
+    in_period.where(from_pool: account).or(in_period.where(to_pool: account)).order(:id)
   end
 
   # A period is a RANGE, and `date` is a datetime column: bounded by dates alone the last day

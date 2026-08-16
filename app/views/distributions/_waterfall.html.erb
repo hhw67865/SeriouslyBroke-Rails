@@ -9,16 +9,46 @@
     the same reasoning as Home's waterfall; there is no multi-account caveat here, because a
     distribution is scoped to one account by definition. %>
 <% rows = presenter.lines %>
-<% cutoff = rows.index { |line| line.funded.zero? && line.short? } || rows.length %>
+<%# `nil` unless something is actually short. With every envelope funded the index finds nothing,
+    falls back to the row count and draws "ran out here · $0.00 unfunded" under the last row of a
+    screen where nothing ran out — which is exactly what this table now renders whenever an
+    overdue bill opened it on a covered period. Same guard, and the same reason, as Home's. %>
+<% cutoff = presenter.short? ? (rows.index { |line| line.funded.zero? && line.short? } || rows.length) : nil %>
 
 <section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
   <div class="px-6 py-4 border-b border-gray-200">
     <h3 id="waterfall-heading" class="text-sm font-semibold text-gray-900">Where your money goes</h3>
-    <p class="mt-1 text-sm text-status-danger">
-      <%= number_to_currency(presenter.shortfall) %> of what your envelopes asked for isn't there.
-      Every row is shown, in the order the money reaches them.
-    </p>
+    <%# Why the table is open, in its own words. The two reasons are different problems with
+        different fixes — money missing, versus money present and a bill unpaid — and a header
+        that only ever named the first would leave the overdue screen looking like a mistake. %>
+    <% if presenter.short? %>
+      <p class="mt-1 text-sm text-status-danger">
+        <%= number_to_currency(presenter.shortfall) %> of what your envelopes asked for isn't there.
+        Every row is shown, in the order the money reaches them.
+      </p>
+    <% else %>
+      <p class="mt-1 text-sm text-gray-600">
+        Every envelope gets what it asked for, but something below still needs you — so the whole
+        split is shown rather than a single line.
+      </p>
+    <% end %>
   </div>
+
+  <%# Red pools with no row of their own: an overdue bill whose envelope already holds the money
+      asks for nothing and is rejected from the waterfall, so this band is the only place on the
+      screen it can appear. It is also the thing the density switch fired on, and a table that
+      opened without saying why reads as a bug. %>
+  <% presenter.alerts.each do |pool, standing| %>
+    <div class="px-6 py-3 border-b border-gray-100 bg-status-danger-light" data-alert-pool="<%= pool.name %>">
+      <div class="flex items-baseline justify-between gap-4">
+        <span class="font-medium text-gray-900"><%= pool.name %></span>
+        <span class="text-sm text-status-danger"><%= pool_status_label(standing) %></span>
+      </div>
+      <p class="mt-0.5 text-xs text-gray-600">
+        Its money is already there — this distribution has nothing to add.
+      </p>
+    </div>
+  <% end %>
 
   <ol>
     <% rows.each_with_index do |line, index| %>

@@ -38,6 +38,9 @@ RSpec.describe "Distributions Proposal", type: :system do
         expect(page).to have_content("Income this period $2,400.00", normalize_ws: true)
         expect(page).to have_content("Swept back from Groceries $85.00", normalize_ws: true)
         expect(page).to have_content("Available $2,900.00", normalize_ws: true)
+        # Nothing left this account inside the period, so the residual line has no cause and does
+        # not render. Paired with the overdrawn example below, where it does.
+        expect(page).to have_no_content("Spent and moved this period")
       end
     end
 
@@ -47,7 +50,13 @@ RSpec.describe "Distributions Proposal", type: :system do
       expect(page).to have_css("#distribution-waterfall")
       expect(page).to have_content("$250.00 of what your envelopes asked for isn't there")
 
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$400.00") }
+      # A FULLY funded row prints the bare amount — `$400.00`, never `$400.00 of $400.00`, which
+      # is the noise the helper drops. `Capybara.exact` is unset, so the positive assertion alone
+      # passes on either string; the pairing is what pins which one was rendered.
+      within("[data-pool-name='Groceries']") do
+        expect(page).to have_content("$400.00")
+        expect(page).to have_no_content(" of ")
+      end
       within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
       within("[data-pool-name='Vacation']") { expect(page).to have_content("$0.00 of $150.00") }
       expect(page).to have_content("ran out here · $250.00 unfunded")
@@ -112,6 +121,58 @@ RSpec.describe "Distributions Proposal", type: :system do
     end
   end
 
+  # Spec §5: "anything short OR OVERDUE → the full waterfall". The overdue half is the one the
+  # short-only switch could not reach — this envelope already holds its $120, so it asks for
+  # nothing and has no row at all, and the screen used to collapse to "2 envelopes funded in full"
+  # over a bill that is already late.
+  describe "an all-clear distribution with an overdue bill", :aggregate_failures do
+    before do
+      envelope("Groceries", 400, priority: 1)
+      overdue_envelope("Utilities", 120, funded: 120, priority: 2)
+      deposit(2_400, on: Date.current)
+      visit new_distribution_path
+    end
+
+    it "opens the full table and says what needs you" do
+      expect(page).to have_css("#distribution-waterfall")
+      expect(page).to have_no_css("#distribution-summary")
+      expect(page).to have_content("Every envelope gets what it asked for, but something below still needs you")
+
+      within("[data-alert-pool='Utilities']") do
+        expect(page).to have_content("overdue · was #{(Date.current - 10).strftime("%b %-d")}")
+        expect(page).to have_content("Its money is already there")
+      end
+    end
+
+    # Nothing ran out, so the cutoff must not be drawn. It is keyed off the row funding, which
+    # finds nothing here and falls back to the end of the list — the line would read
+    # "ran out here · $0.00 unfunded" on a screen where every envelope was funded in full.
+    it "draws no cutoff on a period that never ran out" do
+      expect(page).to have_css("[data-pool-name='Groceries']")
+      expect(page).to have_no_content("ran out here")
+    end
+  end
+
+  # The row half of the same rule, and the pairing DistributionsHelper::DATED_STATES exists for:
+  # `overdue` prints the date of the rule that made it late, so the schedule clause — which
+  # describes the earliest-due rule, not necessarily the same one — must stay off. Asserted
+  # against the "4 periods left" row above, which is the same helper printing the clause.
+  describe "an overdue bill that still needs money", :aggregate_failures do
+    before do
+      overdue_envelope("Utilities", 120, priority: 1)
+      deposit(2_400, on: Date.current)
+      visit new_distribution_path
+    end
+
+    it "prints one date on the row and no schedule clause" do
+      within("[data-pool-name='Utilities']") do
+        expect(page).to have_content("overdue · was #{(Date.current - 10).strftime("%b %-d")}")
+        expect(page).to have_no_content("periods left")
+        expect(page).to have_no_content("due #{(Date.current - 10).strftime("%b %-d")}")
+      end
+    end
+  end
+
   # Amendment B. One account has no sibling overdraft to cancel against, so the negative is real
   # and the screen says so rather than flooring it at zero.
   describe "an overdrawn account", :aggregate_failures do
@@ -127,10 +188,13 @@ RSpec.describe "Distributions Proposal", type: :system do
       expect(page).to have_content("Checking is $200.00 in the red")
 
       within("#distribution-sources") do
-        expect(page).to have_content("Buffer carried over -$300.00", normalize_ws: true)
+        # The overdraft is the SPENDING line's, not the carried-over line's: this account opened
+        # the period holding nothing, took $100 in and paid $300 out.
+        expect(page).to have_content("Buffer carried over $0.00", normalize_ws: true)
+        expect(page).to have_content("Spent and moved this period -$300.00", normalize_ws: true)
         expect(page).to have_content("Available -$200.00", normalize_ws: true)
       end
-      within("#distribution-buffer") { expect(page).to have_content("-$300.00 → -$200.00", normalize_ws: true) }
+      within("#distribution-buffer") { expect(page).to have_content("$0.00 → -$200.00", normalize_ws: true) }
       within("[data-pool-name='Groceries']") { expect(page).to have_content("$0.00 of $400.00") }
     end
   end
@@ -178,7 +242,10 @@ RSpec.describe "Distributions Proposal", type: :system do
 
       expect(page).to have_css("h2", text: "Distribute $2,900.00")
       within("#distribution-sources") { expect(page).to have_content("Swept back from Groceries $85.00", normalize_ws: true) }
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$400.00") }
+      within("[data-pool-name='Groceries']") do
+        expect(page).to have_content("$400.00")
+        expect(page).to have_no_content(" of ")
+      end
       within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
     end
 
@@ -214,6 +281,23 @@ RSpec.describe "Distributions Proposal", type: :system do
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
     create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
+    pool
+  end
+
+  # A bill whose date has passed with no payment recorded against its item. The ITEM is what makes
+  # a rule payable and therefore what makes it late.
+  def overdue_envelope(name, amount, funded: nil, priority: 0)
+    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+    category = create(:category, :expense, user: user, pool: pool)
+    create(
+      :pool_budget,
+      pool: pool,
+      item: create(:item, category: category),
+      amount: amount,
+      interval_months: nil,
+      anchor_date: Date.current - 10
+    )
+    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current) if funded
     pool
   end
 

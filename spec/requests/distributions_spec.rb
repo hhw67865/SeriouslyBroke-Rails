@@ -25,14 +25,41 @@ RSpec.describe "Distributions", type: :request do
       expect(response.body).to include("Checking")
     end
 
-    it "opens on the user's default account when none is named", :aggregate_failures do
-      other = create(:pool, :account, user: user, name: "Ally")
-      user.update!(default_account: other)
+    # The plan's ruling: with no account named, open on the one this period's pay landed in. Both
+    # directions of the same fixture — the income moves and the screen follows it — because an
+    # assertion on one account alone passes on any rule that happens to pick that account.
+    it "opens on the account this period's income landed in", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      deposit(2_400, into: checking)
+      deposit(50, into: ally)
 
       get new_distribution_path
 
-      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Checking")
+      expect(response.body).not_to include("Ally")
+    end
+
+    it "follows the income to the other account", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      deposit(50, into: checking)
+      deposit(2_400, into: ally)
+
+      get new_distribution_path
+
       expect(response.body).to include("Ally")
+      expect(response.body).not_to include("Checking")
+    end
+
+    # No income anywhere is the ordinary shape of a brand-new user and of every user before their
+    # first paycheck of the period. `max_by` promises nothing about which of several equal maxima
+    # it returns, so without the index tie-break this is the example that flaps.
+    it "falls back to priority order when no income has arrived", :aggregate_failures do
+      create(:pool, :account, user: user, name: "Ally", priority: 5)
+
+      get new_distribution_path
+
+      expect(response.body).to include("Checking")
+      expect(response.body).not_to include("Ally")
     end
 
     # The whole point. A bare `Pool.find(params[:account_id])` renders this page — another
@@ -72,5 +99,10 @@ RSpec.describe "Distributions", type: :request do
       expect(response).to redirect_to(root_path)
       expect(flash[:alert]).to eq("Set up an account before distributing.")
     end
+  end
+
+  def deposit(amount, into:)
+    category = create(:category, :income, user: user, pool: into)
+    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 end

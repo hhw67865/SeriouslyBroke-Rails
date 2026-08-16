@@ -29,6 +29,24 @@ RSpec.describe DistributionPresenter, type: :model do
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
   end
 
+  # A bill whose date has passed with no payment recorded against its item. The ITEM is what makes
+  # a rule payable and therefore what makes it late: without one, BudgetCalculator assumes it was
+  # paid on time and the pool never reads :overdue.
+  def overdue_envelope(name, amount, funded: nil, priority: 0)
+    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+    category = create(:category, :expense, user: user, pool: pool)
+    create(
+      :pool_budget,
+      pool: pool,
+      item: create(:item, category: category),
+      amount: amount,
+      interval_months: nil,
+      anchor_date: today - 10
+    )
+    fund(pool, funded, on: this_period) if funded
+    pool
+  end
+
   def deposit(amount, on:)
     category = create(:category, :income, user: user, pool: checking)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
@@ -58,14 +76,20 @@ RSpec.describe DistributionPresenter, type: :model do
       deposit(2_400, on: this_period)
     end
 
-    # The four lines of the sources breakdown, each against the figure the fixture put there —
-    # never against each other. `buffer_carried` is DERIVED from the other three, so asserting
-    # that the four add up would be `x == x` and would pass on any three numbers at all.
+    # The lines of the sources breakdown, each against the figure the fixture put there — never
+    # against each other. Three are measured independently (an `as_of` balance, an income query,
+    # the proposal's sweeps) and the fourth is the residual, so asserting that they add up would
+    # be `x == x` and would pass on any three numbers at all.
+    #
+    # `moved_this_period` is zero here and that is an assertion, not an omission: nothing left
+    # this account inside the period, so the residual has nothing to absorb — which is what makes
+    # the $415 above a real opening balance rather than a plug.
     it "breaks the available money into where it came from", :aggregate_failures do
       subject = presenter
 
       expect(subject.buffer_carried).to eq(415)
       expect(subject.income_this_period).to eq(2_400)
+      expect(subject.moved_this_period).to eq(0)
       expect(subject.total_swept).to eq(85)
       expect(subject.available).to eq(2_900)
     end
@@ -76,6 +100,7 @@ RSpec.describe DistributionPresenter, type: :model do
       subject = presenter
 
       expect(subject.buffer_carried).to be_a(BigDecimal)
+      expect(subject.moved_this_period).to be_a(BigDecimal)
       expect(subject.income_this_period).to be_a(BigDecimal)
       expect(subject.total_swept).to be_a(BigDecimal)
       expect(subject.available).to be_a(BigDecimal)
@@ -106,6 +131,7 @@ RSpec.describe DistributionPresenter, type: :model do
 
       expect(subject).to be_short
       expect(subject).not_to be_covered
+      expect(subject).to be_expanded
       expect(subject.shortfall).to eq(250)
       expect(subject.leftover).to eq(0)
     end
@@ -149,6 +175,63 @@ RSpec.describe DistributionPresenter, type: :model do
       expect(subject.total_allocated).to eq(650)
       expect(subject.leftover).to eq(2_250)
     end
+
+    # The collapsed half of the density switch: nothing short, nothing red, so the screen has one
+    # line to say and says it.
+    it "collapses", :aggregate_failures do
+      subject = presenter
+
+      expect(subject).not_to be_expanded
+      expect(subject.alerts).to be_empty
+    end
+  end
+
+  # Spec §5 says "anything short OR OVERDUE → the full waterfall". The overdue half is not a
+  # variation on the short one: this envelope ALREADY HOLDS its $120, so it asks for nothing, so
+  # it is rejected from #rows — and a short-only switch collapses the whole screen to "everything
+  # is funded, one button" over a bill that is already late.
+  describe "a covered period with an overdue bill that needs no money" do
+    before do
+      rate_envelope("Groceries", 400, priority: 1)
+      overdue_envelope("Utilities", 120, funded: 120, priority: 2)
+      deposit(2_400, on: this_period)
+    end
+
+    it "opens the full table even though every envelope is funded", :aggregate_failures do
+      subject = presenter
+
+      expect(subject).to be_covered
+      expect(subject).to be_expanded
+    end
+
+    # The pool that fired the switch has no row, so unless it is named here the table opens and
+    # says nothing about why. Both halves pinned: it is IN the alerts and NOT in the rows.
+    it "names the pool nothing else on the screen can mention", :aggregate_failures do
+      subject = presenter
+
+      expect(subject.alerts.map { |pool, _standing| pool.name }).to eq(["Utilities"])
+      expect(subject.alerts.map { |_pool, standing| standing.state }).to eq([:overdue])
+      expect(subject.lines.map { |line| line.pool.name }).to eq(["Groceries"])
+    end
+  end
+
+  # The other direction of the alerts list. A red pool that DOES have a row is already named by
+  # that row's own detail line, and listing it again would print one problem twice.
+  describe "a covered period with an overdue bill that still needs money" do
+    before do
+      rate_envelope("Groceries", 400, priority: 1)
+      overdue_envelope("Utilities", 120, priority: 2)
+      deposit(2_400, on: this_period)
+    end
+
+    it "expands on the row rather than on an alert", :aggregate_failures do
+      subject = presenter
+
+      expect(subject).to be_expanded
+      expect(subject.alerts).to be_empty
+      expect(line_for(subject, "Utilities").status.state).to eq(:overdue)
+      expect(line_for(subject, "Utilities").needed).to eq(120)
+    end
   end
 
   # Amendment B. #available is deliberately unclamped: one account has no sibling overdraft to
@@ -166,8 +249,21 @@ RSpec.describe DistributionPresenter, type: :model do
 
       expect(subject.available).to eq(-200)
       expect(subject.leftover).to eq(-200)
-      expect(subject.buffer_carried).to eq(-300)
       expect(subject.available).to be_negative
+    end
+
+    # The four sources against their four causes. The account opened the period holding nothing,
+    # $100 came in, $300 went out — and it is the SPENDING line that carries the overdraft, not
+    # the carried-over one, which is the whole point of measuring the opening buffer rather than
+    # deriving it. Derived, this line printed -$300.00 "carried over" into a period the account
+    # opened at zero.
+    it "blames the overdraft on the spending, not on the buffer it started with", :aggregate_failures do
+      subject = presenter
+
+      expect(subject.buffer_carried).to eq(0)
+      expect(subject.income_this_period).to eq(100)
+      expect(subject.moved_this_period).to eq(-300)
+      expect(subject.total_swept).to eq(0)
     end
 
     it "funds nothing out of money that is not there", :aggregate_failures do
@@ -196,6 +292,17 @@ RSpec.describe DistributionPresenter, type: :model do
       expect(line.due_on).to eq(Date.new(2026, 10, 1))
       expect(line.periods_left).to eq(3)
       expect(line.needed).to eq(400)
+    end
+
+    # `:behind` is deliberately NOT a trigger for the full table: it is amber, it is the ordinary
+    # state of a bill being saved for, and expanding on it would collapse the two-density design
+    # into one. The pool here is genuinely behind and the screen still says its one line.
+    it "does not open the full table merely for being behind", :aggregate_failures do
+      subject = presenter
+
+      expect(line_for(subject, "Rent").status.state).to eq(:behind)
+      expect(subject).not_to be_expanded
+      expect(subject.alerts).to be_empty
     end
   end
 
@@ -226,6 +333,24 @@ RSpec.describe DistributionPresenter, type: :model do
       expect(subject.lines.map(&:needed)).to eq([400, 2_600, 150])
       expect(subject.lines.map(&:funded)).to eq([400, 2_500, 0])
       expect(subject).to be_short
+    end
+
+    # A row's STATE is part of the same snapshot as its amounts. Groceries holds $85 of a closed
+    # period before this split and $400 after it, so the state and the figure beside it have to
+    # describe the same world or the row is two worlds wide.
+    #
+    # The type assertion is a contract, not a proof: it pins that the view is handed values rather
+    # than a live PoolStatus, which is the only thing that makes the amounts below stable after
+    # the rollback. PoolStatus today happens to memoise its balance once `#amount` has been asked,
+    # so a live object would return these same numbers — the point is that nothing outside this
+    # class guarantees it will keep doing so.
+    it "freezes each row's state at the same moment as its figures", :aggregate_failures do
+      line = line_for(presenter, "Groceries")
+
+      expect(line.status).to be_a(described_class::Standing)
+      expect(line.status.state).to eq(:left_to_spend)
+      expect(line.status.amount).to eq(85)
+      expect(line.period_closed).to be(true)
     end
 
     # The label the user needs in order to consent: this is a REPLACEMENT, and what it replaces

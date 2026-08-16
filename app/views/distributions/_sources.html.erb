@@ -15,21 +15,49 @@
         -$200.00" is not an instruction anyone can follow, so the headline says the true thing
         instead and the breakdown below still prints the figure. %>
     <h2 class="text-2xl font-semibold text-status-danger">Nothing to distribute</h2>
-    <p class="mt-1 text-sm text-status-danger">
-      <%= presenter.account.name %> is <%= number_to_currency(-presenter.available) %> in the red,
-      sweeps included — nothing can be funded until money arrives.
-    </p>
+    <%# The red sentence is about an OVERDRAFT, so it fires on `negative?` and not on the
+        headline's `!positive?`. An account sitting at exactly zero was reading "Checking is
+        $0.00 in the red" — a debt of nothing, stated in the loudest colour the app has. An empty
+        account is empty; it is not in trouble. %>
+    <% if presenter.available.negative? %>
+      <p class="mt-1 text-sm text-status-danger">
+        <%= presenter.account.name %> is <%= number_to_currency(-presenter.available) %> in the red,
+        sweeps included — nothing can be funded until money arrives.
+      </p>
+    <% else %>
+      <p class="mt-1 text-sm text-gray-600">
+        <%= presenter.account.name %> has no unallocated cash — nothing can be funded until money
+        arrives.
+      </p>
+    <% end %>
   <% end %>
 
   <dl id="distribution-sources" class="mt-4 max-w-md space-y-1 text-sm">
+    <%# Coloured on the same rule as Available and as the buffer line: a negative buffer is the
+        one figure here that is a statement about being in trouble, and it was rendering in the
+        same grey as the healthy ones while the two figures either side of it turned red. %>
     <div class="flex justify-between gap-4">
       <dt class="text-gray-600">Buffer carried over</dt>
-      <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.buffer_carried) %></dd>
+      <dd class="tabular-nums <%= presenter.buffer_carried.negative? ? "text-status-danger" : "text-gray-900" %>">
+        <%= number_to_currency(presenter.buffer_carried) %>
+      </dd>
     </div>
     <div class="flex justify-between gap-4">
       <dt class="text-gray-600">Income this period</dt>
       <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.income_this_period) %></dd>
     </div>
+    <%# Money that left (or came back to) the buffer inside this period by some route other than
+        a distribution: spending, and reallocations made by hand. Dropped when it is zero, which
+        is the ordinary shape — a line reading "$0.00" invites the reader to look for a cause
+        that is not there. %>
+    <% unless presenter.moved_this_period.zero? %>
+      <div class="flex justify-between gap-4">
+        <dt class="text-gray-600">Spent and moved this period</dt>
+        <dd class="tabular-nums <%= presenter.moved_this_period.negative? ? "text-status-danger" : "text-gray-900" %>">
+          <%= number_to_currency(presenter.moved_this_period) %>
+        </dd>
+      </div>
+    <% end %>
     <%# Named pools, not a bare "swept back": the money left an envelope the user recognises,
         and with no sweep this line would read "Swept back from" followed by nothing. %>
     <% if presenter.sweeps.any? %>
@@ -50,8 +78,10 @@
 
   <%# The all-clear density's ONE summary line. The waterfall does not render at all on this
       branch, so this sentence is the whole of what the screen has to say — hence the buffer
-      figure in it, which the short branch prints as the waterfall's last row instead. %>
-  <% if presenter.covered? %>
+      figure in it, which the expanded branch prints as the waterfall's last row instead.
+      `expanded?` and not `covered?`: the two densities are one decision, and keying the summary
+      on a second predicate is how a screen ends up showing both or neither. %>
+  <% unless presenter.expanded? %>
     <p id="distribution-summary" class="mt-4 text-sm text-gray-700">
       <% if presenter.lines.empty? %>
         Nothing is asking for money this period —
