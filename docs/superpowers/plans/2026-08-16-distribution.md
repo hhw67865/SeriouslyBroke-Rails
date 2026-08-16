@@ -193,6 +193,8 @@ The sources breakdown is required — buffer carried, income this period, swept 
 
 Route: `resources :distributions, only: [:new, :create]`.
 
+Which account the screen opens on is a real choice once a user has more than one: the demo user has two at equal priority, so `[priority, name]` opens on **Ally Savings** rather than the account the paycheck landed in. Default to the account holding the **most income this period**, tie-broken by `[priority, name]` — the account you distribute is the one your pay arrived in. Task 6 links with an explicit `account_id` regardless; the default is for arriving with none.
+
 ### A period that has already been distributed
 
 Task 3 found this and could not fix it from where it stood. Once a period's split has been committed, the envelopes are funded, so a freshly computed proposal asks for **nothing** — the screen would say "nothing to distribute" while the confirm button underneath it replaces the whole split and re-writes it. The screen would be stale and the action correct, which is the wrong way round.
