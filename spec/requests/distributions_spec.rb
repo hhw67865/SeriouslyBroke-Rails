@@ -134,6 +134,20 @@ RSpec.describe "Distributions", type: :request do
       expect(override_field(groceries)).to include('value="120.00"')
     end
 
+    # THE APP'S OWN UI PRODUCED THIS SHAPE, which is why the guard below is not merely defensive.
+    # The month scrubber re-emits every query parameter as `hidden_field key, value: value`, and a
+    # hash written into one scalar box arrives as its own #to_s. This asserts the scrubber's side:
+    # the nested param is dropped rather than flattened, so a month arrow clicked mid-edit carries
+    # no override at all — which is also the right behaviour, since a different month is a
+    # different period whose proposal has different rows.
+    it "does not carry overrides through the month scrubber" do
+      get new_distribution_path(account_id: checking.id, overrides: { groceries.id => "120" })
+
+      scrubber = response.body[%r{<form[^>]*>.*?name="month".*?</form>}m]
+      expect(scrubber).to be_present
+      expect(scrubber).not_to include("overrides")
+    end
+
     it "ignores a scalar where a hash of overrides was expected" do
       get new_distribution_path(account_id: checking.id, overrides: "1")
 

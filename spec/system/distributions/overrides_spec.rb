@@ -199,6 +199,19 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_field("Amount for Rent", with: "200.00")
     end
 
+    # The third cause the header has to tell apart: the edit itself. Nothing is wrong below and
+    # nobody asked to see the table, so neither of the other two sentences may appear.
+    it "names the edit as the reason the table is still open" do
+      expect(page).to have_content("of what your envelopes asked for isn't there")
+
+      fill_in "Amount for Rent", with: "200"
+      click_on "Update figures"
+
+      expect(page).to have_content("your edits are shown below")
+      expect(page).to have_no_content("something below still needs you")
+      expect(page).to have_no_content("You asked to see the whole split")
+    end
+
     # The other direction of the trade, which a one-sided implementation gets wrong by printing
     # "moving -$200.00 onto your next period".
     #
@@ -637,6 +650,68 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
   end
 
+  # EDITS THAT CANCEL ON NET, which is the shape the old gate went silent on: cut one envelope by
+  # $300 and raise another by $300 and nothing leaves the group, so the net is zero while $300 has
+  # plainly moved between two envelopes. The line that exists to say where money went may not fall
+  # silent on the one screen where the user has just reshuffled their budget.
+  #
+  # $900 against $400 + $400 + $200 of asks, so Dining Out starts at $100 of $200 and stays there
+  # through both edits — the cascade is untouched and every dollar is accounted for between the
+  # two rows the user typed in.
+  describe "two edits that cancel out", :aggregate_failures do
+    before do
+      rate_envelope("Groceries", 400, priority: 1)
+      rate_envelope("Rent", 400, priority: 2)
+      rate_envelope("Dining Out", 200, priority: 3)
+      deposit(900, on: Date.current)
+      visit new_distribution_path
+    end
+
+    it "names both ends when the net is zero" do
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$400.00") }
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$400.00") }
+
+      fill_in "Amount for Groceries", with: "100"
+      fill_in "Amount for Rent", with: "700"
+      click_on "Update figures"
+
+      expect_aggregate("Your edits move $300.00: $300.00 from Groceries to Rent.")
+      expect_cancelled_split
+    end
+
+    # The two ends, pinned independently and at figures that differ, so the sentence cannot pass
+    # on a fixture where they coincide. Both are funded in full at the figure the user chose, so
+    # neither prints an "of" clause — paired, because `Capybara.exact` is unset.
+    def expect_cancelled_split
+      within("[data-row-amount='Groceries']") do
+        expect(page).to have_content("$100.00")
+        expect(page).to have_no_content(" of ")
+      end
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$700.00") }
+      expect_cascade_untouched
+    end
+
+    # The whole $300 went between the two rows the sentence names and nowhere else.
+    def expect_cascade_untouched
+      within("[data-row-amount='Dining Out']") { expect(page).to have_content("$100.00 of $200.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$0.00 → $0.00", normalize_ws: true) }
+    end
+
+    # Neither of the other two leads is true here — nothing was freed and nothing was taken — so
+    # both are asserted absent beside the sentence that is true.
+    it "says neither freed nor taken" do
+      fill_in "Amount for Groceries", with: "100"
+      fill_in "Amount for Rent", with: "700"
+      click_on "Update figures"
+
+      within("#distribution-redirect") do
+        expect(page).to have_content("Your edits move")
+        expect(page).to have_no_content("free")
+        expect(page).to have_no_content("take")
+      end
+    end
+  end
+
   # SPEC §5 says every line is editable, and the all-clear density renders no lines — which is not
   # a contradiction (that density is a headline, one summary line and a button) but does leave
   # someone who simply wants to put more into savings on a comfortable period with nothing to type
@@ -665,6 +740,17 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_css("#distribution-waterfall")
       expect(page).to have_no_css("#distribution-summary")
       expect(page).to have_field("Amount for Vacation", with: "", placeholder: "150.00")
+    end
+
+    # THE HEADER HAS TO NAME THE RIGHT CAUSE. "Something below still needs you" is true when an
+    # overdue bill forced the table open and a small lie here, where the user simply asked to
+    # see it — it sends someone hunting for a problem that is not there. Both directions on one
+    # screen: the asked-for sentence present and the needs-you sentence absent.
+    it "says the table is open because it was asked for, not because something needs you" do
+      click_on "Show every envelope"
+
+      expect(page).to have_content("You asked to see the whole split, so here it is")
+      expect(page).to have_no_content("something below still needs you")
     end
 
     # The request has to survive the form, or clearing the last edit collapses the table out from

@@ -182,8 +182,19 @@ class DistributionPresenter
   # `recipients` is `[pool, amount]` in descending order of amount, holding MAGNITUDES; `buffer`
   # likewise. The identity is asserted against the SCREEN's own before-and-after figures rather
   # than against itself, which would be `x == x`.
-  Redirect = Data.define(:moved, :recipients, :buffer, :aggregate) do
+  Redirect = Data.define(:moved, :sources, :recipients, :buffer, :aggregate) do
     def freed? = moved.positive?
+
+    # Edits that CANCEL on net. Nothing left the group, so neither "freed" nor "took" is true and
+    # there is no lead figure to state — but money still went from one envelope to another, and
+    # the line that exists to say where money went may not fall silent on the one screen where
+    # the user has just reshuffled their budget. `sources` is populated only here, and only here
+    # do the two lists name both ends of the same movement.
+    def shifted? = moved.zero?
+
+    # What the sentence leads with. For a shift there is no net, so the figure is the total that
+    # changed hands — which is the sum of either side, and they are equal by construction.
+    def total = shifted? ? recipients.sum(0.to_d, &:last) : moved.abs
 
     # Nothing below was waiting for it. The case the plan singled out, because it is the one
     # where a user who is told nothing concludes the money vanished.
@@ -271,7 +282,13 @@ class DistributionPresenter
   # is remembered, nothing is stored, and a fresh visit collapses again. It only answers the gap
   # the two-density design leaves: a comfortable period renders no rows, so there is nothing to
   # type in even when the user wants to put more into savings.
-  def expanded? = @expanded || short? || overridden? || alerts.any? || lines.any? { |line| line.status.red? }
+  def expanded? = @expanded || short? || overridden? || needs_attention?
+
+  # Something below is genuinely wrong: a red pool with no row of its own, or a row in a red
+  # state. Named because the header has to tell it apart from the two OTHER reasons the table can
+  # be open — the user asking, and the user's own edit — which are not problems and must not be
+  # described as one.
+  def needs_attention? = alerts.any? || lines.any? { |line| line.status.red? }
 
   # Whether the user ASKED for the table, as opposed to the data having demanded it. A different
   # question from #expanded? and read in one place only: the form carries it forward, so clearing
@@ -583,34 +600,71 @@ class DistributionPresenter
   def aggregate_redirect(fresh, edited)
     return nil if edited.size < 2
 
-    edited_ids = edited.to_set { |row| row.pool.id }
+    moved = edited.sum(0.to_d) { |row| @baseline.for(row.pool) - @live.for(row.pool) }
+    return shifted_redirect(fresh) if moved.zero?
 
-    build_redirect(
-      edited.sum(0.to_d) { |row| @baseline.for(row.pool) - @live.for(row.pool) },
-      fresh.rows.reject { |row| edited_ids.include?(row.pool.id) },
-      @baseline,
-      aggregate: true
-    )
+    build_redirect(moved, untouched_rows(fresh, edited), @baseline, aggregate: true)
   end
 
-  # `moved.zero?` is nil rather than a sentence, and it means two different true things depending
-  # on where it came from: for one row, an override the account could not honour (ask $350 with
-  # $185 left and the row still receives $185); for the aggregate, edits that cancelled out on
-  # net. The second can still hide a reshuffle below — one edit freeing exactly what another took,
-  # with a row between them gaining and the buffer losing the same figure — which this says
-  # nothing about. Named as a gap rather than papered over: the rows and the buffer line still
-  # show it, and no lead reading "your edits free $0.00" is worth the coverage.
+  # The rows nobody typed in. In the freed/taken modes the edited rows are the source and the
+  # lead names their total, so listing them again as destinations would say the same money twice.
+  def untouched_rows(fresh, edited)
+    edited_ids = edited.to_set { |row| row.pool.id }
+
+    fresh.rows.reject { |row| edited_ids.include?(row.pool.id) }
+  end
+
+  # `moved.zero?` is nil HERE and only here — one row whose funding the account could not change
+  # (ask $350 with $185 left and the row still receives $185) has changed nothing below it either,
+  # because `remaining` leaves it exactly as it arrived. The aggregate's zero means something
+  # entirely different and is handled by #shifted_redirect.
   def build_redirect(moved, others, without, aggregate:)
     return nil if moved.zero?
 
     direction = moved.positive? ? 1 : -1
     Redirect.new(
       moved: moved,
+      sources: [],
       recipients: recipients_of(others, without, direction),
       buffer: (@live.leftover - without.leftover) * direction,
       aggregate: aggregate
     )
   end
+
+  # EDITS THAT CANCEL ON NET — cut Groceries $300 and raise Rent $300 and nothing left the group,
+  # so the net is zero while $300 has plainly moved between two envelopes.
+  #
+  # The gate was on the wrong quantity. What decides whether there is anything to say is whether
+  # ANY row's funding differs from the untouched proposal, not whether the net is non-zero — and
+  # measured on the net, this screen went silent at exactly the moment a user had reshuffled their
+  # budget. Same decomposition as the other two modes, read in both directions: the negative
+  # deltas are where the money came from and the positive ones are where it went.
+  #
+  # EVERY row, not only the un-edited ones, because in this mode both ends are usually rows the
+  # user typed in. The buffer joins the lists as a `nil` pool rather than staying a member of its
+  # own: here it is one party among several rather than the residual, and it has to be able to
+  # appear on either side.
+  def shifted_redirect(fresh)
+    deltas = shift_deltas(fresh)
+    recipients = largest_first(deltas.select { |_party, delta| delta.positive? })
+    return nil if recipients.empty?
+
+    Redirect.new(
+      moved: 0.to_d,
+      sources: largest_first(deltas.filter_map { |party, delta| [party, -delta] if delta.negative? }),
+      recipients: recipients,
+      buffer: 0.to_d,
+      aggregate: true
+    )
+  end
+
+  # Every party to the split against the untouched proposal, the buffer included as a `nil` pool.
+  def shift_deltas(fresh)
+    fresh.rows.map { |row| [row.pool, @live.for(row.pool) - @baseline.for(row.pool)] } +
+      [[nil, @live.leftover - @baseline.leftover]]
+  end
+
+  def largest_first(parties) = parties.sort_by { |_party, amount| -amount }
 
   # The other rows this edit moved money to (or took it from), largest first. Signs are folded
   # away here rather than in the view: a row that GAINED when the edit freed money and a row that

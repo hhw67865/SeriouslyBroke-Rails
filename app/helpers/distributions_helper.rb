@@ -51,6 +51,32 @@ module DistributionsHelper
     "#{number_to_currency(line.funded)} of #{number_to_currency(line.needed)}"
   end
 
+  # WHY THE FULL TABLE IS OPEN on a period that is not short. Three causes, and they are not
+  # interchangeable:
+  #
+  #   something is genuinely wrong below (an overdue bill, an envelope that will not make its
+  #   date) — the case the two-density design exists for;
+  #
+  #   the user ASKED to see it, on a period where nothing needs them at all. "But something below
+  #   still needs you" is then a small lie that sends someone hunting for a problem that is not
+  #   there — and it was the only copy this branch had until a fourth demo account made the
+  #   combination reachable;
+  #
+  #   the user's own edit made the period all clear, so the table stays open to hold the boxes.
+  #
+  # `needs_attention?` and `expand_requested?` already distinguish all three, so this is a branch
+  # and not new state.
+  def distribution_waterfall_reason(presenter)
+    if presenter.needs_attention?
+      return "Every envelope gets what it asked for, but something below still needs you — " \
+             "so the whole split is shown rather than a single line."
+    end
+    return "Every envelope gets what it asked for. You asked to see the whole split, so here it is." if
+      presenter.expand_requested?
+
+    "Every envelope gets what it asked for — your edits are shown below."
+  end
+
   # What goes IN the box: the user's own figure, and NOTHING at all on a row they have not
   # edited. An empty box is what tells AllocationCalculator this row still wants its rule's ask,
   # and it is the only thing that lets money freed above it cascade down — a box carrying the
@@ -85,10 +111,41 @@ module DistributionsHelper
   # change their figures. A screen that moves money without saying where is the one thing that
   # would make the cascade worse than no cascade.
   def distribution_redirect_sentence(redirect)
+    return distribution_redirect_shift(redirect) if redirect.shifted?
     return distribution_redirect_buffer_only(redirect) if redirect.buffer_only?
 
     "#{distribution_redirect_lead(redirect)}: #{distribution_redirect_destinations(redirect).to_sentence}."
   end
+
+  # BOTH ENDS NAMED, for edits that cancel on net. Neither "freed" nor "took" is true — nothing
+  # left the group — so the sentence states what changed hands and where it came from as well as
+  # where it went. Without it the screen said nothing at all on the one occasion a user had just
+  # reshuffled their budget.
+  #
+  # The one-to-one shape gets the short reading, because it is the shape this mode is nearly
+  # always in and "$300.00 from Groceries and $300.00 to Rent" reads as $600. Anything wider gets
+  # one flat list where every part carries its own preposition and its own figure: each side sums
+  # to the lead by construction, so nothing here can be added to anything else.
+  def distribution_redirect_shift(redirect)
+    total = number_to_currency(redirect.total)
+    return "Your edits move #{total}: #{distribution_redirect_pair(redirect)}." if
+      redirect.sources.one? && redirect.recipients.one?
+
+    parts = redirect.sources.map { |party, amount| "#{number_to_currency(amount)} from #{distribution_party(party)}" }
+    parts += redirect.recipients.map { |party, amount| "#{number_to_currency(amount)} to #{distribution_party(party)}" }
+    "Your edits move #{total}: #{parts.to_sentence}."
+  end
+
+  def distribution_redirect_pair(redirect)
+    source, amount = redirect.sources.first
+
+    "#{number_to_currency(amount)} from #{distribution_party(source)} " \
+      "to #{distribution_party(redirect.recipients.first.first)}"
+  end
+
+  # A `nil` pool is the buffer. It is a party to a shift like any other — money can land there or
+  # come out of it — rather than the residual it is in the other two modes.
+  def distribution_party(pool) = pool ? pool.name : "your buffer"
 
   # "That" for one row's own edit, "Your edits" for the aggregate above the table. The subject is
   # the only thing that changes: the arithmetic underneath is the same subtraction, taken against

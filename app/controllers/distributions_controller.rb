@@ -28,10 +28,18 @@ class DistributionsController < ApplicationController
   # owns the coercion, and a second `.to_d` on this side is a second answer to "what did they
   # mean by an empty box".
   #
-  # Two guards, both against shapes only a hand-built URL produces: `overrides=1` arrives as a
-  # String and has no #permit!, and `overrides[x][]=1` arrives as an Array, which #to_d does not
-  # answer to — either one is a 500 on a GET anyone can link to. Values that are not strings are
-  # dropped rather than rescued, so the row simply keeps its proposed figure.
+  # Two guards. `overrides=1` arrives as a String and has no #permit!; `overrides[x][]=1` arrives
+  # as an Array, which #to_d does not answer to — either one is a 500 on a GET anyone can link to.
+  # Values that are not strings are dropped rather than rescued, so the row simply keeps its
+  # proposed figure.
+  #
+  # THE FIRST OF THOSE WAS PRODUCED BY THIS APP'S OWN UI, not by a hand-built URL, and that is
+  # worth knowing before anyone relaxes it. The month scrubber re-emitted every query parameter as
+  # `hidden_field key, value: value`, which writes a hash's #to_s into one scalar box — so
+  # clicking a month arrow mid-edit submitted `overrides=<inspected hash>` and this guard was the
+  # only thing standing between that and a 500. The scrubber now drops non-scalar params
+  # deliberately (see shared/_date_selector), and the guard stays, because a hidden field
+  # somewhere else is one line away from re-creating the shape.
   #
   # `permit!` is safe precisely because the keys are pool ids and nothing here mass-assigns:
   # every key is looked up against THIS account's own rows (AllocationCalculator#fill, which

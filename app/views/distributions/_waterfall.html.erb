@@ -22,19 +22,18 @@
 <section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
   <div class="px-6 py-4 border-b border-gray-200">
     <h3 id="waterfall-heading" class="text-sm font-semibold text-gray-900">Where your money goes</h3>
-    <%# Why the table is open, in its own words. The two reasons are different problems with
-        different fixes — money missing, versus money present and a bill unpaid — and a header
-        that only ever named the first would leave the overdue screen looking like a mistake. %>
+    <%# WHY THE TABLE IS OPEN, in its own words, and there are now four different reasons with
+        four different fixes. Only the first is red; the rest are statements rather than problems.
+        A header that named the wrong one is worse than a header that named none — "something
+        below still needs you" over a period where the user simply clicked "show every envelope"
+        sends them looking for a problem that is not there. See #distribution_waterfall_reason. %>
     <% if presenter.short? %>
       <p class="mt-1 text-sm text-status-danger">
         <%= number_to_currency(presenter.shortfall) %> of what your envelopes asked for isn't there.
         Every row is shown, in the order the money reaches them.
       </p>
     <% else %>
-      <p class="mt-1 text-sm text-gray-600">
-        Every envelope gets what it asked for, but something below still needs you — so the whole
-        split is shown rather than a single line.
-      </p>
+      <p class="mt-1 text-sm text-gray-600"><%= distribution_waterfall_reason(presenter) %></p>
     <% end %>
 
     <%# AMENDMENT D / SPEC §5, IN WORDS ON THE SCREEN. An override and a rule change are easy to

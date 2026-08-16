@@ -20,8 +20,21 @@
     next_year = current_year
   end
 
-  # Preserve existing query params for form redirects
-  base_params = request.query_parameters.deep_dup.symbolize_keys.except(:month, :year)
+  # Preserve existing query params for form redirects — SCALARS ONLY.
+  #
+  # These ride along as `hidden_field key, value: value`, which writes ONE box holding the value's
+  # #to_s. A nested param therefore does not survive: the distribution screen's
+  # `overrides[<pool id>]` hash came out the other side as a single scalar
+  # `overrides=<inspected hash>`, which only DistributionsController#override_params' type guard
+  # kept from being a 500.
+  #
+  # Dropping them is also the right BEHAVIOUR, not just the safe one: a month arrow moves to a
+  # different period, whose proposal has different rows, so an edit carried across it would name
+  # rows that no longer exist. Dropped deliberately here rather than mangled into something a
+  # guard downstream has to catch.
+  base_params = request.query_parameters.deep_dup.symbolize_keys
+                       .except(:month, :year)
+                       .select { |_key, value| value.is_a?(String) }
   
   # Style variant: 'sidebar' for desktop sidebar, 'mobile' for mobile header
   variant = local_assigns[:variant] || "sidebar"
