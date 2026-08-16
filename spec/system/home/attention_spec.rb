@@ -70,7 +70,7 @@ RSpec.describe "Home Attention", type: :system do
     visit root_path
 
     expect(page).to have_content("Nothing needs you")
-    expect(page).to have_no_content("Where your money went")
+    expect(page).to have_no_content("Where your money goes")
     expect(page).to have_no_content("ran out here")
   end
 
@@ -173,7 +173,7 @@ RSpec.describe "Home Attention", type: :system do
     within(attention_section) do
       expect(page).to have_content("Nothing is flagged, but you're still short")
       expect(page).to have_no_content("Nothing needs you")
-      expect(page).to have_content("Where your money went")
+      expect(page).to have_content("Where your money goes")
     end
   end
 
@@ -206,7 +206,7 @@ RSpec.describe "Home Attention", type: :system do
 
     visit root_path
 
-    expect(page).to have_content("Where your money went")
+    expect(page).to have_content("Where your money goes")
     expect(page).to have_content("ran out here")
   end
 

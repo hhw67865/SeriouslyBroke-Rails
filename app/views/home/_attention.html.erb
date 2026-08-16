@@ -69,7 +69,12 @@
       <%# Sentence case, not the `uppercase` treatment this codebase gives short labels like
           "Current Balance": that renders as WHERE YOUR MONEY WENT, which shouts a whole
           sentence — and it is the literal copy the design spec asks for. %>
-      <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500 mb-2">Where your money went</p>
+      <%# Present tense, not "went": this band has never described a completed distribution —
+          it describes what the NEXT one would do. Past tense was tolerable while it only
+          appeared on a short screen, where a shortfall reads like something that already
+          happened to you; it now renders on covered screens too, above a plan that plainly
+          has not run. The design spec is being corrected to match. %>
+      <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500 mb-2">Where your money goes</p>
 
       <%# Two groups rather than a flag inside one loop: the cutoff is then written once and
           renders correctly at either edge — before every row when the first pool got nothing,

@@ -383,7 +383,7 @@ RSpec.describe HomePresenter do
     # Seen on the screen, not in a spec: a pool that asks for nothing rendered "$0.00 of
     # $0.00" — and below the red "ran out here" line that reads as "this got nothing because
     # the money ran out" when the truth is "this needed nothing". The waterfall answers where
-    # the money went, and a pool with no ask is not part of that story.
+    # the money goes, and a pool with no ask is not part of that story.
     #
     # Arithmetic-neutral by construction: a zero-need row contributes 0 to `needed`, `funded`
     # and `short`, so #shortfall, #projected_buffer and #orphan_required cannot move — which

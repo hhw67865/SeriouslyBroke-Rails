@@ -206,11 +206,11 @@ class HomePresenter
   # be sitting in Checking already with nowhere to go — a setup problem whose fix is
   # assigning the pool, not finding more cash. And a row funded at zero at priority 1 drags
   # the "ran out here" cutoff above rows that were funded in full, on a screen whose entire
-  # job is showing where the money went. #orphan_pools names them on the attention list
+  # job is showing where the money goes. #orphan_pools names them on the attention list
   # instead, and #total_required still counts what they ask for.
   # A pool that asks for nothing is not a row either, and the reason is what it looked like on
   # a screen: "$0.00 of $0.00", and below the "ran out here" line, which reads as money DENIED
-  # rather than money not wanted. This band answers where the money went; a pool with no ask
+  # rather than money not wanted. This band answers where the money goes; a pool with no ask
   # is not part of that story, and the pools band below already shows it.
   #
   # Rejected after the fill, never before it, so the pot still drains in strict priority
