@@ -107,8 +107,11 @@ RSpec.describe "Distributions", type: :request do
   # `["1"].to_d` is another. Nothing a browser submits can reach either, which is exactly why no
   # system example can cover them.
   # $300 of income against a $400 ask, so the proposal is short and the waterfall renders its
-  # boxes — which is what makes `value="300.00"` a reading of the row the override was meant to
+  # box — which is what makes the placeholder a reading of the row the override was meant to
   # change, rather than of a summary line that would move for other reasons too.
+  #
+  # An untouched box is EMPTY and carries the proposal as its placeholder; an overridden one
+  # carries the figure as its value. That is what tells the two apart below.
   describe "GET /distributions/new with overrides", :aggregate_failures do
     let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
 
@@ -128,21 +131,23 @@ RSpec.describe "Distributions", type: :request do
       get new_distribution_path(account_id: checking.id, overrides: { groceries.id => "120" })
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('value="120.00"')
+      expect(override_field(groceries)).to include('value="120.00"')
     end
 
     it "ignores a scalar where a hash of overrides was expected" do
       get new_distribution_path(account_id: checking.id, overrides: "1")
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('value="300.00"')
+      expect(override_field(groceries)).to include('placeholder="300.00"')
+      expect(override_field(groceries)).not_to include("value=")
     end
 
     it "ignores an override whose value is not a scalar" do
       get new_distribution_path(account_id: checking.id, overrides: { groceries.id => ["1"] })
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('value="300.00"')
+      expect(override_field(groceries)).to include('placeholder="300.00"')
+      expect(override_field(groceries)).not_to include("value=")
     end
 
     # An id that names no row on this account has no line to edit — the same rule
@@ -154,8 +159,15 @@ RSpec.describe "Distributions", type: :request do
       get new_distribution_path(account_id: checking.id, overrides: { stranger.id => "5" })
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('value="300.00"')
+      expect(override_field(groceries)).to include('placeholder="300.00"')
+      expect(override_field(groceries)).not_to include("value=")
     end
+  end
+
+  # The one box, isolated from the rest of the page: the layout carries other `value=` inputs,
+  # so a body-wide negative would be about the sidebar rather than about the override.
+  def override_field(pool)
+    response.body[/<input[^>]*id="override-#{pool.id}"[^>]*>/]
   end
 
   def deposit(amount, into:)

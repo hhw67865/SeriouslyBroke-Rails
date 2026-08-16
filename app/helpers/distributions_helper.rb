@@ -51,11 +51,25 @@ module DistributionsHelper
     "#{number_to_currency(line.funded)} of #{number_to_currency(line.needed)}"
   end
 
-  # What goes IN the box. Plain digits with two decimals and no currency symbol and no
-  # thousands delimiter, because the box is an input the user types into and a `number_field`
-  # holding "$1,419.00" is a field the browser refuses to read back — it reports empty, which
-  # AllocationCommitter coerces to zero, which is an envelope silently funded nothing.
+  # What goes IN the box: the user's own figure, and NOTHING at all on a row they have not
+  # edited. An empty box is what tells AllocationCalculator this row still wants its rule's ask,
+  # and it is the only thing that lets money freed above it cascade down — a box carrying the
+  # proposal would submit that figure back and pin the row where it was.
+  #
+  # `line.needed`, not `line.funded`: it is what the user typed, before the account clamped it.
+  # Rendering the clamped figure would silently rewrite a $350 edit as $185 the moment the page
+  # came back, and the user would never see that their number had been changed for them.
   def distribution_override_value(line)
+    return nil unless line.overridden?
+
+    number_with_precision(line.needed, precision: 2, delimiter: "")
+  end
+
+  # What the box SHOWS when it is empty: what this row is getting if it is left alone. Plain
+  # digits with two decimals and no currency symbol and no thousands delimiter, because a
+  # `number_field` holding "$1,419.00" is a field the browser refuses to read back — it reports
+  # empty, and an empty box means something specific here.
+  def distribution_override_placeholder(line)
     number_with_precision(line.funded, precision: 2, delimiter: "")
   end
 

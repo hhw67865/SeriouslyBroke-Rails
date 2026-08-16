@@ -39,10 +39,16 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
 
     # The opposite direction of every consequence example below, taken on the same fixture before
-    # anything is typed: the box is there, holding the proposal's own figure, and says nothing.
-    it "offers the proposal in the box and says nothing until it is changed" do
+    # anything is typed: the box is EMPTY, showing what the row gets if it is left alone, and the
+    # row says nothing.
+    #
+    # Empty is not cosmetic. A box pre-filled with the proposal submits that figure back as the
+    # row's ask, which pins every untouched row where it was and makes the cascade below
+    # impossible — asserted here as the absence of a value, with the placeholder as the paired
+    # positive so "no value" cannot pass on a box that failed to render at all.
+    it "leaves the box empty, showing what the row gets if it is left alone" do
       within("[data-pool-name='Rent']") do
-        expect(page).to have_field("Amount for Rent", with: "500.00")
+        expect(page).to have_field("Amount for Rent", with: "", placeholder: "500.00")
         expect(page).to have_content("$500.00")
       end
       expect(page).to have_no_css("[data-consequence]")
@@ -64,58 +70,85 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
 
     # The row itself has to agree with the box, or the screen is showing two different splits.
+    # `$200.00` and NOT `$200.00 of $500.00`: the $500 was the rule's ask and the user has
+    # overruled it, so this row is now funded in full at the figure they chose. The pairing is
+    # what pins that — `Capybara.exact` is unset, so the positive alone passes on either string.
     it "shows the row funded at the figure that was typed" do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-pool-name='Rent']") do
-        expect(page).to have_field("Amount for Rent", with: "200.00")
-        expect(page).to have_content("$200.00 of $500.00")
+      expect(page).to have_field("Amount for Rent", with: "200.00")
+      # Scoped to the row's own figure, not to the whole row: the consequence line beneath it
+      # legitimately says "instead of $500.00", and a bare `have_no_content(" of ")` over the row
+      # would be an assertion about that sentence instead.
+      within("[data-row-amount='Rent']") do
+        expect(page).to have_content("$200.00")
+        expect(page).to have_no_content(" of ")
       end
     end
 
-    # `Σ pools == your bank balance`. The $300 Rent did not take does not evaporate and does not
-    # cascade down to Groceries either — AllocationCommitter applies the override to that row and
-    # leaves the rest of the split alone, so the money stays in the buffer. Both halves asserted,
-    # because a screen that cascaded would also make the buffer figure move.
-    it "leaves what the envelope did not take in the buffer, and does not re-cascade it" do
-      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $0.00", normalize_ws: true) }
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$200.00 of $400.00") }
+    # THE CASCADE, and the reason overrides live inside the fill. Cutting Rent by $300 frees
+    # $300; Groceries wanted $200 of it and takes exactly that, and the $100 nobody wanted stays
+    # in the buffer.
+    #
+    # Three figures that DIFFER, so the example cannot pass on a fixture where they coincide:
+    # $300 freed, $200 cascaded, $100 into the buffer. The unfunded total falls by the $200
+    # Groceries gained — not by the $300 released — which is the arithmetic that tells a real
+    # waterfall from a subtraction.
+    it "sends what the envelope did not take to the envelope below it" do
+      expect_split(groceries: "$200.00 of $400.00", buffer: "$500.00 → $0.00")
+      expect(page).to have_content("ran out here · $200.00 unfunded")
 
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $300.00", normalize_ws: true) }
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$200.00 of $400.00") }
+      expect_split(groceries: "$400.00", buffer: "$500.00 → $100.00")
+      within("[data-row-amount='Groceries']") { expect(page).to have_no_content(" of ") }
+      expect(page).to have_no_content("ran out here")
+      expect(page).to have_no_content("isn't there")
     end
 
-    # "Ran out here" is a statement about the ACCOUNT running dry. An override is the user
-    # choosing, so it must not move that line or its figure — the $200 Groceries misses is the
-    # cash's doing both before and after Rent is cut to $200.
-    it "does not blame the account for a choice the user made" do
+    def expect_split(groceries:, buffer:)
+      within("[data-row-amount='Groceries']") { expect(page).to have_content(groceries) }
+      within("#distribution-buffer") { expect(page).to have_content(buffer, normalize_ws: true) }
+    end
+
+    # The edit made the period all clear, and the table must NOT collapse over it: the boxes are
+    # the only way to undo what was just typed, and the density switch would otherwise take them
+    # away. Paired against the same fixture before the edit, where the table is open because
+    # something is genuinely short.
+    it "keeps the table open on a period the edit itself made all clear" do
+      expect(page).to have_css("#distribution-waterfall")
+
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      expect(page).to have_content("ran out here · $200.00 unfunded")
-      expect(page).to have_content("$200.00 of what your envelopes asked for isn't there")
+      expect(page).to have_css("#distribution-waterfall")
+      expect(page).to have_no_css("#distribution-summary")
+      expect(page).to have_field("Amount for Rent", with: "200.00")
     end
 
     # The other direction of the trade, which a one-sided implementation gets wrong by printing
-    # "moving -$300.00 onto your next period".
+    # "moving -$200.00 onto your next period".
+    #
+    # And SPEC §7.3 on the same screen: the account can never be over-allocated. Asking $800 of
+    # an account holding $700 takes the $700 and says so — `$700.00 of $800.00` — rather than
+    # writing $800 and leaving the buffer at -$100. The clamp is why "covering $200.00 early"
+    # rather than $300: the extra the envelope actually received is what moved.
     it "says the opposite when the user puts in more than the proposal" do
       fill_in "Amount for Rent", with: "800"
       click_on "Update figures"
 
-      within("[data-consequence='Rent']") do
-        expect(page).to have_content(
-          "You're covering $300.00 early. #{next_period} will need $200.00 instead of $500.00, " \
-          "the last period before #{due_on.strftime("%b %-d")}.",
-          normalize_ws: true
-        )
-      end
-      # Overfunding past what the account holds is allowed and stated rather than refused: the
-      # buffer goes red, which is the true thing about an account that has been over-allocated.
-      within("#distribution-buffer") { expect(page).to have_content("$500.00 → -$300.00", normalize_ws: true) }
+      within("[data-consequence='Rent']") { expect(page).to have_content(covering_early, normalize_ws: true) }
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$700.00 of $800.00") }
+      within("#distribution-buffer") { expect(page).to have_content("$500.00 → $0.00", normalize_ws: true) }
+      # Everything below it is starved instead, which is the honest cost and is stated.
+      within("[data-row-amount='Groceries']") { expect(page).to have_content("$0.00 of $400.00") }
+    end
+
+    def covering_early
+      "You're covering $200.00 early. #{next_period} will need $300.00 instead of $500.00, " \
+        "the last period before #{due_on.strftime("%b %-d")}."
     end
 
     # AMENDMENT D / SPEC §5: an override and a rule change must not look alike, and the screen
@@ -140,7 +173,9 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$100.00 of $400.00") }
+      within("[data-pool-name='Groceries']") do
+        expect(page).to have_field("Amount for Groceries", with: "100.00")
+      end
       expect(page).to have_no_css("[data-consequence='Groceries']")
       expect(page).to have_css("[data-consequence='Rent']")
     end
@@ -172,7 +207,7 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
 
     it "spreads the shortfall over the periods that remain" do
-      expect(page).to have_field("Amount for Rent", with: "250.00")
+      expect(page).to have_field("Amount for Rent", with: "", placeholder: "250.00")
 
       fill_in "Amount for Rent", with: "50"
       click_on "Update figures"
@@ -197,11 +232,12 @@ RSpec.describe "Distribution Overrides", type: :system do
     let(:due_on) { Date.current + 5 }
 
     before do
-      dated_envelope("Rent", 2_000, anchor_date: due_on, interval_months: nil, funded: 1_000, priority: 1)
-      # $500 available against a $1,000 ask, so the proposal itself funds $500 — which is what
-      # makes "override it to the full $1,000" a real edit whose consequence has to be gated,
-      # rather than a figure that happens to equal the proposal and is not an override at all.
-      deposit(1_500, on: Date.current - 14)
+      # Groceries sits ABOVE Rent, so the account's $1,200 leaves Rent $800 of the $1,000 it
+      # needs — which is what makes both "cut Rent further" and "cut Groceries to rescue Rent"
+      # real edits rather than figures that happen to equal the proposal.
+      rate_envelope("Groceries", 400, priority: 1)
+      dated_envelope("Rent", 2_000, anchor_date: due_on, interval_months: nil, funded: 1_000, priority: 2)
+      deposit(2_200, on: Date.current - 14)
       visit new_distribution_path
     end
 
@@ -234,16 +270,45 @@ RSpec.describe "Distribution Overrides", type: :system do
         "period left to arrive in, so nothing after this distribution can fix it."
     end
 
-    # The other direction: fund it in full and there is no consequence at all, on the same
-    # fixture that produced the red one.
-    it "says nothing when the override covers the bill" do
-      expect(page).to have_field("Amount for Rent", with: "500.00")
+    # The other direction, on the same fixture that produced the red one: cover the bill and
+    # nothing is said. It takes two edits, because $1,000 only reaches Rent once Groceries is cut
+    # — which is the whole reason the plan wanted the cascade, seen at the point it matters most.
+    it "says nothing when the edits cover the bill" do
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$800.00 of $1,000.00") }
 
+      fill_in "Amount for Groceries", with: "200"
       fill_in "Amount for Rent", with: "1000"
       click_on "Update figures"
 
-      within("[data-pool-name='Rent']") { expect(page).to have_field("Amount for Rent", with: "1000.00") }
+      expect_rent_funded_in_full
       expect(page).to have_no_css("[data-consequence]")
+    end
+
+    # THE CASCADE RESCUING AN ENVELOPE, with ONE edit and none of it on the row that is rescued.
+    # Cutting Groceries to nothing hands Rent the whole $1,200 and the bill is made — and the
+    # rescued row says nothing, because nobody typed in it.
+    it "rescues the bill below by cutting the envelope above it" do
+      within("[data-row-amount='Rent']") { expect(page).to have_content("$800.00 of $1,000.00") }
+      expect(page).to have_content("ran out here · $200.00 unfunded")
+
+      fill_in "Amount for Groceries", with: "0"
+      click_on "Update figures"
+
+      expect_rent_funded_in_full
+      # The zeroed row keeps its place and its box — there has to be somewhere to type the money
+      # back in — and the account's own shortfall is gone.
+      expect(page).to have_field("Amount for Groceries", with: "0.00")
+      expect(page).to have_no_content("ran out here")
+      expect(page).to have_no_css("[data-consequence]")
+    end
+
+    # `$1,000.00` and not `$1,000.00 of $1,000.00`: the pairing is what pins that the bill is
+    # made rather than that a figure happens to appear on the row.
+    def expect_rent_funded_in_full
+      within("[data-row-amount='Rent']") do
+        expect(page).to have_content("$1,000.00")
+        expect(page).to have_no_content(" of ")
+      end
     end
   end
 
@@ -306,7 +371,9 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
 
     it "does speak, because its ask really moves" do
-      within("[data-pool-name='Vacation']") { expect(page).to have_field("Amount for Vacation", with: "100.00") }
+      within("[data-pool-name='Vacation']") do
+        expect(page).to have_field("Amount for Vacation", with: "", placeholder: "100.00")
+      end
 
       fill_in "Amount for Vacation", with: "40"
       click_on "Update figures"

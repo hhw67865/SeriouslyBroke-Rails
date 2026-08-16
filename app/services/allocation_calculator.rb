@@ -34,13 +34,42 @@ class AllocationCalculator
   # `account`'s. Kept in the signature because every screen that builds one has a current_user
   # and an account, and a proposal that could be built for someone else's account is not a
   # shape worth making available.
-  attr_reader :user, :account, :today
+  attr_reader :user, :account, :today, :overrides
 
-  def initialize(user:, account:, today: Date.current)
+  # `overrides` is `{pool_id => amount}` exactly as a form submits it, and it belongs HERE
+  # rather than on AllocationCommitter, where it used to be applied by substituting figures
+  # onto an already-finished fill.
+  #
+  # THAT WAS TWO READERS OF ONE DECISION and it had a visible cost: by the time the committer
+  # substituted, the waterfall was over, so money freed by cutting a high row could not reach
+  # the envelope below it. The screen then said "$488.43 of what your envelopes asked for isn't
+  # there" while holding $35 that could have funded some of it — a screen contradicting itself,
+  # and the opposite of what someone lowering one envelope so another survives is asking for.
+  # Applied inside #fill, an override simply replaces that row's ask and `remaining` carries on
+  # down by the mechanism that was always there. Nothing new decides anything.
+  #
+  # BLANK MEANS "NO OVERRIDE", NOT ZERO, and this inverted when the form did: every box used to
+  # be pre-filled with the proposal's own figure, so a cleared box meant "give it nothing".
+  # Boxes now render EMPTY with the proposal as their placeholder, so a blank is a row the user
+  # did not touch — and it must fall through to the rule's ask, or a submitted form would pin
+  # every untouched row at its old figure and no money could ever cascade. "Give it nothing" is
+  # typed as `0`.
+  #
+  # Coerced once, here, so nothing downstream has to wonder whether it is holding a String.
+  def initialize(user:, account:, today: Date.current, overrides: {})
     @user = user
     @account = account
     @today = today
+    @overrides = overrides.transform_keys(&:to_s)
+      .compact_blank
+      .transform_values(&:to_d)
   end
+
+  # Whether the USER typed a figure into this row, as opposed to this row's figure having moved
+  # because an override above it freed money. The screen needs the difference: a consequence
+  # line belongs to the row that was edited, and an envelope that was simply reached by the
+  # waterfall was not edited.
+  def overridden?(pool) = overrides.key?(pool.id.to_s)
 
   # What the next distribution takes back, keyed by the envelope it comes from.
   #
@@ -109,13 +138,20 @@ class AllocationCalculator
   end
 
   # Spends `remaining` down as it goes, so each envelope is funded out of what the ones above
-  # it left behind — that IS the waterfall.
+  # it left behind — that IS the waterfall, and it is also the only thing an override has to
+  # touch: replace one row's ask and every row below it re-fills by itself.
   #
-  # Zero-need rows are rejected AFTER the fill, never before, exactly as HomePresenter#waterfall
-  # does: rejecting first cannot change the arithmetic (a zero-need row funds zero and consumes
-  # nothing) but it would put the two screens' row sets at risk of drifting apart, and a
-  # "$0.00 of $0.00" line below the point the money ran out reads as money DENIED rather than
-  # money not wanted.
+  # ZERO-ASK ROWS ARE NOW REJECTED BEFORE THE FILL RATHER THAN AFTER IT, and the order became
+  # load-bearing the moment overrides arrived. Before, rejecting first "could not change the
+  # arithmetic" because a zero-ask row funds zero and consumes nothing — that is no longer
+  # true: an override naming a pool the proposal has no row for would consume `remaining` on
+  # its way to being thrown away, funding a pool the user cannot even see and starving the
+  # envelopes below it. The rule that survives unchanged is the one that matters: the reject is
+  # measured against the ENVELOPE'S OWN ASK, never against the overridden figure, so an
+  # override on a rowless pool is still ignored (Task 3's ruling) while a row the user typed a
+  # zero into keeps its row and its box — there has to be somewhere to type the money back in.
+  # A "$0.00 of $0.00" line below the point the money ran out still reads as money DENIED
+  # rather than money not wanted, which is why the rule exists at all.
   #
   # `[required, 0.to_d].max`, and it is not decoration. `clamp(0, negative)` raises
   # ArgumentError, and a negative ask is reachable: PoolCalculator#goal_required returns
@@ -124,18 +160,41 @@ class AllocationCalculator
   # Measured, not assumed — `update_column(:amount, -150)` past the validation reproduces it,
   # and the example below pins it. Budget validates the sign, but a validation is an input
   # rule and this is a read path; #allocated_balances defends the same shape one level down
-  # for the same reason. Clamping `needed` rather than only the bound also keeps the ROW
-  # coherent: a zero ask is rejected below, where a negative one would have rendered
+  # for the same reason. Clamping the ASK rather than only the bound also keeps the ROW
+  # coherent: a zero ask is rejected above, where a negative one would have rendered
   # "-$150.00 needed" and made #short? read healthy.
   def fill
     remaining = available
-    filled = envelopes.map do |pool|
-      needed = [ask_calculator_for(pool).required, 0.to_d].max
-      funded = remaining.clamp(0.to_d, needed)
-      remaining -= funded
-      Row.new(pool: pool, needed: needed, funded: funded)
+    envelopes.filter_map do |pool|
+      ask = [ask_calculator_for(pool).required, 0.to_d].max
+      next if ask.zero?
+
+      row = row_for(pool, ask, remaining)
+      remaining -= [row.funded, 0.to_d].max
+      row
     end
-    filled.reject { |row| row.needed.zero? }
+  end
+
+  # One row, funded out of what is left. `needed` is the user's figure where they typed one,
+  # so `short` — and with it the cutoff marker, the unfunded total and the buffer — are three
+  # views of THIS fill rather than of a proposal the user has already overruled.
+  #
+  # AN OVERRIDE ABOVE WHAT REMAINS STILL CLAMPS (spec §7.3: "distribution can only hand out
+  # cash that exists — already true of the waterfall"). It did not, while overrides were
+  # substituted after the fill: an override of $350 against $185 of remaining cash wrote $350
+  # and left the account at -$165. The row now reads `$185.00 of $350.00` and says so.
+  #
+  # A NEGATIVE override bypasses the clamp instead of being floored, and that is Task 3's
+  # ruling kept alive rather than an oversight: bad input the user has to see, carried through
+  # to fail PoolMovement's `amount > 0` loudly rather than vanishing from a split it was meant
+  # to change. `clamp(0, negative)` would raise instead, which is a 500 on a GET. It consumes
+  # nothing from `remaining` (see the `max` at the call site) — money cannot flow backwards out
+  # of an envelope that is only ever going to be refused.
+  def row_for(pool, ask, remaining)
+    needed = overrides.fetch(pool.id.to_s, ask)
+    funded = needed.negative? ? needed : remaining.clamp(0.to_d, needed)
+
+    Row.new(pool: pool, needed: needed, funded: funded)
   end
 
   # The plain calculator: what this pool holds RIGHT NOW. The sweep is read from here.

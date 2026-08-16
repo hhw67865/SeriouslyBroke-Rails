@@ -13,11 +13,11 @@
     falls back to the row count and draws "ran out here · $0.00 unfunded" under the last row of a
     screen where nothing ran out — which is exactly what this table now renders whenever an
     overdue bill opened it on a covered period. Same guard, and the same reason, as Home's. %>
-<%# `proposed` and `unfunded`, NOT `funded` and `short?`. The cutoff is a statement about the
-    ACCOUNT running dry, and an override is not the account running dry — a row the user typed
-    a zero into would otherwise drag the "ran out here" line up above envelopes the cash
-    comfortably reached, blaming the bank for a choice the user made. %>
-<% cutoff = presenter.short? ? (rows.index { |line| line.proposed.zero? && line.unfunded.positive? } || rows.length) : nil %>
+<%# Read off the SAME fill as everything else on this card. An override re-runs the waterfall
+    below it, so the money genuinely does reach further down when a high row is cut — a cutoff
+    computed against the un-overridden proposal would sit above envelopes the edit had just
+    funded, and the unfunded total beside it would refuse to move while the buffer grew. %>
+<% cutoff = presenter.short? ? (rows.index { |line| line.funded.zero? && line.short? } || rows.length) : nil %>
 
 <section id="distribution-waterfall" class="bg-white border border-gray-200 rounded" aria-labelledby="waterfall-heading">
   <div class="px-6 py-4 border-b border-gray-200">
@@ -103,19 +103,29 @@
             <span class="flex items-center gap-3">
               <%# The readout keeps its place and its colour: the box holds one number, and
                   `$200.00 of $500.00` is the half of the sentence a bare box cannot carry. %>
-              <span class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
+              <span data-row-amount="<%= line.pool.name %>"
+                    class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
                 <%= distribution_line_amount(line) %>
               </span>
               <label class="sr-only" for="override-<%= line.pool.id %>">Amount for <%= line.pool.name %></label>
-              <%# `min: 0` refuses a negative before it is submitted. A negative override is
-                  bad input rather than a shape with a meaning — AllocationCommitter deliberately
-                  lets it through to fail PoolMovement's own validation loudly, which is the right
+              <%# EMPTY UNLESS THE USER TYPED HERE, with the proposal as the placeholder, and that
+                  is not a styling choice. A box pre-filled with the proposal submits a figure for
+                  every row, and since the fill now treats a submitted figure as that row's ask,
+                  every untouched row would be pinned at its old amount and money freed above it
+                  could never reach anything. Empty means "I did not touch this"; clearing a box
+                  is therefore also how you undo an edit, which is the mockup's
+                  "Reset Rent to $500" for free.
+
+                  `min: 0` refuses a negative before it is submitted. A negative is bad input
+                  rather than a shape with a meaning — AllocationCalculator#row_for deliberately
+                  carries it through to fail PoolMovement's validation loudly, which is the right
                   behaviour for a commit and the wrong one for a box you are still typing in. %>
               <%= number_field_tag "overrides[#{line.pool.id}]",
                                    distribution_override_value(line),
                                    id: "override-#{line.pool.id}",
                                    step: "0.01",
                                    min: "0",
+                                   placeholder: distribution_override_placeholder(line),
                                    class: "form-input w-28 py-1 text-right tabular-nums " \
                                           "#{"border-status-warning" if line.overridden?}" %>
             </span>

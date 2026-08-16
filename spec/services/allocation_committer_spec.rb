@@ -53,9 +53,11 @@ RSpec.describe AllocationCommitter, type: :model do
   # A FRESH proposal per commit by default, because that is what a controller hands over: one
   # request renders a proposal, the next builds another and confirms. `from:` hands a
   # particular snapshot instead, and the two must reach the same ledger.
+  # `overrides` go on the PROPOSAL now, not on the committer: the split is decided in one place,
+  # inside AllocationCalculator#fill, and this class writes whatever that decided.
   def commit(overrides: {}, account: checking, from: nil)
-    committer = described_class.new(from || AllocationCalculator.new(user: user, account: account, today: today), overrides: overrides)
-    committer.call
+    proposal = from || AllocationCalculator.new(user: user, account: account, today: today, overrides: overrides)
+    described_class.new(proposal).call
   end
 
   # A FRESH calculator every time, because PoolCalculator memoises its balance and this spec
@@ -257,28 +259,62 @@ RSpec.describe AllocationCommitter, type: :model do
       expect(checking.total).to eq(585)
     end
 
-    # An override above the ask is honoured rather than clamped: the screen states the
-    # consequence and the user chose it. The buffer absorbs the difference, so the invariant
-    # holds even when the account is left with less than the proposal planned.
-    it "writes an override larger than the ask", :aggregate_failures do
+    # AN OVERRIDE ABOVE THE ASK IS HONOURED, BUT ONLY AS FAR AS THE CASH GOES. Water asks $300
+    # and $185 is left once Groceries has taken its $400, so a $350 override writes $185 and the
+    # account lands on zero rather than on -$165.
+    #
+    # THIS REVERSES AN EARLIER RULING and the reversal is the point of moving overrides into the
+    # fill. While the committer substituted figures after the waterfall, an override wrote its
+    # face value whatever the account held; spec §7.3 says the account can never be
+    # over-allocated — "distribution can only hand out cash that exists — already true of the
+    # waterfall" — and it is true of the waterfall again now that the override goes through it.
+    #
+    # Pinned against a $350 that must NOT appear anywhere, so the example cannot pass on a
+    # committer that quietly writes the face value into a different row.
+    it "clamps an override larger than the cash that is left", :aggregate_failures do
       commit(overrides: { water.id => 350 })
 
-      expect(PoolMovement.kind_allocation.sum(:amount)).to eq(750)
-      expect(balance(water)).to eq(350)
-      expect(balance(checking)).to eq(-165)
+      expect(PoolMovement.kind_allocation.sum(:amount)).to eq(585)
+      expect(balance(water)).to eq(185)
+      expect(balance(checking)).to eq(0)
+      expect(PoolMovement.kind_allocation.pluck(:amount)).not_to include(350)
       expect(checking.total).to eq(585)
     end
 
+    # The row still SAYS what was asked for, so the clamp is visible rather than silent: the
+    # screen renders `$185.00 of $350.00` off exactly these two numbers.
+    it "keeps the asked-for figure on the row it clamped", :aggregate_failures do
+      row = AllocationCalculator.new(
+        user: user,
+        account: checking,
+        today: today,
+        overrides: { water.id => 350 }
+      ).rows.last
+
+      expect(row.needed).to eq(350)
+      expect(row.funded).to eq(185)
+      expect(row.short).to eq(165)
+    end
+
     # What a form actually submits: strings. Both shapes in one example because they take
-    # different paths — "42.50" is an amount, and a box the user cleared coerces to zero and
-    # is skipped rather than crashing on `String#zero?`.
-    it "takes overrides as the strings a form submits", :aggregate_failures do
+    # different paths — "42.50" is an amount, and an EMPTY box is not an override at all.
+    #
+    # THAT SECOND READING INVERTED with this task, and deliberately. A cleared box used to mean
+    # "give this envelope nothing", because every box was pre-filled with the proposal's own
+    # figure. Boxes now render empty with the proposal as their placeholder, so a blank is a row
+    # nobody touched — and it HAS to fall through to the rule's ask, or every untouched row on a
+    # submitted form would be pinned at its old figure and no money could ever cascade. "Give it
+    # nothing" is typed as `0`, which the example above pins.
+    #
+    # Water taking its full $300 rather than the $185 the un-overridden proposal left it is the
+    # cascade in its smallest form: $357.50 freed above it covers the whole ask.
+    it "takes overrides as the strings a form submits, and reads a blank as untouched", :aggregate_failures do
       commit(overrides: { groceries.id => "42.50", water.id => "" })
 
-      expect(PoolMovement.kind_allocation.sole.amount).to eq(42.50)
+      expect(PoolMovement.kind_allocation.pluck(:amount)).to contain_exactly(42.50, 300)
       expect(balance(groceries)).to eq(42.50)
-      expect(balance(water)).to eq(0)
-      expect(balance(checking)).to eq(542.50)
+      expect(balance(water)).to eq(300)
+      expect(balance(checking)).to eq(242.50)
       expect(checking.total).to eq(585)
     end
 

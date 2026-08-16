@@ -22,35 +22,33 @@ class DistributionPresenter
   # ledger WITH the split back in place — half the row describing one world and half the other,
   # which is the exact confusion this screen exists to remove.
   #
-  # `short` and `unfunded` are both derived rather than stored, for AllocationCalculator::Row's
-  # reason: each is a subtraction of two members that are already here, and a stored field is a
-  # second place for the same number to be wrong.
+  # `short` is derived rather than stored for AllocationCalculator::Row's reason: it is
+  # `needed - funded` by definition, and a stored field is a second place for it to be wrong.
   #
   # `status` holds a Standing, NOT a PoolStatus — see Standing for why that distinction is the
   # whole of this class's safety rather than a tidiness.
   #
-  # `proposed` is what the WATERFALL would hand this envelope; `funded` is what it will actually
-  # get once the user's override is applied, and with no override the two are the same number.
-  # Both are kept because the screen asks two different questions of them and answering either
-  # with the other tells a lie:
+  # `needed` IS THE USER'S FIGURE where they typed one, because the fill uses it — so `short`,
+  # the cutoff marker, the unfunded total and the buffer are four views of ONE fill rather than
+  # four readings of a proposal the user has already overruled. An earlier version of this class
+  # kept a second `unfunded` reader measured against the un-overridden proposal, so that "ran out
+  # here" could stay a fact about the account alone; the plan ruled against it, and rightly —
+  # the freed money now cascades, so a cutoff computed off the old fill would sit above
+  # envelopes that had just been funded by the edit.
   #
-  #   #unfunded (needed − proposed) is WHAT THE CASH COULD NOT COVER. It is what the cutoff line
-  #   is about — "ran out here" is a fact about the account running dry, and folding the user's
-  #   own edits into it would blame the bank for a choice the user made two rows up.
-  #
-  #   #short (needed − funded) is WHAT THIS ENVELOPE ENDS UP MISSING, which is what its own row
-  #   has to say and what its consequence line is computed from.
-  #
-  # Both are clamped at zero rather than left signed. Under the proposal alone `funded` can
-  # never exceed `needed` (#fill clamps it), so the clamp is a no-op on an untouched screen —
-  # but an override CAN exceed it, and a signed #short would let one over-funded envelope
-  # cancel another envelope's shortfall inside #shortfall's sum, reporting an account that
-  # covered everything while a row below it got nothing.
+  # `proposed` is what this envelope WOULD have received had nothing been edited, taken from a
+  # second fill with no overrides at all. It answers two questions and only two: how much a row
+  # the user edited is moving (Consequence#moving), and what next period would have asked had
+  # the proposal stood (Consequence#baseline_ask). It is NOT how the screen decides a row was
+  # edited — with the money cascading, a row below an override changes its `funded` without
+  # anybody typing in it, so `overridden` is carried from AllocationCalculator#overridden?
+  # instead.
   Line = Data.define(
     :pool,
     :needed,
     :proposed,
     :funded,
+    :overridden,
     :swept,
     :status,
     :period_closed,
@@ -58,17 +56,13 @@ class DistributionPresenter
     :periods_left,
     :consequence
   ) do
-    def short = [needed - funded, 0.to_d].max
+    def short = needed - funded
 
     def short? = short.positive?
 
-    def unfunded = [needed - proposed, 0.to_d].max
-
-    # Whether the user typed something different into this row's box. Compared by VALUE, so a
-    # box submitted with exactly the proposal's own figure in it — which is what every
-    # untouched box submits, because the screen renders the proposal into it — is correctly not
-    # an override, and no consequence is computed for it.
-    def overridden? = funded != proposed
+    # The user typed in THIS box. Not `funded != proposed`, which is also true of every row the
+    # cascade reached.
+    def overridden? = overridden
 
     def swept? = swept.positive?
 
@@ -167,10 +161,9 @@ class DistributionPresenter
   attr_reader :user, :account, :today, :overrides
 
   # `overrides` arrives exactly as the form submitted it — `{pool_id => amount}`, both sides
-  # strings — and is NOT coerced here. It is handed straight to AllocationCommitter, which
-  # already owns the coercion and already owns the "override or the proposal's own figure"
-  # decision (#amount_for), and this screen reads its answer back. One override path, and the
-  # thing that reads it is the thing that will write it.
+  # strings — and is NOT coerced here. It goes onto the PROPOSAL, which owns the coercion and
+  # applies the figures inside its own fill; this screen then reads the fill's answer back.
+  # One override path, and the thing that reads it is the thing that will write it.
   def initialize(user:, account:, today: Date.current, overrides: {})
     @user = user
     @account = account
@@ -204,7 +197,11 @@ class DistributionPresenter
   #
   # `alerts` as well as the rows, for exactly that reason: the trigger has to see the pools that
   # have no row, or it cannot fire on the case that motivates it.
-  def expanded? = short? || alerts.any? || lines.any? { |line| line.status.red? }
+  # `overridden?` is in the switch for a reason the other three are not: an override can make
+  # the screen ALL CLEAR — type a zero into the only starved row and nothing is short any more —
+  # and collapsing then takes the boxes off the screen, leaving no way to undo what was just
+  # typed. An edit in progress is data too.
+  def expanded? = short? || overridden? || alerts.any? || lines.any? { |line| line.status.red? }
 
   # Red-state envelopes with NO row of their own — the ones #expanded? exists for, and the ones
   # nothing else on this screen can say. A red pool that HAS a row is already named by that row's
@@ -217,11 +214,11 @@ class DistributionPresenter
   # reason: only the rows can say WHICH envelope is starved, and `needed - available` answers a
   # different question.
   #
-  # #unfunded, NOT #short: this figure sits on the cutoff line and in the waterfall's header,
-  # both of which are sentences about the account running out of money. An override is not the
-  # account running out of money — it is the user choosing — so the user's edits stay out of
-  # this number and appear on their own row's consequence line and in the buffer figure instead.
-  def shortfall = lines.sum(0.to_d, &:unfunded)
+  # Summed over the SAME fill the rows and the buffer come from, so cutting a high row and
+  # watching the envelope below it fill up drops this figure by exactly what that envelope
+  # gained. It moving is the point: a total that stayed still while the buffer grew was the
+  # screen saying money could not be found while holding money that could have funded it.
+  def shortfall = lines.sum(0.to_d, &:short)
 
   # True on any row the user has actually changed. The screen says so once, above the table,
   # rather than per row: the edited rows already carry their own consequence line, and a screen
@@ -303,7 +300,7 @@ class DistributionPresenter
   # snapshot built lazily would compute half its figures here and half after the rollback, off
   # a ledger where the split is back.
   def build_snapshot
-    committer = AllocationCommitter.new(proposal, overrides: overrides)
+    committer = AllocationCommitter.new(proposal)
     snapshot = nil
     ActiveRecord::Base.transaction(requires_new: true) do
       snapshot = capture(committer.replace_previous_distribution, committer)
@@ -314,37 +311,52 @@ class DistributionPresenter
 
   # The proposal handed to the committer names the account, the user and the day; its FIGURES
   # are the ones the committer re-derives after the deletion, which is what #capture reads.
-  def proposal = AllocationCalculator.new(user: user, account: account, today: today)
+  def proposal = AllocationCalculator.new(user: user, account: account, today: today, overrides: overrides)
 
   # Standings are taken for EVERY envelope in the account, not only the ones with a row: the
   # density switch has to see a red pool that is asking for nothing, which by definition has no
   # row. Keyed by pool id, so a line and an alert can never disagree about how one pool is doing.
   def capture(fresh, committer)
     standings = envelopes.to_h { |pool| [pool.id, standing_for(pool)] }
-    lines = fresh.rows.map { |row| line_for(row, fresh.sweeps, standings, committer) }
+    baseline = baseline_funding(fresh)
+    lines = fresh.rows.map { |row| line_for(row, fresh, standings, baseline) }
 
     snapshot_from(fresh, committer, standings, lines)
   end
 
-  # `total_allocated` and `leftover` are summed from the LINES rather than read off the
-  # calculator's own #total_allocated / #leftover, because the calculator does not know about
-  # the overrides and those two figures are the ones that have to match the ledger the confirm
-  # will write. The account ends the distribution holding `available − Σ allocations`, and every
-  # allocation is AllocationCommitter#amount_for's answer — so summing the same answers is the
-  # only way `Σ pools == your bank balance` can be shown on screen before it is written.
+  # What each envelope would have received HAD NOTHING BEEN EDITED, keyed by pool id: a second
+  # fill over the same post-deletion ledger, with no overrides at all.
   #
-  # They agree with the calculator's own figures exactly when nothing is overridden, which is
-  # every screen Task 4 pinned.
+  # This is the price of the cascade, and it is worth naming. While overrides were substituted
+  # after the fill, "what would have happened" was sitting right there on the row. Now that an
+  # override re-runs the whole waterfall below it, the only honest way to answer is to run the
+  # waterfall again without it — a row two places down can change its funding because of an
+  # edit nobody made to it.
+  #
+  # Built ONLY when something is actually overridden (`fresh.overrides`, the coerced set, not
+  # the raw params — a form submitting nothing but blanks overrides nothing). Empty otherwise,
+  # and #line_for then falls back to the row's own funding, which is provably the same number.
+  def baseline_funding(fresh)
+    return {} if fresh.overrides.empty?
+
+    AllocationCalculator.new(user: user, account: fresh.account, today: today)
+      .rows.to_h { |row| [row.pool.id, row.funded] }
+  end
+
+  # `total_allocated` and `leftover` come straight off the calculator again. They were summed
+  # from the lines while the committer substituted overrides after the fill — the calculator did
+  # not know about them then, so its own totals described a split nobody was going to write.
+  # With the override inside the fill there is one set of figures, and taking them from anywhere
+  # but their source would be the second reader all over again.
   def snapshot_from(fresh, committer, standings, lines)
-    allocated = lines.sum(0.to_d, &:funded)
     Snapshot.new(
       available: fresh.available,
       carried: opening_buffer(fresh),
       income: income_this_period_from(fresh),
       sweeps: fresh.sweeps.to_a,
       total_swept: fresh.total_swept,
-      total_allocated: allocated,
-      leftover: fresh.available - allocated,
+      total_allocated: fresh.total_allocated,
+      leftover: fresh.leftover,
       lines: lines,
       short: fresh.short?,
       replaced: committer.replaced,
@@ -394,23 +406,37 @@ class DistributionPresenter
   # `sweeps.fetch(pool, 0.to_d)`, because #sweeps holds only the envelopes with something to
   # give. Keyed by the Pool record, exactly as AllocationCommitter reads it, so the amount the
   # row prints is the amount the movement will carry.
-  def line_for(row, sweeps, standings, committer)
+  def line_for(row, fresh, standings, baseline)
     pool = row.pool
-    rule = next_dated_rule(pool)
-    swept = sweeps.fetch(pool, 0.to_d)
-    funded = committer.amount_for(row)
+    swept = fresh.sweeps.fetch(pool, 0.to_d)
+    proposed = baseline.fetch(pool.id, row.funded)
+    overridden = fresh.overridden?(pool)
+
     Line.new(
       pool: pool,
       needed: row.needed,
-      proposed: row.funded,
-      funded: funded,
+      proposed: proposed,
+      funded: row.funded,
+      overridden: overridden,
       swept: swept,
       status: standings.fetch(pool.id),
       period_closed: pool.calculator(today: today).period_closed?,
-      due_on: rule&.due_date,
-      periods_left: rule&.periods_until_due,
-      consequence: consequence_for(row, funded, swept)
+      # A consequence is only ever computed for a row the USER typed in. The cascade moves the
+      # funding of rows below an override without anybody editing them, and "you're moving $200
+      # onto your next period" about a row the waterfall reached on its own names the wrong
+      # actor — the edit that caused it is two rows up, and it already has a line of its own.
+      consequence: overridden ? consequence_for(pool, row.funded, proposed, swept) : nil,
+      **schedule_for(pool)
     )
+  end
+
+  # The row's own schedule clause, as the two members that carry it. Split out only because
+  # #line_for was over rubocop's ABC limit; the pair travels together because they come from
+  # ONE rule (see #next_dated_rule) and reading them apart is how a row ends up naming two bills.
+  def schedule_for(pool)
+    rule = next_dated_rule(pool)
+
+    { due_on: rule&.due_date, periods_left: rule&.periods_until_due }
   end
 
   # A PoolStatus, read down to values while the transaction is still open. See Standing: the
@@ -435,23 +461,28 @@ class DistributionPresenter
   # sweep out. Both halves matter: the sweep is written by the same confirm, so a projection
   # that added the funding without removing the leftover would credit the envelope with money
   # it is about to hand back.
-  def consequence_for(row, funded, swept)
-    return nil if funded == row.funded
+  # Only ever called for a row the user typed in (see #line_for), and nil again when the money
+  # that reaches the envelope is unchanged — which is the ordinary shape of an override the
+  # account could not honour: type $350 with $185 of cash left and the row still receives $185,
+  # so nothing downstream moves and there is nothing to say. The row says the rest itself, in
+  # red, as `$185.00 of $350.00`.
+  def consequence_for(pool, funded, proposed, swept)
+    return nil if funded == proposed
 
-    consequence = build_consequence(row, pending(funded, swept), pending(row.funded, swept))
+    consequence = build_consequence(pool, pending(funded, swept), pending(proposed, swept))
     consequence if consequence.worth_saying?
   end
 
-  def build_consequence(row, chosen, baseline)
-    rule = next_dated_rule(row.pool, on: next_period_start)
+  def build_consequence(pool, chosen, baseline)
+    rule = next_dated_rule(pool, on: next_period_start)
     Consequence.new(
       moving: baseline.funded - chosen.funded,
-      next_ask: projected_ask(row.pool, chosen),
-      baseline_ask: projected_ask(row.pool, baseline),
+      next_ask: projected_ask(pool, chosen),
+      baseline_ask: projected_ask(pool, baseline),
       opens_on: next_period_start,
       due_on: rule&.due_date,
       periods_left: rule&.periods_until_due,
-      standing: standing_for(row.pool, pending: chosen)
+      standing: standing_for(pool, pending: chosen)
     )
   end
 

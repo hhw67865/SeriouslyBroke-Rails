@@ -24,18 +24,22 @@ class AllocationCommitter
     def total_for(predicate) = movements.select(&predicate).sum(0.to_d, &:amount)
   end
 
-  attr_reader :proposal, :overrides
+  attr_reader :proposal
 
-  # `proposal` names the account, the user and the day being distributed — the context the
-  # caller already holds. The FIGURES are re-derived (see #live_proposal); a proposal that
-  # was rendered and then confirmed is a snapshot, and this class writes against the ledger.
+  # `proposal` names the account, the user, the day being distributed AND THE USER'S OVERRIDES
+  # — the context the caller already holds. The FIGURES are re-derived (see #live_proposal); a
+  # proposal that was rendered and then confirmed is a snapshot, and this class writes against
+  # the ledger.
   #
-  # `overrides` is keyed by pool id, matching what a form submits, and coerced here so the
-  # write loop never has to wonder whether it is holding a String. A blank override coerces
-  # to zero and is therefore skipped, which is the same reading as "the user cleared the box".
-  def initialize(proposal, overrides: {})
+  # THIS CLASS NO LONGER TAKES OR APPLIES OVERRIDES. It used to accept an `overrides:` keyword
+  # and substitute those figures onto the finished rows, which made it the second place a split
+  # was decided: AllocationCalculator#fill computed one and this class quietly wrote another.
+  # The cost was not theoretical — substituting after the fill means money freed by cutting a
+  # high row can never reach the envelope below it, because the waterfall is already over. The
+  # override now lives on the calculator and is applied inside the fill, so this class writes
+  # exactly what the proposal says and has nothing left to disagree with the screen about.
+  def initialize(proposal)
     @proposal = proposal
-    @overrides = overrides.to_h { |pool_id, amount| [pool_id.to_s, amount.to_d] }
   end
 
   # ONE transaction, and the sweeps are what make it load-bearing: they are written first, so
@@ -103,20 +107,6 @@ class AllocationCommitter
   # the screen knows whether to say it is REPLACING a split rather than writing the first one.
   def replaced = @replaced ||= []
 
-  # WHAT THIS ROW WILL ACTUALLY MOVE: the user's override where they typed one, the proposal's
-  # own figure where they did not.
-  #
-  # Public, and that is the point. The distribution screen has to show the figure this class is
-  # going to write, and the only way to guarantee the two agree is for the screen to ask this
-  # class rather than to re-implement `overrides.fetch(pool_id, funded)` beside it. Two spellings
-  # of "did the user override this row" is a screen that promises one split and a commit that
-  # writes another, with nothing on either side able to detect the difference.
-  #
-  # `row`, not a pool id, because the fallback is the row's own figure: an override keyed to a
-  # pool with no row has no row to edit and is ignored, which is the same rule #live_proposal's
-  # comment states about a re-derived proposal.
-  def amount_for(row) = overrides.fetch(row.pool.id.to_s, row.funded)
-
   private
 
   def account = proposal.account
@@ -142,11 +132,13 @@ class AllocationCommitter
   # inputs and no write between them, so they are provably the same answer, and one path
   # through the money is worth more than the queries a second path would save.
   #
-  # The caller's overrides survive the re-derivation because they are keyed by pool, not by
-  # row position. An override naming a pool that no longer has a row is ignored: an override
-  # edits a line, and a pool with no line has no line to edit.
+  # The caller's overrides survive the re-derivation because they are carried on the PROPOSAL
+  # and keyed by pool, not by row position. An override naming a pool that no longer has a row
+  # is ignored: an override edits a line, and a pool with no line has no line to edit.
   def live_proposal
-    @live_proposal ||= AllocationCalculator.new(user: proposal.user, account: account, today: proposal.today)
+    @live_proposal ||= AllocationCalculator.new(
+      user: proposal.user, account: account, today: proposal.today, overrides: proposal.overrides
+    )
   end
 
   # Built, not saved. Every figure is read out of the proposal here, before the first save,
@@ -167,22 +159,21 @@ class AllocationCommitter
   end
 
   # A $0 allocation is not an event, and `PoolMovement` would refuse it anyway. This is NOT an
-  # override-only case: #fill rejects rows whose NEED is zero but keeps a row whose FUNDING is
+  # override-only case: #fill rejects rows whose ASK is zero but keeps a row whose FUNDING is
   # zero — the envelope below the point the money ran out, which is the ordinary shape of a
   # short period. Left unskipped, that line fails `amount > 0` and rolls the whole
   # distribution back, so one envelope getting nothing would leave every envelope unfunded.
   #
-  # Only an exact zero is skipped: a NEGATIVE override is bad input the user has to see, and
-  # it fails the amount validation loudly rather than vanishing from a split it was meant to
-  # change. The key is stringified for the same reason it is stringified on the way in — a
-  # lookup that misses is an override silently not applied, which is money not moved with
-  # nothing said about it.
+  # Only an exact zero is skipped: a NEGATIVE amount is bad input the user has to see, and it
+  # fails the amount validation loudly rather than vanishing from a split it was meant to
+  # change. That shape reaches here from an override AllocationCalculator#row_for deliberately
+  # did not floor, and its comment says why the refusal belongs at the write rather than at the
+  # read.
   def allocation_movements
     live_proposal.rows.filter_map do |row|
-      amount = amount_for(row)
-      next if amount.zero?
+      next if row.funded.zero?
 
-      build(from: account, to: row.pool, amount: amount, kind: :allocation)
+      build(from: account, to: row.pool, amount: row.funded, kind: :allocation)
     end
   end
 
