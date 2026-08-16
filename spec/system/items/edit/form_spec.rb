@@ -165,6 +165,10 @@ RSpec.describe "Items Edit - Form", type: :system do
       fill_in "Name", with: "Updated Name"
       click_button "Update Item"
 
+      # Waits for the redirect before reading the model. Without a Capybara call after the
+      # click the example returns mid-request and teardown tears the renderer down under it,
+      # raising `InvalidSessionIdError` here and cascading into the examples that follow.
+      expect(page).to have_content("Item was successfully updated")
       item.reload
       expect(item.category_id).to eq(original_category_id)
       expect(item.category.name).to eq("Groceries")

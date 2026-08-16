@@ -293,7 +293,11 @@ Route: `resources :pool_movements, only: [:new, :create]`.
 
 Spec §4.2 — deferred from Plan 2a because every fix is a write path. Each problem gains a **specific, clickable fix naming a source that can genuinely cover it**, linking to Task 7's screen prefilled.
 
-`HomePresenter#fix_candidates_for(pool)` returns pools in the same account with enough free money, richest first, **excluding any pool whose own status needs attention** — proposing to rob an envelope that is itself behind is not a fix.
+`HomePresenter#fix_candidates_for(pool)` returns pools in the same account with enough free money, **excluding any pool whose own status needs attention** — proposing to rob an envelope that is itself behind is not a fix.
+
+**Order them the way the reallocation screen orders them, by asking it rather than re-sorting.** "Richest first" alone proposes a $950 savings goal while an idle $330 buffer goes unoffered: idle cash costs nothing to move and a down payment is money the user decided to protect. The decisive reason is not the instinct, though — it is that a button reading "take it from House Down Payment" must not open a screen that ranks the buffer first. Home and the screen it links to ranking the same set differently is a screen disagreeing with the button that opened it.
+
+**A problem only gets a fix button if it actually needs money.** `overdue` is about a date, not a balance, so a bill that is past due while already holding its full amount needs *paying*, not funding — offering to move money into it invites a real mistake to fix an imaginary problem. That row takes the same "says so plainly" branch as a problem with no candidate, with a different reason.
 
 A problem with **no** candidate says so plainly rather than offering a dead button. That case is reachable and must be asserted.
 
@@ -306,7 +310,9 @@ Home takes the distribution's view, because that is what will actually happen wh
 - `#waterfall` and `#total_required` compute `required` with `net_of_sweep: true`.
 - `#available` gains `Σ sweepable_amount` across the pools it already counts.
 
-**`#shortfall` and `#covered?` must not move at all.** Required and available both rise by the same swept total, so their difference is invariant — Home says $315 against $500 available, the distribution says $400 against $585, and both are $185 clear. Assert that invariance directly on a fixture with a closed envelope: it is the property that proves the two screens are answering the same question, and if it fails, one of the two halves was changed without the other.
+**`#shortfall` moves only when a closed envelope's leftover exceeds what its rule re-asks for**, and it moves in the right direction. Required and available rise by the same swept total only while leftover ≤ re-ask; an envelope holding $150 against a $100 rate sweeps $150 and re-asks $100, so the gap correctly *closes* by the $50 surplus. Stating invariance as a property was wrong — it is the common case, not the rule.
+
+The property that does hold in both cases is the one worth asserting: **Home's figures agree exactly with `AllocationCalculator`'s for the same account.** That is what proves the two screens answer the same question, and unlike the invariance claim it cannot be true by coincidence.
 
 Sweeps cross no account boundary, so Home may sum `sweepable_amount` over every pool it renders, orphans included, without the per-account scoping `AllocationCalculator` needs.
 

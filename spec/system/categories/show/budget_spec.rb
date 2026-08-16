@@ -52,6 +52,11 @@ RSpec.describe "Categories Show - Budget (Expense)", type: :system do
       fill_in "Amount", with: "300.00"
       click_button "Create Budget"
 
+      # Waits for the redirect to land before the example returns. Without a Capybara call
+      # after the click, the example ends with the POST still in flight and teardown's
+      # `reset_sessions!` navigates the renderer away mid-request, which surfaces as
+      # `InvalidSessionIdError` against this example rather than an assertion failure.
+      expect(page).to have_current_path(category_path(groceries))
       expect(groceries.reload.budget.prorated).to be(false)
     end
   end

@@ -191,11 +191,16 @@ RSpec.describe "Pools Form", type: :system do
         expect(page).to have_field("Create a savings category", type: "checkbox", checked: false)
       end
 
-      it "creates only the pool when neither box is checked" do
+      # Each example below waits on the flash before reading the model. Without a Capybara
+      # call after the click the example returns with the POST still in flight, and
+      # teardown's `reset_sessions!` navigates the renderer away mid-request — which
+      # surfaces as `InvalidSessionIdError` here and takes the rest of the file with it.
+      it "creates only the pool when neither box is checked", :aggregate_failures do
         fill_in "Pool Name", with: "Plain Pool"
         fill_in "Target Amount", with: "1000"
         click_button "Create Pool"
 
+        expect(page).to have_content("Pool was successfully created")
         expect(Pool.last.categories.count).to eq(0)
       end
 
@@ -205,6 +210,7 @@ RSpec.describe "Pools Form", type: :system do
         check "Create an expense category"
         click_button "Create Pool"
 
+        expect(page).to have_content("Pool was successfully created")
         pool = Pool.last
         expect(pool.categories.count).to eq(1)
         category = pool.categories.first
@@ -218,6 +224,7 @@ RSpec.describe "Pools Form", type: :system do
         check "Create a savings category"
         click_button "Create Pool"
 
+        expect(page).to have_content("Pool was successfully created")
         pool = Pool.last
         expect(pool.categories.count).to eq(1)
         category = pool.categories.first
@@ -232,10 +239,9 @@ RSpec.describe "Pools Form", type: :system do
         check "Create a savings category"
         click_button "Create Pool"
 
-        pool = Pool.last
-        expect(pool.categories.pluck(:name)).to contain_exactly(
-          "Dual Pool Expense",
-          "Dual Pool Savings"
+        expect(page).to have_content("Pool was successfully created")
+        expect(Pool.last.categories.pluck(:name)).to contain_exactly(
+          "Dual Pool Expense", "Dual Pool Savings"
         )
       end
     end
