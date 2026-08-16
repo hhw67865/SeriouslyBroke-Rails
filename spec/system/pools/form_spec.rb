@@ -353,6 +353,81 @@ RSpec.describe "Pools Form", type: :system do
       end
     end
 
+    # Both defects the three new fields introduced, driven the way a user meets them.
+    describe "the funding priority box" do
+      # `pools.priority` is NOT NULL, "" casts to nil, and browser validations are off — so
+      # before the model caught it, clearing this box handed the user a 500 instead of a form.
+      it "shows an error instead of crashing when the box is cleared", :aggregate_failures do
+        fill_in "Funding Priority", with: ""
+        click_button "Update Pool"
+
+        expect(page).to have_content("can't be blank")
+        expect(page).to have_field("Funding Priority")
+        expect(pool.reload.priority).to eq(0)
+      end
+
+      it "refuses a negative funding priority", :aggregate_failures do
+        fill_in "Funding Priority", with: "-1"
+        click_button "Update Pool"
+
+        expect(page).to have_content("must be greater than or equal to 0")
+        expect(pool.reload.priority).to eq(0)
+      end
+
+      it "accepts a valid funding priority", :aggregate_failures do
+        fill_in "Funding Priority", with: "4"
+        click_button "Update Pool"
+
+        expect(page).to have_content("Pool was successfully updated")
+        expect(pool.reload.priority).to eq(4)
+      end
+    end
+
+    describe "changing what an account is while envelopes sit inside it" do
+      let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+      let!(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+      # Demoting Checking used to save silently, after which Rent rendered nowhere on Home —
+      # not under an account, not among the orphans — while still counting toward the money
+      # the period had to cover.
+      it "refuses the demotion and says why", :aggregate_failures do
+        create(:pool, :budget_pool, user: user, account: checking, name: "Rent")
+
+        visit edit_pool_path(checking)
+        select "Budget envelope", from: "What kind of pool is this?"
+        select "Ally", from: "Account it sits inside"
+        click_button "Update Pool"
+
+        expect(page).to have_content("move them out first")
+        expect(checking.reload).to be_pool_type_account
+      end
+
+      it "allows the demotion once nothing sits inside it", :aggregate_failures do
+        visit edit_pool_path(checking)
+        select "Budget envelope", from: "What kind of pool is this?"
+        select "Ally", from: "Account it sits inside"
+        click_button "Update Pool"
+
+        expect(page).to have_content("Pool was successfully updated")
+        expect(checking.reload).to be_pool_type_budget
+        expect(checking.account).to eq(ally)
+      end
+    end
+
+    # `assignable_accounts_for` rejects the pool itself, so a user editing their only account
+    # saw an empty collection and, with the branch keyed off that, a panel telling them they
+    # had no bank accounts and should make this one — a bank account — a bank account.
+    describe "the account panel on a user's only bank account" do
+      it "does not claim the user has no bank accounts", :aggregate_failures do
+        checking = create(:pool, :account, user: user, name: "Checking")
+
+        visit edit_pool_path(checking)
+
+        expect(page).to have_no_content("You have no bank accounts yet")
+        expect(page).to have_no_select("Account it sits inside")
+      end
+    end
+
     describe "navigation", :aggregate_failures do
       it "returns to index when clicking cancel" do
         click_link "Cancel"

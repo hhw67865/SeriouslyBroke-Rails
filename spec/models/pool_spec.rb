@@ -117,6 +117,101 @@ RSpec.describe Pool, type: :model do
     end
   end
 
+  # `pools.priority` is NOT NULL with a default of 0, and the form renders it as an integer
+  # input — so a user who clears the box submits "", which casts to nil and, with nothing in
+  # the model to catch it, reached the database as a NotNullViolation 500. The non-negative
+  # bound rides along: exposing the field made an out-of-range priority reachable too, and a
+  # negative one silently outranks every pool the user meant to fund first.
+  describe "priority" do
+    it "rejects a blank priority", :aggregate_failures do
+      pool = build(:pool, priority: nil)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:priority]).to include("can't be blank")
+    end
+
+    it "rejects a negative priority", :aggregate_failures do
+      pool = build(:pool, priority: -1)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:priority]).to include("must be greater than or equal to 0")
+    end
+
+    # Guarded through the form's own casting: "1.5" in an integer column truncates silently,
+    # so the check has to see the string the input actually submits.
+    it "rejects a non-integer priority", :aggregate_failures do
+      pool = build(:pool)
+      pool.priority = "1.5"
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:priority]).to include("must be an integer")
+    end
+
+    it "accepts zero, the column default and the first funding slot" do
+      expect(build(:pool, priority: 0)).to be_valid
+    end
+
+    it "accepts a positive priority" do
+      expect(build(:pool, priority: 7)).to be_valid
+    end
+  end
+
+  # `account_matches_pool_type` only ever looked upward, at the parent, and
+  # `dependent: :restrict_with_error` guards destroy alone. Nothing looked down: an account
+  # holding envelopes could be turned into an envelope itself, at which point HomePresenter
+  # drops it from `accounts`, its children belong to no group `pools_for` can find, and
+  # `orphan_pools` skips them because their `account_id` is not nil. The envelopes render
+  # nowhere on Home while still counting toward the money the period has to cover.
+  describe "changing what a pool is while pools live inside it" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    it "refuses to turn an account holding pools into an envelope", :aggregate_failures do
+      create(:pool, :budget_pool, user: user, account: checking, name: "Rent")
+
+      checking.assign_attributes(pool_type: :budget, account: ally)
+
+      expect(checking).not_to be_valid
+      expect(checking.errors[:pool_type]).to include(
+        "can't be changed while other pools sit inside this account — move them out first"
+      )
+    end
+
+    it "refuses to turn an account holding pools into a savings goal" do
+      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation")
+
+      checking.assign_attributes(pool_type: :savings, account: ally, target_amount: 500)
+
+      expect(checking).not_to be_valid
+    end
+
+    it "permits the change once the pools inside have been moved out" do
+      rent = create(:pool, :budget_pool, user: user, account: checking, name: "Rent")
+      rent.update!(account: ally)
+
+      checking.reload.assign_attributes(pool_type: :budget, account: ally)
+
+      expect(checking).to be_valid
+    end
+
+    # The guard must not fire on every account there is — a bank account nobody has put an
+    # envelope inside yet is exactly the one a user is most likely to have mislabelled.
+    it "permits a childless account to become an envelope" do
+      checking.assign_attributes(pool_type: :budget, account: ally)
+
+      expect(checking).to be_valid
+    end
+
+    # An account keeping its own type is not changing what it is, so holding pools must not
+    # stop an unrelated edit from saving.
+    it "leaves an ordinary edit to an account holding pools alone" do
+      create(:pool, :budget_pool, user: user, account: checking, name: "Rent")
+
+      expect(checking.update(name: "Checking Renamed")).to be(true)
+    end
+  end
+
   describe "name uniqueness" do
     it "rejects a second pool with the same name for the same user", :aggregate_failures do
       user = create(:user)

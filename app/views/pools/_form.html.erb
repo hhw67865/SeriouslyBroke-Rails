@@ -52,6 +52,20 @@
             label: "Account it sits inside",
             hint: "Envelopes must name one. A bank account leaves this blank — it is where the " \
                   "money already is." %>
+      <% elsif pool.user.pools.accounts.exists? %>
+        <%# The collection is empty and yet the user does have an account: the only one they
+            have is this pool. Keyed off `accounts.any?` alone, that user was told on their own
+            account's edit page that they had no bank accounts and should make this one — a
+            bank account — a bank account. A <p>, not a bare <label>, since there is no field
+            below it to label. %>
+        <p class="form-label">Account it sits inside</p>
+        <div class="rounded border border-gray-200 bg-gray-50 p-4">
+          <p class="text-sm text-gray-600">
+            <strong>This is your only bank account.</strong>
+            An account sits inside nothing — it is where the money already is. Envelopes and goals
+            go inside it, not the other way round.
+          </p>
+        </div>
       <% else %>
         <label class="form-label">Account it sits inside</label>
         <div class="rounded border border-status-warning bg-status-warning-light p-4">

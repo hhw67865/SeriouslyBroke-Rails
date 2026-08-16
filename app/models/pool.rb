@@ -48,8 +48,14 @@ class Pool < ApplicationRecord
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
   validates :target_amount, presence: true, if: :pool_type_savings?
   validates :start_date, presence: true
+  # `pools.priority` is NOT NULL with no model-side guard, and the form renders it as an
+  # integer input: a cleared box submits "", which casts to nil and reached the database as a
+  # NotNullViolation 500. The non-negative bound is the obligation deferred when the column
+  # landed — a negative priority outranks every pool the user meant to fund first.
+  validates :priority, presence: true, numericality: { greater_than_or_equal_to: 0, only_integer: true }
 
   validate :account_matches_pool_type
+  validate :pool_type_stays_account_while_it_holds_pools
 
   after_initialize :set_default_start_date, if: :new_record?
   after_create :create_auto_categories
@@ -105,6 +111,21 @@ class Pool < ApplicationRecord
     # Records, not ids: with neither the pool nor its parent saved both `user_id`s are nil,
     # and `nil == nil` waves another user's account through.
     errors.add(:account, "must belong to the same user") unless account.user == user
+  end
+
+  # `account_matches_pool_type` only ever looks upward, at the parent, and
+  # `dependent: :restrict_with_error` guards destroy alone — so nothing stopped an account
+  # that holds envelopes from being turned into an envelope itself. Once it was,
+  # HomePresenter dropped it from `accounts`, its children belonged to no group `pools_for`
+  # could find, and `orphan_pools` skipped them because their `account_id` was not nil: the
+  # envelopes rendered nowhere on Home while still counting toward what the period must
+  # cover. Only the *change* is refused; an account that keeps its type saves as before.
+  def pool_type_stays_account_while_it_holds_pools
+    return if pool_type_account?
+    return unless persisted? && pool_type_was == "account"
+    return unless child_pools.exists?
+
+    errors.add(:pool_type, "can't be changed while other pools sit inside this account — move them out first")
   end
 
   # Savings pools may stay account-less until Plan 3's data migration backfills them;
