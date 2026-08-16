@@ -5,6 +5,16 @@
 # cash, asks every envelope what it needs, and fills them top-down by priority until the
 # money runs out. AllocationCommitter turns the answer into PoolMovement rows.
 #
+# COST, for whoever renders this. `sweepable_amount` is computed TWICE for every envelope: once
+# by #sweeps, and once more inside the plain twin that #ask_calculator_for's `net_of_sweep`
+# calculator builds for itself. The two agree because nothing writes between them, not because
+# they share an object — and that independence is deliberate, since a proposal whose ask and
+# whose sweep could disagree is worse than a slow one. Measured on 4 envelopes (2 closed, 2
+# live), one full proposal: 62 queries reading the live balance, 86 as shipped. The lever, if a
+# screen turns out slow, is to thread the already-computed `sweeps[pool]` figure into the
+# calculator instead of letting it re-derive its own — one reader, passed rather than repeated.
+# Do not reach for it before the screen is measurably slow.
+#
 # STALE AFTER A WRITE, by construction and on purpose. Every figure here is memoised, and the
 # PoolCalculators underneath memoise their balances — so a proposal held across a movement
 # write keeps answering from the snapshot it was built on. That is right for a proposal, whose

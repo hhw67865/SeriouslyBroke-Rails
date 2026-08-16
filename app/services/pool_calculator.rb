@@ -3,6 +3,13 @@
 # Computes a pool's balance and how that balance is spoken for by its rules.
 # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §2.2, §4.3
 class PoolCalculator
+  # Raised when a `net_of_sweep` calculator is asked what to sweep. See #initialize and
+  # #refuse_when_net_of_sweep: the answer would be a second, smaller sweep, and a second sweep
+  # is money moved twice. A named class rather than ArgumentError because Task 3 holds a plain
+  # and a flagged calculator in the same method and may legitimately want to rescue-and-report
+  # this rather than crash a confirm.
+  class NetOfSweepError < StandardError; end
+
   attr_reader :pool, :today
 
   # `net_of_sweep:` answers a different question about the same pool: not "what is in this
@@ -19,10 +26,14 @@ class PoolCalculator
   # Default `false`, so every existing caller is untouched and this cannot change a number on
   # any screen that does not ask for it.
   #
-  # NOT for the sweep itself. #sweepable_amount and #period_closed? on a `net_of_sweep`
-  # calculator are meaningless — the sweep it names has already been subtracted, and asking
-  # again re-derives a second, smaller one from what the dated rules no longer hold. Ask a
-  # plain calculator what to sweep; ask this one what to fund.
+  # NOT for the sweep itself, and this is ENFORCED rather than documented: #sweepable_amount
+  # and #period_closed? RAISE NetOfSweepError when the flag is set. The sweep they name has
+  # already been subtracted, so asking again re-derives a second, smaller one from what the
+  # dated rules no longer hold — measured at $400 and then $100 on the same mixed envelope.
+  # A comment is not a guard on a money path: the failure is not an exception but a silently
+  # misplaced $100, and the caller most likely to make it is a committer holding a plain and a
+  # flagged calculator in the same method. Ask a plain calculator what to sweep; ask this one
+  # what to fund.
   def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false)
     @pool = pool
     @as_of = as_of
@@ -35,14 +46,20 @@ class PoolCalculator
   # movement ledger simply starts empty. `start_date` survives as a savings-goal display
   # attribute, not a balance filter. See the spec example that pins this.
   #
-  # `.to_d` on the RESULT, and it is not decoration: every term here is a `sum(:amount)`
-  # over a `money` column, and an empty sum returns the Integer literal 0 rather than a
-  # BigDecimal zero. A pool holding nothing at all — a fresh envelope, the first shape a
+  # `.to_d` on the RESULT. Every `sum(:amount)` term here returns the Integer literal 0 when
+  # its set is empty, and a pool holding nothing at all — a fresh envelope, the first shape a
   # sweep meets — made all five Integers, so #balance, #reserve, #free_amount and
-  # PoolStatus#balance/#amount all changed TYPE on exactly the pools that are emptiest.
-  # Coerced once here so every reader downstream inherits the guarantee — the coercion is
-  # INSIDE the memo for that reason, so what is stored is already a BigDecimal and no reader
-  # has to re-derive the guarantee from the raw sums.
+  # PoolStatus#balance/#amount all changed TYPE on exactly the pools that are emptiest. Coerced
+  # once here so every reader downstream inherits the guarantee, and INSIDE the memo so what is
+  # stored is already a BigDecimal.
+  #
+  # SINCE #sweep_adjustment JOINED THIS SUM, THE COERCION NO LONGER FIRES. That method returns
+  # a BigDecimal on both of its branches, so the whole expression is a BigDecimal before `.to_d`
+  # is reached and dropping it now fails nothing (measured: 163 examples, 0 failures). It stays
+  # because it is the thing that absorbs a regression one line down — make #sweep_adjustment
+  # return a bare `0` and this method still answers in BigDecimal (0 failures), while dropping
+  # BOTH takes out three type examples across PoolCalculator and PoolStatus. Stated rather than
+  # left claiming a protection the measurement no longer shows.
   #
   # Memoised. These are five aggregates and almost every other reader in this class starts
   # here — #allocated_balances, #free_amount, #sweepable_amount, #progress_percentage and
@@ -227,6 +244,7 @@ class PoolCalculator
   # #sweepable_amount asks it again, and the false path alone costs three aggregates plus a
   # paid-since-anchor SUM per dated rule.
   def period_closed?
+    refuse_when_net_of_sweep(:period_closed?)
     return @period_closed if defined?(@period_closed)
 
     @period_closed = compute_period_closed
@@ -251,6 +269,7 @@ class PoolCalculator
   # coerces only when the clamp FIRES, and this reader must hold its guarantee locally rather
   # than by inheriting one from #balance that a later edit could quietly withdraw.
   def sweepable_amount
+    refuse_when_net_of_sweep(:sweepable_amount)
     return 0.to_d unless period_closed?
 
     [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
@@ -261,6 +280,25 @@ class PoolCalculator
   def withdrawals = movements_out_total + expense_entries_total
 
   private
+
+  # The two readers that answer "what does the next distribution take back", refusing the one
+  # calculator that cannot answer it. Both guards sit at the top of their PUBLIC method rather
+  # than inside #compute_period_closed, because #sweepable_amount reaches #period_closed?
+  # through the public door too and a guard one level down would fire twice with a message
+  # naming the wrong reader.
+  #
+  # Raising is not defensive tidiness here. #sweepable_amount on a flagged calculator does not
+  # return zero — it returns `balance − anchored_reserve` over an already-swept balance, which
+  # on the mixed envelope is a plausible-looking $100. A plausible number is exactly what a
+  # committer cannot detect.
+  def refuse_when_net_of_sweep(reader)
+    return unless @net_of_sweep
+
+    raise NetOfSweepError,
+          "##{reader} is meaningless on a net_of_sweep calculator: the sweep it names has " \
+          "already been subtracted from the balance, so asking again derives a second one. " \
+          "Build a plain PoolCalculator to ask what to sweep."
+  end
 
   # What `net_of_sweep:` takes off the balance, and zero for every other calculator.
   #

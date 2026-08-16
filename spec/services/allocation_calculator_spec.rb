@@ -74,9 +74,13 @@ RSpec.describe AllocationCalculator, type: :model do
     # The sweep is genuinely additive: the $85 is inside the bank's $585 but not inside the
     # $500 buffer, because funding the envelope was a movement out of the account.
     #
-    # `Σ pools == your bank balance` is stated over the money rather than over #leftover's own
-    # definition, which would be tautological: the envelope ends at 85 - 85 + 400 = $400 and
-    # the buffer at 500 + 85 - 400 = $185, and $585 was there before and after.
+    # `Σ pools == your bank balance` is carried by `checking.total`, which is the only figure
+    # here derived from the pool RECORDS rather than from the proposal: the envelope ends at
+    # 85 - 85 + 400 = $400 and the buffer at 500 + 85 - 400 = $185, and $585 was there before
+    # and after. An equation written over #leftover cannot state that, because
+    # `leftover ≡ available - total_allocated` makes every such line expand to
+    # `available == available`. Conservation over the MATERIALISED movements is Task 3's to
+    # assert, where there are real rows to sum.
     it "adds the sweep to the buffer and funds the envelope whole", :aggregate_failures do
       expect(checking.calculator(today: today).balance).to eq(500)
       expect(proposal.available).to eq(585)
@@ -85,7 +89,6 @@ RSpec.describe AllocationCalculator, type: :model do
       expect(proposal.total_allocated).to eq(400)
       expect(proposal.leftover).to eq(185)
       expect(checking.total).to eq(585)
-      expect(proposal.leftover + (85 - 85 + proposal.total_allocated)).to eq(585)
     end
   end
 

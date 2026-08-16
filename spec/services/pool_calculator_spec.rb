@@ -824,6 +824,30 @@ RSpec.describe PoolCalculator, type: :model do
         expect(post_sweep.required).to eq(315)
       end
 
+      # The footgun, closed with code rather than with a comment. A flagged calculator does not
+      # return zero from #sweepable_amount — it re-derives a SECOND, smaller sweep from what the
+      # dated rules no longer hold, which on the mixed envelope below is a plausible-looking
+      # $100 after the real $400. A plausible number is what a committer cannot detect, so both
+      # readers refuse outright.
+      #
+      # The same two readers are asserted on the PLAIN calculator over the same pool in the same
+      # example: a raise pinned in one direction only would pass just as well against a class
+      # that raised for everyone.
+      it "refuses to say what to sweep once the sweep is already netted off", :aggregate_failures do
+        car = envelope(name: "Car")
+        create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+        create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+        fund(car, 900, on: last_period)
+        post_sweep = car.calculator(today: today, net_of_sweep: true)
+
+        expect(calc(car).sweepable_amount).to eq(400)
+        expect(calc(car).period_closed?).to be(true)
+        expect { post_sweep.sweepable_amount }.to raise_error(PoolCalculator::NetOfSweepError, /sweepable_amount/)
+        expect { post_sweep.period_closed? }.to raise_error(PoolCalculator::NetOfSweepError, /period_closed\?/)
+        # The reader it exists for still answers, on the very calculator that refuses the other.
+        expect(post_sweep.required).to eq(100)
+      end
+
       # The subtraction is the one place a BigDecimal balance meets a figure that could be a
       # bare Integer, and an entry-less envelope is where every `sum(:amount)` behind it
       # returns the Integer literal 0.
