@@ -546,11 +546,12 @@ user1.update!(default_account: checking)
 # Priorities put them BELOW the envelopes rather than at the default 0: priority is the
 # order a distribution fills, and a savings goal funded ahead of rent is not a budget
 # anybody runs. 10 and up, leaving 1-9 to the envelopes — Checking holds eight of them, Ally
-# two and Side Gig Checking one — and a savings goal sharing a number with an envelope would
-# let `by_priority`'s name tie-break decide which of the two fills first. These four sit
-# INSIDE Checking, so that tie would be a real one. The numbers shared across accounts are
-# not: 8 by Pet Care and Renters Insurance, 9 by Holiday Gifts and Quarterly Taxes, and every
-# fill on both screens drains one account at a time.
+# two, Side Gig Checking one and Health Savings two — and a savings goal sharing a number with
+# an envelope would let `by_priority`'s name tie-break decide which of the two fills first.
+# These four sit INSIDE Checking, so that tie would be a real one. The numbers shared across
+# accounts are not: 8 by Pet Care, Renters Insurance and Medical Copays, 9 by Holiday Gifts,
+# Quarterly Taxes and Prescriptions — and every fill on both screens drains one account at a
+# time.
 pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 10 + index) }
 orphan_pool = pools[4]
 orphan_pool.update!(priority: 14)
@@ -903,5 +904,69 @@ quarterly_taxes = user1.pools.create!(
   priority: 9
 )
 Budget.create!(pool: quarterly_taxes, amount: 200, basis: :per_paycheck)
+
+# ---------------------------------------------------------------------------------------
+# A FOURTH account, and the only CALM one.
+#
+# This one exists because the previous round consumed the state it demonstrates. Ally used to
+# be the demo's one all-clear screen — covered, nothing red, so DistributionPresenter#expanded?
+# was false and /distributions/new rendered the collapsed density: a headline, the sources
+# breakdown, one summary line and the "Show every envelope" link, with no table and no boxes.
+# Putting the overdue-but-funded premium in Ally was right (it is the only placement where the
+# alerts band is the sole cause of the expansion) and it also expanded Ally permanently, which
+# took the all-clear density — the screen a healthy user sees most often — off the demo
+# entirely, along with the control that reaches the table from it.
+#
+# The two cannot share an account: the alerts band needs a covered account WITH a red pool, and
+# the collapsed density needs a covered account with NONE. So they get one each.
+#
+# Calm by construction, and every number here is chosen to keep it that way:
+#   - two rate rules and nothing dated, so no pool can ever read `overdue` or `won't make it`
+#     and no alert can appear;
+#   - both envelopes empty, so they ASK — an account whose envelopes want nothing renders
+#     "Nothing is asking for money this period" instead of the ordinary
+#     "2 envelopes funded in full", which is the emptier of the two collapsed shapes;
+#   - $400 against $95 of rules, so it is comfortably covered rather than covered by a margin
+#     that the next edit to these seeds could close by accident;
+#   - never funded, so #period_closed? is false for want of a `last_funded_on` and nothing
+#     sweeps — the breakdown stays at its three plain lines.
+#
+# An HSA rather than another savings account: the household already keeps one pot for irregular
+# bills (Ally) and one for the side gig, and a health account is the next thing a real person
+# opens rather than a fourth generic one. It is also the only account here whose contributions
+# both land BEFORE the period and inside it, which makes it the one place in this demo where
+# `Buffer carried over` is a plain positive figure.
+# ---------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the fourth account, the calm one..."
+
+health_savings = user1.pools.create!(name: "Health Savings", pool_type: :account, target_amount: 1_500)
+
+hsa_contributions = user1.categories.create!(
+  name: "Health Savings Contributions",
+  category_type: :income,
+  color: "#4DD0E1",
+  pool: health_savings
+)
+hsa_payroll = hsa_contributions.items.create!(name: "Payroll Contribution")
+# One in each period, and the split is the point: the earlier one is what `Buffer carried over`
+# measures — the balance the instant before this period opened — and the later one is `Income
+# this period`. Every other account in this demo has its first deposit inside the current
+# period, so this is the only screen where those two lines are both positive and obviously
+# different money.
+hsa_payroll.entries.create!(amount: 200, date: today - 10.days, description: "Pre-tax HSA contribution")
+hsa_payroll.entries.create!(amount: 200, date: today, description: "Pre-tax HSA contribution")
+
+# Two envelopes rather than one, so the collapsed summary reads "2 envelopes funded in full"
+# and pluralize is exercised on a real screen. Distinct priorities because these two share an
+# ACCOUNT: a tie here would be a real one, decided by `by_priority`'s name tie-break.
+[["Medical Copays", 8, 60], ["Prescriptions", 9, 35]].each do |name, priority, amount|
+  envelope_pool = user1.pools.create!(
+    name: name,
+    pool_type: :budget,
+    account: health_savings,
+    priority: priority
+  )
+  Budget.create!(pool: envelope_pool, amount: amount, basis: :per_paycheck)
+end
 
 Rails.logger.debug "Seed data created successfully!"
