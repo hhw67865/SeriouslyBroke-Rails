@@ -21,9 +21,33 @@ class PoolCalculator
   # BigDecimal zero. A pool holding nothing at all — a fresh envelope, the first shape a
   # sweep meets — made all five Integers, so #balance, #reserve, #free_amount and
   # PoolStatus#balance/#amount all changed TYPE on exactly the pools that are emptiest.
-  # Coerced once here so every reader downstream inherits the guarantee.
+  # Coerced once here so every reader downstream inherits the guarantee — the coercion is
+  # INSIDE the memo for that reason, so what is stored is already a BigDecimal and no reader
+  # has to re-derive the guarantee from the raw sums.
+  #
+  # Memoised. These are five aggregates and almost every other reader in this class starts
+  # here — #allocated_balances, #free_amount, #sweepable_amount, #progress_percentage and
+  # #remaining_amount all ask — so a single render of a single pool ran them several times
+  # over: measured at ten entry/movement aggregates for one closed envelope, now five.
+  #
+  # `||=`, matching #allocated_balances below, and NOT the `defined?` form. That form is not a
+  # house style to be applied evenly: it is reserved in this class for the three readers whose
+  # answer is legitimately falsy — #period_closed? (false for most pools), #last_funded_on (nil
+  # for a never-funded one) and #fulfilled? (false for every live rule) — where `||=` really
+  # would re-run on every hit. This reader cannot return nil or false. A zero balance is the
+  # tempting counter-example and it is not one: `0`, and `BigDecimal("0")` with it, are TRUTHY
+  # in Ruby, so `||=` memoises the entry-less envelope exactly as well as any other. Measured
+  # both ways — three #balance calls on an entry-less pool cost five aggregates under either
+  # form. Using `defined?` here would imply a falsy answer this method cannot produce.
+  #
+  # STALE AFTER A WRITE, deliberately and not newly. #allocated_balances, #period_closed?,
+  # #last_funded_on, #budgets_by_due_date and #fulfilled? are already memoised and every one of
+  # them derives from this number, so a calculator held across a movement or entry write has
+  # been answering from a snapshot since long before this memo existed. This makes an existing
+  # hazard honest rather than adding a new class of it. The rule it rests on, which Task 2 and
+  # Task 3 carry: anything that writes movements builds fresh calculators afterward.
   def balance
-    (income_entries_total + savings_entries_total +
+    @balance ||= (income_entries_total + savings_entries_total +
       movements_in_total - movements_out_total - expense_entries_total).to_d
   end
 
