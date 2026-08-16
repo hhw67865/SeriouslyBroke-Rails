@@ -83,7 +83,9 @@ Editing a line on the distribution screen is a **one-off** for this distribution
 
 **Interfaces produced:** `PoolCalculator#period_closed?`, `#sweepable_amount`
 
-A rate rule's period has closed when `BudgetCalculator#period_end` is before today. `sweepable_amount` is what the next distribution would take back: the pool's balance, but **only for `pool_type_budget?` pools whose rate rules have all closed**, and never more than the balance.
+A rate rule's period has closed when `BudgetCalculator#period_end`, **measured from the date the pool was last funded**, is before today. Measuring it from `today` instead is a no-op: `period_end` is `today.end_of_month` for a monthly rule and `next_payday - 1` for a per-paycheck one, so it is always `>= today` and the comparison is unreachable for every cadence, anchor and basis. The period being asked about is the one the money belongs to, not the one the reader is standing in.
+
+`sweepable_amount` is what the next distribution would take back: the balance **less what live dated rules are holding**, for `pool_type_budget?` pools whose rate rules have all closed, clamped at zero.
 
 ```ruby
 # A budget envelope whose rate period has ended still holds its leftover — the money
@@ -91,25 +93,38 @@ A rate rule's period has closed when `BudgetCalculator#period_end` is before tod
 # $0, because `Σ pools == your bank balance` is the invariant everything rests on.
 # Savings pools are excluded by type, not by rule shape: a dateless goal is a rate
 # rule on a savings pool, and sweeping it would drain the goal (domain spec §7.2).
-def period_closed?
+def compute_period_closed
   return false unless pool.pool_type_budget?
 
   rate_budgets = pool.budgets.reject { |b| b.anchor_date.present? }
   return false if rate_budgets.empty?
+  return false if last_funded_on.nil?
 
-  rate_budgets.all? { |b| b.calculator(today: today).period_end < today }
+  rate_budgets.all? { |b| b.calculator(today: last_funded_on).period_end < today }
 end
 
 def sweepable_amount
   return 0.to_d unless period_closed?
 
-  [balance, 0.to_d].max.to_d
+  [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
+end
+
+# Reserved by ALLOCATION rather than by the rule's amount, so `#reserve` and
+# `#free_amount` keep their single answer to "which rules is this money covering".
+def anchored_reserve
+  allocated_balances.sum(0.to_d) { |b, taken| live_anchored?(b) ? taken : 0.to_d }
 end
 ```
 
+`period_closed?` memoises `compute_period_closed`; `#all?` means the **latest** period end governs when a pool mixes bases, because sweeping at the earlier one would take money the other rule still expects and `#required` would then ask for it again.
+
+`allocated_balances` gives a `fulfilled?` rule nothing and does not consume `remaining` on its behalf: a settled obligation holds no money, and the rules behind it in the fill order receive what it would otherwise have hoarded. This moves `#reserve` down and `#free_amount` up, and moves `PoolStatus` off `:behind` for pools that only read behind because a paid bill was hoarding an allocation. It cannot move `#required` for the settled rule itself — `BudgetCalculator#shortfall` returns `0.to_d` before it looks at `allocated` — but it does move `#required` for the pool, because the rules behind it now see more money.
+
 The row label gains ` · last period` when `period_closed?`. Update spec §7.2 to match decision 1 above, in the spec's own voice.
 
-**Assert both directions**, including: a savings pool with a rate rule whose period has closed is **not** sweepable; a budget envelope mixing a rate rule and an anchored rule is not sweepable while the anchored rule is live; and `sweepable_amount` returns `BigDecimal` on an entry-less pool.
+**Assert both directions**, including: a savings pool with a rate rule whose period has closed is **not** sweepable; a budget envelope mixing a rate rule and a live dated rule sweeps the rate leftover and **not** the dated rule's reserve; a pool holding only a dated rule is never closed at all; and `sweepable_amount` returns `BigDecimal` on an entry-less pool.
+
+`free_amount` and `sweepable_amount` are **not** interchangeable on a closed envelope: `free_amount` reserves every rule, `sweepable_amount` reserves only the dated ones, and that difference *is* the sweep. They coincide only at zero.
 
 ---
 

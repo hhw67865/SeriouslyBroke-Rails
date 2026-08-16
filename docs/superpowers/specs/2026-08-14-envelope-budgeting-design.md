@@ -219,7 +219,8 @@ def overdue? = item.present? && due_date < Date.current
 
 `period_end` is the end of the rule's current period: the end of the pay period
 for `basis: per_paycheck`, the end of the calendar month for `basis: monthly`.
-It is also the boundary at which that rule's leftover sweeps (see 5.2).
+It is also the boundary that decides whether the pool's period has closed — a pool
+sweeps as a whole, never rule by rule (see 5.2).
 
 Deriving from entry count rather than mutating `anchor_date` matches how the
 rest of the app works (`SavingsPoolCalculator` derives everything) and
@@ -302,7 +303,7 @@ savings pools sit in the same priority list as budget pools. One mechanism.
 ```
 buffer carried from last period    +$382.43
 income Feb 20                    +$2,400.00
-swept back from expired rules       +$85.00
+swept back from closed envelopes    +$85.00
                                  ──────────
 available                        $2,867.43
 ```
