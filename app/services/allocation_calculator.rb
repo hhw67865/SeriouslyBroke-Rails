@@ -214,14 +214,21 @@ class AllocationCalculator
   # ONE LEDGER FOR THE WHOLE PROPOSAL — the envelopes and the account they are funded from,
   # which is every pool this class reads a balance of.
   #
-  # LAZY, AND THAT IS THE LOAD-BEARING WORD RATHER THAN A HABIT. AllocationCommitter DELETES this
-  # period's distributed rows and only then builds the proposal it writes; a ledger built at
-  # construction time would be safe there only by luck, but a ledger built when the first balance
-  # is read is safe by the same rule the rest of this class already lives by — everything here is
-  # memoised at first read and the whole object is a snapshot from that moment on. Built eagerly
-  # and reused across a write, the re-derivation would read the PRE-deletion world and the
-  # replacement would silently write nothing at all. The committer's own re-run examples are what
-  # hold this: see "does not undo the split when the proposal was rendered after it".
+  # Lazy like every other memo here, so a proposal built and never read costs nothing.
+  #
+  # THE LAZINESS THAT PROTECTS THE COMMITTER IS NOT THIS ONE, and an earlier version of this
+  # comment claimed it was. MEASURED, by mutation: build this ledger in #initialize instead and
+  # spec/services/pool_balance_ledger_spec.rb's "reads the ledger at first use rather than at
+  # construction" still passes, because PoolBalanceLedger runs each grouped query at its own FIRST
+  # READ rather than when it is constructed. Make THAT eager and the same example fails at once
+  # (400 expected, 0.0 got). So the guarantee lives one class down, where it is documented, and
+  # this line is a memo rather than a safety property. Stated because a comment claiming a
+  # protection it does not provide is how the protection gets removed.
+  #
+  # What this class still owes AllocationCommitter is unchanged and is about ORDER, not laziness:
+  # the committer builds its `#live_proposal` AFTER the deletion, so the proposal it writes is
+  # over the post-deletion world. Its re-run examples guard that — see "does not undo the split
+  # when the proposal was rendered after it".
   #
   # `envelopes` is read here rather than `account.child_pools` again, so the ledger and the fill
   # cannot be built over different sets.

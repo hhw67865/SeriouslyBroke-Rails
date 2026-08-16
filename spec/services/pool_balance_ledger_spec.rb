@@ -32,6 +32,14 @@ RSpec.describe PoolBalanceLedger, type: :model do
     statements
   end
 
+  # Plain methods rather than `let`s: the fixture already sits at rubocop's memoized-helper limit,
+  # and these are two fixed dates rather than anything worth memoising. `bound` is the `as_of` the
+  # bounded example uses; `after_bound` is the far side of it, where at least one row of every
+  # term sits.
+  def bound = Date.new(2026, 8, 1)
+
+  def after_bound = Date.new(2026, 8, 15)
+
   def envelope(name) = create(:pool, :budget_pool, user: user, account: checking, name: name)
 
   # An entry reaching a pool the way its CATEGORY says. `on_pool:` overrides that with the entry's
@@ -48,22 +56,29 @@ RSpec.describe PoolBalanceLedger, type: :model do
   end
 
   describe "#terms_for" do
-    # ALL FIVE TERMS ACROSS THE SET, at five different amounts, so no two of them can be swapped
-    # without an assertion failing — and both arms of the entries-for-pool predicate on each side.
+    # ALL FIVE TERMS ACROSS THE SET, at amounts no two of which can be swapped without an
+    # assertion failing — both arms of the entries-for-pool predicate on each side, and EVERY
+    # TERM WITH A ROW ON EACH SIDE OF THE `as_of` BOUND (Aug 1). That last part is what makes the
+    # bounded example below able to catch a ledger that bounded four terms and forgot one; an
+    # earlier fixture put only one row past the bound, so the comment claimed a guard the dates
+    # did not provide.
     #
     # No pool carries all five, and that is the ledger's own domain rather than a thinner fixture:
     # Entry validates that an INCOME entry's pool must be an account, so income reaches an envelope
     # nowhere in this app and Groceries' income term is legitimately absent from the grouped hash.
     #
-    #   Checking   income $190 (its category names Checking, the entry names nobody)
-    #              expense $25 (its category names GROCERIES and the entry names Checking — the
-    #                           entry's own pool_id wins, which is the half a COALESCE written the
-    #                           wrong way round loses)
-    #              in $200 · out $500 → balance 190 − 25 + 200 − 500 = −$135
+    #   Checking   income $190 (Jul 12) + $60 (Aug 15) — its category names Checking and the
+    #                          entry names nobody
+    #              expense $25 (Jul 12) — its category names GROCERIES and the entry names
+    #                          Checking, so the entry's own pool_id wins, which is the half a
+    #                          COALESCE written the wrong way round loses
+    #              in $200 (Jul 12) + $100 (Aug 15) · out $500 (Jul 12) + $300 (Aug 15)
+    #              → balance 250 − 25 + 300 − 800 = −$275, and −$135 as of Aug 1
     #
     #   Groceries  savings $30 (Jul 12) + $70 (Aug 15), reaching it by its CATEGORY
-    #              expense $45, over a category with no pool at all, reaching it by the ENTRY
-    #              in $500 · out $200 → balance 100 − 45 + 500 − 200 = $355
+    #              expense $45 (Aug 15), over a category with no pool at all, by the ENTRY
+    #              in $500 (Jul 12) + $300 (Aug 15) · out $200 (Jul 12) + $100 (Aug 15)
+    #              → balance 100 − 45 + 800 − 300 = $555, and $330 as of Aug 1
     #
     #   Fresh      nothing, in any term.
     let!(:groceries) { envelope("Groceries") }
@@ -83,20 +98,23 @@ RSpec.describe PoolBalanceLedger, type: :model do
 
     before do
       entry(:income, 190, category_pool: checking, on: funded_on)
+      entry(:income, 60, category_pool: checking, on: after_bound)
       entry(:expense, 25, category_pool: groceries, on: funded_on, on_pool: checking)
       entry(:savings, 30, category_pool: groceries, on: funded_on)
-      entry(:savings, 70, category_pool: groceries, on: Date.new(2026, 8, 15))
-      entry(:expense, 45, on: funded_on, on_pool: groceries)
+      entry(:savings, 70, category_pool: groceries, on: after_bound)
+      entry(:expense, 45, on: after_bound, on_pool: groceries)
       move(from: checking, to: groceries, amount: 500, on: funded_on)
+      move(from: checking, to: groceries, amount: 300, on: after_bound)
       move(from: groceries, to: checking, amount: 200, on: funded_on)
+      move(from: groceries, to: checking, amount: 100, on: after_bound)
     end
 
     it "reports each term at the amount the fixture put there", :aggregate_failures do
       expect(ledger.terms_for(checking)).to eq(
-        income: 190, savings: 0, expense: 25, movements_in: 200, movements_out: 500
+        income: 250, savings: 0, expense: 25, movements_in: 300, movements_out: 800
       )
       expect(ledger.terms_for(groceries)).to eq(
-        income: 0, savings: 100, expense: 45, movements_in: 500, movements_out: 200
+        income: 0, savings: 100, expense: 45, movements_in: 800, movements_out: 300
       )
     end
 
@@ -112,8 +130,8 @@ RSpec.describe PoolBalanceLedger, type: :model do
         expect(batched.contributions).to eq(plain.contributions)
         expect(batched.withdrawals).to eq(plain.withdrawals)
       end
-      expect(checking.calculator(today: today).balance).to eq(-135)
-      expect(groceries.calculator(today: today).balance).to eq(355)
+      expect(checking.calculator(today: today).balance).to eq(-275)
+      expect(groceries.calculator(today: today).balance).to eq(555)
     end
 
     # THE EMPTY POOL, which is the shape a grouped sum answers for by SAYING NOTHING: it has no
@@ -129,19 +147,41 @@ RSpec.describe PoolBalanceLedger, type: :model do
       expect(fresh.calculator(today: today, terms: terms).balance).to be_a(BigDecimal)
     end
 
-    # `as_of` belongs to the LEDGER, and it bounds all five terms exactly as PoolCalculator#scoped
-    # does. Aug 1 sits between Groceries' two savings entries, so the later $70 falls out and
-    # nothing else moves — asserted against the unbatched calculator carrying the same bound,
-    # which is the only comparison that can catch a ledger that bounded four terms and forgot one.
-    it "bounds every term by as_of", :aggregate_failures do
-      as_of = Date.new(2026, 8, 1)
-      bounded = described_class.new([groceries], as_of: as_of)
+    # THE TYPE GUARANTEE ON THE TWO READERS THAT BUILD ON THE TERMS RATHER THAN ON #balance.
+    # `contributions` and `withdrawals` add two terms without going through #balance's coercion,
+    # so on an empty pool they were `Integer + Integer` unbatched and `BigDecimal + BigDecimal`
+    # batched — the same figure in two shapes depending on WHICH CALLER built the calculator,
+    # which is precisely what "inert by default" is supposed to forbid. Both paths asserted,
+    # because pinning either one alone passes against exactly the version that had the defect.
+    it "keeps contributions and withdrawals decimal on an empty pool down both paths", :aggregate_failures do
+      plain = fresh.calculator(today: today)
+      batched = fresh.calculator(today: today, terms: ledger.terms_for(fresh))
 
-      expect(bounded.terms_for(groceries)).to eq(
-        income: 0, savings: 30, expense: 45, movements_in: 500, movements_out: 200
+      expect([plain.contributions, plain.withdrawals]).to all(be_a(BigDecimal))
+      expect([batched.contributions, batched.withdrawals]).to all(be_a(BigDecimal))
+      expect([plain.contributions, plain.withdrawals, batched.contributions, batched.withdrawals]).to all(eq(0))
+    end
+
+    # `as_of` belongs to the LEDGER, and it bounds ALL FIVE terms exactly as PoolCalculator#scoped
+    # does. Every one of the five has a row on the far side of Aug 1 somewhere in this pair —
+    # Checking's $60 of income, Groceries' $70 of savings and $45 expense, and the $300/$100
+    # movements that are an `in` for one pool and an `out` for the other — so dropping `scoped`
+    # from ANY term moves a figure here. MUTATION-TESTED, one term at a time: removing the
+    # `scoped(...)` wrapper from `entry_totals` fails it on income/savings/expense, and from
+    # `movement_totals` on both movement terms. Asserted against unbatched calculators carrying
+    # the same bound as well as against literals, so neither side is the other restated.
+    it "bounds every term by as_of", :aggregate_failures do
+      bounded = described_class.new([checking, groceries], as_of: bound)
+
+      expect(bounded.terms_for(checking)).to eq(
+        income: 190, savings: 0, expense: 25, movements_in: 200, movements_out: 500
       )
-      expect(groceries.calculator(as_of: as_of, today: today).balance).to eq(285)
-      expect(groceries.calculator(as_of: as_of, today: today, terms: bounded.terms_for(groceries)).balance).to eq(285)
+      expect(bounded.terms_for(groceries)).to eq(
+        income: 0, savings: 30, expense: 0, movements_in: 500, movements_out: 200
+      )
+      expect(checking.calculator(as_of: bound, today: today).balance).to eq(-135)
+      expect(groceries.calculator(as_of: bound, today: today).balance).to eq(330)
+      expect(groceries.calculator(as_of: bound, today: today, terms: bounded.terms_for(groceries)).balance).to eq(330)
     end
 
     # ANOTHER USER'S POOL IS NOT IN THE SET AND ITS MONEY IS NOT IN THE ANSWER. Both halves are
@@ -153,7 +193,7 @@ RSpec.describe PoolBalanceLedger, type: :model do
       expect(their_envelope.calculator(today: today).balance).to eq(1_887)
       expect(ledger.terms_for(their_envelope)).to be_nil
       expect(ledger.terms_for(groceries)).to eq(
-        income: 0, savings: 100, expense: 45, movements_in: 500, movements_out: 200
+        income: 0, savings: 100, expense: 45, movements_in: 800, movements_out: 300
       )
     end
 
@@ -168,6 +208,31 @@ RSpec.describe PoolBalanceLedger, type: :model do
 
       expect(grouped.size).to eq(5)
       expect(per_pool.size).to eq(15)
+    end
+  end
+
+  # WHEN THE FIVE QUERIES ACTUALLY RUN — first read, not construction.
+  #
+  # This is the property AllocationCommitter's re-run examples do NOT pin, and the review was
+  # right about that: the committer builds its `#live_proposal` after the deletion, so those
+  # examples stay green against an eager ledger too. The shape that needs a guard is the other
+  # one — an object built BEFORE a write and read AFTER it, which is what a screen holding a
+  # proposal across a movement actually is. Built eagerly, both expectations below report the
+  # world as it was at `new`: the ledger says nothing left Checking and the proposal offers the
+  # full $1,000 it no longer has.
+  describe "when the five queries run" do
+    let!(:groceries) { envelope("Groceries") }
+
+    before { entry(:income, 1_000, category_pool: checking, on: funded_on) }
+
+    it "reads the ledger at first use rather than at construction", :aggregate_failures do
+      ledger = described_class.new([checking, groceries])
+      proposal = AllocationCalculator.new(user: user, account: checking, today: today)
+
+      move(from: checking, to: groceries, amount: 400, on: today)
+
+      expect(ledger.terms_for(checking)[:movements_out]).to eq(400)
+      expect(proposal.available).to eq(600)
     end
   end
 

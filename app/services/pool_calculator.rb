@@ -102,7 +102,6 @@ class PoolCalculator
   # also the one axis that is not a QUESTION about the pool — as_of, today, net_of_sweep and
   # pending each change what is being asked, while this only changes who ran the query.
   def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false, pending: Pending.none, terms: nil)
-    # rubocop:enable Metrics/ParameterLists
     @pool = pool
     @as_of = as_of
     @today = today
@@ -110,6 +109,7 @@ class PoolCalculator
     @pending = pending
     @terms = terms
   end
+  # rubocop:enable Metrics/ParameterLists
 
   # Deliberately start-date-agnostic. The balance this replaces filtered entries to
   # `pool.start_date..`; a pool's balance is all the money in it, with no cutoff — the
@@ -345,9 +345,16 @@ class PoolCalculator
     [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
   end
 
-  def contributions = movements_in_total + savings_entries_total
+  # `.to_d` ON THE SUM, and it is the type guarantee holding at the one place `terms:` could
+  # otherwise break it. Both operands are `0` the Integer on an empty pool when this calculator
+  # runs its own aggregates, and both are BigDecimal when a ledger hands them over — so without
+  # this, these two readers changed SHAPE with which caller built the calculator, which is
+  # exactly what "inert by default" is supposed to forbid. No rendered figure moved (nothing
+  # divides by these), and a keyword whose inertness is true only of the figures is not inert.
+  # Asserted by type on an empty pool down BOTH paths.
+  def contributions = (movements_in_total + savings_entries_total).to_d
 
-  def withdrawals = movements_out_total + expense_entries_total
+  def withdrawals = (movements_out_total + expense_entries_total).to_d
 
   # Income that landed in this pool inside `range` — the distribution screen's "income this
   # period", and the only part of #balance that screen can name separately.
@@ -547,11 +554,22 @@ class PoolCalculator
 
   # One predicate rather than .or — Entry.incomes already carries the categories
   # join, and .or rejects relations whose joins differ structurally.
+  #
+  # THE EXPRESSION IS PoolBalanceLedger's, NOT A SECOND SPELLING OF IT. This used to read
+  # `entries.pool_id = :id OR (entries.pool_id IS NULL AND categories.pool_id = :id)`, which is
+  # equivalent to the ledger's COALESCE on every arm — the entry's own pool where it has one, its
+  # category's where it does not, and NEITHER matching when both are NULL — but equivalent by
+  # argument rather than by construction. Two SQL forms of the rule the whole invariant rests on,
+  # in two files, with nothing making them move together, is the two-readers defect this branch
+  # has found in every task; the ledger's own header warns against it one layer down. Sharing the
+  # literal makes the equivalence a fact of the source: there is one place to change, and a
+  # change that breaks one path cannot leave the other reading the old rule.
+  #
+  # The constant lives on PoolBalanceLedger rather than here because that is the class that has
+  # to GROUP BY it — the OR form cannot be grouped, so the COALESCE is the shape with the strictly
+  # wider job, and it is the batched path that would otherwise be free to drift.
   def entries_for_pool
-    Entry.where(
-      "entries.pool_id = :id OR (entries.pool_id IS NULL AND categories.pool_id = :id)",
-      id: pool.id
-    )
+    Entry.where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
   end
 
   def movements_in_total = term(:movements_in) { scoped(pool.movements_in).sum(:amount) }
