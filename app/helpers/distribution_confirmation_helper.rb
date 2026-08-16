@@ -28,6 +28,15 @@ module DistributionConfirmationHelper
     "#{said.upcase_first} #{number_to_currency(buffer)} stays in your buffer."
   end
 
+  # THE TWO CLAUSES BELOW ARE INTERNALS OF THE SENTENCE ABOVE, and `private` here is a statement
+  # of intent rather than a wall — worth saying so rather than leaving a reader to assume the
+  # stronger thing. A helper module is mixed into the view context, so a template calling
+  # `distribution_split_clause(...)` with an implicit receiver still reaches it; what this does
+  # buy is that `helpers.distribution_split_clause` from a controller, and any explicit receiver,
+  # now raise. Half a sentence about a split is not a thing any other screen should be able to
+  # render, because it carries no verb, no buffer and no subject.
+  private
+
   # NOT keyed on `movements.empty?`. An account whose overdraft outlives its own sweeps writes
   # sweep rows and funds nothing, so movements are present while no envelope got anything —
   # "distributed $0.00 into 0 envelopes" over a real movement is the wrong half of that story.

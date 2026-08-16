@@ -198,12 +198,27 @@
         still deciding is the shape that makes people distrust a screen about their money.
         The confirm sits to the LEFT of it, as the primary action — and inside the same form, so
         it submits the boxes as they stand rather than only the edits already applied. See
-        _confirm for why that matters and what it costs. %>
+        _confirm for why that matters and what it costs.
+
+        "UPDATE FIGURES" IS FIRST IN DOM ORDER AND `flex-row-reverse` PUTS IT BACK ON THE RIGHT,
+        and that is not styling. HTML's implicit submission activates THE FIRST SUBMIT BUTTON IN
+        TREE ORDER when Enter is pressed in a text or number field — so with the confirm first,
+        typing a figure into a box and pressing Enter, the most natural keystroke there is in a
+        numeric field, POSTED THE SPLIT. On the one screen in this app that moves money, with the
+        boxes below the caret possibly still empty. MEASURED on the example below with the two
+        buttons the other way round: Enter in the Car box landed on Home with 4 movements written
+        and $1,550.00 allocated. It regressed the behaviour this comment's first sentence argues for
+        — committing a paycheck on a keypress is strictly worse than the recompute it refuses —
+        and every existing example passed either way, because none of them press Enter.
+
+        Enter therefore recomputes, as it did before the confirm existed, and the example
+        "recomputes rather than confirming when Enter is pressed in a box" is what holds it. Do
+        not reorder these two without moving the reverse with them. %>
     <div class="flex items-center justify-between gap-4 border-t border-gray-200 px-6 py-4">
       <p class="text-xs text-gray-500">Edits are applied when you confirm — nothing has moved yet.</p>
-      <span class="flex items-center gap-3">
-        <%= render "confirm", presenter: presenter, standalone: false %>
+      <span class="flex flex-row-reverse items-center gap-3">
         <button type="submit" class="btn btn-secondary">Update figures</button>
+        <%= render "confirm", presenter: presenter, standalone: false %>
       </span>
     </div>
   <% end %>

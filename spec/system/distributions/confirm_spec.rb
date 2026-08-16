@@ -165,6 +165,26 @@ RSpec.describe "Distribution Confirm", type: :system do
       end
     end
 
+    # HTML'S IMPLICIT SUBMISSION, and no other example on this screen can see it. Enter pressed in
+    # a text or number field activates THE FIRST SUBMIT BUTTON IN TREE ORDER — so with the confirm
+    # rendered first inside the waterfall's form, the most natural keystroke there is in a numeric
+    # box POSTED THE SPLIT, with the boxes below the caret possibly still empty. Measured with the
+    # two buttons the other way round: this example landed on `/` with 4 movements written and
+    # $1,550.00 allocated, and no click on Confirm.
+    #
+    # Both halves, on the same keystroke: nothing was written, AND the recompute that should have
+    # happened did. The path assertion is the sharp one — `overrides` in the QUERY STRING is a GET
+    # to `new`, which a POST to `create` could not produce.
+    it "recomputes rather than confirming when Enter is pressed in a box" do
+      fill_in "Amount for Car", with: "1000"
+      find_field("Amount for Car").send_keys(:enter)
+
+      expect(page).to have_current_path(/overrides/)
+      within("[data-pool-name='Vacation']") { expect(page).to have_content("$150.00") }
+      expect(PoolMovement.distributed.count).to eq(0)
+      expect(page).to have_css("#confirm-distribution")
+    end
+
     # THE EDIT IS WHAT GETS WRITTEN, and specifically an edit the user never pressed "Update
     # figures" on. The confirm is a submitter inside the waterfall's own form for exactly this
     # reason: a separate form carrying the already-applied overrides would have written $2,500
@@ -260,6 +280,51 @@ RSpec.describe "Distribution Confirm", type: :system do
         expect(buffer).to eq(0)
         expect(bank_balance).to eq(2_900)
       end
+    end
+  end
+
+  # THE COLLAPSED SCREEN'S HIDDEN `account_id`, which every other example on this page would pass
+  # without: with one account the controller's fallback finds the right one whether the field is
+  # there or not. Here the pay landed in Checking, so the fallback picks CHECKING — and the user
+  # is looking at Ally. Delete the field and the button writes Checking's split from Ally's
+  # screen, which is the shape "the moment a second paycheck arrives mid-period" names.
+  describe "confirming a second account from its own screen", :aggregate_failures do
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    before do
+      envelope("Groceries", 400, priority: 1)
+      deposit(2_400, on: Date.current)
+      create(
+        :pool_budget,
+        :per_paycheck_rate,
+        amount: 100,
+        pool: create(:pool, :budget_pool, user: user, account: ally, name: "Holiday")
+      )
+      create(
+        :entry,
+        amount: 300,
+        date: Date.current,
+        item: create(:item, category: create(:category, :income, user: user, pool: ally))
+      )
+      visit new_distribution_path(account_id: ally.id)
+    end
+
+    # The pairing: with no account named this screen opens on Checking, so the example below is
+    # about the field and not about the only account there is.
+    it "opens on the account the pay landed in when none is named" do
+      visit new_distribution_path
+      expect(page).to have_css("h1", text: "Checking")
+      expect(page).to have_no_css("h1", text: "Ally")
+    end
+
+    it "writes the split for the account on screen, not the default one" do
+      expect(page).to have_css("h1", text: "Ally")
+      click_on "Confirm distribution"
+
+      expect(page).to have_content("Distributed $100.00 into 1 envelope. $200.00 stays in your buffer.")
+      expect(balance_of("Holiday")).to eq(100)
+      expect(balance_of("Groceries")).to eq(0)
+      expect(Pool.find(checking.id).calculator.balance).to eq(2_400)
     end
   end
 
