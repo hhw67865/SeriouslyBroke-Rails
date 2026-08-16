@@ -133,6 +133,17 @@ Always run test files one at a time, never entire directories or the full suite:
 ```bash
 bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file at a time
 ```
+
+### Diagnosing `InvalidSessionIdError`
+
+**There are no known environmental spec failures in this suite. Do not write `InvalidSessionIdError` off — diagnose it.** It has two causes, told apart by one question: *is the first failure the same example every run?*
+
+**Stable first failure → your spec.** An example whose last action is `click_button` / `click_link` / `click_on` must make a waiting Capybara assertion (`expect(page).to have_content(...)`, `have_current_path(...)`) **before** any model assertion. `click_*` returns as soon as the click is dispatched; `expect(model.reload.attr)` reads Postgres without waiting on the browser, so the example ends mid-request and Capybara's `reset_sessions!` navigates the renderer away underneath it. The result is `InvalidSessionIdError` with **zero assertion failures**, which then poisons the session for every example after it — so the *count* swings (22 one run, 10 the next) while the *first* failure stays put. Only the first failure is real; the rest are collateral.
+
+**Unstable first failure → a second rspec process.** Concurrent runs deadlock in DatabaseCleaner truncation and destabilise Chrome, making *any* file fail at *random* examples, including provably correct ones. Run `pgrep -f "[r]spec spec/system"` before and during any flake measurement — a neighbouring run that starts and finishes inside your window is invisible at the endpoints.
+
+Procedure: confirm the machine is quiet; run the file 3× looking only at the first failure each time; if it is stable, read that example for a missing wait; run an unrelated system spec as a control — if the control passes, the fault is in the spec.
+
 ---
 
 ## Summary: Implementation Checklist

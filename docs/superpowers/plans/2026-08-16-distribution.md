@@ -23,9 +23,11 @@
 - **Tailwind:** classes not already in the codebase need `bin/rails tailwindcss:build`. Colours from `app/assets/stylesheets/custom.css`. Use `rounded`, never `rounded-lg/xl`.
 - Follow `docs/coding-standards.md`. Calculators in `app/services/`, presenters in `app/presenters/`.
 
-## Known environmental failures — do not chase
+## `InvalidSessionIdError` — diagnose it, never exclude it
 
-`spec/system/pools/form_spec.rb`'s "auto-create categories" group crashes Chrome (`InvalidSessionIdError`, zero assertion failures); it is worse on untouched HEAD and green when run in focused groups. One example in `spec/system/categories/show/budget_spec.rb` does the same. Confirmed pre-existing across three plans.
+This plan's standing "known environmental failures" note was **wrong**, and it had been pasted into every dispatch for four plans. Two of the three named files were spec defects and the third never failed at all; the mechanism was not the one the note described (the throw site is Capybara's `reset_sessions!`, not `after(:each) { driver.quit }`). Fixed; see `CLAUDE.md` → *Diagnosing `InvalidSessionIdError`* for the procedure.
+
+The discriminator, in one line: **is the first failure the same example every run?** Stable → a missing waiting assertion in that example, and everything after it is collateral. Unstable → a second rspec process. Both were happening at once, which is very likely how the original note came to be written.
 
 ## Three decisions this plan settles
 
