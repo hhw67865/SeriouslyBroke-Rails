@@ -209,12 +209,14 @@ scope :for_user, ->(user) {
 Assert in both directions: a pool-mode rule is findable, another user's rule (both modes) raises
 `RecordNotFound`.
 
-**The rule sort key is written out five times** (2b's final fix round counted them:
-`PoolCalculator#budgets_by_due_date`, `HomePresenter#dated_rules_for`,
-`DistributionPresenter#next_dated_rule`, `ReallocationPresenter#holder_for`,
-`PoolStatus#anchored_budgets`). Extract once — a class method taking the calculator context it
-needs — and point all five at it, the same way `ReallocationPresenter.source_order` was
-extracted. No behaviour change; the five suites stay green untouched.
+**The rule sort key is already extracted** — 2b's final fix round did it (`BudgetCalculator#due_order`,
+commit `20255e7`), not merely counted the sites, and all five consume it. This plan's earlier text
+asked for a `Budget::RULE_ORDER` that would have been a *second* spelling of one key on a different
+class — the exact defect the deliverable exists to prevent. Nothing to build; verified by grep
+(the key is spelled exactly once in the app). Two edges carried to Task 3: `due_order`'s `id`
+tie-break raises on a mixed saved/unsaved pair sharing date and amount (unreachable today), and
+`GET /budgets/:id/edit` on a pool-mode rule renders the category-mode form (submission refused by
+`exactly_one_owner`; Task 3's pool-mode form is the fix).
 
 **`PoolMovement#source_entry` ownership** (§7a): validate the entry belongs to the same user as
 the pools. Assert both directions.
