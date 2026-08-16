@@ -26,7 +26,10 @@
   <div class="flex justify-between items-baseline gap-4">
     <span class="font-medium text-gray-900"><%= pool.name %></span>
     <span class="text-sm <%= problem ? "text-status-danger font-medium" : "text-gray-500" %>">
-      <%= pool_status_label(status) %>
+      <%# `period_closed:` through the presenter, never a bare `pool.calculator` — same reason
+          as `status` above: a calculator built here would date itself against Date.current
+          and disagree with the rest of the screen silently. %>
+      <%= pool_status_label(status, period_closed: presenter.period_closed?(pool)) %>
       <%# The date only where the label has not already said one. Of the three quiet states —
           `on track`, `saving` and `left to spend` — only the first has a date to add: the
           other two have no anchored rule to take one from, so #due_on is nil there anyway. %>

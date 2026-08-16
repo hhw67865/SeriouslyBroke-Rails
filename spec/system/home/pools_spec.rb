@@ -41,7 +41,9 @@ RSpec.describe "Home Pools", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  def fund(pool, amount) = create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount)
+  def fund(pool, amount, on: Time.zone.now)
+    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+  end
 
   def spend(pool, amount)
     category = create(:category, :expense, user: user, pool: pool, name: "#{pool.name} spend")
@@ -178,6 +180,27 @@ RSpec.describe "Home Pools", type: :system do
     expect(row("Mystery")).to have_content("nothing funds it")
     # The refill promise would be a flat untruth here: nothing refills this pool.
     expect(row("Mystery")).to have_no_content("refills at its rate")
+  end
+
+  # Plan 2b decision 1, on the row it changes. The spec's original §7.2 had an expired rate
+  # envelope render `$0` with its leftover already shown in the buffer; that would put the
+  # screen at odds with the ledger, because the $60 is still physically in Groceries until a
+  # distribution moves it, and `Σ pools == your bank balance` is the invariant the app rests
+  # on. So the real balance renders, marked as belonging to a period that is over.
+  #
+  # Both envelopes on ONE screen, at the identical balance and the identical rule, differing
+  # only in which side of a period boundary their money arrived on. Split into two examples
+  # the negative half would pass against a view that never says "last period" at all.
+  it "marks a rate envelope whose period has ended, and only that one", :aggregate_failures do
+    deposit(1_000)
+    fund(envelope("Groceries", rate: 400, priority: 1), 60, on: Date.current - 20.days)
+    fund(envelope("Dining Out", rate: 400, priority: 2), 60, on: Date.current)
+
+    visit root_path
+
+    expect(row("Groceries")).to have_content("$60.00 left · last period")
+    expect(row("Dining Out")).to have_content("$60.00 left")
+    expect(row("Dining Out")).to have_no_content("last period")
   end
 
   it "leaves a quiet pool collapsed", :aggregate_failures do

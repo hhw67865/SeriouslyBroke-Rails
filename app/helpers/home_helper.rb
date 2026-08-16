@@ -8,10 +8,30 @@
 # rubocop's Metrics/ModuleLength limit, so this vocabulary does not fit there without
 # starting to delete other people's comments.
 module HomeHelper
+  # `period_closed:` APPENDS ` · last period` rather than replacing the figure. Plan 2b
+  # decision 1: the leftover is still physically in the envelope until a distribution moves
+  # it, so rendering `$0` here would put the screen at odds with the ledger and break
+  # `Σ pools == your bank balance`. "$60.00 left · last period" is true about the amount AND
+  # about which period it belongs to, and creates the same pressure to distribute.
+  #
+  # It is a suffix on every state, not just :left_to_spend, because a closed period is a fact
+  # about the money rather than about how the pool is doing — an overdrawn envelope whose
+  # period has ended is both things at once, and the row has room to say so.
+  def pool_status_label(status, period_closed: false)
+    label = pool_state_label(status)
+
+    period_closed ? "#{label} · last period" : label
+  end
+
   # `strftime("%b %-d")` rather than `l(date, format: :short)`: no view in this app formats
   # a date through I18n, and the locale's :short renders "Mar 01" where the spec's row
   # vocabulary reads "Mar 1". Same format string as WeeklyCalendarPresenter#range_label.
-  def pool_status_label(status)
+  #
+  # Split from #pool_status_label rather than nested inside it because the seven states plus
+  # the closed-period suffix put the one method past rubocop's complexity limit — and the two
+  # answer different questions anyway: this one is how the pool is doing, its caller adds
+  # which period the money belongs to.
+  def pool_state_label(status)
     case status.state
     when :overdrawn then "overdrawn #{number_to_currency(status.amount)}"
     when :overdue then "overdue · was #{status.due_on.strftime("%b %-d")}"

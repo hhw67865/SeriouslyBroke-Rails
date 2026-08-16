@@ -76,6 +76,32 @@ RSpec.describe HomeHelper, type: :helper do
 
       expect(label).to eq("overdue · was Mar 5")
     end
+
+    # Plan 2b decision 1: the closed-period marker is a SUFFIX on the real balance, never a
+    # replacement for it. The $60 is physically in the envelope until a distribution moves it,
+    # and `Σ pools == your bank balance` is the invariant the whole app rests on — so the
+    # figure has to survive the marker. Asserted as full equality, because a `have_content`
+    # on the suffix alone would pass against a label that had dropped the amount.
+    it "marks a closed period without touching the amount" do
+      label = helper.pool_status_label(status(:left_to_spend, amount: 60), period_closed: true)
+
+      expect(label).to eq("$60.00 left · last period")
+    end
+
+    # The default, and the direction that keeps the marker meaning something: an ordinary row
+    # must not carry it. Same state and same amount as above, so the flag is the only variable.
+    it "says nothing about a period that has not closed" do
+      expect(helper.pool_status_label(status(:left_to_spend, amount: 60))).to eq("$60.00 left")
+    end
+
+    # A closed period is a fact about the money, not about how the pool is doing, so it does
+    # not displace the state's own wording — an overdrawn envelope whose period ended is both
+    # at once. This is the pair that would fail if the suffix were folded into one branch.
+    it "marks a closed period on a state that is already in trouble" do
+      label = helper.pool_status_label(status(:overdrawn, amount: 80), period_closed: true)
+
+      expect(label).to eq("overdrawn $80.00 · last period")
+    end
   end
 
   # What an expanded row calls each rule. An item names itself; an item-less rule used to

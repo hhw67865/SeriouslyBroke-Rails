@@ -157,6 +157,15 @@ class HomePresenter
     @statuses[pool.id] ||= pool.status(today: today)
   end
 
+  # Whether this pool's money belongs to a period that has already ended — what the row marks
+  # as ` · last period` and what the next distribution will sweep back.
+  #
+  # Here rather than in the partial for the same reason as #status_for: PoolCalculator defaults
+  # to Date.current, so a view building its own would answer against a different day than every
+  # other figure on the screen whenever `today` is injected, and disagree silently. Routed
+  # through #calculator_for so it reuses the calculator Home has already built for this pool.
+  def period_closed?(pool) = calculator_for(pool).period_closed?
+
   # The dated rules behind a pool, earliest due first, each paired with the due date its
   # row prints. What an expanded row shows: a pool needing attention owes the user the
   # rules that put it there.

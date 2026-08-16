@@ -29,9 +29,10 @@ These emerged during design and resolve most detail questions on their own.
    an amount you might spend.
 3. **Show a consequence only when there is one.** A warning that fires on a
    normal state is noise, and teaches people to ignore warnings.
-4. **Never silently move money.** The app proposes; the user confirms. The one
-   exception is the buffer absorbing a deficit at rollover (§7.2), which is
-   reported rather than confirmed.
+4. **Never silently move money.** The app proposes; the user confirms — with no
+   exception. Sweeping a closed period's leftover and covering a deficit from the
+   buffer are both *shown* before they happen and *moved* only as lines of a
+   distribution the user confirmed (§7.2).
 5. **Any action that shifts money forward must state what it costs later.**
 6. **Nothing blocks recording reality.** Entries are facts. The app says what a
    fact cost; it never refuses one.
@@ -288,19 +289,42 @@ At period rollover, for each rate envelope:
 - **A deficit is covered from the buffer.** The envelope resets to zero, the
   buffer takes the hit.
 
-**Sweeping and covering are computed, not scheduled.** No background job. This
-has two halves, and both are needed:
+**Savings pools never sweep.** Savings accumulate by definition. This is a rule
+about the pool's **type**, not about the shape of its rules: a dateless goal is a
+rate rule on a savings pool, so a sweep written as "every rate envelope" empties
+every goal the user has. Sweep eligibility is `pool_type_budget?`, always.
 
-- **Derived on read.** An expired rate envelope displays as `$0` and its leftover
-  displays in the buffer immediately, whether or not a distribution has happened.
-  Someone who does not open the app for two periods still sees correct numbers.
-- **Materialised at the next distribution**, as its first lines, so the ledger
-  has real `PoolMovement` rows and the money visibly moves as part of an action
-  the user took rather than while they were not looking.
+**An envelope with a live dated rule does not sweep either.** Its balance is
+already spoken for by a bill nobody has paid yet, and the sweep takes the whole
+balance — so sweeping on the rate rule alone would take the rent to top up the
+buffer. Only once every rule on the envelope has rolled or settled is what is
+left genuinely leftover. Where an envelope carries rules on different bases, the
+**latest** period end governs, for the same reason.
 
-Without the first half a user who skips a distribution sees stale envelopes;
-without the second the movement ledger has gaps. The derived value and the
-materialised rows must agree by construction — the same calculation produces both.
+**Sweeping and covering are computed, not scheduled.** No background job. The
+sweep is derived on read and materialised at the next distribution — but the
+derived half **marks** the money, it does not move it:
+
+- **Derived on read: the envelope keeps showing its real balance, marked as
+  belonging to a period that is over.** `$60 · last period`. It does *not* render
+  `$0` with the leftover already counted in the buffer — the $60 is physically in
+  Groceries until a distribution moves it, and `Σ pools == your bank balance` is
+  the invariant this whole app rests on. A display that is right about intent and
+  wrong about location breaks it, and there is no reading of the screen that
+  recovers where the money actually is. The marker creates the same pressure to
+  distribute without inventing a state the ledger does not agree with.
+- **Materialised at the next distribution**, as its first lines — `swept back
+  from Groceries $60` — so the ledger has real `PoolMovement` rows and the money
+  visibly moves as part of an action the user took rather than while they were
+  not looking.
+
+Without the first half a user who skips a distribution cannot tell stale money
+from this period's; without the second the movement ledger has gaps. The marked
+amount and the materialised rows are the same calculation, so they cannot drift.
+
+A **deficit** needs no marker: an overspent envelope already reads `overdrawn`,
+which is the loudest state in the app. It sweeps nothing — there is nothing to
+give back — and the next distribution refills it, the buffer taking the hit.
 
 Chronic overspending is caught by the **buffer trend**, not by a permanently
 negative envelope.

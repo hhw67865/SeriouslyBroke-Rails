@@ -473,4 +473,174 @@ RSpec.describe PoolCalculator, type: :model do
       end
     end
   end
+
+  # Plan 2b decision 1: a rate envelope whose period has ended still HOLDS its leftover
+  # until a distribution moves it, so the question these answer is "is that money spoken
+  # for by a period that is over" — never "should the screen pretend the money is gone".
+  #
+  # `today` is Thu 20 Aug 2026, the last day of a biweekly period anchored Fri 6 Feb 2026:
+  # boundaries fall on Aug 7 and Aug 21, so a payment dated Aug 15 is inside the live
+  # period and one dated Jul 12 is two periods back. Fixed rather than relative because
+  # every expectation here turns on which side of a boundary a date sits.
+  describe "closed periods and sweeping" do
+    let(:sweep_user) { create(:user, :biweekly) }
+    let(:account) { create(:pool, :account, user: sweep_user) }
+    let(:today) { Date.new(2026, 8, 20) }
+    let(:last_period) { Date.new(2026, 7, 12) }
+    let(:this_period) { Date.new(2026, 8, 15) }
+
+    def envelope(trait = :budget_pool, **attrs)
+      create(:pool, trait, user: sweep_user, account: account, **attrs)
+    end
+
+    def fund(pool, amount, on:)
+      create(:pool_movement, from_pool: account, to_pool: pool, amount: amount, date: on)
+    end
+
+    def spend(pool, amount, on:)
+      category = create(:category, :expense, user: sweep_user, pool: pool)
+      create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    end
+
+    def calc(pool) = pool.calculator(today: today)
+
+    # The positive direction. $60 left in Groceries from a period that ended a month ago:
+    # the money is still in the envelope, and the next distribution takes it back.
+    it "sweeps a rate envelope's leftover once its period has ended", :aggregate_failures do
+      groceries = envelope(name: "Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      fund(groceries, 60, on: last_period)
+
+      expect(calc(groceries).period_closed?).to be(true)
+      expect(calc(groceries).sweepable_amount).to eq(60)
+      expect(calc(groceries).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # The negative direction at the same shape and the same balance: the only difference is
+    # which side of Aug 7 the money arrived on. Without this the example above passes against
+    # a #period_closed? hard-coded to true.
+    it "leaves a rate envelope funded inside the live period alone", :aggregate_failures do
+      groceries = envelope(name: "Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      fund(groceries, 60, on: this_period)
+
+      expect(calc(groceries).period_closed?).to be(false)
+      expect(calc(groceries).sweepable_amount).to eq(0)
+      expect(calc(groceries).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # THE trap (plan decision 2). A dateless savings goal IS a rate rule on a savings pool,
+    # so eligibility written as "has a rate rule whose period ended" drains every goal the
+    # user has. #free_amount is asserted alongside because it is the number a naive sweep
+    # would reach for: `required` reads the $150 as a contribution rate while
+    # `allocated_balances` still clamps the reserve to the rule's own $150, so this goal
+    # reports $450 free. Sweeping is gated on the pool's TYPE, never on its rule shape.
+    it "never sweeps a savings goal, whatever its rate rule's period says", :aggregate_failures do
+      vacation = envelope(:savings_pool, name: "Vacation", target_amount: 2_400)
+      create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150)
+      fund(vacation, 600, on: last_period)
+
+      expect(calc(vacation).free_amount).to eq(450)
+      expect(calc(vacation).period_closed?).to be(false)
+      expect(calc(vacation).sweepable_amount).to eq(0)
+      expect(calc(vacation).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # An anchored rule is money already spoken for by a bill that has not been paid yet.
+    # Sweeping the balance out from under it would take the rent to top up the buffer.
+    it "does not sweep an envelope whose anchored rule is still live", :aggregate_failures do
+      car = envelope(name: "Car")
+      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      fund(car, 900, on: last_period)
+
+      expect(calc(car).period_closed?).to be(false)
+      expect(calc(car).sweepable_amount).to eq(0)
+    end
+
+    # The same shape with the anchored rule settled — a one-off dated Aug 1, now behind us.
+    # Without this the example above passes against "any anchored rule blocks forever".
+    it "sweeps once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
+      car = envelope(name: "Car")
+      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      fund(car, 900, on: last_period)
+
+      expect(calc(car).period_closed?).to be(true)
+      expect(calc(car).sweepable_amount).to eq(900)
+    end
+
+    # Mixed bases on one envelope: the per-paycheck rule's period ended Aug 6, the monthly
+    # rule's does not end until Aug 31. `all?` means the LATEST period governs, so the money
+    # stays put while any rule still has a live claim on it.
+    it "waits for the later period when an envelope mixes bases", :aggregate_failures do
+      utilities = envelope(name: "Utilities")
+      create(:pool_budget, :per_paycheck_rate, pool: utilities, amount: 100)
+      create(:pool_budget, :rate, pool: utilities, amount: 600)
+      fund(utilities, 75, on: Date.new(2026, 8, 5))
+
+      expect(utilities.budgets.map { |b| b.calculator(today: Date.new(2026, 8, 5)).period_end })
+        .to contain_exactly(Date.new(2026, 8, 6), Date.new(2026, 8, 31))
+      expect(calc(utilities).period_closed?).to be(false)
+      expect(calc(utilities).sweepable_amount).to eq(0)
+    end
+
+    # The other direction of the same mixed-basis envelope: money from July is past both
+    # period ends, so both rules agree and it sweeps.
+    it "sweeps a mixed-basis envelope once every basis has rolled" do
+      utilities = envelope(name: "Utilities")
+      create(:pool_budget, :per_paycheck_rate, pool: utilities, amount: 100)
+      create(:pool_budget, :rate, pool: utilities, amount: 600)
+      fund(utilities, 75, on: last_period)
+
+      expect(calc(utilities).period_closed?).to be(true)
+    end
+
+    # No rate rule means no period to close. An envelope funded only against a dated bill
+    # accumulates toward it; "use it or lose it" is a rate envelope's policy, not every
+    # envelope's, and applying it here would empty the bill fund every month.
+    it "does not sweep an envelope with only anchored rules", :aggregate_failures do
+      rent = envelope(name: "Rent")
+      create(:pool_budget, pool: rent, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      fund(rent, 500, on: last_period)
+
+      expect(calc(rent).period_closed?).to be(false)
+      expect(calc(rent).sweepable_amount).to eq(0)
+    end
+
+    it "does not sweep an envelope with no rules at all", :aggregate_failures do
+      mystery = envelope(name: "Mystery")
+      fund(mystery, 80, on: last_period)
+
+      expect(calc(mystery).period_closed?).to be(false)
+      expect(calc(mystery).sweepable_amount).to eq(0)
+    end
+
+    # The emptiest shape in the app, and the one every money reader here has changed type on
+    # before: no movements and no entries, so every `sum(:amount)` behind #balance returns the
+    # Integer literal 0. A sweep divides and sums these, so the guarantee is asserted as a
+    # TYPE, not only as a value.
+    it "returns a BigDecimal zero for an entry-less envelope", :aggregate_failures do
+      fresh = envelope(name: "Fresh")
+      create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+
+      expect(calc(fresh).sweepable_amount).to eq(0)
+      expect(calc(fresh).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # A closed envelope that was overspent has nothing to give back. The deficit is the
+    # buffer's problem (spec §7.2), and a negative sweep would be the buffer paying the
+    # envelope on the way OUT — money moving the wrong way through the ledger.
+    it "sweeps nothing from a closed envelope that went negative", :aggregate_failures do
+      dining = envelope(name: "Dining")
+      create(:pool_budget, :per_paycheck_rate, pool: dining, amount: 150)
+      fund(dining, 100, on: last_period)
+      spend(dining, 180, on: last_period)
+
+      expect(calc(dining).balance).to eq(-80)
+      expect(calc(dining).period_closed?).to be(true)
+      expect(calc(dining).sweepable_amount).to eq(0)
+      expect(calc(dining).sweepable_amount).to be_a(BigDecimal)
+    end
+  end
 end

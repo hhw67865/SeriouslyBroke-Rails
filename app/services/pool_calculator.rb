@@ -132,11 +132,120 @@ class PoolCalculator
     [pool.target_amount.to_d - balance, 0.to_d].max
   end
 
+  # A budget envelope whose rate period has ended still holds its leftover — the money is
+  # physically there until a distribution moves it. We say so rather than rendering $0,
+  # because `Σ pools == your bank balance` is the invariant everything rests on.
+  #
+  # Savings pools are excluded by TYPE, not by rule shape. A dateless goal is a rate rule on
+  # a savings pool (see #dateless_goal?), so "has a rate rule whose period ended" would drain
+  # every goal the user has — and #free_amount would hand the sweep a plausible figure to
+  # take, because #required reads that rule's amount as a contribution rate while
+  # #allocated_balances still clamps the reserve to it. Domain spec §7.2: savings accumulate
+  # by definition, so they never sweep.
+  #
+  # Measured against the date the money ARRIVED, not against today. BudgetCalculator#period_end
+  # answers "when does the period containing `today` end", so `period_end(today) < today` is
+  # unreachable by construction — end-of-month is never before today, and #boundary_period_end
+  # is the day before the next boundary, which is today at the earliest. Verified exhaustively:
+  # every cadence x every anchor day x every day of a year x both bases, 15,330 combinations,
+  # zero cases where it held. Asking it of the funding date instead is the same sentence about
+  # the period that money actually belongs to, and it is the reachable one: $60 paid in on
+  # Jul 12 sits in a period that ended Jul 23, and today is Aug 20.
+  #
+  # `all?`, so the LATEST period governs. An envelope mixing a per-paycheck rule and a monthly
+  # one has two different period ends, and until both have rolled some rule still has a live
+  # claim on the money. Sweeping at the earlier of the two would take money the monthly rule
+  # expects to cover the rest of the month, and #required would then ask for the whole monthly
+  # amount again — funding that rule twice in one month. The conservative direction is the
+  # right one for a sweep: money staying put can never break the invariant, and never surprises
+  # the user by disappearing.
+  #
+  # Memoised on `defined?` rather than `||=`, because false is the answer for most pools and
+  # `||=` would re-run the whole thing every time it came back. Home asks this once per row and
+  # #sweepable_amount asks it again, and the false path alone costs three aggregates plus a
+  # paid-since-anchor SUM per dated rule.
+  def period_closed?
+    return @period_closed if defined?(@period_closed)
+
+    @period_closed = closed_period?
+  end
+
+  # What the next distribution would take back. Never more than the balance, and never less
+  # than zero: an overspent envelope has nothing to give, and its deficit is the buffer's
+  # problem (spec §7.2) — a negative sweep would be the buffer paying the envelope on the way
+  # out, money moving the wrong way through the ledger.
+  #
+  # `0.to_d` on the early return, not a bare `0`: that is the branch an entry-less envelope
+  # takes, and this figure is summed and divided by the distribution. Mutating it to `0` fails
+  # the type assertion, so it is the guard actually holding the line here.
+  #
+  # The trailing `.to_d` on the clamp is belt to #balance's braces and, measured, fires no
+  # mutation at all today: both operands are already BigDecimal, so `max` cannot hand back an
+  # Integer. Kept for the reason #free_amount keeps its own — `[x, 0.to_d].max` coerces only
+  # when the clamp FIRES, and this reader must hold its guarantee locally rather than by
+  # inheriting one from #balance that a later edit could quietly withdraw.
+  def sweepable_amount
+    return 0.to_d unless period_closed?
+
+    [balance, 0.to_d].max.to_d
+  end
+
   def contributions = movements_in_total + savings_entries_total
 
   def withdrawals = movements_out_total + expense_entries_total
 
   private
+
+  # The body of #period_closed?, split out only so the memo above it stays one line of
+  # bookkeeping rather than wrapping five guards.
+  def closed_period?
+    return false unless pool.pool_type_budget?
+    return false if live_anchored_rule?
+
+    rate_budgets = pool.budgets.reject { |budget| budget.anchor_date.present? }
+    return false if rate_budgets.empty?
+    return false if last_funded_on.nil?
+
+    rate_budgets.all? { |budget| budget.calculator(today: last_funded_on).period_end < today }
+  end
+
+  # An anchored rule is money already spoken for by a bill nobody has paid yet, and #balance
+  # is the whole envelope — so sweeping a mixed envelope on its rate rule alone would take the
+  # rent to top up the buffer. The rate rules are the only ones that CAN close a period, but
+  # they are not the only ones with a claim on what is in the envelope.
+  #
+  # `fulfilled?` is the only "no longer live" signal BudgetCalculator offers, and it is
+  # deliberately narrow: only a one-time rule can ever be settled, because a recurring rule
+  # always has a next occurrence to fund. So an envelope carrying a recurring dated bill never
+  # sweeps — the conservative direction, and the same one `all?` takes above.
+  def live_anchored_rule?
+    pool.budgets.any? do |budget|
+      budget.anchor_date.present? && !budget.calculator(today: today).fulfilled?
+    end
+  end
+
+  # The last day money entered this pool — the period #period_closed? is actually asking about.
+  #
+  # The three money-IN terms of #balance, and only those: what was spent out of the envelope
+  # says nothing about which period funded it. LAST rather than first, because the money sitting
+  # here now belongs to the most recent funding — a stray $5 arriving today makes the envelope
+  # current, which errs toward leaving money alone.
+  #
+  # `defined?` rather than `||=`: nil is the answer for a never-funded pool and the common one
+  # (a fresh envelope is exactly the shape a sweep meets first), and `||=` would re-run all
+  # three aggregates every time it came back.
+  #
+  # `.to_date` because both `date` columns are datetimes while every calculator here works in
+  # whole days; TimeWithZone#to_date resolves in the request's zone, as DateContext expects.
+  def last_funded_on
+    return @last_funded_on if defined?(@last_funded_on)
+
+    @last_funded_on = [
+      scoped(pool.movements_in).maximum(:date),
+      scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date),
+      scoped(Entry.savings.merge(entries_for_pool)).maximum(:date)
+    ].compact.max&.to_date
+  end
 
   # The sort key is a triple, not a bare due date. `sort_by` is not stable and `pool.budgets`
   # carries no ORDER BY, so two rules sharing a due date could swap fill order between calls —
