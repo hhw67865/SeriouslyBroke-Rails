@@ -289,7 +289,8 @@ savings pools sit in the same priority list as budget pools. One mechanism.
 ### 5.1 Five steps
 
 ```
-1. SWEEP     expired rate-rule balances return to the account
+1. SWEEP     each budget pool whose rate period has ended returns its leftover
+             to the account — its balance, less what live dated rules hold
 2. COMPUTE   required for every pool
 3. FILL      top-down by priority until cash runs out
 4. REPORT    funded / short, plus real bank transfers needed
@@ -312,9 +313,35 @@ Two independent ways a paycheck gets squeezed, both visible:
 
 ### 5.2 Sweeping
 
-Test: `anchor_date.nil?`. No date means the obligation *expired with the
-period*, so the money is genuinely spare and returns to the account. A date
-means the obligation is still ahead, so the money stays.
+Sweeping is per **pool**, not per rule. A pool has one balance, so there is no
+rule-by-rule balance to expire; the question is how much of the one balance is
+still spoken for.
+
+**Eligibility** — the pool's rate period has closed:
+
+- `pool_type_budget?`. This gate is by type, never by rule shape: a dateless goal
+  is a rate rule on a savings pool, so "has an expired rate rule" would drain
+  every goal the user has.
+- The pool has at least one rate rule (`anchor_date.nil?`). No rate rule means no
+  period to close — an envelope funded only against a dated bill accumulates
+  toward it.
+- Its rate rules have **all** closed, so the latest period end governs. Measured
+  from the pool's **last funding date**, not from today: `period_end` answers
+  "when does the period containing this date end", so asking it of today can
+  never put the end in the past. Asking it of the date the money arrived is the
+  reachable question — $60 paid in on Jul 12 sits in a period that ended Jul 23.
+
+**Amount** — the pool's balance, less what its **live** dated rules hold. A dated
+rule is live until it is settled, which only a one-time rule ever is; a recurring
+bill is therefore live every period, and that is correct — the money is genuinely
+spoken for. What it holds is its **allocation** (§4.3), not its amount, so an
+under-funded bill reserves what it actually has. Never below zero: an overspent
+envelope has nothing to give, and its deficit is the buffer's problem (UI spec
+§7.2).
+
+Blocking the whole sweep on a live dated rule instead of subtracting what it
+holds would strand the rate rule's leftover permanently, since a recurring bill
+is never settled.
 
 `pool_type: savings` never sweeps.
 

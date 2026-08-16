@@ -167,7 +167,7 @@ class PoolCalculator
   def period_closed?
     return @period_closed if defined?(@period_closed)
 
-    @period_closed = closed_period?
+    @period_closed = compute_period_closed
   end
 
   # What the next distribution would take back. Never more than the balance, and never less
@@ -179,15 +179,19 @@ class PoolCalculator
   # takes, and this figure is summed and divided by the distribution. Mutating it to `0` fails
   # the type assertion, so it is the guard actually holding the line here.
   #
-  # The trailing `.to_d` on the clamp is belt to #balance's braces and, measured, fires no
-  # mutation at all today: both operands are already BigDecimal, so `max` cannot hand back an
-  # Integer. Kept for the reason #free_amount keeps its own — `[x, 0.to_d].max` coerces only
-  # when the clamp FIRES, and this reader must hold its guarantee locally rather than by
-  # inheriting one from #balance that a later edit could quietly withdraw.
+  # The subtraction is PARTIAL, not all-or-nothing. An envelope carrying a $500 rent rule and a
+  # $100 gas rate rule is closed the moment its rate period ends, and it gives back only what
+  # the rent is not holding — an earlier all-or-nothing gate on the rent left that $100 of
+  # genuine leftover stranded in every period, forever, because a recurring rule is never
+  # `fulfilled?`.
+  #
+  # The trailing `.to_d` on the clamp is belt to the braces on both operands: `[x, 0.to_d].max`
+  # coerces only when the clamp FIRES, and this reader must hold its guarantee locally rather
+  # than by inheriting one from #balance that a later edit could quietly withdraw.
   def sweepable_amount
     return 0.to_d unless period_closed?
 
-    [balance, 0.to_d].max.to_d
+    [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
   end
 
   def contributions = movements_in_total + savings_entries_total
@@ -197,10 +201,14 @@ class PoolCalculator
   private
 
   # The body of #period_closed?, split out only so the memo above it stays one line of
-  # bookkeeping rather than wrapping five guards.
-  def closed_period?
+  # bookkeeping rather than wrapping four guards. Named `compute_` rather than the near-
+  # homograph `closed_period?` it used to be: a memo/body pair that governs money movement
+  # cannot afford two names distinguishable only by word order.
+  #
+  # The marker means exactly what it says — this envelope's RATE period has ended. It carries
+  # no opinion about the envelope's dated bills; #sweepable_amount subtracts what those hold.
+  def compute_period_closed
     return false unless pool.pool_type_budget?
-    return false if live_anchored_rule?
 
     rate_budgets = pool.budgets.reject { |budget| budget.anchor_date.present? }
     return false if rate_budgets.empty?
@@ -209,19 +217,26 @@ class PoolCalculator
     rate_budgets.all? { |budget| budget.calculator(today: last_funded_on).period_end < today }
   end
 
-  # An anchored rule is money already spoken for by a bill nobody has paid yet, and #balance
-  # is the whole envelope — so sweeping a mixed envelope on its rate rule alone would take the
-  # rent to top up the buffer. The rate rules are the only ones that CAN close a period, but
-  # they are not the only ones with a claim on what is in the envelope.
+  # What an unpaid dated bill is already holding. #sweepable_amount is otherwise the whole
+  # envelope, so a mixed envelope would sweep the rent to top up the buffer on the strength of
+  # its gas rule alone.
   #
-  # `fulfilled?` is the only "no longer live" signal BudgetCalculator offers, and it is
-  # deliberately narrow: only a one-time rule can ever be settled, because a recurring rule
-  # always has a next occurrence to fund. So an envelope carrying a recurring dated bill never
-  # sweeps — the conservative direction, and the same one `all?` takes above.
-  def live_anchored_rule?
-    pool.budgets.any? do |budget|
-      budget.anchor_date.present? && !budget.calculator(today: today).fulfilled?
-    end
+  # Reserved by ALLOCATION, not by the rule's amount: #allocated_balances is already this
+  # class's single answer to which rules the money is covering, and it fills earliest-due
+  # first, so an under-funded envelope reserves what the bill actually has rather than what it
+  # wants. A second notion of reserve here would be a second answer to the same question, free
+  # to disagree with #reserve and #free_amount.
+  def anchored_reserve
+    allocated_balances.sum(0.to_d) { |budget, allocated| live_anchored?(budget) ? allocated : 0.to_d }
+  end
+
+  # `fulfilled?` is BudgetCalculator's only "no longer live" signal and it is deliberately
+  # narrow — only a one-time rule can ever be settled, because a recurring rule always has a
+  # next occurrence to fund. A recurring dated bill therefore reserves in every period, which
+  # is correct: the money is genuinely spoken for. What is no longer correct is letting that
+  # stop the rest of the envelope from sweeping.
+  def live_anchored?(budget)
+    budget.anchor_date.present? && !budget.calculator(today: today).fulfilled?
   end
 
   # The last day money entered this pool — the period #period_closed? is actually asking about.

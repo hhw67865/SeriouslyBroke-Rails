@@ -546,28 +546,89 @@ RSpec.describe PoolCalculator, type: :model do
       expect(calc(vacation).sweepable_amount).to be_a(BigDecimal)
     end
 
-    # An anchored rule is money already spoken for by a bill that has not been paid yet.
-    # Sweeping the balance out from under it would take the rent to top up the buffer.
-    it "does not sweep an envelope whose anchored rule is still live", :aggregate_failures do
+    # Fix round 1, the behaviour change. An anchored rule is money already spoken for by a
+    # bill nobody has paid yet, so the sweep must not take it — but a RECURRING dated rule is
+    # never `fulfilled?` (there is always a next occurrence), so gating the whole envelope on
+    # it stranded the rate rule's genuine leftover in every period, permanently. The sweep is
+    # partial instead: the bill keeps what it holds, the rest goes back.
+    #
+    # All three numbers are pinned and all three differ, so the example cannot pass on a
+    # fixture where balance, reserve and sweepable happen to coincide: $900 in, the bill is
+    # holding $500 of it, $400 comes back.
+    it "sweeps a mixed envelope down to what its live bill is holding", :aggregate_failures do
       car = envelope(name: "Car")
-      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
-      create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      rate = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      rent = create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
       fund(car, 900, on: last_period)
 
-      expect(calc(car).period_closed?).to be(false)
+      expect(calc(car).balance).to eq(900)
+      expect(calc(car).allocated_balances[rent]).to eq(500)
+      expect(calc(car).allocated_balances[rate]).to eq(100)
+      expect(calc(car).period_closed?).to be(true)
+      expect(calc(car).sweepable_amount).to eq(400)
+      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # Under-funded, at the shape the fix brief named: $300 against a $500 bill. The reserve is
+    # by ALLOCATION, not by the rule's amount, and #allocated_balances fills earliest-due
+    # first — the rate rule is due at this period's end (Aug 20) and the bill not until Sep 1,
+    # so the rate rule takes its $100 and the bill reserves only the $200 left. $100 therefore
+    # still comes back, and it should: that is last period's unspent grocery money, not rent.
+    #
+    # Pinned as the reserve MOVING (500 -> 200) at the same rule, which is the whole point of
+    # reserving by allocation; a reserve read off `budget.amount` would answer 500 here and
+    # sweep nothing.
+    it "reserves what an under-funded bill actually holds, not what it wants", :aggregate_failures do
+      car = envelope(name: "Car")
+      rent = create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      fund(car, 300, on: last_period)
+
+      expect(calc(car).balance).to eq(300)
+      expect(calc(car).allocated_balances[rent]).to eq(200)
+      expect(calc(car).period_closed?).to be(true)
+      expect(calc(car).sweepable_amount).to eq(100)
+      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # The other direction of the same idea, and the one that reaches zero: when the bill is
+    # the earlier claim it fills FIRST and swallows the whole under-funded balance, leaving
+    # the rate rule nothing to give back. A monthly rate rule ends Aug 31 while this bill,
+    # anchored Jul 25, comes round again on Aug 25 — so the bill sorts ahead of it.
+    #
+    # Without this half the example above passes against a sweep that simply never returns
+    # zero for a live bill.
+    it "sweeps nothing when the live bill's allocation takes the whole balance", :aggregate_failures do
+      car = envelope(name: "Car")
+      rent = create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 7, 25))
+      create(:pool_budget, :rate, pool: car, amount: 100)
+      fund(car, 400, on: last_period)
+
+      expect(calc(car).balance).to eq(400)
+      expect(calc(car).allocated_balances[rent]).to eq(400)
+      expect(calc(car).period_closed?).to be(true)
       expect(calc(car).sweepable_amount).to eq(0)
+      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
     end
 
     # The same shape with the anchored rule settled — a one-off dated Aug 1, now behind us.
-    # Without this the example above passes against "any anchored rule blocks forever".
-    it "sweeps once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
+    # A fulfilled bill reserves nothing, so the whole balance sweeps. Without this the
+    # examples above pass against "any anchored rule reserves forever".
+    #
+    # #free_amount is pinned alongside deliberately, and it DISAGREES: #allocated_balances
+    # still fills a fulfilled rule, so the pool reports $300 free while $900 sweeps. That is
+    # the measured behaviour of the two readers today, and this assertion is here so a later
+    # change to either one has to face the divergence rather than discover it in a ledger.
+    it "sweeps the whole balance once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
       car = envelope(name: "Car")
       create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
       create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
       fund(car, 900, on: last_period)
 
+      expect(calc(car).free_amount).to eq(300)
       expect(calc(car).period_closed?).to be(true)
       expect(calc(car).sweepable_amount).to eq(900)
+      expect(calc(car).sweepable_amount).to be_a(BigDecimal)
     end
 
     # Mixed bases on one envelope: the per-paycheck rule's period ended Aug 6, the monthly
@@ -599,11 +660,18 @@ RSpec.describe PoolCalculator, type: :model do
     # No rate rule means no period to close. An envelope funded only against a dated bill
     # accumulates toward it; "use it or lose it" is a rate envelope's policy, not every
     # envelope's, and applying it here would empty the bill fund every month.
+    #
+    # The `rate_budgets.empty?` guard is now the ONLY thing holding this line — the anchored
+    # gate that used to shadow it is gone — so the fixture is funded $600 against a $500 bill
+    # rather than exactly $500. At an exact match the reserve would eat the balance and
+    # #sweepable_amount would read 0 either way; the extra $100 makes both assertions bite,
+    # because a lost guard turns `[].all?` into `true` and hands that $100 to the buffer.
     it "does not sweep an envelope with only anchored rules", :aggregate_failures do
       rent = envelope(name: "Rent")
       create(:pool_budget, pool: rent, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
-      fund(rent, 500, on: last_period)
+      fund(rent, 600, on: last_period)
 
+      expect(calc(rent).balance).to eq(600)
       expect(calc(rent).period_closed?).to be(false)
       expect(calc(rent).sweepable_amount).to eq(0)
     end
@@ -620,10 +688,16 @@ RSpec.describe PoolCalculator, type: :model do
     # before: no movements and no entries, so every `sum(:amount)` behind #balance returns the
     # Integer literal 0. A sweep divides and sums these, so the guarantee is asserted as a
     # TYPE, not only as a value.
+    #
+    # #period_closed? is asserted directly because the $0 balance cannot distinguish the
+    # `last_funded_on.nil?` guard from the clamp: with nothing in the envelope, sweepable
+    # reads 0 whether the period is judged closed or not. This envelope has never been funded,
+    # so there is no period for it to be past — the marker has to say so on its own.
     it "returns a BigDecimal zero for an entry-less envelope", :aggregate_failures do
       fresh = envelope(name: "Fresh")
       create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
 
+      expect(calc(fresh).period_closed?).to be(false)
       expect(calc(fresh).sweepable_amount).to eq(0)
       expect(calc(fresh).sweepable_amount).to be_a(BigDecimal)
     end

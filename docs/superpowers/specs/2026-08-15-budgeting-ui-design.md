@@ -189,6 +189,12 @@ rate rules reset — so the user never configures which display they get.
 period, the other cannot be fixed by any amount of future funding. Collapsing
 them would hide that they need different actions.
 
+One **suffix** can attach to any of the six states: `· last period`, when the
+envelope's rate period has closed and its money is still sitting there awaiting
+the next distribution (§7.2). It is a fact about which period the money belongs
+to, not a seventh state, so it appends rather than replaces — `$60 left · last
+period`, and equally `overdrawn $80 · last period`.
+
 ## 5. Distribution
 
 Runs about twice a month. Fast when nothing needs you, deliberate when something
@@ -294,12 +300,16 @@ about the pool's **type**, not about the shape of its rules: a dateless goal is 
 rate rule on a savings pool, so a sweep written as "every rate envelope" empties
 every goal the user has. Sweep eligibility is `pool_type_budget?`, always.
 
-**An envelope with a live dated rule does not sweep either.** Its balance is
-already spoken for by a bill nobody has paid yet, and the sweep takes the whole
-balance — so sweeping on the rate rule alone would take the rent to top up the
-buffer. Only once every rule on the envelope has rolled or settled is what is
-left genuinely leftover. Where an envelope carries rules on different bases, the
-**latest** period end governs, for the same reason.
+**An envelope with a live dated rule sweeps only what that rule is not holding.**
+Part of its balance is spoken for by a bill nobody has paid yet, so the sweep
+takes the balance **less** what the live dated rules hold: the bill's reserve
+stays, the expired rate rule's leftover goes. A gate instead of a subtraction —
+"any live dated rule blocks the sweep" — would strand that leftover forever,
+because a recurring bill is never settled and so is live in every period. What
+each dated rule holds is its **allocation** (domain spec §4.3), the same earliest-due-first
+split every other reader uses, so an under-funded bill reserves what it actually
+has rather than what it wants. Where an envelope carries rules on different
+bases, the **latest** period end governs, for the same reason.
 
 **Sweeping and covering are computed, not scheduled.** No background job. The
 sweep is derived on read and materialised at the next distribution — but the
@@ -322,9 +332,13 @@ Without the first half a user who skips a distribution cannot tell stale money
 from this period's; without the second the movement ledger has gaps. The marked
 amount and the materialised rows are the same calculation, so they cannot drift.
 
-A **deficit** needs no marker: an overspent envelope already reads `overdrawn`,
-which is the loudest state in the app. It sweeps nothing — there is nothing to
-give back — and the next distribution refills it, the buffer taking the hit.
+A **deficit** needs no new **state**: an overspent envelope already reads
+`overdrawn`, which is the loudest state in the app. It still carries the
+`· last period` suffix once its period has closed — the suffix is a fact about
+which period the money belongs to, not about how the pool is doing, so it
+attaches to `overdrawn $80 · last period` exactly as it does to a healthy row. It
+sweeps nothing — there is nothing to give back — and the next distribution
+refills it, the buffer taking the hit.
 
 Chronic overspending is caught by the **buffer trend**, not by a permanently
 negative envelope.
