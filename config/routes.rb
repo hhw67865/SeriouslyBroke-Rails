@@ -42,6 +42,18 @@ Rails.application.routes.draw do
   # route of `resources :budgets` above, and Rails refuses a duplicate route name outright.
   get "budget" => "budget_page#show", as: :budget_page
 
+  # WHERE THE USER DECLARES THEIR PERIOD AND THEIR INCOME (spec §3, §8). The first and only
+  # writer for `typical_income`, `period_cadence` and `period_anchor_date` anywhere in the app —
+  # until this route the whole periods system ran on seed data, and §9's structural check was
+  # permanently false in production because nothing could ever set the income it reads.
+  #
+  # ON THE BUDGET PAGE'S CONTROLLER rather than on a users/settings one, because the declaration
+  # is not a profile setting: it is the denominator of every figure the Budget page prints, it is
+  # edited in place inside the structural check block, and a failed save has to re-render THAT
+  # page with its errors. A separate controller would have to rebuild this page's presenter to
+  # show a validation message.
+  patch "budget/user" => "budget_page#update", as: :budget_page_user
+
   # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
   # the period as if its distribution had not happened, which it does by DELETING this period's
   # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite

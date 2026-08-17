@@ -51,6 +51,25 @@ class User < ApplicationRecord
   # disagree about which boundary comes next.
   PERIOD_WINDOW_DAYS = 45
 
+  # HOW MANY PERIODS A YEAR HOLDS, per cadence. The one divisor that turns a rule stated in
+  # calendar time (a monthly cap, a six-monthly premium) into what it claims from one period.
+  #
+  # Semimonthly is 24 and not 26: it is twice a month, so it lands on the same two days of every
+  # month and the year holds 24 of them. Biweekly is 26 — every fourteen days, which overruns
+  # twice a month twice a year. Confusing the two is a 8% error in every normalised figure.
+  PERIODS_PER_YEAR = { "weekly" => 52, "biweekly" => 26, "semimonthly" => 24, "monthly" => 12 }.freeze
+
+  # 12 FOR A USER WHO HAS DECLARED NO CADENCE — i.e. the period IS the calendar month until they
+  # say otherwise. Not zero and never a raise: `Budget#steady_ask` is asked about undeclared
+  # users (the drift detector reads it, and the structural check computes before it renders), and
+  # a divisor of zero there would 500 a page whose whole purpose is to let the user declare.
+  #
+  # The choice matches what the rest of the app already does with an undeclared period:
+  # `BudgetCalculator#period_end` falls back to `today.end_of_month` and `User#period_containing`
+  # to the calendar month. A monthly-basis rule therefore passes through unchanged, and a
+  # per-paycheck rule never consults this at all — `steady_ask` returns its amount directly.
+  def periods_per_year = PERIODS_PER_YEAR.fetch(period_cadence, 12)
+
   # EVERY funding rule this user owns, both modes. `budgets` above is the category-mode half
   # only — it is kept because a category's own screens ask exactly that question — so this is
   # deliberately a second, WIDER reader rather than a redefinition of the first.

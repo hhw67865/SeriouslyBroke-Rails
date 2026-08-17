@@ -1,0 +1,67 @@
+<%# THE DECLARATION: one PATCH, three fields, edited in place inside the block whose figures they
+    produce. Local: `presenter` (BudgetPagePresenter).
+
+    `presenter.declaration` and NOT `presenter.user`, and on the failure path those are two
+    different objects on purpose: the figures above are computed from the row as it stands (the
+    save was refused, so nothing was declared) while this form keeps the rejected values and the
+    errors, so a validation failure does not throw away what the user typed. See
+    BudgetPagePresenter#declaration.
+
+    `url:` is given explicitly because `simple_form_for @user` would otherwise post to
+    `/users/:id` — Devise's registration route, which asks for a current password. %>
+<%= simple_form_for presenter.declaration,
+                    url: budget_page_user_path,
+                    method: :patch,
+                    html: { class: "border-t border-gray-100 pt-5 space-y-4" } do |f| %>
+  <%# Both `:base` and the field errors: the anchor validation's message lands on
+      `period_anchor_date`, and simple_form prints it under that input — but a user who submitted
+      a cadence with no anchor is looking at three fields and needs the block itself to say
+      something went wrong before they find it. %>
+  <% if presenter.declaration.errors.any? %>
+    <p class="rounded bg-status-danger-light border border-status-danger px-3 py-2 text-sm text-status-danger"
+       data-declaration-error>
+      <%= presenter.declaration.errors.full_messages.to_sentence %>
+    </p>
+  <% end %>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <%= f.input :typical_income,
+                as: :decimal,
+                label: "You typically bring in",
+                input_html: { placeholder: "0.00", step: 0.01, min: 0 },
+                hint: "Per period, after tax. A rough figure is fine — nothing is inferred from it." %>
+
+    <%# The enum's own keys, so a cadence this app cannot compute boundaries for is unselectable.
+        Blank is offered because clearing the period back to undeclared is a legitimate move, and
+        a select with no way out would trap a user who set it by accident. %>
+    <%= f.input :period_cadence,
+                as: :select,
+                collection: User.period_cadences.keys.map { |key| [key.humanize, key] },
+                include_blank: "Not set",
+                label: "How long is a period?",
+                hint: "Weekly, every two weeks, twice a month, or monthly." %>
+
+    <%= f.input :period_anchor_date,
+                as: :date,
+                html5: true,
+                label: "A day a period starts",
+                hint: "Any one of them — the rest are counted from it. Required once you pick a period." %>
+  </div>
+
+  <%# DECISION 6, SAID TO THE USER RATHER THAN LEFT AS A SURPRISE. Every figure in this app is
+      derived, so a new cadence changes the divisor in each of them the moment it is saved — and
+      not only the forward-looking ones: the boundaries also decide where each past period began
+      and ended, so history re-buckets too. That is a large consequence for one select, and a user
+      who is not told will read the changed numbers as the app losing their data. %>
+  <p class="text-xs text-gray-500 max-w-2xl">
+    Changing your period re-derives every figure immediately — what each rule claims, what your
+    envelopes need next, and how your history buckets into periods. Nothing is rewritten; it is
+    all counted from these two facts.
+  </p>
+
+  <%# `btn btn-primary`, the app's own component, and NOT the `bg-brand text-white` this first
+      shipped as — application.css says in so many words that white on the brand sage fails
+      contrast, which is why `.btn-primary` paints sage-700 instead. Caught at the browser: the
+      label was barely legible on the rendered button. %>
+  <%= f.button :submit, "Save period and income", class: "btn btn-primary" %>
+<% end %>

@@ -11,6 +11,54 @@ class BudgetPageController < ApplicationController
   # Anchored to today rather than to the sidebar's month scrubber, exactly as Home is: every
   # figure here is about the next period's funding, which is a fact about now.
   def show
-    @presenter = BudgetPagePresenter.new(user: current_user, today: Date.current)
+    @presenter = build_presenter
+  end
+
+  # THE DECLARATION: period and typical income, the two facts every figure on this page divides
+  # by. `current_user`, never a `User.find(params[:id])` — the record being written is the one
+  # signed in and there is no id on the wire to get wrong.
+  #
+  # A FAILED SAVE RE-RENDERS THIS PAGE, not a form of its own — 422, because nothing was written.
+  #
+  # TWO USER OBJECTS ON THE FAILURE PATH, and the split is a defect the browser caught. A failed
+  # `update` leaves the REJECTED values on `current_user` in memory: after submitting a cadence
+  # with no anchor, `current_user.typical_income` reads $2,400 and `period_cadence` reads
+  # "biweekly" though the row holds neither. Handing that object to the presenter rendered the
+  # full structural check — "Your rules need $520.00 a period / You typically bring in $2,400.00 /
+  # Left over $1,880.00 → buffer" — computed from a declaration the database had just refused,
+  # under an error message saying the save had failed. Reloading the page made all three lines
+  # vanish.
+  #
+  # So the FIGURES read a clean reload of the row (what is actually true), and the FORM keeps the
+  # dirty object (what the user typed, plus its errors) so nothing they entered is thrown away.
+  # A separate instance rather than `current_user.reload`, which would discard both.
+  def update
+    if current_user.update(declaration_params)
+      redirect_to budget_page_path, notice: "Your period and income are saved — every figure below is re-derived."
+    else
+      @presenter = BudgetPagePresenter.new(
+        user: User.find(current_user.id),
+        today: Date.current,
+        declaration: current_user
+      )
+      render :show, status: :unprocessable_content
+    end
+  end
+
+  private
+
+  def build_presenter = BudgetPagePresenter.new(user: current_user, today: Date.current)
+
+  # EXACTLY THREE PARAMS, and the list is the whole security boundary here. `current_user.update`
+  # writes the signed-in user's own row, so ownership is never in question — but `User` carries
+  # `email`, `encrypted_password`, `default_account_id` and `theme` on the same record, and a
+  # mass-assignment from this form must reach none of them. A fourth key is dropped by
+  # `expect`/`permit` rather than raising, which is the behaviour a real submission with a stale
+  # field should get; spec/requests/budget_page_spec.rb pins that it is dropped and not written.
+  #
+  # `User` already validates all three (income > 0 allow_nil; anchor presence required whenever a
+  # cadence is set), so this list permits and the model refuses — no second validation here.
+  def declaration_params
+    params.expect(user: [:typical_income, :period_cadence, :period_anchor_date])
   end
 end

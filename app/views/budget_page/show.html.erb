@@ -24,4 +24,11 @@
 
     <%= render "orphans", presenter: @presenter %>
   <% end %>
+
+  <%# OUTSIDE the no_rules? branch, deliberately. §8 puts the check under the rules, but a
+      brand-new user with no rules is exactly the person who has declared nothing — sending the
+      block away with the empty state would leave the only writer for `typical_income`,
+      `period_cadence` and `period_anchor_date` in the app unreachable until they had made a rule.
+      The check reads $0.00 for them, which is true. %>
+  <%= render "structural_check", presenter: @presenter %>
 </div>

@@ -202,4 +202,114 @@ RSpec.describe BudgetPagePresenter do
       expect(presenter).not_to be_no_rules
     end
   end
+
+  # §8's three lines and §9's gate. Every figure is pinned against a planted literal rather than
+  # against a sum recomputed from the same records — `rules_need == Σ steady_ask` over the fixture
+  # that produced it is an identity, and it passes whichever way both sides are wrong.
+  describe "the structural check" do
+    describe "#rules_need" do
+      it "sums what every rule claims from one period", :aggregate_failures do
+        rate(envelope("Groceries"), 400) # $400 a period
+        create(:pool_budget, :rate, pool: envelope("Utilities", priority: 2), amount: 260) # $120
+        rolling(envelope("Car Insurance", priority: 3), amount: 1_200, anchor: today + 3.months, every: 6)
+
+        expect(presenter.rules_need).to eq(BigDecimal("612.31"))
+        expect(presenter.rules_need).to be_a(BigDecimal)
+      end
+
+      # A user with no rules at all is on the same numeric type as one with rules — an empty
+      # `sum` is Integer 0, and this figure is subtracted from and compared against income.
+      it "is a BigDecimal zero when there are no rules", :aggregate_failures do
+        expect(presenter.rules_need).to eq(0)
+        expect(presenter.rules_need).to be_a(BigDecimal)
+      end
+    end
+
+    describe "#typical_income and #leftover" do
+      it "reports the declared income and what survives the rules", :aggregate_failures do
+        rate(envelope("Groceries"), 400)
+
+        expect(presenter.typical_income).to eq(2_400)
+        expect(presenter.typical_income).to be_a(BigDecimal)
+        expect(presenter.leftover).to eq(2_000)
+      end
+
+      # NIL, NOT ZERO. Zero is a claim about the user's income; nil is the absence of one, and
+      # the block renders its invitation off exactly that distinction.
+      it "answers nil for both when no income is declared", :aggregate_failures do
+        user.update!(typical_income: nil)
+        rate(envelope("Groceries"), 400)
+
+        expect(presenter.typical_income).to be_nil
+        expect(presenter.leftover).to be_nil
+      end
+
+      it "goes negative when the rules outrun the income" do
+        rate(envelope("Rent"), 3_000)
+
+        expect(presenter.leftover).to eq(-600)
+      end
+    end
+
+    describe "#underwater?" do
+      it "is true when the rules claim more than the declared income" do
+        rate(envelope("Rent"), 3_000)
+
+        expect(presenter).to be_underwater
+      end
+
+      it "is false when they fit" do
+        rate(envelope("Rent"), 500)
+
+        expect(presenter).not_to be_underwater
+      end
+
+      # The boundary `>` sits on: rules that consume the income exactly are not a structural
+      # problem, and a `>=` would tell a user their budget is impossible on the day it balances.
+      it "is false when they land exactly on the income" do
+        rate(envelope("Rent"), 2_400)
+
+        expect(presenter).not_to be_underwater
+      end
+
+      # Unanswered is not covered. Without this gate a user who has declared nothing would be
+      # told their budget fits an income they never stated.
+      it "is false when no income is declared" do
+        user.update!(typical_income: nil)
+        rate(envelope("Rent"), 3_000)
+
+        expect(presenter).not_to be_underwater
+      end
+
+      # THE SAME DIVERGENCE HomePresenter's redefinition pins, from this page's side: a $5,200
+      # premium due inside this period asks for all of it now, and this page must still read the
+      # standing claim of $200 a period.
+      it "is false in a catch-up period whose rules still fit", :aggregate_failures do
+        rolling(envelope("Car Insurance"), amount: 5_200, anchor: today + 3.days, every: 12)
+
+        expect(presenter.rules_need).to eq(200)
+        expect(presenter).not_to be_underwater
+      end
+    end
+
+    describe "#declared?" do
+      it "is true once income and cadence are both set" do
+        expect(presenter).to be_declared
+      end
+
+      it "is false without an income" do
+        user.update!(typical_income: nil)
+
+        expect(presenter).not_to be_declared
+      end
+
+      # A figure printed "a period" at a user who has not said how long a period is has no unit,
+      # so the block withholds the three lines until both halves exist.
+      it "is false without a cadence" do
+        user.update!(period_cadence: nil, period_anchor_date: nil)
+
+        expect(presenter).not_to be_declared
+      end
+    end
+  end
 end

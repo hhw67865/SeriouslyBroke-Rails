@@ -28,9 +28,22 @@ class BudgetPagePresenter
 
   attr_reader :user, :today
 
-  def initialize(user:, today: Date.current)
+  # THE RECORD THE DECLARATION FORM EDITS, which is `user` on every path but one.
+  #
+  # A refused declaration leaves the rejected values and the errors on the in-memory user, and the
+  # form must keep both — otherwise a validation failure silently throws away what was typed. But
+  # the FIGURES must not read them: the row was not written, so a block computed from those values
+  # would print "$2,400.00 a period" at a user whose income the database still holds as nil, under
+  # a message saying the save failed. Measured in the browser, not reasoned about.
+  #
+  # Hence two objects on that one path: `user` for what is true, `declaration` for what was typed.
+  # See BudgetPageController#update.
+  attr_reader :declaration
+
+  def initialize(user:, today: Date.current, declaration: nil)
     @user = user
     @today = today
+    @declaration = declaration || user
   end
 
   # The top half of §8: pools in fill order, each carrying its rules in due order.
@@ -67,6 +80,43 @@ class BudgetPagePresenter
   # has rather than of #pool_groups: a user whose only rules are orphans has rules, and telling
   # them they have none above a list of their own rules is a screen contradicting itself.
   def no_rules? = rules.empty?
+
+  # §8's structural check, three lines: what the rules claim from a period, what the user says
+  # they bring in, and the difference.
+  #
+  # `Budget.steady_need`, NOT a sum over #rules — even though #rules is already loaded and
+  # preloaded, and this therefore costs a second pass over the same rows. The figure is read by
+  # this page, by Home's standing band and (Task 9) by the sacrifice view, and the moment two of
+  # them spell the sum themselves they are free to disagree about which rules count. One reader,
+  # measured: see the query note in the task report.
+  def rules_need = @rules_need ||= Budget.steady_need(user, today: today)
+
+  # NIL, NOT ZERO, for a user who has not declared one. Zero is a claim — "you bring in nothing"
+  # — and it would make every user with a single rule read as underwater on a screen they have
+  # not yet told anything. The block renders its invitation off this nil.
+  #
+  # `.to_d` because the comparison and the subtraction below both meet `rules_need`, which is
+  # always BigDecimal. The `money` column casts, but an in-memory user assigned
+  # `typical_income: 2400` holds the Integer.
+  def typical_income = user.typical_income&.to_d
+
+  # What is left after every rule is funded — the third line of §8, and the buffer's own source.
+  # Nil wherever #typical_income is, because there is nothing to subtract from.
+  def leftover = typical_income && (typical_income - rules_need)
+
+  # §9's gate, and the ONE state the sacrifice button renders in.
+  #
+  # Steady need against declared income, never `HomePresenter#total_required` against it — see
+  # Budget#steady_ask. `typical_income.present?` first: an undeclared income is not "covered", it
+  # is unanswered, and the block says so rather than showing a button for a comparison nobody has
+  # made.
+  def underwater? = typical_income.present? && rules_need > typical_income
+
+  # Whether the check has anything to check. Both halves are required: without a cadence
+  # `rules_need` still answers (Budget#steady_ask treats the period as a month) but it answers
+  # about a period the user has not agreed to, and printing "$1,668 a period" at someone who has
+  # not said how long a period is states a figure with no unit.
+  def declared? = user.typical_income.present? && user.period_cadence.present?
 
   private
 

@@ -609,5 +609,43 @@ RSpec.describe HomePresenter do
 
       expect(presenter).not_to be_structurally_underwater
     end
+
+    # THE CASE THE OLD READER GOT WRONG, and the pin on the redefinition.
+    #
+    # This reader used to compare `total_required` — THIS period's ask, catch-up included. A
+    # $5,200 annual premium falling due inside the current period asks for all $5,200 now, so
+    # `total_required` clears the declared $2,400 twice over and the band said "your budget
+    # doesn't fit your income" at a user whose rules cost $200 a period against $2,400 of income.
+    # Nothing is structurally wrong here — one bill is simply due, and reallocation IS the fix.
+    #
+    # Both figures asserted, so the example states the divergence rather than just its outcome:
+    # if `total_required` ever stopped exceeding the income the example would pass for the wrong
+    # reason and prove nothing about which reader is in use.
+    it "is false in a catch-up period whose rules still fit the income", :aggregate_failures do
+      create(
+        :pool_budget,
+        pool: envelope("Car Insurance", priority: 1),
+        amount: 5_200,
+        interval_months: 12,
+        anchor_date: today + 3.days
+      )
+
+      expect(presenter.total_required).to be > user.typical_income
+      expect(Budget.steady_need(user, today: today)).to eq(200)
+      expect(presenter).not_to be_structurally_underwater
+    end
+
+    # The other half of the divergence, and the dangerous one: a period in which everything has
+    # already been funded asks for nothing, so the old reader read $0 against $2,400 and stayed
+    # silent on a budget that cannot be made to work at any distribution. $3,000 a period of rules
+    # against $2,400 of income is broken whether or not this month's money has been handed out.
+    it "is true on a fully funded period whose rules do not fit", :aggregate_failures do
+      rent = envelope("Rent", priority: 1)
+      rate(rent, 3_000)
+      create(:pool_movement, from_pool: checking, to_pool: rent, amount: 3_000, date: today)
+
+      expect(presenter.total_required).to eq(0)
+      expect(presenter).to be_structurally_underwater
+    end
   end
 end

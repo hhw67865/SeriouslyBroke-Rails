@@ -296,8 +296,26 @@ class HomePresenter
     Waterfall.cutoff(waterfall) { |row| [row[:funded], row[:short]] }
   end
 
+  # DOES THE BUDGET FIT THE INCOME — a question about the shape of the rules, not about this
+  # afternoon's cash.
+  #
+  # REDEFINED off `Budget.steady_need`. It used to compare `total_required`, which is THIS
+  # period's ask — catch-up on anything behind, zero on anything already funded — and the two
+  # diverge in both directions on the same budget: a period spent catching up on a slipped bill
+  # reported "your budget doesn't fit your income" at someone whose rules fit it comfortably, and
+  # the period right after a distribution reported nothing at all on a budget that does not fit.
+  # Neither reading is what §9 promises, and the second is the dangerous one — the whole point of
+  # the check is that reallocation cannot fix a budget that does not fit.
+  #
+  # Nothing changes retroactively for any existing user: `typical_income` had a column, a
+  # validation and this reader but NO WRITER anywhere in the app until the Budget page's
+  # declaration form landed alongside this change, so every user's `typical_income` was nil and
+  # this method has been unconditionally false in production. The band below it is new ground.
+  #
+  # `today` rather than `Date.current`, because this presenter is built against a clock and a
+  # dated one-off rule's steady claim depends on how many periods are left before it.
   def structurally_underwater?
-    user.typical_income.present? && total_required > user.typical_income.to_d
+    user.typical_income.present? && Budget.steady_need(user, today: today) > user.typical_income.to_d
   end
 
   # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE — PoolStatus#funding_gap, not #amount.

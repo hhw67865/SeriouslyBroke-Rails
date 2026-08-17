@@ -78,7 +78,99 @@ class Budget < ApplicationRecord
     :every_n
   end
 
+  # PER-PERIOD STEADY-STATE COST OF THIS RULE — what it claims from a typical paycheck, NOT what
+  # it asks this period. That second question is `PoolCalculator#required` / `BudgetCalculator
+  # #required`, and the two are deliberately different figures with deliberately different names:
+  #
+  #   #required   — this period's ask. Catch-up on a bill that slipped, zero on one already
+  #                 funded, the whole remainder on one due before the next boundary. It moves
+  #                 every time money is distributed.
+  #   #steady_ask — the standing claim. What this rule costs a period FOREVER, assuming nothing
+  #                 is behind and nothing is ahead. It moves only when the rule itself changes.
+  #
+  # §9's structural check ("your rules need $X a period / you typically bring in $Y") is a
+  # question about the SHAPE of a budget, so it can only be asked of the steady figure. Asked of
+  # #required it answers a different question in the same words: a catch-up period reads
+  # underwater on a budget that fits fine, and the period right after a distribution reads fine
+  # on a budget that does not fit at all.
+  #
+  # BUILT ON #cadence, not on a fifth reading of `basis`/`interval_months`/`anchor_date`. The
+  # shape classification is that method's and the two helpers that used to hold a copy each were
+  # collapsed into it one task ago; a private cascade here would reopen exactly that seam.
+  #
+  # `amount * 12 / (periods_per_year * interval)` rather than `amount / periods_in_interval`, and
+  # the difference is not cosmetic: `periods_in_interval` for a monthly rule under a biweekly user
+  # is 26/12 = 2.1666…, and an Integer spelling of it truncates to 2 — a monthly rule would ask
+  # for half its amount every fortnight, 8% over the year. Dividing once, at the end, keeps the
+  # fraction. `amount.to_d` first because an in-memory record assigned `amount: 260` holds an
+  # Integer and `Integer * 12 / Integer` truncates the cents.
+  #
+  # `user` is the divisor's owner. The one-off branch reaches the rule's OWN owner through the
+  # calculator instead (`BudgetCalculator#periods_until_due`); the two are the same record by
+  # construction, since every caller reaches this through `Budget.for_user(user)`.
+  #
+  # `today:` is not in the plan's sketch and is needed: the one-off shape amortises over the
+  # periods between NOW and its due date, so a caller with a fixed clock (every calculator in
+  # this app takes one) must be able to hand its own down rather than have this reach for
+  # `Date.current` behind it.
+  def steady_ask(user, today: Date.current)
+    case cadence
+    when :per_paycheck then amount.to_d
+    when :one_off then one_off_steady_ask(today)
+    else (amount.to_d * 12 / (user.periods_per_year * (interval_months || 1))).round(2)
+    end
+  end
+
+  # WHAT EVERY RULE THIS USER OWNS CLAIMS FROM ONE PERIOD — the single reader behind §9's
+  # structural check, `BudgetPagePresenter#rules_need` and `HomePresenter#structurally_underwater?`
+  # alike. Two screens asking the same question of two different sums is how one page tells a user
+  # their budget fits while the other says it does not.
+  #
+  # `Budget.for_user`, so it counts BOTH modes: a category cap and a rule on an account-less pool
+  # are money the user has committed, whether or not any distribution can currently reach them.
+  # Leaving them out would understate the need on exactly the budgets that are hardest to fix.
+  #
+  # `sum(0.to_d)` with an explicit BigDecimal seed. An empty relation's `sum` is Integer `0`, and
+  # this figure is compared against `typical_income` and subtracted from it — the seed keeps a
+  # user with no rules at all on the same numeric type as one with rules.
+  #
+  # THE PRELOAD IS MEASURED, and the measurement corrected a claim this comment first made. On the
+  # demo seeds it buys NOTHING: 22 rules cost 5 statements with it and 5 without, because only two
+  # of them are dated and each dated rule is what reaches off the `budgets` row at all. It is kept
+  # because the shape differs even where the figure does not — `#steady_ask`'s one-off branch
+  # builds a BudgetCalculator, which asks `budget.user` for the period boundaries and `budget.item`
+  # for what has been paid, both on other tables. Planted 20 further dated rules and rolled back:
+  # 42 rules cost 45 statements un-preloaded and still 5 with the preload. O(1) against O(n) in
+  # dated rules, on a reader three screens call.
+  #
+  # `category: :user` and `pool: :user` rather than a bare `:user`, because a budget has no user
+  # column — `Budget#user` walks whichever owner the rule has.
+  def self.steady_need(user, today: Date.current)
+    for_user(user)
+      .includes(:item, category: :user, pool: :user)
+      .sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
+  end
+
   private
+
+  # A ONE-TIME RULE HAS NO INTERVAL TO DIVIDE BY, so its steady claim is what saving for it costs
+  # between now and the day it is due — the same divisor `BudgetCalculator#required` uses, taken
+  # from the same place so the two cannot disagree about how many periods are left.
+  #
+  # ZERO ONCE FULFILLED: a settled bill claims nothing from any future period, and telling a user
+  # their rules need money for a bill they have already paid would put the structural check
+  # permanently and unfixably underwater. This is `BudgetCalculator#shortfall`'s own fulfilled
+  # gate, said again at the only other place that asks a one-off rule for a figure.
+  #
+  # `periods_until_due` floors at 1, so a user with no declared cadence — whose
+  # `period_boundaries` is empty — gets the whole amount in one period rather than a division by
+  # zero. Blunt, and it is the honest answer: without a period there is nothing to spread over.
+  def one_off_steady_ask(today)
+    calc = calculator(today: today)
+    return 0.to_d if calc.fulfilled?
+
+    (amount.to_d / calc.periods_until_due).round(2)
+  end
 
   def exactly_one_owner
     errors.add(:base, "must belong to either a category or a pool") if !category_mode? && !pool_mode?
