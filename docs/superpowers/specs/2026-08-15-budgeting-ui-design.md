@@ -402,7 +402,9 @@ queries in exactly the place the money maths lives.
 It is also more truthful: if you decide groceries need $470 and you put in $420,
 you *are* $50 short. The one rough edge — a pool flipping from *on track* to
 *behind* right after a distribution — is handled with wording, not architecture:
-`behind $50 — you raised this rule after distributing`.
+`behind $50 — you changed a rule here after distributing`. ("Changed", not "raised":
+`updated_at` cannot tell a raise from a cut, and a pool's row cannot name which of its
+rules moved — the wording claims exactly what the signal knows.)
 
 ## 9. The structural check
 
