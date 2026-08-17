@@ -67,6 +67,34 @@ class Pool < ApplicationRecord
   after_initialize :set_default_start_date, if: :new_record?
   after_create :create_auto_categories
 
+  # THE LEDGER OUTLIVES THE ENVELOPE — spec §7a's "reconsider `dependent: :destroy` on
+  # `movements_out` before reallocation ships", answered.
+  #
+  # Those two associations alone delete every movement with this pool on either end, and in a
+  # chain that takes a bystander's money with it: Checking → B $100, B → C $60, and destroying B
+  # deletes BOTH rows, so C's inflow evaporates and C silently drops $60. `Σ pools` still equals
+  # the bank balance either way — every movement nets to zero in-tree, so conservation is NOT the
+  # property that breaks — which is exactly why the defect survived this long. Individual
+  # balances are what break.
+  #
+  # So before anything is deleted, every movement with this pool on an end is RE-POINTED: the
+  # destroyed endpoint becomes the pool's own account, which is where the money physically sits
+  # anyway. B → C $60 becomes Checking → C $60 and C never moves; Checking → B $100 becomes
+  # Checking → Checking, which is not a movement at all, so it is destroyed. What is left is the
+  # buffer holding exactly what B held, and a history that reads from and to the buffer.
+  #
+  # `prepend: true` IS LOAD-BEARING. `has_many … dependent:` registers its own `before_destroy`
+  # when the association is declared, and callbacks run in declaration order — so a plain
+  # `before_destroy` here would run AFTER the movements had already been deleted and would have
+  # nothing left to re-point.
+  #
+  # ACCOUNTS ARE EXCLUDED BY TYPE, not by whether they have somewhere to go. An account has no
+  # `account` to absorb anything, `restrict_with_error` on #child_pools already refuses the only
+  # shape that matters, and the movements left on a CHILDLESS account are by construction
+  # cross-account transfers — which spec §5 puts out of scope. `dependent: :destroy` therefore
+  # stays as the backstop for that one case rather than being replaced.
+  before_destroy :return_movements_to_the_account, prepend: true
+
   # Configure searchable fields
   searchable :name, label: "Name"
   searchable :category, through: :categories, column: :name, label: "Category"
@@ -226,6 +254,101 @@ class Pool < ApplicationRecord
   end
 
   private
+
+  # Every movement this pool is an end of, handed to the account that is about to hold its
+  # money. Runs inside `destroy`'s own transaction, so a re-point that will not save takes the
+  # whole deletion down with it and NOTHING moves — the alternative is a pool half detached from
+  # its own history, which no screen could report and no user could undo.
+  #
+  # Nothing here rescues, for `.apply_fill_order`'s reason: `update!` runs the full validation
+  # stack, which is deliberate — a deletion must not be the request that sneaks an invalid
+  # movement past the model — so a row that was ALREADY invalid before the destroy raises
+  # RecordInvalid rather than being quietly re-pointed or quietly dropped.
+  #
+  # ONE PASS TO FIND THE TARGETS, THEN ONE PASS TO WRITE THEM. The orphan refusal below has to
+  # be able to say "this destroy cannot happen" before the first row has moved; interleaved, a
+  # pool with one absorbable movement and one unabsorbable one would write the first and then
+  # abort, and rely on the transaction to undo a write it should never have attempted.
+  #
+  # `order(:id)`, matching AllocationCommitter#previous_distribution: each write here `touch`es
+  # both of its pools, so two deletions racing over the same rows must take them in one fixed
+  # order or deadlock.
+  def return_movements_to_the_account
+    return if pool_type_account?
+
+    targets = adjoining_movements.index_with { |movement| absorbing_account_for(movement) }
+    return if targets.empty?
+    return refuse_for_want_of_an_account if targets.value?(nil)
+
+    targets.each { |movement, account| absorb(movement, account) }
+    movements_in.reset
+    movements_out.reset
+  end
+
+  # `PoolMovement` directly rather than through the two associations, because the associations
+  # are the very things about to delete these rows: a relation loaded here would be the target
+  # `dependent: :destroy` walks, and it must be re-read after the re-point rather than reused.
+  # (Hence the two `reset`s above — a caller that touched `pool.movements_in` before calling
+  # `destroy` would otherwise hand the dependency a cached list of rows that have already moved.)
+  def adjoining_movements
+    PoolMovement.where(from_pool_id: id).or(PoolMovement.where(to_pool_id: id)).order(:id)
+  end
+
+  # Where this movement's money is going once this pool is gone: this pool's own account, and
+  # for an account-less pool the COUNTERPARTY's account instead.
+  #
+  # The fallback is not a courtesy. Savings pools may still be account-less until Plan 3's
+  # backfill (see #require_account_for_budget_pools), and a movement of an orphan's is by
+  # definition a same-user transfer with a real pool on the other end — so the counterparty's
+  # buffer is the one place in the tree the money can land while staying inside the account it
+  # is already sitting in. A counterparty that is ITSELF an account stands in as its own, which
+  # is what makes an orphan → Checking transfer collapse rather than re-point.
+  #
+  # NIL is an answer, not a failure to compute one: two account-less pools transferring between
+  # themselves name no account anywhere, and there is nowhere for the row to go.
+  def absorbing_account_for(movement)
+    account || buffer_of(other_end_of(movement))
+  end
+
+  def buffer_of(pool) = pool.pool_type_account? ? pool : pool.account
+
+  # A movement whose OTHER end is already the absorbing account collapses to account → account
+  # once this one is re-pointed, and a movement from an account to itself is not a movement: it
+  # is the buffer's own money sitting still. Destroyed rather than saved, because
+  # #pools_must_differ would refuse it — and rightly. This is the ordinary shape of a
+  # distribution's own rows: an allocation runs account → envelope and a sweep runs envelope →
+  # account, so destroying the envelope collapses both.
+  #
+  # `kind` is deliberately untouched on the rows that survive. A re-pointed transfer is still
+  # the transfer the user made; `PoolMovement.distributed` selects allocations and sweeps, and
+  # those are exactly the rows that collapse, so a re-pointed row cannot be picked up by a later
+  # distribution's replacement.
+  def absorb(movement, account)
+    if other_end_of(movement) == account
+      movement.destroy!
+    elsif movement.from_pool_id == id
+      movement.update!(from_pool: account)
+    else
+      movement.update!(to_pool: account)
+    end
+  end
+
+  # THE END THAT IS NOT THIS POOL. The two ends always differ (#pools_must_differ and a check
+  # constraint), so exactly one of them is this pool and the other is always found.
+  def other_end_of(movement) = movement.from_pool_id == id ? movement.to_pool : movement.from_pool
+
+  # The one destroy this task refuses, and it refuses in the same vocabulary
+  # `dependent: :restrict_with_error` does — an error on `:base` and a halted callback chain —
+  # so PoolsController#destroy renders it through the branch that already exists for an account
+  # holding pools.
+  def refuse_for_want_of_an_account
+    errors.add(
+      :base,
+      "can't be deleted while it holds transfers and sits in no account — there is no buffer " \
+      "for its money to return to. Move it into an account first."
+    )
+    throw(:abort)
+  end
 
   def account_matches_pool_type
     return errors.add(:account, "cannot be set on an account") if pool_type_account? && account_id.present?

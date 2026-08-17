@@ -34,4 +34,26 @@ module PoolsHelper
 
     "#{kind} in #{pool.account.name}"
   end
+
+  # WHAT DELETING THIS POOL ACTUALLY DOES, said before it happens.
+  #
+  # The page used to warn "This action cannot be undone" over every pool there is, which was
+  # true and told the user nothing about the money. Since Pool#return_movements_to_the_account
+  # an envelope's balance is not destroyed with it — it returns to the account's buffer, and the
+  # transfers that filled it re-read as transfers to and from that buffer. A confirm that
+  # implies the money vanishes is a page lying about its own outcome in the more frightening
+  # direction.
+  #
+  # ACCOUNTS KEEP THE OLD SENTENCE, and so does an account-less pool. An account has no buffer
+  # above it to absorb anything (and one holding pools is refused outright by
+  # `dependent: :restrict_with_error`, which is a different message on a different screen); an
+  # orphan's money lands in whatever account is on the far end of its transfers, which is not a
+  # place this page can name.
+  def pool_delete_confirmation(pool)
+    return "Are you sure you want to delete this pool? This action cannot be undone." if pool.account.blank?
+
+    "Delete #{pool.name}? Any money it is holding returns to #{pool.account.name}'s buffer, " \
+      "and its transfer history re-reads as money moving to and from that buffer. " \
+      "This action cannot be undone."
+  end
 end

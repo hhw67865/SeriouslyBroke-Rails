@@ -60,6 +60,51 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       expect(Pool.exists?(pool_id)).to be(false)
     end
 
+    # THE CONFIRM HAS TO DESCRIBE THE OUTCOME, and since Pool#return_movements_to_the_account
+    # the outcome is not "the money is gone". Both directions, because a sentence that is
+    # printed over every pool there is says nothing about any of them.
+    it "says where an envelope's money goes, naming the account that absorbs it", :aggregate_failures do
+      checking = create(:pool, :account, user: user, name: "Checking")
+      groceries = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+      visit pool_path(groceries)
+
+      confirm = find("button", text: "Delete")["data-turbo-confirm"]
+
+      expect(confirm).to include("returns to Checking's buffer")
+      expect(confirm).to include("re-reads as money moving to and from that buffer")
+    end
+
+    it "keeps the plain warning on a pool with no account above it to absorb anything" do
+      confirm = find("button", text: "Delete")["data-turbo-confirm"]
+
+      expect(confirm).to eq("Are you sure you want to delete this pool? This action cannot be undone.")
+    end
+
+    # The §7a chain, deleted through the actual button: $500 into Checking, $100 allocated to B,
+    # $60 of it transferred on to C. Deleting B used to take C's inflow with it.
+    it "hands the deleted envelope's balance to the buffer and leaves its neighbour alone", :aggregate_failures do
+      checking, envelope_b, envelope_c = chain
+      visit pool_path(envelope_b)
+
+      accept_confirm { click_button "Delete" }
+
+      expect(page).to have_content("Pool was successfully deleted")
+      expect(envelope_c.calculator.balance).to eq(60) # unchanged
+      expect(checking.calculator.balance).to eq(440) # 400, plus B's own 40
+      expect(Pool.find(checking.id).total).to eq(500) # the deposit, unmoved
+    end
+
+    def chain
+      checking = create(:pool, :account, user: user, name: "Checking")
+      envelope_b = create(:pool, :budget_pool, user: user, account: checking, name: "B")
+      envelope_c = create(:pool, :budget_pool, user: user, account: checking, name: "C")
+      category = create(:category, :income, user: user, pool: checking, name: "Salary")
+      create(:entry, item: create(:item, category: category), amount: 500, date: Date.current)
+      create(:pool_movement, from_pool: checking, to_pool: envelope_b, amount: 100, kind: :allocation)
+      create(:pool_movement, from_pool: envelope_b, to_pool: envelope_c, amount: 60, kind: :transfer)
+      [checking, envelope_b, envelope_c]
+    end
+
     it "refuses to delete an account that still holds pools" do
       checking = create(:pool, :account, user: user, name: "Checking")
       create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
