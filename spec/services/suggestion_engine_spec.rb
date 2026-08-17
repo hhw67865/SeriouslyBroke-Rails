@@ -53,6 +53,26 @@ RSpec.describe SuggestionEngine do
     owned
   end
 
+  # ONE OF EVERY KIND, with the amounts ASCENDING in kind order — so a sort by size alone would
+  # produce the exact reverse of the answer, and a sort by kind alone could not order ties. Also the
+  # fixture the query count is pinned on, because it exercises every read the engine makes.
+  def one_of_each
+    water = item("Water", in_category: category("Bills"))
+    spend(water, 120, on: Date.new(2025, 11, 10))
+    spend(water, 120, on: Date.new(2025, 12, 10))
+
+    beans = item("Beans", in_category: category("Coffee"))
+    in_last_three_periods(beans, 150)
+
+    groceries = envelope("Groceries")
+    create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 100)
+    in_drift_window(item("Food", in_category: category("Groceries Spending", pool: groceries)), 200)
+
+    netflix = envelope("Netflix")
+    backed = claimed_item("Netflix", pool: netflix, amount: 250, basis: :per_paycheck, interval_months: nil)
+    spend(backed, 250, on: Date.new(2025, 11, 20))
+  end
+
   def query_count
     count = 0
     subscription = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
@@ -98,7 +118,9 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(water)
       expect(suggestion.amount).to eq(210)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expect(suggestion.detail).to eq(interval_months: 3, occurrences: 2, guessed: false, category_name: "Bills", last_seen_on: Date.new(2026, 1, 15), due_on: Date.new(2026, 4, 15))
+      expected = { interval_months: 3, occurrences: 2, guessed: false, category_name: "Bills", last_seen_on: Date.new(2026, 1, 15), due_on: Date.new(2026, 4, 15), per_period_cost: 32.31 }
+
+      expect(suggestion.detail).to eq(expected)
     end
 
     it "does not fire on an item that already carries a rule" do
@@ -179,18 +201,95 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.detail[:due_on]).to eq(Date.new(2026, 3, 1))
     end
 
+    # `Date#>>` clamps into a short month, and feeding the clamped date back in makes the clamp
+    # permanent: Jan 31 → Feb 28 → Mar 28 → Apr 28, three days before the bill is actually paid.
+    # Every candidate is `>>`-ed from the source instead, so the 31st survives February.
+    it "keeps the day of the month when the roll passes through a short one", :aggregate_failures do
+      rent = item("Rent", in_category: category("Bills"))
+      spend(rent, 900, on: Date.new(2025, 12, 31))
+      spend(rent, 900, on: Date.new(2026, 1, 31))
+
+      suggestion = of_kind(:dated_bill, on: Date.new(2026, 4, 10)).sole
+
+      expect(suggestion.detail[:interval_months]).to eq(1)
+      expect(suggestion.detail[:due_on]).to eq(Date.new(2026, 4, 30))
+      expect(suggestion.detail[:due_on]).not_to eq(Date.new(2026, 4, 28)) # the clamped-forward answer
+    end
+
     it "carries a prefill for the pool and the rule the proposal would create", :aggregate_failures do
       user.update!(default_account: checking)
-      water = item("Water", in_category: category("Bills"))
+      bills = category("Bills")
+      water = item("Water", in_category: bills)
       spend(water, 200, on: Date.new(2025, 10, 15))
       spend(water, 210, on: Date.new(2026, 1, 15))
 
       prefill = of_kind(:dated_bill).sole.prefill
 
-      expect(prefill[:pool]).to eq(name: "Water", pool_type: "budget", account_id: checking.id)
-      expect(prefill[:budget]).to eq(
-        amount: 210, basis: "monthly", interval_months: 3, anchor_date: Date.new(2026, 4, 15), item_id: water.id
-      )
+      expect(prefill[:pool]).to eq(name: "Bills", pool_type: "budget", account_id: checking.id)
+      expect(prefill[:category_id]).to eq(bills.id)
+      expect(prefill[:budget]).to eq(amount: 210, basis: "monthly", interval_months: 3, anchor_date: Date.new(2026, 4, 15), item_id: water.id)
+    end
+
+    # THE ENVELOPE IS THE CATEGORY'S. An envelope named after the ITEM is refused by
+    # `Budget#item_must_belong_to_pool` for every bill, and — since a category points at one pool —
+    # accepting one item-named proposal would make its siblings unacceptable.
+    it "gives two bills in one category the same envelope, so both proposals can be accepted", :aggregate_failures do
+      utilities = category("Utilities")
+      ["Phone", "Internet"].each_with_index do |name, index|
+        bill = item(name, in_category: utilities)
+        spend(bill, 60 + index, on: Date.new(2025, 11, 20))
+        spend(bill, 60 + index, on: Date.new(2025, 12, 20))
+      end
+
+      halves = of_kind(:dated_bill).map { |suggestion| suggestion.prefill.except(:budget) }
+
+      expect(halves.uniq.size).to eq(1)
+      expect(halves.first).to eq(pool: { name: "Utilities", pool_type: "budget", account_id: nil }, category_id: utilities.id)
+      expect(of_kind(:dated_bill).map { |s| s.prefill[:budget][:item_id] }.uniq.size).to eq(2)
+    end
+
+    it "reuses the envelope a category already points at rather than proposing another", :aggregate_failures do
+      pool = envelope("Utilities")
+      bill = item("Phone", in_category: category("Utility Bills", pool: pool))
+      spend(bill, 60, on: Date.new(2025, 11, 20))
+      spend(bill, 60, on: Date.new(2025, 12, 20))
+
+      prefill = of_kind(:dated_bill).sole.prefill
+
+      expect(prefill[:pool_id]).to eq(pool.id)
+      expect(prefill).not_to have_key(:pool)
+      expect(prefill).not_to have_key(:category_id)
+    end
+
+    # An ACCOUNT is not reusable — `Budget#pool_must_not_be_an_account` refuses a rule on one — so a
+    # category pointing at an account gets the same new-envelope offer an unpooled one does. The
+    # demo's "Estimated Taxes" category is exactly this shape.
+    it "offers a new envelope when the category points at an account, which cannot carry a rule", :aggregate_failures do
+      taxes = category("Estimated Taxes", pool: checking)
+      bill = item("Federal Estimate", in_category: taxes)
+      spend(bill, 1_600, on: Date.new(2025, 11, 20))
+
+      prefill = of_kind(:dated_bill).sole.prefill
+
+      expect(prefill).not_to have_key(:pool_id)
+      expect(prefill[:pool]).to eq(name: "Estimated Taxes", pool_type: "budget", account_id: nil)
+      expect(prefill[:category_id]).to eq(taxes.id)
+    end
+
+    # Item 11: the panel leads with the claim that costs the most per period, not the largest
+    # sticker. A $1,600 bill once a year is $61.54 a period; $1,500 every month is $692.31.
+    it "ranks bills by what they cost a period, not by the size of the bill", :aggregate_failures do
+      annual = item("Tax bill", in_category: category("Tax"))
+      spend(annual, 1_600, on: Date.new(2025, 11, 20))
+      rent = item("Rent", in_category: category("Home"))
+      spend(rent, 1_500, on: Date.new(2025, 11, 20))
+      spend(rent, 1_500, on: Date.new(2025, 12, 20))
+
+      result = of_kind(:dated_bill)
+
+      expect(result.map(&:amount)).to eq([1_500, 1_600])
+      expect(result.map { |s| s.detail[:per_period_cost] }).to eq([692.31, 61.54])
+      expect(result.map(&:subject)).to eq([rent, annual])
     end
   end
 
@@ -205,7 +304,9 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(coffee)
       expect(suggestion.amount).to eq(120)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expect(suggestion.detail).to eq(periods_present: 3, periods_measured: 3, periods_window: 6, observed_total: 360, first_seen_on: Date.new(2025, 12, 26), guessed: false)
+      expected = { periods_present: 3, periods_measured: 3, periods_window: 6, observed_total: 360, first_seen_on: Date.new(2025, 12, 30), per_period_cost: 120, guessed: false }
+
+      expect(suggestion.detail).to eq(expected)
     end
 
     it "does not fire on two of six periods" do
@@ -214,6 +315,28 @@ RSpec.describe SuggestionEngine do
       spend(beans, 120, on: Date.new(2026, 1, 26)) # P5
 
       expect(of_kind(:rate)).to be_empty
+    end
+
+    # The second gate, and this task's own ruling: three appearances make it a flow, but a flow that
+    # stopped three periods ago is not a claim on next period. Without it the divisor — which
+    # anchors on FIRST appearance — proposes the dead flow as ongoing at half its old rate.
+    it "does not fire on a flow that stopped before the last three periods", :aggregate_failures do
+      beans = item("Beans", in_category: category("Coffee"))
+      spend(beans, 300, on: Date.new(2025, 11, 20)) # P0
+      spend(beans, 300, on: Date.new(2025, 12, 5)) # P1
+      spend(beans, 300, on: Date.new(2025, 12, 18)) # P2
+
+      expect(of_kind(:rate)).to be_empty
+      expect(of_kind(:dated_bill)).to be_empty # and nothing else picked it up either
+    end
+
+    it "fires when the same three appearances reach into the last three periods" do
+      beans = item("Beans", in_category: category("Coffee"))
+      spend(beans, 300, on: Date.new(2025, 11, 20)) # P0
+      spend(beans, 300, on: Date.new(2025, 12, 5)) # P1
+      spend(beans, 300, on: Date.new(2025, 12, 30)) # P3 — the only difference
+
+      expect(of_kind(:rate).sole.amount).to eq(150) # 900 over the six periods lived through
     end
 
     it "does not fire on a category a pool already covers, however regular the spending" do
@@ -292,12 +415,19 @@ RSpec.describe SuggestionEngine do
   end
 
   describe "drift" do
-    # Four spends of the same size, one in each period of the drift window.
+    # An envelope with a rate rule AND a category pointing at it — a lane that can record spending.
     def rate_envelope(name, amount, **rule)
       pool = envelope(name)
       rule_record = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount, **rule)
       food = item("#{name} food", in_category: category("#{name} Spending", pool: pool))
       [pool, rule_record, food]
+    end
+
+    # The same envelope with NO category pointing at it: it cannot record spending, so its silence
+    # says nothing about the user's behaviour.
+    def unfed_envelope(name, amount)
+      pool = envelope(name)
+      [pool, create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)]
     end
 
     it "reports a rule the spending has outgrown", :aggregate_failures do
@@ -309,9 +439,9 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(rule)
       expect(suggestion.amount).to eq(150)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expect(suggestion.detail).to eq(
-        rule_amount: 100, observed: 150, periods: 4, direction: :up, pool_name: "Groceries", guessed: false
-      )
+      expected = { rule_amount: 100, observed: 150, periods: 4, direction: :up, pool_name: "Groceries", basis: "per_paycheck", per_period_cost: 150, guessed: false }
+
+      expect(suggestion.detail).to eq(expected)
       expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 150 })
     end
 
@@ -365,6 +495,52 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.detail[:direction]).to eq(:up)
     end
 
+    # THE SAME TRAP IN THE HALF THAT WRITES. Everything the panel reports is per-period; the column
+    # the form writes into is MONTHLY on this shape. `amount: 200` there is $92.31 a period — LESS
+    # than the $120 the user was just told was too low, on a suggestion that asked them to raise it.
+    it "puts the drift prefill in the rule's own unit, not in per-period money", :aggregate_failures do
+      pool = envelope("Utilities")
+      rule = create(:pool_budget, :rate, pool: pool, amount: 260)
+      food = item("Bills", in_category: category("Utility Spending", pool: pool))
+      in_drift_window(food, 200)
+
+      suggestion = of_kind(:drift).sole
+
+      expect(suggestion.detail[:basis]).to eq("monthly")
+      expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 433.33 })
+      expect(suggestion.prefill[:budget][:amount]).not_to eq(200)
+      # And the round trip through the app's own normaliser lands back on the observed figure.
+      expect(Budget.new(amount: 433.33, basis: :monthly, interval_months: 1).steady_ask(user, today: today)).to eq(200)
+    end
+
+    it "leaves a per-paycheck rule's prefill alone, because its column is already per-period", :aggregate_failures do
+      _pool, rule, food = rate_envelope("Groceries", 100)
+      in_drift_window(food, 150)
+
+      expect(of_kind(:drift).sole.detail[:basis]).to eq("per_paycheck")
+      expect(of_kind(:drift).sole.prefill).to eq(id: rule.id, budget: { amount: 150 })
+    end
+
+    # Amendment A subtracts item-backed items from the pool's spend, so an item-backed RATE rule
+    # would have its own lane subtracted from the figure meant to describe it.
+    it "does not fire on an item-backed rate rule, whose own lane amendment A subtracts" do
+      pool = envelope("Netflix")
+      backed = claimed_item("Netflix", pool: pool, amount: 20, basis: :per_paycheck, interval_months: nil)
+      in_drift_window(backed, 200)
+
+      expect(of_kind(:drift)).to be_empty
+    end
+
+    it "fires on the same shape once the rule is item-less — the fixture discriminates", :aggregate_failures do
+      pool = envelope("Netflix")
+      rule = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 20)
+      food = item("Netflix", in_category: category("Netflix Spending", pool: pool))
+      in_drift_window(food, 200)
+
+      expect(of_kind(:drift).sole.subject).to eq(rule)
+      expect(of_kind(:drift).sole.amount).to eq(200)
+    end
+
     it "does not fire on a dated rule, whose spending is not a rate" do
       pool = envelope("Car Insurance")
       create(:pool_budget, :recurring, pool: pool, amount: 1_200, anchor_date: Date.new(2026, 6, 1))
@@ -402,15 +578,32 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:drift)).to be_empty
     end
 
-    # The correction the demo forced: verbatim, the demo's $400 grocery rule was reported as having
-    # "averaged $0.00 for 4 periods" purely because no expense category points at that envelope.
-    it "is silent on a pool with no recorded spending at all" do
-      rate_envelope("Groceries", 400)
+    # The correction the demo forced: five of its envelopes have NO expense category pointing at
+    # them, so verbatim they each reported "averaged $0.00 for 4 periods" — including a $400
+    # grocery rule the panel then asked the user to zero.
+    it "is silent on a pool no category feeds, whose silence is about tracking and not about spend" do
+      unfed_envelope("Groceries", 400)
 
       expect(of_kind(:drift)).to be_empty
     end
 
-    it "fires on a single recorded entry, so the silence above is about no evidence and not about size" do
+    # The lane that silence used to swallow. The two fixtures differ ONLY in whether a category
+    # points at the pool; nothing is spent in either.
+    it "reports $0.00 drift on a pool a category does feed and nothing was spent out of", :aggregate_failures do
+      _pool, rule, _food = rate_envelope("Groceries", 400)
+
+      suggestion = of_kind(:drift).sole
+
+      expect(suggestion.subject).to eq(rule)
+      expect(suggestion.amount).to eq(0)
+      expect(suggestion.amount).to be_a(BigDecimal)
+      expect(suggestion.detail[:rule_amount]).to eq(400)
+      expect(suggestion.detail[:observed]).to eq(0)
+      expect(suggestion.detail[:direction]).to eq(:down)
+      expect(suggestion.detail[:periods]).to eq(4)
+    end
+
+    it "fires on a single recorded entry too, so the figure moves with the evidence" do
       _pool, _rule, food = rate_envelope("Groceries", 400)
       spend(food, 40, on: Date.new(2026, 1, 15))
 
@@ -442,7 +635,9 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(rule)
       expect(suggestion.amount).to eq(75)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expect(suggestion.detail).to eq(last_seen_on: Date.new(2025, 11, 20), periods_empty: 3, rule_amount: 75, item_name: backed.name, pool_name: "Netflix", guessed: false)
+      expected = { last_seen_on: Date.new(2025, 11, 20), periods_empty: 3, rule_amount: 75, item_name: backed.name, pool_name: "Netflix", per_period_cost: 75, guessed: false }
+
+      expect(suggestion.detail).to eq(expected)
       expect(suggestion.prefill).to eq(id: rule.id)
     end
 
@@ -489,34 +684,16 @@ RSpec.describe SuggestionEngine do
   end
 
   describe "order" do
-    # One of every kind, with the amounts ASCENDING in kind order — so a sort by amount alone would
-    # produce the exact reverse of the answer, and a sort by kind alone could not order ties.
-    def one_of_each
-      water = item("Water", in_category: category("Bills"))
-      spend(water, 120, on: Date.new(2025, 11, 10))
-      spend(water, 120, on: Date.new(2025, 12, 10))
-
-      beans = item("Beans", in_category: category("Coffee"))
-      in_last_three_periods(beans, 150)
-
-      groceries = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 100)
-      food = item("Food", in_category: category("Groceries Spending", pool: groceries))
-      in_drift_window(food, 200)
-
-      netflix = envelope("Netflix")
-      backed = claimed_item("Netflix", pool: netflix, amount: 250, basis: :per_paycheck, interval_months: nil)
-      spend(backed, 250, on: Date.new(2025, 11, 20))
-    end
-
-    it "ranks by kind first, and the amounts prove nothing else is deciding", :aggregate_failures do
+    it "ranks by kind first, and the figures prove nothing else is deciding", :aggregate_failures do
       one_of_each
 
       result = suggestions
 
       expect(result.map(&:kind)).to eq([:dated_bill, :rate, :drift, :dead_rule])
       expect(result.map(&:amount)).to eq([120, 150, 200, 250])
-      expect(result.map(&:amount).sort.reverse).not_to eq(result.map(&:amount))
+      # The sort key, ascending in kind order too — so neither it nor `amount` could produce this
+      # order on its own.
+      expect(result.map { |suggestion| suggestion.detail[:per_period_cost] }).to eq([55.38, 150, 200, 250])
     end
 
     it "puts the larger amount first within a kind" do
@@ -550,12 +727,11 @@ RSpec.describe SuggestionEngine do
       expect(described_class::Suggestion.members).to eq([:kind, :subject, :amount, :detail, :prefill])
     end
 
-    it "says whether the interval was guessed on every kind, not only the guessing one" do
-      one = item("Water", in_category: category("Bills"))
-      spend(one, 120, on: Date.new(2025, 11, 10))
-      spend(one, 120, on: Date.new(2025, 12, 10))
+    it "carries `guessed:` and `per_period_cost:` on every kind, not only on the kinds that need them", :aggregate_failures do
+      one_of_each
 
-      expect(suggestions.map { |suggestion| suggestion.detail.key?(:guessed) }).to eq([true])
+      expect(suggestions.map { |suggestion| suggestion.detail.key?(:guessed) }).to eq([true, true, true, true])
+      expect(suggestions.map { |suggestion| suggestion.detail[:per_period_cost] }).to all(be_a(BigDecimal))
     end
   end
 
@@ -584,7 +760,16 @@ RSpec.describe SuggestionEngine do
       large = query_count { engine.suggestions }
 
       expect(small).to eq(large)
-      expect(large).to be <= 8
+      expect(large).to eq(4) # categories, items, entries, rules — no pool preload and no drift query
+    end
+
+    # The exact number, on a fixture that exercises every read the engine makes. `eq`, not `<=`: a
+    # bound pins nothing, and the point of the figure is that the Budget page can be costed.
+    it "costs exactly eight queries when every detector has something to say", :aggregate_failures do
+      one_of_each
+
+      expect(query_count { suggestions }).to eq(8)
+      expect(suggestions.size).to eq(4)
     end
   end
 end

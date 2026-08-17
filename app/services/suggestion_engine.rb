@@ -40,6 +40,8 @@ class SuggestionEngine
 
   RATE_WINDOW_PERIODS = 6
   RATE_MIN_PERIODS = 3
+  # How recently a flow must have been seen to still be called one — see #rates' second gate.
+  RATE_RECENT_PERIODS = 3
   DRIFT_WINDOW_PERIODS = 4
   DEAD_WINDOW_PERIODS = 3
 
@@ -90,11 +92,19 @@ class SuggestionEngine
     ordered(dated_bills + rates + drifts + dead_rules)
   end
 
-  # `-amount` rather than a reverse sort on a second pass: one comparison, so the three keys cannot
+  # THE SIZE KEY IS PER-PERIOD COST, NOT `amount`. Three of the four kinds already lead with a
+  # per-period figure, but a dated bill leads with the BILL — and sorting $1,600 once a year above
+  # $1,500 every month puts a $61.54-a-period claim above a $692.31-a-period one, eleven times its
+  # size. `detail[:per_period_cost]` is on every kind for exactly this, and it is `fetch`-ed so a
+  # kind that ever stopped carrying one raises here rather than silently sorting as nil.
+  #
+  # `-cost` rather than a reverse sort on a second pass: one comparison, so the three keys cannot
   # disagree about precedence. `subject.id` last, and every subject here is a persisted record read
   # out of the database — nothing in this class compares an id that may be nil.
   def ordered(list)
-    list.sort_by { |suggestion| [KIND_RANK.fetch(suggestion.kind), -suggestion.amount, suggestion.subject.id] }
+    list.sort_by do |suggestion|
+      [KIND_RANK.fetch(suggestion.kind), -suggestion.detail.fetch(:per_period_cost), suggestion.subject.id]
+    end
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -138,15 +148,32 @@ class SuggestionEngine
   # Shared reads — one query each, for every detector that needs them
   # ---------------------------------------------------------------------------------------------
 
-  # Every expense item this user owns, as records: the dated-bill detector needs one as a `subject`
-  # and the rate detector needs the item → category link to roll the entries up. Loaded once rather
-  # than reached through `entry.item` per row, which is the N+1 amendment E forbids.
+  # EVERY EXPENSE CATEGORY THIS USER OWNS, with its pool, and it is loaded before the items rather
+  # than preloaded off them because FOUR separate things are questions about categories rather than
+  # about items: the rate detector's population, the pool a dated-bill proposal reuses, the name the
+  # bill sentence carries, and (detector 3) whether any category at all points at a pool.
   #
-  # `includes(:category)` on top of the scope's own join, and the extra preload query is bought
-  # deliberately: the dated-bill sentence names the item's category, so reaching for it per
-  # suggestion would be one query per proposed bill.
+  # `includes(:pool)` because the proposal has to know whether the category's pool is an ACCOUNT —
+  # a rule on an account is refused by `Budget#pool_must_not_be_an_account`, so that pool cannot be
+  # reused and the proposal must offer a new envelope instead.
+  def expense_categories
+    @expense_categories ||= user.categories.expenses.includes(:pool).to_a
+  end
+
+  def categories_by_id = @categories_by_id ||= expense_categories.index_by(&:id)
+
+  def category_for(item) = categories_by_id.fetch(item.category_id)
+
+  # THE POOLS SOME EXPENSE CATEGORY POINTS AT — the "a lane exists" test detector 3 needs to tell
+  # *no category feeds this envelope* apart from *a category feeds it and the spending stopped*.
+  # Free: the categories are already loaded above.
+  def fed_pool_ids = @fed_pool_ids ||= expense_categories.filter_map(&:pool_id).to_set
+
+  # Every expense item this user owns. Selected by the category ids already in memory rather than
+  # through `Item.expenses`' join, so this adds no second reading of what an expense is and no
+  # second query for the categories it would join to.
   def expense_items
-    @expense_items ||= Item.expenses.where(categories: { user_id: user.id }).includes(:category).to_a
+    @expense_items ||= Item.where(category_id: categories_by_id.keys).to_a
   end
 
   # THE WHOLE EXPENSE HISTORY, as `[item_id, amount, date]` triples — one query serving the
@@ -261,28 +288,76 @@ class SuggestionEngine
   # NEXT DUE IS ROLLED FORWARD PAST TODAY, and this is a correction to the brief's "last occurrence
   # + interval" — see the task report. A bill last paid on the 2nd of last month, one month apart,
   # is next due on the 2nd of THIS month, which for most of the month is a date in the past: the
-  # panel would propose "next due Aug 2" on Aug 16. Rolling the schedule forward by whole intervals
-  # keeps the anchor on the bill's own cycle (`>>` by the interval, repeatedly) and states a date a
-  # user can act on. The interval and the observed history are unchanged.
+  # panel would propose "next due Aug 2" on Aug 16.
+  #
+  # EVERY CANDIDATE IS `>>`-ed FROM `last_seen_on` ONCE, never from the previous candidate, and that
+  # is not a refactor: `Date#>>` CLAMPS to the end of a short month and the clamp is permanent if it
+  # is fed back in. Rolling Jan 31 forward month by month gives Feb 28 → Mar 28 → Apr 28, and the
+  # bill is paid on the 30th; anchoring each step on the source gives Jan 31 >> 3 = Apr 30, which is
+  # the day the bill actually falls on. The bug was invisible to a Dec → Mar fixture, where no month
+  # is short enough to clamp.
   def next_due_on(last_seen_on, interval_months)
-    due = last_seen_on >> interval_months
-    due >>= interval_months while due < today
-    due
+    steps = 1
+    steps += 1 while (last_seen_on >> (interval_months * steps)) < today
+
+    last_seen_on >> (interval_months * steps)
   end
 
   def dated_bill_suggestion(item, shape)
     due_on = next_due_on(shape[:last_seen_on], shape[:interval_months])
+    category = category_for(item)
 
     Suggestion.new(
       kind: :dated_bill,
       subject: item,
       amount: shape[:amount],
-      detail: shape.except(:amount).merge(due_on: due_on, category_name: item.category.name),
-      prefill: {
-        pool: { name: item.name, pool_type: "budget", account_id: default_account_id },
+      detail: shape.except(:amount).merge(
+        due_on: due_on, category_name: category.name, per_period_cost: bill_per_period_cost(shape)
+      ),
+      prefill: envelope_half(category).merge(
         budget: { amount: shape[:amount], basis: "monthly", interval_months: shape[:interval_months], anchor_date: due_on, item_id: item.id }
-      }
+      )
     )
+  end
+
+  # WHAT A PROPOSED BILL WOULD COST A PERIOD, through `Budget#steady_ask` on an UNSAVED rule of the
+  # exact shape being proposed — the app's one normaliser, asked about a rule that does not exist
+  # yet, rather than a fifth spelling of `amount * 12 / (periods_per_year * interval)` here. It
+  # touches no database: `#cadence` reads three columns off the in-memory record and the monthly
+  # branch divides.
+  #
+  # It is what the list is ORDERED by (see #ordered) and it is in `detail` because Task 7's sentence
+  # needs it for the same reason: a $1,600 bill once a year costs $61.54 a period and a $1,500 bill
+  # every month costs $692.31, and the raw amounts put them in the wrong order by a factor of eleven.
+  def bill_per_period_cost(shape)
+    Budget.new(amount: shape[:amount], basis: :monthly, interval_months: shape[:interval_months])
+      .steady_ask(user, today: today)
+  end
+
+  # THE ENVELOPE A PROPOSAL WOULD FILL IS THE CATEGORY'S, NOT THE ITEM'S — the plan's ruling, and it
+  # is forced by a validation rather than chosen for tidiness. `Budget#item_must_belong_to_pool`
+  # requires `item.category.pool == pool`, so an envelope named after the ITEM is refused for every
+  # item-backed bill; and because a category points at exactly ONE pool, item-named envelopes are
+  # also mutually exclusive — accepting the Phone proposal would make the Internet and Streaming
+  # proposals unacceptable, which on the demo seeds is 8 of 10 bills.
+  #
+  # THE CONSEQUENCE IS SHARING, and it is the honest household shape rather than a workaround: Phone,
+  # Internet and Streaming Services live in one Utilities envelope as three item-backed rules, which
+  # is exactly what `PoolCalculator#sweepable_amount` and the mixed-pool case already model.
+  #
+  # REUSE BEFORE PROPOSE: a category that already points at an envelope needs no new pool, so the
+  # payload carries `pool_id` and nothing else. An ACCOUNT is not reusable — a rule on one is refused
+  # outright — so a category pointing at an account gets the same new-envelope offer an unpooled one
+  # does, and accepting re-points the category.
+  #
+  # Shared with the rate detector, which reaches it only through the creation branch (its population
+  # is `budgetable`, i.e. pool-less by definition). One definition of "the envelope half of a
+  # proposal", so the two kinds cannot come to disagree about what accepting one does.
+  def envelope_half(category)
+    reusable = category.pool
+    return { pool_id: reusable.id } if reusable && !reusable.pool_type_account?
+
+    { pool: { name: category.name, pool_type: "budget", account_id: default_account_id }, category_id: category.id }
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -295,24 +370,39 @@ class SuggestionEngine
   # THE MEAN, NOT THE MAXIMUM. Highest-observed is right for a bill, which must be paid in full or
   # not at all; a rate is a flow, and reserving every grocery category's worst fortnight would
   # over-reserve every one of them forever.
+  # TWO GATES, and the second is a ruling of this task's fix round. `≥3 of the last 6` alone says
+  # only that the category was once a flow: a subscription cancelled three periods ago passes it,
+  # and the divisor below — which anchors on FIRST appearance and never on last — then proposes the
+  # dead flow as ongoing at half its old rate. So it must also have appeared at least once in the
+  # most recent #RATE_RECENT_PERIODS. A rate is a claim about what will happen next period, and
+  # nothing that stopped supports one.
   def rates
     window = periods.last(RATE_WINDOW_PERIODS)
-    spend = category_spend_by_period(window, exclude: proposed_bill_item_ids)
+    totals, first_seen = category_history(window, exclude: proposed_bill_item_ids)
 
     budgetable_categories.filter_map do |category|
-      # `fetch`, not `[]`: `#category_spend_by_period` returns a Hash with a default PROC, and `[]`
-      # on a missing key would write an empty bucket into it mid-iteration.
-      present = spend.fetch(category.id, {}).reject { |_index, total| total.zero? }
+      # `fetch`, not `[]`: `#category_history` returns a Hash with a default PROC, and `[]` on a
+      # missing key would write an empty bucket into it mid-iteration.
+      present = totals.fetch(category.id, {}).reject { |_index, total| total.zero? }
       next if present.size < RATE_MIN_PERIODS
+      next if present.keys.max < window.size - RATE_RECENT_PERIODS
 
-      rate_suggestion(category, present, window)
+      rate_suggestion(category, present, window, first_seen.fetch(category.id))
     end
   end
 
-  def budgetable_categories = @budgetable_categories ||= user.categories.budgetable.order(:id).to_a
+  # `Category#budgetable?` — the model's own Ruby twin of the `Category.budgetable` scope amendment
+  # B names, applied to the categories already in memory. Not a third spelling of the predicate: the
+  # pair already exists on the model and the seeds read the same one.
+  def budgetable_categories = @budgetable_categories ||= expense_categories.select(&:budgetable?).sort_by(&:id)
 
-  # `{ category_id => { period_index => total } }`, rolled up in Ruby off the ONE history query
-  # rather than fetched per period or per category.
+  # `[{ category_id => { period_index => total } }, { category_id => earliest entry date }]`, rolled
+  # up in Ruby off the ONE history query rather than fetched per period or per category.
+  #
+  # THE SECOND HALF IS A REAL ENTRY DATE. `first_seen_on` used to be the first measured period's
+  # START, which is a date no entry supports: a category first spent on the 9th was reported as
+  # first seen on the 2nd, and Task 7 would have rendered that claim. The period count is already in
+  # `periods_measured`; this is the day something actually happened.
   #
   # `exclude:` IS THE DATED BILLS, and it is a correction to the brief — the measurement is in the
   # task report. Rent is $1,500 on the 1st of every month and it lives in a budgetable category, so
@@ -320,20 +410,34 @@ class SuggestionEngine
   # was mostly that same rent: the same dollars, proposed twice, on a money screen. A bill is not a
   # rate — it is the shape the OTHER detector exists for — so its payments are not part of the flow
   # this one measures.
-  def category_spend_by_period(window, exclude:)
+  def category_history(window, exclude:)
     totals = Hash.new { |hash, key| hash[key] = Hash.new(0.to_d) }
+    first_seen = {}
 
-    entry_rows.each do |item_id, amount, date|
-      next if exclude.include?(item_id)
-
-      index = period_index(window, date.to_date)
-      next unless index
-
-      totals[category_of.fetch(item_id)][index] += amount.to_d
+    windowed_rows(window, exclude).each do |category_id, amount, on, index|
+      totals[category_id][index] += amount
+      first_seen[category_id] = earlier_of(first_seen[category_id], on)
     end
 
-    totals
+    [totals, first_seen]
   end
+
+  # The history rows that fall inside `window` and are not a proposed bill, re-keyed onto the
+  # category and the period they belong to. Separated from the roll-up above so that "which rows
+  # count" and "what they add up to" are two readable steps rather than one loop doing both.
+  def windowed_rows(window, exclude)
+    entry_rows.filter_map do |item_id, amount, date|
+      next if exclude.include?(item_id)
+
+      on = date.to_date
+      index = period_index(window, on)
+      next unless index
+
+      [category_of.fetch(item_id), amount.to_d, on, index]
+    end
+  end
+
+  def earlier_of(known, candidate) = known.nil? || candidate < known ? candidate : known
 
   def proposed_bill_item_ids = @proposed_bill_item_ids ||= dated_bills.to_set { |suggestion| suggestion.subject.id }
 
@@ -353,7 +457,7 @@ class SuggestionEngine
   # the brief's own divisor either.
   def periods_measured(present, window) = window.size - present.keys.min
 
-  def rate_suggestion(category, present, window)
+  def rate_suggestion(category, present, window, first_seen_on)
     observed_total = present.values.sum(0.to_d)
     span = periods_measured(present, window)
     # `.ceil` on a BigDecimal answers an Integer, and an Integer amount is the money-type leak this
@@ -369,20 +473,15 @@ class SuggestionEngine
         periods_present: present.size,
         periods_measured: span,
         periods_window: window.size,
-        first_seen_on: window[present.keys.min].first,
+        first_seen_on: first_seen_on,
         observed_total: observed_total,
+        per_period_cost: amount,
         guessed: false
       },
-      prefill: rate_prefill(category, amount)
+      # The creation branch every time: this detector's population is `budgetable`, which is
+      # pool-less by definition, so the reuse branch is unreachable from here.
+      prefill: envelope_half(category).merge(budget: { amount: amount, basis: "per_paycheck" })
     )
-  end
-
-  def rate_prefill(category, amount)
-    {
-      pool: { name: category.name, pool_type: "budget", account_id: default_account_id },
-      budget: { amount: amount, basis: "per_paycheck" },
-      category_id: category.id
-    }
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -428,8 +527,15 @@ class SuggestionEngine
     rate_rules.group_by(&:pool_id).filter_map { |_pool_id, rules| rules.first if rules.one? }
   end
 
+  # ITEM-LESS, and that condition is amendment A's own consequence rather than an extra filter. The
+  # observed figure EXCLUDES entries on items that carry a rule; if the rate rule under examination
+  # is itself item-backed, the exclusion subtracts its own lane. Where the pool holds nothing else,
+  # the figure is $0 and the zero-guard hides drift that is genuinely there; where it holds
+  # something else, the figure is built entirely from dollars this rule does not cover. Both are a
+  # number on a money screen that describes different money from the sentence around it. An
+  # item-backed rule is detector 4's subject, not this one's.
   def rate_shape?(budget)
-    budget.anchor_date.blank? && [:per_paycheck, :monthly].include?(budget.cadence)
+    budget.anchor_date.blank? && budget.item_id.blank? && [:per_paycheck, :monthly].include?(budget.cadence)
   end
 
   # `{ pool_id => total }` over the drift window, in one query for every pool at once.
@@ -437,6 +543,13 @@ class SuggestionEngine
   # `PoolBalanceLedger::ENTRY_POOL_ID` is reused rather than restated: "which pool does this entry
   # reach" already has one SQL form in this app (the entry's own pool, else its category's), and a
   # third spelling of it is how a suggestion and a balance come to describe different money.
+  #
+  # THE LATENT THIRD SPELLING IS `Entry#effective_pool`, and it is NOT the same rule: it adds a
+  # final fallback to `user.default_account`, so an entry whose category has no pool reaches the
+  # account there and reaches NOTHING here (`COALESCE(NULL, NULL)` is NULL). The two are right for
+  # their own questions — a balance asks where the money physically sits, an envelope asks what its
+  # own rules cover — but anything that ever tries to unify them has to decide that, and naming it
+  # here is cheaper than discovering it from a figure that disagrees with Home.
   def pool_spend(pool_ids, window)
     Entry.expenses
       .where(categories: { user_id: user.id })
@@ -448,15 +561,21 @@ class SuggestionEngine
       .transform_values(&:to_d)
   end
 
+  # NO SPEND AND NO LANE IS NOT DRIFT; NO SPEND WITH A LANE IS THE STARKEST DRIFT THERE IS.
+  #
+  # The first half is the correction the demo forced: five envelopes there have NO expense category
+  # pointing at them, so they record no spending by construction, and reading that silence as "you
+  # spend nothing, cut the rule to zero" told the demo user to zero their $400 grocery rule.
+  #
+  # The second half is the lane that silence used to swallow, and it is the more valuable sentence.
+  # A category DOES point at the pool, four complete periods have passed, and nothing was spent:
+  # "Groceries has averaged $0.00 for 4 periods, your rule says $400" is spec §8's drift sentence
+  # with the starkest figure it can carry. Detector 4 cannot say it — that one is item-backed rules
+  # only — so without this the category-fed envelope that quietly stopped has no owner at all.
   def drift_suggestion(rule, observed_total, window)
-    rule_amount = rule.steady_ask(user, today: today)
-    # NO SPEND AT ALL IS NOT DRIFT — a correction to the brief, with the demo measurement behind it
-    # in the task report. An envelope with no expense category pointed at it records no spending by
-    # construction, and reading that silence as "you spend nothing, cut the rule to zero" would
-    # tell the demo user to zero their $400 grocery rule. Absence of tracking is not evidence of
-    # under-spend; a single recorded entry is enough to make the average mean something.
-    return nil if observed_total.zero?
+    return nil if observed_total.zero? && fed_pool_ids.exclude?(rule.pool_id)
 
+    rule_amount = rule.steady_ask(user, today: today)
     observed = (observed_total / window.size).round(2)
     gap = (observed - rule_amount).abs
     return nil if gap < DRIFT_MIN_AMOUNT || gap < rule_amount * DRIFT_MIN_FRACTION
@@ -465,16 +584,41 @@ class SuggestionEngine
       kind: :drift,
       subject: rule,
       amount: observed,
-      detail: {
-        rule_amount: rule_amount,
-        observed: observed,
-        periods: window.size,
-        direction: observed > rule_amount ? :up : :down,
-        pool_name: rule.pool.name,
-        guessed: false
-      },
-      prefill: { id: rule.id, budget: { amount: observed } }
+      detail: drift_detail(rule, rule_amount, observed, window),
+      prefill: { id: rule.id, budget: { amount: rule_unit_amount(rule, observed) } }
     )
+  end
+
+  def drift_detail(rule, rule_amount, observed, window)
+    {
+      rule_amount: rule_amount,
+      observed: observed,
+      periods: window.size,
+      direction: observed > rule_amount ? :up : :down,
+      pool_name: rule.pool.name,
+      basis: rule.basis,
+      per_period_cost: observed,
+      guessed: false
+    }
+  end
+
+  # THE FORM'S FIELD IS IN THE RULE'S OWN UNIT, and getting there means INVERTING `steady_ask`.
+  #
+  # Everything this class reports is per-period, because that is the unit a user's money leaves in.
+  # `budgets.amount` is not: on the anchorless monthly rule — which #rate_shape? admits deliberately
+  # — it is a MONTHLY figure, and `steady_ask` is what divides it down. Writing a per-period observed
+  # figure straight into that column is the mixed-unit trap in the half that WRITES: a $260/month
+  # rule reads $120 a period, an observed $200 says raise it, and `amount: 200` in a monthly field
+  # is $92.31 a period — LESS than the figure the user was just told was too low, on a suggestion
+  # that asked them to raise it. The inverse of `amount * 12 / (periods_per_year * interval)`.
+  #
+  # It cannot be read off `steady_ask` — no reader inverts itself — so it is spelled here, once, and
+  # the spec pins it by round-tripping the answer back through `steady_ask` as well as by literal.
+  # `detail[:basis]` carries the unit so Task 7 can label the field rather than guess.
+  def rule_unit_amount(rule, per_period)
+    return per_period if rule.basis_per_paycheck?
+
+    (per_period * user.periods_per_year * (rule.interval_months || 1) / 12).round(2)
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -503,19 +647,22 @@ class SuggestionEngine
     last_seen_on = occurrences.last.last
     return nil if last_seen_on >= window.first.first
 
+    # WHAT IT COSTS A PERIOD, not what the rule says: a $1,200 six-monthly premium and a $200
+    # per-period rate are the same sentence to a user only once both are stated in the unit the
+    # money actually leaves in. `steady_ask` again, for the same reason drift uses it.
+    per_period = rule.steady_ask(user, today: today)
+
     Suggestion.new(
       kind: :dead_rule,
       subject: rule,
-      # WHAT IT COSTS A PERIOD, not what the rule says: a $1,200 six-monthly premium and a $200
-      # per-period rate are the same sentence to a user only once both are stated in the unit the
-      # money actually leaves in. `steady_ask` again, for the same reason drift uses it.
-      amount: rule.steady_ask(user, today: today),
+      amount: per_period,
       detail: {
         last_seen_on: last_seen_on,
         periods_empty: window.size,
         rule_amount: rule.amount.to_d,
         item_name: rule.item.name,
         pool_name: rule.pool&.name,
+        per_period_cost: per_period,
         guessed: false
       },
       prefill: { id: rule.id }
