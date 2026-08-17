@@ -11,10 +11,21 @@
 # IT WRAPS A PLAIN CALCULATOR rather than reimplementing one, and delegates everything it does not
 # refuse. Both projections are adjustments to the BALANCE, so every reader derived from the balance
 # — #allocated_balances, #reserve, #free_amount, #required — inherits them unchanged and no reader
-# has to learn about them. `delegate_missing_to` is that sentence written as code: an enumerated
-# list of readers would be a second statement of which readers are projected, free to fall behind
-# the class it names, and a reader added to PoolCalculator tomorrow would silently answer the
-# unprojected question here.
+# has to learn about them. Delegating through #method_missing is that sentence written as code, and
+# it is what makes the inheritance FUTURE-PROOF IN ONE DIRECTION: a reader added to PoolCalculator
+# tomorrow is projected the day it is written, because the object it is delegated to was constructed
+# with the adjustment already in it and there is no path here to an unadjusted balance.
+#
+# THE OTHER DIRECTION IS NOT FREE, AND SAYING SO IS THE POINT. The REFUSAL is an enumerated list —
+# PoolCalculator::SWEEP_READERS — and a second reader that names the sweep would be delegated
+# straight past it, answering with the plausible phantom figure the guard exists to prevent. The
+# adjustment needs no list; the refusal cannot do without one. What the list buys is that it is ONE
+# list, read by #method_missing here and named beside the two readers there, so adding a third
+# forces the question rather than answering it wrongly by default.
+#
+# (An enumerated `delegate :balance, :required, …` would not be silently wrong — PoolProjection does
+# not inherit from PoolCalculator, so an unlisted reader raises NoMethodError. Loud and pointless
+# rather than dangerous. The argument for delegating everything is the one above, not a hazard.)
 #
 # THE SPLIT ITSELF is plan 2d decision 4. PoolCalculator carried four keyword axes, a bespoke error
 # class guarding one combination, and a recursive twin of itself inside its own balance memo; the
@@ -128,36 +139,44 @@ class PoolProjection
     @ledger = ledger
   end
 
-  # Everything that is not a question about the sweep — #balance, #required, #free_amount,
-  # #allocated_balances, #last_funded_on, #pool, #today and the rest — is the calculator's own
-  # answer over the projected balance. See the class comment: the delegation is the claim that a
-  # projection is the same reading of the same pool, taken of a ledger that has not happened.
-  delegate_missing_to :calculator
-
-  # THE TWO READERS THAT ANSWER "what does the next distribution take back", refusing the one
-  # object that cannot answer it.
+  # THE ONE DELEGATION PATH, AND THE ONE PLACE THE SWEEP IS REFUSED. Every reader of the projected
+  # pool arrives here — #balance, #required, #free_amount, #allocated_balances and the rest answer
+  # over the projected balance, and the ones that name the sweep are refused first.
   #
-  # Raising is not defensive tidiness here. #sweepable_amount on a projected balance does not
-  # return zero — it returns `balance − anchored_reserve` over an already-swept balance, which on
-  # the mixed envelope is a plausible-looking $100. A plausible number is exactly what a committer
-  # cannot detect.
+  # WHY REFUSE HERE RATHER THAN IN TWO NAMED METHODS. Two overrides would have covered exactly
+  # today's two readers, and a third sweep reader added to PoolCalculator later would have been
+  # delegated straight past them: `#sweepable_amount` on a projected balance does not return zero,
+  # it returns `balance − anchored_reserve` over an already-swept balance, which on the mixed
+  # envelope is a plausible-looking $100 — and a plausible number is exactly what a committer cannot
+  # detect. One list, consulted on every delegated call, is the version of that guard that a future
+  # reader cannot walk around; PoolCalculator names the same constant beside the two readers, so
+  # writing a third puts the question in front of the person writing it.
   #
-  # The guards sit HERE, on the projection, and the calculator underneath now carries none. That is
-  # stronger than the pair of guards this replaces: those sat at the top of two public methods
-  # precisely because #sweepable_amount reaches #period_closed? through the public door and a guard
-  # one level down would fire twice with a message naming the wrong reader. The inner calculator is
-  # a plain one, so its own #sweepable_amount → #period_closed? call cannot reach a guard at all,
-  # and the message can only ever name the reader the caller actually asked for.
-  def sweepable_amount
-    refuse_when_net_of_sweep(:sweepable_amount)
+  # THE GUARD SITS ON THE PROJECTION and the calculator underneath carries none. That is stronger
+  # than the pair of guards it replaces: those sat at the top of two public methods precisely
+  # because #sweepable_amount reaches #period_closed? through the public door and a guard one level
+  # down would fire twice with a message naming the wrong reader. The inner calculator is a plain
+  # one, so its own #sweepable_amount → #period_closed? call cannot reach a guard at all, and the
+  # message can only ever name the reader the caller actually asked for.
+  #
+  # WHAT THIS REPRODUCES FROM `delegate_missing_to`, which it replaced when the guard needed a place
+  # to stand: public methods only (so the calculator's privates stay private, exactly as before),
+  # and an unknown name falling through to a NoMethodError naming this class rather than being
+  # swallowed.
+  #
+  # WHAT IT IMPROVES: the oracle is the CLASS, not the instance, so #respond_to? answers without
+  # building anything. `delegate_missing_to`'s `calculator.respond_to?` would have run the twin's
+  # five aggregates to answer a question about a method table. The two oracles cannot disagree —
+  # PoolCalculator defines no #method_missing of its own, so what it responds to IS what it defines.
+  def method_missing(name, *, &)
+    refuse_when_net_of_sweep(name) if PoolCalculator::SWEEP_READERS.include?(name)
+    return super unless PoolCalculator.public_method_defined?(name)
 
-    calculator.sweepable_amount
+    calculator.public_send(name, *, &)
   end
 
-  def period_closed?
-    refuse_when_net_of_sweep(:period_closed?)
-
-    calculator.period_closed?
+  def respond_to_missing?(name, include_private = false)
+    PoolCalculator.public_method_defined?(name) || super
   end
 
   private
@@ -167,6 +186,24 @@ class PoolProjection
   # transaction that has just DELETED this period's split, and a calculator built before that
   # deletion would answer about a world the screen is not showing. Nothing here touches the
   # database until a reader asks — construction is four ivars.
+  #
+  # "FIRST READ" MEANS THE FIRST DELEGATED READER OF ANY KIND, WHICH IS WIDER THAN WHAT IT REPLACED,
+  # and the difference is stated rather than glossed. The sweep used to be derived inside
+  # PoolCalculator#balance's memo, so the twin's five aggregates ran at the first BALANCE read and
+  # `calculator.today` cost nothing; here the adjustment is a constructor argument, so the first
+  # delegated call — money or not — builds the twin. #respond_to? is deliberately outside that (see
+  # #respond_to_missing?), which was the sharpest edge of it.
+  #
+  # KEPT THAT WAY ON PURPOSE. Making the adjustment lazy — an object the calculator consults at
+  # balance time — would narrow the window back and would trade a guarantee held BY CONSTRUCTION for
+  # one held by a memo: as a constructor argument the adjustment is applied exactly once, before the
+  # calculator can answer anything, and there is no reachable state in which a balance has been read
+  # with the adjustment half-applied. That property is worth more than the window, because the
+  # window is only reachable by reading a non-money reader off a projection BEFORE any money reader
+  # and ACROSS a write — and nothing in app/ reads a non-money reader off one at all (grepped:
+  # `#pool` and `#today` are never asked of a calculator anywhere in the app; every caller asks
+  # #balance, #required, #free_amount or #allocated_balances first). Measured: all six screens'
+  # query counts unchanged.
   #
   # `||=` and not the `defined?` form: this is an object, never nil or false. The `defined?` form
   # is reserved for readers whose answer is legitimately falsy (see PoolCalculator#period_closed?).

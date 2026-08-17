@@ -153,15 +153,30 @@ module HomeHelper
   # `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00` in the attention band
   # a few inches above it.
   #
-  # THE ARGUMENT DOES NOT CARRY UP TO #pool_status_label, AND TAKING IT THERE WOULD RAISE.
-  # `PoolStatus#period_closed?` delegates to the calculator's `#period_closed?`, and on a projection
-  # that reader is `PoolProjection#period_closed?`, which begins with `refuse_when_net_of_sweep` —
-  # and the reallocation and distribution screens hand
-  # #pool_status_label statuses built `net_of_sweep: true`, which would raise `NetOfSweepError` on
-  # the spot. Those screens compute the suffix off a separate PLAIN calculator for exactly this
-  # reason (see DistributionPresenter). So the keyword stays a keyword one level up. It is safe
-  # HERE because the only caller is Home's attention band, whose statuses come from
-  # HomePresenter#status_for and carry no sweep.
+  # THE ARGUMENT DOES NOT CARRY UP TO #pool_status_label, AND THE REASON IS NOT A RAISE.
+  # CORRECTED (2d task 2): this comment used to say the other screens hand #pool_status_label
+  # statuses built `net_of_sweep: true`, so asking them would raise NetOfSweepError. That shape does
+  # not exist and never did — neither `Pool#status` nor `PoolStatus` takes a `net_of_sweep:`
+  # keyword, so no status anywhere carries a sweep and `status.period_closed?` cannot raise on any
+  # screen. An unreachable hazard is the worst kind of reason to keep a design, because the next
+  # person reads it as a constraint.
+  #
+  # The real reason the keyword stays one level up is that #pool_status_label's other callers do not
+  # hold something that can answer it, and must not ask the thing they do hold:
+  #
+  #   - The distribution screen passes a `Standing` — a VALUE read down to four members inside the
+  #     open transaction (see DistributionPresenter::Standing) — which has no #period_closed? to
+  #     ask. It computes the marker off a separate PLAIN calculator and hands it in.
+  #   - The reallocation screen passes a `Candidate` carrying the marker as its own member, again
+  #     off the plain calculator it already built for the row.
+  #   - The statuses on those screens that COULD be asked are PROJECTED ones (`pending:`), and there
+  #     the answer would be about money that has not moved: a pending funding dated today makes the
+  #     rate period look live, so ` · last period` would appear or vanish on the strength of an
+  #     unwritten distribution. Both screens omit the marker on those (see PoolMovementsHelper's
+  #     `becomes …` clause and DistributionsHelper's consequence line).
+  #
+  # It is safe HERE because the only caller is Home's attention band, whose statuses come from
+  # HomePresenter#status_for: plain, unprojected, and about money that is actually in the envelope.
   def pool_problem_label(status, orphan: false, changed_after_distributing: false)
     label = pool_status_label(
       status,

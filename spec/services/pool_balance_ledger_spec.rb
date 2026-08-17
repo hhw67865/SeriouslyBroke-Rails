@@ -421,10 +421,15 @@ RSpec.describe PoolBalanceLedger, type: :model do
   end
 
   # THE net_of_sweep TWIN, which is where most of the batching is won and where it is easiest to
-  # lose without a figure moving. PoolCalculator#sweep_adjustment builds a PLAIN calculator over
-  # the same pool inside its own balance; if that twin does not receive the same terms it runs its
-  # own five aggregates and the flagged calculators — the ask on Home, the ask in the fill, both
-  # asks behind a reallocation's damage — go on costing exactly what they cost before.
+  # lose without a figure moving. PoolProjection#twin builds a PLAIN calculator over the same pool
+  # to derive the sweep it nets off; if that twin does not receive the same terms it runs its own
+  # five aggregates and the flagged calculators — the ask on Home, the ask in the fill, both asks
+  # behind a reallocation's damage — go on costing exactly what they cost before.
+  #
+  # (This comment named PoolCalculator#sweep_adjustment until 2d task 2 moved the twin to
+  # PoolProjection. The examples below are unchanged — they go through `pool.calculator`, which is
+  # the door that did not move — and this is the only line of any existing spec file that task
+  # edited, in the round after its split was approved.)
   describe "the net_of_sweep twin" do
     let!(:groceries) { envelope("Groceries") }
     let(:ledger) { described_class.new([checking, groceries]) }

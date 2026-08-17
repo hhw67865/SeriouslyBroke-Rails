@@ -15,7 +15,28 @@ class PoolCalculator
   # is a PUBLIC name: `rescue PoolCalculator::NetOfSweepError` is what AllocationCommitter's comment
   # names and what pool_calculator_spec asserts in both directions, and `raise`/`rescue` compare by
   # object identity, so the two names cannot come to mean different things.
+  #
+  # IT IS ALSO THE ONE LOAD-TIME REFERENCE BETWEEN THESE TWO CLASSES, and it runs in this direction
+  # ONLY. PoolProjection names PoolCalculator inside method bodies alone (`.for`, #calculator, #twin,
+  # Pending#to_adjustment), so loading this file loads that one and stops. Adding a load-time
+  # reference the other way — `adjustment: PoolCalculator::Adjustment.none` as a default in
+  # PoolProjection's signature is the tempting one — closes the cycle, and it fails in the ugliest
+  # available way: this class object exists by then but Adjustment below does not, so it is a
+  # NameError on boot rather than a circular-require warning.
   NetOfSweepError = PoolProjection::NetOfSweepError
+
+  # THE READERS THAT NAME THE SWEEP, in one list because two classes have to agree about them.
+  # #sweepable_amount and #period_closed? below answer "what does the next distribution take back",
+  # which is the one question a net_of_sweep projection cannot answer — its sweep has already been
+  # subtracted, so asking again derives a second, smaller one. PoolProjection refuses every
+  # delegated call whose name is in here (see PoolProjection#method_missing).
+  #
+  # A CONSTANT RATHER THAN TWO OVERRIDES THERE, and this is the whole of what it buys: a third
+  # reader of the sweep added to this class later is delegated straight past a pair of hand-written
+  # overrides and answers with a plausible phantom figure. It cannot walk past a list — but only if
+  # whoever writes it knows the list exists, which is why the list is named HERE, beside the readers
+  # it is about, and not only in the class that consults it.
+  SWEEP_READERS = [:sweepable_amount, :period_closed?].freeze
 
   # THE PROJECTION SEAM, and the whole of what this class knows about projections: a figure the
   # balance treats as already moved, and the day that money arrived. PoolProjection computes both
@@ -314,6 +335,10 @@ class PoolCalculator
   # it is a PoolProjection, and that is where the guard sits. Same public surface: the two readers
   # still raise NetOfSweepError when asked of a `net_of_sweep` object, which is what
   # `pool.calculator(net_of_sweep: true)` hands back.
+  #
+  # THIS AND #sweepable_amount ARE SWEEP_READERS, and a THIRD reader that answers "what would the
+  # next distribution take back" belongs in that constant on the day it is written. Delegation
+  # projects a new reader automatically; it does not refuse one automatically.
   def period_closed?
     return @period_closed if defined?(@period_closed)
 

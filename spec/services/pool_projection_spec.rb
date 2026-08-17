@@ -88,9 +88,9 @@ RSpec.describe PoolProjection, type: :model do
   end
 
   # Both projections are adjustments to the BALANCE, so every reader derived from the balance
-  # inherits them and no reader has to learn about them. `delegate_missing_to` is that sentence as
-  # code; these are the two halves of it — the money readers answering over the projected balance,
-  # and the readers that are not about money at all still answering.
+  # inherits them and no reader has to learn about them. Delegating through #method_missing is that
+  # sentence as code, and it is what makes a reader added to PoolCalculator tomorrow projected the
+  # day it is written: the object it reaches was constructed with the adjustment already in it.
   describe "delegation" do
     before { fund(groceries, 85, on: last_period) }
 
@@ -104,15 +104,27 @@ RSpec.describe PoolProjection, type: :model do
       expect(projection.reserve).to eq(0)
     end
 
-    # An enumerated `delegate :balance, :required, …` list would have answered the four above and
-    # dropped these two on the floor — they are not money, so nobody would have thought to list
-    # them, and `PoolStatus` reads `today` off the calculator it was handed.
+    # THE SURFACE, DOCUMENTED, AND NOT A HAZARD AVERTED. Nothing in app/ reads #pool or #today off a
+    # calculator (grepped), so an enumerated delegate list would have dropped these two and nobody
+    # would have noticed — and it would have raised NoMethodError rather than answering wrongly,
+    # because PoolProjection does not inherit from PoolCalculator. They are here to say what the
+    # object IS: the same reading of the same pool, not a money-only facade.
     it "delegates the readers that are not projections at all", :aggregate_failures do
       projection = groceries.calculator(today: today, net_of_sweep: true)
 
       expect(projection.pool).to eq(groceries)
       expect(projection.today).to eq(today)
       expect(projection).to respond_to(:income_within)
+    end
+
+    # #respond_to? IS ANSWERED FROM THE CLASS, so asking what a projection can do does not make it
+    # derive a sweep. This is the sharp edge of the adjustment being a constructor argument — the
+    # first delegated CALL builds the twin — and the one place it was cheap to keep flat.
+    it "answers respond_to? without touching the database", :aggregate_failures do
+      projection = groceries.calculator(today: today, net_of_sweep: true)
+
+      expect(sql_for { projection.respond_to?(:balance) }).to be_empty
+      expect(projection).not_to respond_to(:anchored_reserve)
     end
   end
 
@@ -141,6 +153,32 @@ RSpec.describe PoolProjection, type: :model do
 
       expect { projection.sweepable_amount }.to raise_error(described_class::NetOfSweepError, /sweepable_amount/)
       expect { projection.period_closed? }.to raise_error(described_class::NetOfSweepError, /period_closed\?/)
+    end
+
+    # THE LIST IS THE GUARD, AND THE GUARD IS THE LIST. The delegation projects a new reader
+    # automatically and refuses nothing automatically, so a second reader of the sweep added to
+    # PoolCalculator later is refused only if it is named in SWEEP_READERS. Written as a loop over
+    # the constant rather than over two literal names: a third entry is covered the moment it is
+    # added, and an entry REMOVED fails here rather than quietly re-opening the phantom sweep.
+    it "refuses every reader named in SWEEP_READERS", :aggregate_failures do
+      projection = groceries.calculator(today: today, net_of_sweep: true)
+
+      expect(PoolCalculator::SWEEP_READERS).to include(:sweepable_amount, :period_closed?)
+      PoolCalculator::SWEEP_READERS.each do |reader|
+        expect { projection.public_send(reader) }.to raise_error(described_class::NetOfSweepError, /#{reader}/)
+      end
+    end
+
+    # The other direction, on the same object: a reader NOT in the list is delegated and answers
+    # over the projected balance. Without this the guard could be a blanket refusal of everything —
+    # which is the shape the whole `net_of_sweep` keyword exists to avoid, since #required is the
+    # reader these projections are built for.
+    it "delegates the readers that are not in it", :aggregate_failures do
+      projection = groceries.calculator(today: today, net_of_sweep: true)
+
+      expect(PoolCalculator::SWEEP_READERS).not_to include(:required, :free_amount)
+      expect(projection.required).to eq(400)
+      expect(projection.free_amount).to eq(0)
     end
 
     # THE OLD NAME IS THE SAME CLASS, not a second error that happens to be spelled alike. A rescue
