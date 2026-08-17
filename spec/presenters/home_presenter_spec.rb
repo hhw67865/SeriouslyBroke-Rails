@@ -610,6 +610,51 @@ RSpec.describe HomePresenter do
       expect(presenter).not_to be_structurally_underwater
     end
 
+    # THE OTHER HALF OF THE DECLARATION. Income with a blank cadence is reachable — the Budget
+    # page's form offers "Not set" and clearing the period deliberately keeps the income — and in
+    # that state `Budget.steady_need` falls back to treating a period as a calendar month. A
+    # per-rule normaliser may fall back; a VERDICT may not. This band would otherwise announce
+    # "your budget doesn't fit your income" off a per-period figure at a user who has never said
+    # how long a period is, while `/budget` refuses to print that same figure.
+    #
+    # Both directions, on the same rules and the same income, so the example is about the cadence
+    # and nothing else: declared and underwater, then the cadence cleared and silent.
+    it "is false when income is declared but no cadence is", :aggregate_failures do
+      rate(envelope("Rent", priority: 1), 3_000)
+
+      expect(presenter).to be_structurally_underwater
+
+      user.update!(period_cadence: nil, period_anchor_date: nil)
+
+      expect(described_class.new(user: user, today: today)).not_to be_structurally_underwater
+    end
+
+    # THE MEMO, asserted by counting the sum rather than by trusting the spelling. Task 9 adds a
+    # second caller to this reader on this page, and the sum behind it is a query plus a pass over
+    # every rule the user owns.
+    #
+    # `false` is the case that needs the assertion. A `||=` memo re-runs its body every time the
+    # answer is falsey, which after this change is every user who declared no cadence — the memo
+    # would be silently absent for exactly the population it was written for. Both directions
+    # here: true is computed once, and false is computed once too.
+    it "computes the sum once for a budget that does not fit" do
+      rate(envelope("Rent", priority: 1), 3_000)
+      allow(Budget).to receive(:steady_need).and_call_original
+
+      3.times { presenter.structurally_underwater? }
+
+      expect(Budget).to have_received(:steady_need).once
+    end
+
+    it "computes the sum once for a budget that does fit" do
+      rate(envelope("Rent", priority: 1), 500)
+      allow(Budget).to receive(:steady_need).and_call_original
+
+      3.times { presenter.structurally_underwater? }
+
+      expect(Budget).to have_received(:steady_need).once
+    end
+
     # THE CASE THE OLD READER GOT WRONG, and the pin on the redefinition.
     #
     # This reader used to compare `total_required` — THIS period's ask, catch-up included. A

@@ -314,8 +314,26 @@ class HomePresenter
   #
   # `today` rather than `Date.current`, because this presenter is built against a clock and a
   # dated one-off rule's steady claim depends on how many periods are left before it.
+  #
+  # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate
+  # `BudgetPagePresenter#declared?` applies, because it is the same question. Income with a blank
+  # cadence is a reachable state (the declaration form offers "Not set", and a request example
+  # pins that clearing the period keeps the income), and in it `Budget.steady_need` falls back to
+  # treating the period as a calendar month. That fallback is right for a per-rule normaliser and
+  # useless as a verdict: "$1,668 a period" at a user who has not said how long a period is states
+  # a figure with no unit, and this band delivers the verdict WITHOUT the figures that would
+  # justify it. `/budget` already refuses to print those figures; Home refusing to print the
+  # verdict from them is the same refusal.
+  #
+  # Memoised, and the `false` case has to be memoised too — `||=` would recompute the whole sum on
+  # every call for exactly the users who answer false. Task 9 adds a second caller on this page.
   def structurally_underwater?
-    user.typical_income.present? && Budget.steady_need(user, today: today) > user.typical_income.to_d
+    return @structurally_underwater if defined?(@structurally_underwater)
+
+    @structurally_underwater =
+      user.typical_income.present? &&
+      user.period_cadence.present? &&
+      Budget.steady_need(user, today: today) > user.typical_income.to_d
   end
 
   # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE — PoolStatus#funding_gap, not #amount.

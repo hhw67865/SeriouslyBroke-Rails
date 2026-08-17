@@ -390,31 +390,51 @@ RSpec.describe PoolCalculator, type: :model do
 
     # Budget blesses two dateless shapes and their amounts are in different units: a
     # per_paycheck rule's amount IS the per-period rate, while a monthly rule's is a
-    # per-month figure. $600 a month is $300 a period for this biweekly user in a
-    # two-boundary February; summing the two bases raw would ask $600 a fortnight.
+    # per-month figure. Summing the two bases raw would ask $600 a fortnight.
+    #
+    # THE FIGURE MOVED, $300.00 -> $276.92, and this is the one number this plan knowingly
+    # changes. #per_period_rate used to divide by the boundaries falling inside the calendar
+    # MONTH, so the answer depended on which month you asked in: measured across 2026 under this
+    # biweekly cadence it gave $300 in ten months and $200 in the two that hold a third boundary
+    # (March and August) — a 50% swing in a savings goal's standing contribution with no data
+    # change. It now delegates to Budget#steady_ask, for which $600 a month is 600 * 12 / 26 =
+    # $276.92 a period, every month, because 26 periods a year is what biweekly means.
+    #
+    # The old figure was not merely unstable, it was wrong in the direction that matters: two
+    # boundaries a month is 24 periods a year, and this user has 26.
     it "converts a monthly rate to a per-period figure" do
       monthly_goal = create(:pool, :savings_pool, user: goal_user, account: account, target_amount: 2_400)
       create(:pool_budget, :rate, pool: monthly_goal, amount: 600)
 
-      expect(monthly_goal.calculator(today: today).required).to eq(300)
+      expect(monthly_goal.calculator(today: today).required).to eq(BigDecimal("276.92"))
     end
 
-    # The whole month, not what is left of it. Asked on Feb 20 — the month's second and last
-    # boundary — the goal still contributes $300, not the $600 that dividing by the periods
-    # REMAINING would give. A goal wants a steady rate; the lumpier catch-up reading belongs
-    # to a dated bill.
-    it "divides a monthly rate by the whole month, not the periods left in it" do
+    # THE GUARANTEE THIS EXAMPLE HAS ALWAYS MADE, now made across months as well as within one.
+    # It began as "the whole month, not what is left of it" — asked on Feb 20, the month's last
+    # boundary, the goal still contributes its rate rather than the $600 that dividing by the
+    # periods REMAINING would give. A goal wants a steady rate; the lumpier catch-up reading
+    # belongs to a dated bill.
+    #
+    # Feb 6 and Feb 20 (two boundaries) and Mar 6 (three) all read the same, which the old
+    # month-counting normaliser could not do — it answered $300 in February and $200 in March.
+    # Three literals rather than three comparisons to each other, so a method returning a
+    # constant wrong answer cannot pass by being consistent.
+    it "asks the same rate whenever it is asked, in any month", :aggregate_failures do
       monthly_goal = create(:pool, :savings_pool, user: goal_user, account: account, target_amount: 2_400)
       create(:pool_budget, :rate, pool: monthly_goal, amount: 600)
 
-      expect(monthly_goal.calculator(today: Date.new(2026, 2, 20)).required).to eq(300)
+      expect(monthly_goal.calculator(today: Date.new(2026, 2, 20)).required).to eq(BigDecimal("276.92"))
+      expect(monthly_goal.calculator(today: Date.new(2026, 3, 6)).required).to eq(BigDecimal("276.92"))
+      expect(monthly_goal.calculator(today: Date.new(2026, 8, 15)).required).to eq(BigDecimal("276.92"))
     end
 
     # Both bases on one goal, each normalised before adding: $150 a period plus $600 a month.
+    # $450.00 -> $426.92 for the same reason as the two examples above; the per-paycheck half is
+    # untouched at $150, which is what makes the moved total legible.
     it "adds rules of different bases in the same unit" do
       create(:pool_budget, :rate, pool: vacation, amount: 600)
 
-      expect(vacation.calculator(today: today).required).to eq(450)
+      expect(vacation.calculator(today: today).required).to eq(BigDecimal("426.92"))
     end
 
     # A user with no cadence has no boundaries at all, so the monthly amount cannot be

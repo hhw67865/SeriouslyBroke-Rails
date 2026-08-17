@@ -219,6 +219,32 @@ RSpec.describe "Budget page structural check", type: :system do
       expect(page).to have_content("Your budget doesn't fit your income")
     end
 
+    # THE TWO GATES ARE ONE GATE. `/budget` withholds its figures until income AND cadence exist,
+    # because "$3,000.00 a period" at someone who has not said how long a period is states a
+    # figure with no unit. Home used to gate on income alone, so the same user got the VERDICT
+    # those figures justify without the figures — and the verdict was computed from
+    # `steady_need`'s monthly fallback, a per-rule convenience that is not a reading of anyone's
+    # budget.
+    #
+    # Both directions on one fixture, and the screens paired: with the cadence declared, Home
+    # warns and `/budget` prints the figures; with it cleared, both fall silent together.
+    it "says nothing when income is declared but no period is" do
+      declared_user(2_400)
+      rate(envelope("Rent"), 3_000)
+
+      visit root_path
+      expect(page).to have_content("Your budget doesn't fit your income")
+
+      user.update!(period_cadence: nil, period_anchor_date: nil)
+
+      visit root_path
+      expect(page).to have_no_content("Your budget doesn't fit your income")
+
+      visit budget_page_path
+      expect(page).to have_no_css("[data-figure]")
+      expect(page).to have_no_css("[data-sacrifice-link]")
+    end
+
     it "stays silent when it does" do
       declared_user(2_400)
       rate(envelope("Groceries"), 400)

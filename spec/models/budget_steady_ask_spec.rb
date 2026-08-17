@@ -315,10 +315,15 @@ RSpec.describe Budget, type: :model do
       expect(described_class.steady_need(user, today: today)).to eq(300)
     end
 
-    # A stranger's CAP, not just a stranger's pool rule. `for_user`'s OR reaches category-mode
-    # rules through the categories side, so the mode filter and the ownership scope have to hold
-    # at once — a `where.not(pool_id: nil)` written as a standalone reader would sweep in every
-    # user's pool rules, and an ownership scope with no mode filter would sweep in this cap.
+    # A stranger's CAP. It CANNOT discriminate ownership on its own — the mode filter alone
+    # excludes every cap, so this passes with `for_user` removed entirely — and the claim that it
+    # could was an overstatement in an earlier version of this comment. Ownership is carried by
+    # the example above it, which plants a stranger's POOL rule that only `for_user` can exclude.
+    #
+    # What this one is worth is the pairing: the two together say the sum needs BOTH filters, and
+    # this half pins that a cap stays out no matter whose it is — so a future reader who reaches
+    # for "caps are excluded because they belong to categories" finds the case where that reasoning
+    # would have to be re-derived.
     it "does not count another user's cap either" do
       rate(300)
       stranger = create(:user, period_cadence: :biweekly, period_anchor_date: today)

@@ -247,23 +247,35 @@ class PoolCalculator
     [rate, remaining].min
   end
 
-  # A rule's amount is per-period or per-month depending on its basis, and Budget blesses
-  # both shapes without an anchor. Summing them raw mixes units: a $600-a-month rule would
-  # ask $600 every fortnight, more than twice the rate the user set, funding a four-month
-  # goal in under two. Normalise to a per-period figure before adding.
+  # A rule's amount is per-period or per-month depending on its basis, and Budget blesses both
+  # shapes without an anchor. Summing them raw mixes units: a $600-a-month rule would ask $600
+  # every fortnight, more than twice the rate the user set, funding a four-month goal in under
+  # two. Normalise to a per-period figure before adding.
   #
-  # The WHOLE month, not what is left of it, so the goal contributes the same amount every
-  # period regardless of when it is asked. Dividing by the periods REMAINING would make the
-  # ask lumpier as the month wears on — right for a dated bill catching up, wrong for a goal.
+  # `Budget#steady_ask`, NOT a normalisation of this file's own. It used to divide by the
+  # boundaries falling inside the CALENDAR MONTH, and that made a standing rate depend on which
+  # month you asked in: measured on a $260-a-month rule under the demo's biweekly cadence, it
+  # answered $130 in nine months of 2026 and $86.67 in March and August, the two months holding a
+  # third boundary. A 50% swing in a savings goal's contribution with no data change, and neither
+  # figure is the rate the user set — $260 a month is $120 a period, always, because 26 periods a
+  # year is what biweekly means. `steady_ask` says $120 in every month.
   #
-  # `[periods, 1].max` because a user with no cadence configured has no boundaries at all:
-  # fall back to the full amount rather than dividing by zero.
-  def per_period_rate(budget)
-    return budget.amount.to_d if budget.basis_per_paycheck?
-
-    periods = pool.user.period_boundaries(from: today.beginning_of_month, to: today.end_of_month).count
-    budget.amount.to_d / [periods, 1].max
-  end
+  # Two answers to "what does a monthly rule claim per period" is the exact defect this branch
+  # polices hardest, and the second answer was about to become load-bearing: Task 6 makes
+  # `steady_ask` the baseline the drift detector compares against, so the app would have held both
+  # figures on one page. Collapsed here rather than there, while only dateless goals read it.
+  #
+  # THE OLD COMMENT'S TWO GUARANTEES BOTH SURVIVE, more strongly than before:
+  #   - "the whole month, not what is left of it" — `steady_ask` never looks at the calendar for
+  #     an anchorless rule at all, so the ask cannot get lumpier as the month wears on.
+  #   - the no-cadence fallback — `User#periods_per_year` answers 12 for an undeclared user, so a
+  #     monthly rule still passes through at its full amount instead of dividing by zero.
+  #
+  # Only two shapes reach here: #dateless_goal? requires every rule on the pool to be anchorless,
+  # and Budget#shape_must_be_valid pins an anchorless rule to per-paycheck or to a 1-month
+  # interval. `steady_ask` answers both directly (`:per_paycheck` passes the amount through), so
+  # this delegates whole rather than branching first.
+  def per_period_rate(budget) = budget.steady_ask(pool.user, today: today)
 
   # The `sum` seed is the same type guarantee as #goal_required's, for the pool that holds
   # no rules at all: an unseeded `sum` over an empty set returns the Integer literal 0.

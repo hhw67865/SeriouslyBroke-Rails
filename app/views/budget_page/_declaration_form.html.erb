@@ -25,10 +25,15 @@
   <% end %>
 
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <%# `min: 0.01`, not `min: 0`. `User` validates `greater_than: 0`, so a submitted 0 is a 422 —
+        but with `min: 0` the browser called it valid and let it through, which is the form and the
+        model disagreeing about the same field. Blank is still allowed (the validation is
+        `allow_nil`) because clearing the income back to undeclared is a legitimate move; `min`
+        constrains what a value may be, not whether there is one. %>
     <%= f.input :typical_income,
                 as: :decimal,
                 label: "You typically bring in",
-                input_html: { placeholder: "0.00", step: 0.01, min: 0 },
+                input_html: { placeholder: "0.00", step: 0.01, min: 0.01 },
                 hint: "Per period, after tax. A rough figure is fine — nothing is inferred from it." %>
 
     <%# The enum's own keys, so a cadence this app cannot compute boundaries for is unselectable.
@@ -53,10 +58,16 @@
       not only the forward-looking ones: the boundaries also decide where each past period began
       and ended, so history re-buckets too. That is a large consequence for one select, and a user
       who is not told will read the changed numbers as the app losing their data. %>
+  <%# AND THE ONE EXCEPTION, said in the same breath as the rule. Income is DECLARED per period,
+      not converted between periods: $2,400 biweekly does not become $2,400 monthly when the
+      cadence changes, it stays the number in the box while everything around it is recounted. The
+      field is right there, so a user who reads "every figure re-derives" and does not read this
+      will halve or double their real income by changing one select. %>
   <p class="text-xs text-gray-500 max-w-2xl">
     Changing your period re-derives every figure immediately — what each rule claims, what your
     envelopes need next, and how your history buckets into periods. Nothing is rewritten; it is
-    all counted from these two facts.
+    all counted from these two facts. Your income is the exception: it is the figure you type, per
+    period, so change the period and check that number still reads right.
   </p>
 
   <%# `btn btn-primary`, the app's own component, and NOT the `bg-brand text-white` this first
