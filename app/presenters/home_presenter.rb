@@ -73,9 +73,20 @@ class HomePresenter
 
     # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE, and Home's is a date. Of the three quiet
     # states — `on track`, `saving` and `left to spend` — only the first has one to add: the other
-    # two have no anchored rule to take a date from, so #due_on is nil there anyway. A row needing
-    # attention has already said its date inside the label.
-    def due_marker? = !needs_attention? && status.due_on.present?
+    # two have no anchored rule to take a date from, so #due_on is nil there anyway.
+    #
+    # ** THE STATUS, NOT THE ROW, AND THE DIFFERENCE IS AN ORPHAN. ** This gate reads
+    # `status.needs_attention?` rather than this Data's own #needs_attention?, which is the OR with
+    # `orphan`. Written the other way — as it briefly was — an orphan pool whose OWN status is quiet
+    # and which has an anchored rule lost its date: `$50.00 · on track · Oct 17` became
+    # `$50.00 · on track`. The tempting justification ("a row needing attention has said its date
+    # inside the label") is false exactly there, because `pool_status_label` knows nothing about
+    # orphanhood — it renders the QUIET label, and this clause was the only date on the line.
+    #
+    # So the two questions are genuinely different and both belong: orphanhood decides the COLOUR
+    # and the auto-expand (nothing can fund this pool, whatever its balance says), and the status
+    # alone decides whether the label has already spent the date.
+    def due_marker? = !status.needs_attention? && status.due_on.present?
 
     # Home does NOT print `· holds $X`, which is the Budget page's clause. Both screens print one
     # clause after the state and they are different clauses, deliberately: a Home row shows no

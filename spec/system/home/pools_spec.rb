@@ -251,6 +251,66 @@ RSpec.describe "Home Pools", type: :system do
     expect(row("Old Goal")).to have_content("no distribution can reach it")
   end
 
+  # ** THE DUE DATE ON A QUIET ORPHAN — the row the 2d task 6 refactor silently changed, and the
+  #    one shape the byte-for-byte diff of Home could not see. **
+  #
+  # `_pool_row`'s date clause gates on the STATUS being quiet. Moved onto the row object it briefly
+  # gated on the ROW being quiet, and a row is not quiet when it is an orphan — so an orphan whose
+  # own status is `on track` and which has an anchored rule went from
+  # `$300.00 · on track · Oct 17` to `$300.00 · on track`, losing the only date on the line.
+  # `pool_status_label` knows nothing about orphanhood, so the "the label already said the date"
+  # argument that makes the gate safe for attention rows is false here.
+  #
+  # THE BLIND SPOT IS WORTH NAMING: the refactor was verified by diffing Home's whole rendered HTML
+  # against the demo database, byte for byte, and that diff was clean — because no pool on the demo
+  # is BOTH orphaned and quiet-with-a-dated-rule. A rendering diff can only see the states its data
+  # reaches; this pair is the assertion that does not depend on which pools happen to exist.
+  #
+  # Scoped to `span.text-sm`, which is the status line: an orphan row is auto-expanded, and the
+  # detail underneath it prints every dated rule's own date — so `have_no_content(date)` against the
+  # whole row would fail on text that is supposed to be there.
+  describe "an orphan pool's due date", :aggregate_failures do
+    def status_line(name) = find("[data-pool-name='#{name}'] span.text-sm")
+
+    # A SAVINGS pool, because it is the only kind that can be an orphan at all — `Pool` refuses a
+    # budget pool with no account ("Account must be set for budget pools"), which is why
+    # HomePresenter#orphan_pools calls an account-less savings goal the ordinary shape. The anchored
+    # rule is what takes it OUT of the `saving` state (`PoolStatus#saving?` requires no anchored
+    # rule) and into the quiet `on track` one, which is the only quiet state carrying a date.
+    def orphan_with_rule(name, amount:, due:)
+      pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
+      create(:pool_budget, pool: pool, amount: amount, interval_months: 1, anchor_date: due)
+      pool
+    end
+
+    it "prints it when the pool's own status is quiet" do
+      due = Date.current + 2.months
+      pool = orphan_with_rule("Old Goal", amount: 300, due: due)
+      create(:pool_movement, from_pool: checking, to_pool: pool, amount: 300, date: Date.current)
+
+      visit root_path
+
+      expect(status_line("Old Goal")).to have_content("on track")
+      expect(status_line("Old Goal")).to have_content(due.strftime("%b %-d"))
+    end
+
+    # The other direction, on an orphan whose OWN status needs attention. Overdrawn is the state to
+    # reach it with: it fires on the balance alone, so the same shape as above minus the money is
+    # enough, and `PoolStatus#due_on` still answers the rule's date — which is precisely the case
+    # the gate has to suppress, because "overdrawn $50.00 · Oct 17" would date a debt with a
+    # deadline that belongs to something else.
+    it "leaves it off when the pool's own status needs attention" do
+      due = Date.current + 2.months
+      pool = orphan_with_rule("Late Goal", amount: 300, due: due)
+      create(:pool_movement, from_pool: pool, to_pool: checking, amount: 50, date: Date.current)
+
+      visit root_path
+
+      expect(status_line("Late Goal")).to have_content("overdrawn $50.00")
+      expect(status_line("Late Goal")).to have_no_content(due.strftime("%b %-d"))
+    end
+  end
+
   # The group header is the only thing that says these are unfundable, so it must stay
   # silent when every pool has an account — an empty "No account" heading over nothing
   # is a problem invented out of a healthy screen.

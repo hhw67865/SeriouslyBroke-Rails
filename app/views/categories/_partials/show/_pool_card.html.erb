@@ -67,8 +67,13 @@
 
   <%# THE ENVELOPE'S STANDING, in the app's one row vocabulary. Rendered from four spaces in
       because that is the column `shared/_pool_status` is written to emit at — see its header. %>
+  <%# ITS OWN HOOK, NOT `data-envelope-status`. The budget block above this card carries that one,
+      and both render on one page for a pool-covered expense category — a page-wide
+      `find("[data-envelope-status]")` raises Capybara::Ambiguous the moment two elements answer to
+      it, which would have turned an existing scoped assertion into a failure for a reason having
+      nothing to do with what it asserts. %>
   <% if pool.pool_type_budget? %>
-  <p class="mb-4" data-envelope-status>
+  <p class="mb-4" data-pool-card-status>
     <%= render "shared/pool_status", row: presenter %>
   </p>
   <% end %>
