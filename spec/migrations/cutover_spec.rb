@@ -61,7 +61,12 @@ RSpec.describe CutoverToEnvelopeBudgeting do
         account: checking,
         target_amount: nil
       ),
-      rent_goal: create(:pool, user: user, name: "Rent", account: checking, target_amount: 5_000.00)
+      rent_goal: create(:pool, user: user, name: "Rent", account: checking, target_amount: 5_000.00),
+      # AN OVERSPENT GOAL, reached below by an EXPENSE category — a shape the demo has held since
+      # Plan 2c (Health → Emergency Fund). It is here because step 5b's boundary is "budget pools
+      # only", and a boundary is only tested by something sitting on the far side of it: with every
+      # goal at zero or better, a step that wrongly zeroed goals too would pass every example.
+      medical: create(:pool, user: user, name: "Medical Fund", account: checking, target_amount: 1_000.00)
     }
   end
 
@@ -72,6 +77,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       rent: create(:category, :expense, user: user, name: "Rent", pool: nil),
       salary: create(:category, :income, user: user, name: "Salary", pool: nil),
       coffee: create(:category, :expense, user: user, name: "Coffee", pool: nil),
+      health: create(:category, :expense, user: user, name: "Health", pool: pools[:medical]),
       vacation: create(:category, :savings, user: user, name: "Vacation", pool: pools[:holiday])
     }
   end
@@ -97,14 +103,20 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     entry_on(paycheck, 500.00, 7, 15)
   end
 
-  # Money out to it — the negative half.
+  # Money out to it — the negative half. The first four land in categories that will get envelopes;
+  # the last three are already pooled or stay on the buffer.
   def wild_expense_entries(categories)
     entry_on(item_in(categories[:groceries], "Supermarket"), 220.00, 7, 2)
     entry_on(item_in(categories[:groceries], "Corner Shop"), 80.00, 7, 9)
     entry_on(item_in(categories[:utilities], "Electric"), 90.00, 7, 3)
     entry_on(item_in(categories[:rent], "Landlord"), 1_200.00, 7, 1)
+    wild_unenveloped_expenses(categories)
+  end
+
+  def wild_unenveloped_expenses(categories)
     entry_on(item_in(categories[:coffee], "Cafe"), 12.50, 7, 4)
     entry_on(item_in(categories[:coffee], "Kiosk"), 7.25, 7, 11)
+    entry_on(item_in(categories[:health], "Dentist"), 60.00, 7, 12)
   end
 
   # Money that never crossed it — the shape the migration re-records as transfers.
@@ -132,6 +144,26 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     entry_on(item_in(bonus, "Q2 Bonus"), 200.00, 7, 7)
 
     { user: user, old_account: old_account, main: main, dining: dining, bonus: bonus }
+      .merge(settled_lodger(user, old_account))
+  end
+
+  # AN OVERDRAWN ENVELOPE LIVING SOMEWHERE OTHER THAN THE DEFAULT ACCOUNT — the shape the demo does
+  # not have and therefore cannot test. Step 5b has to fund it from Old Account, the buffer that
+  # historically paid for it; funding it from Main would invent a transfer between two real bank
+  # accounts, which is what `PoolMovement#crosses_accounts?` reports and spec §5.4 defers.
+  def settled_lodger(user, old_account)
+    travel = create(
+      :pool,
+      user: user,
+      name: "Travel",
+      pool_type: :budget,
+      account: old_account,
+      target_amount: nil
+    )
+    category = create(:category, :expense, user: user, name: "Travel", pool: travel)
+    entry_on(item_in(category, "Train Ticket"), 70.00, 7, 9)
+
+    { travel: travel, travel_category: category }
   end
 
   # No account at all, and a GOAL already sitting on the name the migration reaches for.
@@ -152,13 +184,13 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
   # ---------------------------------------------------------------------------------------------
   # Bank truth, by hand from the entries planted above
-  #   wild:     3000 + 500 in, minus 220 + 80 + 90 + 1200 + 12.50 + 7.25 out = 1890.25
-  #   settled:  200 in, minus 45 out                                         =  155.00
+  #   wild:     3000 + 500 in, minus 220 + 80 + 90 + 1200 + 12.50 + 7.25 + 60 out = 1830.25
+  #   settled:  200 in, minus 45 + 70 out                                    =   85.00
   #   bare:     nothing                                                      =    0.00
   #   namesake: nothing in, minus 30 out                                     =  -30.00
   # ---------------------------------------------------------------------------------------------
-  def wild_bank_truth = BigDecimal("1890.25")
-  def settled_bank_truth = BigDecimal("155.00")
+  def wild_bank_truth = BigDecimal("1830.25")
+  def settled_bank_truth = BigDecimal("85.00")
   def namesake_bank_truth = BigDecimal("-30.00")
 
   def migrate!
@@ -174,9 +206,10 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
   describe "the invariant it exists to create" do
     it "does not hold before the migration and does hold after it", :aggregate_failures do
-      # The three savings entries are money the app invented: they enter a pool without ever
-      # entering the user's life, so the pools claim $400 against a bank balance of $1,890.25.
-      expect(app_total(wild[:user])).to eq(BigDecimal("400.00"))
+      # The three savings entries are money the app invented — they enter a pool without ever
+      # entering the user's life — and every paycheck ever recorded reaches no pool at all, because
+      # Salary points at nothing. So the pools claim $340.00 against a bank balance of $1,830.25.
+      expect(app_total(wild[:user])).to eq(BigDecimal("340.00"))
 
       migrate!
 
@@ -325,8 +358,77 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     end
 
     it "conserves the count — three entries in, three movements out, none left behind", :aggregate_failures do
-      expect(PoolMovement.count).to eq(3)
-      expect(Entry.count).to eq(11)
+      expect(PoolMovement.where(to_pool: wild[:holiday]).count).to eq(3)
+      expect(Entry.count).to eq(13)
+    end
+  end
+
+  # STEP 5b. Wild's three envelopes open holding their categories' whole spending history —
+  # Groceries −$300.00, Utilities −$90.00, Rent 2 −$1,200.00 — and each is cleared by one movement
+  # out of the buffer. $1,590.00 in total, which is where the buffer's $3,080.25 goes.
+  describe "step 5b — budget envelopes open at zero" do
+    before { migrate! }
+
+    it "leaves every budget envelope holding nothing at all" do
+      expect(wild[:user].pools.budget_pools.map { |pool| pool.calculator.balance }).to all(eq(0))
+    end
+
+    it "pays each deficit out of the buffer, exactly once and exactly in full", :aggregate_failures do
+      zeroing = PoolMovement.where(from_pool: wild[:checking], date: Time.zone.today.all_day)
+
+      expect(zeroing.pluck(:amount).sort).to eq(
+        [
+          BigDecimal("90.00"),
+          BigDecimal("300.00"),
+          BigDecimal("1200.00")
+        ]
+      )
+      expect(zeroing.map(&:kind).uniq).to eq(["transfer"])
+      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("1490.25"))
+    end
+
+    # THE FAR SIDE OF THE BOUNDARY: Medical Fund is a GOAL sitting at −$60.00, which is exactly the
+    # shape step 5b would zero if it selected on the balance alone. It is left overdrawn, because a
+    # goal's balance is real accumulated savings and this one really is overspent.
+    it "does not touch the goals, whose balances are real savings", :aggregate_failures do
+      expect(wild[:holiday].reload.calculator.balance).to eq(BigDecimal("400.00"))
+      expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
+      expect(PoolMovement.where(to_pool: [wild[:rent_goal], wild[:medical]])).not_to exist
+    end
+
+    it "writes nothing on a second run, because nothing is negative any more" do
+      expect { migrate! }.not_to change(PoolMovement, :count)
+    end
+
+    # THE SHAPE THE DEMO CANNOT TEST. Settled's Travel envelope is overdrawn $70.00 and lives in Old
+    # Account, while the user's DEFAULT account is Main. Sourced from the default it would be a
+    # transfer between two real banks; sourced from its own account it is a move inside one.
+    it "funds an envelope from the account it lives in, not from the default one", :aggregate_failures do
+      zeroing = PoolMovement.find_by(to_pool: settled[:travel])
+
+      expect(zeroing).to have_attributes(from_pool_id: settled[:old_account].id, amount: BigDecimal("70.00"))
+      expect(zeroing.crosses_accounts?).to be(false)
+      expect(settled[:travel].reload.calculator.balance).to eq(0)
+      expect(settled[:old_account].reload.calculator.balance).to eq(BigDecimal("-70.00"))
+    end
+  end
+
+  # THE OTHER DIRECTION on the promise step 5b is bounded by: a goal's balance is identical before
+  # the migration and after it. The entry→movement swap replaces a `+amount` with the same
+  # `+amount`, and no step re-points a category away from a goal or zeroes one.
+  describe "what the migration promises not to move" do
+    it "leaves every savings pool's balance exactly where it found it" do
+      before_run = wild[:user].pools.savings_pools.to_h { |pool| [pool.id, pool.calculator.balance] }
+
+      migrate!
+
+      expect(wild[:user].pools.savings_pools.reload.to_h { |pool| [pool.id, pool.calculator.balance] })
+        .to eq(before_run)
+    end
+
+    it "and those balances are figures, not a coincidence of zeroes", :aggregate_failures do
+      expect(wild[:holiday].calculator.balance).to eq(BigDecimal("400.00"))
+      expect(wild[:medical].calculator.balance).to eq(BigDecimal("-60.00"))
     end
   end
 
@@ -341,12 +443,13 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     end
 
     it "leaves the buffer holding everything no envelope or goal claimed", :aggregate_failures do
-      # 3500 income, less 19.75 of buffer-funded coffee, less the 400 transferred out to the goal.
-      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("3080.25"))
+      # 3500 income, less 19.75 of buffer-funded coffee, less 400 transferred to the goal, less the
+      # 1590 that opens the three envelopes at zero. The Health spending is NOT in that list — it
+      # comes out of the goal it points at, which is why Medical Fund sits at −60 below.
+      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("1490.25"))
       expect(wild[:holiday].reload.calculator.balance).to eq(BigDecimal("400.00"))
-      expect(wild[:user].pools.find_by(name: "Groceries").calculator.balance).to eq(BigDecimal("-300.00"))
-      expect(wild[:utilities_pool].reload.calculator.balance).to eq(BigDecimal("-90.00"))
-      expect(wild[:user].pools.find_by(name: "Rent 2").calculator.balance).to eq(BigDecimal("-1200.00"))
+      expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
+      expect(wild[:user].pools.budget_pools.map { |pool| pool.calculator.balance }).to all(eq(0))
       expect(wild[:rent_goal].reload.calculator.balance).to eq(0)
     end
   end
@@ -404,8 +507,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # step 2, a surviving cap converted by step 3 — so no re-run can trip them, which is a
     # property worth having and not a reason to leave them unproven.
     it "names every structural arm it can fail on", :aggregate_failures do
-      break_every_structural_invariant
-      message = verification_message(caps: 5, rules_before: 0)
+      message = broken_verification_message
 
       expect(message).to include("is not an account of this user")
       expect(message).to include("2 categories still have no pool")
@@ -413,6 +515,15 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(message).to include("3 envelope rules created for 5 caps")
       expect(message).to include("1 category-mode caps survived")
       expect(message).to include("1 savings categories survived", "1 savings entries survived")
+    end
+
+    # STEP 5b's TWO ARMS, and neither is implied by the invariant: a zeroing movement of the wrong
+    # size still nets to zero, and a goal that drifted did so by money that stayed in the pool tree.
+    it "reports an envelope left in deficit and a goal that moved", :aggregate_failures do
+      message = broken_verification_message
+
+      expect(message).to include("1 budget envelopes are still negative")
+      expect(message).to include("moved 400.0 -> 410.0")
     end
 
     # ROLLBACK, PROVEN RATHER THAN ASSERTED: the failing run has real work to do before it
@@ -447,11 +558,24 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # rubocop:enable Rails/SkipsModelValidations
   end
 
+  # The snapshot is taken BEFORE the breakage, exactly as the migration takes its own — the drift
+  # arm is about a goal moving during a run, so measuring after the move would prove nothing.
+  def broken_verification_message
+    savings_before = described_class.new.send(:pool_balances, wild[:user].id, described_class::SAVINGS_POOL)
+    break_every_structural_invariant
+
+    verification_message(caps: 5, rules_before: 0, savings_before: savings_before)
+  end
+
   def break_every_structural_invariant
     unpool_a_category_and_evict_a_goal
     create(:budget, category: create(:category, :expense, user: wild[:user], name: "Gym", pool: nil), amount: 60.00)
+    # A savings entry that came back: it revives the category count, the entry count, AND — because
+    # it lands in the goal's lane — moves the goal's balance from 400.00 to 410.00.
     revived = create(:category, :savings, user: wild[:user], name: "Revived", pool: wild[:holiday])
     entry_on(item_in(revived, "Deposit"), 10.00, 7, 20)
+    # Spending that arrived after the envelope was zeroed, putting it back into deficit.
+    entry_on(item_in(wild[:groceries], "Late Receipt"), 25.00, 7, 21)
   end
 
   def unpool_a_category_and_evict_a_goal
@@ -461,13 +585,14 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # rubocop:enable Rails/SkipsModelValidations
   end
 
-  def verification_message(caps:, rules_before:)
+  def verification_message(caps:, rules_before:, savings_before:)
     described_class.new.send(
       :verify!,
       wild[:user].id,
       bare.reload.default_account_id,
       caps: caps,
-      rules_before: rules_before
+      rules_before: rules_before,
+      savings_before: savings_before
     )
     raise "the verification passed a database it should have refused"
   rescue described_class::VerificationFailed => e
