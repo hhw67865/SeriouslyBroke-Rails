@@ -36,26 +36,44 @@
       ytd_path: category_path(@category, period: "ytd") %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <% cache [@category, selected_date, current_period, pace_cache_key(selected_date)] do %>
-      <!-- Left Column -->
-      <div class="lg:col-span-2 space-y-6">
+    <%# THE CACHE NOW COVERS THE LEFT COLUMN ONLY, and the two pool cards are what pushed it there.
+
+        It used to wrap both columns. Every figure inside it was derived from THIS category's own
+        entries, and `Entry belongs_to :item, touch: true` / `Item belongs_to :category, touch: true`
+        move `@category.updated_at` whenever one of those changes — so the key was sound for exactly
+        the figures it held.
+
+        An envelope's balance is not one of those. It moves when a distribution writes a
+        `PoolMovement`, or when an entry in ANOTHER category pointing at the same pool is recorded,
+        and neither of those touches this category: the block would have gone on printing last
+        week's `$240.00 left` under a live "Rules on the Budget page" link. The same was already
+        true of the pool card's progress bar beneath it. Both are now outside the cache, and the
+        left column — the spending figures the period toggle is for — keeps it.
+
+        Cheap: the right column costs two COUNTs and the five preloaded recent entries; the
+        measured page cost is in the task report. %>
+    <!-- Left Column -->
+    <div class="lg:col-span-2 space-y-6">
+      <% cache [@category, selected_date, current_period, pace_cache_key(selected_date)] do %>
         <%= render "categories/_partials/show/summary_card", category: @category %>
         <%= render "categories/_partials/show/items_list", category: @category %>
-      </div>
-      
-      <!-- Right Column -->
-      <div class="space-y-6">
-        <%= render "categories/_partials/show/details_card", category: @category %>
-        
-        <% if @category.budgetable? %>
-          <%= render "categories/_partials/show/budget_card", category: @category %>
-        <% end %>
-        <% if @category.pool.present? %>
-          <%= render "categories/_partials/show/pool_card", category: @category %>
-        <% end %>
-        
-        <%= render "categories/_partials/show/recent_activity", category: @category %>
-      </div>
-    <% end %>
+      <% end %>
+    </div>
+
+    <!-- Right Column -->
+    <div class="space-y-6">
+      <%= render "categories/_partials/show/details_card", category: @category %>
+
+      <%# EVERY EXPENSE CATEGORY, not just `budgetable?` ones — spec §8.1's three states, and the
+          pool-covered one is exactly the shape that used to render no block at all. %>
+      <% if @budget_block %>
+        <%= render "categories/_partials/show/budget_card", presenter: @budget_block %>
+      <% end %>
+      <% if @category.pool.present? %>
+        <%= render "categories/_partials/show/pool_card", category: @category %>
+      <% end %>
+
+      <%= render "categories/_partials/show/recent_activity", category: @category %>
+    </div>
   </div>
 </div>

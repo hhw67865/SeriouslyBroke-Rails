@@ -41,7 +41,7 @@
       <%= pool_status_label(status,
                             period_closed: status.period_closed?,
                             changed_after_distributing: group.changed_after_distributing?) %>
-      <span class="text-gray-400"><%= budget_group_balance(group) %></span>
+      <span class="text-gray-400"><%= pool_balance_clause(status) %></span>
     </span>
   </div>
 

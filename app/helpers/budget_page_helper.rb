@@ -17,10 +17,17 @@ module BudgetPageHelper
   #
   # The balance is therefore on screen for every pool either way; this clause is what puts it
   # there for the three states whose figure is a bill's shortfall instead.
-  def budget_group_balance(group)
-    return "" if group.status.amount_is_balance?
+  #
+  # A STATUS RATHER THAN A `Group`, which is Task 5's widening and not a tidy-up: spec §8.1 puts
+  # the same envelope on the Categories page, said in the same row vocabulary, and that screen has
+  # no Group to hand over. Taking the object the clause actually reads — `PoolStatus`, which owns
+  # both `amount_is_balance?` and `balance` — is what lets the second screen reuse this rather than
+  # grow its own copy of the `· holds` rule. Renamed with the signature so the name stops promising
+  # a Group. `Group#balance` delegates to its status, so the figure is unchanged on the Budget page.
+  def pool_balance_clause(status)
+    return "" if status.amount_is_balance?
 
-    "· holds #{number_to_currency(group.balance)}"
+    "· holds #{number_to_currency(status.balance)}"
   end
 
   # WHAT A RULE IS CALLED. The item it pays is the truest name — "Rent Bill" says what the money
@@ -60,6 +67,30 @@ module BudgetPageHelper
     when :one_off then "once"
     else "every #{budget.interval_months} months"
     end
+  end
+
+  # WHAT A CATEGORY CAP IS NOT — THE APP'S ONE SPELLING OF IT, and the reason it is a method rather
+  # than two paragraphs of copy.
+  #
+  # Two screens owe the user this sentence. The structural check owes it because `rules_need` counts
+  # POOL-MODE rules only, so a user whose only rules are caps reads `$0.00 a period` above a page
+  # listing eight of their own rules; the Categories page's budget block owes it because it is where
+  # a cap is WRITTEN, and §8.1 requires the caveat to sit beside the editor rather than only on the
+  # page that reports the consequence. Spec §8.1 asks for one spelling of it, not two, for the
+  # ordinary reason: two hand-maintained wordings of one rule drift, and then the app is telling a
+  # user two different things about the same cap on two screens.
+  #
+  # "COUNTED IN WHAT YOUR RULES NEED", NOT THE ORIGINAL "counted here". "Here" was a deictic that
+  # only worked underneath the figure — on the Categories page it would point at nothing — and the
+  # replacement names the structural check's own first line, which is truthful from both screens
+  # and is the phrase a reader can then go and find on /budget.
+  #
+  # It stays PLURAL ("your category caps") on a page showing exactly one cap, deliberately: the
+  # sentence is about what the whole class of rule is, and a singular variant for this screen would
+  # be the second spelling the spec forbids.
+  def caps_not_counted_sentence
+    "Your category caps are spending limits, not claims on your income — no distribution fills " \
+      "one, so none of them is counted in what your rules need."
   end
 
   # THE LIST `PATCH /budget/reorder` TAKES, with one pool moved one place. `offset` is -1 for ▲

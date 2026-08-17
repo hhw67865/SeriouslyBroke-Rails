@@ -23,7 +23,7 @@ module SacrificesHelper
   # A per-period rule IS denominated in periods, so the clause rendered "$3,000.00 a period ·
   # $3,000.00 / period": one number twice, on every rate row on the screen, which reads as a
   # rendering fault rather than as information. Measured on the rendered page, exactly as
-  # `BudgetPageHelper#budget_group_balance` was.
+  # `BudgetPageHelper#pool_balance_clause` was.
   #
   # Gated on the CADENCE and not on the two figures being equal, because they can coincide by
   # arithmetic while still meaning different things: a one-off with one period left to save claims

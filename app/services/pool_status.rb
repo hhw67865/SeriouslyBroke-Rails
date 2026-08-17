@@ -12,7 +12,7 @@ class PoolStatus
   # the three arms of #amount that do not read #balance. Here beside ATTENTION_STATES, and for
   # the same reason it is: a caller that has to know which states print the pool's money is
   # asking a question about this class's #amount, and a hand copy of the case statement below
-  # would be a second reader free to drift from it. BudgetPageHelper#budget_group_balance held
+  # would be a second reader free to drift from it. BudgetPageHelper#pool_balance_clause held
   # exactly that copy and now asks #amount_is_balance? instead.
   BILL_STATES = [:overdue, :wont_make_it, :behind].freeze
 

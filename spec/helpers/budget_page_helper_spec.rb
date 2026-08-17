@@ -63,38 +63,37 @@ RSpec.describe BudgetPageHelper, type: :helper do
   # :wont_make_it are the dangerous pair: their labels print a DATE and no money figure at all,
   # so if either fell out of the balance side the pool's balance would vanish from the page and
   # every example here would stay green.
-  describe "#budget_group_balance" do
+  describe "#pool_balance_clause" do
     # A REAL PoolStatus with only its state and balance stubbed, never an `instance_double`
     # answering `amount_is_balance?` itself: the helper is a lookup on that method now, and a
     # double told what to answer would assert nothing about which states print their own money.
     # This way the mapping under test is PoolStatus's real one.
-    def group(state, balance: 250)
-      status = PoolStatus.new(build(:pool))
-      allow(status).to receive_messages(state: state, balance: balance)
-      BudgetPagePresenter::Group.new(
-        pool: build(:pool),
-        rules: [],
-        status: status,
-        changed_after_distributing: false
-      )
+    #
+    # A BARE STATUS, which is what the helper now takes — the Categories page's budget block
+    # (spec §8.1) renders the same clause off a pool it holds no Group for, and wrapping one here
+    # would test a shape only one of the two callers has.
+    def status_for(state, balance: 250)
+      PoolStatus.new(build(:pool)).tap do |status|
+        allow(status).to receive_messages(state: state, balance: balance)
+      end
     end
 
     # :overdue and :wont_make_it print `overdue · was Aug 6` and `won't make it · Aug 19` — no
     # figure whatsoever — so the clause is the only thing putting the balance on screen for them.
     it "states the balance where the label named a bill instead", :aggregate_failures do
-      expect(helper.budget_group_balance(group(:behind))).to eq("· holds $250.00")
-      expect(helper.budget_group_balance(group(:overdue))).to eq("· holds $250.00")
-      expect(helper.budget_group_balance(group(:wont_make_it))).to eq("· holds $250.00")
+      expect(helper.pool_balance_clause(status_for(:behind))).to eq("· holds $250.00")
+      expect(helper.pool_balance_clause(status_for(:overdue))).to eq("· holds $250.00")
+      expect(helper.pool_balance_clause(status_for(:wont_make_it))).to eq("· holds $250.00")
     end
 
     # `pool_status_label` prints PoolStatus#amount, which IS the balance here — printed again
     # the row read "$250.00 left · holds $250.00". :overdrawn is included because its label
     # prints the balance NEGATED, which read "overdrawn $80.00 · holds -$80.00".
     it "stays silent where the label has already said it", :aggregate_failures do
-      expect(helper.budget_group_balance(group(:left_to_spend))).to eq("")
-      expect(helper.budget_group_balance(group(:on_track))).to eq("")
-      expect(helper.budget_group_balance(group(:overdrawn))).to eq("")
-      expect(helper.budget_group_balance(group(:saving))).to eq("")
+      expect(helper.pool_balance_clause(status_for(:left_to_spend))).to eq("")
+      expect(helper.pool_balance_clause(status_for(:on_track))).to eq("")
+      expect(helper.pool_balance_clause(status_for(:overdrawn))).to eq("")
+      expect(helper.pool_balance_clause(status_for(:saving))).to eq("")
     end
   end
 

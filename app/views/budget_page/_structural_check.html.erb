@@ -59,12 +59,17 @@
 
           The orphan band already says the same fact about the same rules in its own register
           ("caps a category — no envelope to fill"); this says what it MEANS for the figure, once,
-          and only where the figure would otherwise read as a rendering fault. %>
+          and only where the figure would otherwise read as a rendering fault.
+
+          THE SENTENCE ITSELF IS `BudgetPageHelper#caps_not_counted_sentence`, shared with the
+          Categories page's budget block (spec §8.1 asks for one spelling of it). The clause after
+          it is NOT shared and must not be: "you have none yet" is true only under the zero this
+          block is gated on, and on a category page it would be a claim about rules the screen
+          cannot see. %>
       <% if presenter.caps_not_counted? %>
         <p class="text-sm text-gray-500 max-w-2xl" data-caps-note>
-          Your category caps are spending limits, not claims on your income — no distribution
-          fills one, so none of them is counted here. Rules that fill an envelope are, and you
-          have none yet.
+          <%= caps_not_counted_sentence %>
+          Rules that fill an envelope are, and you have none yet.
         </p>
       <% end %>
 

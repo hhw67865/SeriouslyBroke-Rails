@@ -13,7 +13,13 @@ class CategoriesController < ApplicationController
   end
 
   # GET /categories/1
-  def show; end
+  #
+  # The budget block is spec §8.1's, and it is built for EXPENSE categories only because that is
+  # the only kind that can carry a cap or point at an envelope — an income or savings category has
+  # no budget state to be in. Nil for the others, and the view renders nothing for a nil.
+  def show
+    @budget_block = CategoryBudgetPresenter.new(category: @category) if @category.expense?
+  end
 
   # GET /categories/new
   def new

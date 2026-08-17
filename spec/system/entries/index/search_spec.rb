@@ -267,6 +267,61 @@ RSpec.describe "Entries Index - Search", type: :system do
 
       expect(page).to have_content("No entries found")
     end
+
+    # AN ENTRY MAY NAME ITS OWN POOL, AND THE SEARCH MUST READ THE SAME LANE EVERY BALANCE READS.
+    #
+    # `PoolBalanceLedger::ENTRY_POOL_ID` is `COALESCE(entries.pool_id, categories.pool_id)` — the
+    # entry's override FIRST — and it is what `PoolCalculator`, the ledger and the suggestion
+    # engine all resolve an entry through. This search used to walk `item → category → pool`, the
+    # second half of that COALESCE with the first half dropped, so an overriding entry was listed
+    # under the envelope it had been moved AWAY FROM and was missing from the one holding its money.
+    # Nothing in the UI writes `entries.pool_id` yet; the seeds and the factories do.
+    #
+    # BOTH DIRECTIONS, and both are needed: a search that returned everything would pass the first
+    # example, and one that returned nothing would pass the second. The two entries sit on the SAME
+    # item, so the only thing separating them is the override.
+    context "with an entry that names its own pool" do
+      before do
+        travel_category = create(:category, :savings, user: user, name: "Travel Savings", pool: vacation_pool)
+        travel_item = create(:item, category: travel_category, name: "Travel Fund")
+        create(
+          :entry,
+          item: travel_item,
+          amount: 400,
+          pool: emergency_pool,
+          description: "Rerouted to emergency",
+          date: Date.parse("2024-04-02")
+        )
+        create(
+          :entry,
+          item: travel_item,
+          amount: 250,
+          description: "Left where the category points",
+          date: Date.parse("2024-04-03")
+        )
+        visit entries_path
+      end
+
+      def search_pool(name)
+        select "Pool", from: "field"
+        fill_in "q", with: name
+        find("input[name='q']").send_keys(:return)
+      end
+
+      it "finds it under the pool it named" do
+        search_pool("Emergency Fund")
+
+        expect(page).to have_content("Rerouted to emergency")
+        expect(page).to have_no_content("Left where the category points")
+      end
+
+      it "does not find it under its category's pool" do
+        search_pool("Vacation Fund")
+
+        expect(page).to have_content("Left where the category points")
+        expect(page).to have_no_content("Rerouted to emergency")
+      end
+    end
   end
 
   describe "search results and navigation", :aggregate_failures do

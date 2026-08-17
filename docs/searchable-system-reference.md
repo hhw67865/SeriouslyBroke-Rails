@@ -12,7 +12,7 @@ This document describes the elegant searchable system implemented in the Serious
 **Key Features**:
 - `searchable` class method for field configuration
 - Automatic SQL generation for different field types
-- Support for direct fields, associations, nested associations, and dates
+- Support for direct fields, associations, nested associations, dates, and model scopes
 - Stores configuration in `_searchable_fields` class attribute
 
 **DSL Examples**:
@@ -21,6 +21,7 @@ searchable :description, label: "Description"                    # Direct column
 searchable :date, type: :date, label: "Date"                    # Date field with special parsing
 searchable :item, through: :item, column: :name, label: "Item"  # Single association
 searchable :category, through: [:item, :category], column: :name, label: "Category" # Nested association
+searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"          # Model scope
 ```
 
 **Generated Methods**:
@@ -108,6 +109,9 @@ class Entry < ApplicationRecord
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
+  # Not `through: [:item, :category, :pool]` — an entry may override its category's pool, and the
+  # lane every balance reads is `COALESCE(entries.pool_id, categories.pool_id)`. See Scope Search.
+  searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
 end
 ```
 
@@ -224,6 +228,32 @@ searchable :category, through: [:item, :category], column: :name
 searchable :date, type: :date
 # Handles: Date parsing, range queries, partial date matching
 ```
+
+### Scope Search — a lane `through:` cannot spell
+```ruby
+searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
+# Delegates to Entry.in_pool_named(query), which returns a relation
+```
+
+`through:` builds a chain of `joins`, so it can only ever follow associations declared on the
+model. A field whose lane is a **SQL expression** rather than a foreign key — a `COALESCE` over
+two columns, a computed column, a union — has no `through:` that describes it.
+
+`type: :scope` names a scope on the model instead, and `search_by` calls it with the query. The
+expression then lives beside the model's other readers of the same rule, where the next person
+changing that rule will see it, and this concern stays ignorant of what any one model's lanes mean.
+
+`Entry`'s `:pool` field is the reason it exists. Every balance in the app resolves an entry through
+`PoolBalanceLedger::ENTRY_POOL_ID` — `COALESCE(entries.pool_id, categories.pool_id)`, the entry's
+own pool first — while the search walked `item → category → pool`, which is the same rule with its
+first half dropped. An entry carrying an override was found under the lane it had overridden away
+from. `Entry.in_pool_named` reuses that constant rather than restating it.
+
+Contract:
+- the scope takes exactly one argument, the query string, and returns a relation;
+- `scope:` is `fetch`-ed, so `type: :scope` without it raises rather than searching nothing;
+- inside the scope, `self` is the current relation, so it composes onto whatever the caller had
+  already filtered — exactly as the join-based branches do.
 
 ## Extension Points
 

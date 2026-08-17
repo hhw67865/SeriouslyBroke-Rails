@@ -29,12 +29,37 @@ class Entry < ApplicationRecord
   scope :pool_covered_expenses, -> { expenses.where.not(categories: { pool_id: nil }) }
   scope :tracked, -> { where(categories: { tracked: true }) }
 
+  # EVERY ENTRY WHOSE POOL IS NAMED `name`, ASKED THE WAY EVERY BALANCE ASKS IT.
+  #
+  # `PoolBalanceLedger::ENTRY_POOL_ID` — `COALESCE(entries.pool_id, categories.pool_id)` — is this
+  # app's one SQL answer to "which pool does this entry reach", and it is the entry's OWN pool
+  # first. Search used to walk `item → category → pool` instead, which is the second half of that
+  # COALESCE with the first half dropped: an entry carrying an override was found under the lane it
+  # had overridden AWAY FROM and not under the one holding its money. Seeds and factories write
+  # that column (no UI does yet), so the two readers already disagreed about rows in the database.
+  #
+  # An INNER JOIN, matching the ledger's own: an entry whose category has no pool and which carries
+  # no override reaches NO pool — `COALESCE(NULL, NULL)` is NULL — and it is correctly absent from
+  # every pool's results rather than swept into one by a LEFT JOIN's nulls.
+  #
+  # `joins(item: :category)` is required by the expression itself (it reads `categories.pool_id`)
+  # and is the same inner join `Entry.expenses` and its siblings carry, so a search composed on top
+  # of a type filter joins nothing twice.
+  scope :in_pool_named,
+        lambda { |name|
+          joins(item: :category)
+            .joins("INNER JOIN pools ON pools.id = #{PoolBalanceLedger::ENTRY_POOL_ID}")
+            .where("pools.name ILIKE ?", "%#{name}%")
+        }
+
   # Define searchable fields using the DSL
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
-  searchable :pool, through: [:item, :category, :pool], column: :name, label: "Pool"
+  # NOT `through: [:item, :category, :pool]`, which is why the DSL grew a `:scope` type — see
+  # `.in_pool_named` above and ModelSearchable::SearchMethods#search_by.
+  searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
 
   # entry override -> category's pool -> nowhere.
   #
