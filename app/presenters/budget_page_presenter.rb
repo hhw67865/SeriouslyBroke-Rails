@@ -229,11 +229,15 @@ class BudgetPagePresenter
       end
   end
 
+  # `user.budgets` and not a bare `Budget.where`, for the same reason every other read on this
+  # presenter goes through the user: `has_many :budgets, through: :categories` walks the category
+  # link, which is exactly and only the category-mode caps this asks about, and it cannot reach a
+  # row the user does not own even if a `category_id` ever arrived from somewhere it should not.
   def caps_by_category_id
     @caps_by_category_id ||=
       begin
         ids = suggestions.filter_map { |suggestion| suggestion.prefill[:category_id] }
-        ids.empty? ? {} : Budget.where(category_id: ids).index_by(&:category_id)
+        ids.empty? ? {} : user.budgets.where(category_id: ids).index_by(&:category_id)
       end
   end
 

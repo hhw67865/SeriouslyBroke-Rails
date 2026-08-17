@@ -105,9 +105,31 @@ RSpec.describe "Budget page suggestions", type: :system do
     # THE RE-POINT, SAID BEFORE THE CLICK: accepting a Phone proposal moves every Utilities entry,
     # and the cap it destroys on the way is named with its own figure.
     it "says what accepting does to the category, and which cap it replaces" do
-      within(suggestion(:dated_bill, phone)) do
+      within(effect_of(:dated_bill, phone)) do
         expect(page).to have_content("puts all Utilities spending in a new Utilities envelope")
-          .and have_content("$40.00 a month cap here is a spending limit")
+      end
+      within(cap_note_of(:dated_bill, phone)) do
+        expect(page).to have_content("$40.00 a month cap here is a spending limit")
+      end
+    end
+
+    # AMENDMENT C, AND IT IS THE CASE THE CONCERN WAS RAISED ABOUT: five of the demo's rate
+    # suggestions are for categories the user has already capped, and a rate row that said nothing
+    # about the cap would read as the app failing to notice it. `Category.budgetable` is "expense,
+    # no pool" and says nothing about caps, so the rate detector fires either way.
+    it "names the cap on a rate suggestion too" do
+      within(cap_note_of(:rate, groceries)) do
+        expect(page).to have_content("$500.00 a month cap here is a spending limit")
+      end
+    end
+
+    # THE NEGATIVE DIRECTION, on the same rendered screen as both positives: Concert's category was
+    # never capped, so there is nothing to replace and the clause must not appear. Without this the
+    # cap note could be unconditional and every assertion above would still pass.
+    it "says nothing about a cap where the category has none" do
+      within(suggestion(:dated_bill, concert)) do
+        expect(page).to have_css("[data-suggestion-effect]")
+        expect(page).to have_no_css("[data-suggestion-cap]")
       end
     end
   end
@@ -141,6 +163,17 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_content("Pays").and have_content("Phone")
     end
 
+    # The CREATE half of the pair the join case pins from the other side: nothing by this name
+    # exists, so the heading says a new envelope and the account picker is a real question the
+    # save will answer with.
+    it "heads the form as a creation, and asks for the account" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_content("A new Utilities envelope")
+      expect(page).to have_select("envelope[account_id]", selected: "Checking")
+      expect(page).to have_no_content("Joining your Utilities envelope")
+    end
+
     # THE ROUND TRIP: accept, and the rule is in the top half while the suggestion has left the
     # bottom one — because the item now carries a rule, which is the engine's own retirement test.
     it "writes the rule, which retires its own suggestion" do
@@ -166,17 +199,36 @@ RSpec.describe "Budget page suggestions", type: :system do
   # second must render and act as ADDING to that envelope rather than making a second one.
   describe "a second bill in the same category", :aggregate_failures do
     before do
+      create(:budget, category: utilities, amount: 40)
       plant_bill(phone, 85)
       plant_bill(internet, 65)
       visit budget_page_path
       accept_and_create(:dated_bill, phone)
     end
 
-    it "offers the envelope the first acceptance created" do
+    # THE COPY HALF OF THE LOAD-BEARING REQUIREMENT, and the negative is the whole assertion.
+    # THREE sentences can appear here and two of them open with "joins your existing Utilities
+    # envelope" — the difference is the clause after it. A regression that rendered the RE-POINT
+    # sentence ("…and points all Utilities spending at it") would promise a category move that has
+    # already happened and will not happen again, and a prefix-only assertion passes green on it.
+    # There is no re-point left to do: the category is already pool-covered, and the payload
+    # carries `pool_id` and no envelope half at all.
+    it "offers the envelope the first acceptance created, without promising to move anything" do
       expect(page).to have_content("Budget was successfully created")
-      within(suggestion(:dated_bill, internet)) do
-        expect(page).to have_content("joins your existing Utilities envelope")
+      within(effect_of(:dated_bill, internet)) do
+        expect(page).to have_content("alongside what is already in it")
+        expect(page).to have_no_content("points all Utilities spending at it")
         expect(page).to have_no_content("in a new Utilities envelope")
+      end
+    end
+
+    # And the cap clause goes with it: a pool-covered category cannot hold a cap
+    # (`destroy_budget_if_pool_linked` took it on the first acceptance), so there is nothing left
+    # to warn about and the row must not warn about it.
+    it "stops naming a cap once the category is covered" do
+      expect(utilities.reload.budget).to be_nil
+      within(suggestion(:dated_bill, internet)) do
+        expect(page).to have_no_css("[data-suggestion-cap]")
       end
     end
 
@@ -212,11 +264,27 @@ RSpec.describe "Budget page suggestions", type: :system do
 
     # The sentence has to match what the save will do, in both directions on one row.
     it "offers to join that envelope rather than to make a second" do
-      within(suggestion(:dated_bill, phone)) do
+      within(effect_of(:dated_bill, phone)) do
         expect(page).to have_content("joins your existing Utilities envelope")
           .and have_content("points all Utilities spending at it")
         expect(page).to have_no_content("in a new Utilities envelope")
       end
+    end
+
+    # THE FORM MUST AGREE WITH THE ROW THE CLICK CAME FROM. Verbatim it did not: the panel said
+    # "joins your existing Utilities envelope" and the very next screen headed "A new Utilities
+    # envelope", labelled the field "New envelope" and offered a "Funded from" account picker that
+    # `BudgetProposal` never reads on this path — an inert control under a heading contradicting
+    # the sentence one click earlier. Both directions, because a heading is only right if the
+    # wrong one is gone.
+    it "heads the form as a join, and asks nothing it will not read" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_content("Joining your Utilities envelope")
+      expect(page).to have_content("You already have this envelope — funded from Checking")
+      expect(page).to have_no_field("envelope[name]")
+      expect(page).to have_no_select("envelope[account_id]")
+      expect(page).to have_no_content("A new Utilities envelope")
     end
 
     it "lands the rule in it and points the category at it" do
@@ -235,7 +303,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
 
     # THE FIGURE ARRIVES IN THE RULE'S OWN UNIT and the form labels it rather than converting it.
-    # The rule here is per-paycheck, so the two coincide; the monthly case is pinned on the engine.
+    # The rule here is per-paycheck, so the two coincide — which is exactly why the monthly case
+    # below exists, and why this example alone would prove nothing about units.
     it "prefills the observed figure beside the current one" do
       accept(:drift, dining_rule)
 
@@ -250,6 +319,49 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_content("Budget was successfully updated")
       expect(dining_rule.reload.amount).to eq(45)
       expect(page).to have_no_css("[data-suggestion='drift:#{dining_rule.id}']")
+    end
+  end
+
+  # THE UNITS SEPARATED. The anchorless MONTHLY rule is the shape `rate_shape?` deliberately admits
+  # alongside `per_paycheck`, and it is the one where `budgets.amount` is NOT a per-period figure:
+  # a $260-a-month rule claims $260 * 12 / 26 = $120.00 a period from a biweekly user. Observed
+  # $200 a period, so the engine inverts back into the rule's column and the field must read
+  # $433.33 — the mixed-unit trap's fifth strike was writing the per-period $200 straight in, which
+  # is $92.31 a period, LESS than the figure the user was just told was too low.
+  #
+  # THREE FACTS, and the absence is the one that matters: the field in the rule's unit, the current
+  # figure labelled in the same unit, and the panel's per-period figure NOWHERE on this screen.
+  describe "accepting a drift on a monthly rule", :aggregate_failures do
+    before do
+      plant_monthly_drift
+      visit budget_page_path
+    end
+
+    it "states the drift in per-period money" do
+      within(suggestion(:drift, retirement_rule)) do
+        expect(page).to have_content("has averaged $200.00 a period for 4 periods")
+          .and have_content("your rule asks for $120.00 a period")
+      end
+    end
+
+    it "prefills the form in the rule's own unit and labels it there" do
+      accept(:drift, retirement_rule)
+
+      expect(page).to have_field("Rule Amount", with: "433.33")
+      expect(page).to have_content("Currently $260.00 a month")
+      expect(page).to have_no_content("$200.00")
+      expect(page).to have_no_content("$120.00")
+    end
+
+    # The round trip through the app's own normaliser: what was written reads back as the observed
+    # figure, so the rule now asks for what the entries actually say.
+    it "writes a rule whose per-period claim is the observed figure" do
+      accept(:drift, retirement_rule)
+      click_button "Update Budget"
+
+      expect(page).to have_content("Budget was successfully updated")
+      expect(retirement_rule.reload.amount).to eq(433.33)
+      expect(retirement_rule.steady_ask(user)).to eq(200)
     end
   end
 
@@ -284,6 +396,14 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   def suggestion(kind, subject) = find("[data-suggestion='#{kind}:#{subject.id}']")
 
+  # The two clauses every proposing row carries, addressed by their own hooks rather than by
+  # searching the whole row: "puts all X spending in a new Y envelope" and "joins your existing Y
+  # envelope" both mention Y, so a row-wide `have_content` cannot tell the two apart — which is
+  # precisely the regression the sharing case has to catch.
+  def effect_of(kind, subject) = suggestion(kind, subject).find("[data-suggestion-effect]")
+
+  def cap_note_of(kind, subject) = suggestion(kind, subject).find("[data-suggestion-cap]")
+
   def rendered_keys = page.all("[data-suggestion]").pluck("data-suggestion")
 
   def accept(kind, subject)
@@ -306,12 +426,15 @@ RSpec.describe "Budget page suggestions", type: :system do
   # The planted history — one detector at a time, and the whole lot for the rendering block
   # ---------------------------------------------------------------------------------------------
 
+  # THREE CAP STATES ON ONE SCREEN, deliberately: Utilities capped (a dated bill that names it),
+  # Groceries capped (a rate that names it — amendment C), and Concert's category left cap-less so
+  # the clause has somewhere to be absent.
   def plant_everything
     create(:budget, category: utilities, amount: 40)
     plant_bill(phone, 85)
     plant_bill(internet, 65)
     concert
-    groceries
+    create(:budget, category: groceries, amount: 500)
     plant_drift
     plant_dead_rule
   end
@@ -357,6 +480,24 @@ RSpec.describe "Budget page suggestions", type: :system do
     category = create(:category, :expense, user: user, name: "Restaurants", pool: dining_pool)
     item = create(:item, category: category, name: "Takeout")
     [5, 19].each { |days| create(:entry, item: item, amount: 90, date: Date.current - days.days) }
+  end
+
+  # A rate rule spelled the OTHER legal way — `basis: monthly`, `interval_months: 1`, no anchor —
+  # so `budgets.amount` is a monthly figure and `steady_ask` divides it down to $120.00 a period.
+  # $800 of spend across the four-period drift window is $200.00 a period observed.
+  def retirement_pool
+    @retirement_pool ||= create(:pool, :budget_pool, user: user, account: checking, name: "Retirement", priority: 4)
+  end
+
+  def retirement_rule
+    @retirement_rule ||= create(:pool_budget, :rate, pool: retirement_pool, amount: 260)
+  end
+
+  def plant_monthly_drift
+    retirement_rule
+    category = create(:category, :expense, user: user, name: "Retirement Extra", pool: retirement_pool)
+    item = create(:item, category: category, name: "Brokerage Transfer")
+    [5, 19, 33, 47].each { |days| create(:entry, item: item, amount: 200, date: Date.current - days.days) }
   end
 
   def netflix_pool

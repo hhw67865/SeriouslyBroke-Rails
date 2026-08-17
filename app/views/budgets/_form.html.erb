@@ -7,17 +7,21 @@
     called the pool's own funding rule a spending limit. Now that §8's page links every rule to
     this form, that is user-reachable, so each mode is asked about the owner it actually has.
 
-    THE THIRD MODE IS A PROPOSAL (§8's suggestion panel, amendment A). Accepting a dated bill or a
-    rate needs an envelope the user does not have yet, the category re-pointed at it, and the rule
-    written — so the form grew an OPTIONAL ENVELOPE HALF rather than the flow growing a second
-    controller. One form, one POST, one transaction: BudgetsController#create hands both halves to
-    BudgetProposal and a failure anywhere writes nothing.
+    THE THIRD MODE IS A PROPOSAL (§8's suggestion panel, amendment A): the form grew an OPTIONAL
+    ENVELOPE HALF rather than the accept flow growing a second controller. What that half makes
+    happen is BudgetProposal's to explain; what matters here is that the form must say which of the
+    two things it is about to do — JOIN an envelope the user already has, or MAKE one — because
+    those are different acts and the panel sentence one click earlier already named one of them.
 
     The pool branch omits `prorated` deliberately: it spreads a monthly category cap across the
     days of the month (CategoryCalculator#prorated_active?) and nothing reads it for a pool-mode
     rule, so offering it would be a switch that does nothing. %>
 <% pool_mode = @budget.pool_mode? %>
 <% proposal = @envelope.present? %>
+<%# THE ENVELOPE THIS WOULD JOIN, or nil where it would create one. Resolved by
+    BudgetsController#set_envelope through BudgetProposal::Envelope#existing — the same reader the
+    save uses, so this heading cannot promise something the write will not do. %>
+<% joining = proposal && @joined_envelope %>
 <%# THE SCHEDULE IS ONLY EDITABLE ON THE WAY IN. A rule's shape (basis, interval, anchor, item) is
     measured by the engine and submitted back; changing it later is the edit form's business, and
     an existing rule's shape is not this partial's to re-offer. %>
@@ -25,6 +29,7 @@
 <% subtitle = "Set spending limits for #{@budget.category&.name || "this category"}" %>
 <% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode %>
 <% subtitle = "A new #{@envelope.name} envelope, and the rule that fills it" if proposal %>
+<% subtitle = "Joining your #{joining.name} envelope, and the rule that adds to it" if joining %>
 <% cancel_path = @budget.category ? category_path(@budget.category) : categories_path %>
 <% cancel_path = budget_page_path if pool_mode || proposal %>
 <%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
@@ -37,7 +42,38 @@
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
-        <% if proposal %>
+        <% if joining %>
+          <%# JOINING AN ENVELOPE THE USER ALREADY HAS. No name field and no account picker: the
+              name is not a decision here (renaming it would not make a second envelope, it would
+              simply stop matching), and the account is the one the envelope already sits in —
+              `BudgetProposal` never reads `envelope[account_id]` on this path, so a picker would
+              be a control that changes nothing under a heading that says it does.
+
+              BOTH STILL GO ON THE WIRE, hidden. `Envelope#existing` is resolved again at save
+              time, and if the envelope were deleted between this render and the submit the
+              creation branch takes over — with the name and the account it was going to need. A
+              form that dropped them would answer that race with "Account must be set for budget
+              pools" on a screen that never asked for one. %>
+          <div>
+            <label class="form-label">Envelope</label>
+            <div class="form-input flex items-center bg-gray-50">
+              <%= joining.name %>
+            </div>
+            <p class="form-hint">
+              You already have this envelope<%= " — funded from #{joining.account.name}" if joining.account %>.
+              This rule joins it, and all <%= @envelope.category.name %> spending is pointed at it from now on.
+            </p>
+            <%# `id: nil` on both: `hidden_field_tag` would otherwise mint `envelope_name` and
+                `envelope_account_id`, the same ids the creation branch gives its VISIBLE controls.
+                The two branches are mutually exclusive so nothing collides today, but a hidden
+                input answering to the id of a control the user is meant to fill in is a trap for
+                the next person to open this file — and these two are carriers, not fields. %>
+            <%= hidden_field_tag "envelope[name]", joining.name, id: nil %>
+            <%= hidden_field_tag "envelope[account_id]", joining.account_id, id: nil %>
+          </div>
+
+          <%= hidden_field_tag "envelope[category_id]", @envelope.category.id %>
+        <% elsif proposal %>
           <%# THE ENVELOPE HALF. Editable, because both fields can legitimately need changing: the
               proposed name is the CATEGORY's name and the user may already have a pool called
               that (Pool validates name uniqueness per user), and `account_id` is read from
@@ -119,8 +155,7 @@
                 step: 0.01,
                 min: 0
               },
-              hint: pool_mode || proposal ? "What this rule asks for #{budget_rule_basis(@budget)}." :
-                "Enter the maximum amount you want to spend in this category" %>
+              hint: budget_amount_hint(@budget, owner: pool_mode || proposal, schedule_shown: new_pool_rule) %>
 
           <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
               The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts

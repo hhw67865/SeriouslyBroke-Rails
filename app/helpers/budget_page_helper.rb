@@ -103,6 +103,23 @@ module BudgetPageHelper
     "caps a category — no envelope to fill"
   end
 
+  # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the pool-mode clause is restored rather than
+  # dropped. "— the schedule itself is set on the pool" is true on the EDIT form, where the shape
+  # is not on screen and a user reading "$1,200.00 every 6 months" needs to know where the six
+  # months came from. It stops being true the moment the form RENDERS the schedule, which a new
+  # pool-mode rule does: the interval is a field three rows below and the anchor is stated beside
+  # it, so the clause would point away from a control the user is looking straight at.
+  #
+  # Keyed on `schedule_shown:` rather than on "is this a proposal", because the two are not the
+  # same set — a suggestion that reuses an envelope by id arrives with no envelope half at all and
+  # still renders its schedule.
+  def budget_amount_hint(budget, owner:, schedule_shown: false)
+    return "Enter the maximum amount you want to spend in this category" unless owner
+
+    basis = "What this rule asks for #{budget_rule_basis(budget)}"
+    schedule_shown ? "#{basis}." : "#{basis} — the schedule itself is set on the pool."
+  end
+
   # -----------------------------------------------------------------------------------------
   # §8's bottom half — the suggestions panel
   # -----------------------------------------------------------------------------------------

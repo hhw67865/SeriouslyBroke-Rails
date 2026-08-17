@@ -48,6 +48,19 @@ RSpec.describe "Budget proposals", type: :request do
       expect(response).to redirect_to(budget_page_path)
     end
 
+    # THE CAP THE RE-POINT DESTROYS, in the direction where it IS destroyed.
+    # `Category#destroy_budget_if_pool_linked` fires on the re-point because a category cannot hold
+    # both a cap and a pool — so a successful acceptance deletes a rule the user wrote, which is
+    # what the panel's cap sentence promises out loud. Net `Budget.count` is unchanged (one cap
+    # out, one rule in) and that is exactly why the record is named rather than counted.
+    it "replaces the category's cap with the new rule" do
+      cap = create(:budget, category: utilities, amount: 300)
+
+      expect { accept }.to not_change(Budget, :count)
+      expect(Budget.exists?(cap.id)).to be false
+      expect(utilities.reload.pool.budgets.sole.item).to eq(phone)
+    end
+
     # §7a'S CLASS, THIRD APPEARANCE, AND THE SHARPEST OF THE THREE: a stranger's item id would
     # write a funding rule against THEIR spending, which this user's page would then read back
     # through BudgetCalculator as their own bill being paid or unpaid.
@@ -113,6 +126,20 @@ RSpec.describe "Budget proposals", type: :request do
       expect { accept(budget: { amount: "0" }) }.to not_change(Pool, :count).and not_change(Budget, :count)
       expect(utilities.reload.pool).to be_nil
       expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    # THE FOURTH ROW THE ROLLBACK HAS TO RESTORE, and counting cannot see it. The re-point runs
+    # `Category#destroy_budget_if_pool_linked` on a `before_validation`, so the cap's DELETE is
+    # issued INSIDE the savepoint — but `not_change(Budget, :count)` passes just as happily if the
+    # cap were deleted and the rule created, which is a user losing a rule they wrote to a request
+    # that failed. The example above deliberately has no cap, so this is the one that tests it,
+    # and it names the RECORD rather than a total.
+    it "leaves the category's cap standing when the rule is refused" do
+      cap = create(:budget, category: utilities, amount: 300)
+
+      expect { accept(budget: { amount: "0" }) }.to not_change(Budget, :count)
+      expect(utilities.reload.budget).to eq(cap)
+      expect(utilities.pool).to be_nil
     end
 
     # `pool_type` IS NOT A WIRE PARAMETER. An envelope is a budget pool by definition, and taking

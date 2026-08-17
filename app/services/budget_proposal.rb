@@ -27,7 +27,33 @@ class BudgetProposal
   #
   # Every one of the three is already ownership-scoped by the time it arrives: the controller
   # looks each up through `current_user`, so this class never asks whose anything is.
-  Envelope = Data.define(:name, :account, :category)
+  Envelope = Data.define(:name, :account, :category) do
+    # THE ENVELOPE THIS HALF WOULD JOIN RATHER THAN CREATE, or nil.
+    #
+    # ONE READER, and that is the point of it living on the value rather than inside #save: the
+    # FORM asks it to decide what it says ("Joining your Utilities envelope" against "A new
+    # Utilities envelope", an account picker against the account the envelope already sits in) and
+    # `BudgetProposal` asks it to decide what it writes. Two spellings of "is this name taken"
+    # would be a heading that promises one thing and a save that does another — which is exactly
+    # the defect the panel's own three sentences were split to avoid, one screen earlier.
+    #
+    # TWO WAYS TO JOIN. The category's own pool, unless it is an ACCOUNT
+    # (`Budget#pool_must_not_be_an_account` refuses a rule on one, so an account is not reusable
+    # and the category is re-pointed off it); or a budget pool the user already has by this name.
+    #
+    # NOT MEMOISED — `Data` instances are frozen. The controller resolves it once per request and
+    # hands the result to the view; nothing here calls it in a loop.
+    def existing
+      reusable = category.pool
+      return reusable if reusable && !reusable.pool_type_account?
+
+      category.user.pools.budget_pools.find_by(name_matches)
+    end
+
+    # Case-insensitively, because `Pool`'s own uniqueness validation is case-insensitive: matching
+    # exactly here would find nothing and then create a pool the database refuses.
+    def name_matches = Pool.sanitize_sql_array(["LOWER(name) = LOWER(?)", name.to_s])
+  end
 
   attr_reader :budget, :envelope
 
@@ -89,9 +115,7 @@ class BudgetProposal
   # on every one of that category's suggestions, and a second creation would either collide on
   # `Pool`'s name uniqueness or — after a rename — quietly re-point the category away from the
   # envelope the first acceptance filled, orphaning it. So the reuse decision is made here too,
-  # against the database as it stands, on the same test the engine uses: the category's own pool,
-  # unless that pool is an ACCOUNT (`Budget#pool_must_not_be_an_account` refuses a rule on one, so
-  # an account is not reusable and the category is re-pointed off it).
+  # against the database as it stands.
   #
   # THE SECOND REUSE IS BY NAME, and it is the demo seeds' own case rather than a hypothetical.
   # The engine names a proposed envelope after the CATEGORY, and the demo already holds a
@@ -105,16 +129,18 @@ class BudgetProposal
   # all, and a SAVINGS GOAL by the same name is a different kind of thing — quietly hanging a
   # monthly bill on someone's holiday fund is worse than the uniqueness error, which the user can
   # answer by renaming in the form the name field is right there in.
-  def find_or_create_envelope
-    reusable = envelope.category.pool
-    return reusable if reusable && !reusable.pool_type_account?
-
-    envelope.category.user.pools.budget_pools.find_by(name_matches) || create_envelope
-  end
-
-  # Case-insensitively, because `Pool`'s own uniqueness validation is case-insensitive: matching
-  # exactly here would look up nothing and then create a pool the database refuses.
-  def name_matches = Pool.sanitize_sql_array(["LOWER(name) = LOWER(?)", envelope.name.to_s])
+  #
+  # THE NARROWING IS ASYMMETRIC ON PURPOSE, and it is stated rather than tidied: the CATEGORY-pool
+  # branch above accepts any non-account pool, savings goals included, while the NAME branch takes
+  # envelopes only. A category already pointing at a savings goal is a link the user made
+  # deliberately and a rule there is a claim they can see; a name collision is a coincidence, and
+  # guessing from one that a holiday fund is the right home for a phone bill is not the same act.
+  # `SuggestionEngine` cannot reach the first case anyway — its rate population is pool-less and
+  # its bill population reuses `pool_id` — so matching the two would be a behaviour change with no
+  # reachable case to pin it.
+  #
+  # `Envelope#existing` is the ONE reader for "would this join something", shared with the form.
+  def find_or_create_envelope = envelope.existing || create_envelope
 
   # `pool_type: :budget` is set here and is NOT a wire parameter — an envelope is a budget pool by
   # definition, and taking the type from the form would let this path attach a funding rule to a

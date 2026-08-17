@@ -38,10 +38,9 @@ class BudgetsController < ApplicationController
 
   # POST /budgets
   #
-  # ONE FORM AND ONE POST for the whole accept flow. Where the request carries an envelope half,
-  # `BudgetProposal` finds-or-creates the envelope, re-points the category at it and writes the
-  # rule inside ONE transaction; where it does not, it is `budget.save` and this action behaves
-  # exactly as it did. Both outcomes render the same two branches.
+  # ONE FORM AND ONE POST for the whole accept flow. What the envelope half makes happen is
+  # `BudgetProposal`'s to explain and this action does not restate it; here it is only that both
+  # outcomes render the same two branches they always did.
   def create
     @budget = Budget.new(budget_params)
 
@@ -191,7 +190,19 @@ class BudgetsController < ApplicationController
     permitted = params.expect(envelope: [:name, :account_id, :category_id])
     return if permitted[:category_id].blank?
 
-    @envelope = BudgetProposal::Envelope.new(
+    @envelope = build_envelope(permitted)
+
+    # RESOLVED ONCE, HERE, so the form and the save read the same answer. Without it the form
+    # headed "A new Utilities envelope" and offered an account picker on the very path where
+    # `BudgetProposal` was going to JOIN an existing envelope and never look at the account — an
+    # inert control under a false heading, one click after a panel sentence saying the opposite.
+    # `Envelope#existing` is the one reader; this only keeps it from being asked four times while
+    # the form renders.
+    @joined_envelope = @envelope.existing
+  end
+
+  def build_envelope(permitted)
+    BudgetProposal::Envelope.new(
       name: permitted[:name],
       account: permitted[:account_id].presence && current_user.pools.find(permitted[:account_id]),
       category: current_user.categories.find(permitted[:category_id])
