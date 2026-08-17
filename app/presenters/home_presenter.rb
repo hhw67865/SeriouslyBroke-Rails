@@ -514,8 +514,25 @@ class HomePresenter
     @waterfall_rows_by_pool ||= waterfall.index_by { |row| row[:pool].id }
   end
 
+  # THE SCREEN'S OWN LEDGER GOES WITH IT, and that is the whole of what `ledger:` is for. One of
+  # these is built per problem row (see #build_fix), and each used to build a PoolBalanceLedger of
+  # its own over `user.pools` — the same 22 pools #ledger already covers, at the same moment, with
+  # no `as_of` on either. Measured on Home: three ledgers and nine grouped maxima, now one and
+  # three.
+  #
+  # SHARING IS SAFE HERE BECAUSE HOME WRITES NOTHING. A ledger is a snapshot memoised at its first
+  # read (PoolBalanceLedger#totals), so handing one across a write would hand out figures from
+  # before it; this presenter renders a GET and the fix buttons are links, so there is no write for
+  # the snapshot to fall the wrong side of.
+  #
+  # #reachable_pools is `accounts + all_pools`, i.e. every pool the user has, and
+  # ReallocationPresenter#all_pools is `user.pools` — the same set, so no source or destination
+  # falls outside it. It would not cost accuracy if one did: #terms_for hands back nil for an
+  # unknown pool and the calculator runs its own five aggregates.
   def damage_reader(pool, source, amount)
-    ReallocationPresenter.new(user: user, to_pool: pool, from_pool: source, amount: amount, today: today)
+    ReallocationPresenter.new(
+      user: user, to_pool: pool, from_pool: source, amount: amount, today: today, ledger: ledger
+    )
   end
 
   # Account-less pools are not rows here at all.

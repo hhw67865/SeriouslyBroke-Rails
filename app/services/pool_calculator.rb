@@ -511,9 +511,53 @@ class PoolCalculator
   # rules sharing a due date could otherwise swap fill order between calls: the same pool
   # reporting different #required figures on consecutive loads with no data change.
   def budgets_by_due_date
-    @budgets_by_due_date ||= pool.budgets.includes(:item, :pool).sort_by do |budget|
-      budget.calculator(today: today).due_order
-    end
+    @budgets_by_due_date ||= rules.sort_by { |budget| budget.calculator(today: today).due_order }
+  end
+
+  # THE POOL'S RULES, READ OFF THE ASSOCIATION — the same `pool.budgets` #dateless_goal?,
+  # #goal_required and #compute_period_closed already enumerate, and that consistency is the point
+  # rather than a side effect.
+  #
+  # This used to be `pool.budgets.includes(:item, :pool)`, which is a NEW RELATION and therefore a
+  # fresh SELECT every time, whatever the caller had already loaded. It defeated every eager load
+  # in the app — HomePresenter and ReallocationPresenter both preload `:budgets` — and it cost up
+  # to THREE queries per calculator that reached it (the budgets, the items, the pools) on top of
+  # the association load its three siblings above trigger anyway. Plan 2c priced it at 38 of
+  # Home's 100 queries; measured again as the only change in the tree, this one line took Home
+  # from 100 to 61, /budget from 45 to 41 and /pool_movements/new from 63 to 25, with every
+  # rendered figure and the whole stripped page text byte-identical on all seven screens.
+  #
+  # It also left this class disagreeing with itself. The three readers above see the association's
+  # loaded target and this one saw a fresh SELECT, so on a pool whose rules had been written to
+  # since the association loaded, #period_closed? and #allocated_balances were answering about
+  # DIFFERENT SETS OF RULES on the same object. Reading the association here removes that split:
+  # there is now one answer to "which rules does this pool have", and the staleness rule is the
+  # one PoolCalculator already carries and callers already obey (see #balance's STALE AFTER A
+  # WRITE note) — anything that writes builds fresh objects afterward, the pool included.
+  #
+  # THE PRELOADER RATHER THAN `includes`, and it is what keeps the N+1 away without re-querying:
+  # given records whose association is already loaded it runs NOTHING (measured: 0 queries when
+  # the caller preloaded `budgets: :item`), and given records without it, one query for the whole
+  # set. `includes` cannot do that here, because a relation with `includes` on it is a second read
+  # of the rows by construction.
+  #
+  # IT IS INERT ON THE DEMO SEEDS AND IS KEPT ANYWAY, stated because a line that fires on nothing
+  # measurable is one somebody will delete. Removing it moves no figure and no query count on any
+  # of the seven screens measured — two of the demo's fifteen rules carry an item, and both of
+  # those items are loaded by another reader on the same page. It is the guarantee the old
+  # `includes(:item)` carried, and the shape that needs it is a pool with SEVERAL item-bearing
+  # dated rules: measured on one built for the purpose, six such rules cost 1 item load with this
+  # line and 6 without it (21 queries against 26). BudgetCalculator#fulfilled? and #overdue? read
+  # `budget.item` for every dated rule, so the cost is per rule, on the reader #required calls.
+  #
+  # `:pool` STAYS IN THE LIST even though the association's automatic `inverse_of` already hands
+  # each rule back the very pool it came from — measured at 0 queries either way. It costs nothing
+  # to keep and it is the one thing standing between BudgetCalculator#user (`category&.user ||
+  # pool&.user`) and a lookup per rule if that inverse is ever lost.
+  def rules
+    budgets = pool.budgets.to_a
+    ActiveRecord::Associations::Preloader.new(records: budgets, associations: [:item, :pool]).call
+    budgets
   end
 
   # EVERY AGGREGATE, EACH BEHIND THE SAME GATE. `term` returns the injected value when this

@@ -134,12 +134,34 @@ class ReallocationPresenter
   # `amount` arrives as the form's String and is coerced ONCE, here. nil for a blank box rather
   # than zero, so a submitted blank reads "Amount can't be blank" instead of the arithmetic's
   # "must be greater than 0" — the box is empty, not set to nothing.
-  def initialize(user:, to_pool: nil, from_pool: nil, amount: nil, today: Date.current)
+  #
+  # `ledger:` IS A COST KEYWORD AND NOT A QUESTION, exactly as `PoolCalculator#terms:` is one
+  # level down: it changes who ran the five aggregates and nothing about what is being asked. It
+  # defaults to nothing, so the reallocation screen and every spec build their own as before, and
+  # #ledger below is the one place either shape is read.
+  #
+  # IT IS FOR A CALLER THAT ALREADY HOLDS A LEDGER OVER THESE POOLS AT THIS MOMENT — today that
+  # is HomePresenter, which renders a fix button per problem row and built ONE OF THESE PER ROW,
+  # each with a ledger of its own over the same 22 pools. Measured on Home: three ledgers, nine
+  # grouped maxima, where one ledger and three would do.
+  #
+  # THE RULE THE CALLER MUST KEEP, and it is PoolBalanceLedger's own: a ledger is a SNAPSHOT,
+  # memoised at its first read, so a ledger handed across a write is a set of figures from before
+  # it. Home writes nothing during a render, which is why it may share. Nothing that writes may
+  # pass one here.
+  #
+  # `rubocop:disable Metrics/ParameterLists` — six keywords, and the disable is stated rather than
+  # the limit raised for the whole app, which is the choice PoolCalculator's own signature made
+  # before Plan 2d decision 4 took two axes off it. Five of these are the movement being proposed
+  # and the day it happens; the sixth is not an axis of the question at all, and folding it into a
+  # `**context` splat to get under the limit would hide `today:`'s default and buy nothing.
+  def initialize(user:, to_pool: nil, from_pool: nil, amount: nil, today: Date.current, ledger: nil) # rubocop:disable Metrics/ParameterLists
     @user = user
     @to_pool = to_pool
     @from_pool = from_pool
     @amount = amount.presence&.to_d
     @today = today
+    @ledger = ledger
   end
 
   # The arithmetic's view of the box: zero when nothing has been typed. Kept apart from #amount
@@ -383,5 +405,15 @@ class ReallocationPresenter
   # Over #all_pools rather than over the sources: `to_pool` is deliberately NOT a source (it is
   # the other end of the move) and #build_gain reads its balance twice, so a ledger scoped to the
   # offer list would raise on the destination — which is the right failure and the wrong set.
+  #
+  # `||=` RATHER THAN `defined?`, and this is the injected keyword's memo as much as it is this
+  # one's: a ledger object is never falsy, so the two forms cost the same and `defined?` would
+  # imply an answer this method cannot give. See #initialize for what an injected ledger is.
+  #
+  # A CALLER'S LEDGER MAY COVER MORE POOLS THAN THIS ONE WOULD, never fewer, and neither direction
+  # can move a figure: PoolBalanceLedger#terms_for returns nil for a pool it was not built over
+  # and PoolCalculator then runs its own five aggregates, so a ledger that misses a pool costs
+  # queries and cannot cost accuracy. What it may NOT differ in is `as_of`, and nothing here has
+  # one — this screen reads the ledger as it stands.
   def ledger = @ledger ||= PoolBalanceLedger.new(all_pools)
 end

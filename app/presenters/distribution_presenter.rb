@@ -457,10 +457,18 @@ class DistributionPresenter
   # Built ONLY when something is actually overridden (`fresh.overrides`, the coerced set, not
   # the raw params — a form submitting nothing but blanks overrides nothing). Nil otherwise, and
   # #line_for then falls back to the live fill, which is provably the same numbers.
+  #
+  # `fresh.with_overrides({})` RATHER THAN A FRESH AllocationCalculator, so this fill runs over
+  # the ledger `fresh` already built rather than eight grouped queries of its own. That method
+  # carries the whole argument for why the two may share one; the half that belongs here is WHICH
+  # `fresh` this is — the committer's post-deletion re-derivation, handed to #capture inside
+  # #build_snapshot's transaction with nothing written between. It also stops `user:`, `account:`
+  # and `today:` being restated at a call site, which is three chances for this fill to describe a
+  # different moment from the one it is the baseline for.
   def baseline_fill(fresh)
     return nil if fresh.overrides.empty?
 
-    fill_of(AllocationCalculator.new(user: user, account: fresh.account, today: today))
+    fill_of(fresh.with_overrides({}))
   end
 
   # The same distribution WITH ONE EDIT UNDONE — the counterfactual a redirect sentence is
@@ -486,14 +494,9 @@ class DistributionPresenter
   def without_override(pool, fresh)
     return @baseline || @live if fresh.overrides.size <= 1
 
-    (@without ||= {})[pool.id] ||= fill_of(
-      AllocationCalculator.new(
-        user: user,
-        account: fresh.account,
-        today: today,
-        overrides: fresh.overrides.except(pool.id.to_s)
-      )
-    )
+    # Over `fresh`'s own ledger, for #baseline_fill's reason and with the same guarantee: these
+    # are N more fills of the SAME instant, and the memo above holds them at one per edited row.
+    (@without ||= {})[pool.id] ||= fill_of(fresh.with_overrides(fresh.overrides.except(pool.id.to_s)))
   end
 
   # `total_allocated` and `leftover` come straight off the calculator again. They were summed
