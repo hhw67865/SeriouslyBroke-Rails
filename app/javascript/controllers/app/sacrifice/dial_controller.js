@@ -70,11 +70,15 @@ export default class extends Controller {
   // be able to say the same thing — a user who checks every box on an unwinnable budget lands here
   // with a positive remainder and reads it, rather than watching the total stop short with no
   // explanation.
+  // `Math.abs` AND NOT `-remaining`, because break-even is a REACHABLE state with an example of its
+  // own: cut exactly the gap and `remaining` is 0, `-0` in JavaScript, and
+  // `Intl.NumberFormat().format(-0)` is "-$0.00" — so the one keystroke that lands the budget
+  // precisely level printed `Covered — -$0.00 a period to spare`. Measured, not guessed.
   writeVerdict(remaining) {
     this.verdictTarget.textContent =
       remaining > 0
         ? `Still underwater ${this.money(remaining)} a period`
-        : `Covered — ${this.money(-remaining)} a period to spare`
+        : `Covered — ${this.money(Math.abs(remaining))} a period to spare`
     this.verdictTarget.classList.toggle("text-status-danger", remaining > 0)
     this.verdictTarget.classList.toggle("text-status-success", remaining <= 0)
   }

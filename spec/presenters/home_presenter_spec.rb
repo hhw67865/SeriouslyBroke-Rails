@@ -701,7 +701,7 @@ RSpec.describe HomePresenter do
   # `travel_to` throughout, because the whole reader is a comparison of two timestamps: without a
   # controlled clock the rule and the movement are written milliseconds apart and every example
   # here would be a coin toss.
-  describe "#raised_after_distributing?" do
+  describe "#changed_after_distributing?" do
     let(:distributed_on) { Time.zone.local(2026, 2, 6, 9, 0, 0) }
 
     def rent_envelope = @rent_envelope ||= envelope("Rent", priority: 1)
@@ -723,7 +723,7 @@ RSpec.describe HomePresenter do
       distribute(400)
       raise_rule(rule, to: 470, at: distributed_on + 2.hours)
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(true)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(true)
     end
 
     # THE POSITIVE PAIR'S OTHER HALF, on the same shape: same envelope, same distribution, and the
@@ -734,13 +734,13 @@ RSpec.describe HomePresenter do
       raise_rule(rule, to: 470, at: distributed_on - 1.hour)
       distribute(470)
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(false)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
     it "is false when nothing has been distributed this period" do
       travel_to(distributed_on) { rate(rent_envelope, 400) }
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(false)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
     # A REALLOCATION IS NOT A DISTRIBUTION. `PoolMovement.distributed` is allocations and sweeps;
@@ -752,7 +752,7 @@ RSpec.describe HomePresenter do
       distribute(400, kind: :transfer)
       raise_rule(rule, to: 470, at: distributed_on + 2.hours)
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(false)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
     # LAST PERIOD'S DISTRIBUTION IS NOT THIS ONE'S. The clause explains a flip that happened since
@@ -767,7 +767,7 @@ RSpec.describe HomePresenter do
       distribute(400, at: distributed_on - 18.days, on: today - 14.days)
       raise_rule(rule, to: 470, at: distributed_on - 17.days)
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(false)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
     # A SWEEP DATES A DISTRIBUTION TOO. A period whose split is pure sweep — every envelope closed
@@ -780,7 +780,7 @@ RSpec.describe HomePresenter do
       end
       raise_rule(rule, to: 470, at: distributed_on + 2.hours)
 
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(true)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(true)
     end
 
     # THE TOUCH CASCADE, MEASURED RATHER THAN REASONED ABOUT. `touch: true` is everywhere on this
@@ -799,7 +799,7 @@ RSpec.describe HomePresenter do
 
       expect(rule.reload.updated_at).to eq(before_at)
       expect(rent_envelope.reload.updated_at).to be > before_at
-      expect(presenter.raised_after_distributing?(rent_envelope)).to be(false)
+      expect(presenter.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
     # A pool with no account has no distribution to be after — nothing can fund it at all — and a
@@ -809,7 +809,7 @@ RSpec.describe HomePresenter do
       travel_to(distributed_on) { create(:pool_budget, :per_paycheck_rate, pool: orphan, amount: 150) }
       distribute(400)
 
-      expect(presenter.raised_after_distributing?(orphan)).to be(false)
+      expect(presenter.changed_after_distributing?(orphan)).to be(false)
     end
   end
 end

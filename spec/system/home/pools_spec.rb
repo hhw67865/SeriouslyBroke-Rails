@@ -282,8 +282,16 @@ RSpec.describe "Home Pools", type: :system do
   # two timestamps, and without a controlled clock the rule and the movement are written
   # milliseconds apart and this is a coin toss. The page itself renders at real now, as every other
   # example here does.
-  describe "a pool that went behind because the rule was raised" do
+  describe "a pool that went behind because a rule was changed" do
     include ActiveSupport::Testing::TimeHelpers
+
+    # EVERY DATE IN THIS BLOCK COMES FROM HERE, resolved ONCE at real now and never inside a
+    # `travel_to`. `Date.current` evaluated three hours back is a different day between midnight and
+    # 03:00 — and this user is anchored to `Date.current` on a biweekly cadence, so a movement dated
+    # a day early falls in the PREVIOUS period, `#latest_distributions` filters it out, and both
+    # positive examples fail for three hours a night on a page that is working perfectly. That is
+    # the flake class this branch has just finished deleting; it does not get a new member.
+    let(:today) { Date.current }
 
     def accumulating_rule(name, amount:, priority:)
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
@@ -292,7 +300,7 @@ RSpec.describe "Home Pools", type: :system do
         pool: pool,
         amount: amount,
         interval_months: 6,
-        anchor_date: Date.current + 3.months
+        anchor_date: today + 3.months
       )
       [pool, rule]
     end
@@ -307,7 +315,7 @@ RSpec.describe "Home Pools", type: :system do
           from_pool: checking,
           to_pool: pool,
           amount: amount,
-          date: Date.current
+          date: today
         )
       end
     end
@@ -338,9 +346,9 @@ RSpec.describe "Home Pools", type: :system do
       visit root_path
 
       expect(row("Car Insurance")).to have_content("behind")
-      expect(row("Car Insurance")).to have_content("you raised this rule after distributing")
+      expect(row("Car Insurance")).to have_content("you changed a rule here after distributing")
       expect(row("Property Tax")).to have_content("behind")
-      expect(row("Property Tax")).to have_no_content("you raised this rule after distributing")
+      expect(row("Property Tax")).to have_no_content("you changed a rule here after distributing")
     end
 
     # THE TWO BANDS RENDER THE SAME POOL INCHES APART, and a `behind` envelope is in both by
@@ -353,28 +361,50 @@ RSpec.describe "Home Pools", type: :system do
       visit root_path
 
       expect(find("[data-problem-pool='Car Insurance']"))
-        .to have_content("you raised this rule after distributing")
+        .to have_content("you changed a rule here after distributing")
     end
 
-    # NO DISTRIBUTION, NO CLAUSE. A rule raised on a period nobody has distributed yet has not been
-    # raised "after distributing" — the envelope is behind because the money has not been handed
+    # THE CASE THAT WOULD HAVE MADE THE OLD COPY A LIE, and the reason this clause no longer says
+    # "you raised this rule". `updated_at` records WHEN a rule moved and nothing about which way:
+    # the rule below goes DOWN, from $1,800 to $1,200, and the envelope is still behind against the
+    # smaller requirement — so the row fires the clause, and under the old wording told a user who
+    # cut their budget that they had raised it. `have_no_content("raised")` is the half that fails
+    # if the old string ever comes back.
+    it "says a rule changed, not raised, when the rule went down", :aggregate_failures do
+      deposit(2_000)
+      pool = rule = nil
+
+      travel_to(3.hours.ago) { pool, rule = accumulating_rule("Car Insurance", amount: 1_800, priority: 1) }
+      distribute(pool, 10, at: 2.hours.ago)
+      travel_to(1.hour.ago) { rule.update!(amount: 1_200) }
+
+      visit root_path
+
+      expect(row("Car Insurance")).to have_content("behind")
+      expect(row("Car Insurance")).to have_content("you changed a rule here after distributing")
+      expect(row("Car Insurance")).to have_no_content("raised")
+    end
+
+    # NO DISTRIBUTION, NO CLAUSE. A rule changed on a period nobody has distributed yet has not been
+    # changed "after distributing" — the envelope is behind because the money has not been handed
     # out, which is a different sentence and one the row already tells.
     it "stays silent when nothing has been distributed this period", :aggregate_failures do
       deposit(2_000)
       rule = nil
 
-      travel_to(3.hours.ago) { _pool, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
+      travel_to(3.hours.ago) { _, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
       travel_to(1.hour.ago) { rule.update!(amount: 1_800) }
 
       visit root_path
 
       expect(row("Car Insurance")).to have_content("behind")
-      expect(row("Car Insurance")).to have_no_content("you raised this rule after distributing")
+      expect(row("Car Insurance")).to have_no_content("you changed a rule here after distributing")
     end
 
     # THE CLAUSE BELONGS TO `behind` AND TO NOTHING ELSE. An overdue bill is overdue because it was
-    # not paid; a raised rule has nothing to do with it, and the aside would be unexplained noise on
-    # the loudest row on the screen. The gate lives in the helper, so this pins it at the render.
+    # not paid; an edited rule has nothing to do with it, and the aside would be unexplained noise
+    # on the loudest row on the screen. The gate lives in the helper, so this pins it at the
+    # render.
     it "stays off a row in another state", :aggregate_failures do
       deposit(2_000)
       pool = payable("Utilities", amount: 120, due: Date.current - 10.days)
@@ -386,7 +416,7 @@ RSpec.describe "Home Pools", type: :system do
       visit root_path
 
       expect(row("Utilities")).to have_content("overdue")
-      expect(row("Utilities")).to have_no_content("you raised this rule after distributing")
+      expect(row("Utilities")).to have_no_content("you changed a rule here after distributing")
     end
   end
 end

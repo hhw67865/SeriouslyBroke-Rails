@@ -61,14 +61,14 @@
       <div class="flex justify-between items-baseline">
         <span class="font-medium text-gray-900"><%= pool.name %></span>
         <span class="text-sm text-status-danger">
-          <%# `raised_after_distributing:` through the presenter, never a query of the partial's
+          <%# `changed_after_distributing:` through the presenter, never a query of the partial's
               own — same reason as `status` above: the period this compares against is
               `presenter.today`'s, and a band reaching for `Date.current` here would date the
               distribution differently from every other figure on the screen. Silent on every
               state but `:behind` (HomeHelper#pool_status_label owns that gate). %>
           <%= pool_problem_label(status,
                                  orphan: orphans.include?(pool),
-                                 raised_after_distributing: presenter.raised_after_distributing?(pool)) %>
+                                 changed_after_distributing: presenter.changed_after_distributing?(pool)) %>
         </span>
       </div>
 

@@ -166,6 +166,39 @@ RSpec.describe "Sacrifice view", type: :system do
       expect(figure("frees")).to have_content("$0.00 a period")
     end
 
+    # THE OTHER END OF THE SAME CLAMP: an EMPTY "cut to" box frees the rule entirely. That is the
+    # honest reading of a cleared field — the user has named no floor — and it is the conservative
+    # one for the totals, since the clamp caps it at the rule's own claim rather than letting a
+    # `NaN` through. It is also where a pasted "1,800" lands: a `type=number` input rejects the
+    # comma in some browsers and hands the dial a blank, so this state is reachable without anyone
+    # meaning to reach it. Pinned at the ROW as well as the footer, so the screen says which rule
+    # produced the figure.
+    #
+    # `fill_in with: ""` is a PROGRAMMATIC clear — it dispatches `change` and no `input` — and that
+    # is the half of the mechanism worth exercising here, because it is the same half a paste or an
+    # autofill uses. Writing this example is what found that the input listened for `input` alone
+    # and left the total stale beside an empty box; the keystroke path was measured separately and
+    # was always correct (typing "100" and backspacing it away moves the total on every press).
+    it "frees the whole claim from a row whose cut-to box is empty", :aggregate_failures do
+      cut(rules[:groceries], "Groceries", to: "")
+
+      expect(row(rules[:groceries]).find("[data-role='row-frees']")).to have_content("frees $2,000.00")
+      expect(figure("frees")).to have_content("$2,000.00 a period")
+      expect(figure("verdict")).to have_content("Covered — $1,557.69 a period to spare")
+    end
+
+    # BREAK-EVEN, TO THE CENT: cutting exactly the gap. `remaining` is 0 here, which in JavaScript
+    # is `-0` after the subtraction, and `Intl.NumberFormat().format(-0)` is "-$0.00" — so this one
+    # keystroke printed `Covered — -$0.00 a period to spare`, a minus sign on the only figure that
+    # has no sign. `have_no_content("-$")` is the assertion that catches it coming back.
+    it "reads level, not negative, when the cuts land exactly on the gap", :aggregate_failures do
+      cut(rules[:groceries], "Groceries", to: "1557.69")
+
+      expect(figure("frees")).to have_content("$442.31 a period")
+      expect(figure("verdict")).to have_content("Covered — $0.00 a period to spare")
+      expect(figure("verdict")).to have_no_content("-$")
+    end
+
     # UNCUTTABLE RULES ARE LISTED AND MARKED (spec §9: "pretending rent is optional would be a
     # lie"), and they carry no checkbox at all — a control that did nothing would be worse than no
     # control.
@@ -256,6 +289,15 @@ RSpec.describe "Sacrifice view", type: :system do
       expect(page).to have_content("Every rule you have is anchored to a date")
       expect(page).to have_css("[data-unwinnable]")
       expect(page).to have_no_css("[data-sacrifice-row]")
+    end
+
+    # THE TWO BLOCKS HAVE TO AGREE. The statement said "cutting every rule BELOW to nothing" over an
+    # empty state saying "There is nothing here to cut" — a screen contradicting itself two inches
+    # apart. `have_no_content("rule below")` is what keeps the old scope from returning.
+    it "does not promise rows the list has none of", :aggregate_failures do
+      expect(find("[data-unwinnable]")).to have_content("Cutting every rule you can cut to nothing")
+      expect(find("[data-unwinnable]")).to have_no_content("rule below")
+      expect(page).to have_content("There is nothing here to cut")
     end
   end
 

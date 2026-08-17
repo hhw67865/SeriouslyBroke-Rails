@@ -240,7 +240,26 @@ class HomePresenter
   # immediately — everything in this design is derived — so raising Groceries from $420 to $470
   # the day after a distribution flips the envelope from `on track` to `behind $50` with no money
   # having moved and nothing having gone wrong. The row says which of the two it is:
-  # `behind $50.00 — you raised this rule after distributing`.
+  # `behind $50.00 — you changed a rule here after distributing`.
+  #
+  # THE COPY SAYS "CHANGED A RULE HERE", NOT §8'S OWN "you raised this rule", AND THE NARROWING IS
+  # DELIBERATE: `updated_at` cannot support the stronger sentence, in two reachable shapes.
+  #
+  #   IT DOES NOT KNOW THE DIRECTION. A user who LOWERS a rule after distributing — Groceries from
+  #   $470 back to $420 on an envelope that is still behind against the new, smaller requirement —
+  #   moves this same timestamp, and "you raised this rule" would tell them they did the opposite
+  #   of what they did. `updated_at` is a fact about WHEN, and the amount before the edit is not on
+  #   the row to compare against; recovering it would mean the `effective_from` versioning §8
+  #   explicitly declined. The honest verb is the one that covers both directions.
+  #
+  #   IT DOES NOT KNOW WHICH RULE. This asks `pool.budgets.any?`, so a pool carrying two rules
+  #   fires the clause when EITHER moved — and "this rule", printed on a POOL's row, points at
+  #   whichever one the reader happens to be looking at. "a rule here" says what is true: something
+  #   in this envelope changed after the money went out. The expanded row below lists the rules.
+  #
+  # A rule CREATED after the distribution answers true as well, and the wording covers that too:
+  # a new claim on an envelope already funded leaves it behind for the same reason an edited one
+  # does, and none of the three cases is a lie under this verb.
   #
   # DERIVED, NO NEW COLUMN. Two timestamps the app already keeps: the rule's `updated_at` against
   # the newest `PoolMovement.distributed` row for this pool's account inside the current period.
@@ -266,13 +285,9 @@ class HomePresenter
   # directions by spec/presenters/home_presenter_spec.rb, which writes a distribution and asserts
   # the clause stays off.
   #
-  # A rule CREATED after the distribution answers true as well, and that is right: a new claim on
-  # an envelope that has already been funded leaves it behind for exactly the same reason a raised
-  # one does, and the sentence is about what the user did, not about which column changed.
-  #
   # `pool.budgets` is eager-loaded by #all_pools, so this asks the database nothing per row; the
   # movements are one query for the whole screen (see #latest_distributions).
-  def raised_after_distributing?(pool)
+  def changed_after_distributing?(pool)
     distributed_at = latest_distributions[pool.account_id]
 
     distributed_at.present? && pool.budgets.any? { |budget| budget.updated_at > distributed_at }
@@ -476,7 +491,7 @@ class HomePresenter
   # cannot disagree about which distribution is "this period's".
   #
   # `{}` on a user with no accounts rather than a query with an empty IN list: an empty `accounts`
-  # makes the whole question moot, and #raised_after_distributing? reads a missing key as "no
+  # makes the whole question moot, and #changed_after_distributing? reads a missing key as "no
   # distribution", which is the safe direction and the true one.
   def latest_distributions
     @latest_distributions ||=

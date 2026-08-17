@@ -48,8 +48,14 @@
         softer ceiling would be the false comfort the spec names. %>
     <% if @presenter.unwinnable? %>
       <div class="mt-4 rounded border border-status-danger bg-status-danger-light px-4 py-3" data-unwinnable>
+        <%# "every rule YOU CAN CUT", not "every rule below": on the all-anchored screen there is no
+            rule below, and the sentence sat directly above an empty state reading "There is nothing
+            here to cut" — one block arguing with the next. The scope has to name the cuttable set
+            either way, because dropping it outright ("cutting every rule to nothing") would be
+            FALSE on that same screen: cutting the anchored rules would close the gap, which is
+            exactly what the user cannot do. %>
         <p class="text-sm font-semibold text-status-danger">
-          Cutting every rule below to nothing still leaves you
+          Cutting every rule you can cut to nothing still leaves you
           <%= number_to_currency(@presenter.unclosable) %> underwater every period.
         </p>
         <p class="mt-1 text-sm text-status-danger">
@@ -131,7 +137,17 @@
                  value="<%= row.claim_param %>"
                  aria-label="Cut <%= budget_rule_name(row.budget) %> to"
                  data-app--sacrifice--dial-target="amount"
-                 data-action="input->app--sacrifice--dial#recompute">
+                 <%# `change` AS WELL AS `input`, and it is a backstop rather than a duplicate.
+                     `input` covers every keystroke, which is the whole of what a user typing does —
+                     measured: typing "100" and then backspacing it away moves the total on each
+                     press. It does NOT cover a value SET without keystrokes, and the field has at
+                     least two such paths: a programmatic clear (which is exactly what Capybara's
+                     `fill_in with: ""` does, and it left the total stale while the box read empty),
+                     and a `type=number` input silently refusing a pasted "1,800". `change` fires on
+                     blur in both, so the figure cannot stay stale once the user looks away.
+                     #recompute reads the whole DOM every time, so firing twice costs a re-read and
+                     can never double-count. %>
+                 data-action="input->app--sacrifice--dial#recompute change->app--sacrifice--dial#recompute">
         </div>
 
         <%# "frees $100" is §9's own row copy, and the word is what makes the figure readable: a
