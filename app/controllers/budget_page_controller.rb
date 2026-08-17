@@ -57,17 +57,36 @@ class BudgetPageController < ApplicationController
   # A REFUSAL RE-RENDERS THIS PAGE AT 422, as a failed declaration does, because nothing was
   # written and the order on screen is still the order in the database — there is nothing to
   # redirect to that would say more.
+  #
+  # A ROW THAT WAS ALREADY INVALID IS A REFUSAL, NOT A 500. `Pool.apply_fill_order` writes through
+  # `update!`, so a pool anywhere in the account carrying a pre-existing validation failure — a
+  # name emptied by a data fix, a `start_date` backfilled to NULL — raises RecordInvalid, rolls
+  # the whole reindex back, and would otherwise reach the user as a crash on a button they were
+  # right to press. It is the same outcome as every other refusal (nothing written, page
+  # re-rendered at 422) and it says WHICH row, because that row is the only thing they can fix.
   def reorder
     account = Pool.apply_fill_order(user: current_user, pool_ids: params.permit(pool_ids: [])[:pool_ids])
 
     return redirect_to(budget_page_path, notice: "#{account.name} fills in that order now.") if account
 
-    flash.now[:alert] = "That order didn't match this account's envelopes — nothing was changed. Reload and try again."
-    @presenter = build_presenter
-    render :show, status: :unprocessable_content
+    refuse("That order didn't match this account's envelopes — nothing was changed. Reload and try again.")
+  rescue ActiveRecord::RecordInvalid => e
+    refuse(
+      "#{e.record.name} could not be saved " \
+      "(#{e.record.errors.full_messages.to_sentence.downcase}), so nothing was changed."
+    )
   end
 
   private
+
+  # One refusal, one shape: nothing was written, so the page comes back as it stands with the
+  # reason above it. 422 rather than a redirect, as a failed declaration is — there is nothing to
+  # redirect to that would say more than the order already on screen does.
+  def refuse(message)
+    flash.now[:alert] = message
+    @presenter = build_presenter
+    render :show, status: :unprocessable_content
+  end
 
   def build_presenter = BudgetPagePresenter.new(user: current_user, today: Date.current)
 

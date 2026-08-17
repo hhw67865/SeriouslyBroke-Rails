@@ -95,23 +95,53 @@ class Pool < ApplicationRecord
   #     changed under it, submitting an order for pools that are no longer the ones being
   #     ordered. Nothing is written and the page comes back saying so, rather than a partial
   #     write leaving an order nobody chose.
+  #
+  # TWO REORDERS AT ONCE ARE LAST-WRITE-WINS, AND THAT IS A DECISION RATHER THAN A LEAVING.
+  # `account.lock!` IS THE FIRST STATEMENT INSIDE THE TRANSACTION, exactly as it is in
+  # AllocationCommitter#call and for a related reason: without it two tabs reordering the same
+  # account issue their UPDATEs in their own submitted orders, take the same pool rows in
+  # DIFFERENT orders, and Postgres breaks the cycle by killing one with a deadlock — a 500 on a
+  # button click. Serialised behind the account row, the second reorder simply lands on top of
+  # the first, whole. It cannot land HALF on top: the submitted list must be the account's entire
+  # `in_fill_order` set, so every ordered pool is rewritten by whichever transaction commits last
+  # and no blend of two orders exists. The staleness check moved INSIDE the lock for the same
+  # reason — a rule deleted between the check and the write would otherwise slip past a guard
+  # that had already passed.
+  #
+  # Nothing here rescues. `update!` runs the full validation stack on every row, which is
+  # deliberate — this is the only writer for `priority` and a reorder must not be the request
+  # that sneaks an invalid row past the model — so a row that was ALREADY invalid before the
+  # reorder (a name emptied by a migration, a start_date backfilled to NULL) raises
+  # RecordInvalid, the transaction rolls back, and BudgetPageController#reorder turns it into the
+  # same 422 as every other refusal with the offending row named. A rescue here would have to
+  # invent a second failure vocabulary beside `nil`.
   def self.apply_fill_order(user:, pool_ids:)
     ids = Array(pool_ids).map(&:to_s)
     pools = fill_order_pools(user, ids)
     return if pools.nil?
 
     account = fill_order_account(user, pools.values)
-    return if account.nil? || account.child_pools.in_fill_order.ids.map(&:to_s).sort != ids.sort
+    return if account.nil?
 
-    transaction { write_fill_order(account, ids, pools) }
-    account
+    transaction do
+      account.lock!
+      next unless account.child_pools.in_fill_order.ids.map(&:to_s).sort == ids.sort
+
+      write_fill_order(user, account, ids, pools)
+      account
+    end
   end
 
   # The submitted pools dropped into the slots the submitted pools already hold, everything else
   # left where it stands, and the whole account renumbered 0,1,2… off the result.
-  def self.write_fill_order(account, ids, pools)
+  #
+  # `user.pools.where(account_id:)` rather than `account.child_pools`, so the write set is scoped
+  # by the same ownership the ids were: `child_pools` walks a foreign key, and that the rows
+  # behind it belong to this user is today only true because `account_matches_pool_type` says so
+  # at save time. A validation is an input rule; this is the write, and it does its own scoping.
+  def self.write_fill_order(user, account, ids, pools)
     queue = ids.dup
-    account.child_pools.by_priority
+    user.pools.where(account_id: account.id).by_priority
       .map { |pool| pools.key?(pool.id.to_s) ? pools.fetch(queue.shift) : pool }
       .each_with_index { |pool, index| pool.update!(priority: index) }
   end

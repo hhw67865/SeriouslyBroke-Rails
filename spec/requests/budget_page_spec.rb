@@ -151,10 +151,12 @@ RSpec.describe "Budget page declaration", type: :request do
     # account's order, because a pinned row alone would pass on a rewrite that moved everything
     # else and a whole-set comparison alone reads as a count.
     describe "a list this user cannot have submitted", :aggregate_failures do
+      # The bad id sits MID-LIST rather than on the end, so a guard that stopped checking after
+      # the first or last element would not pass this.
       it "refuses another user's pool" do
         intruder = create(:pool, :budget_pool, name: "Theirs")
 
-        reorder([groceries.id, rent.id, intruder.id])
+        reorder([groceries.id, intruder.id, rent.id])
 
         expect(response).to have_http_status(:unprocessable_content)
         expect(groceries.reload.priority).to eq(1)
@@ -202,6 +204,60 @@ RSpec.describe "Budget page declaration", type: :request do
         reorder([groceries.id])
 
         expect(response.body).to include("nothing was changed")
+      end
+
+      # `Pool.apply_fill_order` writes through `update!`, so a row that was ALREADY invalid
+      # before the reorder — a `start_date` a data fix left NULL — raises RecordInvalid from a
+      # reindex that had nothing to do with it. That must be this route's own refusal, naming
+      # the row the user has to fix, rather than an unrescued 500 on a button they were right
+      # to press.
+      it "refuses at 422, naming the row, when a pool in the account is already invalid" do
+        rent.update_column(:start_date, nil) # rubocop:disable Rails/SkipsModelValidations -- the point
+
+        reorder([groceries.id, rent.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("Rent could not be saved (start date can")
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+    end
+
+    # THE TWO SEMANTICS THIS TASK INVENTED, and neither was reachable by the fixtures above:
+    # every pool in them carries a rule, so a list omitting a rule-less pool and the
+    # slot-preserving branch that keeps such a pool's rank were both unexercised. The demo seeds
+    # are this shape — `db/seeds.rb` moves four savings pools into Checking with no rule at all —
+    # and under the brief's literal guard every reorder the demo user can make was refused.
+    #
+    # Checking reads Rent(0, rule), Emergency(1, none), Groceries(2, rule), Vacation(3, none).
+    describe "an account holding pools no rule fills", :aggregate_failures do
+      let!(:emergency) { unruled("Emergency", priority: 1) }
+      let!(:vacation) { unruled("Vacation", priority: 3) }
+
+      before { groceries.update!(priority: 2) }
+
+      def unruled(name, priority:)
+        create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+      end
+
+      # The pair to "refuses an order missing one of the account's own pools": omitting a pool a
+      # rule FILLS is a refusal, omitting one no rule fills is the ordinary case.
+      it "accepts a list naming only the pools a rule fills" do
+        reorder([groceries.id, rent.id])
+
+        expect(response).to redirect_to(budget_page_path)
+        expect(groceries.reload.priority).to eq(0)
+      end
+
+      # THE SLOT-PRESERVING BRANCH. Emergency and Vacation are named nowhere on the wire; the two
+      # that are swap with each other and everything else holds its place. Renumbering only the
+      # submitted pools would leave Emergency on 1 tied with Rent on 1, and `[priority, name]` —
+      # not the user — would decide which of the two Home fills first.
+      it "keeps an unruled pool's rank while renumbering the account densely" do
+        reorder([groceries.id, rent.id])
+
+        expect(fill_order).to eq([["Groceries", 0], ["Emergency", 1], ["Rent", 2], ["Vacation", 3]])
+        expect(emergency.reload.priority).to eq(1)
+        expect(vacation.reload.priority).to eq(3)
       end
     end
 

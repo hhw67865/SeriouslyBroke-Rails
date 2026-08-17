@@ -11,7 +11,9 @@
     BudgetPageHelper#reordered_pool_ids) so the order is reachable with no JavaScript at all —
     the drag is the enhancement, not the mechanism. %>
 <section class="space-y-3" data-reorder-account="<%= band.account.name %>"
-         data-controller="app--budget-page--reorder">
+         data-controller="app--budget-page--reorder"
+         data-action="dragover->app--budget-page--reorder#over
+                      drop->app--budget-page--reorder#drop">
   <div class="flex items-baseline justify-between gap-4 px-1">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500"><%= band.account.name %></h2>
     <p class="text-xs text-gray-400">Drag a card, or use the arrows, to set the order this account fills them</p>
