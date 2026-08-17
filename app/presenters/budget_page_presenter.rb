@@ -166,9 +166,9 @@ class BudgetPagePresenter
 
   # THE MONTHLY CAP A RATE SUGGESTION'S CATEGORY ALREADY CARRIES, or nil.
   #
-  # `Category.budgetable` — the rate detector's population — is "an expense category with no pool",
-  # which says nothing about a cap, so five of the demo's rate suggestions are for categories the
-  # user has already budgeted. The sentence must name the cap: a cap funds nothing
+  # `Category#buffer_funded?` — the rate detector's population — is "an expense category funded by
+  # the buffer", which says nothing about a cap, so five of the demo's rate suggestions are for
+  # categories the user has already budgeted. The sentence must name the cap: a cap funds nothing
   # (`Budget.steady_need` counts pool-mode rules only, Task 4's ruling), so the suggestion is
   # correct — but printed silently beside a category the user capped last month it reads as the
   # app failing to notice.

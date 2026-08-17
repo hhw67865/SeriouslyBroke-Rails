@@ -71,7 +71,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       confirm = find("button", text: "Delete")["data-turbo-confirm"]
 
       expect(confirm).to include("returns to Checking's buffer")
-      expect(confirm).to include("re-reads as money moving to and from that buffer")
+      expect(confirm).to include("transfers and spending both re-read as Checking's")
     end
 
     it "keeps the plain warning on a pool with no account above it to absorb anything" do
@@ -103,6 +103,32 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       create(:pool_movement, from_pool: checking, to_pool: envelope_b, amount: 100, kind: :allocation)
       create(:pool_movement, from_pool: envelope_b, to_pool: envelope_c, amount: 60, kind: :transfer)
       [checking, envelope_b, envelope_c]
+    end
+
+    # The real-envelope shape, through the real button: $120 in by movement, $45 out by entries,
+    # balance $75. The buffer must rise by 75 and the spending must keep counting — this is the
+    # case the movement-only chain above cannot show, and the one the demo turned it up on.
+    it "keeps a deleted envelope's spending counting, in the buffer's lane", :aggregate_failures do
+      checking, supplies, category = envelope_with_spending
+      visit pool_path(supplies)
+
+      accept_confirm { click_button "Delete" }
+
+      expect(page).to have_content("Pool was successfully deleted")
+      expect(checking.calculator.balance).to eq(455) # 380 + exactly 75
+      expect(category.reload.pool).to eq(checking)
+      expect(Pool.find(checking.id).total).to eq(455) # 500 paid in less 45 spent
+    end
+
+    def envelope_with_spending
+      checking = create(:pool, :account, user: user, name: "Checking")
+      supplies = create(:pool, :budget_pool, user: user, account: checking, name: "Supplies")
+      salary = create(:category, :income, user: user, pool: checking, name: "Salary")
+      create(:entry, item: create(:item, category: salary), amount: 500, date: Date.current)
+      create(:pool_movement, from_pool: checking, to_pool: supplies, amount: 120, kind: :allocation)
+      spending = create(:category, :expense, user: user, pool: supplies, name: "Supplies Spending")
+      create(:entry, item: create(:item, category: spending), amount: 45, date: Date.current)
+      [checking, supplies, spending]
     end
 
     it "refuses to delete an account that still holds pools" do

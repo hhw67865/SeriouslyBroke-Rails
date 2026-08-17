@@ -85,12 +85,17 @@ RSpec.describe Entry, type: :model do
       expect(entry.effective_pool).to eq(groceries)
     end
 
-    it "falls back to the user's default account when the category has no pool" do
+    # The chain ends at the category's pool — Task 8's fix round removed the `default_account`
+    # fallback from `Category#effective_pool` because no ledger implemented it (see that method).
+    # Both directions in one example: the reader says nil, and the account the user nominated is
+    # measured as not holding the $60 either.
+    it "stops at the category and ignores the user's default account", :aggregate_failures do
       user.update!(default_account: checking)
       category = create(:category, :expense, user: user, pool: nil)
-      entry = create(:entry, item: create(:item, category: category))
+      entry = create(:entry, item: create(:item, category: category), amount: 60)
 
-      expect(entry.effective_pool).to eq(checking)
+      expect(entry.effective_pool).to be_nil
+      expect(checking.calculator.balance).to eq(0)
     end
 
     it "is nil when nothing resolves" do

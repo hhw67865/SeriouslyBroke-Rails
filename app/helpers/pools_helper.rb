@@ -38,22 +38,27 @@ module PoolsHelper
   # WHAT DELETING THIS POOL ACTUALLY DOES, said before it happens.
   #
   # The page used to warn "This action cannot be undone" over every pool there is, which was
-  # true and told the user nothing about the money. Since Pool#return_movements_to_the_account
-  # an envelope's balance is not destroyed with it — it returns to the account's buffer, and the
-  # transfers that filled it re-read as transfers to and from that buffer. A confirm that
-  # implies the money vanishes is a page lying about its own outcome in the more frightening
-  # direction.
+  # true and told the user nothing about the money. Since Pool#return_holdings_to_the_account an
+  # envelope's balance is not destroyed with it — it returns to the account's buffer — and neither
+  # is its history: its transfers re-read as the buffer's, and its categories keep counting their
+  # spending against the buffer. A confirm that implies the money and the history vanish is a page
+  # lying about its own outcome in the more frightening direction.
+  #
+  # BOTH HALVES ARE NAMED, because they are two different fears. "Where does my $400 go" is
+  # answered by the balance clause; "do I lose my grocery history" is answered by the second, and
+  # it is the clause the fix round added — before it, the spending genuinely did stop counting.
   #
   # ACCOUNTS KEEP THE OLD SENTENCE, and so does an account-less pool. An account has no buffer
   # above it to absorb anything (and one holding pools is refused outright by
   # `dependent: :restrict_with_error`, which is a different message on a different screen); an
-  # orphan's money lands in whatever account is on the far end of its transfers, which is not a
-  # place this page can name.
+  # account-less pool is REFUSED outright the moment it has categories or unabsorbable transfers,
+  # and the model says why on the page it returns to, which is a better place for a reason than a
+  # confirm the user has not clicked yet.
   def pool_delete_confirmation(pool)
     return "Are you sure you want to delete this pool? This action cannot be undone." if pool.account.blank?
 
-    "Delete #{pool.name}? Any money it is holding returns to #{pool.account.name}'s buffer, " \
-      "and its transfer history re-reads as money moving to and from that buffer. " \
+    "Delete #{pool.name}? Any money it is holding returns to #{pool.account.name}'s buffer, and " \
+      "its history stays with it — transfers and spending both re-read as #{pool.account.name}'s. " \
       "This action cannot be undone."
   end
 end

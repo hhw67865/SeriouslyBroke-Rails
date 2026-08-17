@@ -112,6 +112,36 @@ RSpec.describe Category, type: :model do
     end
   end
 
+  # THE RATE DETECTOR'S POPULATION, and deliberately NOT the same set as #budgetable?. The two
+  # answer different questions — "may this carry a category-mode cap" and "does this spending come
+  # out of the buffer" — and they part company on exactly one shape, so that shape is pinned by
+  # both readers at once.
+  describe "#buffer_funded?" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
+
+    it "is true for an expense category with no pool at all" do
+      expect(create(:category, :expense, user: user, pool: nil)).to be_buffer_funded
+    end
+
+    it "is true for a category pointing at an account, where budgetable? is false", :aggregate_failures do
+      category = create(:category, :expense, user: user, pool: checking)
+
+      expect(category).to be_buffer_funded
+      expect(category).not_to be_budgetable
+    end
+
+    it "is false once an envelope holds the spending" do
+      expect(create(:category, :expense, user: user, pool: groceries)).not_to be_buffer_funded
+    end
+
+    it "is false for income and savings categories, whichever pool they name", :aggregate_failures do
+      expect(create(:category, :income, user: user, pool: checking)).not_to be_buffer_funded
+      expect(create(:category, :savings, user: user, pool: groceries)).not_to be_buffer_funded
+    end
+  end
+
   describe "destroy_budget_if_pool_linked callback" do
     let(:user) { create(:user) }
     let(:pool) { create(:pool, user: user) }
@@ -181,10 +211,23 @@ RSpec.describe Category, type: :model do
       expect(create(:category, :expense, user: user, pool: groceries).effective_pool).to eq(groceries)
     end
 
-    it "falls back to the user's default account" do
+    # THE FALLBACK THIS METHOD USED TO PROMISE, NOW REFUSED — Task 8's fix round.
+    #
+    # `pool || user&.default_account` read well and was kept by nothing: every balance in the app
+    # resolves an entry through `COALESCE(entries.pool_id, categories.pool_id)`
+    # (`PoolBalanceLedger::ENTRY_POOL_ID`), which has no default account in it. Two readers of one
+    # question, and `Σ pools == your bank balance` turned on which one you asked.
+    #
+    # Asserted in BOTH directions, which is the only way this is worth anything: the reader says
+    # nil, AND the nominated account's own balance is measured and does not contain the $60. A
+    # method agreeing with a ledger is a claim about the ledger, so the ledger is asked.
+    it "ignores the user's default account, because the ledger does", :aggregate_failures do
       user.update!(default_account: checking)
+      category = create(:category, :expense, user: user, pool: nil)
+      create(:entry, item: create(:item, category: category), amount: 60, date: Date.current)
 
-      expect(create(:category, :expense, user: user, pool: nil).effective_pool).to eq(checking)
+      expect(category.effective_pool).to be_nil
+      expect(checking.calculator.balance).to eq(0)
     end
 
     it "uses the category's own pool when the user has no default account" do

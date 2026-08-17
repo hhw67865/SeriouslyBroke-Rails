@@ -127,6 +127,83 @@ RSpec.describe Pool, "#destroy", type: :model do
     end
   end
 
+  # ── AN ENVELOPE WITH BOTH KINDS OF HISTORY ────────────────────────────────────────────────
+  # THE SHAPE THE PLAN'S FIXTURE COULD NOT SHOW, and the one every real envelope has. The chain
+  # above is movement-only, so its balance is entirely movement-derived and the defect this block
+  # exists for is invisible in it: a destroyed pool's CATEGORIES were nullified, its entries then
+  # matched `COALESCE(entries.pool_id, categories.pool_id)` for no pool at all, and the lifetime
+  # spending simply left the ledger.
+  #
+  # Modelled on the demo's Household Supplies, where it was found: $120 in by movement, $45 out by
+  # expense entries, balance $75. TWO planted literals now, and the bank balance is the difference
+  # between them — $500 paid in less $45 spent — which is what `Σ pools` has to equal.
+  describe "an envelope with both movement and entry history" do
+    def spending = 45
+
+    let(:supplies) { create(:pool, :budget_pool, user: user, account: checking, name: "Supplies") }
+    let!(:allocation) do
+      create(:pool_movement, from_pool: checking, to_pool: supplies, amount: 120, kind: :allocation)
+    end
+    let!(:supplies_category) do
+      create(:category, :expense, user: user, pool: supplies, name: "Supplies Spending")
+    end
+    let!(:spend) do
+      create(:entry, item: create(:item, category: supplies_category), amount: spending, date: Date.current)
+    end
+
+    before { pay(checking, deposit, named: "Salary") }
+
+    it "starts from the figures the fixture planted", :aggregate_failures do
+      expect(balance(supplies)).to eq(75) # 120 moved in, 45 spent out
+      expect(balance(checking)).to eq(380) # 500 paid in, 120 moved out
+      expect(total_of(checking)).to eq(deposit - spending) # 455, the bank balance
+    end
+
+    # The whole point of the fix round: 75, not 120. The movement half alone would raise the
+    # buffer by the allocation and leave the spending counted nowhere.
+    it "raises the buffer by the pool's balance, not by its movements alone", :aggregate_failures do
+      expect(balance(checking)).to eq(380)
+      expect(balance(supplies)).to eq(75)
+
+      supplies.destroy
+
+      expect(balance(checking)).to eq(455) # 380 + exactly 75
+      expect(balance(checking)).to be_a(BigDecimal)
+    end
+
+    it "keeps Σ pools at the bank balance, to the penny", :aggregate_failures do
+      expect(total_of(checking)).to eq(deposit - spending)
+
+      supplies.destroy
+
+      expect(total_of(checking)).to eq(deposit - spending)
+      expect(total_of(checking)).to be_a(BigDecimal)
+    end
+
+    # The row, not its effect. A balance assertion is satisfied by a ledger that destroyed the
+    # category and re-invented the $45 somewhere else.
+    it "re-points the category to the account instead of nullifying it", :aggregate_failures do
+      expect { supplies.destroy }.not_to change(Category, :count)
+
+      expect(supplies_category.reload.pool).to eq(checking)
+      expect(supplies_category.name).to eq("Supplies Spending")
+      expect(spend.reload.effective_pool).to eq(checking)
+    end
+
+    it "leaves the entry itself untouched", :aggregate_failures do
+      expect { supplies.destroy }.not_to change(Entry, :count)
+
+      expect(spend.reload.amount).to eq(spending)
+      expect(spend.pool).to be_nil # it never overrode; it resolves through the category
+    end
+
+    # The movement half still behaves as the chain block pins it — asserted here too because this
+    # is the fixture where the two halves have to agree about the same $75.
+    it "still collapses the allocation that funded it" do
+      expect { supplies.destroy }.to change { PoolMovement.exists?(allocation.id) }.from(true).to(false)
+    end
+  end
+
   # A sweep runs envelope → account and an allocation runs account → envelope, so BOTH of a
   # distribution's own row kinds collapse when the envelope is destroyed. The sweep is asserted
   # separately because it is the direction the allocation example cannot reach.
@@ -203,8 +280,37 @@ RSpec.describe Pool, "#destroy", type: :model do
       expect(transfer.to_pool).to eq(other_orphan)
     end
 
-    it "is destroyed without ceremony when it holds no movements at all" do
+    it "is destroyed without ceremony when it holds no movements and no categories" do
       expect { orphan.destroy }.to change { described_class.exists?(orphan.id) }.from(true).to(false)
+    end
+
+    # Nullifying is the `Σ pools` break the fix round refused, so the destroy is refused instead.
+    # The counterpart reach is the "both movement and entry history" block above, where an account
+    # exists and the category re-points into it.
+    it "refuses when categories point at it and no account can take them", :aggregate_failures do
+      category = create(:category, :expense, user: user, pool: orphan, name: "Old Fund Spending")
+      create(:entry, item: create(:item, category: category), amount: 30, date: Date.current)
+
+      expect(orphan.destroy).to be(false)
+
+      expect(orphan.errors[:base]).to include(a_string_matching(/Assign it to an account first/))
+      expect(described_class.exists?(orphan.id)).to be(true)
+      expect(category.reload.pool).to eq(orphan)
+    end
+
+    # The refusal has to come BEFORE the movement half writes anything, not after it and by
+    # rollback: a pool with an absorbable transfer and an unabsorbable category is the one shape
+    # where the two halves disagree about whether the destroy may proceed.
+    it "writes nothing when its transfers could move but its categories could not", :aggregate_failures do
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Car")
+      transfer = create(:pool_movement, from_pool: orphan, to_pool: envelope, amount: 75)
+      category = create(:category, :expense, user: user, pool: orphan, name: "Old Fund Spending")
+
+      expect(orphan.destroy).to be(false)
+
+      expect(transfer.reload.from_pool).to eq(orphan)
+      expect(category.reload.pool).to eq(orphan)
+      expect(described_class.exists?(orphan.id)).to be(true)
     end
   end
 

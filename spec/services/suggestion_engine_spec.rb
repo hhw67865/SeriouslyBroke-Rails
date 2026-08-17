@@ -347,6 +347,42 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:rate)).to be_empty
     end
 
+    # THE OTHER HALF OF THAT SENTENCE — Task 8's fix round. An ACCOUNT is the buffer, so a category
+    # pointing at one is buffer-funded exactly as an un-pooled one is, and the detector's sentence
+    # ("this comes out of your buffer") is literally true of it. The population became reachable in
+    # bulk when destroying an envelope started re-pointing its categories to the account instead of
+    # nullifying them: without this the app would go permanently silent about spending it had just
+    # handed back to the buffer.
+    it "fires on a category pointing at an account, which is the buffer itself", :aggregate_failures do
+      user.update!(default_account: checking)
+      buffered = category("Coffee", pool: checking)
+      in_last_three_periods(item("Beans", in_category: buffered), 120)
+
+      suggestion = of_kind(:rate).sole
+
+      expect(suggestion.subject).to eq(buffered)
+      expect(suggestion.amount).to eq(120)
+      # The CREATION branch, not reuse: an account is not an envelope, so accepting makes one and
+      # re-points the category into it.
+      expect(suggestion.prefill[:pool]).to eq(name: "Coffee", pool_type: "budget", account_id: checking.id)
+      expect(suggestion.prefill[:category_id]).to eq(buffered.id)
+      expect(suggestion.prefill).not_to have_key(:pool_id)
+    end
+
+    # An envelope that was deleted is the path that produces the shape above, end to end.
+    it "starts firing on a category whose envelope was deleted", :aggregate_failures do
+      groceries = envelope("Groceries")
+      covered = category("Groceries Spending", pool: groceries)
+      in_last_three_periods(item("Food", in_category: covered), 100)
+
+      expect(of_kind(:rate)).to be_empty
+
+      groceries.destroy
+
+      expect(covered.reload.pool).to eq(checking)
+      expect(of_kind(:rate).sole.subject).to eq(covered)
+    end
+
     it "rounds the mean up to the nearest dollar" do
       beans = item("Beans", in_category: category("Coffee"))
       spend(beans, 100, on: Date.new(2025, 12, 30))

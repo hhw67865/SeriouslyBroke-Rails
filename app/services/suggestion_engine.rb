@@ -350,9 +350,10 @@ class SuggestionEngine
   # outright — so a category pointing at an account gets the same new-envelope offer an unpooled one
   # does, and accepting re-points the category.
   #
-  # Shared with the rate detector, which reaches it only through the creation branch (its population
-  # is `budgetable`, i.e. pool-less by definition). One definition of "the envelope half of a
-  # proposal", so the two kinds cannot come to disagree about what accepting one does.
+  # Shared with the rate detector, which reaches it only through the creation branch — its
+  # population is `buffer_funded?`, i.e. pool-less OR account-pointed, and the line above sends both
+  # of those shapes down the creation branch. One definition of "the envelope half of a proposal",
+  # so the two kinds cannot come to disagree about what accepting one does.
   def envelope_half(category)
     reusable = category.pool
     return { pool_id: reusable.id } if reusable && !reusable.pool_type_account?
@@ -364,8 +365,21 @@ class SuggestionEngine
   # Detector 2 — a category that behaves like a rate and is funded by nothing
   # ---------------------------------------------------------------------------------------------
 
-  # `Category.budgetable` — an expense category with NO POOL — is the population, and the "no pool"
-  # half is the sentence's own reason: nothing holds this money, so it comes out of the buffer.
+  # `Category#buffer_funded?` — an expense category whose spending comes out of the BUFFER, either
+  # because it names no pool or because it names an ACCOUNT — is the population, and that is the
+  # sentence's own reason: nothing holds this money, so it comes out of the buffer.
+  #
+  # THE ACCOUNT HALF IS TASK 8's FIX ROUND. The population used to be `budgetable?` ("no pool"),
+  # which was the same set in practice because nothing routinely pointed a category at an account.
+  # Destroying an envelope now re-points its categories to the account rather than nullifying them
+  # (it is what keeps `Σ pools` exact), so un-enveloping a category is exactly the act that would
+  # have removed it from this detector forever — the app going silent about the spending at the
+  # moment it went back to being buffer spending. The sentence is unchanged and stays literally
+  # true; only the population widened.
+  #
+  # The accept flow needed nothing: #envelope_half already answers an account-pointed category with
+  # the CREATION branch ("an ACCOUNT is not reusable"), which is the branch this detector always
+  # used, and Task 7 built and measured that path on the demo's Estimated Taxes.
   #
   # THE MEAN, NOT THE MAXIMUM. Highest-observed is right for a bill, which must be paid in full or
   # not at all; a rate is a flow, and reserving every grocery category's worst fortnight would
@@ -380,7 +394,7 @@ class SuggestionEngine
     window = periods.last(RATE_WINDOW_PERIODS)
     totals, first_seen = category_history(window, exclude: proposed_bill_item_ids)
 
-    budgetable_categories.filter_map do |category|
+    buffer_funded_categories.filter_map do |category|
       # `fetch`, not `[]`: `#category_history` returns a Hash with a default PROC, and `[]` on a
       # missing key would write an empty bucket into it mid-iteration.
       present = totals.fetch(category.id, {}).reject { |_index, total| total.zero? }
@@ -391,10 +405,13 @@ class SuggestionEngine
     end
   end
 
-  # `Category#budgetable?` — the model's own Ruby twin of the `Category.budgetable` scope amendment
-  # B names, applied to the categories already in memory. Not a third spelling of the predicate: the
-  # pair already exists on the model and the seeds read the same one.
-  def budgetable_categories = @budgetable_categories ||= expense_categories.select(&:budgetable?).sort_by(&:id)
+  # `Category#buffer_funded?` — the model's own reader, applied to the categories already in memory.
+  # Not a second spelling of the predicate: it lives on the model beside `budgetable?`, and
+  # #expense_categories already `includes(:pool)`, so asking each one whether its pool is an account
+  # costs no query.
+  def buffer_funded_categories
+    @buffer_funded_categories ||= expense_categories.select(&:buffer_funded?).sort_by(&:id)
+  end
 
   # `[{ category_id => { period_index => total } }, { category_id => earliest entry date }]`, rolled
   # up in Ruby off the ONE history query rather than fetched per period or per category.
@@ -478,8 +495,9 @@ class SuggestionEngine
         per_period_cost: amount,
         guessed: false
       },
-      # The creation branch every time: this detector's population is `budgetable`, which is
-      # pool-less by definition, so the reuse branch is unreachable from here.
+      # The creation branch every time: this detector's population is `buffer_funded?`, which is
+      # pool-less or account-pointed, and #envelope_half sends both to creation — an account is not
+      # reusable as an envelope. The reuse branch stays unreachable from here.
       prefill: envelope_half(category).merge(budget: { amount: amount, basis: "per_paycheck" })
     )
   end
@@ -544,12 +562,13 @@ class SuggestionEngine
   # reach" already has one SQL form in this app (the entry's own pool, else its category's), and a
   # third spelling of it is how a suggestion and a balance come to describe different money.
   #
-  # THE LATENT THIRD SPELLING IS `Entry#effective_pool`, and it is NOT the same rule: it adds a
-  # final fallback to `user.default_account`, so an entry whose category has no pool reaches the
-  # account there and reaches NOTHING here (`COALESCE(NULL, NULL)` is NULL). The two are right for
-  # their own questions — a balance asks where the money physically sits, an envelope asks what its
-  # own rules cover — but anything that ever tries to unify them has to decide that, and naming it
-  # here is cheaper than discovering it from a figure that disagrees with Home.
+  # THE LATENT THIRD SPELLING WAS `Entry#effective_pool`, AND IT IS NO LONGER ONE. It used to add a
+  # final fallback to `user.default_account`, so an entry whose category had no pool reached the
+  # account there and reached NOTHING here (`COALESCE(NULL, NULL)` is NULL) — this comment named
+  # the disagreement and predicted it would have to be decided by whoever tried to unify them.
+  # Task 8's fix round decided it: the fallback was a promise no ledger kept, `Σ pools` turned on
+  # the difference, and `Category#effective_pool` now says what this SQL says. The Ruby pair and
+  # this constant are one rule in two languages, which is what they always claimed to be.
   def pool_spend(pool_ids, window)
     Entry.expenses
       .where(categories: { user_id: user.id })
