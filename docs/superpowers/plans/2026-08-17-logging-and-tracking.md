@@ -278,6 +278,14 @@ found this list living only in a gitignored ledger and ruled it a blocker).
 - `_summary_card`'s savings arm still renders account-pointed savings categories with savings
   chrome (the left-column sibling of the fixed right-column card).
 
+- A budget envelope's `target_amount` is read by nothing in the app; the pool show page prints
+  it under a neutral `TARGET` label rather than dropping it. Its meaning wants a ruling
+  (display marker? soft ceiling? delete?) — found by the final fix round's visual check.
+- `_pool_card`'s savings arm prints `Target:` twice (pre-existing, left alone).
+- The alerts-band `period_closed` thread is defensive, not curative: the drift it guards is
+  unreachable today (a closed envelope's re-asking rate rules always produce a row), pinned by
+  a spec that documents the reachability argument rather than prose.
+
 **§7a's Plan 3 (cutover) list is intact in the domain spec** — reverse §6.1 steps 2 and 4 (the
 step that loses data), tighten `account_matches_pool_type`, flip the `pool_type` default,
 delete `savings_entries_total`, the pools unique index, the seeds teardown rewrite,
