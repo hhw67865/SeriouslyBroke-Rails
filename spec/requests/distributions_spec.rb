@@ -119,7 +119,7 @@ RSpec.describe "Distributions", type: :request do
     let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
 
     before do
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
       create(
         :entry,
         item: create(:item, category: create(:category, :income, user: user, pool: checking)),
@@ -190,7 +190,7 @@ RSpec.describe "Distributions", type: :request do
     let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
 
     before do
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
       deposit(1_000, into: checking)
     end
 

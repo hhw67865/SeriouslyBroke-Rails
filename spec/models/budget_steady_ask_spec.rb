@@ -20,7 +20,7 @@ RSpec.describe Budget, type: :model do
   let(:account) { create(:pool, :account, user: user) }
   let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
 
-  def rate(amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   def monthly(amount) = create(:pool_budget, :rate, pool: pool, amount: amount)
 
@@ -32,10 +32,10 @@ RSpec.describe Budget, type: :model do
     create(:pool_budget, pool: pool, amount: amount, interval_months: nil, anchor_date: anchor, item: item)
   end
 
-  describe "#steady_ask on a per-paycheck rate rule" do
+  describe "#steady_ask on a per-period rate rule" do
     subject(:ask) { rate(300).steady_ask(user, today: today) }
 
-    # A per-paycheck amount IS a per-period amount. Nothing to normalise, and normalising it
+    # A per-period amount IS a per-period amount. Nothing to normalise, and normalising it
     # anyway is the mirror image of the bug below.
     it "passes the amount straight through" do
       expect(ask).to eq(300)
@@ -50,7 +50,7 @@ RSpec.describe Budget, type: :model do
   end
 
   # THE MIXED-UNIT TRAP, and it has already bitten once: 2b's Task 1 found `per_period_rate`
-  # treating a monthly amount as per-paycheck, which asked a biweekly user for 2x the rate.
+  # treating a monthly amount as per-period, which asked a biweekly user for 2x the rate.
   # $260 a month under 26 periods a year is $120 a period — the figure is chosen so the bug's
   # answer ($260) and the right one ($120) cannot be confused with a rounding difference.
   describe "a rate rule on a monthly basis", :aggregate_failures do
@@ -226,8 +226,8 @@ RSpec.describe Budget, type: :model do
     let(:their_account) { create(:pool, :account, user: undeclared) }
     let(:their_pool) { create(:pool, :budget_pool, user: undeclared, account: their_account) }
 
-    it "passes a per-paycheck amount through" do
-      rule = create(:pool_budget, :per_paycheck_rate, pool: their_pool, amount: 300)
+    it "passes a per-period amount through" do
+      rule = create(:pool_budget, :per_period_rate, pool: their_pool, amount: 300)
 
       expect(rule.steady_ask(undeclared, today: today)).to eq(300)
     end
@@ -313,7 +313,7 @@ RSpec.describe Budget, type: :model do
     it "counts a rule on a pool no account can reach" do
       rate(300)
       orphan = create(:pool, :savings_pool, user: user, account: nil)
-      create(:pool_budget, :per_paycheck_rate, pool: orphan, amount: 150)
+      create(:pool_budget, :per_period_rate, pool: orphan, amount: 150)
 
       expect(described_class.steady_need(user, today: today)).to eq(450)
     end
@@ -323,7 +323,7 @@ RSpec.describe Budget, type: :model do
       stranger = create(:user, period_cadence: :biweekly, period_anchor_date: today)
       stranger_account = create(:pool, :account, user: stranger)
       stranger_pool = create(:pool, :budget_pool, user: stranger, account: stranger_account)
-      create(:pool_budget, :per_paycheck_rate, pool: stranger_pool, amount: 999)
+      create(:pool_budget, :per_period_rate, pool: stranger_pool, amount: 999)
 
       expect(described_class.steady_need(user, today: today)).to eq(300)
     end

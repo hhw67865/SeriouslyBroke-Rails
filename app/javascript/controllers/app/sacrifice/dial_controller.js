@@ -11,7 +11,7 @@ import { Controller } from "@hotwired/stimulus"
 // IT WORKS IN PER-PERIOD UNITS THROUGHOUT, AND THAT IS THE WHOLE OF ITS CORRECTNESS. Every row's
 // `data-claim` is `Budget#steady_ask` — what the rule claims from ONE period — never
 // `budget.amount`, which is the rule's own unit: a $1,500 monthly Rent rule claims $692.31 from a
-// biweekly period, and a dial fed sticker prices would free $1,500 out of a $2,400 paycheck by
+// biweekly period, and a dial fed sticker prices would free $1,500 out of a $2,400 period by
 // touching one rule. The amount input types against the per-period figure too, and the row says so
 // beside it, because the edit form this row links to works in the rule's OWN unit and the two
 // screens must not be confused. The mixed-unit slip has struck five times on this branch.

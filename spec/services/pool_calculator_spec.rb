@@ -340,7 +340,7 @@ RSpec.describe PoolCalculator, type: :model do
     end
     let(:today) { Date.new(2026, 2, 6) }
 
-    before { create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150) }
+    before { create(:pool_budget, :per_period_rate, pool: vacation, amount: 150) }
 
     # The whole progression, in order, because "a dateless goal is just a rate rule plus a
     # pool target" is the reading this group exists to disprove. An ordinary rate rule is
@@ -389,7 +389,7 @@ RSpec.describe PoolCalculator, type: :model do
     end
 
     # Budget blesses two dateless shapes and their amounts are in different units: a
-    # per_paycheck rule's amount IS the per-period rate, while a monthly rule's is a
+    # per_period rule's amount IS the per-period rate, while a monthly rule's is a
     # per-month figure. Summing the two bases raw would ask $600 a fortnight.
     #
     # THE FIGURE MOVED, $300.00 -> $276.92, and this is the one number this plan knowingly
@@ -429,7 +429,7 @@ RSpec.describe PoolCalculator, type: :model do
     end
 
     # Both bases on one goal, each normalised before adding: $150 a period plus $600 a month.
-    # $450.00 -> $426.92 for the same reason as the two examples above; the per-paycheck half is
+    # $450.00 -> $426.92 for the same reason as the two examples above; the per-period half is
     # untouched at $150, which is what makes the moved total legible.
     it "adds rules of different bases in the same unit" do
       create(:pool_budget, :rate, pool: vacation, amount: 600)
@@ -461,7 +461,7 @@ RSpec.describe PoolCalculator, type: :model do
 
     it "does not apply the cutoff to budget pools" do
       envelope = create(:pool, :budget_pool, user: goal_user, account: account, target_amount: nil)
-      create(:pool_budget, :per_paycheck_rate, pool: envelope, amount: 150)
+      create(:pool_budget, :per_period_rate, pool: envelope, amount: 150)
 
       expect(envelope.calculator(today: today).required).to eq(150)
     end
@@ -488,7 +488,7 @@ RSpec.describe PoolCalculator, type: :model do
     # $100 target, $150 a period, $100 in the pool.
     def pool_at_a_target_below_its_rate(trait)
       create(:pool, trait, user: goal_user, account: account, target_amount: 100).tap do |pool|
-        create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 150)
+        create(:pool_budget, :per_period_rate, pool: pool, amount: 150)
         create(:pool_movement, from_pool: account, to_pool: pool, amount: 100)
       end
     end
@@ -528,7 +528,7 @@ RSpec.describe PoolCalculator, type: :model do
     # the money is still in the envelope, and the next distribution takes it back.
     it "sweeps a rate envelope's leftover once its period has ended", :aggregate_failures do
       groceries = envelope(name: "Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
       fund(groceries, 60, on: last_period)
 
       expect(calc(groceries).period_closed?).to be(true)
@@ -541,7 +541,7 @@ RSpec.describe PoolCalculator, type: :model do
     # a #period_closed? hard-coded to true.
     it "leaves a rate envelope funded inside the live period alone", :aggregate_failures do
       groceries = envelope(name: "Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
       fund(groceries, 60, on: this_period)
 
       expect(calc(groceries).period_closed?).to be(false)
@@ -557,7 +557,7 @@ RSpec.describe PoolCalculator, type: :model do
     # reports $450 free. Sweeping is gated on the pool's TYPE, never on its rule shape.
     it "never sweeps a savings goal, whatever its rate rule's period says", :aggregate_failures do
       vacation = envelope(:savings_pool, name: "Vacation", target_amount: 2_400)
-      create(:pool_budget, :per_paycheck_rate, pool: vacation, amount: 150)
+      create(:pool_budget, :per_period_rate, pool: vacation, amount: 150)
       fund(vacation, 600, on: last_period)
 
       expect(calc(vacation).free_amount).to eq(450)
@@ -577,7 +577,7 @@ RSpec.describe PoolCalculator, type: :model do
     # holding $500 of it, $400 comes back.
     it "sweeps a mixed envelope down to what its live bill is holding", :aggregate_failures do
       car = envelope(name: "Car")
-      rate = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      rate = create(:pool_budget, :per_period_rate, pool: car, amount: 100)
       rent = create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
       fund(car, 900, on: last_period)
 
@@ -601,7 +601,7 @@ RSpec.describe PoolCalculator, type: :model do
     it "reserves what an under-funded bill actually holds, not what it wants", :aggregate_failures do
       car = envelope(name: "Car")
       rent = create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
-      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      create(:pool_budget, :per_period_rate, pool: car, amount: 100)
       fund(car, 300, on: last_period)
 
       expect(calc(car).balance).to eq(300)
@@ -652,7 +652,7 @@ RSpec.describe PoolCalculator, type: :model do
     # exists to take. The pair below pins that the gap is the rate rule's $100 and nothing else.
     it "sweeps the whole balance once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
       car = envelope(name: "Car")
-      rate = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      rate = create(:pool_budget, :per_period_rate, pool: car, amount: 100)
       settled = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
       fund(car, 900, on: last_period)
 
@@ -671,7 +671,7 @@ RSpec.describe PoolCalculator, type: :model do
     # Measured at 0 both before and after the change.
     it "does not change what a pool asks for when the settled rule stops holding money" do
       car = envelope(name: "Car")
-      create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+      create(:pool_budget, :per_period_rate, pool: car, amount: 100)
       create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
       fund(car, 900, on: last_period)
 
@@ -717,12 +717,12 @@ RSpec.describe PoolCalculator, type: :model do
       expect(calc(car).free_amount).to be_a(BigDecimal)
     end
 
-    # Mixed bases on one envelope: the per-paycheck rule's period ended Aug 6, the monthly
+    # Mixed bases on one envelope: the per-period rule's period ended Aug 6, the monthly
     # rule's does not end until Aug 31. `all?` means the LATEST period governs, so the money
     # stays put while any rule still has a live claim on it.
     it "waits for the later period when an envelope mixes bases", :aggregate_failures do
       utilities = envelope(name: "Utilities")
-      create(:pool_budget, :per_paycheck_rate, pool: utilities, amount: 100)
+      create(:pool_budget, :per_period_rate, pool: utilities, amount: 100)
       create(:pool_budget, :rate, pool: utilities, amount: 600)
       fund(utilities, 75, on: Date.new(2026, 8, 5))
 
@@ -736,7 +736,7 @@ RSpec.describe PoolCalculator, type: :model do
     # period ends, so both rules agree and it sweeps.
     it "sweeps a mixed-basis envelope once every basis has rolled" do
       utilities = envelope(name: "Utilities")
-      create(:pool_budget, :per_paycheck_rate, pool: utilities, amount: 100)
+      create(:pool_budget, :per_period_rate, pool: utilities, amount: 100)
       create(:pool_budget, :rate, pool: utilities, amount: 600)
       fund(utilities, 75, on: last_period)
 
@@ -781,7 +781,7 @@ RSpec.describe PoolCalculator, type: :model do
     # so there is no period for it to be past — the marker has to say so on its own.
     it "returns a BigDecimal zero for an entry-less envelope", :aggregate_failures do
       fresh = envelope(name: "Fresh")
-      create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: fresh, amount: 400)
 
       expect(calc(fresh).period_closed?).to be(false)
       expect(calc(fresh).sweepable_amount).to eq(0)
@@ -793,7 +793,7 @@ RSpec.describe PoolCalculator, type: :model do
     # envelope on the way OUT — money moving the wrong way through the ledger.
     it "sweeps nothing from a closed envelope that went negative", :aggregate_failures do
       dining = envelope(name: "Dining")
-      create(:pool_budget, :per_paycheck_rate, pool: dining, amount: 150)
+      create(:pool_budget, :per_period_rate, pool: dining, amount: 150)
       fund(dining, 100, on: last_period)
       spend(dining, 180, on: last_period)
 
@@ -816,7 +816,7 @@ RSpec.describe PoolCalculator, type: :model do
       # (balance 85 → 0, required 315 → 400), so neither direction can pass on a coincidence.
       it "changes nothing unless it is asked for", :aggregate_failures do
         groceries = envelope(name: "Groceries")
-        create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+        create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
         fund(groceries, 85, on: last_period)
 
         expect(calc(groceries).balance).to eq(85)
@@ -835,7 +835,7 @@ RSpec.describe PoolCalculator, type: :model do
       # keyword that simply zeroes the balance.
       it "subtracts nothing from a pool with nothing to sweep", :aggregate_failures do
         groceries = envelope(name: "Groceries")
-        create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+        create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
         fund(groceries, 85, on: this_period)
 
         post_sweep = groceries.calculator(today: today, net_of_sweep: true)
@@ -855,7 +855,7 @@ RSpec.describe PoolCalculator, type: :model do
       # that raised for everyone.
       it "refuses to say what to sweep once the sweep is already netted off", :aggregate_failures do
         car = envelope(name: "Car")
-        create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100)
+        create(:pool_budget, :per_period_rate, pool: car, amount: 100)
         create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
         fund(car, 900, on: last_period)
         post_sweep = car.calculator(today: today, net_of_sweep: true)
@@ -873,7 +873,7 @@ RSpec.describe PoolCalculator, type: :model do
       # returns the Integer literal 0.
       it "keeps the balance a BigDecimal on an envelope holding nothing", :aggregate_failures do
         fresh = envelope(name: "Fresh")
-        create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+        create(:pool_budget, :per_period_rate, pool: fresh, amount: 400)
 
         post_sweep = fresh.calculator(today: today, net_of_sweep: true)
         expect(post_sweep.balance).to eq(0)

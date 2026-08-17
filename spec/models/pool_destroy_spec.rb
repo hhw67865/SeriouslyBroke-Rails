@@ -399,7 +399,7 @@ RSpec.describe Pool, "#destroy", type: :model do
     end
 
     before do
-      create(:pool_budget, :per_paycheck_rate, pool: envelope_c, amount: 200)
+      create(:pool_budget, :per_period_rate, pool: envelope_c, amount: 200)
       pay(checking, deposit, named: "Salary", on: this_period)
       envelope_b.destroy
     end

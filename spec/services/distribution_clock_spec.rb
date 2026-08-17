@@ -35,7 +35,7 @@ RSpec.describe DistributionClock do
     create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
   end
 
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   def rent_envelope = @rent_envelope ||= envelope("Rent", priority: 1)
 
@@ -139,7 +139,7 @@ RSpec.describe DistributionClock do
   # missing key must read as "no distribution" rather than raise.
   it "is false for a pool no account can reach" do
     orphan = create(:pool, user: user, name: "Retirement Supplement", target_amount: 5_000, priority: 1)
-    travel_to(distributed_on) { create(:pool_budget, :per_paycheck_rate, pool: orphan, amount: 150) }
+    travel_to(distributed_on) { create(:pool_budget, :per_period_rate, pool: orphan, amount: 150) }
     distribute(400)
 
     expect(clock.changed_after_distributing?(orphan)).to be(false)

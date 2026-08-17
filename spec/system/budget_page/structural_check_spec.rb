@@ -22,7 +22,7 @@ RSpec.describe "Budget page structural check", type: :system do
     create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
   end
 
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   def declare(income:, cadence:, anchor:)
     fill_in "You typically bring in", with: income

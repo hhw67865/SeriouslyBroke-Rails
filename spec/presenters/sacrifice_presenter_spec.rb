@@ -4,7 +4,7 @@ require "rails_helper"
 
 # THE SACRIFICE VIEW'S ARITHMETIC (spec §9). Every figure here is a PER-PERIOD claim, and the
 # fixtures are chosen so a monthly rule's own amount and its per-period claim are never the same
-# number — a suite whose rules are all per-paycheck would pass with the unit slip in place.
+# number — a suite whose rules are all per-period would pass with the unit slip in place.
 RSpec.describe SacrificePresenter do
   # Biweekly, so `periods_per_year` is 26 and a monthly rule's claim is `amount * 12 / 26` — a
   # figure that is nothing like the amount. A monthly user would make the two equal and hide the
@@ -21,7 +21,7 @@ RSpec.describe SacrificePresenter do
   end
 
   # Anchorless: a rate, and therefore cuttable.
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   # Anchored and recurring: a bill, and therefore fixed.
   def rolling(pool, amount:, anchor: Date.new(2026, 3, 1), every: 1)
@@ -139,14 +139,14 @@ RSpec.describe SacrificePresenter do
     # nothing on this page could reach.
     it "includes a rule on a pool with no account" do
       orphan = create(:pool, user: user, name: "Retirement Supplement", target_amount: 5_000)
-      orphan_rule = create(:pool_budget, :per_paycheck_rate, pool: orphan, amount: 150)
+      orphan_rule = create(:pool_budget, :per_period_rate, pool: orphan, amount: 150)
 
       expect(ids(presenter.cuttable_rows)).to include(orphan_rule.id)
     end
 
     # PER-PERIOD CLAIMS, NOT AMOUNTS — the one assertion that catches the mixed-unit slip head on.
     # $1,500 a month is $692.31 of a biweekly period; a row carrying $1,500 would offer the user
-    # five sixths of a paycheck they do not have.
+    # five sixths of a period they do not have.
     it "carries each rule's per-period claim rather than its own amount", :aggregate_failures do
       rate(envelope("Groceries"), 400)
       monthly = create(:pool_budget, :rate, pool: envelope("Streaming", priority: 2), amount: 1_500)

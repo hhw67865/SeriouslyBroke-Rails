@@ -52,7 +52,7 @@ RSpec.describe "Home Navigation", type: :system do
 
     before do
       rent = create(:pool, :budget_pool, user: user, account: checking, name: "Rent", priority: 1)
-      create(:pool_budget, :per_paycheck_rate, pool: rent, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: rent, amount: 400)
       category = create(:category, :income, user: user, pool: checking)
       create(:entry, item: create(:item, category: category), amount: 100, date: Date.current)
       visit root_path
@@ -61,7 +61,7 @@ RSpec.describe "Home Navigation", type: :system do
     def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
 
     # `exact_text` because Capybara.exact is unset and Home's own band link reads "Distribute
-    # this paycheck" — a bare "Distribute" matches both, and the click below would be ambiguous.
+    # this period" — a bare "Distribute" matches both, and the click below would be ambiguous.
     def nav_link = find_link("Distribute", exact_text: true)
 
     # `have_link(href:)` rather than reading `[:href]` off the node: selenium hands back the
@@ -80,7 +80,7 @@ RSpec.describe "Home Navigation", type: :system do
     # action belongs — a user reading "the next distribution funds this in full" is one click away
     # from performing it.
     it "offers the same action from the band that describes it", :aggregate_failures do
-      within(waterfall_section) { click_link "Distribute this paycheck" }
+      within(waterfall_section) { click_link "Distribute this period" }
 
       expect(page).to have_current_path(new_distribution_path)
       expect(page).to have_css("h1", text: "Checking")
@@ -93,7 +93,7 @@ RSpec.describe "Home Navigation", type: :system do
     # left unmarked is the whole hazard back.
     it "keeps turbo from prefetching either link", :aggregate_failures do
       expect(nav_link["data-turbo-prefetch"]).to eq("false")
-      band_link = within(waterfall_section) { find_link("Distribute this paycheck") }
+      band_link = within(waterfall_section) { find_link("Distribute this period") }
       expect(band_link["data-turbo-prefetch"]).to eq("false")
     end
   end

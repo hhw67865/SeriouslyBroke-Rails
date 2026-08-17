@@ -71,14 +71,14 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 28))
     end
 
-    it "is the day before the next period boundary for a per-paycheck rule" do
-      budget = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 300)
+    it "is the day before the next period boundary for a per-period rule" do
+      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 19))
     end
 
     it "falls back to the end of the month when no period is configured" do
-      budget = cadence_less_rule(:per_paycheck_rate, amount: 300)
+      budget = cadence_less_rule(:per_period_rate, amount: 300)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 28))
     end
@@ -280,8 +280,8 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 28))
     end
 
-    it "is the day before the next period boundary for a per-paycheck rate rule" do
-      budget = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 300)
+    it "is the day before the next period boundary for a per-period rate rule" do
+      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
 
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 19))
     end
@@ -601,8 +601,8 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: today).required(0)).to eq(40.00)
     end
 
-    it "demands the full amount of a per-paycheck rate rule every period" do
-      budget = create(:pool_budget, :per_paycheck_rate, pool: car, amount: 300)
+    it "demands the full amount of a per-period rate rule every period" do
+      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
 
       # due Feb 19; only Feb 6 falls in [Feb 6, Feb 19].
       expect(budget.calculator(today: today).required(0)).to eq(300.00)

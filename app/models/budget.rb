@@ -5,7 +5,7 @@ class Budget < ApplicationRecord
   belongs_to :pool, optional: true, touch: true
   belongs_to :item, optional: true
 
-  enum :basis, { monthly: 0, per_paycheck: 1 }, prefix: true
+  enum :basis, { monthly: 0, per_period: 1 }, prefix: true
 
   # EVERY RULE A USER OWNS, IN ONE RELATION — the reader `User has_many :budgets, through:
   # :categories` cannot be. That association walks the category link only, so it reaches
@@ -63,14 +63,14 @@ class Budget < ApplicationRecord
   # `:every_n` names the shape without naming the number — the interval is on the record and each
   # caller interpolates its own, so this stays a fixed set of four rather than a symbol per N.
   #
-  # `basis_per_paycheck?` FIRST: a per-period rule carries no interval either, so testing the
+  # `basis_per_period?` FIRST: a per-period rule carries no interval either, so testing the
   # interval first would call every rate rule a one-off.
   #
   # A CATEGORY-MODE RULE IS MONTHLY, and it is answered before the interval branches. It is a
   # monthly spending cap that carries no interval at all — #shape_must_be_valid only runs in pool
   # mode — so the nil-interval branch would call every category cap a one-off.
   def cadence
-    return :per_paycheck if basis_per_paycheck?
+    return :per_period if basis_per_period?
     return :monthly if category_mode?
     return :one_off if interval_months.blank?
     return :monthly if interval_months == 1
@@ -78,7 +78,7 @@ class Budget < ApplicationRecord
     :every_n
   end
 
-  # PER-PERIOD STEADY-STATE COST OF THIS RULE — what it claims from a typical paycheck, NOT what
+  # PER-PERIOD STEADY-STATE COST OF THIS RULE — what it claims from a typical period, NOT what
   # it asks this period. That second question is `PoolCalculator#required` / `BudgetCalculator
   # #required`, and the two are deliberately different figures with deliberately different names:
   #
@@ -115,7 +115,7 @@ class Budget < ApplicationRecord
   # `Date.current` behind it.
   def steady_ask(user, today: Date.current)
     case cadence
-    when :per_paycheck then amount.to_d
+    when :per_period then amount.to_d
     when :one_off then one_off_steady_ask(today)
     else (amount.to_d * 12 / (user.periods_per_year * (interval_months || 1))).round(2)
     end
@@ -130,7 +130,7 @@ class Budget < ApplicationRecord
   # the figure rather than an optimisation:
   #
   #   The structural check asks "does your income cover what your rules will CLAIM from it". The
-  #   thing that claims money from a paycheck is the fill, and the fill funds POOLS —
+  #   thing that claims money from a period's income is the fill, and the fill funds POOLS —
   #   AllocationCalculator never reads a category-mode budget, so no distribution has ever asked
   #   for a penny on account of one. A category cap is a SPENDING LIMIT on tracking, not a funding
   #   claim on income: cutting one frees no income, so it could not appear in §9's cut list even
@@ -222,8 +222,8 @@ class Budget < ApplicationRecord
 
   # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §3.1
   def shape_must_be_valid
-    if basis_per_paycheck?
-      errors.add(:basis, "per-paycheck rules cannot have a due date or interval") if anchor_date.present? || interval_months.present?
+    if basis_per_period?
+      errors.add(:basis, "per-period rules cannot have a due date or interval") if anchor_date.present? || interval_months.present?
       return
     end
 

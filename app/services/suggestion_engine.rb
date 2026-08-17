@@ -498,7 +498,7 @@ class SuggestionEngine
       # The creation branch every time: this detector's population is `buffer_funded?`, which is
       # pool-less or account-pointed, and #envelope_half sends both to creation — an account is not
       # reusable as an envelope. The reuse branch stays unreachable from here.
-      prefill: envelope_half(category).merge(budget: { amount: amount, basis: "per_paycheck" })
+      prefill: envelope_half(category).merge(budget: { amount: amount, basis: "per_period" })
     )
   end
 
@@ -530,7 +530,7 @@ class SuggestionEngine
     rules.filter_map { |rule| drift_suggestion(rule, spend.fetch(rule.pool_id, 0.to_d), window) }
   end
 
-  # A RATE RULE IS ONE WITH NO DUE DATE: `per_paycheck`, or the anchorless monthly rule that
+  # A RATE RULE IS ONE WITH NO DUE DATE: `per_period`, or the anchorless monthly rule that
   # `Budget#shape_must_be_valid` pins to `interval_months == 1`. Both are flows, both normalise
   # through `steady_ask`, and a screen that reported drift on only one of the two spellings would
   # be silent on half the rate rules the app can store.
@@ -553,7 +553,7 @@ class SuggestionEngine
   # number on a money screen that describes different money from the sentence around it. An
   # item-backed rule is detector 4's subject, not this one's.
   def rate_shape?(budget)
-    budget.anchor_date.blank? && budget.item_id.blank? && [:per_paycheck, :monthly].include?(budget.cadence)
+    budget.anchor_date.blank? && budget.item_id.blank? && [:per_period, :monthly].include?(budget.cadence)
   end
 
   # `{ pool_id => total }` over the drift window, in one query for every pool at once.
@@ -635,7 +635,7 @@ class SuggestionEngine
   # the spec pins it by round-tripping the answer back through `steady_ask` as well as by literal.
   # `detail[:basis]` carries the unit so Task 7 can label the field rather than guess.
   def rule_unit_amount(rule, per_period)
-    return per_period if rule.basis_per_paycheck?
+    return per_period if rule.basis_per_period?
 
     (per_period * user.periods_per_year * (rule.interval_months || 1) / 12).round(2)
   end

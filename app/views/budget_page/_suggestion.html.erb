@@ -59,7 +59,7 @@
               cap and a pool, so `Category#destroy_budget_if_pool_linked` deletes the cap the
               moment the re-point lands. The trade is honest — a cap is a spending limit that
               reserves nothing (`Budget.steady_need` counts pool-mode rules only) and the rule
-              replacing it is a real claim on the paycheck — but it is a DELETION of something the
+              replacing it is a real claim on the period's income — but it is a DELETION of something the
               user wrote, so it is stated rather than discovered. %>
           <p class="text-gray-500" data-suggestion-cap>
             Your <%= number_to_currency(cap.amount) %> <%= budget_rule_basis(cap) %> cap here is a spending limit,

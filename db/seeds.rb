@@ -555,7 +555,7 @@ user1.update!(default_account: checking)
 pools.first(4).each_with_index { |pool, index| pool.update!(account: checking, priority: 10 + index) }
 orphan_pool = pools[4]
 orphan_pool.update!(priority: 14)
-Budget.create!(pool: orphan_pool, amount: 150, basis: :per_paycheck)
+Budget.create!(pool: orphan_pool, amount: 150, basis: :per_period)
 
 # The tracking half charges Health, Gifts and Education to three of these pools as
 # "pool-covered" expenses and never funds them, which left all three reading `overdrawn` on
@@ -648,7 +648,7 @@ Budget.create!(pool: car_insurance, amount: 1_200, interval_months: 6, anchor_da
 # overdrawn — $100 in the envelope and $180 spent out of it. The debt is real and belongs to
 # the envelope, not to the account, which is why Checking stays healthy above it.
 dining = envelope.call("Dining Out", 5)
-Budget.create!(pool: dining, amount: 150, basis: :per_paycheck)
+Budget.create!(pool: dining, amount: 150, basis: :per_period)
 dining_spending = user1.categories.create!(
   name: "Dining Out Spending",
   category_type: :expense,
@@ -664,7 +664,7 @@ fund.call(dining, 100)
 # left to spend — a rate envelope, topped back up every period. The only state that shows a
 # number you may actually spend.
 groceries = envelope.call("Groceries", 6)
-Budget.create!(pool: groceries, amount: 400, basis: :per_paycheck)
+Budget.create!(pool: groceries, amount: 400, basis: :per_period)
 fund.call(groceries, 400)
 
 # ---------------------------------------------------------------------------------------
@@ -691,7 +691,7 @@ Rails.logger.debug "Creating the two envelopes whose period has already rolled..
 # last period, $45 of it was spent, and the $75 still sitting there is money the next
 # distribution reclaims before it tops the envelope back up to $120.
 supplies = envelope.call("Household Supplies", 7)
-Budget.create!(pool: supplies, amount: 120, basis: :per_paycheck)
+Budget.create!(pool: supplies, amount: 120, basis: :per_period)
 supplies_spending = user1.categories.create!(
   name: "Household Supplies Spending",
   category_type: :expense,
@@ -715,7 +715,7 @@ fund.call(supplies, 120, on: today - 20.days)
 # vet keeps the rest, and the sweep is exactly the rate rule's share — which is the sentence
 # the feature was built to make visible.
 pet_care = envelope.call("Pet Care", 8)
-Budget.create!(pool: pet_care, amount: 50, basis: :per_paycheck)
+Budget.create!(pool: pet_care, amount: 50, basis: :per_period)
 Budget.create!(pool: pet_care, amount: 180, anchor_date: today + 20.days)
 pet_spending = user1.categories.create!(
   name: "Pet Care Spending",
@@ -783,7 +783,7 @@ holiday_gifts = user1.pools.create!(
   account: ally,
   priority: 9
 )
-Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_paycheck)
+Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_period)
 
 # overdue AND ASKING FOR NOTHING — the one shape the distribution screen's alerts band exists
 # for, and the one shape no demo account could produce.
@@ -903,7 +903,7 @@ quarterly_taxes = user1.pools.create!(
   account: side_gig,
   priority: 9
 )
-Budget.create!(pool: quarterly_taxes, amount: 200, basis: :per_paycheck)
+Budget.create!(pool: quarterly_taxes, amount: 200, basis: :per_period)
 
 # ---------------------------------------------------------------------------------------
 # A FOURTH account, and the only CALM one.
@@ -966,7 +966,7 @@ hsa_payroll.entries.create!(amount: 200, date: today, description: "Pre-tax HSA 
     account: health_savings,
     priority: priority
   )
-  Budget.create!(pool: envelope_pool, amount: amount, basis: :per_paycheck)
+  Budget.create!(pool: envelope_pool, amount: amount, basis: :per_period)
 end
 
 Rails.logger.debug "Seed data created successfully!"

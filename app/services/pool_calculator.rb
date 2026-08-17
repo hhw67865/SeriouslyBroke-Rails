@@ -272,8 +272,8 @@ class PoolCalculator
   #     monthly rule still passes through at its full amount instead of dividing by zero.
   #
   # Only two shapes reach here: #dateless_goal? requires every rule on the pool to be anchorless,
-  # and Budget#shape_must_be_valid pins an anchorless rule to per-paycheck or to a 1-month
-  # interval. `steady_ask` answers both directly (`:per_paycheck` passes the amount through), so
+  # and Budget#shape_must_be_valid pins an anchorless rule to per-period or to a 1-month
+  # interval. `steady_ask` answers both directly (`:per_period` passes the amount through), so
   # this delegates whole rather than branching first.
   def per_period_rate(budget) = budget.steady_ask(pool.user, today: today)
 
@@ -318,7 +318,7 @@ class PoolCalculator
   # the period that money actually belongs to, and it is the reachable one: $60 paid in on
   # Jul 12 sits in a period that ended Jul 23, and today is Aug 20.
   #
-  # `all?`, so the LATEST period governs. An envelope mixing a per-paycheck rule and a monthly
+  # `all?`, so the LATEST period governs. An envelope mixing a per-period rule and a monthly
   # one has two different period ends, and until both have rolled some rule still has a live
   # claim on the money. Sweeping at the earlier of the two would take money the monthly rule
   # expects to cover the rest of the month, and #required would then ask for the whole monthly

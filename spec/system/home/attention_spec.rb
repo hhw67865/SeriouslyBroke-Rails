@@ -12,7 +12,7 @@ RSpec.describe "Home Attention", type: :system do
 
   def envelope(name, amount, priority: 1)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
     pool
   end
 
@@ -24,7 +24,7 @@ RSpec.describe "Home Attention", type: :system do
   # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
   def orphan(name, amount)
     pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
     pool
   end
 
@@ -268,7 +268,7 @@ RSpec.describe "Home Attention", type: :system do
     envelope("Rent", 400)
     deposit(100)
     spare = create(:pool, :budget_pool, user: user, account: ally, name: "Gas", priority: 2)
-    create(:pool_budget, :per_paycheck_rate, pool: spare, amount: 200)
+    create(:pool_budget, :per_period_rate, pool: spare, amount: 200)
     deposit(500, into: ally)
 
     visit root_path
@@ -283,7 +283,7 @@ RSpec.describe "Home Attention", type: :system do
   it "shows the waterfall with a cutoff when short", :aggregate_failures do
     ["Rent", "Groceries"].each_with_index do |name, i|
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: i + 1)
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 500)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 500)
     end
     category = create(:category, :income, user: user, pool: checking)
     create(:entry, item: create(:item, category: category), amount: 700, date: Date.current)
@@ -302,7 +302,7 @@ RSpec.describe "Home Attention", type: :system do
     pool = create(
       :pool, :savings_pool, user: user, account: checking, name: name, target_amount: 2_400, priority: 2
     )
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount.abs)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount.abs)
     pool.budgets.first.update_column(:amount, amount) # rubocop:disable Rails/SkipsModelValidations
     pool
   end
@@ -441,7 +441,7 @@ RSpec.describe "Home Attention", type: :system do
   it "draws the cutoff beneath the last pool that got any money", :aggregate_failures do
     { "Rent" => 500, "Groceries" => 500, "Dentist" => 500 }.each_with_index do |(name, amount), i|
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: i + 1)
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
     end
     deposit(700)
 

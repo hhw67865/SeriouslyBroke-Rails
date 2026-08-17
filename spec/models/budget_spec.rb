@@ -98,14 +98,14 @@ RSpec.describe Budget, type: :model do
     let(:user) { create(:user) }
     let(:pool) { create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user)) }
 
-    it "accepts a per-paycheck rate rule" do
+    it "accepts a per-period rate rule" do
       budget = build(
         :budget,
         pool: pool,
         category: nil,
         anchor_date: nil,
         interval_months: nil,
-        basis: :per_paycheck
+        basis: :per_period
       )
 
       expect(budget).to be_valid
@@ -150,18 +150,18 @@ RSpec.describe Budget, type: :model do
       expect(budget).to be_valid
     end
 
-    it "rejects a per-paycheck rule with an anchor date", :aggregate_failures do
+    it "rejects a per-period rule with an anchor date", :aggregate_failures do
       budget = build(
         :budget,
         pool: pool,
         category: nil,
         anchor_date: Date.new(2026, 6, 1),
         interval_months: nil,
-        basis: :per_paycheck
+        basis: :per_period
       )
 
       expect(budget).not_to be_valid
-      expect(budget.errors[:basis]).to include("per-paycheck rules cannot have a due date or interval")
+      expect(budget.errors[:basis]).to include("per-period rules cannot have a due date or interval")
     end
 
     it "rejects a monthly rule with neither an anchor nor an interval", :aggregate_failures do
@@ -203,19 +203,19 @@ RSpec.describe Budget, type: :model do
     end
 
     # The other combination that was unasserted in both directions: the existing
-    # per-paycheck rejection only exercises the anchor_date half of that guard.
-    it "rejects a per-paycheck rule with an interval", :aggregate_failures do
+    # per-period rejection only exercises the anchor_date half of that guard.
+    it "rejects a per-period rule with an interval", :aggregate_failures do
       budget = build(
         :budget,
         pool: pool,
         category: nil,
         anchor_date: nil,
         interval_months: 6,
-        basis: :per_paycheck
+        basis: :per_period
       )
 
       expect(budget).not_to be_valid
-      expect(budget.errors[:basis]).to include("per-paycheck rules cannot have a due date or interval")
+      expect(budget.errors[:basis]).to include("per-period rules cannot have a due date or interval")
     end
   end
 
@@ -227,8 +227,8 @@ RSpec.describe Budget, type: :model do
   describe "#cadence" do
     def pool_rule(*traits, **attrs) = build(:pool_budget, *traits, category: nil, **attrs)
 
-    it "calls a per-paycheck rate rule per-paycheck" do
-      expect(pool_rule(:per_paycheck_rate).cadence).to eq(:per_paycheck)
+    it "calls a per-period rate rule per-period" do
+      expect(pool_rule(:per_period_rate).cadence).to eq(:per_period)
     end
 
     it "calls an anchorless monthly rate rule monthly" do
@@ -248,12 +248,12 @@ RSpec.describe Budget, type: :model do
     end
 
     # The two order hazards, each in the direction that would misfire if the cascade were
-    # rearranged. A per-paycheck rule carries no interval either, so an interval-first cascade
+    # rearranged. A per-period rule carries no interval either, so an interval-first cascade
     # calls every rate rule a one-off; a category cap carries no interval at all
     # (#shape_must_be_valid only runs in pool mode) and would fall into the same arm.
-    it "never reads a per-paycheck rule's blank interval as a one-off", :aggregate_failures do
-      expect(pool_rule(:per_paycheck_rate).interval_months).to be_nil
-      expect(pool_rule(:per_paycheck_rate).cadence).not_to eq(:one_off)
+    it "never reads a per-period rule's blank interval as a one-off", :aggregate_failures do
+      expect(pool_rule(:per_period_rate).interval_months).to be_nil
+      expect(pool_rule(:per_period_rate).cadence).not_to eq(:one_off)
     end
 
     it "calls a category-mode cap monthly rather than a one-off", :aggregate_failures do
@@ -261,6 +261,41 @@ RSpec.describe Budget, type: :model do
 
       expect(budget.interval_months).to be_nil
       expect(budget.cadence).to eq(:monthly)
+    end
+  end
+
+  # THE RENAME IS RUBY-SIDE ONLY. `per_paycheck` became `per_period` with no migration, so the
+  # stored mapping `{ monthly: 0, per_period: 1 }` has to be exactly what it was — a rule written
+  # under the old name still sits in the column as the integer 1, and every one of them would read
+  # as `monthly` if the rename had re-numbered the enum. The two directions are asserted separately
+  # because either alone can pass on a consistently-wrong mapping: the write asserts the integer
+  # the new name produces, and the raw-SQL plant asserts what a row written before the rename now
+  # reads as.
+  describe "the stored basis mapping" do
+    let(:rule) { create(:pool_budget, :per_period_rate, category: nil, amount: 300) }
+
+    def raw_basis(record)
+      Budget.connection.select_value(Budget.sanitize_sql_array(["SELECT basis FROM budgets WHERE id = ?", record.id]))
+    end
+
+    it "writes per_period as the integer 1" do
+      expect(raw_basis(rule)).to eq(1)
+    end
+
+    it "writes monthly as the integer 0" do
+      expect(raw_basis(create(:pool_budget, :rate, category: nil, amount: 300))).to eq(0)
+    end
+
+    # Planted by SQL rather than by the enum writer, because a row created before the rename is
+    # exactly what no Ruby-side spelling can produce today.
+    it "reads a row planted at 1 as per_period", :aggregate_failures do
+      planted = create(:pool_budget, :rate, category: nil, amount: 300)
+      described_class.connection.execute(described_class.sanitize_sql_array(["UPDATE budgets SET basis = 1 WHERE id = ?", planted.id]))
+
+      planted.reload
+
+      expect(planted).to be_basis_per_period
+      expect(planted.basis).to eq("per_period")
     end
   end
 
@@ -353,7 +388,7 @@ RSpec.describe Budget, type: :model do
     end
 
     it "builds a valid record for every shape trait", :aggregate_failures do
-      [:rate, :per_paycheck_rate, :recurring, :one_time].each do |trait|
+      [:rate, :per_period_rate, :recurring, :one_time].each do |trait|
         expect(build(:pool_budget, trait)).to be_valid
       end
     end

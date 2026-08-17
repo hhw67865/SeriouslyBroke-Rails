@@ -10,7 +10,7 @@ require "rails_helper"
 # swapped pair would pass.
 #
 # EVERY FIXTURE HERE IS BIWEEKLY, so a monthly rule's amount and its per-period claim are never the
-# same number. A suite of per-paycheck rules would pass with the mixed-unit slip in place, and that
+# same number. A suite of per-period rules would pass with the mixed-unit slip in place, and that
 # slip has struck five times on this branch.
 RSpec.describe "Sacrifice view", type: :system do
   let(:user) do
@@ -26,7 +26,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
   # Anchorless per-period: a rate, and cuttable.
   def rate(name, amount, priority: 1)
-    create(:pool_budget, :per_paycheck_rate, pool: envelope(name, priority: priority), amount: amount)
+    create(:pool_budget, :per_period_rate, pool: envelope(name, priority: priority), amount: amount)
   end
 
   # Anchorless MONTHLY: also a rate and also cuttable, but its per-period claim is
@@ -220,7 +220,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
   # THE MIXED-UNIT TRAP, THROUGH THE BROWSER. A $1,500-a-month rule claims $692.31 of a biweekly
   # period. Both figures are on the row — the claim this page adds up and the amount the edit form
-  # will show — and the dial must free the FIRST. Freeing $1,500 out of a $2,400 paycheck by
+  # will show — and the dial must free the FIRST. Freeing $1,500 out of a $2,400 period by
   # ticking one box is the defect this example exists for, and it would look entirely plausible.
   describe "a monthly rule in a biweekly period" do
     let(:streaming) { monthly_rate("Streaming", 1_500) }

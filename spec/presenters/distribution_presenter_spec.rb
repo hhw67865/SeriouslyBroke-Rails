@@ -20,7 +20,7 @@ RSpec.describe DistributionPresenter, type: :model do
 
   def rate_envelope(name, rate, funded: nil, priority: 0)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     fund(pool, funded, on: last_period) if funded
     pool
   end

@@ -140,7 +140,7 @@ RSpec.shared_context "with a Checking account to reallocate in" do
   end
 
   def rate_rule(pool, amount)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
   end
 
   # An envelope funded a fortnight ago — one biweekly boundary back — so its rate period has closed
@@ -148,7 +148,7 @@ RSpec.shared_context "with a Checking account to reallocate in" do
   # distribution sweeps back, which is the shape `net_of_sweep:` exists for.
   def closed_envelope(name, rate:, funded:)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: 7)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14)
     pool
   end

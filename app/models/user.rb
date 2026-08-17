@@ -67,7 +67,7 @@ class User < ApplicationRecord
   # The choice matches what the rest of the app already does with an undeclared period:
   # `BudgetCalculator#period_end` falls back to `today.end_of_month` and `User#period_containing`
   # to the calendar month. A monthly-basis rule therefore passes through unchanged, and a
-  # per-paycheck rule never consults this at all — `steady_ask` returns its amount directly.
+  # per-period rule never consults this at all — `steady_ask` returns its amount directly.
   def periods_per_year = PERIODS_PER_YEAR.fetch(period_cadence, 12)
 
   # EVERY funding rule this user owns, both modes. `budgets` above is the category-mode half

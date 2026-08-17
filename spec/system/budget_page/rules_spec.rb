@@ -30,7 +30,7 @@ RSpec.describe "Budget page rules", type: :system do
     create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
   end
 
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   def fund(pool, amount, on:)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
@@ -127,7 +127,7 @@ RSpec.describe "Budget page rules", type: :system do
     # actually made and promises nothing this page does not yet do.
     it "sees the frame, one sentence and no groups at all" do
       expect(page).to have_content("No funding rules yet")
-      expect(page).to have_content("A rule claims part of every paycheck for one envelope")
+      expect(page).to have_content("A rule claims part of every period's income for one envelope")
       expect(page).to have_no_content("Nothing is in the fill order yet")
       expect(page).to have_no_css("[data-pool-group]")
       expect(page).to have_no_css("[data-orphan-group]")

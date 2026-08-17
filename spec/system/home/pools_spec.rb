@@ -17,7 +17,7 @@ RSpec.describe "Home Pools", type: :system do
   # A rate envelope: refilled every period, and the shape that reads `left to spend`.
   def envelope(name, rate:, priority: 1)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     pool
   end
 

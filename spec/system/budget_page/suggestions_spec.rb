@@ -355,7 +355,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
 
     # THE FIGURE ARRIVES IN THE RULE'S OWN UNIT and the form labels it rather than converting it.
-    # The rule here is per-paycheck, so the two coincide — which is exactly why the monthly case
+    # The rule here is per-period, so the two coincide — which is exactly why the monthly case
     # below exists, and why this example alone would prove nothing about units.
     it "prefills the observed figure beside the current one" do
       accept(:drift, dining_rule)
@@ -375,7 +375,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   end
 
   # THE UNITS SEPARATED. The anchorless MONTHLY rule is the shape `rate_shape?` deliberately admits
-  # alongside `per_paycheck`, and it is the one where `budgets.amount` is NOT a per-period figure:
+  # alongside `per_period`, and it is the one where `budgets.amount` is NOT a per-period figure:
   # a $260-a-month rule claims $260 * 12 / 26 = $120.00 a period from a biweekly user. Observed
   # $200 a period, so the engine inverts back into the rule's column and the field must read
   # $433.33 — the mixed-unit trap's fifth strike was writing the per-period $200 straight in, which
@@ -606,7 +606,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   end
 
   def dining_rule
-    @dining_rule ||= create(:pool_budget, :per_paycheck_rate, pool: dining_pool, amount: 150)
+    @dining_rule ||= create(:pool_budget, :per_period_rate, pool: dining_pool, amount: 150)
   end
 
   # A rate rule against a lane that carries far less than it reserves: $180 over the four-period

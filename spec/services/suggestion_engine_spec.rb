@@ -65,11 +65,11 @@ RSpec.describe SuggestionEngine do
     in_last_three_periods(beans, 150)
 
     groceries = envelope("Groceries")
-    create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 100)
+    create(:pool_budget, :per_period_rate, pool: groceries, amount: 100)
     in_drift_window(item("Food", in_category: category("Groceries Spending", pool: groceries)), 200)
 
     netflix = envelope("Netflix")
-    backed = claimed_item("Netflix", pool: netflix, amount: 250, basis: :per_paycheck, interval_months: nil)
+    backed = claimed_item("Netflix", pool: netflix, amount: 250, basis: :per_period, interval_months: nil)
     spend(backed, 250, on: Date.new(2025, 11, 20))
   end
 
@@ -445,7 +445,7 @@ RSpec.describe SuggestionEngine do
       prefill = of_kind(:rate).sole.prefill
 
       expect(prefill[:pool]).to eq(name: "Coffee", pool_type: "budget", account_id: checking.id)
-      expect(prefill[:budget]).to eq(amount: 120, basis: "per_paycheck")
+      expect(prefill[:budget]).to eq(amount: 120, basis: "per_period")
       expect(prefill[:category_id]).to eq(coffee.id)
     end
   end
@@ -454,7 +454,7 @@ RSpec.describe SuggestionEngine do
     # An envelope with a rate rule AND a category pointing at it — a lane that can record spending.
     def rate_envelope(name, amount, **rule)
       pool = envelope(name)
-      rule_record = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount, **rule)
+      rule_record = create(:pool_budget, :per_period_rate, pool: pool, amount: amount, **rule)
       food = item("#{name} food", in_category: category("#{name} Spending", pool: pool))
       [pool, rule_record, food]
     end
@@ -463,7 +463,7 @@ RSpec.describe SuggestionEngine do
     # says nothing about the user's behaviour.
     def unfed_envelope(name, amount)
       pool = envelope(name)
-      [pool, create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)]
+      [pool, create(:pool_budget, :per_period_rate, pool: pool, amount: amount)]
     end
 
     it "reports a rule the spending has outgrown", :aggregate_failures do
@@ -475,7 +475,7 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(rule)
       expect(suggestion.amount).to eq(150)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expected = { rule_amount: 100, observed: 150, periods: 4, direction: :up, pool_name: "Groceries", basis: "per_paycheck", per_period_cost: 150, guessed: false }
+      expected = { rule_amount: 100, observed: 150, periods: 4, direction: :up, pool_name: "Groceries", basis: "per_period", per_period_cost: 150, guessed: false }
 
       expect(suggestion.detail).to eq(expected)
       expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 150 })
@@ -549,11 +549,11 @@ RSpec.describe SuggestionEngine do
       expect(Budget.new(amount: 433.33, basis: :monthly, interval_months: 1).steady_ask(user, today: today)).to eq(200)
     end
 
-    it "leaves a per-paycheck rule's prefill alone, because its column is already per-period", :aggregate_failures do
+    it "leaves a per-period rule's prefill alone, because its column is already per-period", :aggregate_failures do
       _pool, rule, food = rate_envelope("Groceries", 100)
       in_drift_window(food, 150)
 
-      expect(of_kind(:drift).sole.detail[:basis]).to eq("per_paycheck")
+      expect(of_kind(:drift).sole.detail[:basis]).to eq("per_period")
       expect(of_kind(:drift).sole.prefill).to eq(id: rule.id, budget: { amount: 150 })
     end
 
@@ -561,7 +561,7 @@ RSpec.describe SuggestionEngine do
     # would have its own lane subtracted from the figure meant to describe it.
     it "does not fire on an item-backed rate rule, whose own lane amendment A subtracts" do
       pool = envelope("Netflix")
-      backed = claimed_item("Netflix", pool: pool, amount: 20, basis: :per_paycheck, interval_months: nil)
+      backed = claimed_item("Netflix", pool: pool, amount: 20, basis: :per_period, interval_months: nil)
       in_drift_window(backed, 200)
 
       expect(of_kind(:drift)).to be_empty
@@ -569,7 +569,7 @@ RSpec.describe SuggestionEngine do
 
     it "fires on the same shape once the rule is item-less — the fixture discriminates", :aggregate_failures do
       pool = envelope("Netflix")
-      rule = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 20)
+      rule = create(:pool_budget, :per_period_rate, pool: pool, amount: 20)
       food = item("Netflix", in_category: category("Netflix Spending", pool: pool))
       in_drift_window(food, 200)
 
@@ -608,7 +608,7 @@ RSpec.describe SuggestionEngine do
 
     it "is silent on a pool carrying two rate rules, whose spend cannot be attributed" do
       pool, _rule, food = rate_envelope("Groceries", 100)
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 40)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 40)
       in_drift_window(food, 300)
 
       expect(of_kind(:drift)).to be_empty
@@ -664,7 +664,7 @@ RSpec.describe SuggestionEngine do
     end
 
     it "reports an item-backed rule whose item stopped before the last three periods", :aggregate_failures do
-      rule, backed = rule_with_history(amount: 75, last_seen_on: Date.new(2025, 11, 20), basis: :per_paycheck, interval_months: nil)
+      rule, backed = rule_with_history(amount: 75, last_seen_on: Date.new(2025, 11, 20), basis: :per_period, interval_months: nil)
 
       suggestion = of_kind(:dead_rule).sole
 
@@ -685,33 +685,33 @@ RSpec.describe SuggestionEngine do
     end
 
     it "does not fire when the item was still being spent two periods ago" do
-      rule_with_history(amount: 75, last_seen_on: Date.new(2026, 1, 15), basis: :per_paycheck, interval_months: nil)
+      rule_with_history(amount: 75, last_seen_on: Date.new(2026, 1, 15), basis: :per_period, interval_months: nil)
 
       expect(of_kind(:dead_rule)).to be_empty
     end
 
     it "does not fire on the first day of the empty window" do
-      rule_with_history(amount: 75, last_seen_on: Date.new(2025, 12, 26), basis: :per_paycheck, interval_months: nil)
+      rule_with_history(amount: 75, last_seen_on: Date.new(2025, 12, 26), basis: :per_period, interval_months: nil)
 
       expect(of_kind(:dead_rule)).to be_empty
     end
 
     it "fires on the day before it" do
-      rule_with_history(amount: 75, last_seen_on: Date.new(2025, 12, 25), basis: :per_paycheck, interval_months: nil)
+      rule_with_history(amount: 75, last_seen_on: Date.new(2025, 12, 25), basis: :per_period, interval_months: nil)
 
       expect(of_kind(:dead_rule).sole.detail[:last_seen_on]).to eq(Date.new(2025, 12, 25))
     end
 
     it "does not fire on an item that never had an entry — that rule is new, not dead" do
       pool = envelope("Netflix")
-      claimed_item("Netflix", pool: pool, amount: 75, basis: :per_paycheck, interval_months: nil)
+      claimed_item("Netflix", pool: pool, amount: 75, basis: :per_period, interval_months: nil)
 
       expect(of_kind(:dead_rule)).to be_empty
     end
 
     it "does not fire on a rule with no item, which nothing can stop paying" do
       pool = envelope("Dentist")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 75)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 75)
       food = item("Fillings", in_category: category("Dentist Spending", pool: pool))
       spend(food, 75, on: Date.new(2025, 11, 20))
 

@@ -15,7 +15,7 @@ RSpec.describe BudgetPagePresenter do
   end
 
   # A flat per-period rule: no anchor, so no date to be due on.
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   # A rule that rolls: its due date moves with the cycles gone by, which is what makes it
   # answer something other than its own anchor.

@@ -279,7 +279,7 @@ RSpec.describe "Distributions Proposal", type: :system do
 
   def envelope(name, rate, funded: nil, priority: 0)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
     pool
   end

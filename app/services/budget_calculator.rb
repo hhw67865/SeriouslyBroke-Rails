@@ -50,7 +50,7 @@ class BudgetCalculator
   def due_order(on = due_date) = [on, -target, budget.id]
 
   def period_end
-    budget.basis_per_paycheck? ? boundary_period_end : today.end_of_month
+    budget.basis_per_period? ? boundary_period_end : today.end_of_month
   end
 
   # The payment signal is the amount paid, never the number of entries. Counting

@@ -18,8 +18,8 @@ FactoryBot.define do
     end
 
     # $300 every pay period, no due date — the catch-all
-    trait :per_paycheck_rate do
-      basis { :per_paycheck }
+    trait :per_period_rate do
+      basis { :per_period }
       interval_months { nil }
       anchor_date { nil }
     end

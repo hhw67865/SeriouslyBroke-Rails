@@ -55,7 +55,7 @@ module BudgetPageHelper
   # stays a fixed set of four.
   def budget_rule_basis(budget)
     case budget.cadence
-    when :per_paycheck then "/ period"
+    when :per_period then "/ period"
     when :monthly then "a month"
     when :one_off then "once"
     else "every #{budget.interval_months} months"

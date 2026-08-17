@@ -91,7 +91,7 @@ module HomeHelper
     return budget.item.name if budget.item.present?
 
     case budget.cadence
-    when :per_paycheck then "Per period"
+    when :per_period then "Per period"
     when :monthly then "Monthly"
     when :one_off then "One-off"
     else "Every #{budget.interval_months} months"

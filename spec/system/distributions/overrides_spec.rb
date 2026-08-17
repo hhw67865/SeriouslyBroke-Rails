@@ -793,7 +793,7 @@ RSpec.describe "Distribution Overrides", type: :system do
   # A rate envelope: no anchor, so it asks for its amount every period and its leftover sweeps.
   def rate_envelope(name, rate, funded: nil, priority: 0)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
     pool
   end
@@ -809,7 +809,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       target_amount: target,
       priority: priority
     )
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
     pool
   end

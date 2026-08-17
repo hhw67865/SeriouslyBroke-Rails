@@ -19,14 +19,14 @@ RSpec.describe AllocationCalculator, type: :model do
     create(:pool, trait, user: user, account: account, **attrs)
   end
 
-  # An envelope carrying one per-paycheck rate rule, optionally already holding money.
+  # An envelope carrying one per-period rate rule, optionally already holding money.
   # Envelopes are funded out of their account, which is what makes the account's own balance
   # the buffer rather than the whole bank: `Σ pools == your bank balance`.
   def rate_envelope(name, rate, funded: nil, on: nil, **attrs)
     trait = attrs.delete(:trait) || :budget_pool
     account = attrs.fetch(:account, checking)
     pool = envelope(trait, name: name, **attrs)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     fund(pool, funded, on: on || last_period, from: account) if funded
     pool
   end
@@ -117,7 +117,7 @@ RSpec.describe AllocationCalculator, type: :model do
   # so $400 sweeps.
   describe "a mixed envelope carrying a live bill" do
     let(:car) { envelope(name: "Car") }
-    let!(:rate) { create(:pool_budget, :per_paycheck_rate, pool: car, amount: 100) }
+    let!(:rate) { create(:pool_budget, :per_period_rate, pool: car, amount: 100) }
     let!(:rent) { create(:pool_budget, pool: car, amount: 500, interval_months: 1, anchor_date: Date.new(2026, 9, 1)) }
 
     before do

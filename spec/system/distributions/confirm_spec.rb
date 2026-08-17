@@ -296,7 +296,7 @@ RSpec.describe "Distribution Confirm", type: :system do
       deposit(2_400, on: Date.current)
       create(
         :pool_budget,
-        :per_paycheck_rate,
+        :per_period_rate,
         amount: 100,
         pool: create(:pool, :budget_pool, user: user, account: ally, name: "Holiday")
       )
@@ -384,7 +384,7 @@ RSpec.describe "Distribution Confirm", type: :system do
 
   def envelope(name, rate, funded: nil, priority: 0)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
     pool
   end

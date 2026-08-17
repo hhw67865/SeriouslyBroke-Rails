@@ -449,7 +449,7 @@ RSpec.describe PoolStatus, type: :model do
   describe ":saving" do
     it "fires for a savings pool with no dated rule, and reports what it holds", :aggregate_failures do
       pool = goal("Vacation")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 150)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 150)
       fund(pool, 424)
 
       status = pool.status(today: today)
@@ -465,7 +465,7 @@ RSpec.describe PoolStatus, type: :model do
     # distinction — so the new guard must not swallow the state it was carved out of.
     it "does not fire for a budget envelope funded at a rate", :aggregate_failures do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       fund(pool, 400)
 
       expect(pool.status(today: today).state).to eq(:left_to_spend)
@@ -493,7 +493,7 @@ RSpec.describe PoolStatus, type: :model do
   describe ":left_to_spend" do
     it "fires for a pool with only rate rules", :aggregate_failures do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       fund(pool, 400)
       spend(pool, 160)
 
@@ -505,7 +505,7 @@ RSpec.describe PoolStatus, type: :model do
 
     it "does not fire when the pool also has an anchored rule" do
       pool = envelope("Car")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 80)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 80)
       create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
       fund(pool, 600)
 
@@ -556,7 +556,7 @@ RSpec.describe PoolStatus, type: :model do
 
     it "is true for a rate envelope funded in a period that has ended" do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       fund_on(pool, 60, Date.new(2026, 1, 2))
 
       expect(pool.status(today: today).period_closed?).to be(true)
@@ -564,7 +564,7 @@ RSpec.describe PoolStatus, type: :model do
 
     it "is false for the same envelope funded inside the live period" do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       fund_on(pool, 60, today)
 
       expect(pool.status(today: today).period_closed?).to be(false)
@@ -597,7 +597,7 @@ RSpec.describe PoolStatus, type: :model do
 
     it "is true on a rate envelope, whose label prints the balance itself", :aggregate_failures do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       fund(pool, 250)
       status = pool.status(today: today)
 
@@ -611,7 +611,7 @@ RSpec.describe PoolStatus, type: :model do
     # is one number twice.
     it "is true on an overdrawn envelope, whose label prints the balance negated", :aggregate_failures do
       pool = envelope("Dining Out")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       spend(pool, 80)
       status = pool.status(today: today)
 
@@ -638,7 +638,7 @@ RSpec.describe PoolStatus, type: :model do
   describe "money types on a pool with no entries at all", :aggregate_failures do
     it "reports a BigDecimal balance and amount on a rate envelope" do
       pool = envelope("Groceries")
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 400)
       status = pool.status(today: today)
 
       expect(status.state).to eq(:left_to_spend)

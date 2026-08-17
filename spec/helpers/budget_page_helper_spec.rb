@@ -32,7 +32,7 @@ RSpec.describe BudgetPageHelper, type: :helper do
   # digits and a twelvefold difference in what the user owes.
   describe "#budget_rule_amount" do
     it "says a rate rule's period" do
-      expect(helper.budget_rule_amount(pool_rule(:per_paycheck_rate, amount: 400))).to eq("$400.00 / period")
+      expect(helper.budget_rule_amount(pool_rule(:per_period_rate, amount: 400))).to eq("$400.00 / period")
     end
 
     it "says a recurring rule's interval" do

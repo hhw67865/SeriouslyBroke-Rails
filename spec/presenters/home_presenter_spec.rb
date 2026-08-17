@@ -24,7 +24,7 @@ RSpec.describe HomePresenter do
 
   # A flat per-period rule: the catch-all envelope shape, and the one that makes
   # `required` exactly the amount asked for.
-  def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
 
   def bill(pool, amount:, due:) = create(:pool_budget, :one_time, pool: pool, amount: amount, anchor_date: due)
 

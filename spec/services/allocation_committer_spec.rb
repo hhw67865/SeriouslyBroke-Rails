@@ -18,12 +18,12 @@ RSpec.describe AllocationCommitter, type: :model do
     create(:pool, :budget_pool, user: user, account: account, **attrs)
   end
 
-  # An envelope carrying one per-paycheck rate rule, optionally already holding money — and
+  # An envelope carrying one per-period rate rule, optionally already holding money — and
   # funded OUT OF ITS OWN ACCOUNT, which is what makes the account's balance the buffer.
   def rate_envelope(name, rate, funded: nil, on: nil, **attrs)
     account = attrs.fetch(:account, checking)
     pool = envelope(name: name, **attrs)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     fund(pool, funded, on: on || last_period, from: account) if funded
     pool
   end

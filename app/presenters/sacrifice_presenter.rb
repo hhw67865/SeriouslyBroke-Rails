@@ -16,7 +16,7 @@ class SacrificePresenter
   # `claim` is `Budget#steady_ask` — the rule's PER-PERIOD claim, which is the unit the whole page
   # and its dial work in. It is NOT `budget.amount`: a $1,500 monthly Rent rule claims $692.31 from
   # a biweekly period, and a cut list denominated in sticker prices would have the user "free"
-  # $1,500 out of a $2,400 paycheck by touching one rule. The row prints the rule's own unit
+  # $1,500 out of a $2,400 period by touching one rule. The row prints the rule's own unit
   # beside the claim (`budget_rule_basis`) so the edit form it links to is not a surprise.
   #
   # `reason` is nil for a cuttable rule and a symbol for one that is not, and it travels on the
@@ -174,7 +174,7 @@ class SacrificePresenter
 
   # `:dated` and `:fixed` are the spec's own two markings, and they are told apart by SHAPE rather
   # than by a second reading of the three schedule columns: `Budget#cadence` is the one place that
-  # cascade lives (`basis_per_paycheck?` first, then the interval), and a private copy here would
+  # cascade lives (`basis_per_period?` first, then the interval), and a private copy here would
   # reopen exactly the seam Task 7 closed when it collapsed two helpers into it.
   #
   # A one-off is dated in the sense a user can act on: it happens once, on a day, and the money has

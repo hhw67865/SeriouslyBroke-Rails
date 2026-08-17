@@ -107,7 +107,7 @@ RSpec.describe "Budget page reorder", type: :system do
 
   def envelope(name, rate:, priority:, account: checking)
     pool = create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
     pool
   end
 

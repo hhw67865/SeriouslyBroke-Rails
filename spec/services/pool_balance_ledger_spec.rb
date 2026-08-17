@@ -327,8 +327,8 @@ RSpec.describe PoolBalanceLedger, type: :model do
     # guard instead of returning early for a pool that has no rate rule at all. Without this the
     # never-funded example below would pass against any term whatsoever.
     before do
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
-      create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: fresh, amount: 400)
     end
 
     def batched(pool) = pool.calculator(today: today, terms: ledger.terms_for(pool))
@@ -433,7 +433,7 @@ RSpec.describe PoolBalanceLedger, type: :model do
     # is actually asked for a sweep and actually computes a balance to derive it from. Without a
     # closed period #sweepable_amount returns early and the twin never reads a term at all.
     before do
-      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_period_rate, pool: groceries, amount: 400)
       move(from: checking, to: groceries, amount: 85, on: funded_on)
     end
 

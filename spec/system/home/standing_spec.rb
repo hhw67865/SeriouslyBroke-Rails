@@ -12,7 +12,7 @@ RSpec.describe "Home Standing", type: :system do
 
   def envelope(name, amount, priority: 1)
     pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
     pool
   end
 
@@ -24,7 +24,7 @@ RSpec.describe "Home Standing", type: :system do
   # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
   def orphan(name, amount)
     pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
-    create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
     pool
   end
 

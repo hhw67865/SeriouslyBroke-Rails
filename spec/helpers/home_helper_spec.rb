@@ -142,7 +142,7 @@ RSpec.describe HomeHelper, type: :helper do
     # the one shape whose blank interval does NOT mean "never rolls", and reading it as a
     # one-off would be silently wrong the day something asks.
     it "names a per-period rule by its cadence, not as a one-off" do
-      budget = build(:pool_budget, :per_paycheck_rate)
+      budget = build(:pool_budget, :per_period_rate)
 
       expect(helper.pool_rule_label(budget)).to eq("Per period")
     end

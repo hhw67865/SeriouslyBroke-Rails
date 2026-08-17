@@ -278,7 +278,7 @@ RSpec.describe "Home Fixes", type: :system do
     # is the pool's own BALANCE. So the band names the step that does fix it.
     it "tells a pool with no account to get one, rather than offering a move", :aggregate_failures do
       stranded = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 8)
-      create(:pool_budget, :per_paycheck_rate, pool: stranded, amount: 200)
+      create(:pool_budget, :per_period_rate, pool: stranded, amount: 200)
 
       visit root_path
 
@@ -346,7 +346,7 @@ RSpec.describe "Home Fixes", type: :system do
 
     def envelope(name, rate:, priority:, funded: 0, funded_on: Date.current)
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: rate)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
       create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: funded_on) if funded.positive?
       pool
     end

@@ -118,7 +118,7 @@ RSpec.describe "Budget page declaration", type: :request do
 
     def envelope(name, priority:, account: checking)
       pool = create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
-      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 100)
+      create(:pool_budget, :per_period_rate, pool: pool, amount: 100)
       pool
     end
 
