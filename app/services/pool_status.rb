@@ -18,7 +18,7 @@ class PoolStatus
 
   attr_reader :pool, :today
 
-  # `pending:` is PoolCalculator's, passed straight down and never read here — see
+  # `pending:` is PoolProjection's, passed straight down and never read here — see
   # #pool_calculator. Every state this class decides is a reading of the balance or of what the
   # balance leaves a rule holding, so adjusting the balance is the whole of what "how would this
   # pool be doing if the distribution on screen went through" means. :wont_make_it in particular
@@ -35,7 +35,7 @@ class PoolStatus
   # the user has, the distribution screen for every envelope in the account, and the reallocation
   # screen for every source AND a projected one per affordable row. Leaving this class out would
   # have batched the cheaper half of all three screens.
-  def initialize(pool, today: Date.current, pending: PoolCalculator::Pending.none, terms: nil)
+  def initialize(pool, today: Date.current, pending: PoolProjection::Pending.none, terms: nil)
     @pool = pool
     @today = today
     @pending = pending

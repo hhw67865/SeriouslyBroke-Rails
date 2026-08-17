@@ -3,8 +3,8 @@
 # THE TERMS OF PoolCalculator#balance, FOR ANY NUMBER OF POOLS, IN ONE QUERY EACH.
 #
 # Every PoolCalculator runs five aggregates of its own, and every screen here builds several
-# DISTINCT calculators per pool — the plain one, the `net_of_sweep` one, the twin that one
-# builds inside its own balance, a projected one per override. Measured at the end of Plan 2b:
+# DISTINCT calculators per pool — the plain one, the `net_of_sweep` projection, the plain twin
+# that projection builds to derive its sweep, a projected one per override. Measured at the end of Plan 2b:
 # Home 407 queries, /distributions/new 574 with two edits, reallocation 269. The cost is
 # structural rather than per-path, so this is the structural answer: ONE query per term for the
 # whole set of pools a screen is about, handed to the calculators through `terms:`.

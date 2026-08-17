@@ -712,7 +712,7 @@ class DistributionPresenter
   # `pending:` is how the SAME reader answers the projected question. There is one
   # definition of how a pool is doing in this app and this is it; the override case differs only
   # in which balance it is asked about.
-  def standing_for(pool, pending: PoolCalculator::Pending.none)
+  def standing_for(pool, pending: PoolProjection::Pending.none)
     status = pool.status(today: today, pending: pending, terms: ledger.terms_for(pool))
 
     Standing.new(state: status.state, amount: status.amount, due_on: status.due_on, target: status.target)
@@ -770,7 +770,7 @@ class DistributionPresenter
   # Built here rather than inside PoolCalculator because only this class knows which of them the
   # confirm is actually going to write: both come from AllocationCalculator — `funded` from the
   # fill (the override applied, then clamped to the cash), `swept` from #sweeps.
-  def pending(funded, swept) = PoolCalculator::Pending.new(funded: funded, swept: swept, on: today)
+  def pending(funded, swept) = PoolProjection::Pending.new(funded: funded, swept: swept, on: today)
 
   # What this envelope will ask for at the START OF THE NEXT PERIOD, having had `pending` moved
   # through it by the distribution on screen.

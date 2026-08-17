@@ -232,7 +232,7 @@ class ReallocationPresenter
     )
   end
 
-  def incoming = PoolCalculator::Pending.new(funded: requested, swept: 0.to_d, on: today)
+  def incoming = PoolProjection::Pending.new(funded: requested, swept: 0.to_d, on: today)
 
   # THE TWO PENDINGS ARE THE LEDGER THIS MOVE WOULD WRITE, not a signed number, and each side
   # gets the member that matches what actually happens to it.
@@ -243,7 +243,7 @@ class ReallocationPresenter
   # date, which is what the destination's own `movements_in` will report the moment this saves.
   # Measured against that: the spec asserts the previewed figures equal the ones read back from
   # the database after the write.
-  def outgoing = PoolCalculator::Pending.new(funded: 0.to_d, swept: requested, on: today)
+  def outgoing = PoolProjection::Pending.new(funded: 0.to_d, swept: requested, on: today)
 
   # BUILT BARE, THEN ASKED. The row is constructed with no holder and no damage, and the two
   # branches below are chosen by asking the ROW ITSELF whether it can make the move — so
@@ -291,7 +291,7 @@ class ReallocationPresenter
     Damage.new(
       balance_before: calculator_for(pool).balance,
       balance_after: after.balance,
-      ask_before: ask_of(pool, PoolCalculator::Pending.none),
+      ask_before: ask_of(pool, PoolProjection::Pending.none),
       ask_after: ask_of(pool, outgoing),
       slip: slip_for(pool, after),
       status_after: pool.status(today: today, pending: outgoing, terms: ledger.terms_for(pool))

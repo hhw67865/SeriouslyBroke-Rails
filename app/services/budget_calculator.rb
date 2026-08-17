@@ -49,6 +49,23 @@ class BudgetCalculator
   # sorted by — asking twice would double that query for every dated rule on the screen.
   def due_order(on = due_date) = [on, -target, budget.id]
 
+  # WHEN THIS RULE'S PERIOD ROLLS. A per-period rule's rolls on the user's own cadence boundaries;
+  # a MONTHLY-basis rate rule's rolls on the CALENDAR MONTH, and that is not the frame
+  # `Budget#steady_ask` uses for the same rule.
+  #
+  # TWO FRAMES, DELIBERATELY (plan 2d decision 5, recorded here and in `Budget#steady_ask`). A
+  # $260-a-month rule under a biweekly cadence COSTS $120 a period — `steady_ask` divides by
+  # `periods_per_year`, because 26 periods a year is what biweekly means and the answer must not
+  # depend on which month you ask in. Its LIFECYCLE is a different question: the month is the span
+  # the user said the money is for, so the period containing `today` ends when that month does,
+  # and `PoolCalculator#period_closed?` may not sweep the envelope's leftover before it.
+  #
+  # They are different questions — what does it claim per period, versus when is the span it
+  # claimed for over — so two answers is right and unifying them would be one wrong answer to
+  # both. Normalising the lifecycle by `periods_per_year` would end a monthly rule's period
+  # mid-month and sweep money the rule still expects to cover the rest of it; measuring the cost
+  # by the calendar month made a standing rate swing 50% between months holding two boundaries and
+  # months holding three, which is the defect `steady_ask` exists to close.
   def period_end
     budget.basis_per_period? ? boundary_period_end : today.end_of_month
   end

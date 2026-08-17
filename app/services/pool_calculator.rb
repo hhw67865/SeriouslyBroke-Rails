@@ -2,79 +2,50 @@
 
 # Computes a pool's balance and how that balance is spoken for by its rules.
 # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §2.2, §4.3
+#
+# THE LEDGER AS IT STANDS, AND ONLY THAT. Plan 2d decision 4 moved the two questions about a ledger
+# nobody has written yet — the coming sweep, and the movements a screen is proposing — out to
+# PoolProjection, which wraps one of these and owns the adjustment arithmetic, the twin it needs and
+# the refusal that guards it. What stayed is what this class can answer from rows that exist:
+# `as_of:` (a ledger question — which rows had happened by then), `today:` (the clock every
+# calculator shares) and `terms:` (the same aggregates, run by somebody else).
 class PoolCalculator
-  # Raised when a `net_of_sweep` calculator is asked what to sweep. See #initialize and
-  # #refuse_when_net_of_sweep: the answer would be a second, smaller sweep, and a second sweep
-  # is money moved twice. A named class rather than ArgumentError because Task 3 holds a plain
-  # and a flagged calculator in the same method and may legitimately want to rescue-and-report
-  # this rather than crash a confirm.
-  class NetOfSweepError < StandardError; end
+  # THE REFUSAL'S OTHER NAME. The class itself now lives on PoolProjection — the object that raises
+  # it — and this is an ALIAS of that one class, not a second error. It stays because the constant
+  # is a PUBLIC name: `rescue PoolCalculator::NetOfSweepError` is what AllocationCommitter's comment
+  # names and what pool_calculator_spec asserts in both directions, and `raise`/`rescue` compare by
+  # object identity, so the two names cannot come to mean different things.
+  NetOfSweepError = PoolProjection::NetOfSweepError
 
-  # THE MOVEMENTS A SCREEN IS PROPOSING AND HAS NOT WRITTEN — one distribution's whole effect
-  # on one pool, which is how the distribution screen asks "and what would this envelope be
-  # asking for next period if I funded it $200 instead of $500".
+  # THE PROJECTION SEAM, and the whole of what this class knows about projections: a figure the
+  # balance treats as already moved, and the day that money arrived. PoolProjection computes both
+  # and hands them over; see PoolProjection::Pending, where the reasoning about what they MEAN
+  # lives. Nothing here asks what they describe — an adjustment is arithmetic, and this class does
+  # not need to know that a screen is proposing anything.
   #
-  # Three members rather than one signed number, because the ledger's two movements answer two
-  # different questions here and a net figure can only answer the first:
+  # TWO MEMBERS RATHER THAN ONE SIGNED NUMBER, and they are read by two different readers for two
+  # different reasons: #net is what the BALANCE does, #funded_on is what the CLOCK does (see
+  # #last_funded_on). A projection that moved money with no arrival date and a projection that
+  # moved none are not the same question, and one number cannot tell them apart.
   #
-  #   #net is what the BALANCE does — the allocation in less the sweep out — and it is the only
-  #   part #balance needs.
-  #
-  #   #funded_on is what the CLOCK does. #period_closed? measures a rate rule's period from the
-  #   day the money arrived, and a projection whose money has no arrival date reads the pool's
-  #   LAST real funding instead. On a never-funded envelope that is nil, so the period is not
-  #   closed, so nothing is swept, so the projection reports a rate envelope funded $100 as
-  #   asking $300 next period — when the truth is that its leftover is swept back and it asks
-  #   for its full rate again either way. Measured on exactly that shape; see the spec example
-  #   "says nothing about an envelope that is swept and topped back up".
-  #
-  # `funded.positive?` guards the date rather than `net`: a sweep bigger than the allocation is
-  # still a funding event, and a $0 override is not one — AllocationCommitter writes no
-  # allocation at all for it, so it must not make a closed rate period look live.
-  Pending = Data.define(:funded, :swept, :on) do
-    def self.none = new(funded: 0.to_d, swept: 0.to_d, on: nil)
-
-    def net = funded - swept
-
-    def funded_on = funded.positive? ? on : nil
+  # `.none` carries `0.to_d` rather than a bare `0` because #balance sums it with five aggregate
+  # terms, and this class's type guarantee is that a money reader never changes shape with how a
+  # pool is funded — see #balance.
+  Adjustment = Data.define(:net, :funded_on) do
+    def self.none = new(net: 0.to_d, funded_on: nil)
   end
 
   attr_reader :pool, :today
 
-  # `net_of_sweep:` answers a different question about the same pool: not "what is in this
-  # envelope" but "what would be in it once the next distribution has taken back what belongs
-  # to a period that is over". It is a property of the BALANCE, so every reader built on the
-  # balance — #allocated_balances, #reserve, #free_amount, #required — inherits it unchanged.
+  # `adjustment:` IS A PROJECTION'S ARITHMETIC, ALREADY DONE — see Adjustment above and
+  # PoolProjection for who computes it. It is applied in exactly two places (#balance and
+  # #last_funded_on) and inherited everywhere else, because every other reader here is derived from
+  # those: #allocated_balances, #reserve, #free_amount, #sweepable_amount, #required and
+  # #period_closed? all read one of them and none of them has to learn about projections.
   #
-  # It exists because #required reads the live balance while the sweep is not materialised
-  # until the distribution is confirmed, so a swept envelope's leftover is still sitting in it
-  # when the proposal asks what it needs. Groceries holding $85 of last period's money against
-  # a $400 rate rule asks for $315, the sweep then takes the $85 away, and the envelope starts
-  # the period at $315 — short by exactly its own leftover, silently, every period.
+  # Default `Adjustment.none`, so a calculator built without one is the ledger as it stands and no
+  # figure on a screen that asks no projected question can move.
   #
-  # Default `false`, so every existing caller is untouched and this cannot change a number on
-  # any screen that does not ask for it.
-  #
-  # NOT for the sweep itself, and this is ENFORCED rather than documented: #sweepable_amount
-  # and #period_closed? RAISE NetOfSweepError when the flag is set. The sweep they name has
-  # already been subtracted, so asking again re-derives a second, smaller one from what the
-  # dated rules no longer hold — measured at $400 and then $100 on the same mixed envelope.
-  # A comment is not a guard on a money path: the failure is not an exception but a silently
-  # misplaced $100, and the caller most likely to make it is a committer holding a plain and a
-  # flagged calculator in the same method. Ask a plain calculator what to sweep; ask this one
-  # what to fund.
-  # `pending:` is the SAME KIND of thing as `net_of_sweep:` and is deliberately built in the
-  # same shape: an adjustment to the BALANCE, so every reader derived from the balance —
-  # #allocated_balances, #reserve, #free_amount, #sweepable_amount, #required — inherits it
-  # unchanged and no reader has to learn about it. See Pending for what it carries and why it
-  # is a value rather than a number.
-  #
-  # It answers "what would this pool hold once the distribution now on screen had happened",
-  # which is the question the override consequence asks: fund Rent $200 instead of $500 and the
-  # envelope carries $300 less into the next period, so the next period's ask is larger.
-  #
-  # Default `Pending.none`, so every existing caller is untouched and this cannot change a
-  # number on any screen that does not ask for it.
   # `terms:` IS THE SAME AGGREGATES, ALREADY RUN — a `{income:, savings:, expense:, movements_in:,
   # movements_out:, last_funded_on:}` hash from PoolBalanceLedger, which computes them for a whole
   # set of pools in one grouped query per term instead of that many per calculator. When it is
@@ -100,21 +71,22 @@ class PoolCalculator
   # SAME `as_of` OR NOTHING. The ledger bounds its terms by `as_of` itself, so a caller handing
   # terms from one moment to a calculator asking about another gets a balance from neither. One
   # ledger per `as_of`; PoolBalanceLedger carries its own for exactly this reason.
-  # rubocop:disable Metrics/ParameterLists -- the fifth keyword, and the disable is stated rather
-  # than the limit raised for the whole app: Plan 2b's review already named this signature as a
-  # class that has stopped being one idea (four orthogonal axes, now five), and a global Max of 6
-  # would spread that permission to every other method instead of marking it here. `terms:` is
-  # also the one axis that is not a QUESTION about the pool — as_of, today, net_of_sweep and
-  # pending each change what is being asked, while this only changes who ran the query.
-  def initialize(pool, as_of: nil, today: Date.current, net_of_sweep: false, pending: Pending.none, terms: nil)
+  #
+  # THE `rubocop:disable Metrics/ParameterLists` THAT USED TO SIT HERE IS GONE, and that is the
+  # visible half of what decision 4 was for. It read: "the fifth keyword, and the disable is stated
+  # rather than the limit raised for the whole app: Plan 2b's review already named this signature as
+  # a class that has stopped being one idea (four orthogonal axes, now five)". The two axes that
+  # made it four have moved to PoolProjection, so the list is back under the limit on its own and
+  # there is nothing left to grant permission for. `terms:` remains the one axis that is not a
+  # QUESTION about the pool — `as_of` and `today` change what is being asked, while this only
+  # changes who ran the query.
+  def initialize(pool, as_of: nil, today: Date.current, adjustment: Adjustment.none, terms: nil)
     @pool = pool
     @as_of = as_of
     @today = today
-    @net_of_sweep = net_of_sweep
-    @pending = pending
+    @adjustment = adjustment
     @terms = terms
   end
-  # rubocop:enable Metrics/ParameterLists
 
   # Deliberately start-date-agnostic. The balance this replaces filtered entries to
   # `pool.start_date..`; a pool's balance is all the money in it, with no cutoff — the
@@ -128,13 +100,19 @@ class PoolCalculator
   # once here so every reader downstream inherits the guarantee, and INSIDE the memo so what is
   # stored is already a BigDecimal.
   #
-  # SINCE #sweep_adjustment JOINED THIS SUM, THE COERCION NO LONGER FIRES. That method returns
-  # a BigDecimal on both of its branches, so the whole expression is a BigDecimal before `.to_d`
-  # is reached and dropping it now fails nothing (measured: 163 examples, 0 failures). It stays
-  # because it is the thing that absorbs a regression one line down — make #sweep_adjustment
-  # return a bare `0` and this method still answers in BigDecimal (0 failures), while dropping
-  # BOTH takes out three type examples across PoolCalculator and PoolStatus. Stated rather than
-  # left claiming a protection the measurement no longer shows.
+  # SINCE AN ADJUSTMENT JOINED THIS SUM, THE COERCION NO LONGER FIRES. `Adjustment.none` carries
+  # `0.to_d` and every projected one is BigDecimal arithmetic over it, so the whole expression is a
+  # BigDecimal before `.to_d` is reached and dropping it now fails nothing. RE-MEASURED after the
+  # projection split, over pool_calculator_spec + pool_status_spec (107 examples): `.to_d` dropped,
+  # 0 failures; `Adjustment.none` carrying a bare `0` instead, 0 failures; BOTH dropped, exactly
+  # THREE failures — the type examples at pool_calculator_spec:253 and pool_status_spec:639,651.
+  # It stays because it is the thing that absorbs a regression one line up, and the three failures
+  # are what says the pair is doing the work rather than either one alone.
+  #
+  # (The same sentence used to name #sweep_adjustment, which was the BigDecimal operand before
+  # decision 4 moved the sweep to PoolProjection. The guarantee did not move: what enters this sum
+  # from outside the five aggregates is still a BigDecimal by construction, and it is still the
+  # only operand that is.)
   #
   # Memoised. These are five aggregates and almost every other reader in this class starts
   # here — #allocated_balances, #free_amount, #sweepable_amount, #progress_percentage and
@@ -158,8 +136,8 @@ class PoolCalculator
   # hazard honest rather than adding a new class of it. The rule it rests on, which Task 2 and
   # Task 3 carry: anything that writes movements builds fresh calculators afterward.
   def balance
-    @balance ||= (income_entries_total + savings_entries_total + movements_in_total + @pending.net -
-      movements_out_total - expense_entries_total - sweep_adjustment).to_d
+    @balance ||= (income_entries_total + savings_entries_total + movements_in_total + @adjustment.net -
+      movements_out_total - expense_entries_total).to_d
   end
 
   # Retained for the savings-pool views; identical to #balance.
@@ -330,8 +308,13 @@ class PoolCalculator
   # `||=` would re-run the whole thing every time it came back. Home asks this once per row and
   # #sweepable_amount asks it again, and the false path alone costs three aggregates plus a
   # paid-since-anchor SUM per dated rule.
+  # THE REFUSAL THAT USED TO OPEN THIS METHOD IS NOW PoolProjection'S, on the object that has a
+  # sweep to be wrong about. This calculator answers the question honestly for every caller,
+  # because a calculator whose balance has had a sweep taken off it is no longer one of these —
+  # it is a PoolProjection, and that is where the guard sits. Same public surface: the two readers
+  # still raise NetOfSweepError when asked of a `net_of_sweep` object, which is what
+  # `pool.calculator(net_of_sweep: true)` hands back.
   def period_closed?
-    refuse_when_net_of_sweep(:period_closed?)
     return @period_closed if defined?(@period_closed)
 
     @period_closed = compute_period_closed
@@ -356,7 +339,6 @@ class PoolCalculator
   # coerces only when the clamp FIRES, and this reader must hold its guarantee locally rather
   # than by inheriting one from #balance that a later edit could quietly withdraw.
   def sweepable_amount
-    refuse_when_net_of_sweep(:sweepable_amount)
     return 0.to_d unless period_closed?
 
     [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
@@ -389,61 +371,6 @@ class PoolCalculator
   end
 
   private
-
-  # The two readers that answer "what does the next distribution take back", refusing the one
-  # calculator that cannot answer it. Both guards sit at the top of their PUBLIC method rather
-  # than inside #compute_period_closed, because #sweepable_amount reaches #period_closed?
-  # through the public door too and a guard one level down would fire twice with a message
-  # naming the wrong reader.
-  #
-  # Raising is not defensive tidiness here. #sweepable_amount on a flagged calculator does not
-  # return zero — it returns `balance − anchored_reserve` over an already-swept balance, which
-  # on the mixed envelope is a plausible-looking $100. A plausible number is exactly what a
-  # committer cannot detect.
-  def refuse_when_net_of_sweep(reader)
-    return unless @net_of_sweep
-
-    raise NetOfSweepError,
-          "##{reader} is meaningless on a net_of_sweep calculator: the sweep it names has " \
-          "already been subtracted from the balance, so asking again derives a second one. " \
-          "Build a plain PoolCalculator to ask what to sweep."
-  end
-
-  # What `net_of_sweep:` takes off the balance, and zero for every other calculator.
-  #
-  # Derived from a PLAIN calculator over the same pool rather than from `self`, and that is
-  # not a stylistic choice: #sweepable_amount reads #balance (through #anchored_reserve), so
-  # computing it on `self` would recurse until the stack ran out. The plain twin also keeps
-  # one reader of the sweep — the figure subtracted here is the same figure the proposal
-  # lists as `swept back from Groceries` and the same one AllocationCommitter writes as a
-  # `sweep` movement, because all three are `sweepable_amount` on an unflagged calculator.
-  #
-  # Built inside #balance's memo, so it costs one extra pass over the pool's aggregates and
-  # only on the calculators that asked for it.
-  #
-  # `pending:` IS PASSED THROUGH, and it has to be, on both of its members. The twin exists to
-  # answer "what would the next distribution take back", and the next distribution takes it back
-  # from the balance the pool will actually be holding — including whatever this screen is
-  # proposing to put in, and measured from the day that money arrives. Dropped here, a
-  # projection of next period's ask would sweep the OLD balance and then subtract it from the
-  # new one: on a rate envelope funded $400 the twin would sweep $85 (last period's leftover)
-  # instead of $400, and the projection would report the envelope already funded and asking for
-  # nothing.
-  #
-  # `terms:` IS PASSED THROUGH FOR THE SAME REASON, and it is the difference between batching
-  # this class and not batching it. The twin reads the SAME pool over the SAME ledger world — it
-  # differs from `self` in nothing but the flag it drops — so injecting the figures already in
-  # hand is not an optimisation of a different question, it is the same question asked twice.
-  # Dropped here, every `net_of_sweep` calculator quietly runs its own five aggregates inside its
-  # own balance, and those calculators are the majority on every screen this task measures: the
-  # ask on Home, the ask in the fill, both asks behind a reallocation's damage. It would have
-  # undone most of the saving while every figure still agreed, which is the shape a measurement
-  # catches and a test does not.
-  def sweep_adjustment
-    return 0.to_d unless @net_of_sweep
-
-    self.class.new(pool, as_of: @as_of, today: today, pending: @pending, terms: @terms).sweepable_amount
-  end
 
   # The body of #period_closed?, split out only so the memo above it stays one line of
   # bookkeeping rather than wrapping four guards. Named `compute_` rather than the near-
@@ -519,14 +446,19 @@ class PoolCalculator
   # is built once per screen while the zone that matters is the request's, and a date resolved at
   # ledger-construction time would be one step further from it for no gain.
   #
-  # The PENDING date is added AFTER the batched value and never travels through the ledger. It is
-  # a property of what THIS calculator is projecting — one screen's unwritten distribution — while
-  # the ledger describes rows that exist; folding it in would make one shared ledger answer
+  # The ADJUSTMENT'S date is added AFTER the batched value and never travels through the ledger. It
+  # is a property of what THIS calculator is projecting — one screen's unwritten distribution —
+  # while the ledger describes rows that exist; folding it in would make one shared ledger answer
   # differently for two calculators over the same pool.
+  #
+  # `.compact.max` and not `@adjustment.funded_on || funded_at`: a projection dated today over a
+  # pool funded yesterday and one over a pool funded next month are different worlds, and LAST is
+  # the rule (see above). Both are nil on a never-funded pool with nothing projected into it, and
+  # that nil is the answer the `defined?` memo exists to hold.
   def last_funded_on
     return @last_funded_on if defined?(@last_funded_on)
 
-    @last_funded_on = [funded_at, @pending.funded_on].compact.max&.to_date
+    @last_funded_on = [funded_at, @adjustment.funded_on].compact.max&.to_date
   end
 
   # THE THREE MAX(date)s, BEHIND THE SAME GATE AS THE FIVE SUMS. Injected when a ledger ran them

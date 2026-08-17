@@ -113,6 +113,20 @@ class Budget < ApplicationRecord
   # periods between NOW and its due date, so a caller with a fixed clock (every calculator in
   # this app takes one) must be able to hand its own down rather than have this reach for
   # `Date.current` behind it.
+  #
+  # THIS DIVIDES A MONTHLY RULE BY `periods_per_year` WHILE ITS PERIOD STILL ENDS ON THE CALENDAR
+  # MONTH, and the divergence is deliberate (plan 2d decision 5, recorded here and in
+  # `BudgetCalculator#period_end`). A $260-a-month rule under a biweekly cadence costs $120 a
+  # period — always, in every month — because that is what a standing monthly rate means spread
+  # over 26 periods. Its LIFECYCLE is a different question: the month is the span the user said
+  # the money is for, so `period_end` closes it at month end and the sweep may not take the
+  # envelope's leftover before then.
+  #
+  # Cost and lifecycle are not the same question, so one answer for both would be wrong for one of
+  # them. Measured in both directions: costing by the calendar's boundaries made this rule answer
+  # $130 in nine months of 2026 and $86.67 in the two holding a third boundary (see above), and
+  # ending its period by `periods_per_year` instead would roll a monthly rule mid-month and fund it
+  # twice inside one month.
   def steady_ask(user, today: Date.current)
     case cadence
     when :per_period then amount.to_d

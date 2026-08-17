@@ -656,8 +656,8 @@ class HomePresenter
   # `terms:` HERE TOO, and this is the half of Home the brief's caller list did not name — stated
   # as an extension rather than folded in quietly. Threading only #calculator_for took Home from
   # 440 queries to 364 on the demo seeds; these calculators are the expensive ones, because a
-  # `net_of_sweep` calculator is TWO sets of five aggregates (it builds a plain twin of itself
-  # inside its own balance, see PoolCalculator#sweep_adjustment) and #total_required asks one of
+  # `net_of_sweep` calculator is TWO sets of five aggregates (the projection builds a plain twin
+  # to derive its sweep, see PoolProjection#twin) and #total_required asks one of
   # every pool the user has. Same ledger, same pool, same `as_of` — the terms are identical by
   # construction, and #calculator_for's own memo already proves the two objects may share them.
   def ask_calculator_for(pool)

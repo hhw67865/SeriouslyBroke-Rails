@@ -250,9 +250,9 @@ class AllocationCalculator
   # path through the money.
   #
   # THE SAME `terms:` AS THE PLAIN CALCULATOR, and this is where most of the batching is actually
-  # won. A `net_of_sweep` calculator builds a plain twin of itself inside its own balance (see
-  # PoolCalculator#sweep_adjustment), so this one object is TWO sets of five aggregates — and
-  # PoolCalculator threads the terms into the twin for exactly that reason. Both read the same
+  # won. A `net_of_sweep` calculator is a PoolProjection, which builds a plain twin to derive its
+  # sweep (see PoolProjection#twin), so this one object is TWO sets of five aggregates — and the
+  # projection threads the terms into the twin for exactly that reason. Both read the same
   # pool over the same unwritten ledger, so there is one right set of figures for all three
   # objects to share.
   def ask_calculator_for(pool)

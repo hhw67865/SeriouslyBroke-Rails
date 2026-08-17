@@ -154,8 +154,9 @@ module HomeHelper
   # a few inches above it.
   #
   # THE ARGUMENT DOES NOT CARRY UP TO #pool_status_label, AND TAKING IT THERE WOULD RAISE.
-  # `PoolStatus#period_closed?` delegates to `PoolCalculator#period_closed?`, which begins with
-  # `refuse_when_net_of_sweep` — and the reallocation and distribution screens hand
+  # `PoolStatus#period_closed?` delegates to the calculator's `#period_closed?`, and on a projection
+  # that reader is `PoolProjection#period_closed?`, which begins with `refuse_when_net_of_sweep` —
+  # and the reallocation and distribution screens hand
   # #pool_status_label statuses built `net_of_sweep: true`, which would raise `NetOfSweepError` on
   # the spot. Those screens compute the suffix off a separate PLAIN calculator for exactly this
   # reason (see DistributionPresenter). So the keyword stays a keyword one level up. It is safe

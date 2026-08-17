@@ -300,10 +300,17 @@ class Pool < ApplicationRecord
   # A keyword here rather than those callers reaching for `PoolCalculator.new` themselves, so
   # this stays the one place a calculator is built from a pool. A second construction path is how
   # a keyword ends up honoured on one screen and forgotten on the next.
-  def calculator(as_of: nil, today: Date.current, net_of_sweep: false, pending: PoolCalculator::Pending.none,
+  # `net_of_sweep:` and `pending:` KEPT THEIR NAMES AND CHANGED THEIR ADDRESS (plan 2d decision 4).
+  # They are projections — questions about a ledger nobody has written — and they now belong to
+  # PoolProjection, which wraps a plain calculator and owns the arithmetic, the twin and the
+  # refusal. This signature does not change, because it is the app's one door onto a pool's figures
+  # and every caller of it asks the same questions it always did; `PoolProjection.for` hands back a
+  # plain PoolCalculator when neither projection is asked for, so the callers that ask none are on
+  # exactly the object they have always had.
+  def calculator(as_of: nil, today: Date.current, net_of_sweep: false, pending: PoolProjection::Pending.none,
                  terms: nil)
-    PoolCalculator.new(
-      self, as_of: as_of, today: today, net_of_sweep: net_of_sweep, pending: pending, terms: terms
+    PoolProjection.for(
+      self, net_of_sweep: net_of_sweep, pending: pending, as_of: as_of, today: today, terms: terms
     )
   end
 
@@ -314,7 +321,7 @@ class Pool < ApplicationRecord
   # own vocabulary rather than inventing a second one.
   # `terms:` threads down the same way and for the same reason, and defaults to nothing here too:
   # a view or a controller asking one pool how it is doing pays five queries either way.
-  def status(today: Date.current, pending: PoolCalculator::Pending.none, terms: nil)
+  def status(today: Date.current, pending: PoolProjection::Pending.none, terms: nil)
     PoolStatus.new(self, today: today, pending: pending, terms: terms)
   end
 
