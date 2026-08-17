@@ -96,7 +96,7 @@ create_table "budgets", id: :uuid do |t|
   t.money   "amount",          null: false, scale: 2
   t.integer "interval_months"                # nullable — see 3.1
   t.date    "anchor_date"                    # nullable — see 3.1
-  t.integer "basis",           null: false, default: 0  # monthly:0 | per_paycheck:1
+  t.integer "basis",           null: false, default: 0  # monthly:0 | per_period:1
   t.uuid    "item_id"                        # nullable — attribution link
   t.timestamps
 end
@@ -131,7 +131,7 @@ shapes. Everything else is a validation error.
 
 | anchor_date | interval_months | basis | meaning |
 | --- | --- | --- | --- |
-| nil | nil | per_paycheck | rate rule, resets each pay period — *"$300/paycheck for gas & other"* |
+| nil | nil | per_period | rate rule, resets each pay period — *"$300/paycheck for gas & other"* |
 | nil | 1 | monthly | rate rule, resets each month — *"$600/mo groceries"* |
 | set | N | monthly | recurring obligation — *"$800 every 6 months, next Jun 1"* |
 | set | nil | monthly | one-time obligation or savings goal — never rolls |
@@ -151,7 +151,7 @@ A savings goal needs no separate math: it is the fourth shape, with
 
 **`Budget`**
 - must match one of the four shapes in 3.1
-- `basis: per_paycheck` → `anchor_date` and `interval_months` must both be nil
+- `basis: per_period` → `anchor_date` and `interval_months` must both be nil
 - `item` must belong to a category linked to this budget's pool
 - an item may be claimed by at most one budget
 - pool must not be `pool_type: account`
@@ -218,7 +218,7 @@ def overdue? = item.present? && due_date < Date.current
 ```
 
 `period_end` is the end of the rule's current period: the end of the pay period
-for `basis: per_paycheck`, the end of the calendar month for `basis: monthly`.
+for `basis: per_period`, the end of the calendar month for `basis: monthly`.
 It is also the boundary that decides whether the pool's period has closed — a pool
 sweeps as a whole, never rule by rule (see 5.2).
 
@@ -284,7 +284,7 @@ expense, and the consequence appears in dollars on the next allocation screen.
 ## 5. The paycheck flow
 
 There are no percentages anywhere. A savings goal with a deadline computes
-`required` like any bill, and an open-ended goal is a `per_paycheck` rule — so
+`required` like any bill, and an open-ended goal is a `per_period` rule — so
 savings pools sit in the same priority list as budget pools. One mechanism.
 
 ### 5.1 Five steps

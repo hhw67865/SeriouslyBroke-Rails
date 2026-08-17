@@ -84,6 +84,8 @@ assertion, stop and report rather than adjusting it.
   questions into one wrong answer.
 - **The override-entries nullify residual** (an override entry whose category points nowhere
   leaves the tree): unreachable from the UI, named in `pool.rb`'s comment since 2c's close-out.
+- **`BudgetCalculator#shortfall` not netting partial payments** (§7a): over-reserves, the safe
+  direction. Stays deferred — omitted from this list originally; added by the final review.
 
 ## Pre-verified: already closed, no task needed
 
@@ -244,6 +246,44 @@ Three finishing moves:
 - [ ] Visual check both screens; commit
 
 ---
+
+## The Plan 3 inheritance list
+
+Committed here so it survives the SDD directory's archiving (2c's precedent; 2d's final review
+found this list living only in a gitignored ledger and ruled it a blocker).
+
+**Perf residues, measured:**
+- `account.child_pools`' budgets re-read per fill — 60 queries of the widest screen's 161
+  (12 envelopes × 5 reads across four fills, plus `DistributionPresenter#envelopes`, no memo).
+- Unmemoised `BudgetCalculator#paid_since_anchor` — 18 of Home's 41.
+- The two-edits-on-real-rows distribution screen was 245 queries at base and had never been
+  measured: Task 2's harness overrode pools with no row in the fill, so the counterfactual
+  machinery never fired. Any future byte-identity contract must verify its screens contain the
+  shape they claim.
+
+**Correctness / design, deferred with reasons:**
+- `PoolBalanceLedger::AsOfMismatch` has no `rescue` anywhere and must not acquire one.
+- The `_impact` card's known edges: the open numpad pushes it ~300px down; `/entries/impact`
+  builds one pool ledger per category change (unmeasured); a bill-shaped envelope pins its bar
+  full; the client overwrites the server's initial figure on load.
+- The category page's cache hole, named in `categories/show.html.erb`: an entry carrying its own
+  `pool_id` override touches its category's pool, not the pool it was overridden onto.
+- `shared/_pool_status`'s whitespace is load-bearing and untested.
+- `/distributions/new` takes write locks on a GET (2b's delete-compute-rollback ruling —
+  structural; belongs to a plan that reworks the render).
+- `steady_ask` vs `period_end` two frames — deliberate, recorded in both comments.
+- The override-entries nullify residual — named in `pool.rb`'s comment; unreachable from the UI.
+- `BudgetCalculator#shortfall` does not net partial payments (§7a) — over-reserves, the safe
+  direction.
+- `_summary_card`'s savings arm still renders account-pointed savings categories with savings
+  chrome (the left-column sibling of the fixed right-column card).
+
+**§7a's Plan 3 (cutover) list is intact in the domain spec** — reverse §6.1 steps 2 and 4 (the
+step that loses data), tighten `account_matches_pool_type`, flip the `pool_type` default,
+delete `savings_entries_total`, the pools unique index, the seeds teardown rewrite,
+`contribution_entries`/`withdrawal_entries`/`timeline_entries`, the duplicate income validators.
+Every §7a "Plan 2" item is closed; `crosses_accounts?`'s preload item was satisfied differently
+(in-memory pools with `:account` eager-loaded) and is hereby explicitly closed.
 
 ## Plan 2d Done — and the conversion with it
 
