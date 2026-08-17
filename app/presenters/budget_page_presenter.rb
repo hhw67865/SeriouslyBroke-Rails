@@ -164,6 +164,20 @@ class BudgetPagePresenter
   # would hide is drift.
   def suggestions = @suggestions ||= SuggestionEngine.new(user: user, today: today).suggestions
 
+  # THE PANEL'S INDEX AND ITS HEADINGS, from one grouping so the counts cannot disagree with the
+  # runs they point at.
+  #
+  # `group_by` and NOT a sort: `SuggestionEngine#ordered` already sorts by `[kind, per-period cost,
+  # id]`, so the kinds arrive in the engine's rank order and each run is contiguous by
+  # construction. Re-sorting here would be this page deciding to disagree with the reader it
+  # renders — the same objection #suggestions' own comment makes — and grouping a list that is
+  # already grouped is free.
+  #
+  # It hides nothing, which is the whole constraint (§8 forbids truncation and dismissal alike).
+  # Every suggestion the engine returned is in exactly one group and every group is rendered in
+  # full; the index above them is navigation, not a filter.
+  def suggestions_by_kind = @suggestions_by_kind ||= suggestions.group_by(&:kind)
+
   # THE MONTHLY CAP A RATE SUGGESTION'S CATEGORY ALREADY CARRIES, or nil.
   #
   # `Category#buffer_funded?` — the rate detector's population — is "an expense category funded by

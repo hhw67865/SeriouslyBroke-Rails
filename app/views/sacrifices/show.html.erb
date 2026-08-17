@@ -1,0 +1,199 @@
+<%# THE SACRIFICE VIEW (spec §9). `@presenter` is a SacrificePresenter.
+
+    Reallocation cannot fix a budget that does not fit an income — "the app must say so rather than
+    let someone reallocate through six months of sinking" — so this screen offers no move, no
+    transfer and no distribution. It offers cuts, and the only links on it go to the rules' own
+    edit forms, where a cut is actually made. NOTHING HERE IS WRITTEN (plan decision 3): the dial
+    below is arithmetic in the browser over figures this page printed, and a reload returns the
+    page to its opening state.
+
+    THE WHOLE SCREEN IS DENOMINATED IN PER-PERIOD CLAIMS, and this is the one thing to know before
+    editing it. Every figure — the gap, each row's amount, what a cut frees, the totals — is what
+    the rule claims from ONE period (`Budget#steady_ask`). A rule's OWN unit is a different number:
+    the demo's Rent rule is $1,500 a month and claims $692.31 of a biweekly period. Each row prints
+    its rule's unit beside the claim so the edit form it links to is not a surprise, but nothing on
+    this page ever adds a figure in the rule's unit to a figure in the period's. %>
+<% content_for :title, "What could you cut?" %>
+
+<%= page_header(title: "What could you cut?",
+                subtitle: "Your rules ask for more than you bring in. This is what would have to give.") %>
+
+<div class="space-y-6"
+     data-controller="app--sacrifice--dial"
+     data-app--sacrifice--dial-gap-value="<%= @presenter.gap_param %>">
+  <%# §9'S HEADLINE, verbatim in shape: the gap, then the two figures it came from. The same two
+      readers the Budget page's structural check prints (`Budget.steady_need` and the declared
+      income), so a user arriving here from that page's button meets the number they just read. %>
+  <section class="bg-white border border-gray-200 rounded p-6">
+    <h2 class="text-2xl font-semibold text-status-danger" data-figure="gap">
+      <%= number_to_currency(@presenter.gap) %> underwater every period
+    </h2>
+    <p class="mt-2 text-sm text-gray-600">
+      Your rules need <strong data-figure="rules-need"><%= number_to_currency(@presenter.rules_need) %></strong>.
+      You typically bring home <strong data-figure="typical-income"><%= number_to_currency(@presenter.typical_income) %></strong>.
+    </p>
+
+    <%# THE UNWINNABLE CASE, STATED PLAINLY AND FIRST (spec §9: "if every available cut still
+        leaves a gap, the app says so instead of offering false comfort").
+
+        It is the SERVER's sentence and not the dial's, because it is a fact about the rules rather
+        than about what is currently checked: it is true before the user touches anything and stays
+        true whatever they touch. The dial still works underneath it — a user who cannot win still
+        wants to see how close they can get, and hiding the list would leave the page saying only
+        "no" — but the page OPENS on the sentence, with the number, so no arrangement of checkboxes
+        can be mistaken for a way out.
+
+        `unclosable` is the gap left after cutting every cuttable rule to zero. That is not a
+        realistic budget and is not offered as one; it is the strongest claim available, and a
+        softer ceiling would be the false comfort the spec names. %>
+    <% if @presenter.unwinnable? %>
+      <div class="mt-4 rounded border border-status-danger bg-status-danger-light px-4 py-3" data-unwinnable>
+        <p class="text-sm font-semibold text-status-danger">
+          Cutting every rule below to nothing still leaves you
+          <%= number_to_currency(@presenter.unclosable) %> underwater every period.
+        </p>
+        <p class="mt-1 text-sm text-status-danger">
+          This budget does not fit this income. Nothing on this page can close it — the answer is a
+          bigger income or a bill that goes away, and we would rather say so than have you
+          rearrange it for six months.
+        </p>
+      </div>
+    <% end %>
+  </section>
+
+  <%# THE LIST: what you could cut, then what you could not, then the running total — the shape
+      §9 draws. One list rather than two sections, because the two groups together ARE the figure
+      at the top of the page (SacrificePresenter#rows_total is `rules_need`, and the presenter spec
+      pins it), and a reader who adds the column up must land on the number in the headline. %>
+  <section class="bg-white border border-gray-200 rounded">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h3 class="text-sm font-semibold text-gray-900">What could you cut?</h3>
+      <p class="mt-1 text-sm text-gray-500">
+        Tick a rule and type what you would keep it at, per period. Nothing is saved — this is a
+        question, not a change. The link on each row is where the rule is actually edited.
+      </p>
+    </div>
+
+    <% if @presenter.cuttable_rows.empty? %>
+      <%# REACHABLE, and it is the worst version of the unwinnable case rather than an empty state:
+          every rule the user has is anchored, so there is nothing on this screen to dial at all.
+          The block above has already said the gap cannot be closed here; this says why the list
+          below has no checkboxes in it. %>
+      <div class="px-6 py-6">
+        <p class="text-sm text-gray-600">
+          Every rule you have is anchored to a date, and a dated bill is not a rate you can dial
+          down — the bill is what it is. There is nothing here to cut.
+        </p>
+      </div>
+    <% end %>
+
+    <% @presenter.cuttable_rows.each do |row| %>
+      <%# `data-claim` in plain, undelimited digits (see Row#claim_param), because `parseFloat` is
+          what reads it: a $1,500-a-period rule delimited as "1,500.00" parses as 1.5, and the row
+          would offer to free a dollar fifty out of fifteen hundred with every figure on the page
+          still looking right. %>
+      <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2"
+           data-sacrifice-row="<%= row.budget.id %>"
+           data-app--sacrifice--dial-target="row"
+           data-claim="<%= row.claim_param %>">
+        <input type="checkbox"
+               id="cut-<%= row.budget.id %>"
+               class="form-checkbox"
+               aria-label="Cut <%= budget_rule_name(row.budget) %>"
+               data-app--sacrifice--dial-target="toggle"
+               data-action="change->app--sacrifice--dial#recompute">
+
+        <label class="flex-1 min-w-40 text-sm font-medium text-gray-900" for="cut-<%= row.budget.id %>">
+          <%= budget_rule_name(row.budget) %>
+        </label>
+
+        <%# THE CLAIM, AND THE RULE'S OWN UNIT WHERE IT IS A DIFFERENT THING. "$692.31 a period" is
+            what this page adds up; "$1,500.00 a month" is what the edit form on the right of this
+            row will show. A row printing only the first sends the user to a form whose number they
+            do not recognise, and a row printing only the second invites them to subtract a monthly
+            figure from a per-period gap. `sacrifice_rule_unit` is silent on a per-paycheck rule,
+            whose unit IS the period — see its comment for what that clause looked like. %>
+        <span class="text-sm text-gray-600 tabular-nums" data-role="claim">
+          <%= number_to_currency(row.claim) %> a period
+          <span class="text-gray-400"><%= sacrifice_rule_unit(row) %></span>
+        </span>
+
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500">cut to</span>
+          <%# `step` and `min` match what a cut can be. The dial clamps anyway (see #freedBy) —
+              a typed figure above the claim frees nothing and a blank one frees the lot — because
+              a browser constraint is a rendering and the arithmetic must be right without it. %>
+          <input type="number"
+                 id="cut-amount-<%= row.budget.id %>"
+                 class="form-input w-28 tabular-nums"
+                 step="0.01"
+                 min="0"
+                 value="<%= row.claim_param %>"
+                 aria-label="Cut <%= budget_rule_name(row.budget) %> to"
+                 data-app--sacrifice--dial-target="amount"
+                 data-action="input->app--sacrifice--dial#recompute">
+        </div>
+
+        <%# "frees $100" is §9's own row copy, and the word is what makes the figure readable: a
+            bare "$300.00" in a column of its own, beside a "$400.00 a period" and a "100", is a
+            fourth number with nothing saying which of the three it came from. Outside the target
+            span, because the dial writes `textContent` and would wipe a word it shared with. %>
+        <span class="text-sm text-gray-600 tabular-nums w-32 text-right" data-role="row-frees">
+          frees <span data-app--sacrifice--dial-target="rowFrees"><%= number_to_currency(0) %></span>
+        </span>
+
+        <%= link_to "Edit the rule",
+                    edit_budget_path(row.budget),
+                    class: "btn btn-secondary whitespace-nowrap",
+                    data: { rule_edit_link: true } %>
+      </div>
+    <% end %>
+
+    <%# UNCUTTABLE RULES ARE MARKED AS SUCH (spec §9: "pretending rent is optional would be a
+        lie"). They are listed rather than hidden because the gap at the top of this page is made
+        of them too, and a user who cannot see them has been shown a list that does not add up. %>
+    <% @presenter.fixed_rows.each do |row| %>
+      <div class="px-6 py-3 border-b border-gray-100 flex flex-wrap items-center gap-x-4 gap-y-2 bg-gray-50"
+           data-fixed-row="<%= row.budget.id %>">
+        <span class="flex-1 min-w-40 text-sm font-medium text-gray-700">
+          <%= budget_rule_name(row.budget) %>
+        </span>
+        <span class="text-sm text-gray-600 tabular-nums" data-role="claim">
+          <%= number_to_currency(row.claim) %> a period
+          <span class="text-gray-400"><%= sacrifice_rule_unit(row) %></span>
+        </span>
+        <span class="text-sm text-gray-500" data-role="fixed-reason">
+          <%= sacrifice_fixed_reason(row) %>
+        </span>
+        <%= link_to "Edit the rule",
+                    edit_budget_path(row.budget),
+                    class: "btn btn-secondary whitespace-nowrap",
+                    data: { rule_edit_link: true } %>
+      </div>
+    <% end %>
+
+    <%# THE RUNNING TOTAL. Server-rendered at the state the page opens in — nothing cut, so nothing
+        freed and the whole gap still open — and recomputed by the dial's `connect()` before the
+        user touches anything, so the two descriptions of "what is checked right now" agree from
+        the first paint rather than from the first click. %>
+    <div class="px-6 py-4 border-t-2 border-gray-200 space-y-1">
+      <div class="flex justify-between items-baseline gap-4 text-sm">
+        <span class="text-gray-600">Cutting frees</span>
+        <%# The money is its OWN element and " a period" sits outside it, because the dial writes
+            `textContent` — a target spanning both would have the unit wiped on the first keystroke
+            and the figure would silently lose the only thing that says what it is per. %>
+        <span class="font-semibold text-gray-900 tabular-nums" data-figure="frees">
+          <span data-app--sacrifice--dial-target="freed"><%= number_to_currency(0) %></span> a period
+        </span>
+      </div>
+      <div class="flex justify-between items-baseline gap-4 text-sm">
+        <span class="text-gray-600">Where that leaves you</span>
+        <span class="font-semibold tabular-nums text-status-danger"
+              data-figure="verdict"
+              data-app--sacrifice--dial-target="verdict">
+          Still underwater <%= number_to_currency(@presenter.gap) %> a period
+        </span>
+      </div>
+    </div>
+  </section>
+</div>

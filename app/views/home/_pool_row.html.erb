@@ -29,7 +29,13 @@
       <%# `period_closed:` through the presenter, never a bare `pool.calculator` — same reason
           as `status` above: a calculator built here would date itself against Date.current
           and disagree with the rest of the screen silently. %>
-      <%= pool_status_label(status, period_closed: presenter.period_closed?(pool)) %>
+      <%# `raised_after_distributing:` through the presenter for the same reason, one question
+          further out: it compares the pool's rules against THIS period's latest distribution, and
+          which period that is depends on `presenter.today`. Spec §8's rough edge — a pool flipping
+          to `behind` because the rule was raised rather than because money went missing. %>
+      <%= pool_status_label(status,
+                            period_closed: presenter.period_closed?(pool),
+                            raised_after_distributing: presenter.raised_after_distributing?(pool)) %>
       <%# The date only where the label has not already said one. Of the three quiet states —
           `on track`, `saving` and `left to spend` — only the first has a date to add: the
           other two have no anchored rule to take one from, so #due_on is nil there anyway. %>

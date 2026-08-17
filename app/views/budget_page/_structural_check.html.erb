@@ -72,10 +72,11 @@
           a budget that does not fit an income, so this is the one screen that must not offer
           moving money as the answer.
 
-          The target 404s until Task 9 draws `/sacrifice`. Deliberate for this task's window: a
-          disabled control or a `href="#"` would be a button that lies about being a button, and
-          this one's whole job is to say a real thing is reachable. A literal path rather than a
-          route helper because the helper does not exist yet and the page must still render.
+          The target is live: `sacrifice_path` (Task 9), which refuses in the two states this
+          button cannot be shown in — nothing declared, or the budget already fitting — so the
+          route's gate and this gate are the same condition read twice rather than two conditions.
+          It was a literal `/sacrifice` while the route did not exist, deliberately: a disabled
+          control or a `href="#"` would have been a button lying about being a button.
 
           Home's standing-band button class for class, plus a fill — the two are the same offer
           made from two screens and must not look like two different controls. `hover:bg-white`
@@ -84,7 +85,7 @@
           have silently done nothing. %>
       <% if presenter.underwater? %>
         <%= link_to("What could you cut?",
-                    "/sacrifice",
+                    sacrifice_path,
                     class: "inline-flex items-center gap-2 px-4 py-2 rounded border " \
                            "border-status-danger bg-status-danger-light text-status-danger " \
                            "text-sm font-medium hover:bg-white",

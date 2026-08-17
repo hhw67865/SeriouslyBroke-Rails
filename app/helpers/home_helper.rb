@@ -17,10 +17,24 @@ module HomeHelper
   # It is a suffix on every state, not just :left_to_spend, because a closed period is a fact
   # about the money rather than about how the pool is doing — an overdrawn envelope whose
   # period has ended is both things at once, and the row has room to say so.
-  def pool_status_label(status, period_closed: false)
+  # `raised_after_distributing:` IS SPEC §8'S ROUGH EDGE, and it is gated on `:behind` HERE rather
+  # than at each caller. Rule changes apply immediately, so raising a rule the day after a
+  # distribution flips its envelope from `on track` to `behind $50` with no money having moved —
+  # and the clause exists to say which of the two kinds of `behind` this is. On any other state it
+  # would be an unexplained aside: an `overdue` bill is overdue because it was not paid, and a
+  # raised rule has nothing to do with it. One gate, so no caller can put the clause somewhere it
+  # does not belong.
+  #
+  # AFTER the `· last period` suffix, because the two say different kinds of thing and the order
+  # is the order a reader needs them: how the pool is doing, WHICH period its money belongs to,
+  # then why it is doing that. `behind $50.00 · last period — you raised this rule after
+  # distributing` reads as one sentence; the other order splits the state from its own explanation.
+  def pool_status_label(status, period_closed: false, raised_after_distributing: false)
     label = pool_state_label(status)
+    label = "#{label} · last period" if period_closed
+    label = "#{label} — you raised this rule after distributing" if raised_after_distributing && status.state == :behind
 
-    period_closed ? "#{label} · last period" : label
+    label
   end
 
   # `strftime("%b %-d")` rather than `l(date, format: :short)`: no view in this app formats
@@ -106,9 +120,14 @@ module HomeHelper
     "Nothing in #{container.name} has #{number_to_currency(fix.amount)} spare to move."
   end
 
-  def pool_problem_label(status, orphan: false)
-    return pool_status_label(status) unless orphan
-    return "no account · #{pool_status_label(status)}" if status.needs_attention?
+  # `raised_after_distributing:` travels through rather than stopping here: the attention band and
+  # the pools band render the SAME pool inches apart on one screen — a `behind` envelope is in both
+  # by construction — and one of them explaining the state while the other did not would read as
+  # the two bands disagreeing about why.
+  def pool_problem_label(status, orphan: false, raised_after_distributing: false)
+    label = pool_status_label(status, raised_after_distributing: raised_after_distributing)
+    return label unless orphan
+    return "no account · #{label}" if status.needs_attention?
 
     "no account — nothing can fund it"
   end

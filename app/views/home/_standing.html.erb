@@ -73,11 +73,25 @@
     </p>
   <% end %>
 
-  <%# Deliberately a dead link: the sacrifice view that answers this is Plan 2c. %>
+  <%# §9: A PERMANENTLY VISIBLE BUTTON, AND ONLY WHEN INCOME < RULES. It is live now — the same
+      destination the Budget page's structural check points at, because there is one answer to
+      "what do I cut" and it is one screen.
+
+      `structurally_underwater?`, which is Task 4's reader and NOT a comparison of this band's own.
+      It is gated on income AND cadence together (`declared?`'s condition) and memoised for the
+      false case too, so this second caller on the page costs nothing. A recomputation here could
+      say "your budget doesn't fit your income" beside a /budget page that says it fits — and the
+      route this button opens refuses on exactly that reader's condition, so a button that
+      disagreed with it would open a redirect back to /budget.
+
+      This band's own headline is about THIS PERIOD'S CASH and can say "You're covered" while this
+      button is showing: they are different questions, which is why §9 asks for the button to be
+      permanent rather than conditional on the shortfall. %>
   <% if presenter.structurally_underwater? %>
     <%= link_to("Your budget doesn't fit your income",
-                "#",
+                sacrifice_path,
                 class: "mt-4 inline-flex items-center gap-2 px-4 py-2 rounded border " \
-                       "border-status-danger text-status-danger text-sm font-medium") %>
+                       "border-status-danger text-status-danger text-sm font-medium hover:bg-white",
+                data: { sacrifice_link: true }) %>
   <% end %>
 </div>

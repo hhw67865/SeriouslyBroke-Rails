@@ -92,6 +92,58 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(rendered_keys.size).to eq(6)
     end
 
+    # THE INDEX (Task 7's review): the panel runs to about 5,000px on the demo and §8 forbids both
+    # of the usual answers — no truncation, no dismissal — so what is left is navigation.
+    #
+    # THE COUNTS ARE CHECKED AGAINST THE ROWS THEMSELVES rather than against the engine, because an
+    # index that agreed with the engine and disagreed with what is on screen would be exactly the
+    # defect: a strip promising three bills over a list of two.
+    it "agrees with the rows the panel is actually showing" do
+      expect(rendered_keys.map { |key| key.split(":").first }.tally)
+        .to eq("dated_bill" => 3, "rate" => 1, "drift" => 1, "dead_rule" => 1)
+    end
+
+    # THE WORDING IS PINNED AS LITERALS, not rebuilt from `pluralize` here — an expectation that
+    # called the same helper the view calls would pass whatever it returned. It also puts the
+    # singular on the screen: three of the four kinds are at one on this fixture, and "1 rates" is
+    # the copy nobody notices until it ships.
+    it "names each kind with its count" do
+      expect(index_link(:dated_bill).text).to eq("3 bills")
+      expect(index_link(:rate).text).to eq("1 rate")
+      expect(index_link(:drift).text).to eq("1 drifting")
+      expect(index_link(:dead_rule).text).to eq("1 dead")
+    end
+
+    # HIDING NOTHING IS THE WHOLE CONSTRAINT. The index sums to every suggestion the engine
+    # returned, so no kind can quietly fall out of the panel behind a heading that never appeared.
+    it "indexes every suggestion on the page" do
+      indexed = page.all("[data-suggestions-index-link]").sum { |link| link.text.to_i }
+
+      expect(indexed).to eq(rendered_keys.size)
+      expect(indexed).to eq(6)
+    end
+
+    # THE ANCHOR HAS TO LAND, and on something that says what it is: a bare `<span id>` would be a
+    # jump to a spot with nothing at it. Followed rather than merely asserted, because a fragment
+    # that names no element is a link that silently does nothing.
+    it "jumps to the run it names" do
+      index_link(:drift).click
+
+      # `url: true` because Capybara's `current_path` drops the fragment, and the fragment is the
+      # whole of what this link does. The scroll itself is the browser's; what has to be true here
+      # is that the fragment names an element that exists and says what it is.
+      expect(page).to have_current_path(%r{/budget\#suggestions-drift\z}, url: true)
+      expect(find("#suggestions-drift")).to have_content("Rules that have drifted · 1")
+    end
+
+    # Each heading sits directly above its own run, which is what makes the jump useful — the
+    # engine sorts by kind first, so the runs are contiguous and the heading is not a filter.
+    it "heads each run with its kind and its count", :aggregate_failures do
+      expect(find("#suggestions-dated_bill")).to have_content("Dated bills · 3")
+      expect(find("#suggestions-rate")).to have_content("Rates · 1")
+      expect(find("#suggestions-dead_rule")).to have_content("Rules that look dead · 1")
+    end
+
     # SPEC §8: suggestions cannot be dismissed, so there is deliberately no control that would.
     # Asserted as an absence of the affordance rather than of a word, because the risk is a button
     # arriving later that hides a real drift.
@@ -405,6 +457,8 @@ RSpec.describe "Budget page suggestions", type: :system do
   def cap_note_of(kind, subject) = suggestion(kind, subject).find("[data-suggestion-cap]")
 
   def rendered_keys = page.all("[data-suggestion]").pluck("data-suggestion")
+
+  def index_link(kind) = find("[data-suggestions-index-link='#{kind}']")
 
   def accept(kind, subject)
     within(suggestion(kind, subject)) { click_link suggestion_accept_label(kind) }

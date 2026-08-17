@@ -193,6 +193,38 @@ module BudgetPageHelper
     end
   end
 
+  # THE INDEX STRIP'S WORDING — "10 bills · 5 rates · 4 drifting · 2 dead", §8's own shorthand for
+  # a panel that on the demo runs to about 5,000px. Short by design: this is a jump list, and the
+  # heading it lands on says the kind in full.
+  #
+  # `pluralize` prints the count with the noun, and the two kinds that are ADJECTIVES rather than
+  # nouns ("drifting", "dead") take the count directly — "4 drifts" would name a thing this app has
+  # no word for, and "4 dead rules" is the heading's job, not the index's.
+  def suggestion_kind_count(kind, count)
+    case kind
+    when :dated_bill then pluralize(count, "bill")
+    when :rate then pluralize(count, "rate")
+    when :drift then "#{count} drifting"
+    else "#{count} dead"
+    end
+  end
+
+  # WHAT A RUN OF ROWS IS, said in full at the top of the run — the index's shorthand expanded, so
+  # a reader who jumped knows what they jumped to. Deliberately not the same strings: an index item
+  # is read in a line of four, a heading is read alone.
+  def suggestion_kind_heading(kind)
+    case kind
+    when :dated_bill then "Dated bills"
+    when :rate then "Rates"
+    when :drift then "Rules that have drifted"
+    else "Rules that look dead"
+    end
+  end
+
+  # The fragment the index links to and the heading carries. One reader, because an anchor whose
+  # two ends are spelled separately is a link that silently stops working.
+  def suggestion_kind_anchor(kind) = "suggestions-#{kind}"
+
   # "every month" / "every 6 months", said of a PROPOSED interval rather than of a saved rule.
   # `budget_rule_basis` reads a Budget and there is no Budget yet, so this reads the integer.
   def suggestion_interval_label(months) = months == 1 ? "every month" : "every #{months} months"

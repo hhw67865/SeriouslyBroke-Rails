@@ -32,6 +32,14 @@ class HomePresenter
     # PLAIN DIGITS FOR THE QUERY STRING, for ReallocationPresenter#amount_value's reason one screen
     # later: `BigDecimal("300").to_s` is "0.3e3", which reaches the link as `amount=0.3e3`. It is
     # read back correctly (`to_d` parses it) but it is the URL the user sees and copies.
+    #
+    # THAT REASON HAS SINCE EXPIRED AND THE METHOD HAS NOT (measured while Task 9 was copying the
+    # same reader): on bigdecimal 4.0.1, which is what this branch resolves,
+    # `BigDecimal("300").to_s` is "300.0" and `BigDecimal("692.31").to_s` is "692.31". Kept,
+    # because the SECOND thing it does is still live and always was — `number_to_rounded` scales
+    # to two decimals, and it is asked for `delimiter: ""` so a four-figure amount cannot reach a
+    # query string as "1,500.00". Recorded rather than deleted so nobody re-derives the old claim
+    # from the code and finds it false.
     def amount_param = ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2, delimiter: "")
   end
 
@@ -228,6 +236,48 @@ class HomePresenter
   # through #calculator_for so it reuses the calculator Home has already built for this pool.
   def period_closed?(pool) = calculator_for(pool).period_closed?
 
+  # SPEC §8'S ONE ROUGH EDGE, HANDLED WITH WORDING RATHER THAN ARCHITECTURE. Rule changes apply
+  # immediately — everything in this design is derived — so raising Groceries from $420 to $470
+  # the day after a distribution flips the envelope from `on track` to `behind $50` with no money
+  # having moved and nothing having gone wrong. The row says which of the two it is:
+  # `behind $50.00 — you raised this rule after distributing`.
+  #
+  # DERIVED, NO NEW COLUMN. Two timestamps the app already keeps: the rule's `updated_at` against
+  # the newest `PoolMovement.distributed` row for this pool's account inside the current period.
+  #
+  # `created_at` ON THE MOVEMENT, NOT `date`, AND THE DIFFERENCE IS THE WHOLE HONESTY OF THE
+  # CLAUSE. `date` is the period day a distribution is FOR — AllocationCommitter writes every row
+  # of a split with the same one, and the user may confirm it hours or days later; `created_at` is
+  # the instant they pressed confirm. The sentence claims the rule was raised AFTER the money was
+  # handed out, so it must compare against the moment the money moved. Compared against `date`,
+  # every rule edited later on the period's opening day would be called raised-after-distributing
+  # including the ones edited BEFORE the confirm — the app blaming a user for an edit it had
+  # already taken into account. And `updated_at` is a timestamp while `date` is a period marker:
+  # comparing them at all is a unit mismatch dressed as a comparison.
+  #
+  # THE SIGNAL IS CLEAN, AND THAT WAS MEASURED RATHER THAN ASSUMED, because `touch: true` is
+  # everywhere on this schema and a cascade reaching `budgets` would make this fire on users who
+  # changed nothing. Every `touch: true` in app/models points AT a pool, a category, an item or a
+  # user — `Budget belongs_to :pool, touch: true` touches the POOL when a rule is saved, never the
+  # other way — and NO association anywhere declares `belongs_to :budget, touch: true`. The only
+  # writers of a `budgets` row in the whole app are BudgetsController#update and BudgetProposal's
+  # `budget.save`, which are the user editing a rule and the user accepting a suggestion. So
+  # `budgets.updated_at` moves when, and only when, the user changed the rule. Pinned in both
+  # directions by spec/presenters/home_presenter_spec.rb, which writes a distribution and asserts
+  # the clause stays off.
+  #
+  # A rule CREATED after the distribution answers true as well, and that is right: a new claim on
+  # an envelope that has already been funded leaves it behind for exactly the same reason a raised
+  # one does, and the sentence is about what the user did, not about which column changed.
+  #
+  # `pool.budgets` is eager-loaded by #all_pools, so this asks the database nothing per row; the
+  # movements are one query for the whole screen (see #latest_distributions).
+  def raised_after_distributing?(pool)
+    distributed_at = latest_distributions[pool.account_id]
+
+    distributed_at.present? && pool.budgets.any? { |budget| budget.updated_at > distributed_at }
+  end
+
   # The dated rules behind a pool, earliest due first, each paired with the due date its
   # row prints. What an expanded row shows: a pool needing attention owes the user the
   # rules that put it there.
@@ -411,6 +461,53 @@ class HomePresenter
   end
 
   private
+
+  # WHEN EACH ACCOUNT LAST HANDED MONEY OUT THIS PERIOD, keyed by account id — one query for the
+  # whole screen rather than one per `behind` row, on the widest iteration in the app.
+  #
+  # BOTH ENDS OF THE MOVEMENT, because a distribution writes in both directions: allocations leave
+  # the account for its envelopes and sweeps come back from them. Either is the distribution, so
+  # either dates it; filtering on `from_pool_id` alone would miss a period whose split was pure
+  # sweep, and on `to_pool_id` alone would miss the ordinary one.
+  #
+  # Bounded by `period_datetimes_containing`, which is the app's one reader of where a period
+  # starts and ends and widens the last day to its own midnight — the same bound
+  # AllocationCommitter uses to find the split it is replacing, so this screen and that write path
+  # cannot disagree about which distribution is "this period's".
+  #
+  # `{}` on a user with no accounts rather than a query with an empty IN list: an empty `accounts`
+  # makes the whole question moot, and #raised_after_distributing? reads a missing key as "no
+  # distribution", which is the safe direction and the true one.
+  def latest_distributions
+    @latest_distributions ||=
+      begin
+        account_ids = accounts.map(&:id)
+        account_ids.empty? ? {} : fold_distributions(distribution_rows(account_ids), account_ids)
+      end
+  end
+
+  def distribution_rows(account_ids)
+    within_period = PoolMovement.distributed.where(date: user.period_datetimes_containing(today))
+
+    within_period.where(from_pool_id: account_ids)
+      .or(within_period.where(to_pool_id: account_ids))
+      .pluck(:from_pool_id, :to_pool_id, :created_at)
+  end
+
+  # Folded in Ruby rather than grouped in SQL because each row names TWO pools and only one of
+  # them is the account — a `GROUP BY` would need the same two-branch decision written as a CASE
+  # over both columns, and a period's distribution is a handful of rows.
+  def fold_distributions(rows, account_ids)
+    ids = account_ids.to_set
+
+    rows.each_with_object({}) do |(from_id, to_id, created_at), latest|
+      [from_id, to_id].each do |id|
+        next unless ids.include?(id)
+
+        latest[id] = created_at if latest[id].nil? || latest[id] < created_at
+      end
+    end
+  end
 
   def compute_fix_candidates(pool)
     amount = fix_amount_for(pool)

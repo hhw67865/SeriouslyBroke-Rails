@@ -272,4 +272,121 @@ RSpec.describe "Home Pools", type: :system do
     expect(group("Checking")).to have_content("buffer now -$400.00")
     expect(group("Checking")).to have_css(".text-status-danger", text: "-$400.00")
   end
+
+  # SPEC §8'S ONE ROUGH EDGE, HANDLED WITH WORDING. Rule changes apply immediately — everything in
+  # this design is derived — so raising a rule the day after a distribution flips its envelope from
+  # `on track` to `behind` with no money missing and nothing having gone wrong. The row says which
+  # of the two kinds of `behind` it is.
+  #
+  # `travel_to` only around the WRITES, never around `visit`: the whole clause is a comparison of
+  # two timestamps, and without a controlled clock the rule and the movement are written
+  # milliseconds apart and this is a coin toss. The page itself renders at real now, as every other
+  # example here does.
+  describe "a pool that went behind because the rule was raised" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    def accumulating_rule(name, amount:, priority:)
+      pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+      rule = create(
+        :pool_budget,
+        pool: pool,
+        amount: amount,
+        interval_months: 6,
+        anchor_date: Date.current + 3.months
+      )
+      [pool, rule]
+    end
+
+    # One allocation per envelope, small enough to leave both of them behind: the clause explains a
+    # `behind` row, so the row has to still be behind.
+    def distribute(pool, amount, at:)
+      travel_to(at) do
+        create(
+          :pool_movement,
+          kind: :allocation,
+          from_pool: checking,
+          to_pool: pool,
+          amount: amount,
+          date: Date.current
+        )
+      end
+    end
+
+    # THE PAIR THE CLAUSE HAS TO TELL APART: two envelopes with the same shape of rule, the same
+    # distribution and the same `behind` state, differing only in which side of that distribution
+    # their rule was last edited on.
+    def plant_pair
+      deposit(2_000)
+      raised_pool = raised_rule = steady_pool = nil
+
+      travel_to(3.hours.ago) do
+        raised_pool, raised_rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1)
+        steady_pool, = accumulating_rule("Property Tax", amount: 1_200, priority: 2)
+      end
+
+      [raised_pool, steady_pool].each { |pool| distribute(pool, 10, at: 2.hours.ago) }
+      travel_to(1.hour.ago) { raised_rule.update!(amount: 1_800) }
+    end
+
+    # BOTH DIRECTIONS ON ONE SCREEN, and that is the point rather than a convenience. Two envelopes
+    # identical in every way that matters — same shape of rule, same distribution, both `behind` —
+    # differing only in which side of the distribution their rule was last edited on. Split into
+    # two examples, the negative half would pass against a view that never prints the clause at all.
+    it "says so on that row and on no other", :aggregate_failures do
+      plant_pair
+
+      visit root_path
+
+      expect(row("Car Insurance")).to have_content("behind")
+      expect(row("Car Insurance")).to have_content("you raised this rule after distributing")
+      expect(row("Property Tax")).to have_content("behind")
+      expect(row("Property Tax")).to have_no_content("you raised this rule after distributing")
+    end
+
+    # THE TWO BANDS RENDER THE SAME POOL INCHES APART, and a `behind` envelope is in both by
+    # construction. One explaining the state while the other did not would read as the screen
+    # disagreeing with itself about why — which is why the clause is threaded through
+    # `pool_problem_label` as well as `pool_status_label`.
+    it "says the same thing in the attention band" do
+      plant_pair
+
+      visit root_path
+
+      expect(find("[data-problem-pool='Car Insurance']"))
+        .to have_content("you raised this rule after distributing")
+    end
+
+    # NO DISTRIBUTION, NO CLAUSE. A rule raised on a period nobody has distributed yet has not been
+    # raised "after distributing" — the envelope is behind because the money has not been handed
+    # out, which is a different sentence and one the row already tells.
+    it "stays silent when nothing has been distributed this period", :aggregate_failures do
+      deposit(2_000)
+      rule = nil
+
+      travel_to(3.hours.ago) { _pool, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
+      travel_to(1.hour.ago) { rule.update!(amount: 1_800) }
+
+      visit root_path
+
+      expect(row("Car Insurance")).to have_content("behind")
+      expect(row("Car Insurance")).to have_no_content("you raised this rule after distributing")
+    end
+
+    # THE CLAUSE BELONGS TO `behind` AND TO NOTHING ELSE. An overdue bill is overdue because it was
+    # not paid; a raised rule has nothing to do with it, and the aside would be unexplained noise on
+    # the loudest row on the screen. The gate lives in the helper, so this pins it at the render.
+    it "stays off a row in another state", :aggregate_failures do
+      deposit(2_000)
+      pool = payable("Utilities", amount: 120, due: Date.current - 10.days)
+      rule = pool.budgets.first
+
+      distribute(pool, 10, at: 2.hours.ago)
+      travel_to(1.hour.ago) { rule.update!(amount: 180) }
+
+      visit root_path
+
+      expect(row("Utilities")).to have_content("overdue")
+      expect(row("Utilities")).to have_no_content("you raised this rule after distributing")
+    end
+  end
 end

@@ -63,6 +63,16 @@ Rails.application.routes.draw do
   # nothing reads. Pool.apply_fill_order owns the refusal and the write.
   patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
 
+  # THE SACRIFICE VIEW (spec §9): what would have to give for these rules to fit this income.
+  #
+  # Reachable only from the two structural-check buttons — the Budget page's and Home's standing
+  # band — and it refuses in the two states neither of them can be in: nothing declared, or the
+  # budget already fits (see SacrificesController#show). Both refusals redirect to /budget with a
+  # sentence rather than 404, because the route is not wrong, the moment is.
+  #
+  # Singular and verbless: there is no Sacrifice record and nothing on the page is written.
+  get "sacrifice" => "sacrifices#show"
+
   # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
   # the period as if its distribution had not happened, which it does by DELETING this period's
   # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite

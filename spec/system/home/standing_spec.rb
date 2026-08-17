@@ -174,19 +174,76 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("none of the figures above count it")
   end
 
-  it "shows the structural warning only when rules exceed typical income" do
+  # §9'S PERMANENT BUTTON, and it is live rather than a dead link now that /sacrifice exists.
+  # The href is asserted, not just the label: a button that says the budget does not fit and goes
+  # nowhere is the state this replaced, and it looked identical.
+  it "shows the structural warning only when rules exceed typical income", :aggregate_failures do
     envelope("Rent", 3_000)
 
     visit root_path
 
-    expect(page).to have_link("Your budget doesn't fit your income")
+    expect(page).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
+    expect(page).to have_css("[data-sacrifice-link]")
   end
 
-  it "hides the structural warning when the budget fits" do
+  it "hides the structural warning when the budget fits", :aggregate_failures do
     envelope("Groceries", 400)
 
     visit root_path
 
     expect(page).to have_no_link("Your budget doesn't fit your income")
+    expect(page).to have_no_css("[data-sacrifice-link]")
+  end
+
+  # THE BUTTON AND THE ROUTE ARE THE SAME CONDITION READ TWICE. Home shows it on
+  # `structurally_underwater?` and /sacrifice refuses on the same test, so a button that rendered
+  # where the route refuses would open a redirect straight back — which is exactly what a second,
+  # divergent comparison here would produce. Followed rather than merely asserted, because only
+  # following it can tell the two apart.
+  it "opens the sacrifice view when followed", :aggregate_failures do
+    envelope("Rent", 3_000)
+
+    visit root_path
+    click_link "Your budget doesn't fit your income"
+
+    expect(page).to have_current_path(sacrifice_path)
+    expect(page).to have_content("$600.00 underwater every period")
+  end
+
+  # THE HEADLINE AND THE BUTTON ANSWER DIFFERENT QUESTIONS, which is why §9 asks for the button to
+  # be permanent rather than gated on the shortfall. This period's cash is fine — the money is in
+  # the account — and the budget still does not fit the income. Both on one screen, because a
+  # reader who saw only the first would think nothing was wrong.
+  it "keeps the button up on a period whose cash is covered", :aggregate_failures do
+    envelope("Rent", 3_000)
+    deposit(5_000)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "You're covered")
+    expect(page).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
+  end
+
+  # An undeclared user has made no comparison, so there is no verdict to render — and the button
+  # must not appear on a rules-need figure with no income to measure it against.
+  it "shows no structural warning before an income is declared" do
+    user.update!(typical_income: nil)
+    envelope("Rent", 3_000)
+
+    visit root_path
+
+    expect(page).to have_no_css("[data-sacrifice-link]")
+  end
+
+  # INCOME WITHOUT A CADENCE IS REACHABLE — the declaration form offers "Not set" for the period —
+  # and `Budget.steady_need` still answers there, against a period the user has not agreed to. The
+  # gate is both halves, and this is the half that only fails when one of them is dropped.
+  it "shows no structural warning before a period is declared" do
+    user.update!(period_cadence: nil, period_anchor_date: nil)
+    envelope("Rent", 3_000)
+
+    visit root_path
+
+    expect(page).to have_no_css("[data-sacrifice-link]")
   end
 end
