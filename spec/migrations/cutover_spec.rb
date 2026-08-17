@@ -163,7 +163,28 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     category = create(:category, :expense, user: user, name: "Travel", pool: travel)
     entry_on(item_in(category, "Train Ticket"), 70.00, 7, 9)
 
-    { travel: travel, travel_category: category }
+    { travel: travel, travel_category: category }.merge(settled_lodging_goal(user, old_account))
+  end
+
+  # A GOAL PRE-HOUSED IN A NON-DEFAULT ACCOUNT, holding savings entries. Step 2 fills only a NULL
+  # `account_id`, so this one keeps Old Account throughout — and step 5's entry→movement conversion
+  # has to source from Old Account, not from the flagged default. Sourced from Main it would be a
+  # transfer between two real banks: the shape §5.4 defers and `#crosses_accounts?` reports.
+  def settled_lodging_goal(user, old_account)
+    goal = create(:pool, user: user, name: "Retirement", account: old_account, target_amount: 9_000.00)
+    category = create(:category, :savings, user: user, name: "Retirement", pool: goal)
+    entry_on(item_in(category, "Monthly Top-up"), 120.00, 7, 10)
+
+    { retirement: goal }
+  end
+
+  # A POOL HOUSED IN SOMETHING THAT IS NOT AN ACCOUNT — `account_id` is not null, so the old
+  # "IS NULL" test called it housed, while `Pool#account_matches_pool_type` calls it invalid and
+  # Task 6's tightening would meet it with no remedy. Written past the model deliberately.
+  def misfile_a_pool_inside_an_envelope(user, pool, envelope)
+    # rubocop:disable Rails/SkipsModelValidations -- the model refuses this row; a database does not
+    Pool.where(id: pool.id).update_all(account_id: envelope.id)
+    # rubocop:enable Rails/SkipsModelValidations
   end
 
   # No account at all, and a GOAL already sitting on the name the migration reaches for.
@@ -185,7 +206,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # ---------------------------------------------------------------------------------------------
   # Bank truth, by hand from the entries planted above
   #   wild:     3000 + 500 in, minus 220 + 80 + 90 + 1200 + 12.50 + 7.25 + 60 out = 1830.25
-  #   settled:  200 in, minus 45 + 70 out                                    =   85.00
+  #   settled:  200 in, minus 45 + 70 out (the 120 goal top-up is neither)   =   85.00
   #   bare:     nothing                                                      =    0.00
   #   namesake: nothing in, minus 30 out                                     =  -30.00
   # ---------------------------------------------------------------------------------------------
@@ -266,6 +287,24 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       migrate!
 
       expect(wild[:checking].reload.account_id).to be_nil
+    end
+
+    # NOT-NULL IS NOT THE QUESTION. A pool filed inside an ENVELOPE has an `account_id` and no
+    # account; the old check called it housed and let it through.
+    it "re-houses a pool filed inside something that is not an account" do
+      misfile_a_pool_inside_an_envelope(wild[:user], wild[:rent_goal], wild[:utilities_pool])
+
+      migrate!
+
+      expect(wild[:rent_goal].reload.account_id).to eq(wild[:checking].id)
+    end
+
+    # The other direction: a pool already living in a real account of the user's — just not the
+    # DEFAULT one — is not disturbed.
+    it "leaves a pool that already lives in one of the user's other accounts where it is" do
+      migrate!
+
+      expect(settled[:travel].reload.account_id).to eq(settled[:old_account].id)
     end
   end
 
@@ -351,6 +390,20 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(movements.map(&:kind).uniq).to eq(["transfer"])
     end
 
+    # THE SHAPE THE DEMO CANNOT TEST, on the step that had it wrong. Settled's Retirement goal lives
+    # in Old Account while their default is Main; the conversion has to come out of the account the
+    # goal actually lives in.
+    it "funds a goal from the account it lives in, not from the default one", :aggregate_failures do
+      movement = PoolMovement.find_by(to_pool: settled[:retirement])
+
+      expect(movement).to have_attributes(from_pool_id: settled[:old_account].id, amount: BigDecimal("120.00"))
+      expect(movement.crosses_accounts?).to be(false)
+    end
+
+    it "writes no movement anywhere that crosses an account boundary" do
+      expect(PoolMovement.all.reject { |movement| movement.crosses_accounts? == false }).to eq([])
+    end
+
     it "deletes the entries, their items and the savings categories", :aggregate_failures do
       expect(Entry.where(item_id: Item.where(category_id: wild[:vacation].id)).count).to eq(0)
       expect(Item.where(category_id: wild[:vacation].id).count).to eq(0)
@@ -409,7 +462,9 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(zeroing).to have_attributes(from_pool_id: settled[:old_account].id, amount: BigDecimal("70.00"))
       expect(zeroing.crosses_accounts?).to be(false)
       expect(settled[:travel].reload.calculator.balance).to eq(0)
-      expect(settled[:old_account].reload.calculator.balance).to eq(BigDecimal("-70.00"))
+      # −70.00 opening Travel at zero, −120.00 funding the Retirement goal: both out of the account
+      # that houses them, neither out of the flagged default.
+      expect(settled[:old_account].reload.calculator.balance).to eq(BigDecimal("-190.00"))
     end
   end
 
@@ -451,6 +506,15 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
       expect(wild[:user].pools.budget_pools.map { |pool| pool.calculator.balance }).to all(eq(0))
       expect(wild[:rent_goal].reload.calculator.balance).to eq(0)
+    end
+  end
+
+  # Savings entries are deleted, their categories and items with them, and a converted cap cannot be
+  # told from a rule somebody wrote by hand afterwards. Undoing this means restoring a backup, and
+  # the migration says so rather than offering a `down` that would lose more.
+  describe "reversal" do
+    it "refuses to run backwards" do
+      expect { described_class.new.down }.to raise_error(ActiveRecord::IrreversibleMigration)
     end
   end
 
@@ -499,7 +563,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       Category.where(id: wild[:coffee].id).update_all(pool_id: bare.reload.default_account_id)
       # rubocop:enable Rails/SkipsModelValidations
 
-      expect { migrate! }.to raise_error(described_class::VerificationFailed, /Σ pools/)
+      expect { migrate! }.to raise_error(described_class::VerificationFailed, /#{wild[:user].id}.*Σ pools/)
     end
 
     # THE STRUCTURAL ARMS, ASKED DIRECTLY. Every one of them names a condition the migration's own

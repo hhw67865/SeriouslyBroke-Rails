@@ -101,9 +101,24 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
 
   private
 
-  # ONE TRANSACTION PER USER, and the verification is INSIDE it: a user whose figures do not
-  # reconcile is rolled back to the shape they arrived in, and the raise stops the run before the
-  # next user is touched.
+  # THE TRANSACTION BOUNDARY IS THE WHOLE MIGRATION, NOT THE USER — and the earlier wording here
+  # ("one transaction per user") was wrong about production, so it is corrected rather than quietly
+  # deleted. `ActiveRecord::Migrator` already wraps the run in a JOINABLE transaction on PostgreSQL,
+  # so this block joins it instead of opening one: no savepoint is taken, and a raise on user 3
+  # rolls back users 1 and 2 with it.
+  #
+  # THAT IS THE BEHAVIOUR WE WANT, and it is stronger than the per-user guarantee the plan asked
+  # for: the run is all-or-nothing. `requires_new: true` would buy per-user savepoints and, with
+  # them, a 10,000-user database that is 6,000 migrated and 4,000 not — a state with no name, no
+  # screen and no way back. It is deliberately not expressible.
+  #
+  # UNDER THE SPEC it is per-user after all, and for a reason that belongs to the test harness
+  # rather than to this file: DatabaseCleaner opens its example transaction with `joinable: false`,
+  # so this block DOES take a savepoint there and the sabotage examples can watch one user roll back
+  # while the others stand. Same code, two boundaries, both correct.
+  #
+  # Either way the verification runs INSIDE the block, so a user whose figures do not reconcile is
+  # never committed.
   def migrate_user(user_id, email)
     ActiveRecord::Base.transaction do
       # TAKEN BEFORE ANY WRITE, and it is the one figure this migration promises not to move. See
@@ -111,14 +126,19 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
       savings_before = pool_balances(user_id, SAVINGS_POOL)
 
       account_id = ensure_default_account(user_id)
-      counts = { housed: house_account_less_pools(user_id, account_id) }
+      counts = { housed: house_the_pools(user_id, account_id) }
       counts[:caps], rules_before = convert_caps(user_id, account_id)
+      # MEASURED, NOT ECHOED. The report used to print the cap count twice — "7 caps -> 7 envelope
+      # rules" from one variable — which is a receipt that confirms itself. This side is read back
+      # off the table, so the two halves of that sentence can disagree.
+      counts[:rules] = pool_rule_count(user_id) - rules_before
       counts[:pointed] = point_remaining_categories(user_id, account_id)
-      counts[:moved], counts[:deleted] = convert_savings_entries(user_id, account_id)
-      counts[:zeroed] = zero_the_envelopes(user_id, account_id)
+      counts[:moved], counts[:deleted], savings_movements = convert_savings_entries(user_id, account_id)
+      counts[:zeroed], zeroing_movements = zero_the_envelopes(user_id, account_id)
 
-      pooled, bank = verify!(user_id, account_id,
-                             caps: counts[:caps], rules_before: rules_before, savings_before: savings_before)
+      pooled, bank = verify!(user_id, account_id, caps: counts[:caps], rules_before: rules_before,
+                                                  savings_before: savings_before,
+                                                  written: savings_movements + zeroing_movements)
 
       report(email, account_id, counts, pooled, bank)
     end
@@ -152,14 +172,35 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
                          account_id: nil)
   end
 
-  # STEP 2 — every non-account pool sits in an account. `pool_type: ACCOUNT_POOL` is excluded
-  # rather than filtered by `account_id` alone: an account's own `account_id` is nil BY
-  # DEFINITION (`Pool#account_matches_pool_type` refuses one), so housing it would be the same
-  # error in the other direction.
-  def house_account_less_pools(user_id, account_id)
-    MigrationPool.where(user_id: user_id, account_id: nil)
+  # STEP 2 — every non-account pool sits in an account OF THIS USER THAT IS REALLY AN ACCOUNT, and
+  # all three clauses of that are load-bearing.
+  #
+  # "NOT NULL" IS NOT THE QUESTION, and asking only that was the bug. A pool whose `account_id`
+  # points at an ENVELOPE, or at a stranger's account, has a non-null column and a house that cannot
+  # hold it: `Pool#account_matches_pool_type` already refuses both ("must be an account", "must
+  # belong to the same user"), so the row is invalid today, invisible to every screen that groups by
+  # account, and — this is the part that matters — it would sail through the one migration able to
+  # fix it and meet Task 6's tightening with no remedy left. Violators are re-housed in the default
+  # account exactly as the null ones are.
+  #
+  # `pool_type: ACCOUNT_POOL` is excluded rather than filtered by `account_id` alone: an account's
+  # own `account_id` is nil BY DEFINITION (the same validation refuses one), so housing it would be
+  # the same error in the other direction.
+  #
+  # `NOT EXISTS` rather than `NOT IN`, because `account_id NOT IN (...)` is NULL for a null column
+  # and NULL is not true — the account-less pools, which are the common case, would not have
+  # matched at all.
+  def house_the_pools(user_id, account_id)
+    MigrationPool.where(user_id: user_id)
                  .where.not(pool_type: ACCOUNT_POOL)
+                 .where(unhoused_predicate, uid: user_id, acct: ACCOUNT_POOL)
                  .update_all(account_id: account_id, updated_at: now)
+  end
+
+  # Shared by step 2 and the verifier, so "housed" cannot mean two things.
+  def unhoused_predicate
+    "NOT EXISTS (SELECT 1 FROM pools a WHERE a.id = pools.account_id " \
+      "AND a.user_id = :uid AND a.pool_type = :acct)"
   end
 
   # STEP 3 — ENVELOPES FIRST. Each category-mode cap becomes a monthly funding rule on an
@@ -246,27 +287,57 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   #
   # The destination is `COALESCE(entries.pool_id, categories.pool_id)` — the same lane every
   # balance in the app resolves an entry through — so the money lands in the pool that was
-  # already counting it, not merely in the pool its category names.
+  # already counting it, not merely in the pool its category names. The SOURCE is #home_accounts'
+  # answer for that destination; see there for why it is not the default account.
   #
   # TWO ENTRIES GET NO MOVEMENT, and both are conserving rather than lossy. An entry whose lane
-  # resolves to the DEFAULT ACCOUNT ITSELF would be a movement from a pool to itself, which the
-  # `pool_movements_distinct_pools` constraint refuses and which would move nothing anyway. An
-  # entry with a non-positive amount cannot exist through `Entry`'s validation and would break the
-  # `pool_movements_positive_amount` constraint if it did. Neither omission touches `Σ pools`: a
-  # movement's two halves cancel inside the user's own pool set by construction, so what the
-  # movements decide is WHERE the money sits, never HOW MUCH there is.
+  # resolves to an ACCOUNT is already sitting in its own buffer — its source and destination are
+  # the same pool, which the `pool_movements_distinct_pools` constraint refuses and which would move
+  # nothing anyway. An entry with a non-positive amount cannot exist through `Entry`'s validation and
+  # would break the `pool_movements_positive_amount` constraint if it did. Neither omission touches
+  # `Σ pools`: a movement's two halves cancel inside the user's own pool set by construction, so what
+  # the movements decide is WHERE the money sits, never HOW MUCH there is.
   def convert_savings_entries(user_id, account_id)
     category_ids = MigrationCategory.where(user_id: user_id, category_type: SAVINGS_CATEGORY).pluck(:id)
-    return [0, 0] if category_ids.empty?
+    return [0, 0, []] if category_ids.empty?
 
     item_ids = MigrationItem.where(category_id: category_ids).pluck(:id)
     rows = savings_entry_rows(item_ids)
-    movements = rows.filter_map { |_id, amount, date, pool_id| movement_row(account_id, amount, date, pool_id) }
+    homes = home_accounts(rows.map(&:last).compact.uniq)
+    movements = rows.filter_map do |_id, amount, date, pool_id|
+      movement_row(homes.fetch(pool_id, account_id), amount, date, pool_id)
+    end
 
-    MigrationMovement.insert_all!(movements) if movements.any?
+    written = movements.any? ? inserted_ids(movements) : []
     destroy_savings_records(rows.map(&:first), item_ids, category_ids)
 
-    [movements.length, rows.length]
+    [movements.length, rows.length, written]
+  end
+
+  # THE ACCOUNT A POOL LIVES IN, and the one destination rule both movement-writing steps share.
+  #
+  # An envelope or a goal answers with the account holding it; an ACCOUNT answers with itself, since
+  # it sits inside no other and stands in as its own — which is exactly `PoolMovement
+  # #containing_account`, the reader `#crosses_accounts?` is built on. Written once here because
+  # steps 5 and 5b were getting it right and wrong respectively: 5b was corrected to source a
+  # zeroing movement from the envelope's own account, while 5 still hardcoded the DEFAULT account
+  # and so wrote a cross-account transfer for any goal the user keeps somewhere else. Step 2 only
+  # fills a NULL `account_id`, so a goal pre-housed in a second account is untouched by it and the
+  # shape survives the migration.
+  #
+  # A cross-account movement is a BANK TRANSFER — spec §5.4 defers those, `#crosses_accounts?`
+  # renders them with a callout, and the migration must not invent one that never happened. The
+  # verifier checks this directly (#cross_account_failures) rather than trusting the two call sites
+  # to keep agreeing.
+  def home_accounts(pool_ids)
+    return {} if pool_ids.empty?
+
+    MigrationPool.where(id: pool_ids).pluck(:id, :account_id, :pool_type)
+                 .to_h { |id, account_id, type| [id, type == ACCOUNT_POOL ? id : account_id] }
+  end
+
+  def inserted_ids(rows)
+    MigrationMovement.insert_all!(rows, returning: %w[id]).rows.flatten
   end
 
   def savings_entry_rows(item_ids)
@@ -279,10 +350,10 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
       .pluck(Arel.sql("entries.id, entries.amount, entries.date, COALESCE(entries.pool_id, categories.pool_id)"))
   end
 
-  def movement_row(account_id, amount, date, pool_id)
-    return nil if pool_id.blank? || pool_id == account_id || amount.blank? || amount <= 0
+  def movement_row(source_id, amount, date, pool_id)
+    return nil if pool_id.blank? || source_id.blank? || pool_id == source_id || amount.blank? || amount <= 0
 
-    { from_pool_id: account_id, to_pool_id: pool_id, amount: amount, date: date,
+    { from_pool_id: source_id, to_pool_id: pool_id, amount: amount, date: date,
       source_entry_id: nil, kind: TRANSFER_KIND, created_at: now, updated_at: now }
   end
 
@@ -333,40 +404,32 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # expression the invariant is (see #balance_expression) and why the verifier gained a check of its
   # own: a movement of the wrong size still nets to zero, so it would leave the envelope wrong and
   # the invariant serene.
-  # FROM THE ENVELOPE'S OWN ACCOUNT, not from the user's default one, and the two differ for any
-  # envelope the user keeps somewhere else. The ruling this step implements says "from the buffer",
-  # and the buffer that historically paid a Health Savings envelope's bills is Health Savings — so
-  # this is that instruction read literally rather than a departure from it. Sourcing every one of
-  # them from the default account would invent a BANK TRANSFER that never happened:
-  # `PoolMovement#crosses_accounts?` answers true for it, spec §5.4 puts cross-account transfers out
-  # of scope, and the app would render a cutover artefact as money moving between real institutions.
-  # Step 2 guarantees the `account_id` is there; the fallback covers nothing and costs nothing.
-  #
-  # It does not discriminate on the demo — all eight of its overdrawn envelopes sit in Checking —
-  # so the shape is planted in the spec instead, where a second account holds one.
+  # FROM THE ENVELOPE'S OWN ACCOUNT (#home_accounts), not from the user's default one. The ruling
+  # this step implements says "from the buffer", and the buffer that historically paid a Health
+  # Savings envelope's bills is Health Savings — so this is that instruction read literally rather
+  # than a departure from it. It does not discriminate on the demo, where all eight overdrawn
+  # envelopes sit in Checking, so the shape is planted in the spec instead.
   def zero_the_envelopes(user_id, account_id)
     deficits = pool_balances(user_id, BUDGET_POOL).select { |_id, balance| balance.negative? }
-    return 0 if deficits.empty?
+    return [0, []] if deficits.empty?
 
-    homes = MigrationPool.where(id: deficits.keys).pluck(:id, :account_id).to_h
+    homes = home_accounts(deficits.keys)
+    rows = deficits.filter_map do |pool_id, balance|
+      movement_row(homes.fetch(pool_id, account_id), -balance, now, pool_id)
+    end
 
-    MigrationMovement.insert_all!(
-      deficits.map do |pool_id, balance|
-        { from_pool_id: homes[pool_id] || account_id, to_pool_id: pool_id, amount: -balance, date: now,
-          source_entry_id: nil, kind: TRANSFER_KIND, created_at: now, updated_at: now }
-      end
-    )
-    deficits.length
+    [rows.length, inserted_ids(rows)]
   end
 
   # STEP 6 — eight checks, collected rather than short-circuited so a bad user is reported whole,
   # then raised as one failure inside the transaction.
-  def verify!(user_id, account_id, caps:, rules_before:, savings_before:)
+  def verify!(user_id, account_id, caps:, rules_before:, savings_before:, written: [])
     pooled = pool_total(user_id)
     bank = bank_total(user_id)
     failures = structural_failures(user_id, account_id, caps, rules_before)
     failures.concat(envelope_failures(user_id))
     failures.concat(savings_drift_failures(user_id, savings_before))
+    failures.concat(cross_account_failures(written))
     failures << "Σ pools #{pooled.to_f} != bank truth #{bank.to_f}" unless pooled == bank
 
     raise VerificationFailed, "user #{user_id}: #{failures.join('; ')}" if failures.any?
@@ -419,8 +482,34 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
 
   def unpooled_categories(user_id) = MigrationCategory.where(user_id: user_id, pool_id: nil).count
 
+  # Step 2's own predicate, not a paraphrase of it: "has an account" and "is housed" have to be the
+  # same question, or the step repairs one set and the verifier inspects another.
   def houseless_pools(user_id)
-    MigrationPool.where(user_id: user_id, account_id: nil).where.not(pool_type: ACCOUNT_POOL).count
+    MigrationPool.where(user_id: user_id)
+                 .where.not(pool_type: ACCOUNT_POOL)
+                 .where(unhoused_predicate, uid: user_id, acct: ACCOUNT_POOL)
+                 .count
+  end
+
+  # NO MOVEMENT THIS MIGRATION WROTE MAY CROSS AN ACCOUNT BOUNDARY. `COALESCE(account_id, id)` is
+  # `PoolMovement#containing_account` in SQL — an account stands in as its own — so this is
+  # `#crosses_accounts?` asked of the rows just inserted.
+  #
+  # SCOPED TO THIS RUN'S ROWS, deliberately. A user may legitimately hold a cross-account movement:
+  # the model supports one, `#must_not_cross_accounts` only refuses it on the `:reallocation`
+  # context, and §5.4 calls the UI deferred rather than the record illegal. A blanket check would
+  # make this migration refuse a database the app itself would accept.
+  def cross_account_failures(written)
+    return [] if written.empty?
+
+    crossing = MigrationMovement
+               .where(id: written)
+               .joins("JOIN pools f ON f.id = pool_movements.from_pool_id")
+               .joins("JOIN pools t ON t.id = pool_movements.to_pool_id")
+               .where("COALESCE(f.account_id, f.id) <> COALESCE(t.account_id, t.id)")
+               .count
+
+    crossing.zero? ? [] : ["#{crossing} movements written by this migration cross accounts"]
   end
 
   # BOTH SIDES MEASURED FROM THE DATABASE. `caps` is the count of category-mode rows read before
@@ -469,6 +558,17 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # `::numeric` on every money column, because `money` in Postgres is a fixed-scale type whose
   # arithmetic with integers is its own business; the comparison this migration turns on is
   # between two exact decimals or it is between two roundings.
+  #
+  # WHAT IT COSTS, MEASURED RATHER THAN GUESSED. Three correlated sub-selects, and #pool_balances
+  # runs them once PER POOL — so the shape is roughly `users × pools × entries` with no index able
+  # to collapse the `COALESCE(entries.pool_id, categories.pool_id)` join. On the demo (1 user, 22
+  # pools, 184 entries) the whole migration takes ~0.17s and it is not worth a line of tuning.
+  # BEFORE A LARGE-SCALE RUN, MEASURE IT on a restored copy: at ten thousand users with hundreds of
+  # entries each this becomes the migration's whole runtime, and the fix (one grouped pass over
+  # entries and movements, joined back to pools, exactly as `PoolBalanceLedger` does it for screens)
+  # is a rewrite of this method rather than of its callers. Left unoptimised on purpose — the code
+  # a migration is verified with should be the code that is easiest to read and hardest to get
+  # wrong, and this one runs once.
   def balance_expression(pools)
     <<~SQL.squish
       COALESCE((SELECT SUM(CASE WHEN c.category_type = #{EXPENSE_CATEGORY}
@@ -555,7 +655,7 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
 
   def report(email, account_id, counts, pooled, bank)
     say "#{email}: buffer #{MigrationPool.where(id: account_id).pick(:name)}; " \
-        "#{counts[:housed]} pools housed; #{counts[:caps]} caps -> #{counts[:caps]} envelope rules; " \
+        "#{counts[:housed]} pools housed; #{counts[:caps]} caps -> #{counts[:rules]} envelope rules; " \
         "#{counts[:pointed]} categories -> buffer; " \
         "#{counts[:deleted]} savings entries -> #{counts[:moved]} movements; " \
         "#{counts[:zeroed]} envelopes zeroed; " \
