@@ -18,7 +18,16 @@ Rails.application.routes.draw do
       patch :categories, to: "pools/categories#update"
     end
   end
-  resources :entries, except: [:show]
+  # THE §6 IMPACT CARD'S FRAGMENT. The envelope on the entry form is DERIVED from the category, so
+  # the card has to follow the category select, and the whole of the card — the honest
+  # no-envelope shape, the goal shape, whether a period end date exists at all — is a server
+  # decision. A collection GET returning the partial keeps it one, rather than shipping
+  # `_impact.html.erb` a second time in JavaScript.
+  resources :entries, except: [:show] do
+    collection do
+      get :impact
+    end
+  end
   resources :items, only: [:edit, :update, :destroy]
   resources :categories do
     resources :items, only: [:index, :new, :create], controller: "categories/items" do

@@ -8,6 +8,8 @@ class EntriesController < ApplicationController
   before_action :load_options, only: [:new, :edit, :create, :update]
   before_action :set_previous_url, only: [:new, :create, :edit, :update]
 
+  helper_method :entry_impact
+
   # GET /entries
   def index
     @entries = build_entries_query
@@ -49,6 +51,32 @@ class EntriesController < ApplicationController
     end
   end
 
+  # GET /entries/impact
+  #
+  # THE §6 CARD FOR A CATEGORY THE USER HAS JUST PICKED. The envelope is derived from the category
+  # (§6: "derived, never picked"), so every category change asks the server what the card now says
+  # — and it is the server that says it, because every branch the card has is a server decision.
+  #
+  # READ-ONLY, AND THE ONLY THING ON THIS CONTROLLER THAT IS GUARANTEED TO STAY THAT WAY. It renders
+  # a presenter that writes nothing, so `Σ pools == your bank balance` is untouched by construction
+  # rather than by care.
+  #
+  # `find_by` and not `find` on both scalars: the category select can be CLEARED, which asks this
+  # action for the card of no category at all, and the honest answer is an empty fragment rather
+  # than a 404 in the console. Both are scoped to `current_user` — a card is a report of somebody's
+  # balance, and an unscoped `Entry.find` here would report a stranger's.
+  def impact
+    render partial: "entries/impact",
+           locals: {
+             impact: EntryImpactPresenter.new(
+               user: current_user,
+               category: current_user.categories.find_by(id: params[:category_id]),
+               amount: params[:amount],
+               entry: current_user.entries.find_by(id: params[:entry_id])
+             )
+           }
+  end
+
   # DELETE /entries/1
   def destroy
     @entry.destroy
@@ -56,6 +84,26 @@ class EntriesController < ApplicationController
   end
 
   private
+
+  # THE §6 CARD FOR THE FORM AS IT STANDS. A helper method rather than an instance variable set in
+  # a filter, because `create` and `update` build their entry INSIDE the action: a `before_action`
+  # would have nothing to read and an `after_action` runs after the render it is meant to feed.
+  # Asked once, by the form, at the moment it renders.
+  #
+  # `entry.amount` is what the form is currently showing — the entry's own on edit, the rejected
+  # figure on a failed submit — so the card opens on the truth for the amount beside it rather than
+  # on a blank-slate figure the browser has to correct.
+  #
+  # Memoised because the form asks twice — once for the card and once for the submit button's
+  # label — and the answer involves a pool's five ledger aggregates.
+  def entry_impact(entry)
+    @entry_impact ||= EntryImpactPresenter.new(
+      user: current_user,
+      category: entry.item&.category,
+      amount: entry.amount,
+      entry: entry.persisted? ? entry : nil
+    )
+  end
 
   def build_entries_query
     entries = current_user.entries.includes(item: :category)

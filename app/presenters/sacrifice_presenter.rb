@@ -29,32 +29,13 @@ class SacrificePresenter
     # PLAIN, UNDELIMITED DIGITS FOR THE DIAL, because `parseFloat` is what reads this attribute and
     # it stops at the first character it does not understand.
     #
-    # THE LIVE HAZARD IS THE THOUSANDS SEPARATOR, and it is measured rather than assumed:
-    # `number_to_rounded` delimits by default, so a $1,500-a-period rate rule would reach
-    # `data-claim` as "1,500.00" and `parseFloat("1,500.00")` is 1.5 — a rule offering to free a
-    # dollar fifty. `delimiter: ""` is the whole of what stops it, and the presenter spec pins a
-    # four-figure claim for exactly that reason.
-    #
-    # `HomePresenter::Fix#amount_param` gives a second reason — BigDecimal's `to_s` emitting
-    # "0.3e3" — and ON THIS BRANCH THAT REASON HAS EXPIRED: bigdecimal 4.0.1 prints
-    # `BigDecimal("300").to_s` as "300.0" and `BigDecimal("692.31").to_s` as "692.31", both of which
-    # `parseFloat` reads correctly. Recorded rather than relied on. The scaling to two decimals is
-    # still wanted (a claim is money and the row beside it prints cents), and a bigdecimal that
-    # went back to scientific notation would find this already guarded.
-    #
-    # See the task-9 report for the measurement.
-    def claim_param = SacrificePresenter.digits(claim)
+    # `DigitsHelper.digits`, which is where this reader lives now: it used to be
+    # `SacrificePresenter.digits` and moved out whole when the §6 impact card became its second
+    # consumer. Its whole rationale — the thousands separator, the expired BigDecimal reason, why
+    # ActiveSupport rather than ActionView — moved with it and is written down there. See the
+    # task-9 report for the measurement.
+    def claim_param = DigitsHelper.digits(claim)
   end
-
-  # ONE SPELLING OF "MONEY A BROWSER CAN PARSE", for the two figures that cross into the DOM as
-  # data attributes rather than as copy: each row's claim and the gap the dial measures against.
-  # Two spellings would be two chances to leave the delimiter in, and the delimiter is the defect.
-  #
-  # `ActiveSupport::NumberHelper` and NOT ActionView's `number_with_precision`, because this is
-  # called from a Data object with no view context. The first spelling of this in the view reached
-  # for `number_to_rounded`, which is the ActiveSupport module's name and not a view helper at all
-  # — a 500 on the whole page, caught by the first system example that loaded it.
-  def self.digits(amount) = ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2, delimiter: "")
 
   attr_reader :user, :today
 
@@ -84,8 +65,8 @@ class SacrificePresenter
   # route before a single figure is printed. The arithmetic stays total; the gate does the work.
   def gap = @gap ||= rules_need - typical_income.to_d
 
-  # The gap as digits the dial can subtract from — see ::digits.
-  def gap_param = self.class.digits(gap)
+  # The gap as digits the dial can subtract from — see `DigitsHelper.digits`.
+  def gap_param = DigitsHelper.digits(gap)
 
   # BOTH HALVES OF THE DECLARATION, income AND cadence — the same condition
   # `BudgetPagePresenter#declared?` applies and the same one `HomePresenter#structurally_underwater?`

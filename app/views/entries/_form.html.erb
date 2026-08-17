@@ -2,7 +2,15 @@
   <%= f.error_notification %>
   <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
   <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
-  <div>
+  <%# THE §6 IMPACT CARD'S CONTROLLER SPANS THE WHOLE FORM, because the three things overdrawing
+      changes are not in one place: the figure and the sentence are in the card, and the submit
+      button's words are down in the form actions. `entry-id` is what lets the card exclude THIS
+      entry's own amount on edit — the ledger has already counted it, and the card must show the
+      world as if the entry were being decided now. Blank on a new entry. %>
+  <div data-controller="app--entry--impact"
+       data-action="entry:categoryChanged->app--entry--impact#categoryChanged"
+       data-app--entry--impact-url-value="<%= impact_entries_path %>"
+       data-app--entry--impact-entry-id-value="<%= entry.id %>">
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
@@ -63,7 +71,11 @@
                     placeholder: "0.00",
                     autocomplete: "off",
                     class: "form-input pr-10 #{"form-input-error" if entry.errors[:amount].any?}",
-                    data: { shared__calculator_pad_target: "input" } %>
+                    data: {
+                      shared__calculator_pad_target: "input",
+                      app__entry__impact_target: "amount",
+                      action: "input->app--entry--impact#recompute change->app--entry--impact#recompute"
+                    } %>
                 <%= render "shared/calculator_pad_toggle" %>
               </div>
             <% end %>
@@ -78,6 +90,13 @@
                 type: "date",
                 value: entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d")
               } %>
+        </div>
+
+        <%# THE ONLY THING BUDGETING ADDS TO THIS FORM (§6): the envelope impact, under the amount
+            field. The container is stable and the CARD inside it is replaced by the server whenever
+            the category changes — the envelope is derived from the category, never picked. %>
+        <div data-app--entry--impact-target="card">
+          <%= render "entries/impact", impact: entry_impact(entry) %>
         </div>
 
         <%= f.input :description, 
@@ -96,8 +115,22 @@ wrapper_html: { class: "mt-5" },
           (@previous_url.presence || entries_path),
           class: "btn btn-secondary" %>
 
+      <%# §6: "Nothing blocks. Overdrawing shows the envelope going negative and says the buffer can
+          cover it. The button reads 'Save anyway'."
+
+          BOTH LABELS COME DOWN FROM THE SERVER and the browser only chooses between them, so the
+          words on the button are never JavaScript's invention. The server also opens on the right
+          one: an edit whose own amount already overdraws its envelope reads "Save anyway" before a
+          single keystroke. The button is never disabled — the whole ruling is that this warns and
+          never blocks. %>
+      <% default_label = entry.persisted? ? "Update Entry" : "Create Entry" %>
       <%= f.button :submit,
-          entry.persisted? ? "Update Entry" : "Create Entry" %>
+          entry_impact(entry).overdrawn? ? "Save anyway" : default_label,
+          data: {
+            app__entry__impact_target: "submit",
+            default_label: default_label,
+            overdrawn_label: "Save anyway"
+          } %>
     </div>
   </div>
 <% end %>
