@@ -98,6 +98,50 @@ RSpec.describe "Budget page structural check", type: :system do
       expect(page).to have_no_css("[data-sacrifice-link]")
       within(check_block) { expect(page).to have_no_content("Underwater") }
     end
+
+    # THE RULING ON SCREEN. A cap is a spending limit and not a claim on income, so its amount is
+    # in neither the figure nor the block — and the "we are not counting your caps" sentence is
+    # absent here, because beside a real figure it would be a footnote about an exclusion nobody
+    # noticed. $650 a month is $300 a period under this user, so a counted cap would read $820.
+    it "leaves a category cap out of the figure and out of the block" do
+      create(:budget, category: create(:category, :expense, user: user, name: "Housing"), amount: 650)
+      visit budget_page_path
+
+      within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
+      within(check_block) do
+        expect(page).to have_no_content("$650.00")
+        expect(page).to have_no_content("$820.00")
+        expect(page).to have_no_css("[data-caps-note]")
+      end
+    end
+  end
+
+  # THE LEGACY SHAPE, and the reason the ruling needs a sentence: every pre-envelope user of this
+  # app has category caps and no pool rules at all. `rules need $0.00` is the honest answer —
+  # nothing yet claims their income, and the suggestion engine exists to propose the rules that
+  # will — but a bare $0.00 printed over a page listing eight of their own rules reads as a figure
+  # that failed to compute.
+  describe "a user whose only rules are category caps", :aggregate_failures do
+    before do
+      declared_user(2_400)
+      create(:budget, category: create(:category, :expense, user: user, name: "Housing"), amount: 1_500)
+      create(:budget, category: create(:category, :expense, user: user, name: "Food"), amount: 600)
+      visit budget_page_path
+    end
+
+    it "reads zero and says in one sentence why" do
+      within(figure("rules-need")) { expect(page).to have_content("$0.00 a period") }
+      within(figure("leftover")) { expect(page).to have_content("$2,400.00 → buffer") }
+      expect(page).to have_css("[data-caps-note]")
+      within("[data-caps-note]") do
+        expect(page).to have_content("spending limits, not claims on your income")
+      end
+    end
+
+    it "is covered rather than underwater, and offers no cut list" do
+      expect(page).to have_no_css("[data-sacrifice-link]")
+      within(check_block) { expect(page).to have_no_content("Underwater") }
+    end
   end
 
   # STATE THREE OF THREE: declared and underwater. Figures AND the button.

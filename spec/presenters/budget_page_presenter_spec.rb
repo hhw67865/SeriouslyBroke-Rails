@@ -208,7 +208,7 @@ RSpec.describe BudgetPagePresenter do
   # that produced it is an identity, and it passes whichever way both sides are wrong.
   describe "the structural check" do
     describe "#rules_need" do
-      it "sums what every rule claims from one period", :aggregate_failures do
+      it "sums what every rule that fills an envelope claims from one period", :aggregate_failures do
         rate(envelope("Groceries"), 400) # $400 a period
         create(:pool_budget, :rate, pool: envelope("Utilities", priority: 2), amount: 260) # $120
         rolling(envelope("Car Insurance", priority: 3), amount: 1_200, anchor: today + 3.months, every: 6)
@@ -217,11 +217,49 @@ RSpec.describe BudgetPagePresenter do
         expect(presenter.rules_need).to be_a(BigDecimal)
       end
 
+      # THE RULING, from the page's side. A cap is a spending limit, not a claim on income — no
+      # distribution fills one — so the figure is the pool rule's alone and the cap's amount
+      # appears nowhere in it. $650 a month normalises to $300 a period under this biweekly user,
+      # so a counted cap would read $700 and a raw-amount cap $1,050: three distinguishable
+      # answers, and only one of them right.
+      it "counts no category cap, whatever the cap is worth", :aggregate_failures do
+        rate(envelope("Groceries"), 400)
+        category_rule("Housing", 650)
+
+        expect(presenter.rules_need).to eq(400)
+        expect(presenter.rules_need).not_to eq(700)
+      end
+
       # A user with no rules at all is on the same numeric type as one with rules — an empty
       # `sum` is Integer 0, and this figure is subtracted from and compared against income.
       it "is a BigDecimal zero when there are no rules", :aggregate_failures do
         expect(presenter.rules_need).to eq(0)
         expect(presenter.rules_need).to be_a(BigDecimal)
+      end
+    end
+
+    # WHY "$0.00 a period" IS NOT A BUG on the legacy shape: caps only, so nothing yet claims the
+    # user's income. Both directions, because a sentence rendered unconditionally would pass the
+    # positive half on its own.
+    describe "#caps_not_counted?" do
+      it "is true for a user whose only rules are caps" do
+        category_rule("Housing", 1_500)
+
+        expect(presenter).to be_caps_not_counted
+      end
+
+      it "is false once one rule fills an envelope, cap or no cap", :aggregate_failures do
+        rate(envelope("Groceries"), 400)
+        category_rule("Housing", 1_500)
+
+        expect(presenter.rules_need).to be_positive
+        expect(presenter).not_to be_caps_not_counted
+      end
+
+      # Zero need with no caps either is the brand-new user, who is told they have no rules at
+      # all — a sentence about caps they do not have would invent a concept for them.
+      it "is false for a user with no rules whatsoever" do
+        expect(presenter).not_to be_caps_not_counted
       end
     end
 

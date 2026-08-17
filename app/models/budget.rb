@@ -121,18 +121,48 @@ class Budget < ApplicationRecord
     end
   end
 
-  # WHAT EVERY RULE THIS USER OWNS CLAIMS FROM ONE PERIOD — the single reader behind §9's
+  # WHAT THIS USER'S FUNDING RULES CLAIM FROM ONE PERIOD — the single reader behind §9's
   # structural check, `BudgetPagePresenter#rules_need` and `HomePresenter#structurally_underwater?`
   # alike. Two screens asking the same question of two different sums is how one page tells a user
   # their budget fits while the other says it does not.
   #
-  # `Budget.for_user`, so it counts BOTH modes: a category cap and a rule on an account-less pool
-  # are money the user has committed, whether or not any distribution can currently reach them.
-  # Leaving them out would understate the need on exactly the budgets that are hardest to fix.
+  # POOL-MODE RULES ONLY. CATEGORY-MODE CAPS ARE EXCLUDED, and the boundary is the whole point of
+  # the figure rather than an optimisation:
+  #
+  #   The structural check asks "does your income cover what your rules will CLAIM from it". The
+  #   thing that claims money from a paycheck is the fill, and the fill funds POOLS —
+  #   AllocationCalculator never reads a category-mode budget, so no distribution has ever asked
+  #   for a penny on account of one. A category cap is a SPENDING LIMIT on tracking, not a funding
+  #   claim on income: cutting one frees no income, so it could not appear in §9's cut list even
+  #   in principle, and counting one inflates "your rules need" by money that will never be asked
+  #   for.
+  #
+  # Measured on the demo seeds, and the measurement corrected the estimate that prompted the
+  # ruling — a "~$2,900 of caps" figure I reported was a MONTHLY total read as a per-period one,
+  # which is the exact mixed-unit slip #steady_ask exists to prevent, made in prose instead of in
+  # code. The real figures: of $4,125 a period, $1,523.08 was category caps, leaving $2,601.92.
+  #
+  # The DUPLICATION the ruling names is real and visible in that breakdown — a "Housing" cap of
+  # $1,500 a month ($692.31 a period) sitting beside the $1,500 Rent rule that actually fills the
+  # envelope, the same $692.31 counted twice; "Food & Dining" $600 a month over the top of
+  # Groceries, Dining Out and Household Supplies. What is NOT true is that excluding caps makes
+  # the demo comfortable: it still needs $2,601.92 against $2,400 of income. The overstatement was
+  # $1,523.08 a period, not the whole gap.
+  #
+  # TASK 9 INHERITS THIS BOUNDARY: the sacrifice view's cut list is pool-mode rules and nothing
+  # else, because the gap it is closing is this sum. It should not re-decide the question.
+  #
+  # ORPHAN POOL RULES STAY IN. A rule on an account-less pool is a real claim the user declared —
+  # the fix is giving the pool an account, not pretending the claim away — which is the same line
+  # 2b drew when orphans left the waterfall but stayed in HomePresenter#total_required.
+  #
+  # `for_user(user).where.not(pool_id: nil)` rather than a bare `where(pool_id: user.pools)`, so
+  # ownership keeps being decided in exactly one place (#for_user) and this adds only the mode
+  # filter on top of it.
   #
   # `sum(0.to_d)` with an explicit BigDecimal seed. An empty relation's `sum` is Integer `0`, and
   # this figure is compared against `typical_income` and subtracted from it — the seed keeps a
-  # user with no rules at all on the same numeric type as one with rules.
+  # user with no pool rules at all on the same numeric type as one with them.
   #
   # THE PRELOAD IS MEASURED, and the measurement corrected a claim this comment first made. On the
   # demo seeds it buys NOTHING: 22 rules cost 5 statements with it and 5 without, because only two
@@ -143,11 +173,12 @@ class Budget < ApplicationRecord
   # 42 rules cost 45 statements un-preloaded and still 5 with the preload. O(1) against O(n) in
   # dated rules, on a reader three screens call.
   #
-  # `category: :user` and `pool: :user` rather than a bare `:user`, because a budget has no user
-  # column — `Budget#user` walks whichever owner the rule has.
+  # `pool: :user` rather than a bare `:user`, because a budget has no user column — `Budget#user`
+  # walks whichever owner the rule has, and in this relation that is always the pool.
   def self.steady_need(user, today: Date.current)
     for_user(user)
-      .includes(:item, category: :user, pool: :user)
+      .where.not(pool_id: nil)
+      .includes(:item, pool: :user)
       .sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
   end
 

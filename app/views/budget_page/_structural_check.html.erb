@@ -52,6 +52,22 @@
         </div>
       </dl>
 
+      <%# WHY THE FIGURE ABOVE IS $0.00 when the page above it lists rules. Only category caps
+          exist, and a cap is a spending limit on tracking rather than a claim on income — no
+          distribution fills one, so cutting one would free nothing and counting one would inflate
+          "your rules need" by money that will never be asked for.
+
+          The orphan band already says the same fact about the same rules in its own register
+          ("caps a category — no envelope to fill"); this says what it MEANS for the figure, once,
+          and only where the figure would otherwise read as a rendering fault. %>
+      <% if presenter.caps_not_counted? %>
+        <p class="text-sm text-gray-500 max-w-2xl" data-caps-note>
+          Your category caps are spending limits, not claims on your income — no distribution
+          fills one, so none of them is counted here. Rules that fill an envelope are, and you
+          have none yet.
+        </p>
+      <% end %>
+
       <%# §9: A PERMANENTLY VISIBLE BUTTON, AND ONLY WHEN INCOME < RULES. Reallocation cannot fix
           a budget that does not fit an income, so this is the one screen that must not offer
           moving money as the answer.

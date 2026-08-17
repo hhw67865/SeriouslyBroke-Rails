@@ -89,6 +89,9 @@ class BudgetPagePresenter
   # this page, by Home's standing band and (Task 9) by the sacrifice view, and the moment two of
   # them spell the sum themselves they are free to disagree about which rules count. One reader,
   # measured: see the query note in the task report.
+  #
+  # It counts POOL-MODE rules only, deliberately — a category cap is a spending limit, not a claim
+  # on income. #caps_not_counted? below is what keeps that exclusion from reading as a bug.
   def rules_need = @rules_need ||= Budget.steady_need(user, today: today)
 
   # NIL, NOT ZERO, for a user who has not declared one. Zero is a claim — "you bring in nothing"
@@ -117,6 +120,20 @@ class BudgetPagePresenter
   # about a period the user has not agreed to, and printing "$1,668 a period" at someone who has
   # not said how long a period is states a figure with no unit.
   def declared? = user.typical_income.present? && user.period_cadence.present?
+
+  # WHEN "$0.00 A PERIOD" NEEDS EXPLAINING. A user whose only rules are category caps — the shape
+  # every pre-envelope user of this app has — reads `rules need $0.00` and trivially covered, and
+  # that is CORRECT: no distribution fills a cap, so nothing yet claims their income. The envelope
+  # rules that would are exactly what Tasks 6-7's suggestion engine exists to propose.
+  #
+  # Correct is not the same as legible, though. Zero printed above a page listing eight of the
+  # user's own rules reads as a figure that failed to compute, so the block says in one sentence
+  # which rules it is not counting and why. Gated on the zero, not merely on caps existing: beside
+  # a real pool-mode figure the sentence would be a footnote about an exclusion nobody noticed.
+  #
+  # Off `#rules`, which is already loaded — `user.all_budgets` reaches both modes, so this asks no
+  # new question of the database.
+  def caps_not_counted? = rules_need.zero? && rules.any?(&:category_mode?)
 
   private
 

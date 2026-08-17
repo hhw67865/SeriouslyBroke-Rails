@@ -190,8 +190,13 @@ RSpec.describe Budget, type: :model do
 
   # A CATEGORY-MODE RULE IS A MONTHLY SPENDING CAP and carries no interval at all, so it reaches
   # `Budget#cadence`'s `:monthly` branch through a different door than the pool-mode rate rule
-  # does. It must normalise identically — a cap is money committed whether or not an envelope
-  # holds it.
+  # does. `#steady_ask` still ANSWERS for one — it is a per-rule normaliser and a cap has a
+  # perfectly good per-period equivalent, which Task 6's drift detector will want when it compares
+  # a cap against observed spending.
+  #
+  # `.steady_need` is where the exclusion lives instead, because that is where the question
+  # changes from "what is this rule per period" to "what claims the user's income". See the
+  # `.steady_need` group below.
   describe "a category-mode cap" do
     subject(:ask) { create(:budget, category: create(:category, :expense, user: user), amount: 260) }
 
@@ -251,18 +256,47 @@ RSpec.describe Budget, type: :model do
   # `rules.sum(&:steady_ask)` — the same records recomputed by the same method is `x == x`, and it
   # passes just as happily when every term is wrong.
   describe ".steady_need", :aggregate_failures do
-    it "sums every rule the user owns, in both modes" do
+    it "sums every pool-mode rule the user owns" do
       rate(300) # $300 a period
       monthly(260) # $120 a period
       every(6, amount: 1_200, anchor: today + 3.months) # $92.31 a period
-      create(:budget, category: create(:category, :expense, user: user), amount: 130) # $60 a period
 
-      expect(described_class.steady_need(user, today: today)).to eq(BigDecimal("572.31"))
+      expect(described_class.steady_need(user, today: today)).to eq(BigDecimal("512.31"))
+    end
+
+    # THE RULING, and its own figures. A category cap is a spending limit on tracking, not a claim
+    # on income: no distribution fills one, so cutting one would free nothing.
+    #
+    # THE AMOUNTS ARE CHOSEN SO EVERY WRONG ANSWER IS DISTINGUISHABLE. The pool rule asks $300 and
+    # the cap is $650 a month, which normalises to $300 a period as well — so a cap silently
+    # counted reads $600, a cap counted at its RAW amount reads $950, and a sum that took the cap
+    # instead of the rule still reads $300 but fails the second expectation. The cap's own
+    # `steady_ask` is asserted non-zero on the same line, so the exclusion cannot be mistaken for
+    # a rule that happens to claim nothing.
+    it "counts no category-mode cap, whatever the cap is worth" do
+      rate(300)
+      cap = create(:budget, category: create(:category, :expense, user: user), amount: 650)
+
+      expect(cap.steady_ask(user, today: today)).to eq(300)
+      expect(described_class.steady_need(user, today: today)).to eq(300)
+    end
+
+    # The other direction, and the state a legacy user of this app is actually in: caps and
+    # nothing else. Zero is the honest answer — nothing yet claims their income — and the Budget
+    # page says so in words rather than leaving a bare $0.00 over a list of their own rules.
+    it "is zero for a user whose only rules are caps" do
+      create(:budget, category: create(:category, :expense, user: user, name: "Housing"), amount: 1_500)
+      create(:budget, category: create(:category, :expense, user: user, name: "Food"), amount: 600)
+
+      expect(described_class.steady_need(user, today: today)).to eq(0)
+      expect(described_class.steady_need(user, today: today)).to be_a(BigDecimal)
     end
 
     # An account-less pool's rule is still money the user has committed. It is unreachable by any
     # distribution — which is exactly why leaving it out of the need would understate the budgets
-    # that are hardest to fix.
+    # that are hardest to fix, and it is the line 2b already drew when orphans left the waterfall
+    # but stayed in HomePresenter#total_required. The contrast with the cap above is the whole
+    # ruling: an orphan is a real claim with a broken route, a cap is not a claim at all.
     it "counts a rule on a pool no account can reach" do
       rate(300)
       orphan = create(:pool, :savings_pool, user: user, account: nil)
@@ -277,6 +311,18 @@ RSpec.describe Budget, type: :model do
       stranger_account = create(:pool, :account, user: stranger)
       stranger_pool = create(:pool, :budget_pool, user: stranger, account: stranger_account)
       create(:pool_budget, :per_paycheck_rate, pool: stranger_pool, amount: 999)
+
+      expect(described_class.steady_need(user, today: today)).to eq(300)
+    end
+
+    # A stranger's CAP, not just a stranger's pool rule. `for_user`'s OR reaches category-mode
+    # rules through the categories side, so the mode filter and the ownership scope have to hold
+    # at once — a `where.not(pool_id: nil)` written as a standalone reader would sweep in every
+    # user's pool rules, and an ownership scope with no mode filter would sweep in this cap.
+    it "does not count another user's cap either" do
+      rate(300)
+      stranger = create(:user, period_cadence: :biweekly, period_anchor_date: today)
+      create(:budget, category: create(:category, :expense, user: stranger), amount: 999)
 
       expect(described_class.steady_need(user, today: today)).to eq(300)
     end
