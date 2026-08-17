@@ -1,10 +1,12 @@
 <%# THE CATEGORIES PAGE'S ONE CHANGE (spec §8.1). Local: `presenter` (CategoryBudgetPresenter).
 
-    Three states, and the branch below is the whole of §8.1: an expense category is EITHER covered
-    by an envelope, OR capped, OR neither. `Budget#category_must_not_have_pool` is what makes the
-    first two mutually exclusive rather than an ordering choice made here — a pool-covered category
-    cannot hold a cap, which is also why the first arm renders no editor: there is nothing it could
-    legally write.
+    Four arms: §8.1's three — covered by an envelope, capped, neither — plus the account-pointed
+    one the spec does not name and `Pool#return_holdings_to_the_account` creates in bulk. See
+    CategoryBudgetPresenter's header for why that fourth arm exists and what was false without it.
+    `Budget#category_must_not_have_pool` is what makes the pooled arms and the capped one mutually
+    exclusive rather than an ordering choice made here — a category pointing at any pool cannot
+    hold a cap, which is also why neither pooled arm renders an editor: there is nothing either
+    could legally write.
 
     Rendered for every EXPENSE category now, where it used to render only for `budgetable?` ones.
     That widening IS the change: a category whose money moved into an envelope used to lose this
@@ -13,9 +15,68 @@
      data-budget-block
      data-budget-state="<%= presenter.state %>">
   <% case presenter.state %>
+  <% when :account_pointed %>
+    <%# THE CATEGORY POINTS AT AN ACCOUNT, AND AN ACCOUNT IS THE BUFFER (§7.1).
+
+        §8.1 does not name this state — it splits the world into "points at an envelope" and
+        `budgetable?` ("no pool at all"), and this shape is in neither — but
+        `Pool#return_holdings_to_the_account` produces it in bulk on every envelope destroy, so it
+        is where a user lands the moment they un-envelope a category.
+
+        NO STANDING AND NO ENVELOPE NAME HERE. Rendering the account's status would print the whole
+        account's balance as this one category's, and calling it an envelope would promise a rule
+        that `Budget#pool_must_not_be_an_account` forbids anything from ever writing.
+
+        NO CAP EDITOR EITHER, and the sentence says why rather than leaving a missing button to be
+        noticed: `Budget#category_must_not_have_pool` refuses a cap for a category pointing at ANY
+        pool, an account included.
+
+        THE REGISTER IS THE APP'S EXISTING ONE for this exact shape — `entries/_impact`'s honest
+        card ("No envelope — this spending isn't budgeted. It comes out of your buffer. Give it an
+        envelope on the Budget page") and `budget_page/_suggestion_rate`'s "currently comes out of
+        your buffer", both of which speak about `Category#buffer_funded?`. Three screens, one
+        sentence. %>
+    <h2 class="text-xl font-semibold mb-4">Buffer</h2>
+
+    <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+      No envelope — this spending isn't budgeted.
+    </p>
+    <p class="text-sm text-gray-500 mb-4">
+      It comes out of your buffer. Nothing reserves money for this category, and no cap can be set
+      while it points at an account.
+    </p>
+
+    <dl class="divide-y divide-gray-200 mb-4">
+      <div class="py-3 flex justify-between gap-4">
+        <dt class="text-sm font-medium text-gray-500">Account</dt>
+        <dd class="text-sm text-gray-900 font-medium" data-account-name><%= presenter.pool.name %></dd>
+      </div>
+    </dl>
+
+    <%# THE POINTER WHERE THERE IS ONE, AND THE STANDING OFFER WHERE THERE IS NOT — one route to
+        /budget either way, never both. `buffer_funded?` IS the rate detector's population, so this
+        is precisely the shape the panel is most likely to be proposing an envelope for, and the
+        pointer names what is waiting. Without a proposal the card would otherwise be a dead end,
+        so it makes the offer in the impact card's own words. %>
+    <% if presenter.suggested? %>
+      <%= render "categories/_partials/show/suggestion_pointer", presenter: presenter %>
+    <% else %>
+      <%= link_to budget_page_path, class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+        <span>Give it an envelope on the Budget page</span>
+        <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
+      <% end %>
+    <% end %>
   <% when :pool_covered %>
     <%# POOL-COVERED. No cap editor, by the model's own rule; the block's job is to say WHERE this
         category's money now lives and how that envelope is doing, in the app's one row vocabulary.
+
+        A BUDGET POOL AND A SAVINGS POOL SHARE THIS ARM, and the line is the model's:
+        `Budget#pool_must_not_be_an_account` lets a rule sit on either of them, `PoolStatus` gives
+        both a row-vocabulary state (a savings pool's is `$424.00 of $2,400.00`), and
+        `ENTRY_POOL_ID` resolves this category's entries into either the same way. Every clause of
+        the sentence below is therefore true of both, and an expense category pointing at a savings
+        goal is an ordinary shape on the demo — Health → Emergency Fund, Education → Retirement
+        Supplement. An ACCOUNT is the one pool none of that is true of, and it took the arm above.
 
         `pool_status_label` with BOTH suffixes, exactly as Home's pools band and the Budget page's
         group header pass them — this block says how the envelope STANDS RIGHT NOW, and a screen
@@ -83,12 +144,7 @@
       <span>Update Budget</span>
     <% end %>
   <% else %>
-    <%# UNCAPPED — unchanged, except for the pointer §8.1 adds.
-
-        The pointer renders only when `SuggestionEngine` is currently proposing a rule whose
-        acceptance would move THIS category (CategoryBudgetPresenter#suggestions), so it can never
-        send a user to a panel with nothing in it for them. It points at the run its kind sits in
-        through `suggestion_kind_anchor`, the same reader the panel's own index uses. %>
+    <%# UNCAPPED — unchanged, except for the pointer §8.1 adds. %>
     <h2 class="text-xl font-semibold mb-4">Budget Management</h2>
 
     <div class="bg-gray-50 rounded p-6 text-center">
@@ -104,17 +160,7 @@
     </div>
 
     <% if presenter.suggested? %>
-      <div class="mt-4 pt-4 border-t border-gray-100" data-suggestion-pointer>
-        <p class="text-sm text-gray-500 mb-3">
-          Your spending here already looks like a rule — the Budget page is proposing
-          <%= pluralize(presenter.suggestions.size, "rule") %> for this category.
-        </p>
-        <%= link_to budget_page_path(anchor: suggestion_kind_anchor(presenter.first_suggestion_kind)),
-                    class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
-          <span>See it on the Budget page</span>
-          <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
-        <% end %>
-      </div>
+      <%= render "categories/_partials/show/suggestion_pointer", presenter: presenter %>
     <% end %>
   <% end %>
 </div>

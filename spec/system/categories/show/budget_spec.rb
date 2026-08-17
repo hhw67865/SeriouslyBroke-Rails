@@ -2,7 +2,8 @@
 
 require "rails_helper"
 
-# THE CATEGORIES PAGE'S BUDGET BLOCK — spec §8.1's three states, each asserted in both directions.
+# THE CATEGORIES PAGE'S BUDGET BLOCK — spec §8.1's three states plus the account-pointed fourth
+# the spec does not name, each asserted in both directions.
 #
 # `Capybara.exact` is unset in this suite and this page is full of chrome that matches substrings
 # ("Budget Management", the sidebar's "Budget" link, "Monthly Budget" in the summary card, the
@@ -71,10 +72,14 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       visit category_path(category("Dining Out Spending"))
     end
 
+    # The name is read off `[data-envelope-name]` rather than asserted against the whole block:
+    # "Dining Out" is also the CATEGORY's name ("Dining Out Spending"), which the page header, the
+    # breadcrumb and the banner all print, so an unscoped `have_content` here would pass against a
+    # block that never named the envelope at all.
     it "names the envelope and how it is doing, and links to the Budget page" do
       expect(block["data-budget-state"]).to eq("pool_covered")
+      expect(find("[data-envelope-name]").text).to eq("Dining Out")
       within(block) do
-        expect(page).to have_content("Dining Out")
         expect(page).to have_content("$0.00 left")
         expect(page).to have_link("Rules on the Budget page", href: budget_page_path)
       end
@@ -95,6 +100,95 @@ RSpec.describe "Categories Show - Budget block", type: :system do
     # have — and it is the sentence most at risk of being pasted into all three arms.
     it "does not print the cap caveat" do
       within(block) { expect(page).to have_no_content("spending limits, not claims on your income") }
+    end
+
+    # A SAVINGS POOL SHARES THIS ARM, and the line between the pooled arms is the model's own:
+    # `Budget#pool_must_not_be_an_account` lets a rule sit on a savings pool, so every clause of
+    # the envelope sentence is true of one. `$0.00 of $2,000.00` is the row vocabulary's `:saving`
+    # state — the same helper, a different state, which is exactly what sharing the arm means.
+    it "treats an expense category pointing at a savings goal the same way" do
+      goal = create(:pool, :savings_pool, user: user, account: checking, name: "Vet Fund", target_amount: 2_000)
+      create(:category, :expense, user: user, name: "Pet Care", pool: goal)
+
+      visit category_path(category("Pet Care"))
+
+      expect(block["data-budget-state"]).to eq("pool_covered")
+      expect(find("[data-envelope-name]").text).to eq("Vet Fund")
+      within(block) { expect(page).to have_content("$0.00 of $2,000.00") }
+    end
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # The fourth state §8.1 does not name — the category points at an ACCOUNT
+  # ------------------------------------------------------------------------------------------
+
+  # `Category#pool_covered?` is `expense? && pool_id.present?`, which says yes to an ACCOUNT, so the
+  # first version of this block told such a category it had an envelope, printed the ACCOUNT's name
+  # as that envelope and the account's whole balance as this one category's standing, and spoke of
+  # "the rule that fills the envelope" — which `Budget#pool_must_not_be_an_account` guarantees can
+  # never exist. Every clause was false, and none of it was reachable before this block widened to
+  # pool-covered categories.
+  #
+  # PLANTED THROUGH THE PRODUCTION ROUTE. `Pool#return_holdings_to_the_account` is what puts a
+  # category here — destroying an envelope re-points its categories at the account rather than
+  # nullifying them, which is what keeps `Σ pools` conserved — so the fixture destroys an envelope
+  # instead of assigning an account by hand. A hand-assigned pool would test the render without
+  # testing that the shape is reachable.
+  describe "a category left pointing at an account", :aggregate_failures do
+    before do
+      pool = covered("Streaming")
+      pool.destroy!
+    end
+
+    it "says the spending comes out of the buffer, and names the account" do
+      visit category_path(category("Streaming Spending"))
+
+      expect(block["data-budget-state"]).to eq("account_pointed")
+      expect(find("[data-account-name]").text).to eq("Checking")
+      within(block) do
+        expect(page).to have_content("No envelope — this spending isn't budgeted.")
+        expect(page).to have_content("It comes out of your buffer.")
+      end
+    end
+
+    # THE OTHER DIRECTION, AND IT IS THE HALF THAT WAS WRONG: no envelope name, no standing, no
+    # "rule that fills the envelope", and still no cap editor — the model forbids a cap for a
+    # category pointing at any pool, so the arm that tells the truth must not grow one.
+    it "claims no envelope and no standing for it" do
+      visit category_path(category("Streaming Spending"))
+
+      expect(block).to have_no_css("[data-envelope-name]")
+      expect(block).to have_no_css("[data-envelope-status]")
+      within(block) do
+        expect(page).to have_no_content("the rule that fills the envelope")
+        expect(page).to have_no_link("Create Budget")
+        expect(page).to have_no_link("Update Budget")
+      end
+    end
+
+    # THE SHARPEST HALF. `Category#buffer_funded?` — no pool, or a pool that IS an account — is
+    # `SuggestionEngine#rates`' own population, so this is precisely the shape the panel is most
+    # likely to be proposing an envelope for, and an envelope is this category's only way out. The
+    # first version ran the engine on the uncapped arm only, so the category that needed the
+    # pointer most was the one that never got it.
+    it "carries the pointer at the Budget page's proposal" do
+      bill(category("Streaming Spending"), amount: 180)
+
+      visit category_path(category("Streaming Spending"))
+
+      within(block) do
+        expect(page).to have_content("the Budget page is proposing")
+        expect(page).to have_link("See it on the Budget page", href: budget_page_path(anchor: "suggestions-dated_bill"))
+      end
+    end
+
+    # And with nothing proposed the card is still not a dead end: it makes the offer in the words
+    # `entries/_impact`'s honest card already uses for this exact shape.
+    it "offers the envelope directly when nothing is proposed" do
+      visit category_path(category("Streaming Spending"))
+
+      expect(block).to have_no_css("[data-suggestion-pointer]")
+      within(block) { expect(page).to have_link("Give it an envelope on the Budget page", href: budget_page_path) }
     end
   end
 
@@ -239,10 +333,8 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       end
     end
 
-    # A bill's shape, straight into `SuggestionEngine`'s dated-bill detector: two payments of the
-    # same size a whole month apart, on an item carrying no rule of its own.
     it "points at the Budget page when a rule is being proposed there" do
-      bill("Utilities", amount: 220)
+      bill(create(:category, :expense, user: user, name: "Utilities"), amount: 220)
 
       visit category_path(category("Utilities"))
 
@@ -268,8 +360,12 @@ RSpec.describe "Categories Show - Budget block", type: :system do
 
   private
 
-  def bill(name, amount:)
-    item = create(:item, category: create(:category, :expense, user: user, name: name))
+  # A BILL'S SHAPE, straight into `SuggestionEngine`'s dated-bill detector: two payments of the same
+  # size a whole month apart, on an item carrying no rule of its own. It takes a CATEGORY rather
+  # than a name because both callers need it against a category they already planted — one built by
+  # hand, one produced by `Pool#destroy`'s re-point.
+  def bill(target, amount:)
+    item = create(:item, category: target)
     [2, 1].each { |months| create(:entry, item: item, amount: amount, date: Date.current - months.months) }
   end
 end

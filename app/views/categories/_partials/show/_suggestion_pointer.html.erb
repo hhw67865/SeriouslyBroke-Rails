@@ -1,0 +1,22 @@
+<%# THE POINTER AT /budget'S SUGGESTIONS (spec §8.1). Local: `presenter` (CategoryBudgetPresenter).
+
+    ONE PARTIAL FOR TWO ARMS. It renders on the uncapped arm, where §8.1 puts it, and on the
+    account-pointed arm, where it matters more: that category's spending comes out of the buffer
+    and an envelope is its only way out, so a proposal for one is the single most useful thing the
+    block can say. Two copies of the sentence would be two wordings for one offer.
+
+    It renders ONLY when the engine currently proposes for this category
+    (CategoryBudgetPresenter#suggestions), so it can never send a user to a panel with nothing in it
+    for them. The anchor is `suggestion_kind_anchor`, the same reader the panel's own index and
+    headings use — one spelling of the fragment, so this link cannot silently stop working. %>
+<div class="mt-4 pt-4 border-t border-gray-100" data-suggestion-pointer>
+  <p class="text-sm text-gray-500 mb-3">
+    Your spending here already looks like a rule — the Budget page is proposing
+    <%= pluralize(presenter.suggestions.size, "rule") %> for this category.
+  </p>
+  <%= link_to budget_page_path(anchor: suggestion_kind_anchor(presenter.first_suggestion_kind)),
+              class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+    <span>See it on the Budget page</span>
+    <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
+  <% end %>
+</div>
