@@ -44,12 +44,18 @@ comes first.
 
 ```
 Home        pools — where you stand            (was: Dashboard)
-Entries     the ledger                          unchanged
-Categories  per-category detail                 one change, see §8
+Distribute  split a period's income             NEW (2b's entry point)
 Budget      rules, priority, suggestions        NEW
+Entries     the ledger                          unchanged
+Categories  per-category detail                 one change, see §8.1
+Pools       savings goals index                 unchanged
 Calendar    month/week grid                     unchanged
 Reports     the existing charts and tabs        (was: Dashboard, demoted)
 ```
+
+(As built: Distribute second — the app's signature action sits beside where you stand — and
+Budget third, ahead of the ledger it governs. This table was corrected after 2d shipped; the
+original omitted Distribute and Pools and ordered Budget fourth.)
 
 The dashboard is not weakened — it is relocated. It answers *what happened*,
 which is a question you visit deliberately, not the first thing you should see.
