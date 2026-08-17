@@ -75,11 +75,11 @@ class PoolCalculator
   #
   # Default `Pending.none`, so every existing caller is untouched and this cannot change a
   # number on any screen that does not ask for it.
-  # `terms:` IS THE SAME FIVE AGGREGATES, ALREADY RUN — a `{income:, savings:, expense:,
-  # movements_in:, movements_out:}` hash from PoolBalanceLedger, which computes them for a whole
-  # set of pools in five grouped queries instead of five per calculator. When it is present the
-  # five `*_total` readers return the injected figures and NO aggregate runs here; when it is
-  # absent this class queries exactly as it always has.
+  # `terms:` IS THE SAME AGGREGATES, ALREADY RUN — a `{income:, savings:, expense:, movements_in:,
+  # movements_out:, last_funded_on:}` hash from PoolBalanceLedger, which computes them for a whole
+  # set of pools in one grouped query per term instead of that many per calculator. When it is
+  # present the five `*_total` readers and #funded_at return the injected values and NO aggregate
+  # runs here; when it is absent this class queries exactly as it always has.
   #
   # It is a COST keyword and not a money one, which is the whole of why it is safe: the ledger
   # reproduces #income_entries_total's scoping and the other four's line for line, including the
@@ -87,6 +87,11 @@ class PoolCalculator
   # over the same pool are the same numbers. That is asserted in both directions — the default
   # pinned equal to today's figures, and a deliberately wrong term pinned as visibly MOVING the
   # balance, because a keyword that is inert when set is worth nothing.
+  #
+  # The sixth member is a DATE and not money, and it carries the same both-direction pin one
+  # question further along: a wrong-on-purpose `last_funded_on` must visibly move #period_closed?,
+  # because that is the reader it exists for and a date nothing consumes would be a no-op nobody
+  # could see.
   #
   # `nil` rather than an empty hash for "not batched": an empty hash is a ledger that answered
   # for a pool it does not know, and that must not read as "run your own queries" — it reads as
@@ -497,16 +502,38 @@ class PoolCalculator
   # three aggregates every time it came back.
   #
   # `.to_date` because both `date` columns are datetimes while every calculator here works in
-  # whole days; TimeWithZone#to_date resolves in the request's zone, as DateContext expects.
+  # whole days; TimeWithZone#to_date resolves in the request's zone, as DateContext expects. It
+  # stays HERE, on the calculator, rather than moving into the ledger with the query: the ledger
+  # is built once per screen while the zone that matters is the request's, and a date resolved at
+  # ledger-construction time would be one step further from it for no gain.
+  #
+  # The PENDING date is added AFTER the batched value and never travels through the ledger. It is
+  # a property of what THIS calculator is projecting — one screen's unwritten distribution — while
+  # the ledger describes rows that exist; folding it in would make one shared ledger answer
+  # differently for two calculators over the same pool.
   def last_funded_on
     return @last_funded_on if defined?(@last_funded_on)
 
-    @last_funded_on = [
-      scoped(pool.movements_in).maximum(:date),
-      scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date),
-      scoped(Entry.savings.merge(entries_for_pool)).maximum(:date),
-      @pending.funded_on
-    ].compact.max&.to_date
+    @last_funded_on = [funded_at, @pending.funded_on].compact.max&.to_date
+  end
+
+  # THE THREE MAX(date)s, BEHIND THE SAME GATE AS THE FIVE SUMS. Injected when a ledger ran them
+  # for the whole pool set — 24 of /budget's 50 queries and 48 of Home's, measured — and run here
+  # when it did not, over exactly the three money-IN scopes of #balance.
+  #
+  # The pre-`to_date` maximum rather than the finished answer, because that is what the ledger can
+  # honestly compute: a TimeWithZone or nil, the same shape `maximum(:date)` returns below. Nil
+  # travels through `term` untouched — `@terms.fetch` finds the key and returns its nil value
+  # rather than yielding — which is what keeps #last_funded_on's `defined?` memo from re-running
+  # three aggregates on the never-funded envelope this whole reader exists to answer nil for.
+  def funded_at
+    term(PoolBalanceLedger::FUNDED_ON) do
+      [
+        scoped(pool.movements_in).maximum(:date),
+        scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date),
+        scoped(Entry.savings.merge(entries_for_pool)).maximum(:date)
+      ].compact.max
+    end
   end
 
   # The sort key is a triple, not a bare due date, and it is BudgetCalculator#due_order's — the
@@ -520,7 +547,7 @@ class PoolCalculator
     end
   end
 
-  # THE FIVE AGGREGATES, EACH BEHIND THE SAME GATE. `term` returns the injected figure when this
+  # EVERY AGGREGATE, EACH BEHIND THE SAME GATE. `term` returns the injected value when this
   # calculator was handed a ledger's terms and otherwise runs the block, so the query and the
   # batched answer sit in one place per term and cannot describe different scopes.
   #
@@ -528,6 +555,18 @@ class PoolCalculator
   # compute what this class needs, and the loud KeyError is the only honest answer. A `0.to_d`
   # default here would report an envelope holding nothing — a wrong number, silently, on the one
   # path this whole keyword exists to make cheaper.
+  #
+  # `fetch` IS ALSO WHAT MAKES THE SIXTH TERM'S NIL SAFE, and it is key-aware rather than
+  # truthiness-aware — which is the whole distinction. `last_funded_on` is legitimately nil for a
+  # never-funded pool, so the tempting `@terms[name] || yield` would read that real answer as a
+  # miss and run the three MAX(date)s anyway, on exactly the emptiest pools this term exists to
+  # answer cheaply: the same falsy-answer trap #period_closed?, #last_funded_on and #fulfilled?
+  # each dodge one level up with `defined?` and keyed `fetch`. Mutation-tested — `|| yield` here
+  # leaves a batched calculator running three maxima of its own, and the ledger spec's
+  # "runs three grouped maxima where per-pool calculators run three each" says so.
+  #
+  # (`fetch(name) { yield }` would be safe on nil and is still not used: the block would swallow
+  # the missing-key case that must raise.)
   def term(name)
     return @terms.fetch(name) if @terms
 

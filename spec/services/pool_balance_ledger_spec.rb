@@ -109,11 +109,16 @@ RSpec.describe PoolBalanceLedger, type: :model do
       move(from: groceries, to: checking, amount: 100, on: after_bound)
     end
 
+    # `.except` THE SIXTH TERM, and the key list is asserted alongside so the exclusion cannot
+    # quietly hide a money term that stopped being computed. The funding date is a DATE with a
+    # boolean consumer rather than an amount, so it is pinned in its own describe below — where
+    # the thing it actually decides (#period_closed?) can be asserted with it.
     it "reports each term at the amount the fixture put there", :aggregate_failures do
-      expect(ledger.terms_for(checking)).to eq(
+      expect(ledger.terms_for(checking).keys).to eq(PoolBalanceLedger::TERMS)
+      expect(ledger.terms_for(checking).except(PoolBalanceLedger::FUNDED_ON)).to eq(
         income: 250, savings: 0, expense: 25, movements_in: 300, movements_out: 800
       )
-      expect(ledger.terms_for(groceries)).to eq(
+      expect(ledger.terms_for(groceries).except(PoolBalanceLedger::FUNDED_ON)).to eq(
         income: 0, savings: 100, expense: 45, movements_in: 800, movements_out: 300
       )
     end
@@ -138,11 +143,20 @@ RSpec.describe PoolBalanceLedger, type: :model do
     # key in any of the five hashes. Asserted by TYPE as well as by value, because `0` and
     # `0.to_d` are `==` and only one of them keeps every reader downstream in BigDecimal — six
     # Integer leaks on this branch so far, every one of them at an empty set.
-    it "gives a pool with no rows a decimal zero in every term", :aggregate_failures do
+    # AND NIL, NOT A ZERO, IN THE SIXTH. The two empty answers are different in kind: the pool
+    # holds nothing, and it was funded on no day at all. A date-shaped default here — epoch, or
+    # the `0.to_d` the five money terms take — would make PoolCalculator#compute_period_closed
+    # read every fresh envelope's rate period as long over, and the next distribution would sweep
+    # envelopes that have never been funded.
+    it "gives a pool with no rows a decimal zero in every money term", :aggregate_failures do
       terms = ledger.terms_for(fresh)
+      money = terms.except(PoolBalanceLedger::FUNDED_ON)
 
-      expect(terms.values).to all(eq(0))
-      expect(terms.values).to all(be_a(BigDecimal))
+      expect(money.keys).to eq(PoolBalanceLedger::MONEY_TERMS)
+      expect(money.values).to all(eq(0))
+      expect(money.values).to all(be_a(BigDecimal))
+      expect(terms).to have_key(PoolBalanceLedger::FUNDED_ON)
+      expect(terms[PoolBalanceLedger::FUNDED_ON]).to be_nil
       expect(fresh.calculator(today: today, terms: terms).balance).to eq(0)
       expect(fresh.calculator(today: today, terms: terms).balance).to be_a(BigDecimal)
     end
@@ -170,18 +184,32 @@ RSpec.describe PoolBalanceLedger, type: :model do
     # `scoped(...)` wrapper from `entry_totals` fails it on income/savings/expense, and from
     # `movement_totals` on both movement terms. Asserted against unbatched calculators carrying
     # the same bound as well as against literals, so neither side is the other restated.
-    it "bounds every term by as_of", :aggregate_failures do
+    it "bounds every money term by as_of", :aggregate_failures do
       bounded = described_class.new([checking, groceries], as_of: bound)
 
-      expect(bounded.terms_for(checking)).to eq(
+      expect(bounded.terms_for(checking).except(PoolBalanceLedger::FUNDED_ON)).to eq(
         income: 190, savings: 0, expense: 25, movements_in: 200, movements_out: 500
       )
-      expect(bounded.terms_for(groceries)).to eq(
+      expect(bounded.terms_for(groceries).except(PoolBalanceLedger::FUNDED_ON)).to eq(
         income: 0, savings: 30, expense: 0, movements_in: 500, movements_out: 200
       )
       expect(checking.calculator(as_of: bound, today: today).balance).to eq(-135)
       expect(groceries.calculator(as_of: bound, today: today).balance).to eq(330)
       expect(groceries.calculator(as_of: bound, today: today, terms: bounded.terms_for(groceries)).balance).to eq(330)
+    end
+
+    # AND THE SIXTH, which is the term where the bound is easiest to lose without a money figure
+    # moving. Both pools have money-in rows on both sides of Aug 1, so an unbounded MAX(date)
+    # answers Aug 15 for each — which is what the unbounded ledger is asserted to answer here, so
+    # the two halves cannot both be satisfied by one date. Mutation-tested by dropping `scoped`
+    # from `grouped_entries` and from `grouped_movements` in turn; each fails one of the pairs.
+    it "bounds the funding date by as_of", :aggregate_failures do
+      bounded = described_class.new([checking, groceries], as_of: bound)
+
+      expect(bounded.terms_for(checking)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(funded_on)
+      expect(bounded.terms_for(groceries)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(funded_on)
+      expect(ledger.terms_for(checking)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(after_bound)
+      expect(ledger.terms_for(groceries)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(after_bound)
     end
 
     # ANOTHER USER'S POOL IS NOT IN THE SET AND ITS MONEY IS NOT IN THE ANSWER. Both halves are
@@ -192,21 +220,26 @@ RSpec.describe PoolBalanceLedger, type: :model do
 
       expect(their_envelope.calculator(today: today).balance).to eq(1_887)
       expect(ledger.terms_for(their_envelope)).to be_nil
-      expect(ledger.terms_for(groceries)).to eq(
+      expect(ledger.terms_for(groceries).except(PoolBalanceLedger::FUNDED_ON)).to eq(
         income: 0, savings: 100, expense: 45, movements_in: 800, movements_out: 300
       )
+      expect(ledger.terms_for(groceries)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(after_bound)
     end
 
-    # THE POINT OF THE CLASS, measured rather than asserted about. Five queries for three pools,
-    # against fifteen for the same three read one at a time — and the gap widens with every pool,
-    # which is what "multiples, not percents" means on a screen rendering eighteen of them.
-    it "costs five queries for the whole set where per-pool calculators cost five each", :aggregate_failures do
+    # THE POINT OF THE CLASS, measured rather than asserted about. Eight queries for three pools,
+    # against fifteen for the same three balances read one at a time — and the gap widens with
+    # every pool, which is what "multiples, not percents" means on a screen rendering eighteen of
+    # them. The whole ledger is eight rather than five now: five grouped SUMs and three grouped
+    # MAX(date)s, and the three are asserted separately in "the funding date term" below, against
+    # the three PER POOL that #last_funded_on runs without them.
+    it "costs eight queries for the whole set where per-pool calculators cost five each", :aggregate_failures do
       pools = [checking, groceries, fresh]
 
       grouped = sql_for { pools.each { |pool| ledger.terms_for(pool) } }
       per_pool = sql_for { pools.each { |pool| pool.calculator(today: today).balance } }
 
-      expect(grouped.size).to eq(5)
+      expect(grouped.size).to eq(8)
+      expect(grouped.grep(/MAX/).size).to eq(3)
       expect(per_pool.size).to eq(15)
     end
   end
@@ -276,6 +309,114 @@ RSpec.describe PoolBalanceLedger, type: :model do
     it "refuses a terms hash that does not carry every term" do
       expect { groceries.calculator(today: today, terms: { income: 1.to_d }).balance }
         .to raise_error(KeyError)
+    end
+  end
+
+  # THE SIXTH TERM, which is a DATE and is pinned differently from the five money ones because
+  # what consumes it is a BOOLEAN. `last_funded_on` reaches no screen directly: it reaches
+  # PoolCalculator#period_closed?, which decides whether the next distribution sweeps an envelope.
+  # So every example below asserts that decision as well as the date, and the never-funded case
+  # asserts it twice over — a date-shaped default in place of nil does not look wrong, it looks
+  # like a fresh envelope whose period ended in 1970.
+  describe "the funding date term" do
+    let!(:groceries) { envelope("Groceries") }
+    let(:ledger) { described_class.new([checking, groceries, fresh]) }
+    let!(:fresh) { envelope("Fresh Envelope") }
+
+    # A rate rule on each envelope, so #compute_period_closed reaches its `last_funded_on.nil?`
+    # guard instead of returning early for a pool that has no rate rule at all. Without this the
+    # never-funded example below would pass against any term whatsoever.
+    before do
+      create(:pool_budget, :per_paycheck_rate, pool: groceries, amount: 400)
+      create(:pool_budget, :per_paycheck_rate, pool: fresh, amount: 400)
+    end
+
+    def batched(pool) = pool.calculator(today: today, terms: ledger.terms_for(pool))
+
+    # ALL THREE MONEY-IN SOURCES, each winning once. Groceries is funded by a SAVINGS entry on
+    # Jul 12 and a MOVEMENT on Aug 15; Checking by a MOVEMENT on Jul 12 and an INCOME entry on
+    # Aug 15 — so a ledger that consulted only entries answers Jul 12 for Groceries, and one that
+    # consulted only movements answers Jul 12 for Checking. (Income reaches an account and never
+    # an envelope: Entry validates that, which is why the two pools carry different pairs.)
+    #
+    # Money OUT is deliberately absent from the answer: Groceries also pays $500 away on Aug 20,
+    # later than either of its fundings, and a term reading the wrong direction would say Aug 20.
+    # It is paid to Fresh rather than to Checking because a movement has two ends and Checking is
+    # under assertion here — an `out` for one pool is always an `in` for another.
+    it "reads the latest of the three money-in sources", :aggregate_failures do
+      entry(:savings, 30, category_pool: groceries, on: funded_on)
+      move(from: checking, to: groceries, amount: 500, on: after_bound)
+      move(from: groceries, to: checking, amount: 200, on: funded_on)
+      entry(:income, 190, category_pool: checking, on: after_bound)
+      move(from: groceries, to: fresh, amount: 500, on: today)
+
+      expect(ledger.terms_for(groceries)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(after_bound)
+      expect(ledger.terms_for(checking)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(after_bound)
+      expect(ledger.terms_for(fresh)[PoolBalanceLedger::FUNDED_ON].to_date).to eq(today)
+    end
+
+    # NIL, AND #period_closed? FALSE BECAUSE OF IT. Both paths asserted: the unbatched calculator
+    # is the answer this class must not move, and the batched one is the path that would move it.
+    # Mutating #terms_for's `[]` into the money terms' `fetch(pool.id, 0.to_d)` fails this — the
+    # sweep would then be offered every envelope the user has just created.
+    it "answers nil for a never-funded pool and leaves its period open", :aggregate_failures do
+      expect(ledger.terms_for(fresh)[PoolBalanceLedger::FUNDED_ON]).to be_nil
+      expect(fresh.calculator(today: today).period_closed?).to be(false)
+      expect(batched(fresh).period_closed?).to be(false)
+      expect(batched(fresh).sweepable_amount).to eq(0)
+    end
+
+    # AND THE MEMO HOLDS ON THAT NIL, which is the property `defined?` exists for and the one no
+    # value assertion can see: nil is the answer for every envelope a user has just created, and
+    # `||=` re-runs all three aggregates on it every time.
+    #
+    # `send`, because #last_funded_on is private and #period_closed? carries a `defined?` memo of
+    # its own that hides the second call from every public caller — so read through a screen this
+    # claim is unmeasurable, and a claim this class makes in a comment and cannot measure is what
+    # this branch has found a defect behind in every task. Mutation-tested: `||=` here reports 6.
+    it "memoises a nil funding date rather than re-running its aggregates", :aggregate_failures do
+      plain = fresh.calculator(today: today)
+      injected = batched(fresh)
+
+      plain_maxima = sql_for { 2.times { plain.send(:last_funded_on) } }.grep(/MAX/)
+      injected_maxima = sql_for { 2.times { injected.send(:last_funded_on) } }.grep(/MAX/)
+
+      expect(plain.send(:last_funded_on)).to be_nil
+      expect(injected.send(:last_funded_on)).to be_nil
+      expect(plain_maxima.size).to eq(3)
+      expect(injected_maxima).to be_empty
+    end
+
+    # THE INJECTED DATE IS INERT WHEN IT IS RIGHT AND VISIBLE WHEN IT IS WRONG, which is the same
+    # both-direction pin the five money terms carry — one question further along, because a date
+    # nothing consumes would be a no-op no assertion could see. $85 arriving Aug 15 sits inside
+    # the live biweekly period (boundaries Aug 7 and Aug 21), so nothing is swept; the same $85
+    # with Jul 12 injected over it is two periods old, and the whole envelope goes back.
+    it "changes nothing when it is right and moves period_closed? when it is wrong", :aggregate_failures do
+      move(from: checking, to: groceries, amount: 85, on: after_bound)
+      stale = ledger.terms_for(groceries).merge(PoolBalanceLedger::FUNDED_ON => funded_on.in_time_zone)
+
+      expect(groceries.calculator(today: today).period_closed?).to be(false)
+      expect(batched(groceries).period_closed?).to be(false)
+      expect(batched(groceries).sweepable_amount).to eq(0)
+      expect(groceries.calculator(today: today, terms: stale).period_closed?).to be(true)
+      expect(groceries.calculator(today: today, terms: stale).sweepable_amount).to eq(85)
+    end
+
+    # THREE MAX(date)s FOR THE WHOLE SET, against three PER POOL — 24 of /budget's 50 queries and
+    # 48 of Home's before this term existed. Read off the statements rather than asserted about,
+    # because #period_closed? answers the same either way and nothing else can tell the two apart.
+    it "runs three grouped maxima where per-pool calculators run three each", :aggregate_failures do
+      move(from: checking, to: groceries, amount: 85, on: funded_on)
+      envelopes = [groceries, fresh]
+
+      grouped = sql_for { envelopes.each { |pool| ledger.terms_for(pool) } }.grep(/MAX/)
+      per_pool = sql_for { envelopes.each { |pool| pool.calculator(today: today).period_closed? } }.grep(/MAX/)
+      batched_maxima = sql_for { envelopes.each { |pool| batched(pool).period_closed? } }.grep(/MAX/)
+
+      expect(grouped.size).to eq(3)
+      expect(per_pool.size).to eq(6)
+      expect(batched_maxima).to be_empty
     end
   end
 

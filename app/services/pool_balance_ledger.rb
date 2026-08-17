@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# THE FIVE TERMS OF PoolCalculator#balance, FOR ANY NUMBER OF POOLS, IN FIVE QUERIES.
+# THE TERMS OF PoolCalculator#balance, FOR ANY NUMBER OF POOLS, IN ONE QUERY EACH.
 #
 # Every PoolCalculator runs five aggregates of its own, and every screen here builds several
 # DISTINCT calculators per pool — the plain one, the `net_of_sweep` one, the twin that one
@@ -14,6 +14,13 @@
 # the same two movement directions, the same `as_of` bound — because the only acceptable outcome
 # of this class is that no figure anywhere moves. A second definition of "what is in this pool"
 # would be exactly the two-readers defect this branch has found in every task.
+#
+# THE SIXTH TERM IS A DATE RATHER THAN AN AMOUNT, and it is here for the same measured reason the
+# five money ones are. PoolCalculator#last_funded_on runs three MAX(date) aggregates — two entry,
+# one movement — over EXACTLY the three money-IN scopes already batched above, and Task 3's fix
+# round priced it: 24 of /budget's 50 queries and 48 of Home's, the single largest named residue
+# on both. It reuses `grouped_entries` and `grouped_movements` verbatim rather than restating
+# their WHERE and GROUP BY, so the batched MAX cannot see a row the batched SUM does not.
 #
 # A SNAPSHOT, STALE AFTER A WRITE, on the same rule PoolCalculator#balance already carries: the
 # terms are memoised at their FIRST READ, not at construction, and anything that writes movements
@@ -34,10 +41,21 @@
 #
 # See docs/superpowers/plans/2026-08-16-budget-page.md Task 1.
 class PoolBalanceLedger
-  # The five members of #terms_for, in the order they appear in PoolCalculator#balance. Named
-  # once so a caller reading a term this class does not compute gets a KeyError rather than a
-  # silent zero (see PoolCalculator#term).
-  TERMS = [:income, :savings, :expense, :movements_in, :movements_out].freeze
+  # The five MONEY members of #terms_for, in the order they appear in PoolCalculator#balance.
+  # Named once so a caller reading a term this class does not compute gets a KeyError rather than
+  # a silent zero (see PoolCalculator#term).
+  MONEY_TERMS = [:income, :savings, :expense, :movements_in, :movements_out].freeze
+
+  # The sixth, and it is SEPARATE from the five rather than appended to them because its EMPTY
+  # ANSWER IS DIFFERENT IN KIND. A pool with no rows sums to `0.to_d` — it holds nothing — but it
+  # was not funded on the zeroth of anything, and PoolCalculator#compute_period_closed reads
+  # `last_funded_on.nil?` as its guard: any date at all here, epoch included, marks every fresh
+  # envelope's rate period closed and hands it to the sweep. So this term defaults to nil and
+  # cannot travel through the `fetch(pool.id, 0.to_d)` the five money terms share.
+  FUNDED_ON = :last_funded_on
+
+  # Every member of #terms_for, which is the hash PoolCalculator consumes whole.
+  TERMS = [*MONEY_TERMS, FUNDED_ON].freeze
 
   # WHICH POOL AN ENTRY REACHES — the one expression, shared with PoolCalculator#entries_for_pool
   # rather than restated there.
@@ -63,7 +81,7 @@ class PoolBalanceLedger
   # id-less pool matches no row, and `IN (NULL)` matches nothing in Postgres either — but a nil
   # in the list would then make #terms_for answer for every other unsaved pool as well.
   #
-  # `as_of` is PoolCalculator's own, and it bounds all five terms exactly as #scoped does there.
+  # `as_of` is PoolCalculator's own, and it bounds every term exactly as #scoped does there.
   # It is part of the LEDGER rather than of a term because a calculator asking about an earlier
   # moment is asking about a different world: one ledger per `as_of`, never one shared across two.
   def initialize(pools, as_of: nil)
@@ -72,7 +90,7 @@ class PoolBalanceLedger
     @as_of = as_of
   end
 
-  # The five terms for one pool, as `PoolCalculator.new(pool, terms:)` consumes them.
+  # The six terms for one pool, as `PoolCalculator.new(pool, terms:)` consumes them.
   #
   # `fetch` with a `0.to_d` default, and both halves are load-bearing. A grouped sum returns a
   # hash with NO KEY AT ALL for a pool that has no rows in that term — the emptiest pools, which
@@ -96,23 +114,32 @@ class PoolBalanceLedger
   # a `let` referenced for the first time inside the example. Built to raise, this class took
   # that example down; the pool is a real pool with a real balance, and the ledger simply does
   # not know it.
+  # `[]` RATHER THAN `fetch` ON THE SIXTH, and that is the whole of the nil-vs-default discipline
+  # this term needs: a pool absent from the grouped MAX hash has never been funded, and nil is the
+  # answer PoolCalculator#last_funded_on already gives for it. The key is always PRESENT with a nil
+  # value, which is what keeps PoolCalculator#term's `fetch`-without-default silent here (a missing
+  # key is a ledger that does not compute what the calculator needs; a nil value is a real answer)
+  # and what keeps #last_funded_on's `defined?` memo from re-running on it.
   def terms_for(pool)
     return nil unless @known.include?(pool.id)
 
-    TERMS.index_with { |term| totals(term).fetch(pool.id, 0.to_d) }
+    MONEY_TERMS.index_with { |term| totals(term).fetch(pool.id, 0.to_d) }
+      .merge(FUNDED_ON => totals(FUNDED_ON)[pool.id])
   end
 
   private
 
   # Memoised per term, and the win is ACROSS CALLS rather than across terms: #terms_for builds all
-  # five for the pool it is asked about, so the first call pays for the whole set and every
+  # six for the pool it is asked about, so the first call pays for the whole set and every
   # #terms_for after it — one per pool, several per pool where a screen builds a plain and a
   # flagged calculator and a status — is free. Five queries for a screen, not five per calculator.
   #
   # `fetch` with a block rather than `||=`: a grouped sum over a term with no rows at all is `{}`,
   # which is falsy-adjacent enough to matter if this ever memoised on truthiness — `||=` would
   # re-run the query on every hit for exactly the emptiest ledger. (`{}` is truthy in Ruby today,
-  # so this is the form that stays right rather than the form that fixes a live bug.)
+  # so this is the form that stays right rather than the form that fixes a live bug.) The sixth
+  # term needs that form for a second reason: it costs THREE queries, so a memo that missed on the
+  # empty ledger would re-run all three per pool — the exact cost this term exists to remove.
   def totals(term)
     @totals ||= {}
     @totals.fetch(term) { @totals[term] = compute(term) }
@@ -125,29 +152,60 @@ class PoolBalanceLedger
     when :expense then entry_totals(Entry.expenses)
     when :movements_in then movement_totals(:to_pool_id)
     when :movements_out then movement_totals(:from_pool_id)
+    when FUNDED_ON then funding_dates
     end
   end
 
-  # One grouped SUM per entry kind. The WHERE and the GROUP BY are the same expression, so a row
-  # can only be counted for a pool the predicate itself assigns it to — an entry whose category
-  # belongs to somebody else's pool is outside the IN list and is not summed for anybody, which
-  # is what an unbatched calculator does too (it filters on one pool id and sees nothing else).
-  def entry_totals(scope)
-    scoped(scope)
-      .where("#{ENTRY_POOL_ID} IN (:ids)", ids: @pool_ids)
-      .group(ENTRY_POOL_ID)
-      .sum(:amount)
+  # THE LAST DAY MONEY ENTERED EACH POOL — the three money-IN scopes of PoolCalculator#balance and
+  # only those, exactly as PoolCalculator#last_funded_on names them: what was spent out of an
+  # envelope says nothing about which period funded it.
+  #
+  # Three grouped queries for the whole set rather than three per pool, and the merge takes the
+  # LATER of two dates for a pool that appears in more than one — which is the same `.compact.max`
+  # the unbatched reader runs over its own three scalars, one level up. A pool present in none of
+  # the three is absent from the result, and #terms_for reads that absence as nil.
+  #
+  # `date` is a datetime column, so `maximum` type-casts to a TimeWithZone here exactly as it does
+  # unbatched; the `.to_date` that turns it into a whole day stays in PoolCalculator, where the
+  # request's zone is the one that applies.
+  def funding_dates
+    [entry_maxima(Entry.incomes), entry_maxima(Entry.savings), movement_maxima]
+      .reduce { |left, right| left.merge(right) { |_id, earlier, later| [earlier, later].max } }
+  end
+
+  # One grouped SUM per entry kind, over the shared grouped scope below.
+  def entry_totals(scope) = grouped_entries(scope).sum(:amount)
+
+  def entry_maxima(scope) = grouped_entries(scope).maximum(:date)
+
+  # The WHERE and the GROUP BY are the same expression, so a row can only be counted for a pool
+  # the predicate itself assigns it to — an entry whose category belongs to somebody else's pool
+  # is outside the IN list and is not counted for anybody, which is what an unbatched calculator
+  # does too (it filters on one pool id and sees nothing else).
+  #
+  # SHARED BY THE SUM AND THE MAX rather than written twice: the two aggregates answer about the
+  # same rows by construction, so a term that moved would move both together instead of letting a
+  # balance and its funding date describe different sets of entries.
+  def grouped_entries(scope)
+    scoped(scope).where("#{ENTRY_POOL_ID} IN (:ids)", ids: @pool_ids).group(ENTRY_POOL_ID)
   end
 
   # `pool.movements_in` / `#movements_out` are `to_pool_id` / `from_pool_id` on PoolMovement and
   # carry no other condition, so the batched form is the same rows with the id read back out.
-  def movement_totals(column)
-    scoped(PoolMovement.where(column => @pool_ids)).group(column).sum(:amount)
+  def movement_totals(column) = grouped_movements(column).sum(:amount)
+
+  # Movements IN only, because that is the direction that funds a pool.
+  def movement_maxima = grouped_movements(:to_pool_id).maximum(:date)
+
+  def grouped_movements(column)
+    scoped(PoolMovement.where(column => @pool_ids)).group(column)
   end
 
   # PoolCalculator#scoped, and deliberately the same expression: `date` is a datetime column on
   # both tables and the bound is inclusive, so a ledger and an unbatched calculator asked about
-  # the same instant have to include the same rows.
+  # the same instant have to include the same rows. It wraps the MAX(date)s too, because
+  # #last_funded_on's three queries go through PoolCalculator#scoped today — an `as_of` calculator
+  # must not report itself funded by money it has not reached yet.
   def scoped(relation)
     as_of ? relation.where(date: ..as_of) : relation
   end
