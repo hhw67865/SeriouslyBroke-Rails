@@ -251,12 +251,23 @@ RSpec.describe "Entry impact card", type: :system do
     end
 
     it "is told the truth and pointed at the Budget page", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='unbudgeted']")
+      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='spending']")
 
       within(card) do
         expect(figure("headline")).to have_text("No envelope — this spending isn't budgeted.")
         expect(page).to have_text("It comes out of your buffer.")
         expect(page).to have_link("Give it an envelope on the Budget page", href: budget_page_path)
+      end
+    end
+
+    # THE CONTRIBUTION'S SENTENCE IS NOT THIS ONE — see the goalless-savings example below. Pinned
+    # from this side too, because "same card, different noun" is exactly the shape that would pass
+    # a one-sided assertion.
+    it "does not borrow the contribution's words", :aggregate_failures do
+      within(card) do
+        expect(page).not_to have_text("No goal")
+        expect(page).not_to have_text("The money stays in your buffer")
+        expect(page).not_to have_link("Make a savings goal for it")
       end
     end
 
@@ -279,8 +290,66 @@ RSpec.describe "Entry impact card", type: :system do
       visit new_entry_path
       select_category("Estimated Taxes")
 
-      expect(page).to have_css("[data-impact-card='unbudgeted']")
+      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='spending']")
       expect(page).not_to have_css("[data-impact-card='envelope']")
+    end
+  end
+
+  # A CONTRIBUTION IS NOT SPENDING, and the expense sentence is false of it in every clause: nothing
+  # comes OUT of the buffer (under ENTRY_POOL_ID this entry counts toward no pool, so the money stays
+  # there), and the Budget page's rate suggestion is `expense?`-gated, so it would never offer this
+  # category anything. The fix is a savings pool, and the link goes where that is made.
+  describe "a savings category whose goal is gone" do
+    before do
+      create(:category, user: user, name: "Old Goal", category_type: :savings, pool: nil)
+
+      visit new_entry_path
+      select_category("Old Goal")
+    end
+
+    it "gets the contribution's own sentence and the fix that exists", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='contribution']")
+
+      within(card) do
+        expect(figure("headline")).to have_text("No goal — this contribution has nowhere to land.")
+        expect(page).to have_text("The money stays in your buffer.")
+        expect(page).to have_link("Make a savings goal for it", href: new_pool_path)
+      end
+    end
+
+    it "does not borrow the spending sentence", :aggregate_failures do
+      within(card) do
+        expect(page).not_to have_text("No envelope")
+        expect(page).not_to have_text("It comes out of your buffer")
+        expect(page).not_to have_link("Give it an envelope on the Budget page")
+      end
+    end
+  end
+
+  # An empty grey track beside "$240.00 left" would say "nothing left" an inch under a figure saying
+  # otherwise, so an envelope with nothing to claim gets no bar at all.
+  describe "an envelope with no rules on it" do
+    let(:gifts_pool) { create(:pool, :budget_pool, user: user, account: checking, name: "Gifts") }
+
+    before do
+      create(:category, user: user, name: "Gifts", category_type: :expense, pool: gifts_pool)
+      create(:pool_movement, from_pool: checking, to_pool: gifts_pool, amount: 240, date: Time.zone.now)
+
+      visit new_entry_path
+    end
+
+    it "prints the figures and draws no bar", :aggregate_failures do
+      select_category("Gifts")
+
+      within(card) { expect(figure("balance")).to have_text("$240.00") }
+      expect(page).not_to have_css("[data-figure='bar']", visible: :all)
+    end
+
+    it "draws one on an envelope that does claim something", :aggregate_failures do
+      select_category("Groceries")
+
+      within(card) { expect(figure("balance")).to have_text("$240.00") }
+      expect(page).to have_css("[data-figure='bar']", visible: :all)
     end
   end
 
@@ -435,6 +504,34 @@ RSpec.describe "Entry impact card", type: :system do
         expect(figure("envelope")).to have_text("Dining Out envelope")
         expect(figure("balance")).to have_text("$100.00")
         expect(figure("balance-after")).to have_text("$55.00")
+      end
+    end
+  end
+
+  # THE TWO SIGNS COME FROM TWO RECORDS AT ONCE, and the fragment endpoint has to carry the entry id
+  # for the first of them to be readable at all: the SAVED category says a contribution went IN, the
+  # category now in the select says an expense comes OUT. Reading either off the wrong record moves
+  # the figure by twice the entry.
+  describe "re-categorising a contribution as spending" do
+    let(:vacation_pool) do
+      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
+    end
+    let!(:contribution) do
+      vacation = create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
+      create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
+      create(:pool_movement, from_pool: checking, to_pool: vacation_pool, amount: 600, date: Time.zone.now)
+      create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.current)
+    end
+
+    it "gives the contribution back before subtracting the expense", :aggregate_failures do
+      visit edit_entry_path(contribution)
+      select_category("Education")
+
+      # Ledger: 600 funded + 150 contributed. Without the contribution: 600. Spending 150: 450.
+      expect(vacation_pool.calculator.balance).to eq(BigDecimal("750"))
+      within(card) do
+        expect(figure("balance")).to have_text("$600.00")
+        expect(figure("balance-after")).to have_text("$450.00")
       end
     end
   end

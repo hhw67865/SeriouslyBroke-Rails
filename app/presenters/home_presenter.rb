@@ -40,7 +40,11 @@ class HomePresenter
     # to two decimals, and it is asked for `delimiter: ""` so a four-figure amount cannot reach a
     # query string as "1,500.00". Recorded rather than deleted so nobody re-derives the old claim
     # from the code and finds it false.
-    def amount_param = ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2, delimiter: "")
+    #
+    # `DigitsHelper.digits` since 2d Task 4: this was a byte-identical copy of the sacrifice view's
+    # spelling, which the impact card made a third consumer of. Four copies of "money a browser can
+    # parse" is four chances to leave the delimiter in.
+    def amount_param = DigitsHelper.digits(amount)
   end
 
   attr_reader :user, :today

@@ -134,12 +134,29 @@ RSpec.describe EntryImpactPresenter do
       expect(present(groceries, amount: "400").bar_percent).to eq(0)
     end
 
-    it "draws nothing, and does not divide, on an envelope with no rules on it", :aggregate_failures do
+    # NO BAR AT ALL rather than an empty one: a full-length grey track under "$240.00 left" says
+    # "nothing left" an inch beneath a figure saying otherwise.
+    it "has no bar at all, and does not divide, on an envelope with no rules on it", :aggregate_failures do
       fund(groceries_pool, 240)
 
+      expect(present(groceries).bar?).to be(false)
       expect(present(groceries).denominator).to eq(0)
       expect(present(groceries).bar_percent).to eq(0)
       expect(present(groceries).balance).to eq(BigDecimal("240"))
+    end
+
+    it "has one the moment the envelope has something to claim", :aggregate_failures do
+      fund(groceries_pool, 240)
+      rate(groceries_pool, 300)
+
+      expect(present(groceries).bar?).to be(true)
+      expect(present(groceries).bar_percent).to eq(80)
+    end
+
+    it "has none on a card with no envelope behind it" do
+      unpooled = create(:category, user: user, name: "Shopping", category_type: :expense, pool: nil)
+
+      expect(present(unpooled).bar?).to be(false)
     end
   end
 
@@ -247,6 +264,26 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance).to eq(0)
       expect(impact.balance_after).to eq(BigDecimal("150"))
     end
+
+    # RE-CATEGORISING ACROSS TYPES, which is where the two signs are read from two different places
+    # at once: the SAVED category decides what the ledger counted (a savings entry went IN), and the
+    # category now in the form decides what the save would do (an expense comes OUT). Reading either
+    # sign off the wrong record moves the figure by twice the entry.
+    it "reads the exclusion off the saved category and the subtraction off the chosen one", :aggregate_failures do
+      vacation_pool = create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
+      vacation = create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
+      education = create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
+      fund(vacation_pool, 600)
+      contribution = create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.new(2026, 2, 6))
+
+      impact = present(education, amount: "150", entry: contribution)
+
+      # Ledger: 600 funded + 150 contributed. Without the contribution: 600. Spending 150: 450.
+      expect(vacation_pool.calculator(today: today).balance).to eq(BigDecimal("750"))
+      expect(impact.balance).to eq(BigDecimal("600"))
+      expect(impact.direction).to eq(-1)
+      expect(impact.balance_after).to eq(BigDecimal("450"))
+    end
   end
 
   describe "a category with no envelope" do
@@ -272,10 +309,26 @@ RSpec.describe EntryImpactPresenter do
       expect(present(on_the_account, amount: "55").figures?).to be(false)
     end
 
-    it "says it of a savings category whose goal is gone too" do
+    # THE TWO ARMS ARE DIFFERENT SENTENCES, and #contribution? is what picks between them. A
+    # contribution with nowhere to land does not come OUT of the buffer — under ENTRY_POOL_ID it
+    # counts toward no pool at all, so the money STAYS there — and the Budget page's rate suggestion
+    # is `expense?`-gated, so it would never offer this category anything.
+    it "says it of a savings category whose goal is gone too, in the contribution's own words", :aggregate_failures do
       orphan = create(:category, user: user, name: "Old Goal", category_type: :savings, pool: nil)
 
       expect(present(orphan).unbudgeted?).to be(true)
+      expect(present(orphan).contribution?).to be(true)
+    end
+
+    it "does not call an expense a contribution", :aggregate_failures do
+      expect(present(unpooled).contribution?).to be(false)
+      expect(present(unpooled).unbudgeted?).to be(true)
+    end
+
+    it "calls a savings category on an ACCOUNT a contribution too" do
+      on_the_account = create(:category, user: user, name: "Buffer Top-up", category_type: :savings, pool: checking)
+
+      expect(present(on_the_account).contribution?).to be(true)
     end
 
     it "is not what an enveloped category gets", :aggregate_failures do
@@ -395,6 +448,37 @@ RSpec.describe EntryImpactPresenter do
     it "takes a BigDecimal straight from the record on edit", :aggregate_failures do
       expect(present(groceries, amount: BigDecimal("55.25")).amount).to eq(BigDecimal("55.25"))
       expect(present(groceries, amount: BigDecimal("-55")).amount).to eq(0)
+    end
+
+    # THE CLIENT'S COPY OF THIS RULE, PINNED AT THE SOURCE. The card's whole client/server agreement
+    # rests on the browser and Ruby agreeing about what a number is, and the two spellings cannot be
+    # one literal across two languages — so the source is read and compared. A keystroke that reads
+    # as $50 in Ruby and as nothing in JavaScript would show a figure that moves on submit.
+    #
+    # THE ANCHORS DIFFER ON PURPOSE and that is the point of comparing the BODY rather than the whole
+    # pattern. JavaScript's `$` without `m` is already end-of-string; RUBY'S IS NOT — `^`/`$` are
+    # line anchors there — so `\A…\z` is the spelling that means the same thing. Measured on the one
+    # input where it bites (see the example below): `"5\n5"` matches `/^\d*\.?\d+$/` in Ruby on its
+    # first line while `Number("5\n5")` is NaN, so the two halves would read the same keystrokes as
+    # $5 and as nothing.
+    it "is the same rule the browser applies", :aggregate_failures do
+      js = Rails.root.join("app/javascript/controllers/app/entry/impact_controller.js").read
+      client_pattern = js[%r{static TYPED_AMOUNT = /(.+)/}, 1]
+      server_pattern = described_class::TYPED_AMOUNT.source
+
+      expect(client_pattern).to eq("^\\d*\\.?\\d+$")
+      expect(server_pattern).to eq("\\A\\d*\\.?\\d+\\z")
+      expect(client_pattern[1..-2]).to eq(server_pattern[2..-3])
+    end
+
+    # `\A…\z` EARNING ITS KEEP. `#strip` takes the trailing newline off "55\n" — as the browser's
+    # `.trim()` does — so that shape never separates the two anchorings. An EMBEDDED one does:
+    # `"5\n5"` survives `strip`, matches Ruby's line-anchored `$` on its first line, and is NaN to
+    # `Number`. `\z` refuses it, which is the answer the browser already gives.
+    it "refuses an embedded newline, which Ruby's line-anchored `$` would have waved through", :aggregate_failures do
+      expect(present(groceries, amount: "5\n5").amount).to eq(0)
+      expect("5\n5".match?(/^\d*\.?\d+$/)).to be(true)
+      expect(present(groceries, amount: "55\n").amount).to eq(BigDecimal("55"))
     end
   end
 end

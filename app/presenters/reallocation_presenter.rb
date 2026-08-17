@@ -245,10 +245,15 @@ class ReallocationPresenter
   # Two decimals, not BigDecimal#to_s("F"), which rendered a link carrying `amount=300` back into
   # the box as "300.0" — measured on screen. A money box showing one decimal place invites the
   # reader to wonder which figure the screen is actually working with.
+  #
+  # `DigitsHelper.digits` since 2d Task 4 — this was the fourth byte-identical spelling of it. The
+  # nil guard stays HERE and does not move into the helper: nil is meaningful on this screen only
+  # (an untouched amount box is empty, not "0.00"), and pushing it down would hand every other
+  # consumer a silent nil where a figure belongs.
   def amount_value
     return nil if amount.nil?
 
-    ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2, delimiter: "")
+    DigitsHelper.digits(amount)
   end
 
   private

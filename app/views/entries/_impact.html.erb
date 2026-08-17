@@ -28,14 +28,30 @@
         comes out of your buffer" of exactly this population (`Category#buffer_funded?`), so a user
         who meets the sentence here and the offer there is reading one app. And it points at the
         Budget page, which is where the offer to fix it lives. %>
-    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4" data-impact-card="unbudgeted">
-      <p class="text-sm font-medium text-gray-900" data-figure="headline">
-        No envelope — this spending isn't budgeted.
-      </p>
-      <p class="mt-1 text-sm text-gray-600">
-        It comes out of your buffer.
-        <%= link_to "Give it an envelope on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
-      </p>
+    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
+         data-impact-card="unbudgeted"
+         data-unbudgeted-arm="<%= impact.contribution? ? "contribution" : "spending" %>">
+      <%# TWO ARMS, AND NOT ONE SENTENCE WITH A DIFFERENT NOUN — see #contribution?. A contribution
+          with nowhere to land does not come OUT of the buffer, it STAYS in it, and the fix for it is
+          a savings pool rather than a rule on the Budget page (whose rate suggestion is
+          `expense?`-gated and would never offer this category anything). %>
+      <% if impact.contribution? %>
+        <p class="text-sm font-medium text-gray-900" data-figure="headline">
+          No goal — this contribution has nowhere to land.
+        </p>
+        <p class="mt-1 text-sm text-gray-600">
+          The money stays in your buffer.
+          <%= link_to "Make a savings goal for it", new_pool_path, class: "text-status-info hover:underline" %>
+        </p>
+      <% else %>
+        <p class="text-sm font-medium text-gray-900" data-figure="headline">
+          No envelope — this spending isn't budgeted.
+        </p>
+        <p class="mt-1 text-sm text-gray-600">
+          It comes out of your buffer.
+          <%= link_to "Give it an envelope on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+        </p>
+      <% end %>
     </div>
   <% else %>
     <%# `data-balance` and `data-denominator` in plain, undelimited digits (DigitsHelper.digits),
@@ -82,12 +98,16 @@
           balance-after ÷ what the envelope is for, clamped 0..1. An overdrawn envelope simply has
           no bar left — the figure above says so, signed and in red, which is the same way the
           account header prints a negative buffer. %>
-      <div class="mt-2 h-2 w-full overflow-hidden rounded bg-gray-200">
-        <div class="h-full rounded bg-brand"
-             data-app--entry--impact-target="bar"
-             data-figure="bar"
-             style="width: <%= impact.bar_percent %>%"></div>
-      </div>
+      <%# OMITTED ENTIRELY when the envelope has no rules on it (see #bar?): an empty track drawn
+          beside "$240.00 left" would say "nothing left" an inch under a figure saying otherwise. %>
+      <% if impact.bar? %>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded bg-gray-200">
+          <div class="h-full rounded bg-brand"
+               data-app--entry--impact-target="bar"
+               data-figure="bar"
+               style="width: <%= impact.bar_percent %>%"></div>
+        </div>
+      <% end %>
 
       <%# §6: "Overdrawing shows the envelope going negative and says the buffer can cover it."
           BOTH STATES ARE RENDERED BY THE SERVER and the browser only toggles `hidden`, so the

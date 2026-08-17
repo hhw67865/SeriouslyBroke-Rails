@@ -70,7 +70,9 @@ export default class extends Controller {
 
     this.afterTarget.textContent = this.money(after)
     this.afterTarget.classList.toggle("text-status-danger", after < 0)
-    this.barTarget.style.width = `${this.barPercent(after, denominator)}%`
+    // An envelope with no rules on it has no bar at all — the server omits it rather than drawing
+    // an empty track beside a real figure — so this is a real absence, not a defensive guard.
+    if (this.hasBarTarget) this.barTarget.style.width = `${this.barPercent(after, denominator)}%`
     this.bufferTarget.hidden = after >= 0
     this.writeSubmit(after < 0)
   }
@@ -162,11 +164,17 @@ export default class extends Controller {
   // for one number.
   //
   // `cents === 0 ? 0 : cents` AND NOT `Math.abs`, because BOTH halves of that are load-bearing here.
-  // Negative zero is reachable — `Math.round(-0.4)` is `-0`, and so is a balance spent to the exact
-  // penny through the wrong rounding — and `Intl.NumberFormat().format(-0)` is "-$0.00", which is
-  // the sacrifice dial's exact shipped bug: the one keystroke that lands an envelope precisely
-  // level printed a negative. `Math.abs` was the fix THERE because that figure is never negative;
-  // here the sign is the whole point of the overdraw state, so only the zero is normalised.
+  // `Intl.NumberFormat().format(-0)` is "-$0.00" — the sacrifice dial's exact shipped bug, where the
+  // one keystroke that landed a budget precisely level printed a negative. `Math.abs` was the fix
+  // THERE because that figure is never negative; here the sign is the whole point of the overdraw
+  // state, and `Math.abs` would destroy it, so only the zero is normalised.
+  //
+  // BELT AND BRACES, STATED RATHER THAN IMPLIED: with integer cents on both sides this branch
+  // cannot fire. `-0` in JavaScript comes from a negative operand or a negative-rounding
+  // (`Math.round(-0.4)`), and every operand reaching here is already an integer number of cents, so
+  // an exactly-level envelope arrives as `+0`. It stays because it costs a comparison and it is
+  // what absorbs a future change of units back to dollars — the change that produced the bug
+  // upstream.
   money(cents) {
     const safe = cents === 0 ? 0 : cents
 

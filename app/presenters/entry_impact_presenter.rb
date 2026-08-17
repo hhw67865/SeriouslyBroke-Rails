@@ -95,6 +95,21 @@ class EntryImpactPresenter
   # two-armed question here does not.
   def unbudgeted? = pool.nil? || pool.pool_type_account?
 
+  # WHICH HONEST CARD, and the two are not one sentence with a different noun.
+  #
+  # A CONTRIBUTION IS NOT SPENDING, and every clause of the expense sentence is false of it. Nothing
+  # "comes out of" the buffer: under `PoolBalanceLedger::ENTRY_POOL_ID` a savings entry whose
+  # category names no pool counts toward NO pool at all, so the money it moves stays exactly where
+  # it was — unclaimed cash in the account, which is the buffer. Saying it comes out is the precise
+  # opposite of what happens. And the Budget page is the wrong destination: the rate suggestion that
+  # would fix an unbudgeted EXPENSE has `Category#buffer_funded?` for its population, which is
+  # `expense? && …`, so that screen will never offer this category anything. The fix for a
+  # contribution with nowhere to land is a savings pool, and it is made on `/pools/new`.
+  #
+  # Keyed on the CATEGORY's type, unlike #goal?, which is keyed on the pool's — here there is no
+  # pool to ask, and the question is what the user is doing rather than where it would land.
+  def contribution? = category.present? && category.savings?
+
   # A SAVINGS POOL IS A GOAL, so the card takes the goal shape (`$X → $Y of $Z goal`) rather than
   # the envelope's. `target_amount` is the existing goal reader — `PoolCalculator#progress_percentage`
   # and `#remaining_amount` measure against exactly this — and a savings pool with no target set has
@@ -176,9 +191,15 @@ class EntryImpactPresenter
   # The envelope case is untouched: a budget pool's bar is Σ steady_ask, exactly as ruled.
   def denominator = @denominator ||= goal_target || steady_claim
 
+  # WHETHER THERE IS A BAR AT ALL. An envelope with no rules on it has no per-period claim, so
+  # there is nothing for a bar to be a fraction OF — and an empty track drawn beside real figures
+  # says "nothing left" an inch under a line saying $240.00, which is the same two-answers-on-one-
+  # card defect that moved the goal's denominator. No denominator, no bar.
+  def bar? = figures? && denominator.positive?
+
   # BALANCE-AFTER OVER THE DENOMINATOR, CLAMPED 0..1. Zero when there is nothing to measure against:
-  # an envelope with no rules on it has no per-period claim, so the bar has no length to mean
-  # anything with, and dividing by it would be a `ZeroDivisionError` on a rendering path.
+  # the bar is not rendered in that case (see #bar?), and the guard stays because dividing by it
+  # would be a `ZeroDivisionError` on a rendering path and this reader is public.
   def bar_fraction
     return 0.to_d unless denominator.positive?
 
@@ -238,9 +259,13 @@ class EntryImpactPresenter
   # The entry AS THE LEDGER HOLDS IT, or nil when the ledger holds none: nothing at all for a new
   # entry, and a reload for the one path where the object handed in is provably not the record on
   # disk. `#changed?` is false on every ordinary path, so the query is not paid for on any of them.
+  #
+  # SCOPED THROUGH `user.entries`, not `Entry`. The controller already scopes both ids it accepts,
+  # so a bare `Entry.find_by` is safe today — and this is the one read on a path that PRINTS A
+  # BALANCE, so it should not be safe by argument about a caller. It costs the same query.
   def counted_entry
     return nil unless entry&.persisted?
 
-    entry.changed? ? Entry.find_by(id: entry.id) : entry
+    entry.changed? ? user.entries.find_by(id: entry.id) : entry
   end
 end

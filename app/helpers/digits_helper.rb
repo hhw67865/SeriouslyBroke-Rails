@@ -4,12 +4,19 @@
 # data attribute rather than as copy. Two spellings would be two chances to leave the delimiter
 # in, and the delimiter is the defect.
 #
-# EXTRACTED FROM `SacrificePresenter.digits`, which was its first and for one plan its only home.
-# It has two consumers now — the sacrifice dial's claims and gap, and the §6 impact card's balance
-# and bar denominator — and a second copy beside the second consumer is exactly how the two would
-# come to disagree about what a thousands separator is. The reader moved; the sacrifice view calls
-# it through `Row#claim_param` and `#gap_param` exactly as before, so nothing on that screen
-# changed shape.
+# EXTRACTED FROM `SacrificePresenter.digits`, which was its first home and never its only one. FOUR
+# consumers, and the count is measured rather than claimed — the last two were byte-identical
+# copies found by grep when the third was about to become a fourth:
+#
+#   * `SacrificePresenter::Row#claim_param` / `#gap_param` — the dial's per-period claims and gap,
+#   * `EntryImpactPresenter#balance_param` / `#denominator_param` — the §6 impact card,
+#   * `HomePresenter::Fix#amount_param` — the attention band's fix links,
+#   * `ReallocationPresenter#amount_value` — the reallocation form's amount box (which keeps its own
+#     nil guard, because an untouched box is empty and that is true of no other caller).
+#
+# Every one of them calls the same method now. Four spellings would be four chances to leave the
+# delimiter in, and every caller kept its own name and its own behaviour, so no screen changed
+# shape.
 #
 # THE LIVE HAZARD IS THE THOUSANDS SEPARATOR, and it is measured rather than assumed:
 # `number_to_rounded` delimits by default, so a $1,500 figure would reach `data-claim` as
