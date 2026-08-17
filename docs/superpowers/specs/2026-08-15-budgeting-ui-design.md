@@ -406,6 +406,22 @@ you *are* $50 short. The one rough edge — a pool flipping from *on track* to
 `updated_at` cannot tell a raise from a cut, and a pool's row cannot name which of its
 rules moved — the wording claims exactly what the signal knows.)
 
+### 8.1 The Categories page's one change
+
+The nav table above promises it; here it is. A category's show page carries a budget block
+today, built for caps. Under envelope budgeting it becomes envelope-aware, three states:
+
+- **Pool-covered** (the category points at an envelope): no cap editor — the model already
+  forbids a cap here — and the block names the envelope, its balance through the one row
+  vocabulary, and links to `/budget`. The envelope is where this category's money now lives.
+- **Budgetable with a cap**: the cap editor stays, plus the same one-sentence caveat the
+  Budget page's structural check uses — a cap is a tracking limit, not counted in what your
+  rules need. One spelling of that sentence, not two.
+- **Budgetable, no cap**: unchanged, except the block may point at the Budget page's
+  suggestions if the engine currently proposes a rule for this category.
+
+Nothing else on the page changes. The tracking half stays good.
+
 ## 9. The structural check
 
 Reallocation cannot fix a budget that does not fit an income. The app must say so
