@@ -99,8 +99,50 @@ class DistributionPresenter
   # has passed or cannot be reached is the app's loudest fact.
   RED_STATES = [:overdue, :wont_make_it].freeze
 
-  Standing = Data.define(:state, :amount, :due_on, :target) do
+  # THE FIFTH MEMBER IS `period_closed`, AND THE VOCABULARY IS WHY (2d whole-plan review, fix 3).
+  #
+  # This object is "a PoolStatus reduced to the values its label is made of", and the label grew a
+  # clause this list did not have. `HomeHelper#pool_status_label` appends ` · last period` from
+  # `period_closed:`, so the alerts band — the only place on this screen that labels a Standing
+  # with no row of its own — had no way to pass it, while every other status on the screen does.
+  #
+  # HOW BAD IS IT TODAY: NOT BAD, AND THE HONEST ANSWER IS "UNREACHABLE" (measured, not assumed —
+  # see the reachability example in distribution_presenter_spec). The band holds red envelopes with
+  # NO ROW, and a `period_closed?` envelope always has one: #fill asks with `net_of_sweep: true`,
+  # so a closed envelope's leftover is swept off its balance and its rate rules ask for their full
+  # amounts again, while `BudgetCalculator#shortfall` clamps at zero so no other rule can subtract
+  # that back down. Ask positive → row → not an alert. The two screens cannot currently disagree.
+  #
+  # IT IS FIXED ANYWAY, because that argument is a proof about ANOTHER class's fill semantics
+  # holding a property of THIS one's vocabulary. It is exactly the shape of reasoning that made
+  # `shared/_pool_status` necessary: two screens that agree by argument rather than by
+  # construction, with nothing to fail when the argument stops being true. Reject zero-ask rows a
+  # different way, or admit a red state that does not ask for money, and the band starts printing a
+  # shorter sentence about the same envelope than Home does — silently, because a missing suffix
+  # still renders.
+  #
+  # CAPTURED INSIDE THE TRANSACTION LIKE ITS SIBLINGS, and for the same reason: `PoolStatus`
+  # delegates `#period_closed?` to a calculator whose `#last_funded_on` is three MAX(date)s over
+  # movements and entries, so asked after the rollback it would answer against a ledger where this
+  # period's split is back — the half-row defect the whole snapshot exists to prevent.
+  #
+  # IT ANSWERS RATHER THAN REFUSING, verified and not assumed. `PoolCalculator::SWEEP_READERS`
+  # lists `:period_closed?`, and `PoolProjection` refuses every name on that list — but only when
+  # `net_of_sweep` (see PoolProjection#refuse_when_net_of_sweep). Both Standings built here come
+  # through `#standing_for`, which passes `pending:` and never `net_of_sweep:`, so the alerts
+  # band's is a plain PoolCalculator (`PoolProjection.for` returns one when neither projection is
+  # asked for) and the consequence line's is a projection with the refusal switched off.
+  #
+  # ONE OF THE TWO CONSUMERS IGNORES IT, deliberately. `DistributionsHelper
+  # #distribution_unrecoverable_sentence` labels `Consequence#standing`, which is a projected
+  # state — what this envelope BECOMES if the edit is confirmed — and hanging "last period" off a
+  # world that does not exist yet would date a sentence about the future.
+  Standing = Data.define(:state, :amount, :due_on, :target, :period_closed) do
     def red? = RED_STATES.include?(state)
+
+    # The reader `pool_status_label` consumes, spelled as PoolStatus spells it so a caller reading
+    # one and a caller reading the other cannot come to mean different things.
+    def period_closed? = period_closed
   end
 
   # WHAT AN OVERRIDE COSTS YOU LATER — the sentence this screen exists to be able to say, and
@@ -581,7 +623,13 @@ class DistributionPresenter
       # not "fix" this by projecting the status; the projection already exists, on the row that
       # was edited, as Consequence#standing.
       status: standings.fetch(pool.id),
-      period_closed: pool.calculator(today: today, terms: ledger.terms_for(pool)).period_closed?,
+      # OFF THE SAME STANDING AS THE LINE'S STATE, not a calculator of its own. This used to build
+      # a second `pool.calculator(today:, terms:)` — provably the same object PoolStatus builds
+      # internally, and therefore provably the same answer — but "provably" is the word #capture's
+      # own comment refuses to rest on for `status`: one Standing per pool id is what stops a line
+      # and an alert disagreeing about one envelope, and the suffix is now part of what they agree
+      # about. The member stays because DistributionsHelper reads `line.period_closed`.
+      period_closed: standings.fetch(pool.id).period_closed?,
       # Both sentences are only ever computed for a row the USER typed in. The cascade moves the
       # funding of rows below an override without anybody editing them, and "you're moving $200
       # onto your next period" about a row the waterfall reached on its own names the wrong
@@ -718,7 +766,16 @@ class DistributionPresenter
   def standing_for(pool, pending: PoolProjection::Pending.none)
     status = pool.status(today: today, pending: pending, terms: ledger.terms_for(pool))
 
-    Standing.new(state: status.state, amount: status.amount, due_on: status.due_on, target: status.target)
+    Standing.new(
+      state: status.state,
+      amount: status.amount,
+      due_on: status.due_on,
+      target: status.target,
+      # `PoolStatus#period_closed?`, the same delegation Home's row reads, off the calculator this
+      # status already holds — never a second `pool.calculator`, which is the two-objects-one-pool
+      # shape PoolStatus's own comment on that delegation refuses.
+      period_closed: status.period_closed?
+    )
   end
 
   # The consequence of one override, or nil — nil both when the user changed nothing and when

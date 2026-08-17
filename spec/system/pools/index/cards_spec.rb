@@ -106,16 +106,27 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
       # Current balance: -$500
       # Target: $10,000
-      # Progress: -5%
+      # Progress: 0% — see below.
 
       before do
         create(:entry, item: expense_item, amount: 500.0)
         visit pools_path
       end
 
-      it "shows negative progress and balance" do
+      # CHANGED WITH THE FLOOR (2d whole-plan review, fix 1). This pinned "-5% complete", which is
+      # the figure `PoolCalculator#progress_percentage` produced before it clamped at zero as well
+      # as at 100 — the same unclamped reader that drew "-30% complete" on an account's page. The
+      # expectation was pinning the defect, so it moves with the fix: a bar measures how much of a
+      # target is there, and less than none of it is there is still none of it.
+      #
+      # THE BALANCE ASSERTION IS UNTOUCHED AND IS THE POINT OF KEEPING THIS EXAMPLE. The money is
+      # still -$500.00 and the card still says so in red — the clamp is on the RATIO, not on the
+      # figure, and `Σ pools == your bank balance` would be broken by rounding an overdraft up to
+      # zero anywhere.
+      it "floors progress at zero and still prints the negative balance" do
         within(".bg-white.rounded", text: "Emergency Fund") do
-          expect(page).to have_content("-5% complete")
+          expect(page).to have_content("0% complete")
+          expect(page).to have_no_content("-5% complete")
 
           current_label = find("span.text-xs.text-gray-500", text: "Current")
           current_amount = current_label.sibling("span.text-base.font-semibold")

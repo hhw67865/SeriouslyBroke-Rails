@@ -71,12 +71,22 @@
   <%# Red pools with no row of their own: an overdue bill whose envelope already holds the money
       asks for nothing and is rejected from the waterfall, so this band is the only place on the
       screen it can appear. It is also the thing the density switch fired on, and a table that
-      opened without saying why reads as a bug. %>
+      opened without saying why reads as a bug.
+
+      `period_closed:` LIKE EVERY OTHER ROW ON THIS SCREEN (2d whole-plan review, fix 3). This band
+      passed no suffix at all until `DistributionPresenter::Standing` could answer for one. It is
+      the one status on this screen that was labelled with less than the vocabulary offers, and it
+      is a band of pools with NO ROW — which is also why the gap never showed: a closed envelope
+      always asks for its rate again once its leftover is swept, so it always HAS a row and never
+      reaches here. See Standing's header for why "unreachable today" was not a reason to leave it.
+
+      Not the OTHER suffix, exactly as the waterfall rows below: `changed_after_distributing` is
+      about a rule edited since the last split, and this screen is the split being made. %>
   <% presenter.alerts.each do |pool, standing| %>
     <div class="px-6 py-3 border-b border-gray-100 bg-status-danger-light" data-alert-pool="<%= pool.name %>">
       <div class="flex items-baseline justify-between gap-4">
         <span class="font-medium text-gray-900"><%= pool.name %></span>
-        <span class="text-sm text-status-danger"><%= pool_status_label(standing) %></span>
+        <span class="text-sm text-status-danger"><%= pool_status_label(standing, period_closed: standing.period_closed?) %></span>
       </div>
       <p class="mt-0.5 text-xs text-gray-600">
         Its money is already there — this distribution has nothing to add.

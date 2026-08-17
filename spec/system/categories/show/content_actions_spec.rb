@@ -82,7 +82,10 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_content("Savings category details and management")
       expect(page).to have_content("Summary")
       expect(page).to have_content("Monthly Contribution")
-      expect(page).to have_content("Savings Pool")
+      # CHANGED WITH THE ONE NAMER (2d whole-plan review, fix 2): a savings pool is a "Goal" in
+      # every sentence the app writes about one, this page's summary box included.
+      expect(page).to have_content("Goal")
+      expect(page).to have_no_content("Savings Pool")
       expect(page).to have_content("Main Pool")
     end
 

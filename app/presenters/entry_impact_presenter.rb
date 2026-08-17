@@ -123,7 +123,18 @@ class EntryImpactPresenter
   def goal_target = goal? ? pool.target_amount.to_d : nil
 
   # "envelope" or "goal" — the noun the header uses, from the pool's own type.
-  def noun = pool&.pool_type_savings? ? "goal" : "envelope"
+  #
+  # `Pool#noun` NOW, AND THIS CARD IS WHERE THAT MAPPING CAME FROM (2d whole-plan review, fix 2).
+  # The words are unchanged: this was the one screen already saying "goal" for a savings pool and
+  # "buffer" for an account, and the category page's two blocks were moved onto it rather than the
+  # other way round. What changes is that the case expression that produced them is no longer a
+  # third copy of the classification.
+  #
+  # THE `nil` ARM STAYS AND CANNOT FIRE FROM THE VIEW. Both call sites sit inside the branch
+  # `#figures?` guards, so a card printing this noun has a pool that is neither nil nor an account.
+  # The fallback is for the reader that calls it anyway — "envelope" is the right word for spending
+  # that reaches no pool, and it is what the honest card's own headline says.
+  def noun = pool&.noun || "envelope"
 
   # WHAT IS IN THE ENVELOPE, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #

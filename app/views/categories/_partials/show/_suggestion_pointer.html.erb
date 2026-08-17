@@ -14,9 +14,14 @@
     Your spending here already looks like a rule — the Budget page is proposing
     <%= pluralize(presenter.suggestions.size, "rule") %> for this category.
   </p>
+  <%# "it" OR "them", AGREEING WITH THE SENTENCE ABOVE IT. That line already pluralises through
+      `pluralize` — "proposing 2 rules for this category" — and the link under it said "See it",
+      which reads as a pointer at one of the two and leaves the other unaccounted for. The anchor
+      stays the FIRST kind's either way: it opens the panel at the first thing waiting, and
+      scrolling to a section is not a claim about how many are in it. %>
   <%= link_to budget_page_path(anchor: suggestion_kind_anchor(presenter.first_suggestion_kind)),
               class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
-    <span>See it on the Budget page</span>
+    <span>See <%= presenter.suggestions.size > 1 ? "them" : "it" %> on the Budget page</span>
     <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
   <% end %>
 </div>

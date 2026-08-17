@@ -284,10 +284,35 @@ class PoolCalculator
     budgets_by_due_date.sum(0.to_d) { |budget| budget.calculator(today: today).required(allocated_balances[budget]) }
   end
 
+  # HOW FULL, AS A WHOLE PERCENT, CLAMPED AT BOTH ENDS.
+  #
+  # THE FLOOR IS THE FIX (2d whole-plan review, fix 1) AND IT IS AT THE READER. This clamped at 100
+  # and not at zero, so an overdrawn pool measured against a target answered a NEGATIVE percentage
+  # and every render site drew it: the demo's Side Gig Checking (an account, $1,000 buffer marker,
+  # -$300 balance) read `-30% complete` under a red bar, and Task 6's "View Account" link on the
+  # category page walks straight to the page that drew it. "Minus thirty percent complete" is not a
+  # reading of anything — a bar measures how much of a target is there, and less than none of it is
+  # there is still none of it.
+  #
+  # ONE READER, SIX SITES. `pools/show`, `pools/_pool`, `pools/_form`'s live preview,
+  # `dashboard/_pools_strip` (through `Dashboard::SavingsPresenter`), `categories/_summary_card` and
+  # `categories/_pool_card` all print this figure and four of them also branch on its sign; fixing
+  # it in any one of them would have left the other five saying the other thing. The impact card's
+  # bar is NOT a seventh site and deliberately so — `EntryImpactPresenter#bar_fraction` measures a
+  # DIFFERENT quantity (balance-after over the period's claim) and does its own 0..1 clamp, matched
+  # digit for digit by `impact_controller.js` so the server and the browser agree at both edges.
+  #
+  # THE `progress < 0` / `progress.negative?` BRANCHES IN THOSE VIEWS ARE NOW UNREACHABLE and are
+  # left standing rather than swept out: they cost nothing, they are belt to this brace, and a view
+  # that would draw a red bar if this floor were ever removed is a better failure than one that
+  # would draw a bar of negative width.
+  #
+  # The type is Integer at both bounds by construction — `.round` on the quotient, and two Integer
+  # clamp bounds — so this reader does not carry #balance's money-type guarantee and never did.
   def progress_percentage
     return 0 unless pool.target_amount.to_f.positive?
 
-    [(balance / pool.target_amount * 100).round, 100].min
+    (balance / pool.target_amount * 100).round.clamp(0, 100)
   end
 
   # `to_d`, not `to_f`: nil-safe in exactly the same way (`nil.to_d` is 0, and account and

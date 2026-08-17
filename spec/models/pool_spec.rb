@@ -61,6 +61,26 @@ RSpec.describe Pool, type: :model do
   describe "pool_type" do
     it { is_expected.to define_enum_for(:pool_type).with_values(account: 0, budget: 1, savings: 2).with_prefix }
 
+    # ONE NOUN PER TYPE (2d whole-plan review, fix 2). Three screens held three different words for
+    # one savings pool — "Envelope" in the category page's budget block, "Savings Pool" on its pool
+    # card, "goal" on the entry form's impact card — while every one of them classified the pool
+    # correctly. All three read this now, so the mapping is asserted here whole rather than three
+    # times over in three system suites.
+    it "names each kind of pool in the app's one vocabulary", :aggregate_failures do
+      user = create(:user)
+      checking = create(:pool, :account, user: user, name: "Checking")
+
+      expect(checking.noun).to eq("buffer")
+      expect(create(:pool, :budget_pool, user: user, account: checking).noun).to eq("envelope")
+      expect(create(:pool, pool_type: :savings, user: user).noun).to eq("goal")
+    end
+
+    # `fetch`, so a fourth pool type is a loud failure here rather than three screens quietly
+    # defaulting to "envelope".
+    it "refuses to name a type it does not know" do
+      expect { described_class::NOUNS.fetch("wallet") }.to raise_error(KeyError)
+    end
+
     it "requires budget pools to name an account", :aggregate_failures do
       pool = build(:pool, :budget_pool, account: nil)
 

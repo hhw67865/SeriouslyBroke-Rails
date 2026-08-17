@@ -44,7 +44,7 @@ RSpec.describe "Categories Show - Pool card", type: :system do
   end
 
   # ------------------------------------------------------------------------------------------
-  # A savings pool — the one arm whose rendering does not change
+  # A savings pool — one noun, and the verb the category earns
   # ------------------------------------------------------------------------------------------
 
   describe "a category pointing at a savings pool" do
@@ -56,12 +56,19 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       visit category_path(user.categories.find_by!(name: "Emergency Fund Saving"))
     end
 
-    it "still calls itself a savings pool, with its target and its progress", :aggregate_failures do
+    # CHANGED WITH THE ONE NAMER (2d whole-plan review, fix 2). This pinned "Savings Pool" and
+    # "View Savings Pool", which were this card's private nouns for a pool the budget block above
+    # called an "Envelope" and the entry form's impact card called a "goal" — three words, one
+    # pool, and the classifiers agreeing throughout. `Pool::NOUNS` is now the single mapping and
+    # the impact card's vocabulary is the one that won, because it was already the app's ("buffer
+    # now" on Home, `#dateless_goal?` on the calculator, §7.1's buffer marker).
+    it "calls itself a goal, with its target and its progress", :aggregate_failures do
       expect(card["data-pool-card-type"]).to eq("savings")
-      expect(card).to have_content("Savings Pool")
+      expect(card).to have_content("Goal")
       expect(card).to have_content("Target: $2,000.00")
       expect(card).to have_content("25% complete")
-      expect(card).to have_link("View Savings Pool")
+      expect(card).to have_link("View Goal")
+      expect(card).to have_no_content("Savings Pool")
     end
 
     # The negative half, and it is not decoration: the type test could have been written the wrong
@@ -70,6 +77,51 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       expect(card).to have_no_content("Envelope")
       expect(card).to have_no_content("Buffer")
       expect(card).to have_no_content("buffer now")
+    end
+
+    # THE VERB IS THE CATEGORY'S, NOT THE POOL'S (fix 2's other half). A savings category really
+    # does contribute.
+    it "says a savings category contributes to it", :aggregate_failures do
+      expect(card).to have_content("This category contributes to a shared goal")
+      expect(card).to have_no_content("draws from")
+    end
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # An EXPENSE category pointing at a savings pool — the shape the three nouns diverged on
+  # ------------------------------------------------------------------------------------------
+
+  # THE DEMO'S OWN SHAPE, not a corner: Health → Emergency Fund and Education → Retirement
+  # Supplement both point an expense category at a savings goal. Before this fix the page said
+  # "Envelope" in the budget block, "Savings Pool" on this card and "contributes to" in its
+  # sentence — while `PoolBalanceLedger::ENTRY_POOL_ID` SUBTRACTS that category's entries from the
+  # pool and `EntryImpactPresenter#direction` signs them -1 on the entry form. The card was naming
+  # the wrong thing and the wrong direction at once.
+  describe "an expense category pointing at a savings pool" do
+    before do
+      goal = create(:pool, user: user, name: "Retirement Supplement", target_amount: 2_000)
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 500, date: Date.current)
+      pointed_at(goal)
+      visit category_path(user.categories.find_by!(name: "Retirement Supplement Spending"))
+    end
+
+    it "calls the pool a goal and says the category DRAWS from it", :aggregate_failures do
+      expect(card["data-pool-card-type"]).to eq("savings")
+      expect(card).to have_content("Goal")
+      expect(card).to have_content("This category's spending draws from a shared goal")
+      expect(card).to have_no_content("This category contributes to")
+      expect(card).to have_no_content("Savings Pool")
+    end
+
+    # THE THREE CARDS AGREEING, ON ONE PAGE, WHICH IS THE WHOLE OF FIX 2. The budget block sits
+    # four inches above this card and used to say "Envelope" about the same pool. Asserted
+    # page-wide rather than in the card's scope, because "the page says one noun" is the claim.
+    it "makes the budget block above it use the same noun", :aggregate_failures do
+      block = find("[data-budget-block]")
+
+      expect(block).to have_content("Goal")
+      expect(block).to have_no_content("Envelope")
+      expect(find("[data-envelope-name]")).to have_content("Retirement Supplement")
     end
   end
 
@@ -84,11 +136,15 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       visit category_path(user.categories.find_by!(name: "Groceries Spending"))
     end
 
+    # UNCHANGED BY THE ONE NAMER, and that is the assertion: "envelope" is what a budget pool was
+    # already called here and on the two screens beside it, so `Pool::NOUNS` had to leave this arm
+    # exactly where it stood while moving the savings one.
     it "names itself an envelope and says how it is doing, in the row vocabulary", :aggregate_failures do
       expect(card["data-pool-card-type"]).to eq("budget")
       expect(card).to have_content("Envelope")
       expect(card).to have_content("$250.00 left")
       expect(card).to have_link("View Envelope")
+      expect(card).to have_no_content("Goal")
     end
 
     # THE DEFECT, ASSERTED AS ITSELF. A budget envelope has no `target_amount` at all, which is how
@@ -98,7 +154,11 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       expect(card).to have_no_content("Savings Pool")
       expect(card).to have_no_content("Target:")
       expect(card).to have_no_content("% complete")
-      expect(card).to have_no_content("contributes to a shared savings pool")
+      # The savings sentence in BOTH of its directions — the noun changed under this assertion
+      # (fix 2) and a stale literal here would have gone on passing against a string the app no
+      # longer prints anywhere.
+      expect(card).to have_no_content("contributes to a shared goal")
+      expect(card).to have_no_content("draws from a shared goal")
     end
   end
 

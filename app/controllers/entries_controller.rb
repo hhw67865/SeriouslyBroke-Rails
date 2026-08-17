@@ -96,8 +96,21 @@ class EntriesController < ApplicationController
   #
   # Memoised because the form asks twice — once for the card and once for the submit button's
   # label — and the answer involves a pool's five ledger aggregates.
+  #
+  # KEYED ON THE ARGUMENT, which a bare `@entry_impact ||=` was not. Its correctness was a fact
+  # about the CIRCUMSTANCE rather than about the method: one entry per render today, so the two
+  # asks are about the same object and the memo is right by accident. A second entry passed to it
+  # in the same request — a form that previewed two rows, an action that rendered a card for the
+  # old and the new item — would silently receive the FIRST entry's card, with its balance, its
+  # envelope name and its overdraw sentence, beside a different amount. A hash keyed on the entry
+  # costs one line and makes the answer a fact about the argument.
+  #
+  # New records are safe as keys: ActiveRecord leaves `#hash`/`#eql?` on object identity for an
+  # unsaved record, so `new` and `create` (which build their entry in the action) get one bucket
+  # each rather than colliding on a nil id.
   def entry_impact(entry)
-    @entry_impact ||= EntryImpactPresenter.new(
+    @entry_impact ||= {}
+    @entry_impact[entry] ||= EntryImpactPresenter.new(
       user: current_user,
       category: entry.item&.category,
       amount: entry.amount,

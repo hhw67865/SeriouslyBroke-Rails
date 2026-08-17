@@ -89,6 +89,39 @@ RSpec.describe PoolCalculator, type: :model do
     end
   end
 
+  # THE FLOOR, IN BOTH DIRECTIONS (2d whole-plan review, fix 1). #progress_percentage capped at 100
+  # and not at zero, so an overdrawn pool measured against a target answered a NEGATIVE percentage
+  # and all six render sites drew it — the demo's Side Gig Checking read "-30% complete" in red,
+  # a savings bar on a bank overdraft.
+  #
+  # BOTH DIRECTIONS, because a floor that also flattened real progress would be a worse bug than
+  # the one it fixed: the overdrawn pool reads 0, and a partly funded one reads its true figure.
+  # The cap is asserted with it, since one clamp now does both jobs and a mutation to either bound
+  # has to fail something.
+  describe "#progress_percentage clamps at both ends", :aggregate_failures do
+    let(:goal) { create(:pool, user: user, name: "Clamped", target_amount: 1_000) }
+    let(:contributions) { create(:item, category: create(:category, :savings, user: user, pool: goal)) }
+    let(:spending) { create(:item, category: create(:category, :expense, user: user, pool: goal)) }
+
+    it "floors at zero on an overdrawn pool and reports the true figure on a partial one" do
+      create(:entry, item: spending, amount: 300)
+
+      expect(goal.calculator.current_balance).to eq(-300) # the balance itself still says so
+      expect(goal.calculator.progress_percentage).to eq(0)
+
+      create(:entry, item: contributions, amount: 550)
+
+      expect(goal.calculator.current_balance).to eq(250)
+      expect(goal.calculator.progress_percentage).to eq(25)
+    end
+
+    it "still caps at 100 when the goal is overfunded" do
+      create(:entry, item: contributions, amount: 2_500)
+
+      expect(goal.calculator.progress_percentage).to eq(100)
+    end
+  end
+
   describe "envelope behaviour" do
     let(:envelope_user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
     let(:checking) { create(:pool, :account, user: envelope_user, name: "Checking") }

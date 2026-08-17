@@ -35,8 +35,13 @@
         card ("No envelope — this spending isn't budgeted. It comes out of your buffer. Give it an
         envelope on the Budget page") and `budget_page/_suggestion_rate`'s "currently comes out of
         your buffer", both of which speak about `Category#buffer_funded?`. Three screens, one
-        sentence. %>
-    <h2 class="text-xl font-semibold mb-4">Buffer</h2>
+        sentence.
+
+        THE HEADING IS `Pool#noun` THOUGH THE WORD DOES NOT CHANGE. An account's noun is already
+        "buffer" — this arm is where the app's vocabulary was RIGHT — and reading it off the one
+        mapping rather than restating it is what keeps the three types answerable from one place
+        instead of three arms agreeing by coincidence. %>
+    <h2 class="text-xl font-semibold mb-4"><%= presenter.pool.noun.capitalize %></h2>
 
     <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
       No envelope — this spending isn't budgeted.
@@ -82,17 +87,29 @@
         group header pass them — this block says how the envelope STANDS RIGHT NOW, and a screen
         that dropped a suffix would describe the same envelope differently from the two screens
         beside it on the same afternoon. `pool_balance_clause` puts the balance on screen for the
-        three states whose figure is a bill's shortfall rather than the pool's money. %>
-    <h2 class="text-xl font-semibold mb-4">Envelope</h2>
+        three states whose figure is a bill's shortfall rather than the pool's money.
+
+        THE NOUN IS `Pool#noun` AND NOT THE LITERAL "Envelope" (2d whole-plan review, fix 2). The
+        arm is shared by a budget pool and a savings one, and it used to call both an envelope —
+        while the pool card four inches below called the same savings pool a "Savings Pool" and the
+        entry form's impact card called it a "goal". Three nouns for one pool, and the classifiers
+        agreed all along: the words were the only thing that had drifted. `Pool::NOUNS` is now the
+        single mapping all three read.
+
+        The DOM hooks stay `data-envelope-*` on both arms. They name the block's slot rather than
+        the pool's kind, the specs scope by them, and renaming them per pool type would give the
+        page two hooks for one row. %>
+    <h2 class="text-xl font-semibold mb-4"><%= presenter.pool.noun.capitalize %></h2>
 
     <p class="text-sm text-gray-500 mb-4">
-      This category's spending comes out of an envelope, so it has no cap — the rule that fills the
-      envelope is what decides how much there is to spend.
+      This category's spending comes out of <%= presenter.pool.noun == "envelope" ? "an" : "a" %>
+      <%= presenter.pool.noun %>, so it has no cap — the rule that fills the
+      <%= presenter.pool.noun %> is what decides how much there is to spend.
     </p>
 
     <dl class="divide-y divide-gray-200 mb-4">
       <div class="py-3 flex justify-between gap-4">
-        <dt class="text-sm font-medium text-gray-500">Envelope</dt>
+        <dt class="text-sm font-medium text-gray-500"><%= presenter.pool.noun.capitalize %></dt>
         <dd class="text-sm text-gray-900 font-medium" data-envelope-name><%= presenter.pool.name %></dd>
       </div>
 

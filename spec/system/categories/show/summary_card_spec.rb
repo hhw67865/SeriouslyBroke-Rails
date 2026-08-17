@@ -36,6 +36,36 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     end
   end
 
+  # THE LEFT COLUMN'S OWN NOUN (2d whole-plan review, fix 2, found in the visual check). This
+  # sentence read "Funded by savings pool <name>" for every pool-covered expense category — false
+  # twice over about an ENVELOPE (not a savings pool, and it is not funding anything: the money
+  # comes out of it), and false once about a goal an expense category SPENDS from. The card sits on
+  # the same page as the budget block and the pool card, which had both been moved onto
+  # `Pool#noun`; this one was still saying the third thing.
+  describe "what the pool-covered sentence calls the pool", :aggregate_failures do
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+    it "names an envelope an envelope" do
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+
+      visit category_path(create(:category, :expense, user: user, name: "Food", pool: envelope))
+
+      expect(page).to have_content("Spending here comes out of the envelope Groceries")
+      expect(page).to have_no_content("Funded by savings pool")
+    end
+
+    # The other direction on the same sentence, and the one the demo actually holds
+    # (Health → Emergency Fund).
+    it "names a savings pool a goal" do
+      goal = create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000)
+
+      visit category_path(create(:category, :expense, user: user, name: "Health", pool: goal))
+
+      expect(page).to have_content("Spending here comes out of the goal Emergency Fund")
+      expect(page).to have_no_content("comes out of the envelope")
+    end
+  end
+
   describe "income category labels", :aggregate_failures do
     let!(:category) { create(:category, category_type: "income", user: user, name: "Salary") }
     let!(:item) { create(:item, category: category, name: "Paycheck") }

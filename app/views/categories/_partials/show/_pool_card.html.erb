@@ -20,20 +20,17 @@
     construction and this new caller cannot repeat the omission the whole-plan review caught twice.
 
     The account arm reads a BALANCE and no state: an account is the buffer (§7.1), its target is a
-    health marker rather than a goal, and `PoolStatus` would word it as saving toward one. %>
+    health marker rather than a goal, and `PoolStatus` would word it as saving toward one.
+
+    THE HEADING IS `Pool#noun` (2d whole-plan review, fix 2), which is what finally closed the
+    three-noun defect this card was the loudest member of. Its savings arm said "Savings Pool"
+    while the budget block above said "Envelope" and the entry form's impact card said "goal" —
+    about ONE pool, on one afternoon. The classifiers never disagreed; only the words did. %>
 <% pool = presenter.pool %>
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
      data-pool-card
      data-pool-card-type="<%= pool.pool_type %>">
-  <h2 class="text-xl font-semibold mb-4">
-    <% if pool.pool_type_savings? %>
-      Savings Pool
-    <% elsif pool.pool_type_account? %>
-      Buffer
-    <% else %>
-      Envelope
-    <% end %>
-  </h2>
+  <h2 class="text-xl font-semibold mb-4"><%= pool.noun.capitalize %></h2>
 
   <div class="flex items-center justify-between mb-4">
     <div>
@@ -83,10 +80,9 @@
       it draws a bar the wrong way and labels it "-30% complete". A goal is the only place the
       question means anything. %>
   <% if pool.pool_type_savings? && pool.target_amount.present? && pool.target_amount.positive? %>
-    <%
-      progress = pool.calculator.progress_percentage
-      current_balance = pool.calculator.current_balance
-    %>
+    <%# `progress_percentage` now floors at zero as well as capping at 100, so the `< 0` arms below
+        are unreachable and kept only as belt to that brace — see the reader. %>
+    <% progress = pool.calculator.progress_percentage %>
     <div class="mb-4">
       <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
         <div class="h-2.5 rounded-full
@@ -115,10 +111,25 @@
   <%# WHAT THIS POOL IS, SAID ONCE PER KIND. The account sentence is the app's existing register
       for the shape — `entries/_impact`'s honest card and `budget_page/_suggestion_rate` both say
       the money "comes out of your buffer" — and the envelope sentence is the budget block's,
-      because the two blocks are on one page and must not describe one envelope two ways. %>
+      because the two blocks are on one page and must not describe one envelope two ways.
+
+      THE SAVINGS ARM ASKS WHICH WAY THE MONEY GOES, and it is the CATEGORY that answers (2d
+      whole-plan review, fix 2). It used to say "This category contributes to a shared savings
+      pool" for every category handed to it, which is the opposite of the truth for an EXPENSE
+      category pointing at a goal — the demo's Health → Emergency Fund and Education → Retirement
+      Supplement, an ordinary shape rather than a corner. That category WITHDRAWS: under
+      `PoolBalanceLedger::ENTRY_POOL_ID` its entries are subtracted from the pool's balance, and
+      `EntryImpactPresenter#direction` signs them -1 on the entry form an inch from where the money
+      is typed in. The pool's TYPE picks the noun; the CATEGORY's type picks the verb, exactly as
+      `#contribution?` and `#goal?` split the same two questions there. %>
   <p class="text-sm text-gray-500 mb-4">
     <% if pool.pool_type_savings? %>
-      This category contributes to a shared savings pool. Multiple categories may contribute to or withdraw from this pool.
+      <% if presenter.category.savings? %>
+        This category contributes to a shared goal.
+      <% else %>
+        This category's spending draws from a shared goal.
+      <% end %>
+      Other categories may contribute to it or draw from it too.
     <% elsif pool.pool_type_account? %>
       This category points at an account, and an account is your buffer. Nothing reserves money for this category, and no rule can fill an account.
     <% else %>
@@ -129,12 +140,16 @@
   <div class="flex gap-3">
     <%= link_to pool_path(pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
       <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
-      <% if pool.pool_type_savings? %>
-        <span>View Savings Pool</span>
-      <% elsif pool.pool_type_account? %>
+      <%# THE BUTTON NAMES WHAT IT OPENS. Two of the three are `Pool#noun` capitalised and the
+          third deliberately is not: an account's noun is "buffer" — its ROLE in the money, which
+          is what the card's heading and its balance line are about — while this button opens
+          `pools/show` for the account RECORD, a page whose own subtitle reads "Bank account". A
+          "View Buffer" button landing on a page headed Bank account would be the one place the
+          vocabulary paid for itself in confusion. %>
+      <% if pool.pool_type_account? %>
         <span>View Account</span>
       <% else %>
-        <span>View Envelope</span>
+        <span>View <%= pool.noun.capitalize %></span>
       <% end %>
     <% end %>
 

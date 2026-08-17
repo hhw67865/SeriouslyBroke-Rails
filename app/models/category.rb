@@ -117,11 +117,23 @@ class Category < ApplicationRecord
   # of the same chain (the entry's own override first, this second), and the pair is where the rule
   # is written down in Ruby — so that method's comment has to move with this one, and did.
   #
-  # Grepped before changing it. `Entry#effective_pool` calls this and is the ONLY caller of it
-  # anywhere in `app/`; nothing in `app/`, `lib/`, `db/` or the views calls THAT one, so no rendered
-  # figure and no write depended on the fallback and correcting it could not move a screen. The
-  # header this replaces claimed "PoolCalculator calls it", which had been untrue since Plan 2b
-  # moved the calculator onto ENTRY_POOL_ID.
+  # WHO CALLS IT NOW, AND THE GREP CLAIM THAT USED TO STAND HERE IS WITHDRAWN. This header said
+  # "`Entry#effective_pool` calls this and is the ONLY caller of it anywhere in `app/`; nothing in
+  # `app/`, `lib/`, `db/` or the views calls THAT one" — true when the fallback was removed, and
+  # BOTH HALVES FALSE since Task 4:
+  #
+  #   * `EntryImpactPresenter#pool` calls THIS one, on every render of the entry form, and
+  #   * `EntryImpactPresenter#own_contribution` calls `Entry#effective_pool` — to decide whether
+  #     the entry being edited is already counted in the pool the card is describing, which is the
+  #     difference between the card printing "$240 → $185 left" and printing it twice-spent.
+  #
+  # So a rendered balance now depends on this reader's CURRENT behaviour. What the withdrawn
+  # sentence was really recording is a fact about a moment: the fallback was removed at a time when
+  # nothing depended on it, so correcting it could not move a screen. Readers have since arrived,
+  # and they are readers of what it does today — changing it now moves figures on the entry form.
+  # (The claim before that one — "PoolCalculator calls it" — had been untrue since Plan 2b moved
+  # the calculator onto ENTRY_POOL_ID. A grep pasted into a comment is a fact with an expiry date;
+  # what stays true is WHY this agrees with the SQL, which is the paragraph above.)
   def effective_pool
     pool
   end

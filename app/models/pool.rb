@@ -56,6 +56,32 @@ class Pool < ApplicationRecord
   # `account` association ("the account this pool sits inside").
   enum :pool_type, { account: 0, budget: 1, savings: 2 }, prefix: true
 
+  # ONE NOUN PER POOL TYPE, IN ONE PLACE, because three screens had three of them for one pool.
+  #
+  # THE DEFECT (2d whole-plan review, fix 2). For the demo's Health → Emergency Fund shape — an
+  # EXPENSE category pointing at a SAVINGS pool — the category page's budget block called it an
+  # "Envelope", the pool card four inches below called it a "Savings Pool", and the entry form's
+  # impact card called it a "goal". Three nouns, one pool, one afternoon. The CLASSIFIERS never
+  # disagreed — every one of them resolves `pool_type_*` — only the words did, which is precisely
+  # the shape a shared classifier cannot catch.
+  #
+  # `entries/_impact` IS THE MODEL the other two were moved onto: it already said "goal" for a
+  # savings pool and "buffer" for an account, and those are the words the rest of the app's prose
+  # uses for the same things (`home/_account`'s "buffer now", `PoolCalculator#dateless_goal?`,
+  # spec §7.1's buffer marker). So the vocabulary was not invented here; it was collected.
+  #
+  # ON THE MODEL RATHER THAN IN A HELPER, for one reason: `EntryImpactPresenter` is a PORO that
+  # needs this noun and cannot reach a view helper without including ActionView, and a second
+  # spelling of the mapping for the presenter's sake would be exactly the drift this constant
+  # exists to close. It is a fact about the pool's TYPE, not about a screen — every screen that
+  # capitalises or pluralises it does so at the call site.
+  #
+  # `fetch`, so a fourth pool type raises here rather than defaulting quietly to "envelope" on
+  # three screens at once.
+  NOUNS = { "account" => "buffer", "budget" => "envelope", "savings" => "goal" }.freeze
+
+  def noun = NOUNS.fetch(pool_type)
+
   # THE TWO DESTROYS THIS MODEL REFUSES, both refusing in the same vocabulary
   # `dependent: :restrict_with_error` does — an error on `:base` and a halted callback chain — so
   # PoolsController#destroy renders them through the branch that already exists for an account

@@ -13,7 +13,12 @@ RSpec.describe "Categories Show - Savings Pool", type: :system do
 
     visit category_path(category)
 
-    expect(page).to have_content("Savings Pool")
+    # CHANGED WITH THE ONE NAMER (2d whole-plan review, fix 2). This pinned "Savings Pool", the
+    # noun both this page's summary box and its pool card used for a pool the budget block and the
+    # entry form's impact card called something else. `Pool::NOUNS` is the single mapping now and
+    # a savings pool is a "Goal" everywhere the app speaks about one.
+    expect(page).to have_content("Goal")
+    expect(page).to have_no_content("Savings Pool")
     expect(page).to have_content("Main Pool")
 
     click_link "View details"

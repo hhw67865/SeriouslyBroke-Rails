@@ -1,13 +1,39 @@
 <%# The pool detail page. Reached for a pool of ANY kind — it is where creating one lands
-    you — so the chrome that only makes sense for a savings goal is now gated on there being
-    a target to measure against, rather than rendering a 0% bar toward $0.00 at every
-    envelope and account. %>
+    you — so the chrome that only makes sense for a savings goal is gated on the pool BEING a
+    savings goal, rather than rendering a 0% bar toward $0.00 at every envelope and account.
+
+    THE GATE USED TO BE `target_amount.present?` ALONE, AND THAT WAS THE SHIP-BLOCKER (2d
+    whole-plan review, fix 1). All three kinds may carry a target — the form says so in as many
+    words ("Required on a savings goal … On an account it is your buffer marker … Optional on an
+    envelope") — so an ACCOUNT with a buffer marker got the whole savings hero: a progress bar, a
+    "% complete" figure and a "Goal Achieved!"/"Still Needed" badge. On this app's own demo that
+    read `-30% complete` in red for Side Gig Checking, a $1,000 marker against a -$300 overdraft,
+    and Task 6's "View Account" button on the category page leads here.
+
+    `PoolCalculator#progress_percentage` now floors at zero, so the figure itself can no longer go
+    negative anywhere. That is the other half of the same fix and it is not this half: 0% complete
+    toward a "Goal" on a bank account is a true number answering a question nobody asked. §7.1 —
+    an account's target is the buffer marker, a health line and never a cap, and never a thing
+    being saved toward — so the account says that instead, in Home's own register for it
+    (`home/_account`: "buffer now $X · target $Y").
+
+    A BUDGET ENVELOPE'S TARGET KEEPS ITS FIGURE AND LOSES THE BAR, and the split is deliberate.
+    Nothing in the app reads an envelope's target — no sweep, no fill, no status — so it is a
+    number the user typed and is owed back, which is why the tile below still prints it. But
+    "100% complete · Goal Achieved!" about an envelope is false in the app's own terms: an
+    envelope full of money is FUNDED, and the next distribution sweeps it and starts again. It has
+    no goal to achieve. %>
 <%
   calculator = @pool.calculator
   progress = calculator.progress_percentage
   current_balance = calculator.current_balance
   target_amount = @pool.target_amount
   remaining = calculator.remaining_amount
+
+  # The one gate the savings chrome hangs off. A goal needs both halves: the type says the target
+  # MEANS a goal, and `present?` says there is one to measure against.
+  goal = @pool.pool_type_savings? && target_amount.present?
+  buffer_marker = @pool.pool_type_account? && target_amount.present?
 %>
 
 <%= page_header(
@@ -36,13 +62,12 @@
 <div class="max-w-6xl mx-auto">
 
   <% cache [@pool, selected_date] do %>
-  <%# Hero Progress Section. Everything measured AGAINST A TARGET is gated on there being
-      one: an envelope and an account carry no target_amount, and a full-width bar reading
-      "0% complete · Getting Started · Target Goal $0.00" is not a neutral default — it is
-      the page telling a user their new envelope has achieved nothing toward a figure they
-      never set. Current Balance is true of all three kinds and always renders. %>
+  <%# Hero Progress Section. Everything that reads a target AS A GOAL is gated on `goal` — see the
+      header. A full-width bar reading "0% complete · Getting Started · Target Goal $0.00" is not a
+      neutral default; it is the page telling a user their new envelope has achieved nothing toward
+      a figure they never set. Current Balance is true of all three kinds and always renders. %>
   <div class="bg-white rounded shadow-sm border border-gray-100 p-8 mb-8">
-    <% if target_amount.present? %>
+    <% if goal %>
     <%# Progress Visualization %>
     <div class="mb-8">
       <div class="flex justify-between items-center mb-3">
@@ -91,8 +116,12 @@
     </div>
     <% end %>
 
-    <%# Key Metrics %>
-    <div class="<%= target_amount.present? ? "grid grid-cols-1 md:grid-cols-3 gap-6" : "grid grid-cols-1 gap-6" %>">
+    <%# Key Metrics. Three tiles for a goal, two where a target is present but is not one, one
+        where there is no target at all. %>
+    <div class="<%= if goal then "grid grid-cols-1 md:grid-cols-3 gap-6"
+                    elsif target_amount.present? then "grid grid-cols-1 md:grid-cols-2 gap-6"
+                    else "grid grid-cols-1 gap-6"
+                    end %>">
       <div class="text-center">
         <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Current Balance</div>
         <div class="text-2xl md:text-3xl font-bold <%= current_balance >= 0 ? "text-gray-900" : "text-status-danger" %>">
@@ -100,14 +129,29 @@
         </div>
       </div>
 
+      <%# THE TARGET TILE, LABELLED BY WHAT THE TARGET IS. "Target Goal" is true of one of the
+          three kinds; on an account the same figure is the buffer marker and on an envelope it is
+          a number the app reads nowhere. The label carries the difference rather than the figure
+          being suppressed — the user typed it and is owed it back. %>
       <% if target_amount.present? %>
         <div class="text-center">
-          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Target Goal</div>
+          <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+            <%= if goal then "Target Goal"
+                elsif buffer_marker then "Buffer Target"
+                else "Target"
+                end %>
+          </div>
           <div class="text-2xl md:text-3xl font-bold text-gray-900">
             <%= number_to_currency(target_amount) %>
           </div>
         </div>
+      <% end %>
 
+      <%# "STILL NEEDED" IS THE GOAL'S ALONE. It is `target - balance`, which is a shortfall only
+          where the target is a thing being saved toward: an account $300 under its buffer marker
+          does not NEED $1,300, and printing that under an overdraft is the same savings chrome
+          the bar above was. %>
+      <% if goal %>
         <div class="text-center">
           <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
             <%= progress >= 100 ? "Excess Saved" : "Still Needed" %>
@@ -118,6 +162,18 @@
         </div>
       <% end %>
     </div>
+
+    <%# WHAT AN ACCOUNT'S TARGET IS, said in Home's words for it. `home/_account` prints
+        "buffer now $X · target $Y" and its comment carries the reason: "of $2,000.00" reads as a
+        denominator without saying what it measures, so the label has to say the word. This page
+        has more room than that header, so it says the whole sentence once. %>
+    <% if buffer_marker %>
+      <p class="mt-6 text-center text-sm text-gray-500" data-buffer-marker>
+        buffer now <strong class="<%= "text-status-danger" if current_balance.negative? %>"><%= number_to_currency(current_balance) %></strong>
+        · target <%= number_to_currency(target_amount) %> — a target on an account is your buffer
+        marker, a health line and never a goal to fill.
+      </p>
+    <% end %>
   </div>
 
   <%# Money Flow Summary %>

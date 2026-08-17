@@ -82,6 +82,11 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       within(block) do
         expect(page).to have_content("$0.00 left")
         expect(page).to have_link("Rules on the Budget page", href: budget_page_path)
+        # THE NOUN, from `Pool::NOUNS` since fix 2 and unchanged for a budget pool — this arm is
+        # shared with savings pools and used to call both of them an envelope. See the savings
+        # half of the pair at the bottom of this describe.
+        expect(page).to have_content("Envelope")
+        expect(page).to have_no_content("Goal")
       end
     end
 
@@ -115,6 +120,25 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       expect(block["data-budget-state"]).to eq("pool_covered")
       expect(find("[data-envelope-name]").text).to eq("Vet Fund")
       within(block) { expect(page).to have_content("$0.00 of $2,000.00") }
+    end
+
+    # SAME ARM, DIFFERENT NOUN (2d whole-plan review, fix 2). Sharing the arm is a fact about the
+    # model — a rule may sit on either pooled kind — and it is NOT a licence to call both an
+    # envelope, which is what this block did while the pool card four inches below called the same
+    # pool a "Savings Pool" and the entry form's impact card called it a "goal". The `data-`
+    # hooks stay `envelope`-named on both: they name the block's slot, not the pool's kind.
+    it "calls a savings pool a goal in the same arm" do
+      goal = create(:pool, :savings_pool, user: user, account: checking, name: "Vet Fund", target_amount: 2_000)
+      create(:category, :expense, user: user, name: "Pet Care", pool: goal)
+
+      visit category_path(category("Pet Care"))
+
+      within(block) do
+        expect(page).to have_content("Goal")
+        expect(page).to have_content("comes out of a goal")
+        expect(page).to have_no_content("Envelope")
+        expect(page).to have_no_content("comes out of an envelope")
+      end
     end
   end
 
@@ -179,6 +203,23 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       within(block) do
         expect(page).to have_content("the Budget page is proposing")
         expect(page).to have_link("See it on the Budget page", href: budget_page_path(anchor: "suggestions-dated_bill"))
+      end
+    end
+
+    # THE LINK AGREES WITH THE SENTENCE ABOVE IT (2d whole-plan review, minors). That sentence
+    # already pluralises through `pluralize` — "proposing 2 rules for this category" — while the
+    # link under it said "See it", which reads as a pointer at one of the two and leaves the other
+    # unaccounted for. Both directions: the singular case is the example directly above, which is
+    # what says this did not simply become "them" everywhere.
+    it "pluralises the pointer when more than one rule is waiting" do
+      2.times { bill(category("Streaming Spending"), amount: 180) }
+
+      visit category_path(category("Streaming Spending"))
+
+      within(block) do
+        expect(page).to have_content("proposing 2 rules for this category")
+        expect(page).to have_link("See them on the Budget page")
+        expect(page).to have_no_link("See it on the Budget page")
       end
     end
 

@@ -215,6 +215,61 @@ RSpec.describe DistributionPresenter, type: :model do
     end
   end
 
+  # THE FIFTH MEMBER (2d whole-plan review, fix 3). `Standing` is a PoolStatus reduced to the
+  # values its label is made of, and `pool_status_label`'s ` · last period` suffix was not among
+  # them — so the alerts band, the one status on the screen with no row to borrow the clause from,
+  # was labelled with less than the vocabulary offers.
+  describe "the standing's closed-period marker" do
+    # BOTH DIRECTIONS ON ONE SCREEN, differing only in when the money arrived: Groceries was funded
+    # in a period that has ended, Car in this one.
+    it "carries the marker for a closed envelope and not for a live one", :aggregate_failures do
+      rate_envelope("Groceries", 400, funded: 85, priority: 1)
+      car = rate_envelope("Car", 2_600, priority: 2)
+      fund(car, 100, on: this_period)
+      deposit(2_400, on: this_period)
+
+      subject = presenter
+
+      expect(line_for(subject, "Groceries").status.period_closed?).to be(true)
+      expect(line_for(subject, "Car").status.period_closed?).to be(false)
+    end
+
+    # IT ANSWERS RATHER THAN RAISING, which is the half worth pinning: `:period_closed?` is in
+    # `PoolCalculator::SWEEP_READERS` and `PoolProjection` refuses every name on that list when it
+    # is `net_of_sweep`. Both Standings here come through `#standing_for`, which passes `pending:`
+    # and never `net_of_sweep:` — so the alert's is a plain calculator and the consequence line's
+    # is a projection with the refusal switched off. A NoMethodError or a NetOfSweepError here
+    # would take the whole distribution screen down.
+    it "answers on an alert pool, which has no row to borrow the clause from", :aggregate_failures do
+      rate_envelope("Groceries", 400, priority: 1)
+      overdue_envelope("Utilities", 120, funded: 120, priority: 2)
+      deposit(2_400, on: this_period)
+
+      subject = presenter
+
+      expect(subject.alerts.map { |pool, _standing| pool.name }).to eq(["Utilities"])
+      expect(subject.alerts.map { |_pool, standing| standing.period_closed? }).to eq([false])
+    end
+
+    # WHY THE MARKER CANNOT YET BE SEEN IN THAT BAND, pinned rather than argued in a comment. The
+    # band holds red envelopes with NO ROW; #fill asks with `net_of_sweep: true`, so a closed
+    # envelope's swept leftover leaves its rate rule asking for its full amount again, and
+    # `BudgetCalculator#shortfall` clamps at zero so nothing subtracts that back down. Positive ask
+    # → row → never an alert. If this example ever fails, the two screens can disagree — and the
+    # fifth member above is what stops them.
+    it "cannot reach the alerts band today, because a closed envelope always asks again", :aggregate_failures do
+      groceries = rate_envelope("Groceries", 400, funded: 85, priority: 1)
+      overdue_envelope("Utilities", 120, funded: 120, priority: 2)
+      deposit(2_400, on: this_period)
+
+      subject = presenter
+
+      expect(groceries.calculator(today: today).period_closed?).to be(true)
+      expect(line_for(subject, "Groceries").needed).to eq(400)
+      expect(subject.alerts.map { |_pool, standing| standing.period_closed? }).to all(be(false))
+    end
+  end
+
   # The other direction of the alerts list. A red pool that DOES have a row is already named by
   # that row's own detail line, and listing it again would print one problem twice.
   describe "a covered period with an overdue bill that still needs money" do
