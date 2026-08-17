@@ -71,6 +71,24 @@ class Category < ApplicationRecord
   # category carry a category-mode cap", and `Budget#category_must_not_have_pool` answers no for an
   # account-pointed category. A cap on buffer spending is what an envelope replaces, so the two
   # readers diverging here is the point rather than a wrinkle.
+  #
+  # WHAT THE DIVERGENCE COSTS THE USER, NAMED RATHER THAN LEFT TO BE DISCOVERED. A category whose
+  # envelope was deleted now points at an account, so it is `buffer_funded?` but NOT `budgetable?`,
+  # and three readers part company on exactly that shape:
+  #
+  #   * `Budget`'s category-mode cap — the form's collection is `expenses.budgetable`
+  #     (`budgets/_form`, `BudgetsController#set_category`), so the category can no longer be given
+  #     a monthly cap.
+  #   * `Entry.budgetable_expenses` (`expenses.where(categories: { pool_id: nil })`), and
+  #   * `DashboardPresenter#tracked_budgetable_expense_categories`
+  #     (`tracked_expense_categories.select(&:budgetable?)`), which together feed the Dashboard's
+  #     budget-health figures — `total_tracked_budgetable_expenses` and the Expenses/All tab
+  #     breakdowns. The spending moves out of the "budgeted" band and into `pool_covered`.
+  #
+  # Both are RECOVERABLE and neither destroys anything: clearing the category's pool puts it back in
+  # every one of those sets, and accepting the rate suggestion this predicate now produces gives it
+  # a real envelope, which is the better answer and the one the panel offers. Recorded here so the
+  # whole-plan review sees the family rather than meeting one member of it on a screen.
   def buffer_funded?
     expense? && (pool.nil? || pool.pool_type_account?)
   end
@@ -97,8 +115,13 @@ class Category < ApplicationRecord
   #
   # Kept as a named reader rather than folded into `pool`: `Entry#effective_pool` is the other half
   # of the same chain (the entry's own override first, this second), and the pair is where the rule
-  # is written down in Ruby. Measured before changing it — nothing in `app/` called either method;
-  # the only readers were their own specs.
+  # is written down in Ruby — so that method's comment has to move with this one, and did.
+  #
+  # Grepped before changing it. `Entry#effective_pool` calls this and is the ONLY caller of it
+  # anywhere in `app/`; nothing in `app/`, `lib/`, `db/` or the views calls THAT one, so no rendered
+  # figure and no write depended on the fallback and correcting it could not move a screen. The
+  # header this replaces claimed "PoolCalculator calls it", which had been untrue since Plan 2b
+  # moved the calculator onto ENTRY_POOL_ID.
   def effective_pool
     pool
   end

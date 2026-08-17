@@ -298,10 +298,23 @@ class Pool < ApplicationRecord
   # past the model — so a row that was ALREADY invalid before the destroy raises RecordInvalid
   # rather than being quietly re-pointed or quietly dropped.
   #
-  # EVERY REFUSAL IS DECIDED BEFORE THE FIRST WRITE. The two orphan cases below have to be able to
-  # say "this destroy cannot happen" before anything has moved; interleaved, a pool with one
-  # absorbable movement and one unabsorbable category would write the first and then abort, and
-  # rely on the transaction to undo a write it should never have attempted.
+  # EVERY REFUSAL IS DECIDED BEFORE THE FIRST WRITE, and the reason is NOT the one it looks like.
+  #
+  # Interleaved — movement loop first, refusal after — a pool with one absorbable movement and one
+  # unabsorbable category would `update!` the transfer and then `throw(:abort)`, and `destroy`'s own
+  # `with_transaction_returning_status` would raise `ActiveRecord::Rollback` and unwind the write.
+  # The visible outcome would be identical, and the spec's `reload` assertions would pass either
+  # way; see the note on that example, which says so rather than claiming a discrimination it does
+  # not make.
+  #
+  # It is the ordering that stays correct WHEN THE ROLLBACK DOES NOT HAPPEN. `pool.destroy` inside
+  # an already-open JOINABLE transaction opens no savepoint, so the `Rollback` is swallowed by the
+  # outer block and the outer transaction commits — the same trap AllocationCommitter#call spells
+  # out and answers with `requires_new: true`, and the same one Task 7 measured. In that world an
+  # interleaved implementation leaves the re-pointed transfer PERSISTED beside a pool that still
+  # exists and a refusal the caller was told about: a movement silently re-parented by a delete that
+  # did not happen. Deciding first is the version with no such world. No caller wraps `destroy`
+  # today; the guarantee costs one extra pass over a handful of rows and does not depend on one.
   #
   # `order(:id)`, matching AllocationCommitter#previous_distribution: each movement write `touch`es
   # both of its pools, so two deletions racing over the same rows must take them in one fixed
@@ -310,10 +323,14 @@ class Pool < ApplicationRecord
     return if pool_type_account?
 
     targets = adjoining_movements.index_with { |movement| absorbing_account_for(movement) }
-    return refuse_for_want_of_an_account(:categories) if account.blank? && categories.exists?
-    return refuse_for_want_of_an_account(:movements) if targets.value?(nil)
+    refuse_for_want_of_an_account(:categories) if account.blank? && categories.exists?
+    refuse_for_want_of_an_account(:movements) if targets.value?(nil)
 
-    targets.each { |movement, account| absorb(movement, account) }
+    # `absorber`, not `account`: the block would otherwise shadow the `account` association for the
+    # whole loop, which is the confusion `pool_type_account?`'s prefix exists to prevent one level
+    # up — and in the ORPHAN case the shadowed name is not merely confusing but wrong, because
+    # `self.account` is nil there and the absorber is the counterparty's.
+    targets.each { |movement, absorber| absorb(movement, absorber) }
     hand_categories_to_the_account
     movements_in.reset
     movements_out.reset
@@ -385,13 +402,15 @@ class Pool < ApplicationRecord
   # the transfer the user made; `PoolMovement.distributed` selects allocations and sweeps, and
   # those are exactly the rows that collapse, so a re-pointed row cannot be picked up by a later
   # distribution's replacement.
-  def absorb(movement, account)
-    if other_end_of(movement) == account
+  # `absorber` rather than `account`, for the reason its caller's block parameter carries the same
+  # name: `account` here would read as this pool's own, and for an orphan it is the counterparty's.
+  def absorb(movement, absorber)
+    if other_end_of(movement) == absorber
       movement.destroy!
     elsif movement.from_pool_id == id
-      movement.update!(from_pool: account)
+      movement.update!(from_pool: absorber)
     else
-      movement.update!(to_pool: account)
+      movement.update!(to_pool: absorber)
     end
   end
 

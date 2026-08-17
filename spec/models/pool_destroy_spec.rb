@@ -298,10 +298,23 @@ RSpec.describe Pool, "#destroy", type: :model do
       expect(category.reload.pool).to eq(orphan)
     end
 
-    # The refusal has to come BEFORE the movement half writes anything, not after it and by
-    # rollback: a pool with an absorbable transfer and an unabsorbable category is the one shape
-    # where the two halves disagree about whether the destroy may proceed.
-    it "writes nothing when its transfers could move but its categories could not", :aggregate_failures do
+    # THIS EXAMPLE DOES NOT DISCRIMINATE THE WRITE ORDERING, and it is written down rather than
+    # claimed otherwise — the same honesty the `categories.reset` note in `Pool` carries.
+    #
+    # An INTERLEAVED implementation (movement loop first, refusal after) would `update!` the
+    # transfer and then `throw(:abort)`, and `destroy`'s own transaction would unwind the write, so
+    # every `reload` below passes under either ordering. What it does pin is the OUTCOME — a pool
+    # holding both an absorbable transfer and an unabsorbable category is refused whole, with
+    # nothing left half-moved — which is worth pinning on its own.
+    #
+    # The ordering is still the right one, for a reason no example here can reach: inside an
+    # already-open JOINABLE transaction `ActiveRecord::Rollback` is swallowed and the outer
+    # transaction commits, so an interleaved implementation would leave the transfer re-pointed
+    # beside a pool that still exists. Reproducing that would mean committing a real outer
+    # transaction from a spec that runs inside one; the reason lives in
+    # `Pool#return_holdings_to_the_account`'s comment instead of in a fixture that would have to
+    # fight the test harness to exist.
+    it "refuses whole when its transfers could move but its categories could not", :aggregate_failures do
       envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Car")
       transfer = create(:pool_movement, from_pool: orphan, to_pool: envelope, amount: 75)
       category = create(:category, :expense, user: user, pool: orphan, name: "Old Fund Spending")

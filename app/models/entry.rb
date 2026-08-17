@@ -36,7 +36,14 @@ class Entry < ApplicationRecord
   searchable :category, through: [:item, :category], column: :name, label: "Category"
   searchable :pool, through: [:item, :category, :pool], column: :name, label: "Pool"
 
-  # entry override -> category's pool -> the user's default account
+  # entry override -> category's pool -> nowhere.
+  #
+  # The chain ENDS at the category, and the sibling half says why: Task 8 removed
+  # `Category#effective_pool`'s `|| user&.default_account` because no ledger implemented it —
+  # every balance resolves an entry through `COALESCE(entries.pool_id, categories.pool_id)`
+  # (`PoolBalanceLedger::ENTRY_POOL_ID`), and `Σ pools == your bank balance` turned on which of the
+  # two answers you asked for. This line and that one are one rule in two halves, so this comment
+  # is kept in step with it rather than left describing a third step that no longer exists.
   def effective_pool
     pool || resolved_category&.effective_pool
   end

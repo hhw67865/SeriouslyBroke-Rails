@@ -48,6 +48,14 @@ module PoolsHelper
   # answered by the balance clause; "do I lose my grocery history" is answered by the second, and
   # it is the clause the fix round added — before it, the spending genuinely did stop counting.
   #
+  # A THIRD CONSEQUENCE IS DELIBERATELY NOT IN THE SENTENCE. A re-pointed category can no longer
+  # carry a category-mode cap, and drops out of the Dashboard's "budgeted" band (both spelled out on
+  # `Category#buffer_funded?`). It is left out because a confirm has to be read in the second before
+  # a click, and a third clause about a feature the user may never have used would bury the two
+  # that answer what they are actually afraid of. It is also the only reversible one — clearing the
+  # category's pool, or accepting the rate suggestion this creates, puts it back — so it is a thing
+  # to discover and undo rather than a thing to warn about.
+  #
   # ACCOUNTS KEEP THE OLD SENTENCE, and so does an account-less pool. An account has no buffer
   # above it to absorb anything (and one holding pools is refused outright by
   # `dependent: :restrict_with_error`, which is a different message on a different screen); an
