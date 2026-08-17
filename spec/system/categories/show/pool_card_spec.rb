@@ -1,0 +1,209 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+# THE POOL CARD SAYS WHAT ITS POOL IS — §7a's savings-chrome family, its last known member.
+#
+# Before this, the card rendered savings chrome for every pool it was handed: a budget envelope
+# read "Savings Pool" with a bare "Target:" and no figure, and an ACCOUNT read
+# "Savings Pool / Target: $1,000.00 / -30% complete" — a savings progress bar drawn on a buffer,
+# in red, reproduced below from the shape this app's own demo data holds.
+#
+# `Capybara.exact` IS UNSET IN THIS SUITE and this page is dense with strings that contain the ones
+# under test: the budget block directly above the card also says "Envelope", the savings summary
+# card also says "Savings Pool", the banner and the header print the CATEGORY's name, and the
+# sidebar says "Pools". Every assertion is therefore scoped to `[data-pool-card]`, and every
+# positive is paired with a negative — an unscoped `have_content("Savings Pool")` on a savings
+# category's page passes whatever this card renders.
+RSpec.describe "Categories Show - Pool card", type: :system do
+  let(:today) { Date.current }
+  let(:user) do
+    create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
+  end
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+  before do
+    today # OUTSIDE any travel_to, so no example can date its own fixtures against a frozen clock.
+    sign_in user, scope: :user
+  end
+
+  def card = find("[data-pool-card]")
+
+  def envelope(name, rate: 400)
+    create(:pool, :budget_pool, user: user, account: checking, name: name).tap do |pool|
+      create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
+    end
+  end
+
+  def fund(pool, amount, on: Date.current)
+    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+  end
+
+  def pointed_at(pool, type: :expense)
+    create(:category, type, user: user, name: "#{pool.name} Spending", pool: pool)
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # A savings pool — the one arm whose rendering does not change
+  # ------------------------------------------------------------------------------------------
+
+  describe "a category pointing at a savings pool" do
+    let(:goal) { create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000) }
+
+    before do
+      create(:category, :savings, user: user, name: "Emergency Fund Saving", pool: goal)
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 500, date: Date.current)
+      visit category_path(user.categories.find_by!(name: "Emergency Fund Saving"))
+    end
+
+    it "still calls itself a savings pool, with its target and its progress", :aggregate_failures do
+      expect(card["data-pool-card-type"]).to eq("savings")
+      expect(card).to have_content("Savings Pool")
+      expect(card).to have_content("Target: $2,000.00")
+      expect(card).to have_content("25% complete")
+      expect(card).to have_link("View Savings Pool")
+    end
+
+    # The negative half, and it is not decoration: the type test could have been written the wrong
+    # way round and every positive above would still pass on some other arm.
+    it "does not borrow the envelope's or the buffer's words", :aggregate_failures do
+      expect(card).to have_no_content("Envelope")
+      expect(card).to have_no_content("Buffer")
+      expect(card).to have_no_content("buffer now")
+    end
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # A budget envelope — "Savings Pool / Target:" with nothing after it
+  # ------------------------------------------------------------------------------------------
+
+  describe "a category pointing at a budget envelope" do
+    before do
+      pointed_at(envelope("Groceries"))
+      fund(user.pools.find_by!(name: "Groceries"), 250)
+      visit category_path(user.categories.find_by!(name: "Groceries Spending"))
+    end
+
+    it "names itself an envelope and says how it is doing, in the row vocabulary", :aggregate_failures do
+      expect(card["data-pool-card-type"]).to eq("budget")
+      expect(card).to have_content("Envelope")
+      expect(card).to have_content("$250.00 left")
+      expect(card).to have_link("View Envelope")
+    end
+
+    # THE DEFECT, ASSERTED AS ITSELF. A budget envelope has no `target_amount` at all, which is how
+    # "Target:" came to print with nothing after it — a label with a missing figure reads as data
+    # that failed to load, on a card whose heading was also wrong.
+    it "drops the savings chrome entirely", :aggregate_failures do
+      expect(card).to have_no_content("Savings Pool")
+      expect(card).to have_no_content("Target:")
+      expect(card).to have_no_content("% complete")
+      expect(card).to have_no_content("contributes to a shared savings pool")
+    end
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # Both label suffixes, threaded by the shared row shape
+  # ------------------------------------------------------------------------------------------
+
+  # THE CARD IS A NEW CALLER OF THE ROW VOCABULARY, which is the exact method 2c's whole-plan review
+  # caught two callers dropping a suffix from. It cannot repeat that here because it passes an
+  # OBJECT to `shared/_pool_status` rather than two optional keywords — but "cannot" is a claim, so
+  # both suffixes are asserted in both directions.
+  describe "the label's two suffixes" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    it "marks an envelope whose period has ended" do
+      pointed_at(envelope("Groceries"))
+      fund(user.pools.find_by!(name: "Groceries"), 60, on: today - 20.days)
+
+      visit category_path(user.categories.find_by!(name: "Groceries Spending"))
+
+      expect(card).to have_content("$60.00 left · last period")
+    end
+
+    # The negative half on the identical shape — same envelope, same rule, same balance, differing
+    # only in which side of the period boundary the money arrived on.
+    it "leaves a live period unmarked", :aggregate_failures do
+      pointed_at(envelope("Groceries"))
+      fund(user.pools.find_by!(name: "Groceries"), 60, on: today)
+
+      visit category_path(user.categories.find_by!(name: "Groceries Spending"))
+
+      expect(card).to have_content("$60.00 left")
+      expect(card).to have_no_content("last period")
+    end
+
+    # `changed_after_distributing:` is the second suffix and it needs a `behind` envelope — a rate
+    # rule is `left to spend` however little is in it, so this one accumulates toward a date.
+    def accumulating(name, amount:)
+      pool = create(:pool, :budget_pool, user: user, account: checking, name: name)
+      rule = create(:pool_budget, pool: pool, amount: amount, interval_months: 6, anchor_date: today + 3.months)
+      [pool, rule]
+    end
+
+    def distribute(pool, amount, at:)
+      travel_to(at) do
+        create(:pool_movement, kind: :allocation, from_pool: checking, to_pool: pool, amount: amount, date: today)
+      end
+    end
+
+    it "says a rule changed after the money went out" do
+      pool = rule = nil
+      travel_to(3.hours.ago) { pool, rule = accumulating("Car Insurance", amount: 1_200) }
+      pointed_at(pool)
+      distribute(pool, 10, at: 2.hours.ago)
+      travel_to(1.hour.ago) { rule.update!(amount: 1_800) }
+
+      visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
+
+      expect(card).to have_content("you changed a rule here after distributing")
+    end
+
+    # The same envelope, the same distribution, the rule never touched afterwards. Without this the
+    # positive above would pass against a card that printed the clause unconditionally.
+    it "stays silent when the rule was not touched afterwards", :aggregate_failures do
+      pool = nil
+      travel_to(3.hours.ago) { pool, = accumulating("Car Insurance", amount: 1_200) }
+      pointed_at(pool)
+      distribute(pool, 10, at: 2.hours.ago)
+
+      visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
+
+      expect(card).to have_content("behind")
+      expect(card).to have_no_content("you changed a rule here after distributing")
+    end
+  end
+
+  # ------------------------------------------------------------------------------------------
+  # An account — the worst case, reproduced
+  # ------------------------------------------------------------------------------------------
+
+  describe "a category pointing at an account" do
+    before do
+      buffer = create(:pool, :account, user: user, name: "Side Gig Checking", target_amount: 1_000)
+      create(:pool_movement, from_pool: buffer, to_pool: envelope("Groceries"), amount: 300, date: Date.current)
+      pointed_at(buffer)
+      visit category_path(user.categories.find_by!(name: "Side Gig Checking Spending"))
+    end
+
+    it "calls itself the buffer and prints what is in it", :aggregate_failures do
+      expect(card["data-pool-card-type"]).to eq("account")
+      expect(card).to have_content("Buffer")
+      expect(card).to have_content("buffer now -$300.00")
+      expect(card).to have_link("View Account")
+    end
+
+    # THE EXACT SHAPE FOUND IN TASK 5'S FIX ROUND, on this app's own demo: an account with a buffer
+    # marker of $1,000 and $300 of overdraft rendered "Savings Pool / Target: $1,000.00 / -30%
+    # complete" — a progress bar measuring an overdrawn buffer against a goal it is not saving
+    # toward. `-30%` is asserted as a literal because that is the figure that was on screen.
+    it "draws no savings progress on a buffer, target or no target", :aggregate_failures do
+      expect(card).to have_no_content("Savings Pool")
+      expect(card).to have_no_content("Target:")
+      expect(card).to have_no_content("% complete")
+      expect(card).to have_no_content("-30")
+      expect(card).to have_no_css("[style*='width:']")
+    end
+  end
+end

@@ -78,6 +78,31 @@ class CategoryBudgetPresenter
   # queries, and this page renders exactly one. `PoolStatus` builds its own calculator for it.
   def status = @status ||= pool.status(today: today)
 
+  # THE ROW VOCABULARY'S FOUR QUESTIONS, so this presenter can be handed straight to
+  # `shared/_pool_status` exactly as `HomePresenter::Row` and `BudgetPagePresenter::Group` are.
+  #
+  # THIS IS THE POINT OF THAT PARTIAL, DEMONSTRATED. The pool card below the block is a NEW caller
+  # of `pool_status_label` — the exact method 2c's whole-plan review caught two callers dropping a
+  # suffix from — and it cannot repeat the defect, because it does not pass suffixes at all. It
+  # passes an object, and an object either answers all four or raises on the first render.
+  #
+  # `balance_clause?` true and `due_marker?` false: the card prints no rules, so `· holds $X` is
+  # the clause that adds something, exactly as on the Budget page. A date would be a rule's date
+  # with nothing on the card saying which rule.
+  delegate :needs_attention?, :period_closed?, to: :status
+  def balance_clause? = true
+  def due_marker? = false
+
+  # THE POOL'S OWN MONEY, for the card's ACCOUNT arm — an account IS the buffer (§7.1), so what
+  # the card owes the reader there is the cash sitting in it, the same quantity Home's account
+  # header calls `buffer now`. Off the status this class already holds, never a second
+  # `pool.calculator`: two objects for one balance is how two figures on one page disagree.
+  #
+  # The account arm reads no STATE, deliberately — `PoolStatus` would hand an account with a
+  # target the `saving` state and word its buffer as progress toward a goal, which is the savings
+  # chrome this rider exists to take off it.
+  delegate :balance, to: :status
+
   # BOTH SUFFIXES, and this screen owes both for the reason `HomeHelper#pool_status_label`'s comment
   # gives: this block says how the envelope STANDS RIGHT NOW, so a clause here and not on Home is
   # two screens describing the same envelope differently. `period_closed?` rides on the status's own

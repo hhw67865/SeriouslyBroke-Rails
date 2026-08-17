@@ -17,8 +17,19 @@ class CategoriesController < ApplicationController
   # The budget block is spec §8.1's, and it is built for EXPENSE categories only because that is
   # the only kind that can carry a cap or point at an envelope — an income or savings category has
   # no budget state to be in. Nil for the others, and the view renders nothing for a nil.
+  # THE POOL CARD GETS THE SAME OBJECT, and one instance serves both blocks (2d task 6). The card
+  # is older than the budget block and rendered savings chrome for every pool it was given — an
+  # ACCOUNT read "Savings Pool / Target: $1,000.00 / -30% complete", a savings progress bar drawn
+  # on a buffer — so it now asks what its pool IS, which is exactly the question this presenter
+  # already answers for the block above it.
+  #
+  # It is built for every pooled category, not just `expense?` ones: a SAVINGS category points at a
+  # pool too, and that is the arm whose rendering does not change. Memoised, so an expense category
+  # pointing at an envelope builds ONE PoolStatus for both blocks rather than two that could
+  # disagree about the same envelope on the same page.
   def show
-    @budget_block = CategoryBudgetPresenter.new(category: @category) if @category.expense?
+    @budget_block = category_pool_presenter if @category.expense?
+    @pool_card = category_pool_presenter if @category.pool.present?
   end
 
   # GET /categories/new
@@ -74,6 +85,10 @@ class CategoriesController < ApplicationController
   end
 
   private
+
+  def category_pool_presenter
+    @category_pool_presenter ||= CategoryBudgetPresenter.new(category: @category)
+  end
 
   def set_category
     @category = current_user.categories.find(params[:id])

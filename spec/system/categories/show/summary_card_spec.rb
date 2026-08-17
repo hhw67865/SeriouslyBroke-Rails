@@ -108,4 +108,73 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
       expect(page).to have_content("Expected by today: $150.00")
     end
   end
+
+  # THE POOL BALANCE THE LEFT COLUMN STILL PRINTS, AND THE KEY THAT NOW BUSTS IT (2d task 6).
+  #
+  # Task 5 narrowed this fragment cache to the left column because an envelope's balance is not
+  # derived from THIS category's entries — a `PoolMovement` moves it and touches nothing here — and
+  # moved the two readers it found outside. It missed one: `_summary_card`'s savings arm prints
+  # `pool.calculator.{current_balance,progress_percentage}` from inside the gray box in the middle
+  # of the partial, where taking the reader out would mean taking the box out of the card it is
+  # drawn in. So the POOL is in the key instead, which works because the bust chain exists on that
+  # side: `PoolMovement belongs_to :from_pool/:to_pool, touch: true`.
+  #
+  # THE ENVIRONMENT MAKES THIS INVISIBLE BY DEFAULT — `config.cache_store = :null_store` in test —
+  # so every other example in this suite would pass against a key that never busts anything. These
+  # two turn a real store on, which is the only way either half means anything.
+  describe "the pool figure inside the fragment cache" do
+    around do |example|
+      cache = Rails.cache
+      controller_cache = ActionController::Base.cache_store
+      caching = ActionController::Base.perform_caching
+
+      Rails.cache = ActionController::Base.cache_store = ActiveSupport::Cache::MemoryStore.new
+      ActionController::Base.perform_caching = true
+      example.run
+    ensure
+      Rails.cache = cache
+      ActionController::Base.cache_store = controller_cache
+      ActionController::Base.perform_caching = caching
+    end
+
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:goal) { create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000) }
+    let!(:savings) { create(:category, category_type: "savings", user: user, name: "Rainy Day", pool: goal) }
+
+    def fund(amount) = create(:pool_movement, from_pool: checking, to_pool: goal, amount: amount, date: Date.current)
+
+    # THE STALENESS FIX ITSELF: a movement, and the figure has moved on the next load. Before the
+    # pool joined the key this second load served the first load's fragment — `$500.00 / $2,000.00`
+    # under a live "View details" link pointing at a pool screen reading $800.
+    it "moves when a movement funds the pool", :aggregate_failures do
+      fund(500)
+      visit category_path(savings)
+      expect(page).to have_content("$500.00 / $2,000.00")
+
+      fund(300)
+      visit category_path(savings)
+
+      expect(page).to have_content("$800.00 / $2,000.00")
+    end
+
+    # AND THE CACHE IS GENUINELY ON, which the example above cannot show on its own — it would read
+    # exactly the same against a store that never stored anything, and the null store is what this
+    # environment configures. `update_column` writes the name with no callbacks, so no `touch`
+    # reaches the pool and the key does not move: the LEFT column keeps serving the stale name while
+    # the pool card in the uncached right column already shows the new one. One load, both halves.
+    it "still serves a cached left column when nothing in the key moved", :aggregate_failures do
+      fund(500)
+      visit category_path(savings)
+      expect(page).to have_content("Emergency Fund")
+
+      # SKIPPING THE CALLBACKS IS THE POINT, not a shortcut: `update!` would move `updated_at`,
+      # which is exactly what this example needs NOT to happen — a key that moved would prove
+      # nothing about whether anything was ever stored.
+      goal.update_column(:name, "Renamed Fund") # rubocop:disable Rails/SkipsModelValidations
+      visit category_path(savings)
+
+      expect(page).to have_content("Emergency Fund")
+      expect(page).to have_content("Renamed Fund")
+    end
+  end
 end

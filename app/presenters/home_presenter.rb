@@ -47,6 +47,44 @@ class HomePresenter
     def amount_param = DigitsHelper.digits(amount)
   end
 
+  # ONE POOL AS A ROW, AND IT IS `BudgetPagePresenter::Group`'S SHAPE ON PURPOSE (2d task 6).
+  #
+  # The two screens print the same sentence about the same envelope, and twice now they have
+  # printed it differently: `_pool_group` passed `period_closed:` and not
+  # `changed_after_distributing:`, and Home's own two bands passed one suffix each. Both defects
+  # were possible for one reason — `pool_status_label` takes the suffixes as OPTIONAL keywords, so
+  # every caller is free to thread one and forget the other, and a forgotten one is silent.
+  #
+  # This is the fix, and it is structural rather than vigilant: `shared/_pool_status` threads both
+  # suffixes off ONE object, and that object is this Data — so a caller does not decide which
+  # suffixes to pass, it decides which OBJECT to pass, and an object missing an answer raises
+  # NoMethodError at render rather than dropping a clause. The Budget page's Group answers the same
+  # four questions; a third caller (the category page's pool card) answers them too.
+  #
+  # `orphan` is Home's alone and rides here rather than in the partial because it changes what the
+  # row IS, not how it is drawn: a pool no account holds is in trouble whatever its status says —
+  # nothing can fund it — so it opens with the rest of the trouble and takes the red. Hence
+  # #needs_attention? is the status's OR this, and the partial can ask one question.
+  Row = Data.define(:pool, :status, :period_closed, :changed_after_distributing, :orphan) do
+    def period_closed? = period_closed
+    def changed_after_distributing? = changed_after_distributing
+    def orphan? = orphan
+    def needs_attention? = status.needs_attention? || orphan
+
+    # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE, and Home's is a date. Of the three quiet
+    # states — `on track`, `saving` and `left to spend` — only the first has one to add: the other
+    # two have no anchored rule to take a date from, so #due_on is nil there anyway. A row needing
+    # attention has already said its date inside the label.
+    def due_marker? = !needs_attention? && status.due_on.present?
+
+    # Home does NOT print `· holds $X`, which is the Budget page's clause. Both screens print one
+    # clause after the state and they are different clauses, deliberately: a Home row shows no
+    # rules and no balance elsewhere, so a date is the thing it is missing, while a Budget card
+    # lists every rule underneath and is missing only the money. Said here rather than in the
+    # partial so the partial asks the row instead of asking which screen it is on.
+    def balance_clause? = false
+  end
+
   attr_reader :user, :today
 
   def initialize(user:, today: Date.current)
@@ -222,6 +260,23 @@ class HomePresenter
   # Every orphan is still a problem and still named, by the attention band and by the pools
   # band. It is only the arithmetic this sentence claims that narrows to these.
   def orphan_pools_owed = orphan_pools.select { |pool| required_for(pool).positive? }
+
+  # THE ROW OBJECT `shared/_pool_status` IS GIVEN, built here rather than in the partial for the
+  # reason #status_for and #period_closed? are: every member is dated against THIS presenter's
+  # `today`, and a view assembling its own would be free to build one of them against
+  # `Date.current` and disagree with the rest of the screen silently.
+  #
+  # Both suffixes are read HERE, together, for every row — which is the point. They used to be two
+  # keyword arguments a partial could pass separately, and Home's two bands did exactly that.
+  def row_for(pool, orphan: false)
+    Row.new(
+      pool: pool,
+      status: status_for(pool),
+      period_closed: period_closed?(pool),
+      changed_after_distributing: changed_after_distributing?(pool),
+      orphan: orphan
+    )
+  end
 
   # Views MUST use this rather than calling pool.status directly. PoolStatus defaults
   # to Date.current, so a bare call in a partial would compute against a different day

@@ -51,10 +51,30 @@
         left column — the spending figures the period toggle is for — keeps it.
 
         Cheap: the right column costs two COUNTs and the five preloaded recent entries; the
-        measured page cost is in the task report. %>
+        measured page cost is in the task report.
+
+        AND THE POOL IS IN THE KEY, because moving the reader out was not available for the one
+        that stayed (2d task 6). `_summary_card`'s savings arm prints
+        `pool.calculator.{current_balance,progress_percentage}` from INSIDE the gray box in the
+        middle of that partial — taking the reader outside this cache would have meant taking the
+        box out of the card it is drawn in, which relocates the UI to fix a staleness bug. So the
+        cache is keyed on the pool instead, which is the other half of the amendment's own offer
+        and works because the bust chain exists on that side: `PoolMovement belongs_to :from_pool,
+        touch: true` and `:to_pool, touch: true` move `pool.updated_at` on every distribution line
+        and every reallocation, and `Category belongs_to :pool, touch: true` carries an entry's
+        touch up through its item and its category to the pool — so an entry recorded in ANOTHER
+        category on the same pool busts this one too.
+
+        ONE HOLE STAYS AND IT IS NAMED: an entry carrying its own `pool_id` override touches its
+        own category's pool, not the pool it was overridden onto, so an override entry against
+        THIS pool from another category does not bust this key. It is narrower than what the key
+        closes — the override lane is Task 5's, and no writer of it exists outside the entry form —
+        and it is a pre-existing staleness rather than one this key introduces. Written down
+        because the alternative is somebody re-deriving the guarantee and finding it wider than it
+        is. %>
     <!-- Left Column -->
     <div class="lg:col-span-2 space-y-6">
-      <% cache [@category, selected_date, current_period, pace_cache_key(selected_date)] do %>
+      <% cache [@category, @category.pool, selected_date, current_period, pace_cache_key(selected_date)] do %>
         <%= render "categories/_partials/show/summary_card", category: @category %>
         <%= render "categories/_partials/show/items_list", category: @category %>
       <% end %>
@@ -69,8 +89,8 @@
       <% if @budget_block %>
         <%= render "categories/_partials/show/budget_card", presenter: @budget_block %>
       <% end %>
-      <% if @category.pool.present? %>
-        <%= render "categories/_partials/show/pool_card", category: @category %>
+      <% if @pool_card %>
+        <%= render "categories/_partials/show/pool_card", presenter: @pool_card %>
       <% end %>
 
       <%= render "categories/_partials/show/recent_activity", category: @category %>

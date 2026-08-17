@@ -33,11 +33,26 @@ class BudgetPagePresenter
     delegate :balance, to: :status
     delegate :priority, to: :pool
 
+    # THE ROW VOCABULARY'S FOUR QUESTIONS, so this Data and `HomePresenter::Row` answer the same
+    # set and `shared/_pool_status` can render either without asking which screen it is on. These
+    # two rode straight off `status` in the partial before; through the group they are the group's,
+    # which is what stops a caller threading one suffix and forgetting the other (see
+    # HomePresenter::Row's header for the two times that happened).
+    delegate :needs_attention?, :period_closed?, to: :status
+
     # A PREDICATE, matching `Rule#anchored?` above and the two neighbours the partial reads beside
     # it — `status.needs_attention?` and `status.period_closed?`. The header prints
     # `period_closed?` and this one on adjacent lines, and one of the two answering without a `?`
     # reads as a different kind of thing.
     def changed_after_distributing? = changed_after_distributing
+
+    # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE. `· holds $X` on the three states whose figure
+    # is a bill's shortfall rather than this pool's money — `pool_balance_clause` owns which — and
+    # never a date: every rule's own date is printed in the rows below this header, so a date up
+    # here would be one of them repeated without saying which. The mirror of
+    # `HomePresenter::Row#due_marker?`, where the screen is missing the opposite thing.
+    def balance_clause? = true
+    def due_marker? = false
   end
 
   # ONE ACCOUNT AND ITS POOLS IN FILL ORDER. The page's main list is banded by account rather

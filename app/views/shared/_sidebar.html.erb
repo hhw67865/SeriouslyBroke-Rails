@@ -85,11 +85,17 @@
             %>
             
             <%# Analysis Section %>
+            <%# CALENDAR BEFORE REPORTS — spec §2's order, and the last step of the demotion.
+                §2 ends `… Calendar · Reports`, with Reports last because that is what "relocated,
+                not weakened" means: the charts answer *what happened*, a question you visit
+                deliberately, so nothing in the sidebar may sit below them and read as more
+                incidental than they are. Reports was first in this section while it was still
+                called the Dashboard and still the app's front door; it is neither now. %>
             <%= render "shared/nav_section",
                 title: "Analysis",
                 links: [
-                  { name: "Reports", path: reports_path, icon: "chart-bar" },
-                  { name: "Calendar", path: calendar_path, icon: "calendar" }
+                  { name: "Calendar", path: calendar_path, icon: "calendar" },
+                  { name: "Reports", path: reports_path, icon: "chart-bar" }
                 ]
             %>
           </ul>

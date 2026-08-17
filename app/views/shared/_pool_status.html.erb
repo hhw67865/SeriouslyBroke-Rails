@@ -1,0 +1,39 @@
+<%# HOW ONE POOL IS DOING, IN THE APP'S ONE ROW VOCABULARY (spec §4.4). Local: `row` — anything
+    answering #status, #period_closed?, #changed_after_distributing?, #needs_attention?,
+    #due_marker? and #balance_clause?. Today: `HomePresenter::Row`, `BudgetPagePresenter::Group`
+    and `CategoryBudgetPresenter`.
+
+    WHY THIS PARTIAL EXISTS, AND IT IS NOT DE-DUPLICATION. `pool_status_label` takes BOTH suffixes
+    as optional keywords, so every caller of it is free to thread one and forget the other, and a
+    forgotten suffix is silent — the row still renders, just describing the same envelope
+    differently from the screen next to it. That defect shipped twice: once between Home and
+    /budget (`_pool_group` passed `period_closed:` alone) and once between Home's OWN two bands
+    (`pool_problem_label` passed `changed_after_distributing:` alone). Both were caught in review,
+    neither by a test, because there is nothing to fail — the assertion has to already suspect the
+    missing clause.
+
+    So the threading happens ONCE, here, off ONE object. A caller no longer chooses which suffixes
+    to pass; it chooses which OBJECT to pass, and an object that cannot answer all four questions
+    raises NoMethodError the first time the row renders. That is the difference between "currently
+    consistent" and "structurally hard to drift".
+
+    THE INDENTATION BELOW IS LOAD-BEARING and deliberately does not read as nested markup. This
+    partial replaced the identical span that stood in `home/_pool_row` and
+    `budget_page/_pool_group`, and the refactor's contract was byte-identical rendering on both
+    screens — so the literal whitespace those two files emitted lives here now, at the column each
+    caller's own render line puts it. Both render this from four spaces in; that is why the closing
+    tag sits at four and the contents at six. Moving a caller changes what this file has to say.
+    There is no trailing newline for the same reason: the caller's own line supplies it.
+
+    THE CLAUSE AFTER THE STATE IS THE ROW'S, not this file's. Home adds a date, the Budget page
+    adds `· holds $X`, and neither is an accident of markup — a Home row shows no rules and no
+    balance anywhere else on the line, while a Budget card lists every rule beneath it and is
+    missing only the money. The row says which it wants; this partial does not ask which screen it
+    is on. %>
+<span class="text-sm <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>">
+      <%= pool_status_label(row.status,
+                            period_closed: row.period_closed?,
+                            changed_after_distributing: row.changed_after_distributing?) %>
+<% if row.due_marker? %>        · <%= row.status.due_on.strftime("%b %-d") %>
+<% end %><% if row.balance_clause? %>      <span class="text-gray-400"><%= pool_balance_clause(row.status) %></span>
+<% end %>    </span>

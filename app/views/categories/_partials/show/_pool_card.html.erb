@@ -1,22 +1,86 @@
-<!-- Savings Pool Information -->
-<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
-  <h2 class="text-xl font-semibold mb-4">Savings Pool</h2>
-  
+<%# THE POOL BEHIND THIS CATEGORY, IN THE WORDS OF WHAT THAT POOL ACTUALLY IS. Local: `presenter`
+    (CategoryBudgetPresenter).
+
+    THE DEFECT THIS CARD HELD (§7a's savings-chrome family, its last known member). The card is
+    older than envelopes and rendered savings chrome for EVERY pool it was handed: a budget
+    envelope read "Savings Pool" with a bare "Target:" and no figure after it, and — found while
+    fixing that — an ACCOUNT read "Savings Pool / Target: $1,000.00 / -30% complete", a savings
+    progress bar drawn on a buffer, in red, on this app's own demo data. None of the three
+    sentences was true of either. Task 5 then landed the budget block directly ABOVE this card, so
+    the page said "Envelope" and "Savings Pool" about one pool, four inches apart.
+
+    THE TYPE IS ASKED OF THE POOL, not of the category. `Category#pool_covered?` is
+    `expense? && pool_id.present?` and says yes to an account, which is exactly how the account
+    arm of the block above went wrong before it was corrected; the pool's own enum cannot.
+
+    ONE VOCABULARY, NOT A NEW ONE. The envelope arm says how the envelope is doing through
+    `shared/_pool_status` — the same span, the same words and the same red as Home's pools band
+    and the Budget page's group headers — so a user reading this page and /budget on one afternoon
+    is told one thing. It passes the presenter as the row, so both label suffixes are threaded by
+    construction and this new caller cannot repeat the omission the whole-plan review caught twice.
+
+    The account arm reads a BALANCE and no state: an account is the buffer (§7.1), its target is a
+    health marker rather than a goal, and `PoolStatus` would word it as saving toward one. %>
+<% pool = presenter.pool %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
+     data-pool-card
+     data-pool-card-type="<%= pool.pool_type %>">
+  <h2 class="text-xl font-semibold mb-4">
+    <% if pool.pool_type_savings? %>
+      Savings Pool
+    <% elsif pool.pool_type_account? %>
+      Buffer
+    <% else %>
+      Envelope
+    <% end %>
+  </h2>
+
   <div class="flex items-center justify-between mb-4">
     <div>
-      <h3 class="font-medium text-gray-900"><%= category.pool.name %></h3>
-      <p class="text-sm text-gray-500 mt-1">Target: <%= number_to_currency(category.pool.target_amount) %></p>
+      <h3 class="font-medium text-gray-900"><%= pool.name %></h3>
+      <%# A TARGET ONLY WHERE ONE IS A GOAL. A budget envelope's `target_amount` is nil, which is
+          how "Target:" came to print with nothing after it, and an account's is the buffer marker
+          the user set — a health line, never a thing being saved toward (Home's account header
+          says "target" for exactly this reason and says "buffer now" first). %>
+      <% if pool.pool_type_savings? %>
+        <p class="text-sm text-gray-500 mt-1">Target: <%= number_to_currency(pool.target_amount) %></p>
+      <% elsif pool.pool_type_account? %>
+        <%# RED WHEN IT IS NEGATIVE, matching `home/_account`'s header: an overdraft is the loudest
+            thing in the app, and a buffer at -$300.00 printed in the same grey as a healthy one
+            is this page being quieter about it than every other screen. %>
+        <p class="text-sm mt-1 <%= presenter.balance.negative? ? "text-status-danger font-medium" : "text-gray-500" %>">
+          buffer now <strong><%= number_to_currency(presenter.balance) %></strong>
+        </p>
+      <% end %>
     </div>
-    
+
     <div class="h-10 w-10 bg-brand rounded-full flex items-center justify-center">
-      <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
+      <% if pool.pool_type_savings? %>
+        <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
+      <% elsif pool.pool_type_account? %>
+        <%= heroicon "building-library", options: { class: "h-5 w-5 text-white" } %>
+      <% else %>
+        <%= heroicon "wallet", options: { class: "h-5 w-5 text-white" } %>
+      <% end %>
     </div>
   </div>
-  
-  <% if category.pool.target_amount.present? && category.pool.target_amount.positive? %>
-    <% 
-      progress = category.pool.calculator.progress_percentage
-      current_balance = category.pool.calculator.current_balance
+
+  <%# THE ENVELOPE'S STANDING, in the app's one row vocabulary. Rendered from four spaces in
+      because that is the column `shared/_pool_status` is written to emit at — see its header. %>
+  <% if pool.pool_type_budget? %>
+  <p class="mb-4" data-envelope-status>
+    <%= render "shared/pool_status", row: presenter %>
+  </p>
+  <% end %>
+
+  <%# THE PROGRESS BAR IS THE SAVINGS ARM'S ALONE. `progress_percentage` measures a balance against
+      a goal and clamps at 100 but not at zero, so on a pool with no goal — or an overdrawn one —
+      it draws a bar the wrong way and labels it "-30% complete". A goal is the only place the
+      question means anything. %>
+  <% if pool.pool_type_savings? && pool.target_amount.present? && pool.target_amount.positive? %>
+    <%
+      progress = pool.calculator.progress_percentage
+      current_balance = pool.calculator.current_balance
     %>
     <div class="mb-4">
       <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
@@ -38,23 +102,39 @@
             <%= progress %>% complete
           <% end %>
         </span>
-        <span>Target: <%= number_to_currency(category.pool.target_amount) %></span>
+        <span>Target: <%= number_to_currency(pool.target_amount) %></span>
       </div>
     </div>
   <% end %>
-  
+
+  <%# WHAT THIS POOL IS, SAID ONCE PER KIND. The account sentence is the app's existing register
+      for the shape — `entries/_impact`'s honest card and `budget_page/_suggestion_rate` both say
+      the money "comes out of your buffer" — and the envelope sentence is the budget block's,
+      because the two blocks are on one page and must not describe one envelope two ways. %>
   <p class="text-sm text-gray-500 mb-4">
-    This category contributes to a shared savings pool. Multiple categories may contribute to or withdraw from this pool.
+    <% if pool.pool_type_savings? %>
+      This category contributes to a shared savings pool. Multiple categories may contribute to or withdraw from this pool.
+    <% elsif pool.pool_type_account? %>
+      This category points at an account, and an account is your buffer. Nothing reserves money for this category, and no rule can fill an account.
+    <% else %>
+      This category's spending comes out of this envelope. What is in it is what there is to spend, and the rules on the Budget page are what fill it.
+    <% end %>
   </p>
-  
+
   <div class="flex gap-3">
-    <%= link_to pool_path(category.pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
+    <%= link_to pool_path(pool), class: "flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
       <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
-      <span>View Savings Pool</span>
+      <% if pool.pool_type_savings? %>
+        <span>View Savings Pool</span>
+      <% elsif pool.pool_type_account? %>
+        <span>View Account</span>
+      <% else %>
+        <span>View Envelope</span>
+      <% end %>
     <% end %>
 
-    <%= link_to edit_pool_path(category.pool), class: "inline-flex items-center justify-center px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition" do %>
+    <%= link_to edit_pool_path(pool), class: "inline-flex items-center justify-center px-3 py-2 rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 shadow-sm transition" do %>
       <%= heroicon "pencil-square", options: { class: "h-4 w-4" } %>
     <% end %>
   </div>
-</div> 
+</div>

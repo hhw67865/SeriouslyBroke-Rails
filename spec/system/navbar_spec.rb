@@ -21,6 +21,32 @@ RSpec.describe "Navbar", type: :system do
       expect(page).to have_link("Calendar")
     end
 
+    # SPEC §2'S ORDER, END TO END — Home · Distribute · Budget · Entries · Categories · Calendar ·
+    # Reports, with Reports LAST because that is what the demotion means: the charts answer *what
+    # happened*, a question you visit deliberately, so nothing may sit below them and read as more
+    # incidental than they are. Distribute is second (2b's addition, absent from §2's table) because
+    # it is an ACTION on the household's money rather than a report on it.
+    #
+    # A LITERAL LIST, so neither side is derived from the other — the same shape as
+    # budget_page/rules_spec's `first(4)`, which asserts Budget's position inside the Main section
+    # and stays green under this. `Pools` is in the list because it is on the screen: §2's table
+    # never named it, and an assertion that skipped it would pass just as happily if a future edit
+    # moved it below Reports.
+    it "puts the sections in spec §2's order, Reports last" do
+      expect(page.all("nav a").map { |link| link.text.strip })
+        .to eq(["Home", "Distribute", "Budget", "Entries", "Categories", "Pools", "Calendar", "Reports"])
+    end
+
+    # THE NEGATIVE HALF OF THE ORDER, and it is not redundant with the list above: the list would
+    # also pass if `nav a` silently stopped matching the Analysis section altogether. This says the
+    # two Analysis items are both there AND which way round.
+    it "puts Calendar above Reports rather than below it", :aggregate_failures do
+      names = page.all("nav a").map { |link| link.text.strip }
+
+      expect(names.index("Calendar")).to be < names.index("Reports")
+      expect(names.last).to eq("Reports")
+    end
+
     it "navigates to main sections correctly", :aggregate_failures do
       click_link "Categories"
       expect(page).to have_current_path(categories_path)

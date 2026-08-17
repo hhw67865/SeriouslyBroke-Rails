@@ -5,44 +5,37 @@
     trouble is never hidden behind a chevron. Both states render server-side; the
     click-to-toggle interaction is Plan 2b, which is why there is no chevron yet.
 
-    Status through `presenter.status_for`, never `pool.status` — PoolStatus defaults to
-    Date.current and a bare call here would compute against a different day than the rest
-    of the screen, silently.
+    Status through `presenter.row_for`, never `pool.status` — PoolStatus and PoolCalculator
+    both default to Date.current, and a bare call here would compute against a different day
+    than the rest of the screen, silently. The row carries the status AND both label suffixes
+    as one object, which is what lets the status span itself be shared with the Budget page.
 
     The row says only how the pool itself stands, in the §4.4 vocabulary. It does NOT
     repeat `pool_problem_label`'s "no account" wording the attention band uses: that band
     is a flat list where each row has to carry its own context, while here the group header
     already says where the money lives, and saying it again on every row would print the
     same sentence five times under a heading that just said it. %>
-<% status = presenter.status_for(pool) %>
-<% orphan = local_assigns.fetch(:orphan, false) %>
+<% row = presenter.row_for(pool, orphan: local_assigns.fetch(:orphan, false)) %>
+<% orphan = row.orphan? %>
 <%# An orphan is a problem whatever its own status says — nothing can fund it — so it opens
-    with the rest of the trouble rather than reading as a quiet line under a loud heading. %>
-<% problem = status.needs_attention? || orphan %>
+    with the rest of the trouble rather than reading as a quiet line under a loud heading.
+    `Row#needs_attention?` is where that OR lives now, so this row and the span below it cannot
+    disagree about whether the pool is in trouble. %>
+<% problem = row.needs_attention? %>
 <% rules = presenter.dated_rules_for(pool) %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
      data-pool-name="<%= pool.name %>"
      data-expanded="<%= problem %>">
   <div class="flex justify-between items-baseline gap-4">
     <span class="font-medium text-gray-900"><%= pool.name %></span>
-    <span class="text-sm <%= problem ? "text-status-danger font-medium" : "text-gray-500" %>">
-      <%# `period_closed:` through the presenter, never a bare `pool.calculator` — same reason
-          as `status` above: a calculator built here would date itself against Date.current
-          and disagree with the rest of the screen silently. %>
-      <%# `changed_after_distributing:` through the presenter for the same reason, one question
-          further out: it compares the pool's rules against THIS period's latest distribution, and
-          which period that is depends on `presenter.today`. Spec §8's rough edge — a pool flipping
-          to `behind` because the rule was raised rather than because money went missing. %>
-      <%= pool_status_label(status,
-                            period_closed: presenter.period_closed?(pool),
-                            changed_after_distributing: presenter.changed_after_distributing?(pool)) %>
-      <%# The date only where the label has not already said one. Of the three quiet states —
-          `on track`, `saving` and `left to spend` — only the first has a date to add: the
-          other two have no anchored rule to take one from, so #due_on is nil there anyway. %>
-      <% if status.due_on.present? && !status.needs_attention? %>
-        · <%= status.due_on.strftime("%b %-d") %>
-      <% end %>
-    </span>
+    <%# THE STATUS SPAN IS SHARED WITH THE BUDGET PAGE (see `shared/_pool_status`). Both suffixes
+        travel on `row` — through the presenter, never a bare `pool.calculator`, because a
+        calculator or a clock built here would date itself against `Date.current` and disagree
+        with the rest of the screen silently — and the partial threads them together, so this
+        caller cannot pass one and drop the other. It did: for two of this plan's tasks Home's
+        pools band and its attention band printed different suffixes for the same pool inches
+        apart. The date clause is Home's and rides on `Row#due_marker?`. %>
+    <%= render "shared/pool_status", row: row %>
   </div>
 
   <% if problem %>
