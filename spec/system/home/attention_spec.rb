@@ -380,6 +380,62 @@ RSpec.describe "Home Attention", type: :system do
     end
   end
 
+  # WHICH PERIOD THE FIGURE BELONGS TO, IN THE ATTENTION BAND — the suffix this band was the one
+  # caller in the app to omit.
+  #
+  # `#pool_problem_label` passed `changed_after_distributing:` and NOT `period_closed:`, so ONE
+  # Home render printed `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00`
+  # in the attention band a few inches above it — the exact defect Task 3's fix round closed
+  # between Home and /budget, reintroduced between Home's own two bands. Both bands are asserted
+  # here, on one visit, because that is where the disagreement was visible.
+  #
+  # THE PAIR IS THE POINT. Two rate envelopes with the SAME rule, the SAME spending and therefore
+  # the same `overdrawn $80.00`, differing only in which side of a period boundary their money
+  # arrived on. A lone closed-period row would pass against a suffix printed unconditionally.
+  #
+  # :overdrawn rather than :behind because `PoolCalculator#period_closed?` is false for a pool with
+  # any anchored rule (`rate_budgets` would be empty), and :overdrawn is the one attention state
+  # guarded on the balance alone — so it is the only state a rate envelope can be in AND have a
+  # closed period.
+  describe "an overdrawn envelope whose period has ended" do
+    before do
+      deposit(2_000)
+      swept = envelope("Swept", 400, priority: 1)
+      live = envelope("Live", 400, priority: 2)
+      # Two periods back on a biweekly cadence anchored today, so the rate rule's own period —
+      # measured from `last_funded_on`, which is this movement — closed before today.
+      create(:pool_movement, from_pool: checking, to_pool: swept, amount: 100, date: Date.current - 21.days)
+      create(:pool_movement, from_pool: checking, to_pool: live, amount: 100, date: Date.current)
+      spend(swept, 180)
+      spend(live, 180)
+      visit root_path
+    end
+
+    def spend(pool, amount)
+      category = create(:category, :expense, user: user, pool: pool, name: "#{pool.name} spend")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    it "marks the closed period on the problem row, and only on that one", :aggregate_failures do
+      expect(find("[data-problem-pool='Swept']")).to have_content("overdrawn $80.00 · last period")
+      within(find("[data-problem-pool='Live']")) do
+        expect(page).to have_content("overdrawn $80.00")
+        expect(page).to have_no_content("last period")
+      end
+    end
+
+    # THE TWO BANDS, ONE SCREEN, ONE VISIT. This is the assertion the defect would have failed:
+    # the same pool, rendered inches apart, read `overdrawn $80.00 · last period` below and
+    # `overdrawn $80.00` above. Compared to a literal on both sides rather than to each other, so
+    # a label that lost its amount fails here rather than agreeing with itself about nothing.
+    it "reads the same in the attention band as in the pools band", :aggregate_failures do
+      expect(find("[data-problem-pool='Swept']")).to have_content("overdrawn $80.00 · last period")
+      expect(find("[data-pool-name='Swept']")).to have_content("overdrawn $80.00 · last period")
+      expect(find("[data-problem-pool='Live']")).to have_no_content("last period")
+      expect(find("[data-pool-name='Live']")).to have_no_content("last period")
+    end
+  end
+
   # The cutoff sits where the money ran out, and a pool funded $200 of $500 did receive
   # money: it belongs ABOVE the line, with only the pools that got nothing below it.
   it "draws the cutoff beneath the last pool that got any money", :aggregate_failures do

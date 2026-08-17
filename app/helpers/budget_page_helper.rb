@@ -165,9 +165,6 @@ module BudgetPageHelper
     }
   end
 
-  # WHETHER ACCEPTING THIS PROPOSAL WOULD MOVE THE CATEGORY. True when the payload carries the
-  # creation half, false when it reuses the envelope the category already points at — which is
-  # exactly the state the SECOND bill in one category is in once the first has been accepted.
   # WHETHER ACCEPTING WOULD MOVE THE CATEGORY. True when the payload carries the creation half —
   # which is the half that also re-points — and false when it reuses the envelope the category
   # already points at, the state the SECOND bill in a category is in once the first was accepted.

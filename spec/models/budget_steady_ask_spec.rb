@@ -190,13 +190,24 @@ RSpec.describe Budget, type: :model do
 
   # A CATEGORY-MODE RULE IS A MONTHLY SPENDING CAP and carries no interval at all, so it reaches
   # `Budget#cadence`'s `:monthly` branch through a different door than the pool-mode rate rule
-  # does. `#steady_ask` still ANSWERS for one — it is a per-rule normaliser and a cap has a
-  # perfectly good per-period equivalent, which Task 6's drift detector will want when it compares
-  # a cap against observed spending.
+  # does. `#steady_ask` still ANSWERS for one, and this example pins that it does.
   #
-  # `.steady_need` is where the exclusion lives instead, because that is where the question
-  # changes from "what is this rule per period" to "what claims the user's income". See the
-  # `.steady_need` group below.
+  # THE REASON WRITTEN HERE USED TO BE A CONSUMER, AND THE CONSUMER NEVER ARRIVED. It said Task 6's
+  # drift detector "will want" a cap's per-period equivalent — but `SuggestionEngine
+  # #attributable_rate_rules` selects `budget.pool_mode? && rate_shape?(budget)`, so a cap is
+  # filtered out before `#steady_ask` is ever asked of it, and no reader in `app/` passes this
+  # method a category-mode rule today. Citing a caller that does not exist is a justification that
+  # evaporates the moment anyone greps for it.
+  #
+  # THE METHOD IS STILL RIGHT, and the real reason is structural rather than a customer list.
+  # `#steady_ask` is a PER-RULE NORMALISER: "what is this rule, per period". A cap has a perfectly
+  # good answer to that ($260 a month is $120 a fortnight) and refusing to give it would be this
+  # method deciding a question that is not its own. The mode filter belongs at SUM level, where the
+  # question changes to "what claims the user's income" — which is `.steady_need`, and which is
+  # exactly where it lives. A future reader wanting to show a user what their cap costs per period
+  # would otherwise meet a normaliser that refuses on grounds of a sum it is not part of.
+  #
+  # See the `.steady_need` group below for the exclusion and its own figures.
   describe "a category-mode cap" do
     subject(:ask) { create(:budget, category: create(:category, :expense, user: user), amount: 260) }
 
@@ -206,8 +217,10 @@ RSpec.describe Budget, type: :model do
   end
 
   # THE UNDECLARED USER. The structural-check block renders nothing without a cadence, so this path
-  # feeds no screen yet — but Task 6's drift detector calls `steady_ask` for every rule regardless,
-  # and a divisor of zero here would 500 the page that exists to fix the missing declaration.
+  # feeds no verdict yet — but the drift detector calls `steady_ask` for every pool-mode rate rule
+  # regardless of whether a period has been declared, and a divisor of zero here would 500 the very
+  # page that exists to fix the missing declaration. The shapes below are asserted because the
+  # method must ANSWER for all of them, not because a screen prints them.
   describe "a user who has declared no period" do
     let(:undeclared) { create(:user) }
     let(:their_account) { create(:pool, :account, user: undeclared) }

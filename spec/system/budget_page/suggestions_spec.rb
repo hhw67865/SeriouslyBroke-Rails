@@ -440,6 +440,89 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
   end
 
+  # WHAT ACCEPTING DOES TO `Σ pools == your bank balance` — the consequence `BudgetProposal`'s
+  # header used to deny and nothing asserted.
+  #
+  # THE RE-POINT MOVES THE CATEGORY'S WHOLE ENTRY HISTORY, not its future spending.
+  # `PoolBalanceLedger::ENTRY_POOL_ID` is `COALESCE(entries.pool_id, categories.pool_id)` with no
+  # date bound and `PoolCalculator#balance` is start-date-agnostic, so the instant
+  # `category.pool_id` is written, every entry that category ever carried is inside the new
+  # envelope's lane. The envelope has no movements in, so it opens at exactly minus that total.
+  #
+  # THE DIRECTION IS TOWARD TRUTH, and that is the whole reason the code is right. A pool-less
+  # expense category's spending was outside the pool tree: it left the bank and no pool recorded
+  # it, so `Σ pools` was OVERSTATING the bank by exactly that lifetime figure. Both sides are
+  # asserted, before and after, so the assertion is about the direction and not merely about a
+  # number moving.
+  #
+  # EVERY FIGURE IS A PLANTED LITERAL AND THE TWO SIDES ARE INDEPENDENT. $2,000 goes in, $1,400
+  # goes out, $600 is what the bank holds — three literals written here, never one computed from
+  # the other two and never `Pool#total` compared against its own parts.
+  #
+  # THE ANCIENT ENTRY IS THE POINT OF THE FIXTURE. $500 spent 400 days ago is outside every window
+  # this page measures — `#rates` indexes only the last six periods, so it moves neither the
+  # proposed $300 a period nor the "$900.00 spent in 3 of the last 6 periods" the row prints — and
+  # it lands in the envelope anyway. The panel's own figures cannot predict the balance the click
+  # produces, which is why the row has to say so in words.
+  describe "the balance an accepted rate suggestion opens with", :aggregate_failures do
+    before do
+      deposit(2_000)
+      groceries # $900 across the last three periods, which is what the row measures
+      create(:entry, item: groceries.items.sole, amount: 500, date: Date.current - 400.days)
+      visit budget_page_path
+      # A WAITING ASSERTION BEFORE ANY MODEL READ, and `assert_selector` rather than `expect`
+      # because a hook is not the place for an expectation (RSpec/ExpectInHook) — it still waits.
+      # Two of the examples below assert on records rather than on the page, and `visit` alone
+      # leaves the request in flight: the example ends, Capybara's `reset_sessions!` navigates the
+      # renderer away underneath it, and the whole file dies of `InvalidSessionIdError` with zero
+      # assertion failures. Diagnosed by CLAUDE.md's own procedure rather than written off.
+      page.assert_selector("[data-suggestions]")
+    end
+
+    def deposit(amount)
+      category = create(:category, :income, user: user, pool: checking, name: "Pay")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    def pool_total = user.pools.reload.sum(0.to_d) { |pool| pool.calculator.balance }
+
+    # THE ROW SAYS SO BEFORE THE CLICK (finding 2c). One clause, on the sentence already naming
+    # which spending moves — the row already warns about the re-point and about the cap it would
+    # delete, and burying either of those to make room would be worse than omitting this.
+    it "warns that the envelope will open carrying the category's past spending" do
+      within(effect_of(:rate, groceries)) do
+        expect(page).to have_content("past and future")
+        expect(page).to have_content("carrying what has already been spent")
+      end
+    end
+
+    # THE OVERSTATEMENT, MEASURED BEFORE THE CLICK. $2,000 arrived and $1,400 of it has been spent,
+    # so the bank holds $600 — and `Σ pools` says $2,000, because a pool-less category's spending
+    # reaches no pool at all. This is the gap the acceptance closes, and asserting it here is what
+    # keeps the assertion below from reading as a regression.
+    it "starts with the sum overstating the bank by the whole unpooled history" do
+      expect(pool_total).to eq(2_000)
+    end
+
+    it "opens the envelope at minus the category's lifetime spending", :aggregate_failures do
+      accept_and_create(:rate, groceries)
+
+      expect(page).to have_content("Budget was successfully created")
+      within("[data-pool-group='Groceries']") { expect(page).to have_content("overdrawn $1,400.00") }
+      expect(groceries.reload.pool.calculator.balance).to eq(-1_400)
+    end
+
+    # THE OTHER SIDE, INDEPENDENTLY PLANTED. $600 is what the bank holds — $2,000 in, $1,400 out —
+    # and after the acceptance the pool tree says the same thing for the first time. `Σ pools` fell
+    # by exactly the lifetime spend, and no `pool_movements` row was written to make it happen.
+    it "lands the sum on the bank-true figure, with no movement written", :aggregate_failures do
+      expect { accept_and_create(:rate, groceries) }.not_to change(PoolMovement, :count)
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(pool_total).to eq(600)
+    end
+  end
+
   private
 
   # ---------------------------------------------------------------------------------------------

@@ -5,13 +5,18 @@ require "rails_helper"
 RSpec.describe HomeHelper, type: :helper do
   # `needs_attention?` is answered from PoolStatus's own constant rather than a hand-set
   # flag, so a double can never claim a combination the real object cannot produce.
-  def status(state, amount: 0, due_on: nil, target: nil)
+  #
+  # `period_closed?` is on the double because #pool_problem_label now READS it off the status
+  # rather than taking it as a keyword — that is the fix, not an accident of the double: a keyword
+  # gave a caller the option of omitting it, and the attention band took that option.
+  def status(state, amount: 0, due_on: nil, target: nil, period_closed: false)
     instance_double(
       PoolStatus,
       state: state,
       amount: amount,
       due_on: due_on,
       target: target,
+      period_closed?: period_closed,
       needs_attention?: PoolStatus::ATTENTION_STATES.include?(state)
     )
   end
@@ -171,6 +176,39 @@ RSpec.describe HomeHelper, type: :helper do
     it "keeps a due date when an unassigned pool is also overdue" do
       expect(helper.pool_problem_label(status(:overdue, amount: 600, due_on: Date.new(2026, 3, 1)), orphan: true))
         .to eq("no account · overdue · was Mar 1")
+    end
+
+    # THE DEFECT THIS METHOD SHIPPED WITH, in the exact figures it shipped in. It passed
+    # `changed_after_distributing:` and NOT `period_closed:`, so ONE Home render printed
+    # `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00` in the attention
+    # band a few inches above — two bands disagreeing about one pool on one screen.
+    #
+    # Asserted as full equality against the same literal `#pool_status_label`'s own closed-period
+    # example uses, so the two methods are pinned to one string rather than to each other.
+    it "carries the closed-period suffix the pools band prints" do
+      label = helper.pool_problem_label(status(:overdrawn, amount: 80, period_closed: true))
+
+      expect(label).to eq("overdrawn $80.00 · last period")
+    end
+
+    # The other direction, and the one that keeps the suffix meaning something: same state, same
+    # amount, same method — the flag is the only variable, so a suffix printed unconditionally
+    # fails here.
+    it "stays silent about a period that has not closed" do
+      expect(helper.pool_problem_label(status(:overdrawn, amount: 80))).to eq("overdrawn $80.00")
+    end
+
+    # BOTH SUFFIXES AT ONCE, in the order `#pool_status_label` fixes: how the pool is doing, which
+    # period its money belongs to, then why. An orphan carries them too — "no account" is a fourth
+    # fact about the same row, not a replacement for the other three.
+    it "carries both suffixes together, and behind the orphan prefix" do
+      label = helper.pool_problem_label(
+        status(:behind, amount: 50, period_closed: true),
+        orphan: true,
+        changed_after_distributing: true
+      )
+
+      expect(label).to eq("no account · behind $50.00 · last period — you changed a rule here after distributing")
     end
   end
 end

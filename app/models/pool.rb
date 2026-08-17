@@ -9,9 +9,29 @@ class Pool < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
 
-  # Entries that named this pool directly, overriding their category's. Nullified on
-  # destroy for the same reason categories are: the entry falls back down the chain
-  # rather than blocking the delete on a foreign key.
+  # Entries that named this pool directly, overriding their category's. Nullified on destroy so
+  # the entry FALLS BACK DOWN THE CHAIN — `ENTRY_POOL_ID` is
+  # `COALESCE(entries.pool_id, categories.pool_id)`, so clearing the override hands the entry to
+  # its category's pool — rather than blocking the delete on a foreign key.
+  #
+  # NOT "for the same reason categories are", WHICH TASK 8 REVERSED. Categories are no longer
+  # nullified in practice: `#return_holdings_to_the_account` re-points them to the destroyed pool's
+  # account before the association's own callback can fire, precisely because nullifying them took
+  # every entry they carried out of the pool tree and raised `Σ pools` by the pool's lifetime
+  # spending. The `dependent: :nullify` on `#categories` survives only as the backstop for an
+  # ACCOUNT, which has no account of its own to absorb anything. This line is a different case with
+  # a different answer, and citing that one as its reason is now backwards.
+  #
+  # THE RESIDUAL, RECORDED HERE RATHER THAN ONLY IN THE SDD LEDGER: an override entry whose
+  # CATEGORY points at no pool leaves the tree. Clearing `entries.pool_id` makes `ENTRY_POOL_ID`
+  # `COALESCE(NULL, NULL)` — NULL — so that entry counts toward no pool at all and `Σ pools` rises
+  # by its amount, the same shape Task 8 fixed for categories. It is unreachable from the UI today,
+  # and that was grepped rather than assumed: `EntriesController#entry_params` permits
+  # `[:amount, :date, :description, :item_id]` and nothing else, so no request can set
+  # `entries.pool_id` at all, and no other writer of it exists in `app/`. The column is a schema
+  # affordance the UI has not yet grown into. The honest fix, when something can reach it, is the
+  # one the categories half already got — re-point the override to this pool's account inside
+  # `#return_holdings_to_the_account` rather than clearing it.
   has_many :override_entries, class_name: "Entry", dependent: :nullify, inverse_of: :pool
 
   belongs_to :account, class_name: "Pool", optional: true
@@ -66,6 +86,24 @@ class Pool < ApplicationRecord
   # the waterfall reaches it, and the Budget page — which groups rules under the pool they fill —
   # has no card to drag for it. One reader for that set, because `.apply_fill_order` refuses a
   # list that is not exactly it and BudgetPagePresenter renders exactly it.
+  #
+  # `distinct` MAKES THIS ORDER BADLY, and the failure is a 500 rather than a wrong order —
+  # `PG::InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select
+  # list`. The review note said this fires on `.in_fill_order.by_priority`; MEASURED ON THE DEMO IT
+  # DOES NOT, and the correction is mine. `distinct` emits `SELECT DISTINCT pools.*`, which already
+  # contains `priority` and `name`, so that pair composes fine and answers 14 pools.
+  #
+  # What actually raises is anything that NARROWS the select list out from under the ORDER BY, or
+  # orders by the joined table. All four measured:
+  #
+  #   Pool.in_fill_order.by_priority.ids          # raises — `ids` selects only pools.id
+  #   Pool.in_fill_order.by_priority.pluck(:id)   # raises — same reason
+  #   Pool.in_fill_order.select(:id).by_priority  # raises — same reason
+  #   Pool.in_fill_order.order("budgets.amount")  # raises — budgets.amount is not selected
+  #
+  # `.apply_fill_order` sits one keystroke from the first of those: it asks
+  # `account.child_pools.in_fill_order.ids`, which is safe only because it does NOT order. Order in
+  # Ruby, as BudgetPagePresenter does with its `[priority, name]` sort.
   scope :in_fill_order, -> { joins(:budgets).distinct }
 
   attr_accessor :create_expense_category, :create_savings_category

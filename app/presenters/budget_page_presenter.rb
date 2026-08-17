@@ -21,9 +21,23 @@ class BudgetPagePresenter
   # app's existing row vocabulary through `pool_status_label` rather than a second one of its own,
   # and its #balance is the pool's balance — the same object, so the header's state and its figure
   # cannot disagree, and the page does not build a second calculator to ask.
-  Group = Data.define(:pool, :rules, :status) do
+  #
+  # `changed_after_distributing` rides on the group rather than being asked in the partial, for the
+  # same reason `status` does: it compares this pool's rules against THIS period's latest
+  # distribution, and which period that is depends on the presenter's `today`. It is the second
+  # half of the row vocabulary — `period_closed?` is the first — and this page carries BOTH because
+  # a suffix on Home and not here is two screens describing one envelope differently on the same
+  # afternoon. That the Budget page is where rules are EDITED makes the clause more nearly a
+  # caption for what the user just did here than anywhere else in the app.
+  Group = Data.define(:pool, :rules, :status, :changed_after_distributing) do
     delegate :balance, to: :status
     delegate :priority, to: :pool
+
+    # A PREDICATE, matching `Rule#anchored?` above and the two neighbours the partial reads beside
+    # it — `status.needs_attention?` and `status.period_closed?`. The header prints
+    # `period_closed?` and this one on adjacent lines, and one of the two answering without a `?`
+    # reads as a different kind of thing.
+    def changed_after_distributing? = changed_after_distributing
   end
 
   # ONE ACCOUNT AND ITS POOLS IN FILL ORDER. The page's main list is banded by account rather
@@ -129,10 +143,22 @@ class BudgetPagePresenter
   # §9's gate, and the ONE state the sacrifice button renders in.
   #
   # Steady need against declared income, never `HomePresenter#total_required` against it — see
-  # Budget#steady_ask. `typical_income.present?` first: an undeclared income is not "covered", it
-  # is unanswered, and the block says so rather than showing a button for a comparison nobody has
-  # made.
-  def underwater? = typical_income.present? && rules_need > typical_income
+  # Budget#steady_ask.
+  #
+  # `declared?` AND NOT `typical_income.present?`, WHICH IS THIS FIX ROUND'S CORRECTION. The gate
+  # used to ask only about the income, and it was unreachable in the wrong state only because the
+  # view happens to nest this inside `if declared?` — a layout fact protecting a money comparison,
+  # which is not a gate at all. A user with an income and NO CADENCE reaches `rules_need` through
+  # `Budget#steady_ask`, which treats the period as a calendar month: comparing a monthly need
+  # against an income whose period nobody has declared is two units in one `>`, and it decides
+  # whether the app offers to cut the user's budget. Closed at the reader, so no second caller can
+  # inherit the view's accident.
+  #
+  # THE APP NOW SPELLS THE SAME COMPARISON THREE TIMES AND ALL THREE AGREE — this,
+  # `HomePresenter#structurally_underwater?` and `SacrificePresenter#gap` — each gated on a
+  # declaration that includes the cadence. An undeclared income is not "covered", it is unanswered,
+  # and the block says so rather than showing a button for a comparison nobody has made.
+  def underwater? = declared? && rules_need > typical_income
 
   # Whether the check has anything to check. Both halves are required: without a cadence
   # `rules_need` still answers (Budget#steady_ask treats the period as a month) but it answers
@@ -283,8 +309,26 @@ class BudgetPagePresenter
     Group.new(
       pool: pool,
       rules: rules_by_pool.fetch(pool.id).sort_by { |budget| rule_order(budget) }.map { |budget| build_rule(budget) },
-      status: pool.status(today: today, terms: ledger.terms_for(pool))
+      status: pool.status(today: today, terms: ledger.terms_for(pool)),
+      changed_after_distributing: distribution_clock.changed_after_distributing?(pool)
     )
+  end
+
+  # ONE CLOCK FOR THE WHOLE PAGE, over exactly the accounts the groups sit in — one movement query
+  # for the screen rather than one per group. `pool.account_id` is in memory already (`#rules`
+  # preloads `pool: [..., :account]`), and `#changed_after_distributing?` reads `pool.budgets`,
+  # which the same preload loaded.
+  #
+  # Off `grouped_pools` rather than `user.pools.accounts`: an account holding no rule-carrying
+  # envelope has no group on this page, so widening the query to it would fetch a distribution
+  # nothing renders.
+  #
+  # MEASURED ON THE DEMO SEEDS, because a per-group query on the widest per-rule screen in the app
+  # is exactly the shape this page has been bitten by before: the whole page costs 31 statements
+  # without the clause and 32 with it. One query for thirteen groups, O(1) in groups.
+  def distribution_clock
+    @distribution_clock ||=
+      DistributionClock.new(user: user, account_ids: grouped_pools.map(&:account_id), today: today)
   end
 
   def build_orphan(budget)

@@ -328,6 +328,33 @@ RSpec.describe BudgetPagePresenter do
         expect(presenter.rules_need).to eq(200)
         expect(presenter).not_to be_underwater
       end
+
+      # THE HALF OF THE GATE THAT WAS MISSING, asserted on the presenter rather than through the
+      # page. `#underwater?` used to ask only `typical_income.present?`, and it was unreachable in
+      # this state solely because the view nests it inside `if declared?` — a layout fact standing
+      # in for a money gate. Asked directly, the old reader answered TRUE here.
+      #
+      # An income with NO CADENCE is a comparison with two units in it: `Budget#steady_ask` falls
+      # back to treating the period as a calendar month, so this reads $3,000 A MONTH against
+      # $2,400 "a period" the user has never defined — and decides whether the app offers to cut
+      # their budget on the strength of it. `rules_need` is asserted non-zero on the same line so
+      # the false cannot be mistaken for a user whose rules claim nothing.
+      #
+      # BOTH DIRECTIONS ON ONE FIXTURE, and the cadence is the only variable that moves: the same
+      # rule and the same income answer false without it and true with it. A second example
+      # planting the declared case from scratch would be the affirmative one four lines above,
+      # which pins nothing about this gate.
+      it "is false when an income is declared but no cadence is", :aggregate_failures do
+        user.update!(period_cadence: nil, period_anchor_date: nil)
+        rate(envelope("Rent"), 3_000)
+
+        expect(presenter.rules_need).to eq(3_000)
+        expect(presenter).not_to be_underwater
+
+        user.update!(period_cadence: :biweekly, period_anchor_date: today)
+
+        expect(described_class.new(user: user.reload, today: today)).to be_underwater
+      end
     end
 
     describe "#declared?" do

@@ -498,6 +498,85 @@ RSpec.describe AllocationCommitter, type: :model do
     expect(PoolMovement.distributed.count).to eq(2)
   end
 
+  # ONE PERIOD SPANNING TWO ALREADY-COMMITTED SPLITS — the ruled behaviour of
+  # #previous_distribution when the user changes their cadence, and until now exercised nowhere.
+  #
+  # THE STATE IS REACHABLE AND NOT EXOTIC. Nothing stops a user distributing weekly for a month
+  # and then telling the app they are paid fortnightly; the Budget page's declaration form is one
+  # select away. `#period` is `period_datetimes_containing(today)` read against the cadence AS IT
+  # STANDS, so the moment the cadence widens, two splits that were each a period's whole
+  # distribution are both inside one period.
+  #
+  # THE RULE IS "the period's distribution", NOT "the last one". #previous_distribution filters on
+  # the period and the account and nothing else, so it takes BOTH splits — which is the right
+  # answer and worth pinning: replacing only the most recent one would leave the earlier split's
+  # $400 sitting in Groceries while the new split funded it again, double-funding one rule out of
+  # one paycheck.
+  #
+  # THE ROWS ARE PINNED BY ID, not by count. Three rows go in (an allocation, then a sweep and an
+  # allocation) and one comes out, so a count-only assertion cannot tell "both splits replaced"
+  # from "one split replaced and one row of the other survived".
+  #
+  # `Σ pools` IS PINNED AGAINST THE PLANTED DEPOSIT, never against `Pool#total`'s own parts: $1,000
+  # went in, nothing was spent, and $1,000 is what the tree holds before and after. A replacement
+  # that lost or duplicated a movement moves this figure and nothing else would say so.
+  describe "a cadence change that puts two committed splits in one period" do
+    let(:user) { create(:user, period_cadence: :weekly, period_anchor_date: Date.new(2026, 2, 6)) }
+    let!(:groceries) { rate_envelope("Groceries", 400) }
+
+    # Weekly off the same Feb 6 anchor: Aug 7..Aug 13 and Aug 14..Aug 20 are two periods, and each
+    # gets its own distribution. Widened to biweekly they are ONE period, Aug 7..Aug 20.
+    def weekly_first = Date.new(2026, 8, 10)
+    def weekly_second = Date.new(2026, 8, 17)
+
+    def commit_on(day)
+      described_class.new(AllocationCalculator.new(user: user, account: checking, today: day)).call
+    end
+
+    before { deposit(1_000, on: Date.new(2026, 8, 7)) }
+
+    # The two committed splits, returned as the ids the replacement has to destroy.
+    def two_weekly_splits
+      (commit_on(weekly_first).movements + commit_on(weekly_second).movements).map(&:id)
+    end
+
+    # THE FIXTURE, ASSERTED RATHER THAN ASSUMED, because the example below is only about what it
+    # says if these really are two separate splits under the old cadence: one allocation in the
+    # first week, then a sweep of the now-closed weekly period and a re-fund in the second.
+    it "distributes each weekly period on its own before the cadence moves", :aggregate_failures do
+      expect(commit_on(weekly_first).movements.map(&:kind)).to eq(["allocation"])
+      expect(commit_on(weekly_second).movements.map(&:kind)).to eq(["sweep", "allocation"])
+      expect(user.period_containing(weekly_first)).not_to eq(user.period_containing(weekly_second))
+    end
+
+    it "replaces both splits with a single one", :aggregate_failures do
+      old_ids = two_weekly_splits
+      user.update!(period_cadence: :biweekly)
+      expect(user.reload.period_containing(today)).to eq(Date.new(2026, 8, 7)..today)
+
+      replacement = commit_on(today)
+
+      expect(PoolMovement.where(id: old_ids)).to be_empty
+      expect(replacement.movements.map { |movement| [movement.kind, movement.amount] })
+        .to eq([["allocation", 400]])
+      expect(PoolMovement.distributed.pluck(:date).map(&:to_date)).to eq([today])
+    end
+
+    # Conservation is the invariant, and it is a separate assertion from the row bookkeeping above
+    # because the two fail differently: a replacement can lose a row and still balance, and it can
+    # balance and still have double-funded a rule. Both figures are planted — $1,000 deposited,
+    # $400 claimed by the rule — and neither is read off the other.
+    it "leaves the tree holding exactly what was paid in", :aggregate_failures do
+      two_weekly_splits
+      user.update!(period_cadence: :biweekly)
+
+      commit_on(today)
+
+      expect([balance(groceries), balance(checking)]).to eq([400, 600])
+      expect(checking.total).to eq(1_000)
+    end
+  end
+
   # Replacement is scoped to the account being distributed, not to the period alone. Both
   # directions: Checking's re-run keeps Ally's rows, and Ally's own re-run keeps Checking's.
   describe "a second account distributing in the same period" do

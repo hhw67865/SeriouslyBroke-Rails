@@ -71,7 +71,12 @@ RSpec.describe BudgetPageHelper, type: :helper do
     def group(state, balance: 250)
       status = PoolStatus.new(build(:pool))
       allow(status).to receive_messages(state: state, balance: balance)
-      BudgetPagePresenter::Group.new(pool: build(:pool), rules: [], status: status)
+      BudgetPagePresenter::Group.new(
+        pool: build(:pool),
+        rules: [],
+        status: status,
+        changed_after_distributing: false
+      )
     end
 
     # :overdue and :wont_make_it print `overdue · was Aug 6` and `won't make it · Aug 19` — no

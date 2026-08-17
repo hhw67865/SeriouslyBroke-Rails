@@ -14,9 +14,39 @@
 # account, whose item) and the model's is shape; this is the ORDER of three writes, which is
 # neither. `BudgetsController#create` calls #save and renders the same two outcomes it always did.
 #
-# THE INVARIANT (`Σ pools == the bank balance`) IS UNTOUCHED. A pool created here has no movements,
-# so its balance is zero and it adds zero to the sum. The re-point moves future *spending* into the
-# envelope's lane, which changes what the envelope is measured against, not how much money exists.
+# WHAT THIS DOES TO `Σ pools == your bank balance`, MEASURED RATHER THAN REASONED. This header used
+# to claim the invariant was untouched, on the grounds that a new pool has no movements and so adds
+# zero. The first half is true and the conclusion is not, because the re-point does not move FUTURE
+# spending — it moves the category's WHOLE ENTRY HISTORY, in one click.
+#
+# `PoolBalanceLedger::ENTRY_POOL_ID` is `COALESCE(entries.pool_id, categories.pool_id)` with NO date
+# bound, and `PoolCalculator#balance` is deliberately start-date-agnostic (an envelope's balance is
+# every dollar that ever reached it, minus every dollar that ever left). So the instant
+# `category.pool_id` is written, every entry that category has ever carried — years of it — is
+# inside the new envelope's lane. The envelope has no movements in, so it opens at exactly
+# `-lifetime spend`, and `Σ pools` falls by that same figure. Nothing was written to `pool_movements`
+# and no money moved.
+#
+# THE DIRECTION IS TOWARD TRUTH, which is why the code is right and the old sentence was wrong. A
+# pool-less expense category's spending was outside the pool tree entirely: it left the bank and no
+# pool's balance recorded it, so `Σ pools` was OVERSTATING the bank by exactly that lifetime total.
+# The re-point does not break the invariant — it closes a gap the invariant had, moving Σ to the
+# bank-true figure in one step.
+#
+# MEASURED ON THE DEMO, TWICE. Task 7's browser pass opened an envelope at `overdrawn $754.00`;
+# this fix round re-measured on Entertainment, whose panel row proposes `$84.00 a period` and
+# reports `$251.00 spent in 3 of the last 6 periods`. Accepting it opened the envelope at
+# `overdrawn $496.00` — the category's LIFETIME spend, half of it older than any window the page
+# measures — and `Σ pools` fell from $6,063.00 to $5,567.00, by exactly $496.00, with
+# `PoolMovement.count` unchanged at 6. The panel's own figures cannot predict that balance, which
+# is why the row has to say so in words.
+#
+# THE USER IS TOLD BEFORE THE CLICK. `_suggestion.html.erb`'s re-point paragraph carries the clause;
+# an envelope that opens deep in the red on a screen whose other rows all read `$0.00 left` is the
+# app looking broken, and it is not broken.
+#
+# Pinned by spec/system/budget_page/suggestions_spec.rb ("an envelope that opens carrying the
+# category's past spending"), against planted literals on both sides.
 #
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
 # .superpowers/sdd/2026-08-16-budget-page/task-7-brief.md amendment A.

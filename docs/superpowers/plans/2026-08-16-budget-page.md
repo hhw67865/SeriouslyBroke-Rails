@@ -449,3 +449,20 @@ plainly — with a screen, not a shrug — when the budget cannot fit the income
 **Plan 2d** (last): logging's envelope impact, the Categories change, Reports demotion, the
 `basis_per_paycheck?` rename including its user-visible string, the `/pools` index gap,
 `searchable :pool`, and `PoolCalculator`'s keyword-axes split.
+
+**Carried into 2d from 2c's whole-plan review** — booked here so they survive the SDD
+directory being archived, rather than living only in `.superpowers/sdd/`:
+
+- **`PoolCalculator#budgets_by_due_date` defeats the eager load.** It re-queries
+  `pool.budgets.includes(:item, :pool)` off the association rather than reading the rows
+  `HomePresenter#all_pools` already preloaded, so Home runs **38 queries** where the preload
+  should have made it a handful. One reader, one preload — decide which side owns it.
+- **Home builds several ledgers.** `PoolBalanceLedger` is constructed more than once per Home
+  render (the standing band, the pools band and the fix path do not share one), so the five
+  grouped aggregates run several times over for the same pool set.
+- **One ledger per fill on the distribution screen.** `AllocationCalculator#fill` builds a
+  ledger per proposal row instead of one for the account's whole waterfall.
+- **`steady_ask` and `period_end` are two frames.** `Budget#steady_ask` amortises a one-off over
+  `periods_until_due` while `BudgetCalculator#period_end` answers the calendar month for an
+  undeclared user; the two are consistent today only because nothing asks both of one rule in
+  one sentence. Name the frame explicitly before something does.

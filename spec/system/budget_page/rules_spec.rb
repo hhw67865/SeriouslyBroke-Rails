@@ -178,6 +178,89 @@ RSpec.describe "Budget page rules", type: :system do
     end
   end
 
+  # WHY THE ENVELOPE IS BEHIND — spec §8's rough edge, on the page it belongs to most.
+  #
+  # `_pool_group` passed `period_closed:` and NOT `changed_after_distributing:`, so a `behind`
+  # envelope read `behind $X — you changed a rule here after distributing` on Home and a bare
+  # `behind $X` here, on the same afternoon: the same defect the pair above closed, in the other
+  # direction. And this is the screen that owed the clause most — the rule the user changed is on
+  # the row directly beneath the heading, so here the sentence is nearly a caption for what they
+  # just did.
+  #
+  # THE PAIR IS THE POINT, as it is above. Two envelopes with the same shape of rule, the same
+  # distribution and the same `behind` state, differing only in which side of that distribution
+  # their rule was last edited on. Split into two examples the negative half would pass against a
+  # page that never prints the clause at all.
+  #
+  # `travel_to` rather than `update_column`: the signal is `budgets.updated_at` against the
+  # movement's `created_at`, and both must be written by the app the way the app writes them —
+  # `created_at`, never `date` (a period marker compared to a timestamp is a unit mismatch, see
+  # `DistributionClock`).
+  describe "an envelope whose rule moved after the money did" do
+    include ActiveSupport::Testing::TimeHelpers
+
+    before do
+      deposit(2_000)
+      raised = steady = raised_rule = nil
+
+      travel_to(3.hours.ago) do
+        raised = envelope("Car Insurance", priority: 1)
+        steady = envelope("Property Tax", priority: 2)
+        raised_rule = rolling(raised, amount: 1_200, anchor: Date.current + 3.months, every: 6)
+        rolling(steady, amount: 1_200, anchor: Date.current + 3.months, every: 6)
+      end
+
+      # Small enough to leave both behind: the clause explains a `behind` row, so the row has to
+      # still be behind.
+      [raised, steady].each { |pool| distribute(pool, 10, at: 2.hours.ago) }
+      travel_to(1.hour.ago) { raised_rule.update!(amount: 1_800) }
+
+      visit budget_page_path
+    end
+
+    def deposit(amount)
+      category = create(:category, :income, user: user, pool: checking, name: "Pay")
+      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    end
+
+    def distribute(pool, amount, at:)
+      travel_to(at) do
+        create(
+          :pool_movement,
+          kind: :allocation,
+          from_pool: checking,
+          to_pool: pool,
+          amount: amount,
+          date: Date.current
+        )
+      end
+    end
+
+    it "says so on that group and on no other", :aggregate_failures do
+      within(group("Car Insurance")) do
+        expect(page).to have_content("behind")
+        expect(page).to have_content("you changed a rule here after distributing")
+      end
+      within(group("Property Tax")) do
+        expect(page).to have_content("behind")
+        expect(page).to have_no_content("you changed a rule here after distributing")
+      end
+    end
+
+    # `Σ pools == your bank balance` rests on the two screens agreeing about every pool, and the
+    # clause is part of what they have to agree about. Same user, same afternoon, same two
+    # envelopes — read off /budget and off Home, each compared to the literal rather than to the
+    # other.
+    it "reads exactly as Home reads for the same pools", :aggregate_failures do
+      visit root_path
+
+      expect(find("[data-pool-name='Car Insurance']"))
+        .to have_content("you changed a rule here after distributing")
+      expect(find("[data-pool-name='Property Tax']"))
+        .to have_no_content("you changed a rule here after distributing")
+    end
+  end
+
   # The link is in the sidebar, which every signed-in page renders — so it is asserted from two
   # unrelated screens, and its POSITION is asserted too: a rule is neither a report nor a
   # category, and it belongs between the action that spends the money and the ledger that

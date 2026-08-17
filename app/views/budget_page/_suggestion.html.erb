@@ -26,14 +26,30 @@
             the two are said separately because they are two acts. A user who already has an
             envelope by that name is JOINING it, not creating a second — the demo's "Utilities" is
             exactly that shape — and a sentence promising a new one would be describing something
-            the save is not going to do. %>
+            the save is not going to do.
+
+            "PAST AND FUTURE", AND IT IS A CLAUSE RATHER THAN A PARAGRAPH. `ENTRY_POOL_ID` has no
+            date bound and `PoolCalculator#balance` is start-date-agnostic, so the re-point moves
+            the category's WHOLE history: a new envelope opens at minus its lifetime spend — the
+            demo's read `overdrawn $496.00` — and the user who was not told reads a red row they
+            did nothing to earn. Three warnings on one row is one too many, though, and this is the
+            least of them: burying the re-point or the cap it deletes would be worse than omitting
+            this. So it rides on the sentence already saying which spending moves.
+
+            THE TWO BRANCHES SAY IT DIFFERENTLY BECAUSE THEY DO DIFFERENT THINGS. A NEW envelope
+            OPENS at minus the lifetime spend, which is a starting balance. A JOINED one already
+            exists and already holds money; the re-point DROPS that balance by the same figure, so
+            it "takes on" the history rather than starting out with it — and it is the join whose
+            resulting number is least predictable from anything else on the row. %>
         <p class="text-gray-500" data-suggestion-effect>
           <% if joined %>
             This rule joins your existing <%= joined %> envelope, and points all
-            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it.
+            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it,
+            past and future — so the envelope takes on what has already been spent.
           <% else %>
             Accepting this puts all <%= suggestion.detail[:category_name] || suggestion.subject.name %>
-            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope.
+            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope,
+            past and future — so it opens carrying what has already been spent.
           <% end %>
         </p>
 

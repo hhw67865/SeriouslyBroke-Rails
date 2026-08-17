@@ -27,9 +27,22 @@ module HomeHelper
   #
   # "CHANGED A RULE HERE" AND NOT §8'S LITERAL "you raised this rule". The spec's sentence claims a
   # DIRECTION and a SUBJECT that the signal behind it cannot supply — a lowered rule moves the same
-  # timestamp, and a pool with two rules cannot say which one moved. See
-  # HomePresenter#changed_after_distributing? for both shapes. The design spec is being corrected to
-  # match, as it was over the waterfall band's tense.
+  # timestamp, and a pool with two rules cannot say which one moved. See `DistributionClock` for
+  # both shapes and for the timestamps behind them. The design spec is being corrected to match, as
+  # it was over the waterfall band's tense.
+  #
+  # WHICH CALLERS PASS THIS CLAUSE, and it is not all of them. The three that say how a pool STANDS
+  # RIGHT NOW pass it — Home's pools band, Home's attention band (through #pool_problem_label) and
+  # the Budget page's group header — because those three render the same envelope on the same
+  # afternoon and a clause on one of them alone reads as the app disagreeing with itself. It was
+  # missing from two of the three at different times, once between Home and /budget and once
+  # between Home's own two bands.
+  #
+  # The distribution and reallocation screens pass `period_closed:` and NOT this, deliberately.
+  # Their rows describe a move that has not happened — `pool_movements_helper`'s sentences are
+  # literally "becomes …" — and why the envelope got into its current state is a different subject
+  # from what a proposed transfer would do to it. Which period the money belongs to bears on the
+  # move; who last edited the rule does not.
   #
   # AFTER the `· last period` suffix, because the two say different kinds of thing and the order
   # is the order a reader needs them: how the pool is doing, WHICH period its money belongs to,
@@ -126,12 +139,34 @@ module HomeHelper
     "Nothing in #{container.name} has #{number_to_currency(fix.amount)} spare to move."
   end
 
-  # `changed_after_distributing:` travels through rather than stopping here: the attention band and
-  # the pools band render the SAME pool inches apart on one screen — a `behind` envelope is in both
-  # by construction — and one of them explaining the state while the other did not would read as
-  # the two bands disagreeing about why.
+  # BOTH SUFFIXES TRAVEL THROUGH rather than stopping here, and they travel for one reason: the
+  # attention band and the pools band render the SAME pool inches apart on one screen — a `behind`
+  # envelope is in both by construction, and so is an overdrawn one — so a suffix on one band and
+  # not the other reads as the two bands disagreeing about the same pool.
+  #
+  # `changed_after_distributing:` arrives from the caller because it is a question about the
+  # SCREEN's period (see HomePresenter#changed_after_distributing?), which a status cannot answer.
+  # `period_closed:` is NOT a keyword here and deliberately so: it is a fact about this pool's own
+  # money, `PoolStatus#period_closed?` already carries it off the calculator the status was built
+  # from, and a keyword would give a caller the option of omitting it. That option is exactly what
+  # went wrong — this method used to pass one suffix and not the other, so one Home render printed
+  # `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00` in the attention band
+  # a few inches above it.
+  #
+  # THE ARGUMENT DOES NOT CARRY UP TO #pool_status_label, AND TAKING IT THERE WOULD RAISE.
+  # `PoolStatus#period_closed?` delegates to `PoolCalculator#period_closed?`, which begins with
+  # `refuse_when_net_of_sweep` — and the reallocation and distribution screens hand
+  # #pool_status_label statuses built `net_of_sweep: true`, which would raise `NetOfSweepError` on
+  # the spot. Those screens compute the suffix off a separate PLAIN calculator for exactly this
+  # reason (see DistributionPresenter). So the keyword stays a keyword one level up. It is safe
+  # HERE because the only caller is Home's attention band, whose statuses come from
+  # HomePresenter#status_for and carry no sweep.
   def pool_problem_label(status, orphan: false, changed_after_distributing: false)
-    label = pool_status_label(status, changed_after_distributing: changed_after_distributing)
+    label = pool_status_label(
+      status,
+      period_closed: status.period_closed?,
+      changed_after_distributing: changed_after_distributing
+    )
     return label unless orphan
     return "no account · #{label}" if status.needs_attention?
 

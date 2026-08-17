@@ -24,12 +24,23 @@
       <span class="text-xs text-gray-400">priority <%= group.priority %></span>
     </div>
     <span class="text-sm <%= status.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>">
-      <%# `period_closed:` is not optional here. The suffix says WHICH PERIOD the figure belongs
-          to, and a swept rate-rule envelope reading `$400.00 left · last period` on Home while
-          this page reads `$400.00 left` for the same pool on the same afternoon is two screens
-          describing one envelope differently. Off the status's own memoised calculator, so this
-          page still builds exactly one calculator per pool. %>
-      <%= pool_status_label(status, period_closed: status.period_closed?) %>
+      <%# BOTH SUFFIXES, and neither is optional here.
+
+          `period_closed:` says WHICH PERIOD the figure belongs to, and a swept rate-rule envelope
+          reading `$400.00 left · last period` on Home while this page reads `$400.00 left` for the
+          same pool on the same afternoon is two screens describing one envelope differently. Off
+          the status's own memoised calculator, so this page still builds exactly one calculator
+          per pool.
+
+          `changed_after_distributing:` is the same objection said about the other clause, and this
+          page is the one that owed it most: a `behind` envelope is on Home AND here, and this is
+          where the rule was edited. The row below is the very form the user changed — the clause
+          names the act, on the screen the act happened on. Through the group, never a query of the
+          partial's own: the period it compares against is `today`'s. Silent on every state but
+          `:behind` (HomeHelper#pool_status_label owns that gate). %>
+      <%= pool_status_label(status,
+                            period_closed: status.period_closed?,
+                            changed_after_distributing: group.changed_after_distributing?) %>
       <span class="text-gray-400"><%= budget_group_balance(group) %></span>
     </span>
   </div>
