@@ -26,9 +26,16 @@
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
         <% if pool_mode %>
-          <%# The pool a rule fills is not editable here — the page that lists rules groups them
-              by pool, so moving one is a re-parenting the list itself should own. Submitted back
-              so the record keeps its owner; `budget_params` scopes it through current_user. %>
+          <%# THE FORM DOES NOT OFFER THE POOL, which is not the same as the pool being
+              unwritable: `budget_params` permits `pool_id`, so a tampered submission DOES
+              re-parent the rule — within the user's own pools and nowhere else, because
+              `scoped_owner` looks it up through `current_user.pools` and a stranger's id 404s.
+              Both directions are pinned in spec/requests/budgets_spec.rb.
+
+              No picker because the page that lists rules groups them BY pool, so moving one
+              between envelopes is a re-parenting that list should own rather than a control
+              buried in one rule's form. The field is submitted back so the record keeps the
+              owner it arrived with. %>
           <div>
             <label class="form-label">Pool</label>
             <div class="form-input flex items-center bg-gray-50">

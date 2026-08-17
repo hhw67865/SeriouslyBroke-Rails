@@ -219,6 +219,51 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  # THE FOUR SHAPES ABOVE, READ BACK OUT AS ONE SYMBOL. `HomeHelper#pool_rule_label` and
+  # `BudgetPageHelper#budget_rule_basis` each held a copy of this cascade, in the same
+  # hazard-ordered sequence; the classification lives here now and the two helpers keep only
+  # their own words. Every arm is asserted, because a helper reduced to a lookup can no longer
+  # catch a misclassification itself.
+  describe "#cadence" do
+    def pool_rule(*traits, **attrs) = build(:pool_budget, *traits, category: nil, **attrs)
+
+    it "calls a per-paycheck rate rule per-paycheck" do
+      expect(pool_rule(:per_paycheck_rate).cadence).to eq(:per_paycheck)
+    end
+
+    it "calls an anchorless monthly rate rule monthly" do
+      expect(pool_rule(:rate).cadence).to eq(:monthly)
+    end
+
+    it "calls an anchored one-month rule monthly" do
+      expect(pool_rule(interval_months: 1, anchor_date: Date.new(2026, 3, 1)).cadence).to eq(:monthly)
+    end
+
+    it "calls a multi-month rule every_n rather than naming the number" do
+      expect(pool_rule(interval_months: 6, anchor_date: Date.new(2026, 3, 1)).cadence).to eq(:every_n)
+    end
+
+    it "calls an interval-less anchored rule a one-off" do
+      expect(pool_rule(:one_time).cadence).to eq(:one_off)
+    end
+
+    # The two order hazards, each in the direction that would misfire if the cascade were
+    # rearranged. A per-paycheck rule carries no interval either, so an interval-first cascade
+    # calls every rate rule a one-off; a category cap carries no interval at all
+    # (#shape_must_be_valid only runs in pool mode) and would fall into the same arm.
+    it "never reads a per-paycheck rule's blank interval as a one-off", :aggregate_failures do
+      expect(pool_rule(:per_paycheck_rate).interval_months).to be_nil
+      expect(pool_rule(:per_paycheck_rate).cadence).not_to eq(:one_off)
+    end
+
+    it "calls a category-mode cap monthly rather than a one-off", :aggregate_failures do
+      budget = build(:budget, category: build(:category, :expense), amount: 200)
+
+      expect(budget.interval_months).to be_nil
+      expect(budget.cadence).to eq(:monthly)
+    end
+  end
+
   describe "#user" do
     let(:user) { create(:user) }
 

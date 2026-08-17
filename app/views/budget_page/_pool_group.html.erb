@@ -15,7 +15,12 @@
       <span class="text-xs text-gray-400">priority <%= group.priority %></span>
     </div>
     <span class="text-sm <%= status.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>">
-      <%= pool_status_label(status) %>
+      <%# `period_closed:` is not optional here. The suffix says WHICH PERIOD the figure belongs
+          to, and a swept rate-rule envelope reading `$400.00 left · last period` on Home while
+          this page reads `$400.00 left` for the same pool on the same afternoon is two screens
+          describing one envelope differently. Off the status's own memoised calculator, so this
+          page still builds exactly one calculator per pool. %>
+      <%= pool_status_label(status, period_closed: status.period_closed?) %>
       <span class="text-gray-400"><%= budget_group_balance(group) %></span>
     </span>
   </div>

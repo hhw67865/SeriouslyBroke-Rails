@@ -49,15 +49,20 @@ module HomeHelper
   # screen reads as missing data rather than as information — so it is named by its SHAPE
   # instead, because the row already prints its amount and its date on the other side and how
   # often it comes round is the only thing the line was still missing.
+  #
+  # A LOOKUP ON `Budget#cadence` below the item branch, not a predicate cascade of its own: this
+  # and `BudgetPageHelper#budget_rule_basis` used to hold the same four-branch classification in
+  # the same hazard-ordered sequence. The classification is the record's, the wording is this
+  # screen's — Home NAMES a rule, the Budget page says what an amount is per.
   def pool_rule_label(budget)
     return budget.item.name if budget.item.present?
-    # Before the nil-interval branch: a per-period rule also carries no interval, and that
-    # blank means "every period", not "never rolls".
-    return "Per period" if budget.basis_per_paycheck?
-    return "One-off" if budget.interval_months.blank?
-    return "Monthly" if budget.interval_months == 1
 
-    "Every #{budget.interval_months} months"
+    case budget.cadence
+    when :per_paycheck then "Per period"
+    when :monthly then "Monthly"
+    when :one_off then "One-off"
+    else "Every #{budget.interval_months} months"
+    end
   end
 
   # Both forms of the seventh state read as accumulation; NEITHER may read as money to spend,

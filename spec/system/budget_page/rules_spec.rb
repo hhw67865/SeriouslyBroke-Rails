@@ -16,13 +16,25 @@ RSpec.describe "Budget page rules", type: :system do
 
   def group(name) = find("[data-pool-group='#{name}']")
 
+  # The orphan band is NOT a pool and does not share the pools' selector namespace — it used to,
+  # keyed on the literal string "Not in the fill order", so a pool a user actually named that
+  # would have collided with it and the fill-order assertion below was plucking a list of pools
+  # with a band on the end.
+  def orphan_band = find("[data-orphan-group]")
+
   def rule_row(name) = find("[data-rule='#{name}']")
+
+  def pool_groups = page.all("[data-pool-group]").pluck("data-pool-group")
 
   def envelope(name, priority: 1)
     create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
   end
 
   def rate(pool, amount) = create(:pool_budget, :per_paycheck_rate, pool: pool, amount: amount)
+
+  def fund(pool, amount, on:)
+    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+  end
 
   def rolling(pool, amount:, anchor:, every: 1)
     create(:pool_budget, pool: pool, amount: amount, interval_months: every, anchor_date: anchor)
@@ -41,8 +53,7 @@ RSpec.describe "Budget page rules", type: :system do
     end
 
     it "puts the pools in priority order" do
-      expect(page.all("[data-pool-group]").pluck("data-pool-group"))
-        .to eq(["Car Insurance", "Groceries"])
+      expect(pool_groups).to eq(["Car Insurance", "Groceries"])
       expect(page).to have_no_content("Nothing is in the fill order yet")
     end
 
@@ -77,15 +88,18 @@ RSpec.describe "Budget page rules", type: :system do
     end
 
     it "lists them apart from the fill order, each with its own reason" do
-      within(group("Not in the fill order")) do
+      within(orphan_band) do
+        expect(page).to have_content("Not in the fill order")
         expect(page).to have_content("caps a category — no envelope to fill")
         expect(page).to have_content("no account — nothing can fund it")
       end
     end
 
+    # The band is outside the pool namespace entirely, so the fill order is a list of POOLS —
+    # this assertion used to end in the band's own heading.
     it "keeps them out of the pool groups, and keeps a real rule out of them" do
-      expect(page.all("[data-pool-group]").pluck("data-pool-group"))
-        .to eq(["Groceries", "Not in the fill order"])
+      expect(pool_groups).to eq(["Groceries"])
+      expect(page).to have_css("[data-orphan-group]")
       within(group("Groceries")) { expect(page).to have_no_content("no envelope to fill") }
     end
   end
@@ -101,7 +115,8 @@ RSpec.describe "Budget page rules", type: :system do
     it "says the fill order is empty rather than that there are no rules" do
       expect(page).to have_content("Nothing is in the fill order yet")
       expect(page).to have_no_content("No funding rules yet")
-      within(group("Not in the fill order")) { expect(page).to have_content("Shopping") }
+      expect(pool_groups).to be_empty
+      within(orphan_band) { expect(page).to have_content("Shopping") }
     end
   end
 
@@ -115,17 +130,81 @@ RSpec.describe "Budget page rules", type: :system do
       expect(page).to have_content("A rule claims part of every paycheck for one envelope")
       expect(page).to have_no_content("Nothing is in the fill order yet")
       expect(page).to have_no_css("[data-pool-group]")
+      expect(page).to have_no_css("[data-orphan-group]")
       expect(page).to have_no_css("[data-rule]")
     end
   end
 
+  # WHICH PERIOD THE FIGURE BELONGS TO — the suffix `pool_status_label` appends for a rate
+  # envelope whose period has ended, and the one clause the Budget page used to be the only
+  # caller in the app to omit.
+  #
+  # The pair is deliberate and so is its shape: two envelopes with the SAME rule, the SAME
+  # balance and therefore the same "$400.00 left", differing only in which side of a period
+  # boundary the money arrived on. A lone closed-period group would pass against a suffix
+  # printed unconditionally.
+  describe "a pool whose period has ended", :aggregate_failures do
+    before do
+      swept = envelope("Swept", priority: 1)
+      live = envelope("Live", priority: 2)
+      rate(swept, 400)
+      rate(live, 400)
+      # Two periods back on a biweekly cadence anchored today, so the rate rule's own period —
+      # measured from `last_funded_on`, which is this movement — closed before today.
+      fund(swept, 400, on: Date.current - 21.days)
+      fund(live, 400, on: Date.current)
+      visit budget_page_path
+    end
+
+    it "says which period the figure belongs to, and only where the period has ended" do
+      within(group("Swept")) { expect(page).to have_content("$400.00 left · last period") }
+      within(group("Live")) do
+        expect(page).to have_content("$400.00 left")
+        expect(page).to have_no_content("last period")
+      end
+    end
+
+    # `Σ pools == your bank balance` rests on the two screens agreeing about every pool. Same
+    # user, same afternoon, same two envelopes — read off Home and off the Budget page, and the
+    # rendered strings compared to a literal rather than to each other.
+    it "reads exactly as Home reads for the same pools" do
+      visit root_path
+
+      within("[data-pool-name='Swept']") { expect(page).to have_content("$400.00 left · last period") }
+      within("[data-pool-name='Live']") do
+        expect(page).to have_content("$400.00 left")
+        expect(page).to have_no_content("last period")
+      end
+    end
+  end
+
+  # The link is in the sidebar, which every signed-in page renders — so it is asserted from two
+  # unrelated screens, and its POSITION is asserted too: a rule is neither a report nor a
+  # category, and it belongs between the action that spends the money and the ledger that
+  # records what was spent.
   describe "the nav", :aggregate_failures do
-    it "reaches the page from anywhere and marks it current" do
+    it "reaches the page from the categories screen and marks it current" do
       visit categories_path
       click_link "Budget"
 
       expect(page).to have_current_path(budget_page_path)
       expect(page).to have_content("The rules that fill your envelopes")
+    end
+
+    it "reaches the page from the entries screen too" do
+      visit entries_path
+      click_link "Budget"
+
+      expect(page).to have_current_path(budget_page_path)
+      expect(page).to have_content("The rules that fill your envelopes")
+    end
+
+    # A literal list, so neither side is derived from the other.
+    it "sits between Distribute and Entries in the Main section" do
+      visit budget_page_path
+
+      expect(page.all("nav a").map { |link| link.text.strip }.first(4))
+        .to eq(["Home", "Distribute", "Budget", "Entries"])
     end
   end
 

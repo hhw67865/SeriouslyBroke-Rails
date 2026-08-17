@@ -544,6 +544,83 @@ RSpec.describe PoolStatus, type: :model do
     end
   end
 
+  # WHICH PERIOD THE FIGURE BELONGS TO. `pool_status_label`'s ` · last period` suffix rides on
+  # a status, so every screen that renders one has to be able to ask — and asking through here
+  # rather than through a second `pool.calculator` is what keeps the answer and the balance on
+  # one object. Both directions, at the same shape and the same money, so the funding DATE is
+  # the only variable.
+  describe "#period_closed?" do
+    def fund_on(pool, amount, date)
+      create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: date)
+    end
+
+    it "is true for a rate envelope funded in a period that has ended" do
+      pool = envelope("Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      fund_on(pool, 60, Date.new(2026, 1, 2))
+
+      expect(pool.status(today: today).period_closed?).to be(true)
+    end
+
+    it "is false for the same envelope funded inside the live period" do
+      pool = envelope("Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      fund_on(pool, 60, today)
+
+      expect(pool.status(today: today).period_closed?).to be(false)
+    end
+  end
+
+  # WHETHER #amount IS A READING OF THE BALANCE, asked of the class that owns #amount.
+  # BudgetPageHelper prints the balance beside the label only where this is false, so a state
+  # falling out of BILL_STATES silently drops that pool's balance off the Budget page.
+  describe "#amount_is_balance?" do
+    it "is false for the three states whose figure is a bill's", :aggregate_failures do
+      expect(described_class::BILL_STATES).to contain_exactly(:overdue, :wont_make_it, :behind)
+      described_class::BILL_STATES.each do |state|
+        expect(described_class::ATTENTION_STATES).to include(state)
+      end
+    end
+
+    # The method, not the constant, on live records — and each one asserted against #balance
+    # itself rather than against a repeat of the branch.
+    it "is false on a pool that is behind, whose label prints a shortfall", :aggregate_failures do
+      pool = envelope("Car")
+      create(:pool_budget, pool: pool, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      fund(pool, 20)
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:behind)
+      expect(status.amount_is_balance?).to be(false)
+      expect(status.amount).not_to eq(status.balance)
+    end
+
+    it "is true on a rate envelope, whose label prints the balance itself", :aggregate_failures do
+      pool = envelope("Groceries")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      fund(pool, 250)
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:left_to_spend)
+      expect(status.amount_is_balance?).to be(true)
+      expect(status.amount).to eq(status.balance)
+    end
+
+    # The fourth true state, and the one that is true for a different reason: :overdrawn prints
+    # the balance NEGATED, which is still a reading of it — "overdrawn $80.00 · holds -$80.00"
+    # is one number twice.
+    it "is true on an overdrawn envelope, whose label prints the balance negated", :aggregate_failures do
+      pool = envelope("Dining Out")
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 400)
+      spend(pool, 80)
+      status = pool.status(today: today)
+
+      expect(status.state).to eq(:overdrawn)
+      expect(status.amount_is_balance?).to be(true)
+      expect(status.amount).to eq(-status.balance)
+    end
+  end
+
   describe "an account pool" do
     it "reads as left_to_spend, since a buffer is always spendable" do
       status = checking.status(today: today)

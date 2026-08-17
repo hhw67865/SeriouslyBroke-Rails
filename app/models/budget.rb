@@ -52,6 +52,32 @@ class Budget < ApplicationRecord
     BudgetCalculator.new(self, today: today)
   end
 
+  # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`
+  # are three columns whose COMBINATION is the shape (§3.1), and reading the shape off them takes
+  # a four-branch cascade in an order that is a hazard in itself — so the cascade lives once,
+  # here, and the two helpers that used to hold a copy each keep only their own words:
+  # `HomeHelper#pool_rule_label` names a rule ("Every 6 months") and
+  # `BudgetPageHelper#budget_rule_basis` says what an amount is per ("every 6 months").
+  # Classification is the model's; wording is each screen's.
+  #
+  # `:every_n` names the shape without naming the number — the interval is on the record and each
+  # caller interpolates its own, so this stays a fixed set of four rather than a symbol per N.
+  #
+  # `basis_per_paycheck?` FIRST: a per-period rule carries no interval either, so testing the
+  # interval first would call every rate rule a one-off.
+  #
+  # A CATEGORY-MODE RULE IS MONTHLY, and it is answered before the interval branches. It is a
+  # monthly spending cap that carries no interval at all — #shape_must_be_valid only runs in pool
+  # mode — so the nil-interval branch would call every category cap a one-off.
+  def cadence
+    return :per_paycheck if basis_per_paycheck?
+    return :monthly if category_mode?
+    return :one_off if interval_months.blank?
+    return :monthly if interval_months == 1
+
+    :every_n
+  end
+
   private
 
   def exactly_one_owner

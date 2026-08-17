@@ -2,23 +2,23 @@
 
 # The Budget page's row copy. See the UI design spec §8.
 module BudgetPageHelper
-  # The states whose label is about a BILL rather than about the pool's own money, and therefore
-  # the only ones that owe the reader a balance beside it. Named here rather than string-testing
-  # the label for a figure, which would be an assertion about a string this module does not own —
-  # the same shape as `DistributionsHelper::DATED_STATES` one screen over.
-  BALANCE_UNSAID = [:overdue, :wont_make_it, :behind].freeze
-
   # WHAT THE ENVELOPE IS HOLDING, and only where the row has not already said it.
   #
-  # `pool_status_label` prints PoolStatus#amount, which IS the balance in five of the seven states
-  # and its negation in a sixth. Printed unconditionally this read "$400.00 left · holds $400.00"
-  # and "overdrawn $80.00 · holds -$80.00" — one number twice, on ten of the demo's fourteen
-  # groups. Measured on the rendered page, not reasoned about.
+  # `pool_status_label` prints PoolStatus#amount, which IS the balance in four of the seven states
+  # — the balance itself in three and its negation on :overdrawn. Printed unconditionally this
+  # read "$400.00 left · holds $400.00" and "overdrawn $80.00 · holds -$80.00" — one number twice,
+  # on ten of the demo's fourteen groups. Measured on the rendered page, not reasoned about.
+  #
+  # `PoolStatus#amount_is_balance?` rather than a state list of this module's own. Which states
+  # print the pool's money is a fact about `PoolStatus#amount`, and a hand copy of its case
+  # statement here would be a second reader free to drift from it the day an eighth state lands.
+  # (String-testing the label for a `$` would be worse still — an assertion about a string this
+  # module does not own.)
   #
   # The balance is therefore on screen for every pool either way; this clause is what puts it
   # there for the three states whose figure is a bill's shortfall instead.
   def budget_group_balance(group)
-    return "" unless BALANCE_UNSAID.include?(group.status.state)
+    return "" if group.status.amount_is_balance?
 
     "· holds #{number_to_currency(group.balance)}"
   end
@@ -44,19 +44,22 @@ module BudgetPageHelper
     "#{number_to_currency(budget.amount)} #{budget_rule_basis(budget)}"
   end
 
-  # `basis_per_paycheck?` FIRST: a per-period rule carries no interval either, so testing the
-  # interval first would call every rate rule a one-off.
+  # A LOOKUP ON `Budget#cadence`, not a predicate cascade of its own. This module and
+  # `HomeHelper#pool_rule_label` used to hold the same four-branch classification, in the same
+  # order, each with its own copy of the comment saying why that order is a hazard — so the
+  # classification moved to the record whose columns it reads and only the WORDS stayed here.
+  # Home names a rule ("Every 6 months"); this says what an amount is per ("every 6 months"),
+  # and it is the only one of the two ever asked about a category-mode rule.
   #
-  # A category-mode rule is a monthly spending limit and carries no interval at all
-  # (Budget#shape_must_be_valid only runs in pool mode), so it is answered before the
-  # interval branches rather than falling into the one-off arm.
+  # `:every_n` interpolates the interval here rather than carrying it, so the model's answer
+  # stays a fixed set of four.
   def budget_rule_basis(budget)
-    return "/ period" if budget.basis_per_paycheck?
-    return "a month" if budget.category_mode?
-    return "once" if budget.interval_months.blank?
-    return "a month" if budget.interval_months == 1
-
-    "every #{budget.interval_months} months"
+    case budget.cadence
+    when :per_paycheck then "/ period"
+    when :monthly then "a month"
+    when :one_off then "once"
+    else "every #{budget.interval_months} months"
+    end
   end
 
   # WHY THIS RULE IS NOT IN THE FILL ORDER, and never merely that it is not.

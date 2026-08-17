@@ -8,6 +8,14 @@
 class PoolStatus
   ATTENTION_STATES = [:overdrawn, :overdue, :wont_make_it, :behind].freeze
 
+  # THE STATES WHOSE #amount IS ABOUT A BILL RATHER THAN ABOUT THIS POOL'S OWN MONEY — exactly
+  # the three arms of #amount that do not read #balance. Here beside ATTENTION_STATES, and for
+  # the same reason it is: a caller that has to know which states print the pool's money is
+  # asking a question about this class's #amount, and a hand copy of the case statement below
+  # would be a second reader free to drift from it. BudgetPageHelper#budget_group_balance held
+  # exactly that copy and now asks #amount_is_balance? instead.
+  BILL_STATES = [:overdue, :wont_make_it, :behind].freeze
+
   attr_reader :pool, :today
 
   # `pending:` is PoolCalculator's, passed straight down and never read here — see
@@ -77,6 +85,22 @@ class PoolStatus
   def target = pool.target_amount.to_d
 
   def needs_attention? = ATTENTION_STATES.include?(state)
+
+  # IS #amount A READING OF THIS POOL'S BALANCE? True in four of the seven states — the balance
+  # itself in three and its negation on :overdrawn — and false in the three whose figure is a
+  # bill's shortfall. A row that prints the label AND the balance needs this to know whether it
+  # is about to print one number twice; that is a question about #amount, so it is answered here.
+  def amount_is_balance? = BILL_STATES.exclude?(state)
+
+  # WHICH PERIOD THE FIGURE BELONGS TO, off the calculator this class already holds — never a
+  # second `pool.calculator`, which would run #last_funded_on's three aggregates against an
+  # object free to disagree with the one #balance came from.
+  #
+  # Here rather than on each presenter because `pool_status_label`'s ` · last period` suffix
+  # rides on a status, and every screen that prints a status owes the reader the same suffix: a
+  # swept rate-rule envelope reading `$400.00 left · last period` on Home and `$400.00 left` on
+  # the Budget page is two screens describing one pool differently on the same afternoon.
+  delegate :period_closed?, to: :pool_calculator
 
   # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE, which is not always #amount.
   #
