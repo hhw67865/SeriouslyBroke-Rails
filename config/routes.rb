@@ -54,6 +54,15 @@ Rails.application.routes.draw do
   # show a validation message.
   patch "budget/user" => "budget_page#update", as: :budget_page_user
 
+  # WHERE FUNDING PRIORITY IS SET (spec §8). Until this route `pools.priority` was seed data with
+  # no writer in the app at all, while every distribution spent by it: `Pool.by_priority` is the
+  # fill order AllocationCalculator#fill and Home's waterfall both read.
+  #
+  # ONE ACCOUNT'S ENVELOPES IN THEIR NEW ORDER, as `pool_ids[]`, because priority is only ever
+  # compared within an account — the fill is per-account, so a cross-account ordering is a number
+  # nothing reads. Pool.apply_fill_order owns the refusal and the write.
+  patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
+
   # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
   # the period as if its distribution had not happened, which it does by DELETING this period's
   # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite

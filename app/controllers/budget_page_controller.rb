@@ -45,6 +45,28 @@ class BudgetPageController < ApplicationController
     end
   end
 
+  # THE FILL ORDER (spec §8: "drag-ordered — this is where funding priority is set"). One
+  # account's envelopes arrive as `pool_ids[]` in their new order and `Pool.apply_fill_order`
+  # writes `priority: index` over exactly that list, or refuses the whole thing.
+  #
+  # THE SAME SCOPING DISCIPLINE AS #update, one level down: every id goes through
+  # `current_user.pools` inside the model method, so an id that is not this user's is not found
+  # rather than found and refused — and the refusal is indistinguishable from the one a stale
+  # page gets, which is the right answer for both.
+  #
+  # A REFUSAL RE-RENDERS THIS PAGE AT 422, as a failed declaration does, because nothing was
+  # written and the order on screen is still the order in the database — there is nothing to
+  # redirect to that would say more.
+  def reorder
+    account = Pool.apply_fill_order(user: current_user, pool_ids: params.permit(pool_ids: [])[:pool_ids])
+
+    return redirect_to(budget_page_path, notice: "#{account.name} fills in that order now.") if account
+
+    flash.now[:alert] = "That order didn't match this account's envelopes — nothing was changed. Reload and try again."
+    @presenter = build_presenter
+    render :show, status: :unprocessable_content
+  end
+
   private
 
   def build_presenter = BudgetPagePresenter.new(user: current_user, today: Date.current)

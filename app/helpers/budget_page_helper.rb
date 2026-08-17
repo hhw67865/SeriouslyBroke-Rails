@@ -62,6 +62,30 @@ module BudgetPageHelper
     end
   end
 
+  # THE LIST `PATCH /budget/reorder` TAKES, with one pool moved one place. `offset` is -1 for ▲
+  # and +1 for ▼, and the whole band goes on the wire rather than "this pool, one place up",
+  # because the endpoint's contract is an ORDER and not an instruction — the same shape the drag
+  # controller builds out of the DOM, so a reorder means one thing however it was made.
+  #
+  # A move off either end returns the list unchanged, so the button at an edge is a no-op even if
+  # the `disabled` attribute on it is ever bypassed. #reorder_edge? is what hides it.
+  def reordered_pool_ids(groups, group, offset)
+    ids = groups.map { |candidate| candidate.pool.id }
+    index = ids.index(group.pool.id)
+    target = index + offset
+    return ids unless target.between?(0, ids.size - 1)
+
+    ids.insert(target, ids.delete_at(index))
+  end
+
+  # Whether this pool is already as far as `offset` would take it — the top row cannot move up
+  # and the bottom row cannot move down.
+  def reorder_edge?(groups, group, offset)
+    index = groups.index(group)
+
+    offset.negative? ? index.zero? : index == groups.size - 1
+  end
+
   # WHY THIS RULE IS NOT IN THE FILL ORDER, and never merely that it is not.
   #
   # The account-less clause is Home's own row phrasing, verbatim

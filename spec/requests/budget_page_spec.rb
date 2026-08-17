@@ -101,4 +101,119 @@ RSpec.describe "Budget page declaration", type: :request do
       expect(user.reload.typical_income).to be_nil
     end
   end
+
+  # THE FILL ORDER'S OWNERSHIP BOUNDARY. `PATCH /budget/reorder` is the app's only writer for
+  # `pools.priority` outside the pool form, and unlike the declaration above it takes IDS off the
+  # wire — so the question here is whose pools they are and whether they are one account's.
+  #
+  # A request spec, because the browser can only ever submit the order the page rendered: a list
+  # mixing two accounts, naming another user's pool or missing one of its own is a fact about the
+  # route, and every one of them must leave `priority` exactly as it was.
+  describe "the fill order" do
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:savings) { create(:pool, :account, user: user, name: "Savings") }
+    let!(:rent) { envelope("Rent", priority: 0) }
+    let!(:groceries) { envelope("Groceries", priority: 1) }
+    let!(:gifts) { envelope("Gifts", priority: 3, account: savings) }
+
+    def envelope(name, priority:, account: checking)
+      pool = create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
+      create(:pool_budget, :per_paycheck_rate, pool: pool, amount: 100)
+      pool
+    end
+
+    def reorder(ids) = patch(budget_page_reorder_path, params: { pool_ids: ids })
+
+    # The whole account, name by name — a count would pass on a set that had been shuffled.
+    def fill_order(account = checking)
+      account.child_pools.by_priority.pluck(:name, :priority)
+    end
+
+    describe "a list of one account's pools in a new order", :aggregate_failures do
+      it "writes a dense 0,1,2… and comes back to the page" do
+        reorder([groceries.id, rent.id])
+
+        expect(response).to redirect_to(budget_page_path)
+        expect(fill_order).to eq([["Groceries", 0], ["Rent", 1]])
+      end
+
+      # The reindex is per account and nothing else moves — the same user's other account is
+      # named on the wire nowhere and must read exactly as it did.
+      it "leaves the same user's other account untouched" do
+        reorder([groceries.id, rent.id])
+
+        expect(gifts.reload.priority).to eq(3)
+        expect(fill_order(savings)).to eq([["Gifts", 3]])
+      end
+    end
+
+    # EVERY REFUSAL, ASSERTED IN BOTH DIRECTIONS: a pinned row that did not move AND the whole
+    # account's order, because a pinned row alone would pass on a rewrite that moved everything
+    # else and a whole-set comparison alone reads as a count.
+    describe "a list this user cannot have submitted", :aggregate_failures do
+      it "refuses another user's pool" do
+        intruder = create(:pool, :budget_pool, name: "Theirs")
+
+        reorder([groceries.id, rent.id, intruder.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(groceries.reload.priority).to eq(1)
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+
+      it "refuses two accounts in one order" do
+        reorder([groceries.id, rent.id, gifts.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(gifts.reload.priority).to eq(3)
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+
+      # A PARTIAL LIST IS A REFUSAL, NOT A PARTIAL WRITE: Rent would keep priority 0 and
+      # Groceries would be written to 0 as well, and `[priority, name]` — not the user — would
+      # decide which of the two gets funded first.
+      it "refuses an order missing one of the account's own pools" do
+        reorder([groceries.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(groceries.reload.priority).to eq(1)
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+
+      it "refuses a duplicated id, which would silently drop a pool" do
+        reorder([groceries.id, groceries.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+
+      # A pool no account holds is in no fill order, so an order naming one is meaningless
+      # rather than merely wrong.
+      it "refuses an account-less pool" do
+        loose = create(:pool, :savings_pool, user: user, account: nil, name: "Retirement")
+
+        reorder([loose.id])
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(loose.reload.priority).to eq(0)
+      end
+
+      it "says nothing was changed rather than failing silently" do
+        reorder([groceries.id])
+
+        expect(response.body).to include("nothing was changed")
+      end
+    end
+
+    describe "a signed-out request", :aggregate_failures do
+      it "is sent to sign in rather than reordering anything" do
+        sign_out user
+
+        reorder([groceries.id, rent.id])
+
+        expect(response).to redirect_to(new_user_session_path)
+        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
+      end
+    end
+  end
 end

@@ -1,0 +1,25 @@
+<%# ▲▼ — the fill order without JavaScript. Locals: `group`, `band`.
+
+    TWO PLAIN FORMS, not two Stimulus actions, and that is the point of them: each button already
+    carries the whole band in its new order as hidden `pool_ids[]` fields, so the reorder works
+    with scripting off and is testable without synthesising drag events. reorder_controller does
+    the same thing from the DOM when a card is dropped; both submit one shape to one endpoint.
+
+    Named, not just glyphed: `Capybara.enable_aria_label` is on, and "Move Groceries up" is also
+    what a screen reader has to hear — a button whose only text is ▲ says nothing about what
+    moves or where. %>
+<span class="flex items-center gap-1">
+  <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
+    <%= button_to glyph,
+                  budget_page_reorder_path,
+                  method: :patch,
+                  params: { pool_ids: reordered_pool_ids(band.groups, group, offset) },
+                  disabled: reorder_edge?(band.groups, group, offset),
+                  form_class: "inline-block leading-none",
+                  aria: { label: "Move #{group.pool.name} #{direction}" },
+                  title: "Move #{group.pool.name} #{direction}",
+                  class: "px-1 text-xs rounded border border-gray-200 text-gray-500 " \
+                         "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \
+                         "disabled:text-gray-200 disabled:border-gray-100" %>
+  <% end %>
+</span>

@@ -6,9 +6,10 @@
   <% if @presenter.no_rules? %>
     <%= render "empty" %>
   <% else %>
-    <%# The fill order itself: pool by pool, top to bottom, exactly as a distribution spends. %>
-    <% @presenter.pool_groups.each do |group| %>
-      <%= render "pool_group", group: group %>
+    <%# The fill order itself: pool by pool, top to bottom, exactly as a distribution spends —
+        banded by the account that spends it, because that is the scope one reorder rewrites. %>
+    <% @presenter.account_bands.each do |band| %>
+      <%= render "account_band", band: band %>
     <% end %>
 
     <%# Rules exist but none of them fills an envelope — every one is an orphan. Said plainly

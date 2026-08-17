@@ -26,6 +26,13 @@ class BudgetPagePresenter
     delegate :priority, to: :pool
   end
 
+  # ONE ACCOUNT AND ITS POOLS IN FILL ORDER. The page's main list is banded by account rather
+  # than flat, and Task 5 is why: priority is only ever compared within an account (the fill is
+  # per-account), so a flat list interleaved by `[priority, name]` across two accounts would
+  # offer the user a drag between rows whose relative order decides nothing. The band is the
+  # scope of one reorder — what is inside it is exactly what `PATCH /budget/reorder` rewrites.
+  Band = Data.define(:account, :groups)
+
   attr_reader :user, :today
 
   # THE RECORD THE DECLARATION FORM EDITS, which is `user` on every path but one.
@@ -59,6 +66,18 @@ class BudgetPagePresenter
   # distribution at all — its rules are named in #orphan_rules with the step that fixes them.
   def pool_groups
     @pool_groups ||= grouped_pools.sort_by { |pool| [pool.priority, pool.name] }.map { |pool| build_group(pool) }
+  end
+
+  # #pool_groups banded by the account that funds them, accounts in their own `[priority, name]`
+  # order. `group_by` preserves insertion order, so each band's groups arrive already in fill
+  # order — there is no second sort here to disagree with #pool_groups' one.
+  #
+  # Every group has an account by construction (#rules_by_pool selects on `pool.account_id`), so
+  # there is no nil band to render and no pool falls out of the page by being banded.
+  def account_bands
+    @account_bands ||= pool_groups.group_by { |group| group.pool.account }
+      .sort_by { |account, _groups| [account.priority, account.name] }
+      .map { |account, groups| Band.new(account: account, groups: groups) }
   end
 
   # THE RULES NO DISTRIBUTION CAN REACH, each saying which of the two reasons it is.
@@ -150,7 +169,7 @@ class BudgetPagePresenter
   # demo seeds: eleven `SELECT users WHERE id = ?` for one user, and the page's whole cost fell
   # from 37 queries to 26 when they were preloaded.
   def rules
-    @rules ||= user.all_budgets.includes(:item, category: :user, pool: [:user, :budgets]).to_a
+    @rules ||= user.all_budgets.includes(:item, category: :user, pool: [:user, :budgets, :account]).to_a
   end
 
   def rules_by_pool

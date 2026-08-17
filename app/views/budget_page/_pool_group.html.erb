@@ -1,16 +1,26 @@
-<%# One pool and the rules that fill it. Local: `group` (BudgetPagePresenter::Group).
+<%# One pool and the rules that fill it. Locals: `group` (BudgetPagePresenter::Group) and `band`
+    (the account it sits in — the card is a row of that band's drag list).
 
     The header says how the pool is doing in the app's ONE row vocabulary
     (`HomeHelper#pool_status_label`, spec §4.4) — the same words, the same red, as Home and the
     distribution screen. A second vocabulary here would have two screens describe one envelope
     differently on the same afternoon.
 
-    `priority` is stated because this page is where funding priority is set (Task 5 makes it
-    draggable); the number is what decides who gets filled first when the money runs out. %>
+    `priority` is stated because this page is where funding priority is set; the number is what
+    decides who gets filled first when the money runs out, and dragging this card — or its ▲▼ —
+    is what writes it. %>
 <% status = group.status %>
-<section class="bg-white border border-gray-200 rounded" data-pool-group="<%= group.pool.name %>">
+<section class="bg-white border border-gray-200 rounded"
+         data-pool-group="<%= group.pool.name %>"
+         data-pool-id="<%= group.pool.id %>"
+         data-app--budget-page--reorder-target="row"
+         draggable="true"
+         data-action="dragstart->app--budget-page--reorder#start
+                      dragover->app--budget-page--reorder#over
+                      dragend->app--budget-page--reorder#finish">
   <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
     <div class="flex items-baseline gap-3">
+      <%= render "reorder_controls", group: group, band: band %>
       <h3 class="text-sm font-semibold text-gray-900"><%= group.pool.name %></h3>
       <span class="text-xs text-gray-400">priority <%= group.priority %></span>
     </div>

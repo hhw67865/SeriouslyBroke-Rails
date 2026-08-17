@@ -43,6 +43,13 @@ class Pool < ApplicationRecord
   scope :savings_pools, -> { where(pool_type: :savings) }
   scope :by_priority, -> { order(:priority, :name) }
 
+  # THE POOLS AN ACCOUNT ACTUALLY FILLS, and therefore the ones a fill order is over: an envelope
+  # with no funding rule asks for nothing, AllocationCalculator#fill drops its zero-ask row before
+  # the waterfall reaches it, and the Budget page — which groups rules under the pool they fill —
+  # has no card to drag for it. One reader for that set, because `.apply_fill_order` refuses a
+  # list that is not exactly it and BudgetPagePresenter renders exactly it.
+  scope :in_fill_order, -> { joins(:budgets).distinct }
+
   attr_accessor :create_expense_category, :create_savings_category
 
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
@@ -63,6 +70,76 @@ class Pool < ApplicationRecord
   # Configure searchable fields
   searchable :name, label: "Name"
   searchable :category, through: :categories, column: :name, label: "Category"
+
+  # THE FILL ORDER, WRITTEN — the only writer for `priority` outside the pool form, and the one
+  # the Budget page's drag and its ▲▼ buttons both go through. `pool_ids` is ONE account's
+  # rule-carrying envelopes in the order the user just put them in. Answers the account on
+  # success and NIL on refusal, which is the whole vocabulary the caller needs: nothing partial
+  # exists.
+  #
+  # DENSE, not "shift the moved row and leave the rest": `by_priority` is `[priority, name]`, so
+  # a sparse rewrite leaves ties whose winner is decided by a name — the defect Plan 1 shipped in
+  # its waterfall. The rewrite is dense over the account's WHOLE set of pools, not merely over
+  # the submitted ones, and each unsubmitted pool KEEPS ITS PLACE in the sequence: a pool with no
+  # rule would otherwise be left on an old number that collides with a renumbered one, and the
+  # tie-break the density exists to defeat would decide which of the two Home draws first.
+  # Its number moves, its rank does not.
+  #
+  # EVERY REFUSAL IS THE SAME REFUSAL and writes nothing at all:
+  #   * an id that is not this user's (`user.pools` is the only lookup — an id belonging to
+  #     someone else simply is not found, so `pools.size` falls short),
+  #   * ids from two accounts, or from none (a pool with no account is funded by no
+  #     distribution, so it has no fill order to be in),
+  #   * a duplicate id (which would make the list shorter than it looks and silently drop a pool),
+  #   * a list that is not the account's whole `in_fill_order` set — a page whose rules have
+  #     changed under it, submitting an order for pools that are no longer the ones being
+  #     ordered. Nothing is written and the page comes back saying so, rather than a partial
+  #     write leaving an order nobody chose.
+  def self.apply_fill_order(user:, pool_ids:)
+    ids = Array(pool_ids).map(&:to_s)
+    pools = fill_order_pools(user, ids)
+    return if pools.nil?
+
+    account = fill_order_account(user, pools.values)
+    return if account.nil? || account.child_pools.in_fill_order.ids.map(&:to_s).sort != ids.sort
+
+    transaction { write_fill_order(account, ids, pools) }
+    account
+  end
+
+  # The submitted pools dropped into the slots the submitted pools already hold, everything else
+  # left where it stands, and the whole account renumbered 0,1,2… off the result.
+  def self.write_fill_order(account, ids, pools)
+    queue = ids.dup
+    account.child_pools.by_priority
+      .map { |pool| pools.key?(pool.id.to_s) ? pools.fetch(queue.shift) : pool }
+      .each_with_index { |pool, index| pool.update!(priority: index) }
+  end
+  private_class_method :write_fill_order
+
+  # The submitted pools keyed by their id as it arrived on the wire, or NIL if the list itself is
+  # not a list of this user's pools: empty, holding a duplicate (which would make it shorter than
+  # it looks and drop a pool), or naming an id `user.pools` does not find — someone else's, or
+  # nothing at all, and the two deserve the same answer.
+  def self.fill_order_pools(user, ids)
+    return if ids.empty? || ids.uniq.size != ids.size
+
+    pools = user.pools.where(id: ids).index_by { |pool| pool.id.to_s }
+    pools if pools.size == ids.size
+  end
+  private_class_method :fill_order_pools
+
+  # The one account every submitted pool sits inside, or nil if that is not one account. Looked
+  # up through `user.pools.accounts` rather than through `pools.first.account`, so an envelope
+  # whose `account_id` points at a pool that is not an account — or not this user's — is a
+  # refusal rather than a silent write against whatever that row happens to be.
+  def self.fill_order_account(user, pools)
+    account_ids = pools.map(&:account_id).uniq
+    return unless account_ids.one? && account_ids.first.present?
+
+    user.pools.accounts.find_by(id: account_ids.first)
+  end
+  private_class_method :fill_order_account
 
   # Entries scoped to start_date and filtered by category type.
   #

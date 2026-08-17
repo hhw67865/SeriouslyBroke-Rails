@@ -1,0 +1,28 @@
+<%# One account's envelopes, in the order its money reaches them. Local: `band`
+    (BudgetPagePresenter::Band).
+
+    THE BAND IS THE SCOPE OF ONE REORDER. Priority is only ever compared inside an account —
+    AllocationCalculator#fill walks `account.child_pools.by_priority` — so a drag that crossed
+    accounts would be moving a row past rows whose relative order decides nothing. What is
+    inside this element is exactly what `PATCH /budget/reorder` rewrites.
+
+    The form is EMPTY and hidden: reorder_controller fills it with one `pool_ids[]` per card in
+    DOM order at drop time. The ▲▼ buttons carry their own already-swapped list (see
+    BudgetPageHelper#reordered_pool_ids) so the order is reachable with no JavaScript at all —
+    the drag is the enhancement, not the mechanism. %>
+<section class="space-y-3" data-reorder-account="<%= band.account.name %>"
+         data-controller="app--budget-page--reorder">
+  <div class="flex items-baseline justify-between gap-4 px-1">
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500"><%= band.account.name %></h2>
+    <p class="text-xs text-gray-400">Drag a card, or use the arrows, to set the order this account fills them</p>
+  </div>
+
+  <% band.groups.each do |group| %>
+    <%= render "pool_group", group: group, band: band %>
+  <% end %>
+
+  <% form_data = { app__budget_page__reorder_target: "form" } %>
+  <%= form_with(url: budget_page_reorder_path, method: :patch, class: "hidden", data: form_data) do %>
+    <%# One hidden `pool_ids[]` per card, appended by reorder_controller in DOM order at drop. %>
+  <% end %>
+</section>
