@@ -1,35 +1,33 @@
-<%# THE CATEGORIES PAGE'S ONE CHANGE (spec §8.1). Local: `presenter` (CategoryBudgetPresenter).
+<%# THE CATEGORIES PAGE'S BUDGET BLOCK (spec §8.1). Local: `presenter` (CategoryBudgetPresenter).
 
-    Four arms: §8.1's three — covered by an envelope, capped, neither — plus the account-pointed
-    one the spec does not name and `Pool#return_holdings_to_the_account` creates in bulk. See
-    CategoryBudgetPresenter's header for why that fourth arm exists and what was false without it.
-    `Budget#category_must_not_have_pool` is what makes the pooled arms and the capped one mutually
-    exclusive rather than an ordering choice made here — a category pointing at any pool cannot
-    hold a cap, which is also why neither pooled arm renders an editor: there is nothing either
-    could legally write.
+    TWO ARMS. §8.1's `capped` and `uncapped` states are deleted with the category cap (plan 3,
+    task 3): the first needed a Budget owned by a category and the second a category owned by no
+    pool, and neither is a shape this app can hold. What is left is the line review added — an
+    ACCOUNT, which is the buffer, against an envelope or a goal, which hold money. See
+    CategoryBudgetPresenter's header.
 
-    Rendered for every EXPENSE category now, where it used to render only for `budgetable?` ones.
-    That widening IS the change: a category whose money moved into an envelope used to lose this
-    block entirely and say nothing about where its spending now lives. %>
+    NEITHER ARM RENDERS AN EDITOR, and now there is nothing an editor could write: the money a
+    category has to spend is decided by the rule that fills its pool, which lives on the Budget
+    page. Both arms link there. %>
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
      data-budget-block
      data-budget-state="<%= presenter.state %>">
-  <% case presenter.state %>
-  <% when :account_pointed %>
+  <% if presenter.state == :account_pointed %>
     <%# THE CATEGORY POINTS AT AN ACCOUNT, AND AN ACCOUNT IS THE BUFFER (§7.1).
 
-        §8.1 does not name this state — it splits the world into "points at an envelope" and
-        `budgetable?` ("no pool at all"), and this shape is in neither — but
-        `Pool#return_holdings_to_the_account` produces it in bulk on every envelope destroy, so it
-        is where a user lands the moment they un-envelope a category.
+        §8.1 does not name this state — it split the world into "points at an envelope" and "no
+        pool at all", and this shape was in neither — but `Pool#return_holdings_to_the_account`
+        produces it in bulk on every envelope destroy, so it is where a user lands the moment they
+        un-envelope a category, and since plan 3 required a pool on every category it is the ONLY
+        unfunded shape left.
 
         NO STANDING AND NO ENVELOPE NAME HERE. Rendering the account's status would print the whole
         account's balance as this one category's, and calling it an envelope would promise a rule
         that `Budget#pool_must_not_be_an_account` forbids anything from ever writing.
 
-        NO CAP EDITOR EITHER, and the sentence says why rather than leaving a missing button to be
-        noticed: `Budget#category_must_not_have_pool` refuses a cap for a category pointing at ANY
-        pool, an account included.
+        NO EDITOR EITHER, and the sentence says why rather than leaving a missing button to be
+        noticed: nothing reserves this money, and the way to change that is to give the category an
+        envelope on the Budget page — which is what the pointer below offers.
 
         THE REGISTER IS THE APP'S EXISTING ONE for this exact shape — `entries/_impact`'s honest
         card ("No envelope — this spending isn't budgeted. It comes out of your buffer. Give it an
@@ -47,8 +45,8 @@
       No envelope — this spending isn't budgeted.
     </p>
     <p class="text-sm text-gray-500 mb-4">
-      It comes out of your buffer. Nothing reserves money for this category, and no cap can be set
-      while it points at an account.
+      It comes out of your buffer. Nothing reserves money for this category, so nothing here can
+      run out — and nothing tells you when it has cost more than you meant it to.
     </p>
 
     <dl class="divide-y divide-gray-200 mb-4">
@@ -71,7 +69,7 @@
         <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
       <% end %>
     <% end %>
-  <% when :pool_covered %>
+  <% else %>
     <%# POOL-COVERED. No cap editor, by the model's own rule; the block's job is to say WHERE this
         category's money now lives and how that envelope is doing, in the app's one row vocabulary.
 
@@ -103,7 +101,7 @@
 
     <p class="text-sm text-gray-500 mb-4">
       This category's spending comes out of <%= presenter.pool.noun == "envelope" ? "an" : "a" %>
-      <%= presenter.pool.noun %>, so it has no cap — the rule that fills the
+      <%= presenter.pool.noun %> — the rule that fills the
       <%= presenter.pool.noun %> is what decides how much there is to spend.
     </p>
 
@@ -134,56 +132,6 @@
     <%= link_to budget_page_path, class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition", data: { budget_link: true } do %>
       <%= heroicon "adjustments-horizontal", options: { class: "h-4 w-4" } %>
       <span>Rules on the Budget page</span>
-    <% end %>
-  <% when :capped %>
-    <%# CAPPED — the existing editor, unchanged, plus the caveat §8.1 requires beside it.
-
-        The sentence is `BudgetPageHelper#caps_not_counted_sentence`, the same string the structural
-        check prints, because the spec asks for one spelling of it and because this is the screen a
-        cap is WRITTEN on: a user setting one here and reading "$0.00 a period" on /budget an hour
-        later has been told two different things about the same rule. %>
-    <h2 class="text-xl font-semibold mb-4">Budget Management</h2>
-
-    <dl class="divide-y divide-gray-200 mb-4">
-      <div class="py-3 flex justify-between">
-        <dt class="text-sm font-medium text-gray-500">Budget Amount</dt>
-        <dd class="text-sm text-gray-900"><%= number_to_currency(presenter.cap.amount) %></dd>
-      </div>
-
-      <div class="py-3 flex justify-between">
-        <dt class="text-sm font-medium text-gray-500">Prorated</dt>
-        <dd class="text-sm text-gray-900">
-          <%= presenter.cap.prorated? ? "Yes — tracks daily pace" : "No — flat monthly cap" %>
-        </dd>
-      </div>
-    </dl>
-
-    <p class="text-sm text-gray-500 mb-4" data-caps-note>
-      <%= caps_not_counted_sentence %>
-    </p>
-
-    <%= link_to edit_budget_path(presenter.cap), class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition" do %>
-      <%= heroicon "pencil-square", options: { class: "h-4 w-4" } %>
-      <span>Update Budget</span>
-    <% end %>
-  <% else %>
-    <%# UNCAPPED — unchanged, except for the pointer §8.1 adds. %>
-    <h2 class="text-xl font-semibold mb-4">Budget Management</h2>
-
-    <div class="bg-gray-50 rounded p-6 text-center">
-      <div class="mx-auto w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center mb-3">
-        <%= heroicon "calculator", options: { class: "h-6 w-6 text-gray-400" } %>
-      </div>
-      <h3 class="text-base font-medium text-gray-900 mb-1">No budget set</h3>
-      <p class="text-sm text-gray-500 mb-4">Setting a budget helps you track your spending</p>
-      <%= link_to new_budget_path(category_id: presenter.category.id), class: "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
-        <%= heroicon "plus", options: { class: "h-4 w-4" } %>
-        <span>Create Budget</span>
-      <% end %>
-    </div>
-
-    <% if presenter.suggested? %>
-      <%= render "categories/_partials/show/suggestion_pointer", presenter: presenter %>
     <% end %>
   <% end %>
 </div>

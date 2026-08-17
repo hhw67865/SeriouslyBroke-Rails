@@ -28,11 +28,16 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expect(page).to have_content("$3,000.00 earned")
     end
 
+    # THE "BUDGET USED" CARD IS GONE UNTIL TASK 4, and that is a consequence of the cap's deletion
+    # rather than of this page changing: the card is gated on `total_budget.positive?`, and
+    # `total_budget` sums `CategoryCalculator#monthly_budget_rate`, which reads a category's cap.
+    # With no cap reachable it is $0.00 for every user, so the card renders for nobody. Task 4
+    # replaces it with a pool-level figure or deletes it; this task owes only that the page renders.
     it "shows health indicators with Net Savings (not Savings Rate)" do
       expect(page).to have_content("Net Savings")
       expect(page).not_to have_content("Savings Rate")
       expect(page).to have_content("Expense Ratio")
-      expect(page).to have_content("used")
+      expect(page).to have_no_content("% used")
     end
 
     it "shows savings pools section with pool card" do
@@ -159,8 +164,12 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
 
   def seed_mixed_financial_data
     pool = create(:pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
+    # THE CAP IS GONE (plan 3, task 3) and the split this page draws no longer depends on one.
+    # `Groceries` points at an ACCOUNT (the factory's default) — buffer-funded spending, which is
+    # where `DashboardPresenter`'s FINDING-1 bridge puts the "budgeted" band — while `Car Repair`
+    # points at a pool, which is the other side. The figures below are unchanged; only the reason
+    # a category lands on one side is. Task 4 owns what these bands should MEAN.
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
-    create(:budget, category: expense_cat, amount: 500)
 
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)

@@ -4,9 +4,29 @@ class Category < ApplicationRecord
   include ModelSearchable
 
   belongs_to :user, touch: true
-  belongs_to :pool, optional: true, touch: true
+
+  # EVERY CATEGORY NAMES ITS LANE (plan 3 decision 3). `optional: true` is gone, and the required
+  # `belongs_to` IS the presence validation — one spelling, the Rails one, rather than a
+  # `validates :pool, presence: true` sitting beside an association that says the opposite.
+  #
+  # The nil `pool_id` used to mean "the user's default account", and it was a promise nothing kept:
+  # `PoolBalanceLedger::ENTRY_POOL_ID` resolves `COALESCE(entries.pool_id, categories.pool_id)` to
+  # NOTHING for such a category, so its spending reached no pool at all while `Σ pools == bank
+  # truth` claimed otherwise. The cutover migration points every nil at the user's default account
+  # and verifies it in raw SQL; this is the line that stops one coming back.
+  belongs_to :pool, touch: true
+
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
+
+  # KEPT, THOUGH THE CAP IS GONE — and the check the plan asked for is written down here rather
+  # than left to be re-run. `budgets.category_id` is nil on every row after the cutover, so this
+  # association answers nil for every category the app can now hold; the two callbacks that were
+  # its reason for being (`destroy_budget_if_*`) are deleted below. It is not callerless, though:
+  # `CategoryCalculator#monthly_budget_rate` reads `category.budget&.amount`, and the dashboard's
+  # budget chart and totals are built on it. Those readers are Task 4's, the COLUMN is Task 6's,
+  # and deleting the association here would take the dashboard down with it for one intermediate
+  # commit. So it stays, dead but compiling, until the task that owns its readers arrives.
   has_one :budget, dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
@@ -22,10 +42,6 @@ class Category < ApplicationRecord
          savings: 2
        }
 
-  before_validation :destroy_budget_if_not_expense
-  before_validation :destroy_budget_if_pool_linked
-
-  validate :budget_only_for_expense
   validate :income_must_land_in_an_account
 
   # Basic scopes
@@ -34,13 +50,14 @@ class Category < ApplicationRecord
   scope :savings, -> { where(category_type: :savings) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
-  scope :budgetable, -> { expenses.where(pool_id: nil) }
-  scope :pool_covered, -> { expenses.where.not(pool_id: nil) }
 
+  # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed: the Categories index used to print
+  # `category.budget&.amount` and now prints the pool the spending comes out of, so preloading the
+  # association would be one query for a link that is nil on every row.
   scope :with_type,
         lambda { |type|
           case (type || :expense).to_sym
-          when :expense then expenses.includes(:budget, :pool, :items)
+          when :expense then expenses.includes(:pool, :items)
           when :income then incomes.includes(:items)
           when :savings then savings.includes(:items, :pool)
           end
@@ -49,48 +66,24 @@ class Category < ApplicationRecord
   # Configure searchable fields
   searchable :name, label: "Name"
 
-  def budgetable?
-    expense? && pool_id.nil?
-  end
-
-  def pool_covered?
-    expense? && pool_id.present?
-  end
-
-  # SPENDING THAT COMES OUT OF THE BUFFER — the rate detector's population, and a superset of
-  # #budgetable? by exactly one shape: a category pointing at an ACCOUNT.
+  # SPENDING THAT COMES OUT OF THE BUFFER — the rate detector's population, the Categories page's
+  # account-pointed arm, and the one predicate all of them read.
   #
-  # `budgetable?` ("no pool at all") used to be that population, and its sentence — *"this comes out
-  # of your buffer, an envelope would hold it"* — is just as literally true of a category pointing
-  # at an account, because an account IS the buffer. It became reachable in bulk when Task 8's
-  # fix round made a destroyed envelope's categories re-point to the account: every category the
-  # user has ever un-enveloped now points at one, and under `budgetable?` the app would have gone
-  # permanently silent about spending it had just handed back to the buffer.
+  # THE NIL ARM DIED WITH THE SHAPE (plan 3 decision 3). This used to be
+  # `pool.nil? || pool.pool_type_account?`, because a category with no pool at all was the ordinary
+  # pre-cutover way to spend from the buffer. `belongs_to :pool` is required now, so the first half
+  # can no longer be true of a saved record and the second half is the whole question: an account
+  # IS the buffer (§7.1), so an expense category pointing at one is spending that nothing reserves.
   #
-  # NOT the same question as #budgetable?, which stays exactly as it was: that one is "may this
-  # category carry a category-mode cap", and `Budget#category_must_not_have_pool` answers no for an
-  # account-pointed category. A cap on buffer spending is what an envelope replaces, so the two
-  # readers diverging here is the point rather than a wrinkle.
+  # The sentence three screens say about this set is unchanged and stays literally true — *"No
+  # envelope — this spending isn't budgeted. It comes out of your buffer"* on the Categories page,
+  # the entry form's impact card and `budget_page/_suggestion_rate`. Only the spelling narrowed.
   #
-  # WHAT THE DIVERGENCE COSTS THE USER, NAMED RATHER THAN LEFT TO BE DISCOVERED. A category whose
-  # envelope was deleted now points at an account, so it is `buffer_funded?` but NOT `budgetable?`,
-  # and three readers part company on exactly that shape:
-  #
-  #   * `Budget`'s category-mode cap — the form's collection is `expenses.budgetable`
-  #     (`budgets/_form`, `BudgetsController#set_category`), so the category can no longer be given
-  #     a monthly cap.
-  #   * `Entry.budgetable_expenses` (`expenses.where(categories: { pool_id: nil })`), and
-  #   * `DashboardPresenter#tracked_budgetable_expense_categories`
-  #     (`tracked_expense_categories.select(&:budgetable?)`), which together feed the Dashboard's
-  #     budget-health figures — `total_tracked_budgetable_expenses` and the Expenses/All tab
-  #     breakdowns. The spending moves out of the "budgeted" band and into `pool_covered`.
-  #
-  # Both are RECOVERABLE and neither destroys anything: clearing the category's pool puts it back in
-  # every one of those sets, and accepting the rate suggestion this predicate now produces gives it
-  # a real envelope, which is the better answer and the one the panel offers. Recorded here so the
-  # whole-plan review sees the family rather than meeting one member of it on a screen.
+  # The family of readers this predicate used to diverge from — `budgetable?`, `Category.budgetable`
+  # and `Entry.budgetable_expenses`, all of which meant "no pool at all" — is gone: with no pool-less
+  # category expressible there is nothing left for them to be a different answer TO.
   def buffer_funded?
-    expense? && (pool.nil? || pool.pool_type_account?)
+    expense? && pool.pool_type_account?
   end
 
   def calculator(date = Date.current, period: :monthly)
@@ -139,24 +132,6 @@ class Category < ApplicationRecord
   end
 
   private
-
-  def destroy_budget_if_not_expense
-    return unless category_type_changed? && !expense? && budget
-
-    budget.destroy
-    self.budget = nil
-  end
-
-  def destroy_budget_if_pool_linked
-    return unless pool_id_changed? && pool_id.present? && budget
-
-    budget.destroy
-    self.budget = nil
-  end
-
-  def budget_only_for_expense
-    errors.add(:budget, "can only be set for expense categories") if budget.present? && !expense?
-  end
 
   # Income lands in an account, never directly in an envelope: the allocation rules
   # move it out of the account afterwards.

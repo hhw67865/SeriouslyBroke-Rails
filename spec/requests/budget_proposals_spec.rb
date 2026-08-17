@@ -18,7 +18,11 @@ RSpec.describe "Budget proposals", type: :request do
   let(:user) { create(:user) }
   let(:stranger) { create(:user) }
   let(:account) { create(:pool, :account, user: user, name: "Checking") }
-  let(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
+  # POINTED AT THE ACCOUNT, which is where a buffer-funded category lives after plan 3 — the
+  # pool-less shape this fixture used to have is refused by `Category belongs_to :pool`. It is the
+  # same input to the accept flow: `SuggestionEngine#envelope_half` sends an account-pointed
+  # category down the CREATION branch, because an account is not reusable as an envelope.
+  let(:utilities) { create(:category, :expense, user: user, name: "Utilities", pool: account) }
   let(:phone) { create(:item, category: utilities, name: "Phone") }
 
   # `scope:` explicitly, as the other request specs do: Devise's mappings are populated when the
@@ -48,18 +52,12 @@ RSpec.describe "Budget proposals", type: :request do
       expect(response).to redirect_to(budget_page_path)
     end
 
-    # THE CAP THE RE-POINT DESTROYS, in the direction where it IS destroyed.
-    # `Category#destroy_budget_if_pool_linked` fires on the re-point because a category cannot hold
-    # both a cap and a pool — so a successful acceptance deletes a rule the user wrote, which is
-    # what the panel's cap sentence promises out loud. Net `Budget.count` is unchanged (one cap
-    # out, one rule in) and that is exactly why the record is named rather than counted.
-    it "replaces the category's cap with the new rule" do
-      cap = create(:budget, category: utilities, amount: 300)
-
-      expect { accept }.to not_change(Budget, :count)
-      expect(Budget.exists?(cap.id)).to be false
-      expect(utilities.reload.pool.budgets.sole.item).to eq(phone)
-    end
+    # THE CAP EXAMPLES ARE DELETED (plan 3, task 3). Two stood here: accepting a proposal
+    # DESTROYED the category's cap (`destroy_budget_if_pool_linked` fired on the re-point), and a
+    # REFUSED rule had to leave that cap standing — the fourth row the rollback had to restore,
+    # which counting could not see. Both callbacks and the cap itself are gone, so the acceptance
+    # destroys nothing and the rollback has three rows to restore rather than four. The three are
+    # pinned by the examples that remain.
 
     # §7a'S CLASS, THIRD APPEARANCE, AND THE SHARPEST OF THE THREE: a stranger's item id would
     # write a funding rule against THEIR spending, which this user's page would then read back
@@ -69,7 +67,7 @@ RSpec.describe "Budget proposals", type: :request do
 
       expect { accept(budget: { item_id: foreign_item.id }) }.not_to change(Budget, :count)
       expect(response).to have_http_status(:not_found)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
     end
 
     # The line, from the other side: this item is the user's OWN, so the controller must let it
@@ -87,7 +85,7 @@ RSpec.describe "Budget proposals", type: :request do
 
       expect { accept(envelope: { category_id: foreign.id }) }.not_to change(Pool, :count)
       expect(response).to have_http_status(:not_found)
-      expect(foreign.reload.pool).to be_nil
+      expect(foreign.reload.pool).to eq(foreign.pool)
     end
 
     it "refuses a stranger's account in the envelope half and writes nothing" do
@@ -95,7 +93,7 @@ RSpec.describe "Budget proposals", type: :request do
 
       expect { accept(envelope: { account_id: foreign_account.id }) }.not_to change(Pool, :count)
       expect(response).to have_http_status(:not_found)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
     end
 
     # Ownership here, shape in the model: this pool IS the user's, it is simply not an account,
@@ -106,7 +104,7 @@ RSpec.describe "Budget proposals", type: :request do
 
       expect { accept(envelope: { account_id: own_envelope.id }) }.not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
     end
 
     # A USER WHO HAS NOMINATED NO ACCOUNT is asked rather than written blank: the engine reads
@@ -115,7 +113,7 @@ RSpec.describe "Budget proposals", type: :request do
     it "refuses an envelope with no account and writes nothing" do
       expect { accept(envelope: { account_id: "" }) }.not_to change(Pool, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
     end
 
     # THE MUTATION CHECK ON THE TRANSACTION. The pool and the re-point both succeed and the RULE
@@ -124,22 +122,8 @@ RSpec.describe "Budget proposals", type: :request do
     # category with neither silently moves every entry in it into a stranger of an envelope.
     it "writes no pool, no re-point and no rule when the rule itself is refused" do
       expect { accept(budget: { amount: "0" }) }.to not_change(Pool, :count).and not_change(Budget, :count)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
       expect(response).to have_http_status(:unprocessable_content)
-    end
-
-    # THE FOURTH ROW THE ROLLBACK HAS TO RESTORE, and counting cannot see it. The re-point runs
-    # `Category#destroy_budget_if_pool_linked` on a `before_validation`, so the cap's DELETE is
-    # issued INSIDE the savepoint — but `not_change(Budget, :count)` passes just as happily if the
-    # cap were deleted and the rule created, which is a user losing a rule they wrote to a request
-    # that failed. The example above deliberately has no cap, so this is the one that tests it,
-    # and it names the RECORD rather than a total.
-    it "leaves the category's cap standing when the rule is refused" do
-      cap = create(:budget, category: utilities, amount: 300)
-
-      expect { accept(budget: { amount: "0" }) }.to not_change(Budget, :count)
-      expect(utilities.reload.budget).to eq(cap)
-      expect(utilities.pool).to be_nil
     end
 
     # `pool_type` IS NOT A WIRE PARAMETER. An envelope is a budget pool by definition, and taking
@@ -195,7 +179,7 @@ RSpec.describe "Budget proposals", type: :request do
 
       expect { accept }.to not_change(Pool, :count).and not_change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(utilities.reload.pool).to be_nil
+      expect(utilities.reload.pool).to eq(account)
     end
 
     # The ordinary reuse payload — `budget[pool_id]` and no envelope half at all — takes the plain

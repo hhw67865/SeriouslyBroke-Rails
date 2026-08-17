@@ -33,9 +33,10 @@ RSpec.describe SacrificePresenter do
     create(:pool_budget, pool: pool, amount: amount, interval_months: nil, anchor_date: anchor)
   end
 
-  def cap(name, amount)
-    create(:budget, category: create(:category, :expense, user: user, name: name), amount: amount)
-  end
+  # `#cap` is deleted with the shape it built (plan 3, task 3): a rule owned by a category. The
+  # three examples that used it — the gap counting no cap, the cut list excluding one, and
+  # `#rows_total` adding up with one on the fixture — are deleted with it. Nothing is left out of
+  # this page's arithmetic now, which is a stronger statement than the one they made.
 
   def ids(rows) = rows.map { |row| row.budget.id }
 
@@ -58,17 +59,6 @@ RSpec.describe SacrificePresenter do
       budget_page = BudgetPagePresenter.new(user: user, today: today)
 
       expect(presenter.gap).to eq(budget_page.rules_need - budget_page.typical_income)
-    end
-
-    # A CAP IS NOT A CLAIM ON INCOME (Task 4's ruling). Nothing fills one, so cutting one frees
-    # nothing and counting one would inflate the gap by money that will never be asked for. Pinned
-    # as a figure that does NOT move rather than as a row that is absent, because the row's absence
-    # is asserted separately and this is the arithmetic consequence.
-    it "counts no category cap" do
-      rate(envelope("Groceries"), 2_500)
-      cap("Food & Dining", 600)
-
-      expect(presenter.gap).to eq(BigDecimal("100.00"))
     end
 
     # Negative is a budget that fits. The controller refuses the route there, and #underwater? is
@@ -119,19 +109,18 @@ RSpec.describe SacrificePresenter do
   end
 
   describe "#cuttable_rows" do
-    # THE CUT LIST IS ANCHORLESS POOL-MODE RULES. All four kinds are on the fixture at once so the
-    # boundary is drawn rather than merely reported: two rates in, a recurring bill and a one-off
-    # out, and a category cap out of the page entirely.
-    it "holds the anchorless pool rules and nothing else", :aggregate_failures do
+    # THE CUT LIST IS THE ANCHORLESS RULES. All the kinds this app can hold are on the fixture at
+    # once so the boundary is drawn rather than merely reported: two rates in, a recurring bill and
+    # a one-off out. (A category cap used to be a third arm — off the page entirely — and is
+    # deleted with the shape.)
+    it "holds the anchorless rules and nothing else", :aggregate_failures do
       groceries = rate(envelope("Groceries"), 400)
       dining = rate(envelope("Dining Out", priority: 2), 150)
       rent = rolling(envelope("Rent", priority: 3), amount: 1_500)
       dentist = one_off(envelope("Dentist", priority: 4), amount: 300, anchor: Date.new(2026, 3, 4))
-      food_cap = cap("Food & Dining", 600)
 
       expect(ids(presenter.cuttable_rows)).to contain_exactly(groceries.id, dining.id)
       expect(ids(presenter.fixed_rows)).to contain_exactly(rent.id, dentist.id)
-      expect(ids(presenter.cuttable_rows + presenter.fixed_rows)).not_to include(food_cap.id)
     end
 
     # A RULE ON AN ACCOUNT-LESS POOL IS A REAL CLAIM the user declared — it is inside
@@ -197,7 +186,6 @@ RSpec.describe SacrificePresenter do
       rolling(envelope("Rent", priority: 2), amount: 1_500)
       rolling(envelope("Car Insurance", priority: 3), amount: 1_200, anchor: Date.new(2026, 5, 1), every: 6)
       one_off(envelope("Dentist", priority: 4), amount: 300, anchor: Date.new(2026, 3, 4))
-      cap("Food & Dining", 600)
 
       expect(presenter.rows_total).to eq(presenter.rules_need)
     end

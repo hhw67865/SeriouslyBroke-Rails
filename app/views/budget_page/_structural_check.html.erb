@@ -52,26 +52,10 @@
         </div>
       </dl>
 
-      <%# WHY THE FIGURE ABOVE IS $0.00 when the page above it lists rules. Only category caps
-          exist, and a cap is a spending limit on tracking rather than a claim on income — no
-          distribution fills one, so cutting one would free nothing and counting one would inflate
-          "your rules need" by money that will never be asked for.
-
-          The orphan band already says the same fact about the same rules in its own register
-          ("caps a category — no envelope to fill"); this says what it MEANS for the figure, once,
-          and only where the figure would otherwise read as a rendering fault.
-
-          THE SENTENCE ITSELF IS `BudgetPageHelper#caps_not_counted_sentence`, shared with the
-          Categories page's budget block (spec §8.1 asks for one spelling of it). The clause after
-          it is NOT shared and must not be: "you have none yet" is true only under the zero this
-          block is gated on, and on a category page it would be a claim about rules the screen
-          cannot see. %>
-      <% if presenter.caps_not_counted? %>
-        <p class="text-sm text-gray-500 max-w-2xl" data-caps-note>
-          <%= caps_not_counted_sentence %>
-          Rules that fill an envelope are, and you have none yet.
-        </p>
-      <% end %>
+      <%# THE CAPS NOTE IS DELETED (plan 3, task 3). It explained why the figure above could read
+          $0.00 over a page listing the user's own rules — because those rules were category caps,
+          which no distribution fills — and every rule this page can now show is a claim on income,
+          so a zero here means the user has written no rules at all rather than the wrong kind. %>
 
       <%# §9: A PERMANENTLY VISIBLE BUTTON, AND ONLY WHEN INCOME < RULES. Reallocation cannot fix
           a budget that does not fit an income, so this is the one screen that must not offer

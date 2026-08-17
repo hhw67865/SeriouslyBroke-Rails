@@ -1,21 +1,18 @@
 # frozen_string_literal: true
 
 FactoryBot.define do
+  # A RULE IS OWNED BY A POOL, FULL STOP (plan 3, task 3). This factory used to default to a
+  # category — the monthly cap — with a `:pool_budget` sub-factory for the funding rule; the cap is
+  # deleted, so the default IS the funding rule and `:pool_budget` is kept as an alias so the
+  # hundreds of call sites that name it do not all have to be rewritten to say the same thing.
   factory :budget do
     amount { Faker::Number.decimal(l_digits: 3, r_digits: 2) }
-    association :category, factory: [:category, :expense]
+    pool { association :pool, :budget_pool }
+    basis { :monthly }
+    interval_months { 1 }
+    anchor_date { nil }
 
-    trait :prorated do
-      prorated { true }
-    end
-
-    factory :pool_budget do
-      category { nil }
-      association :pool, factory: [:pool, :budget_pool]
-      basis { :monthly }
-      interval_months { 1 }
-      anchor_date { nil }
-    end
+    factory :pool_budget
 
     # $300 every pay period, no due date — the catch-all
     trait :per_period_rate do

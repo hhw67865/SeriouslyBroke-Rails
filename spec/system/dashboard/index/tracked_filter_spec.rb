@@ -14,9 +14,11 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
     let!(:dining_item) { create(:item, category: dining, name: "Restaurants") }
 
+    # THE TWO CAPS THIS PLANTED ARE DELETED (plan 3, task 3), and with them the "Monthly Budget"
+    # stat card they fed — it is gated on `total_budget.positive?`, which sums a category's cap. The
+    # tracked/untracked totals below are entry sums and are untouched, which is what this file is
+    # actually about.
     before do
-      create(:budget, category: groceries, amount: 800)
-      create(:budget, category: dining, amount: 200)
       create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
       create(:entry, item: dining_item, amount: 150.00, date: base_date + 2.days)
     end
@@ -26,7 +28,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$1,000.00") }
+      expect(page).to have_no_content("$1,000.00")
     end
 
     it "reduces tracked total and budget when a budgeted category is untracked" do
@@ -35,7 +37,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
+      expect(page).to have_no_content("$800.00")
     end
 
     it "shows untracked category separately in breakdown" do
@@ -66,7 +68,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       expect(page).to have_content("$300.00") # wait for page reload
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
+      expect(page).to have_no_content("$800.00")
     end
 
     it "applies multiple toggle changes in a single submission" do

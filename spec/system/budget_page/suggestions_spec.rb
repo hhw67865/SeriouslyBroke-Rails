@@ -16,7 +16,10 @@ RSpec.describe "Budget page suggestions", type: :system do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
+  # POINTED AT THE ACCOUNT, which is where buffer-funded spending lives after plan 3 — the
+  # pool-less shape this fixture used to have is refused by `Category belongs_to :pool`, and
+  # `Category#buffer_funded?` answers true for both, so the detectors see the same input.
+  let(:utilities) { create(:category, :expense, user: user, name: "Utilities", pool: checking) }
   let(:phone) { create(:item, category: utilities, name: "Phone") }
   let(:internet) { create(:item, category: utilities, name: "Internet") }
 
@@ -154,34 +157,23 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # THE RE-POINT, SAID BEFORE THE CLICK: accepting a Phone proposal moves every Utilities entry,
-    # and the cap it destroys on the way is named with its own figure.
-    it "says what accepting does to the category, and which cap it replaces" do
+    # THE RE-POINT, SAID BEFORE THE CLICK: accepting a Phone proposal moves every Utilities entry.
+    #
+    # THE CAP CLAUSE IS DELETED WITH THE CAP (plan 3, task 3). Three examples named it — one on a
+    # dated bill, one on a rate (amendment C's case), and one negative on a category that had none
+    # — because accepting used to DESTROY the category's cap as a side effect of the re-point. That
+    # deletion cannot happen, so the row has one clause and the negative is the whole panel's.
+    it "says what accepting does to the category" do
       within(effect_of(:dated_bill, phone)) do
         expect(page).to have_content("puts all Utilities spending in a new Utilities envelope")
       end
-      within(cap_note_of(:dated_bill, phone)) do
-        expect(page).to have_content("$40.00 a month cap here is a spending limit")
-      end
     end
 
-    # AMENDMENT C, AND IT IS THE CASE THE CONCERN WAS RAISED ABOUT: five of the demo's rate
-    # suggestions are for categories the user has already capped, and a rate row that said nothing
-    # about the cap would read as the app failing to notice it. `Category.budgetable` is "expense,
-    # no pool" and says nothing about caps, so the rate detector fires either way.
-    it "names the cap on a rate suggestion too" do
-      within(cap_note_of(:rate, groceries)) do
-        expect(page).to have_content("$500.00 a month cap here is a spending limit")
-      end
-    end
-
-    # THE NEGATIVE DIRECTION, on the same rendered screen as both positives: Concert's category was
-    # never capped, so there is nothing to replace and the clause must not appear. Without this the
-    # cap note could be unconditional and every assertion above would still pass.
-    it "says nothing about a cap where the category has none" do
-      within(suggestion(:dated_bill, concert)) do
+    it "says nothing about a cap anywhere on the panel" do
+      within("[data-suggestions]") do
         expect(page).to have_css("[data-suggestion-effect]")
         expect(page).to have_no_css("[data-suggestion-cap]")
+        expect(page).to have_no_content("cap here is a spending limit")
       end
     end
   end
@@ -251,7 +243,6 @@ RSpec.describe "Budget page suggestions", type: :system do
   # second must render and act as ADDING to that envelope rather than making a second one.
   describe "a second bill in the same category", :aggregate_failures do
     before do
-      create(:budget, category: utilities, amount: 40)
       plant_bill(phone, 85)
       plant_bill(internet, 65)
       visit budget_page_path
@@ -274,15 +265,8 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # And the cap clause goes with it: a pool-covered category cannot hold a cap
-    # (`destroy_budget_if_pool_linked` took it on the first acceptance), so there is nothing left
-    # to warn about and the row must not warn about it.
-    it "stops naming a cap once the category is covered" do
-      expect(utilities.reload.budget).to be_nil
-      within(suggestion(:dated_bill, internet)) do
-        expect(page).to have_no_css("[data-suggestion-cap]")
-      end
-    end
+    # The cap clause that used to be asserted absent here is absent from the whole panel now; see
+    # the rendering block above.
 
     it "lands as a second rule in that same envelope" do
       accept_and_create(:dated_bill, internet)
@@ -487,8 +471,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     def pool_total = user.pools.reload.sum(0.to_d) { |pool| pool.calculator.balance }
 
     # THE ROW SAYS SO BEFORE THE CLICK (finding 2c). One clause, on the sentence already naming
-    # which spending moves — the row already warns about the re-point and about the cap it would
-    # delete, and burying either of those to make room would be worse than omitting this.
+    # which spending moves — burying the re-point to make room for it would be worse than omitting
+    # it.
     it "warns that the envelope will open carrying the category's past spending" do
       within(effect_of(:rate, groceries)) do
         expect(page).to have_content("past and future")
@@ -496,12 +480,15 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # THE OVERSTATEMENT, MEASURED BEFORE THE CLICK. $2,000 arrived and $1,400 of it has been spent,
-    # so the bank holds $600 — and `Σ pools` says $2,000, because a pool-less category's spending
-    # reaches no pool at all. This is the gap the acceptance closes, and asserting it here is what
-    # keeps the assertion below from reading as a regression.
-    it "starts with the sum overstating the bank by the whole unpooled history" do
-      expect(pool_total).to eq(2_000)
+    # WHAT THIS PAIR USED TO MEASURE, AND WHAT IT MEASURES NOW. Before plan 3 the category named no
+    # pool, so its $1,400 of spending reached NO pool at all: `Σ pools` read $2,000 against a bank
+    # holding $600, and the acceptance closed that $1,400 gap. A category with no pool is not a
+    # shape the app can hold any more — its spending comes out of the ACCOUNT, and the sum is
+    # bank-true from the start — so the claim under test becomes CONSERVATION: the acceptance moves
+    # $1,400 of history out of the buffer and into the envelope without changing the total, and
+    # without writing a movement to do it.
+    it "starts with the sum already agreeing with the bank" do
+      expect(pool_total).to eq(600)
     end
 
     it "opens the envelope at minus the category's lifetime spending", :aggregate_failures do
@@ -512,13 +499,13 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(groceries.reload.pool.calculator.balance).to eq(-1_400)
     end
 
-    # THE OTHER SIDE, INDEPENDENTLY PLANTED. $600 is what the bank holds — $2,000 in, $1,400 out —
-    # and after the acceptance the pool tree says the same thing for the first time. `Σ pools` fell
-    # by exactly the lifetime spend, and no `pool_movements` row was written to make it happen.
-    it "lands the sum on the bank-true figure, with no movement written", :aggregate_failures do
+    # BOTH SIDES OF THE MOVE, INDEPENDENTLY: the buffer gives up exactly the history the envelope
+    # takes on, the total does not move, and no `pool_movements` row was written to make it happen.
+    it "moves the history out of the buffer without moving the total", :aggregate_failures do
       expect { accept_and_create(:rate, groceries) }.not_to change(PoolMovement, :count)
 
       expect(page).to have_content("Budget was successfully created")
+      expect(checking.calculator.balance).to eq(2_000)
       expect(pool_total).to eq(600)
     end
   end
@@ -536,8 +523,6 @@ RSpec.describe "Budget page suggestions", type: :system do
   # envelope" both mention Y, so a row-wide `have_content` cannot tell the two apart — which is
   # precisely the regression the sharing case has to catch.
   def effect_of(kind, subject) = suggestion(kind, subject).find("[data-suggestion-effect]")
-
-  def cap_note_of(kind, subject) = suggestion(kind, subject).find("[data-suggestion-cap]")
 
   def rendered_keys = page.all("[data-suggestion]").pluck("data-suggestion")
 
@@ -563,15 +548,14 @@ RSpec.describe "Budget page suggestions", type: :system do
   # The planted history — one detector at a time, and the whole lot for the rendering block
   # ---------------------------------------------------------------------------------------------
 
-  # THREE CAP STATES ON ONE SCREEN, deliberately: Utilities capped (a dated bill that names it),
-  # Groceries capped (a rate that names it — amendment C), and Concert's category left cap-less so
-  # the clause has somewhere to be absent.
+  # THE THREE CAP STATES THIS USED TO PLANT ARE GONE (plan 3, task 3): a cap is not a shape the app
+  # can hold, so the two `create(:budget, category: …)` lines and the row clause they fed are
+  # deleted with it.
   def plant_everything
-    create(:budget, category: utilities, amount: 40)
     plant_bill(phone, 85)
     plant_bill(internet, 65)
     concert
-    create(:budget, category: groceries, amount: 500)
+    groceries
     plant_drift
     plant_dead_rule
   end
@@ -586,7 +570,7 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   # ONE payment, and big enough to be a bill at all ($100 floor) — the guessed shape.
   def concert
-    @concert ||= create(:item, category: create(:category, :expense, user: user, name: "Fun"), name: "Concert").tap do |item|
+    @concert ||= create(:item, category: create(:category, :expense, user: user, name: "Fun", pool: checking), name: "Concert").tap do |item|
       create(:entry, item: item, amount: 200, date: Date.current - 20.days)
     end
   end
@@ -595,7 +579,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   # keeps its hands off. Present in 3 of the last 6 and in the most recent 3, so both rate gates
   # open; measured over 3 periods, which is the span since it first appeared.
   def groceries
-    @groceries ||= create(:category, :expense, user: user, name: "Groceries").tap do |category|
+    @groceries ||= create(:category, :expense, user: user, name: "Groceries", pool: checking).tap do |category|
       item = create(:item, category: category, name: "Supermarket")
       [5, 19, 33].each { |days| create(:entry, item: item, amount: 300, date: Date.current - days.days) }
     end

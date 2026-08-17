@@ -4,7 +4,12 @@ require "rails_helper"
 
 RSpec.describe "Savings Pools Categories - Manage", type: :system do
   let!(:user) { create(:user) }
-  let!(:pool) { create(:pool, name: "Emergency Fund", user: user) }
+
+  # THE GOAL IS HOUSED IN AN ACCOUNT, which is the post-cutover shape (the migration houses every
+  # non-account pool) and is load-bearing here: DISCONNECTING a category hands it back to the
+  # pool's account, because `Category belongs_to :pool` refuses the nil this screen used to write.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let!(:pool) { create(:pool, :savings_pool, name: "Emergency Fund", user: user, account: checking) }
 
   before do
     sign_in user, scope: :user
@@ -36,9 +41,9 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
 
   describe "category display", :aggregate_failures do
     before do
-      create(:category, name: "Monthly Savings", category_type: "savings", user: user)
-      create(:category, name: "Vacation Expenses", category_type: "expense", user: user)
-      create(:category, name: "Salary", category_type: "income", user: user)
+      create(:category, name: "Monthly Savings", category_type: "savings", user: user, pool: checking)
+      create(:category, name: "Vacation Expenses", category_type: "expense", user: user, pool: checking)
+      create(:category, name: "Salary", category_type: "income", user: user, pool: checking)
       visit categories_pool_path(pool)
     end
 
@@ -54,9 +59,14 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       expect(page).not_to have_content("Income Categories")
     end
 
-    it "shows available status for unconnected categories" do
+    # "Available to connect" — the arm for a category with NO pool at all — is unreachable since
+    # plan 3 required a pool on every category. A category not connected to THIS goal is connected
+    # to something, and the row says which, which is the more useful sentence anyway: it is where
+    # the money currently lives.
+    it "names the pool an unconnected category's money currently lives in" do
       within(:xpath, "//label[contains(., 'Monthly Savings')]") do
-        expect(page).to have_content("Available to connect")
+        expect(page).to have_content("Connected to Checking")
+        expect(page).to have_no_content("Available to connect")
       end
     end
 
@@ -120,19 +130,24 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       expect(category_checkbox("Connected Savings")).to be_checked
     end
 
+    # DISCONNECTING HANDS THE CATEGORY BACK TO THE GOAL'S ACCOUNT (plan 3, task 3). It used to null
+    # `pool_id`, which `Category belongs_to :pool` now refuses — `update` returned false, the
+    # category stayed connected, and the page said "Categories updated successfully!" over it. The
+    # destination is the one `Pool#hand_categories_to_the_account` already uses when a pool is
+    # destroyed, so the category's history moves into the buffer rather than out of the pool tree.
     it "disconnects a category by connecting a different one", :aggregate_failures do
       uncheck_category("Connected Savings")
       check_category("Other Savings")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(connected_savings.reload.pool).to be_nil
+      expect(connected_savings.reload.pool).to eq(checking)
       expect(other_savings.reload.pool).to eq(pool)
     end
   end
 
   describe "category conflicts" do
-    let!(:other_pool) { create(:pool, name: "Other Pool", user: user) }
+    let!(:other_pool) { create(:pool, :savings_pool, name: "Other Pool", user: user, account: checking) }
     let!(:conflicting_category) do
       create(
         :category,

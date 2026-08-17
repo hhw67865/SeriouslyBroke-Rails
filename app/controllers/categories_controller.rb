@@ -15,8 +15,9 @@ class CategoriesController < ApplicationController
   # GET /categories/1
   #
   # The budget block is spec §8.1's, and it is built for EXPENSE categories only because that is
-  # the only kind that can carry a cap or point at an envelope — an income or savings category has
-  # no budget state to be in. Nil for the others, and the view renders nothing for a nil.
+  # the only kind whose pool answers a question about a budget — an income category names the
+  # account its money lands in, which is not a state the block has words for. Nil for the others,
+  # and the view renders nothing for a nil.
   # THE POOL CARD GETS THE SAME OBJECT, and one instance serves both blocks (2d task 6). The card
   # is older than the budget block and rendered savings chrome for every pool it was given — an
   # ACCOUNT read "Savings Pool / Target: $1,000.00 / -30% complete", a savings progress bar drawn
@@ -33,8 +34,17 @@ class CategoriesController < ApplicationController
   end
 
   # GET /categories/new
+  # THE POOL DEFAULTS TO THE USER'S DEFAULT ACCOUNT (plan 3 decision 3). `categories.pool_id` is
+  # required now, and a form that opened with nothing selected would make every new category a
+  # 422 the user has to read before they can guess what the field wants. The default is also the
+  # right answer for most new categories: an account IS the buffer (§7.1), so "this comes out of my
+  # buffer" is what spending means before it has an envelope, and it is the shape the Budget page's
+  # rate detector then offers to give one to.
+  #
+  # `default_account` is nullable on `users`, so this can still leave the field unset — the form
+  # then opens on the first pool in the list and the validation is what refuses a genuine blank.
   def new
-    @category = current_user.categories.new
+    @category = current_user.categories.new(pool: current_user.default_account)
     @category.category_type = params[:type] if params[:type].present?
   end
 

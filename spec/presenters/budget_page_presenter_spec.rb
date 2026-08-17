@@ -23,8 +23,11 @@ RSpec.describe BudgetPagePresenter do
     create(:pool_budget, pool: pool, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
-  def category_rule(name, amount)
-    create(:budget, category: create(:category, :expense, user: user, name: name), amount: amount)
+  # `#category_rule` is deleted with the shape it built (plan 3, task 3): a rule owned by a
+  # category. Every example that used it is either deleted below or re-planted on the ORPHAN shape
+  # that survives — a rule on a pool no account can reach.
+  def stranded_rule(name, amount)
+    create(:pool_budget, :per_period_rate, pool: create(:pool, :savings_pool, user: user, account: nil, name: name), amount: amount)
   end
 
   def names(rules) = rules.map { |rule| rule.budget.id }
@@ -138,14 +141,9 @@ RSpec.describe BudgetPagePresenter do
   end
 
   describe "#orphan_rules" do
-    it "collects a category-mode rule and says why", :aggregate_failures do
-      budget = category_rule("Shopping", 200)
-      rate(envelope("Groceries"), 400)
-
-      expect(names(presenter.orphan_rules)).to eq([budget.id])
-      expect(presenter.orphan_rules.first.reason).to eq(:category)
-      expect(names(presenter.pool_groups.first.rules)).not_to include(budget.id)
-    end
+    # The category-mode arm — a rule that funded a category rather than an envelope — is deleted
+    # with the shape (plan 3, task 3). `#orphan_reason` answers one reason now, and the example
+    # below is it.
 
     it "collects a rule on an account-less pool and says why", :aggregate_failures do
       # A SAVINGS pool: `Pool#account_matches_pool_type` refuses an account-less budget pool
@@ -168,15 +166,16 @@ RSpec.describe BudgetPagePresenter do
     # Ordered by owner name and then by due order, on a fixture where insertion order is the
     # reverse. `all_budgets` carries no ORDER BY, so an unsorted list renders in heap order.
     it "orders orphans by owner name and then by due order", :aggregate_failures do
-      zebra = category_rule("Zebra", 100)
-      alpha_small = create(:budget, category: create(:category, :expense, user: user, name: "Alpha"), amount: 50)
+      zebra = stranded_rule("Zebra", 100)
+      alpha_small = stranded_rule("Alpha", 50)
 
       expect(names(presenter.orphan_rules)).to eq([alpha_small.id, zebra.id])
       expect(alpha_small.created_at).to be > zebra.created_at
     end
 
-    it "leaves another user's category-mode rule out" do
-      create(:budget, category: create(:category, :expense, user: create(:user)), amount: 300)
+    it "leaves another user's stranded rule out" do
+      other = create(:user)
+      create(:pool_budget, :per_period_rate, pool: create(:pool, :savings_pool, user: other, account: nil), amount: 300)
 
       expect(presenter.orphan_rules).to be_empty
     end
@@ -190,7 +189,7 @@ RSpec.describe BudgetPagePresenter do
     end
 
     it "is false once any rule exists, including one no distribution reaches", :aggregate_failures do
-      category_rule("Shopping", 200)
+      stranded_rule("Shopping", 200)
 
       expect(presenter).not_to be_no_rules
       expect(presenter.pool_groups).to be_empty
@@ -217,18 +216,8 @@ RSpec.describe BudgetPagePresenter do
         expect(presenter.rules_need).to be_a(BigDecimal)
       end
 
-      # THE RULING, from the page's side. A cap is a spending limit, not a claim on income — no
-      # distribution fills one — so the figure is the pool rule's alone and the cap's amount
-      # appears nowhere in it. $650 a month normalises to $300 a period under this biweekly user,
-      # so a counted cap would read $700 and a raw-amount cap $1,050: three distinguishable
-      # answers, and only one of them right.
-      it "counts no category cap, whatever the cap is worth", :aggregate_failures do
-        rate(envelope("Groceries"), 400)
-        category_rule("Housing", 650)
-
-        expect(presenter.rules_need).to eq(400)
-        expect(presenter.rules_need).not_to eq(700)
-      end
+      # The cap-exclusion example is deleted with the cap (plan 3, task 3): it pinned that a $650
+      # monthly cap contributed nothing to this figure, and there is no cap to exclude.
 
       # A user with no rules at all is on the same numeric type as one with rules — an empty
       # `sum` is Integer 0, and this figure is subtracted from and compared against income.
@@ -238,30 +227,10 @@ RSpec.describe BudgetPagePresenter do
       end
     end
 
-    # WHY "$0.00 a period" IS NOT A BUG on the legacy shape: caps only, so nothing yet claims the
-    # user's income. Both directions, because a sentence rendered unconditionally would pass the
-    # positive half on its own.
-    describe "#caps_not_counted?" do
-      it "is true for a user whose only rules are caps" do
-        category_rule("Housing", 1_500)
-
-        expect(presenter).to be_caps_not_counted
-      end
-
-      it "is false once one rule fills an envelope, cap or no cap", :aggregate_failures do
-        rate(envelope("Groceries"), 400)
-        category_rule("Housing", 1_500)
-
-        expect(presenter.rules_need).to be_positive
-        expect(presenter).not_to be_caps_not_counted
-      end
-
-      # Zero need with no caps either is the brand-new user, who is told they have no rules at
-      # all — a sentence about caps they do not have would invent a concept for them.
-      it "is false for a user with no rules whatsoever" do
-        expect(presenter).not_to be_caps_not_counted
-      end
-    end
+    # `#caps_not_counted?` and its three examples are deleted (plan 3, task 3). The predicate
+    # explained why the figure above could read $0.00 over a page listing the user's own rules —
+    # because those rules were caps, which no distribution fills. Every rule this page can show is
+    # a claim on income now, so a zero means no rules at all, which `#no_rules?` already says.
 
     describe "#typical_income and #leftover" do
       it "reports the declared income and what survives the rules", :aggregate_failures do

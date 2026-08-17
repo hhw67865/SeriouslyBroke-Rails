@@ -1,5 +1,9 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, pace_cache_key(selected_date), :expenses_v9] do %>
+<%# `pace_cache_key(selected_date)` left this key with the daily ramp it existed for: a prorated
+    cap's "expected today" figure changed every day, so the key had to as well. Proration is deleted
+    (plan 3, task 3) and nothing under this cache moves with the clock. The version suffix is bumped
+    so no entry cached under the old shape survives the deploy. %>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v10] do %>
 
 <%# === MONTHLY BUDGET SYSTEM === %>
 <%# Recurring expenses tracked against monthly budget caps %>
@@ -73,15 +77,11 @@
             <% end %>
           </div>
           <% if cat[:budget_percentage] %>
+            <%# The prorated arm — "over pace" / "under pace" and an "expected today" figure — is
+                deleted with `budgets.prorated` (plan 3, task 3). It spread a monthly cap across the
+                days of the month; there is no cap and no ramp, so there is one sentence. %>
             <p class="text-xs font-medium <%= cat[:over_budget] ? "text-terracotta" : "text-gray-500" %>">
-              <% if cat[:prorated] %>
-                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over pace" : "#{number_to_currency(cat[:budget_diff])} under pace" %>
-                <% if cat[:budget_pace] != cat[:budget] %>
-                  <span class="text-gray-400 font-normal">· expected today: <%= number_to_currency(cat[:budget_pace]) %></span>
-                <% end %>
-              <% else %>
-                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
-              <% end %>
+              <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
             </p>
           <% end %>
         </div>

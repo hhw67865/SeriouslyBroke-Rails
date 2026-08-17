@@ -1,31 +1,27 @@
 # frozen_string_literal: true
 
-# THE CATEGORIES PAGE'S BUDGET BLOCK, in the states spec §8.1 gives it — PLUS ONE THE SPEC DOES NOT
-# NAME. Read-only: the cap form it links to owns the writes, and the other arms have nothing to
-# write at all.
+# THE CATEGORIES PAGE'S BUDGET BLOCK, in the two states an expense category can now be in.
+# Read-only: it has nothing to write.
 #
-# THE STATES ARE DISJOINT AND EXHAUSTIVE FOR AN EXPENSE CATEGORY, and not by arrangement here:
-# `Budget#category_must_not_have_pool` refuses a cap on a category that points at ANY pool, so no
-# pooled arm can also be capped, and "no pool, no cap" is the remainder.
+# TWO ARMS, WHERE §8.1 GAVE IT THREE AND REVIEW ADDED A FOURTH. The spec split the world into
+# "points at an envelope" and "budgetable" (no pool at all), and the second half divided again into
+# capped and uncapped. Plan 3 deleted the category cap and required a pool on every category, so
+# both of those arms describe shapes the app cannot hold: `:capped` needed a `Budget` owned by a
+# category, and `:uncapped` needed a category owned by no pool.
 #
-# THE FOURTH STATE IS `:account_pointed`, AND IT IS A CORRECTION MADE IN REVIEW. §8.1 divides the
-# world into "points at an envelope" and "budgetable" (`Category#budgetable?` — no pool at all), and
-# a category pointing at an ACCOUNT is in neither: `pool_covered?` admits it (any pool), so the
-# first version of this block told such a category it had an envelope, named the ACCOUNT as that
-# envelope, printed the account's whole balance as this one category's standing, and spoke of "the
-# rule that fills the envelope" — which `Budget#pool_must_not_be_an_account` guarantees can never
-# exist. Every clause was false.
+# WHAT REMAINS IS THE DIVISION REVIEW ADDED, and it turns out to be the real one. A category points
+# at an ACCOUNT — an account IS the buffer (§7.1), so nothing reserves this money — or it points at
+# a budget envelope or a savings goal, which hold money and can carry a rule. That line is
+# `Budget#pool_must_not_be_an_account`, the model's own: a budget pool and a savings pool can both
+# carry a rule and both hold money, so the envelope arm's sentence is true of both and they share
+# it; an account can carry none of it, so it gets an arm that says what is actually true of it.
 #
-# It is not a hypothetical shape. `Pool#return_holdings_to_the_account` re-points a destroyed
-# envelope's categories at the account in bulk — that re-point is what keeps `Σ pools` conserved —
-# so un-enveloping a category is exactly how a user reaches it, and `Category#buffer_funded?`'s own
-# comment already documents the family of readers that part company there.
-#
-# THE LINE BETWEEN THE TWO POOLED ARMS IS `Budget#pool_must_not_be_an_account`, the model's own:
-# a budget pool and a savings pool can both carry a rule and both hold money, so the envelope arm's
-# sentence is true of both and they share it; an account can carry no rule, so it gets an arm that
-# says what is actually true of it — the money comes out of the buffer, and an account IS the
-# buffer (§7.1).
+# Reading the account arm as "pooled" is the defect the fourth arm was added to fix, and it is
+# worth keeping written down: the block told such a category it had an envelope, named the ACCOUNT
+# as that envelope, printed the account's whole balance as this one category's standing, and spoke
+# of "the rule that fills the envelope" — which `pool_must_not_be_an_account` guarantees can never
+# exist. Every clause was false. `Pool#return_holdings_to_the_account` re-points a destroyed
+# envelope's categories at the account in bulk, so it is where a user lands on un-enveloping.
 #
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8.1.
 class CategoryBudgetPresenter
@@ -51,22 +47,15 @@ class CategoryBudgetPresenter
   # an arm the page did not render — which would make a scoped assertion pass against the wrong
   # state and read as green. Both come from here.
   #
-  # THE ACCOUNT TEST COMES FIRST and is asked of the POOL'S TYPE rather than of `pool_covered?`,
-  # which is `expense? && pool_id.present?` and therefore says yes to an account. Read second it
-  # would never be reached; read as `pool_covered?` at all it is the defect the class comment
-  # describes.
+  # THE ACCOUNT TEST IS THE WHOLE QUESTION, and it is asked of the POOL'S TYPE. `pool` cannot be nil
+  # — `Category belongs_to :pool` is required — so the two arms are disjoint and exhaustive, and
+  # `:pool_covered` keeps its name (and its `data-budget-state` value) rather than being renamed to
+  # "not an account": the specs scope by it and the noun the arm prints comes from `Pool#noun`.
   def state
-    return :account_pointed if pool&.pool_type_account?
-    return :pool_covered if pool.present?
-    return :capped if capped?
+    return :account_pointed if pool.pool_type_account?
 
-    :uncapped
+    :pool_covered
   end
-
-  # The cap itself, so the view's branch and the link it renders read the same record.
-  def cap = category.budget
-
-  def capped? = cap.present?
 
   # ---- The pool-covered arm --------------------------------------------------------------------
 
@@ -132,16 +121,15 @@ class CategoryBudgetPresenter
   # real one.
   #
   # `prefill[:category_id]` IS THE ENGINE'S OWN ANSWER to "which category would accepting this
-  # move", the same key `BudgetPagePresenter#cap_for` reads, and on both asking arms it is
-  # complete: `SuggestionEngine#envelope_half` sends a pool-less category AND an account-pointed
-  # one down its CREATION branch ("an ACCOUNT is not reusable"), and that is the branch carrying
-  # `category_id`. So every dated-bill and rate suggestion about either shape is keyed here. The
-  # other two kinds are about pool-mode rules, which neither shape can own.
+  # move", and on this arm it is complete: `SuggestionEngine#envelope_half` sends an account-pointed
+  # category down its CREATION branch ("an ACCOUNT is not reusable"), and that is the branch
+  # carrying `category_id`. So every dated-bill and rate suggestion about this shape is keyed here.
+  # The other two kinds are about rules that fill a pool, which this shape cannot own.
   #
-  # THE COST, AND WHY IT IS PAID ONLY ON THESE TWO ARMS. The engine is 8 queries and ~14ms warm on
-  # the demo's three-year history against a page that costs 14 queries and ~76ms. An enveloped or a
-  # capped category never runs it. Gated at the reader rather than in the view so no second caller
-  # can inherit the run without the state that justifies it.
+  # THE COST, AND WHY IT IS PAID ON ONE ARM ONLY. The engine is 8 queries and ~14ms warm on the
+  # demo's three-year history against a page that costs 14 queries and ~76ms. An enveloped category
+  # never runs it. Gated at the reader rather than in the view so no second caller can inherit the
+  # run without the state that justifies it.
   def suggestions
     return [] unless proposable?
 
@@ -161,24 +149,21 @@ class CategoryBudgetPresenter
   # WHETHER A PROPOSAL COULD BE ABOUT THIS CATEGORY AT ALL — ONE CONDITION, and it stays one.
   #
   # `Category#buffer_funded?` is the model's own reader for "this spending comes out of the buffer"
-  # (no pool, or a pool that IS an account) and it is LITERALLY `SuggestionEngine#rates`' own
-  # population, so the gate and the detector it gates on are the same reader rather than two that
-  # can drift. `&& cap.blank?` is what keeps the pointer off the capped arm: `buffer_funded?` says
-  # yes to a capped pool-less category — the engine does propose rates for those, which is why
-  # `BudgetPagePresenter#cap_for` exists — but §8.1 puts the pointer in the no-cap state only, and
-  # the capped arm already carries its own sentence about what a cap is.
+  # and it is LITERALLY `SuggestionEngine#rates`' own population, so the gate and the detector it
+  # gates on are the same reader rather than two that can drift.
   #
-  # The three-way truth table, since the conjunction is doing real work:
+  # IT USED TO BE `&& cap.blank?`, and that clause kept the pointer off the capped arm — the engine
+  # proposes rates for a capped category, but §8.1 put the pointer in the no-cap state only because
+  # the capped arm carried its own sentence about what a cap is. Both the arm and the cap are
+  # deleted, so the conjunction is one predicate again:
   #
-  #   no pool, no cap    → buffer_funded ✓, cap blank ✓ → asks   (§8.1's third state)
-  #   no pool, capped    → buffer_funded ✓, cap set  ✗ → silent (§8.1's second state)
-  #   account-pointed    → buffer_funded ✓, cap blank ✓ → asks   (a cap is forbidden here anyway)
-  #   budget/savings pool→ buffer_funded ✗              → silent (the envelope arm)
+  #   account-pointed     → buffer_funded ✓ → asks   (the buffer arm's only way out)
+  #   budget/savings pool → buffer_funded ✗ → silent (the envelope arm)
   #
   # Asked of the model rather than of #state's symbol so an edit to the state names cannot widen
-  # the gate, and written as one predicate rather than `state.in?([...])` so there is one place a
-  # future arm has to be argued into.
-  def proposable? = category.buffer_funded? && cap.blank?
+  # the gate, and written as a predicate rather than `state == :account_pointed` so there is one
+  # place a future arm has to be argued into.
+  def proposable? = category.buffer_funded?
 
   def engine_suggestions = SuggestionEngine.new(user: category.user, today: today).suggestions
 end

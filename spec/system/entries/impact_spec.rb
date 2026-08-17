@@ -33,10 +33,11 @@ RSpec.describe "Entry impact card", type: :system do
   end
 
   # THE TWO CATEGORIES EVERY OTHER STATE NEEDS, reached by name through the select rather than by
-  # reference: an expense with no envelope at all, and an income (which must land in an account,
-  # `Category#income_must_land_in_an_account`).
+  # reference: an expense funded by the BUFFER — pointing at the account, which is what "no
+  # envelope" means since plan 3 required a pool on every category — and an income (which must land
+  # in an account, `Category#income_must_land_in_an_account`).
   before do
-    create(:category, user: user, name: "Shopping", category_type: :expense, pool: nil)
+    create(:category, user: user, name: "Shopping", category_type: :expense, pool: checking)
     create(:category, user: user, name: "Paycheck", category_type: :income, pool: checking)
     sign_in user, scope: :user
   end
@@ -284,24 +285,21 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).not_to have_button("Save anyway")
     end
 
-    it "says the same of a category pointing at an account, which is the buffer", :aggregate_failures do
-      create(:category, user: user, name: "Estimated Taxes", category_type: :expense, pool: checking)
-
-      visit new_entry_path
-      select_category("Estimated Taxes")
-
-      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='spending']")
-      expect(page).not_to have_css("[data-impact-card='envelope']")
-    end
+    # The example that stood here planted a SECOND category pointing at the account, to say that
+    # the arm above (a category with no pool at all) said the same of it. There is one shape now —
+    # `Shopping` above IS the account-pointed one — so the pair collapsed into it.
   end
 
   # A CONTRIBUTION IS NOT SPENDING, and the expense sentence is false of it in every clause: nothing
   # comes OUT of the buffer (under ENTRY_POOL_ID this entry counts toward no pool, so the money stays
   # there), and the Budget page's rate suggestion is `expense?`-gated, so it would never offer this
   # category anything. The fix is a savings pool, and the link goes where that is made.
-  describe "a savings category whose goal is gone" do
+  # POINTED AT THE ACCOUNT rather than at nothing: plan 3 requires a pool on every category, and a
+  # savings category naming an ACCOUNT is the surviving spelling of "this contribution has nowhere
+  # to land" — an account is the buffer, which is exactly where the money stays.
+  describe "a savings category with no goal behind it" do
     before do
-      create(:category, user: user, name: "Old Goal", category_type: :savings, pool: nil)
+      create(:category, user: user, name: "Old Goal", category_type: :savings, pool: checking)
 
       visit new_entry_path
       select_category("Old Goal")

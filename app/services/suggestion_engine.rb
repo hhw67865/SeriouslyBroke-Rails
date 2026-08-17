@@ -365,17 +365,17 @@ class SuggestionEngine
   # Detector 2 — a category that behaves like a rate and is funded by nothing
   # ---------------------------------------------------------------------------------------------
 
-  # `Category#buffer_funded?` — an expense category whose spending comes out of the BUFFER, either
-  # because it names no pool or because it names an ACCOUNT — is the population, and that is the
-  # sentence's own reason: nothing holds this money, so it comes out of the buffer.
+  # `Category#buffer_funded?` — an expense category pointing at an ACCOUNT, so its spending comes
+  # out of the BUFFER — is the population, and that is the sentence's own reason: nothing holds this
+  # money, so it comes out of the buffer.
   #
-  # THE ACCOUNT HALF IS TASK 8's FIX ROUND. The population used to be `budgetable?` ("no pool"),
-  # which was the same set in practice because nothing routinely pointed a category at an account.
-  # Destroying an envelope now re-points its categories to the account rather than nullifying them
-  # (it is what keeps `Σ pools` exact), so un-enveloping a category is exactly the act that would
-  # have removed it from this detector forever — the app going silent about the spending at the
-  # moment it went back to being buffer spending. The sentence is unchanged and stays literally
-  # true; only the population widened.
+  # THE POPULATION HAS BEEN WIDENED ONCE AND NARROWED ONCE, AND IT IS THE SAME SET EITHER WAY. It
+  # was `budgetable?` ("no pool at all") until Task 8 made destroying an envelope re-point its
+  # categories at the account rather than nullifying them — un-enveloping a category would otherwise
+  # have removed it from this detector forever, the app going silent about spending at the moment it
+  # went back to being buffer spending. Plan 3 then required a pool on every category, so the
+  # "no pool" half is not a shape any more and `buffer_funded?` is exactly the account-pointed set.
+  # The sentence the detector prints has never changed and is still literally true.
   #
   # The accept flow needed nothing: #envelope_half already answers an account-pointed category with
   # the CREATION branch ("an ACCOUNT is not reusable"), which is the branch this detector always
@@ -406,9 +406,8 @@ class SuggestionEngine
   end
 
   # `Category#buffer_funded?` — the model's own reader, applied to the categories already in memory.
-  # Not a second spelling of the predicate: it lives on the model beside `budgetable?`, and
-  # #expense_categories already `includes(:pool)`, so asking each one whether its pool is an account
-  # costs no query.
+  # Not a second spelling of the predicate: it lives on the model, and #expense_categories already
+  # `includes(:pool)`, so asking each one whether its pool is an account costs no query.
   def buffer_funded_categories
     @buffer_funded_categories ||= expense_categories.select(&:buffer_funded?).sort_by(&:id)
   end
@@ -422,7 +421,7 @@ class SuggestionEngine
   # `periods_measured`; this is the day something actually happened.
   #
   # `exclude:` IS THE DATED BILLS, and it is a correction to the brief — the measurement is in the
-  # task report. Rent is $1,500 on the 1st of every month and it lives in a budgetable category, so
+  # task report. Rent is $1,500 on the 1st of every month and it lives in a buffer-funded category, so
   # verbatim the demo proposed a $1,500 dated bill for Rent AND a "rate" for Housing whose average
   # was mostly that same rent: the same dollars, proposed twice, on a money screen. A bill is not a
   # rate — it is the shape the OTHER detector exists for — so its payments are not part of the flow
@@ -535,12 +534,14 @@ class SuggestionEngine
   # through `steady_ask`, and a screen that reported drift on only one of the two spellings would
   # be silent on half the rate rules the app can store.
   #
-  # POOL-MODE ONLY, because the observed figure is "what reached this pool" and a category-mode cap
-  # reaches no pool. And a pool carrying MORE THAN ONE rate rule is skipped outright: its spend
+  # THE POOL-MODE FILTER IS GONE (plan 3, task 3). It excluded category-mode caps, because the
+  # observed figure is "what reached this pool" and a cap reaches no pool; `#budgets` is
+  # `Budget.for_user`, which is pool-scoped by construction now, so the clause could never exclude
+  # a row again. A pool carrying MORE THAN ONE rate rule is still skipped outright: its spend
   # cannot be attributed between them, and a suggestion that guessed the split would put a figure
   # on a money screen that no entry supports.
   def attributable_rate_rules
-    rate_rules = budgets.select { |budget| budget.pool_mode? && rate_shape?(budget) }
+    rate_rules = budgets.select { |budget| rate_shape?(budget) }
 
     rate_rules.group_by(&:pool_id).filter_map { |_pool_id, rules| rules.first if rules.one? }
   end

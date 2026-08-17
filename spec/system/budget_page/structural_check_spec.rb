@@ -99,43 +99,31 @@ RSpec.describe "Budget page structural check", type: :system do
       within(check_block) { expect(page).to have_no_content("Underwater") }
     end
 
-    # THE RULING ON SCREEN. A cap is a spending limit and not a claim on income, so its amount is
-    # in neither the figure nor the block — and the "we are not counting your caps" sentence is
-    # absent here, because beside a real figure it would be a footnote about an exclusion nobody
-    # noticed. $650 a month is $300 a period under this user, so a counted cap would read $820.
-    it "leaves a category cap out of the figure and out of the block" do
-      create(:budget, category: create(:category, :expense, user: user, name: "Housing"), amount: 650)
-      visit budget_page_path
-
-      within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
-      within(check_block) do
-        expect(page).to have_no_content("$650.00")
-        expect(page).to have_no_content("$820.00")
-        expect(page).to have_no_css("[data-caps-note]")
-      end
+    # THE CAPS NOTE IS GONE FROM THE PAGE (plan 3, task 3), so this asserts its absence rather than
+    # the conditions it used to appear under. Two examples stood here: one planted a $650 cap and
+    # checked that neither the figure nor the block mentioned it, and one gave a user caps and
+    # nothing else so the block explained its own $0.00. A rule owned by a category is not a shape
+    # the app can hold, so both fixtures are unbuildable and both examples are deleted with the
+    # behaviour. What survives is the guarantee the note's deletion has to keep: nothing on this
+    # page still talks about caps.
+    it "says nothing about category caps anywhere" do
+      expect(page).to have_no_css("[data-caps-note]")
+      within(check_block) { expect(page).to have_no_content("spending limits") }
     end
   end
 
-  # THE LEGACY SHAPE, and the reason the ruling needs a sentence: every pre-envelope user of this
-  # app has category caps and no pool rules at all. `rules need $0.00` is the honest answer —
-  # nothing yet claims their income, and the suggestion engine exists to propose the rules that
-  # will — but a bare $0.00 printed over a page listing eight of their own rules reads as a figure
-  # that failed to compute.
-  describe "a user whose only rules are category caps", :aggregate_failures do
+  # ZERO NEED IS NOW THE BRAND-NEW USER AND NOTHING ELSE. It used to be the legacy shape too —
+  # caps and no envelope rules — which is what the deleted note explained.
+  describe "a declared user with no rules at all", :aggregate_failures do
     before do
       declared_user(2_400)
-      create(:budget, category: create(:category, :expense, user: user, name: "Housing"), amount: 1_500)
-      create(:budget, category: create(:category, :expense, user: user, name: "Food"), amount: 600)
       visit budget_page_path
     end
 
-    it "reads zero and says in one sentence why" do
+    it "reads zero with no explanation to give" do
       within(figure("rules-need")) { expect(page).to have_content("$0.00 a period") }
       within(figure("leftover")) { expect(page).to have_content("$2,400.00 → buffer") }
-      expect(page).to have_css("[data-caps-note]")
-      within("[data-caps-note]") do
-        expect(page).to have_content("spending limits, not claims on your income")
-      end
+      expect(page).to have_no_css("[data-caps-note]")
     end
 
     it "is covered rather than underwater, and offers no cut list" do

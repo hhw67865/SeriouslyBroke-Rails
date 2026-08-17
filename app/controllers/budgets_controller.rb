@@ -2,7 +2,6 @@
 
 class BudgetsController < ApplicationController
   before_action :set_budget, only: [:edit, :update, :destroy]
-  before_action :set_category, only: [:new, :create]
   before_action :set_envelope, only: [:new, :create]
 
   # EVERY COLUMN THIS FORM MAY WRITE. `basis`, `interval_months`, `anchor_date` and `item_id`
@@ -12,7 +11,12 @@ class BudgetsController < ApplicationController
   # Each carries a validation consequence — `shape_must_be_valid` on the first three,
   # `item_must_belong_to_pool` and `item_must_not_be_claimed` on the last — so shape is answered by
   # `Budget` and only OWNERSHIP is answered below.
-  BUDGET_FIELDS = [:amount, :category_id, :pool_id, :prorated, :basis, :interval_months, :anchor_date, :item_id].freeze
+  #
+  # `category_id` AND `prorated` LEFT THE LIST WITH THE CATEGORY-MODE CAP (plan 3, task 3). Neither
+  # column can be written any more — a rule is owned by a pool, and the daily ramp `prorated` fed
+  # is deleted — and an unpermitted key is the only spelling of that which a tampered POST also
+  # obeys.
+  BUDGET_FIELDS = [:amount, :pool_id, :basis, :interval_months, :anchor_date, :item_id].freeze
 
   # GET /budgets/new
   #
@@ -20,7 +24,7 @@ class BudgetsController < ApplicationController
   # goes through the same ownership scoping the POST does — a stranger's `item_id` in a GET would
   # render THEIR item's name on this user's form, which is the read-shaped half of the same leak.
   def new
-    @budget = @category ? @category.build_budget : Budget.new
+    @budget = Budget.new
     @budget.assign_attributes(prefill_attributes)
   end
 
@@ -45,7 +49,7 @@ class BudgetsController < ApplicationController
     @budget = Budget.new(budget_params)
 
     if BudgetProposal.new(budget: @budget, envelope: @envelope).save
-      redirect_to owner_path(@budget), notice: "Budget was successfully created."
+      redirect_to budget_page_path, notice: "Budget was successfully created."
     else
       render :new, status: :unprocessable_content
     end
@@ -54,7 +58,7 @@ class BudgetsController < ApplicationController
   # PATCH/PUT /budgets/1
   def update
     if @budget.update(budget_params)
-      redirect_to owner_path(@budget), notice: "Budget was successfully updated."
+      redirect_to budget_page_path, notice: "Budget was successfully updated."
     else
       render :edit, status: :unprocessable_content
     end
@@ -62,77 +66,35 @@ class BudgetsController < ApplicationController
 
   # DELETE /budgets/1
   def destroy
-    owner = owner_path(@budget)
     @budget.destroy
-    redirect_to owner, notice: "Budget was successfully deleted."
+    redirect_to budget_page_path, notice: "Budget was successfully deleted."
   end
 
   private
 
-  # `Budget.for_user`, not `current_user.budgets` — the association walks the category link
-  # only, so it 404s every pool-mode rule, which is every rule the Budget page manages.
-  # Still a scoped lookup, so another user's rule raises RecordNotFound exactly as before.
+  # `Budget.for_user`, not a bare `Budget` — a scoped lookup, so another user's rule raises
+  # RecordNotFound. It used to be contrasted with `current_user.budgets`, the association that
+  # walked the category link; that association is deleted with the cap it reached.
   def set_budget
     @budget = Budget.for_user(current_user).find(params[:id])
   end
 
-  # WHERE A CHANGED RULE SENDS YOU: the screen that owns it. A rule has exactly one owner
-  # (Budget#exactly_one_owner), and until #set_budget was widened only one of the two was
-  # ever reachable here — so `category_path(@budget.category)` was safe by accident.
-  #
-  # It is not safe now. A pool-mode rule has no category at all, and `category_path(nil)`
-  # raises UrlGenerationError: a 500 raised AFTER the update or destroy had already been
-  # written, on precisely the rules the widened reader just made reachable. Widening a
-  # reader must not open a crash path behind it.
-  #
-  # THE POOL-MODE DESTINATION IS THE BUDGET PAGE, not `pool_path`. The pool page was a floor
-  # while nothing else could render a pool-mode rule; §8's page is where every rule the user
-  # owns now lives, and it is the page the Edit link was clicked FROM. Returning to the pool
-  # would answer a rule change with a screen that says nothing about rules. Category-mode
-  # rules still go back to their category, which is still the only screen that renders one.
-  #
-  # #destroy takes the path BEFORE the delete, and that ordering is DEFENSIVE, NOT LOAD-BEARING
-  # — an earlier version of this comment claimed otherwise and was wrong. Measured: a destroyed
-  # Budget is frozen but keeps its `category_id`/`pool_id`, and the owner row is not touched by
-  # the child's delete, so `owner_path` resolves to the same URL after the destroy as before it.
-  # Taking it first states that the destination is a fact about the rule as it stood, and it
-  # survives a future `dependent:` or callback that does start clearing the link — but nothing
-  # today depends on the order, and no example fails if it is reversed.
-  def owner_path(budget)
-    budget.category ? category_path(budget.category) : budget_page_path
-  end
-
-  def set_category
-    @category = current_user.categories.expenses.budgetable.find(params[:category_id]) if params[:category_id]
-  end
-
-  # THE WRITE SIDE OF #set_budget'S QUESTION, and it has to be asked here because nothing else
-  # asks it. `category_id` is a wire parameter, and `Budget` cannot object to a foreign
-  # category — it validates that a category is an expense and pool-free, never WHOSE it is.
-  # Unscoped, `POST /budgets` with a stranger's category id wrote a funding rule onto their
-  # category, and `PATCH` re-parented one of mine onto theirs; both then rendered on their
+  # THE WRITE SIDE OF OWNERSHIP, and it has to be asked here because nothing else asks it.
+  # `pool_id` is a wire parameter, and `Budget` cannot object to a foreign pool — it validates
+  # that a pool is not an account, that the shape is legal and that the item belongs to it, never
+  # WHOSE it is. Unscoped, `POST /budgets` with a stranger's pool id wrote a funding rule onto
+  # their envelope and `PATCH` re-parented one of mine onto theirs; both then rendered on their
   # page. A scoped read beside an unscoped write is ownership on the way in only.
   #
-  # WHERE THE LINE SITS, deliberately: `current_user.categories` and nothing more. Ownership
-  # is the controller's question. Expense-ness and pool-freeness are #category_must_be_expense
-  # and #category_must_not_have_pool, which already answer them — stacking `.expenses
-  # .budgetable` here would make this a second reader of both, and would turn a legible form
-  # error on the user's OWN income category into a 404 indistinguishable from a stranger's id.
-  # `set_category` scopes harder because it answers a different question: which categories may
-  # be OFFERED the form, not which a save may name.
+  # WHERE THE LINE SITS, deliberately: `current_user.pools` and nothing more. Ownership is the
+  # controller's question, while "not an account", "the right shape" and "the item belongs to this
+  # pool" are Budget's own validations. Scoping to `.budget_pools` here would turn a user naming
+  # their OWN account into a 404 — their record vanishing — where the model gives a legible 422.
   #
-  # `pool_id` IS NOW PERMITTED, and the same line is drawn on it. The Budget page links every
-  # pool-mode rule to this form, so the form submits the rule's own pool back — and the moment
-  # the parameter is permitted, "whose pool is this" becomes exactly the question `category_id`
-  # already had to answer. Two request examples pinned `pool_id` as inert while it was
-  # unpermitted; widening the list trips them by design, and they are rewritten into the
-  # both-direction ownership pair below.
-  #
-  # `current_user.pools` and nothing more, for the same reason as categories: ownership is the
-  # controller's question, while "not an account", "the right shape" and "the item belongs to
-  # this pool" are Budget's own validations. Scoping to `.budget_pools` here would turn a user
-  # naming their OWN account into a 404 — their record vanishing — where the model gives a
-  # legible 422.
+  # `category_id` USED TO BE SCOPED HERE TOO and is no longer permitted at all: a rule owned by a
+  # category is not a shape this app can hold, so the key is refused rather than laundered. The
+  # ownership pair that pinned it is retired with it (see the task report); the `pool_id` pair
+  # below, which asks the same question of the owner that remains, stands.
   def budget_params = scoped_owners(params.expect(budget: BUDGET_FIELDS))
 
   # THE SAME LIST AND THE SAME SCOPING, read off a GET. `expect` raises ParameterMissing on a
@@ -157,7 +119,6 @@ class BudgetsController < ApplicationController
   # The line stays exactly where Task 2 drew it: whose, here; what shape, in the model. An item
   # of the user's OWN in the wrong category is `item_must_belong_to_pool`'s 422, not a 404.
   def scoped_owners(permitted)
-    permitted = scoped_owner(permitted, :category_id, current_user.categories)
     permitted = scoped_owner(permitted, :pool_id, current_user.pools)
     scoped_owner(permitted, :item_id, current_user.items)
   end
@@ -166,15 +127,18 @@ class BudgetsController < ApplicationController
   # category it would re-point at it. Present only when the panel sent one — every other request
   # to this controller leaves `@envelope` nil and `BudgetProposal` degrades to `budget.save`.
   #
-  # `envelope[category_id]` RATHER THAN THE FORM'S OWN `category_id`, and the rename is
-  # load-bearing: `#set_category` already reads a top-level `category_id` as the OWNER of a
-  # category-mode cap, and the engine's payload means something entirely different by the same
-  # word — the category to be MOVED into the new envelope. One key with two meanings on one form
-  # is a rule that quietly caps a category when it was asked to fund an envelope.
+  # `envelope[category_id]` RATHER THAN A TOP-LEVEL `category_id`, and the nesting is kept now that
+  # the collision it was invented for is gone. `category_id` used to name the OWNER of a
+  # category-mode cap on this same form while the engine's payload meant the category to be MOVED
+  # into the new envelope — one key with two meanings, a request that quietly capped a category
+  # when it was asked to fund an envelope. The cap is deleted and the top-level key is no longer
+  # permitted at all, so the nesting now buys something narrower and still worth having: this id is
+  # not a `Budget` column, and a payload that spelled it like one would invite the next reader to
+  # add it back to BUDGET_FIELDS.
   #
   # KEYED ON THE CATEGORY, not on the presence of the `envelope` key: without a category there is
   # nothing to re-point, so there is no envelope half — and the rule then has no owner at all,
-  # which `Budget#exactly_one_owner` answers with a legible 422 rather than this raising.
+  # which `Budget#must_belong_to_a_pool` answers with a legible 422 rather than this raising.
   #
   # `pool_type` IS NOT PERMITTED. See BudgetProposal#create_envelope.
   #
@@ -210,9 +174,8 @@ class BudgetsController < ApplicationController
   end
 
   # `find`, so a stranger's id raises RecordNotFound and arrives as the same 404 #set_budget
-  # gives. Skipped when blank, because a blank owner is the other mode's form submitting its
-  # empty picker and an owner-less create re-rendering — both of which Budget already answers
-  # (#exactly_one_owner), and neither of which is a stranger's id.
+  # gives. Skipped when blank, because a blank owner is an owner-less create re-rendering, which
+  # Budget already answers (#must_belong_to_a_pool), and which is not a stranger's id.
   def scoped_owner(permitted, key, scope)
     return permitted if permitted[key].blank?
 

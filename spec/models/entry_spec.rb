@@ -87,22 +87,20 @@ RSpec.describe Entry, type: :model do
 
     # The chain ends at the category's pool — Task 8's fix round removed the `default_account`
     # fallback from `Category#effective_pool` because no ledger implemented it (see that method).
-    # Both directions in one example: the reader says nil, and the account the user nominated is
-    # measured as not holding the $60 either.
+    # Both directions in one example: the reader names the category's own pool, and the account the
+    # user nominated is measured as not holding the $60.
+    #
+    # It used to plant a category with NO pool, which said the same thing more starkly (the reader
+    # answered nil rather than the default account). `Category belongs_to :pool` is required since
+    # plan 3, so the fixture moves to a pool-mode one; what the example pins — that nominating a
+    # default account does not route a category's spending into it — is unchanged.
     it "stops at the category and ignores the user's default account", :aggregate_failures do
       user.update!(default_account: checking)
-      category = create(:category, :expense, user: user, pool: nil)
+      category = create(:category, :expense, user: user, pool: groceries)
       entry = create(:entry, item: create(:item, category: category), amount: 60)
 
-      expect(entry.effective_pool).to be_nil
+      expect(entry.effective_pool).to eq(groceries)
       expect(checking.calculator.balance).to eq(0)
-    end
-
-    it "is nil when nothing resolves" do
-      category = create(:category, :expense, user: user, pool: nil)
-      entry = create(:entry, item: create(:item, category: category))
-
-      expect(entry.effective_pool).to be_nil
     end
 
     # The ownership validator guards this exact hazard; the two must not disagree about
@@ -130,17 +128,16 @@ RSpec.describe Entry, type: :model do
         expect(entry.effective_pool).to eq(savings_account)
       end
 
-      it "prefers the entry's pool over the default account when the category has no pool" do
-        user.update!(default_account: checking)
-        entry = entry_with(entry_pool: savings_account, category_pool: nil)
+      # The two examples that stood here planted a category with NO pool — the cell where the
+      # entry's own pool was the only answer available. That cell is gone: `Category belongs_to
+      # :pool` is required, so every category names a lane and the entry's override is always
+      # OVERRIDING something rather than filling a hole. The example above is the surviving form of
+      # the same claim.
+      it "prefers the entry's pool even when the category names one and the user names another" do
+        user.update!(default_account: savings_account)
+        entry = entry_with(entry_pool: checking, category_pool: groceries)
 
-        expect(entry.effective_pool).to eq(savings_account)
-      end
-
-      it "uses the entry's pool when neither the category nor the user names one" do
-        entry = entry_with(entry_pool: savings_account, category_pool: nil)
-
-        expect(entry.effective_pool).to eq(savings_account)
+        expect(entry.effective_pool).to eq(checking)
       end
 
       it "prefers the category's pool over the default account" do

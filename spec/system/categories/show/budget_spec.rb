@@ -2,8 +2,14 @@
 
 require "rails_helper"
 
-# THE CATEGORIES PAGE'S BUDGET BLOCK — spec §8.1's three states plus the account-pointed fourth
-# the spec does not name, each asserted in both directions.
+# THE CATEGORIES PAGE'S BUDGET BLOCK — two states, each asserted in both directions.
+#
+# §8.1's `capped` and `uncapped` are deleted with the category cap (plan 3, task 3): the first
+# needed a Budget owned by a category and the second a category owned by no pool, and neither is a
+# shape the app can hold. Their nine examples went with them, along with the `caps_caveat` literal
+# this file used to check on two screens at once. What remains is the division review added — an
+# ACCOUNT, which is the buffer, against an envelope or a goal — plus the suggestion pointer, which
+# moves onto the account-pointed arm because that is the only arm that can still ask for one.
 #
 # `Capybara.exact` is unset in this suite and this page is full of chrome that matches substrings
 # ("Budget Management", the sidebar's "Budget" link, "Monthly Budget" in the summary card, the
@@ -47,16 +53,6 @@ RSpec.describe "Categories Show - Budget block", type: :system do
   end
 
   def category(name) = user.categories.find_by!(name: name)
-
-  # THE CAVEAT AS A LITERAL, not as a call to the helper that renders it. Asserting
-  # `caps_not_counted_sentence` against a page that prints `caps_not_counted_sentence` is a
-  # tautology — it would stay green through any rewording, including one that made the two screens
-  # disagree with each other. This literal is checked on the Categories page AND on /budget below,
-  # so the ONE SPELLING §8.1 asks for is what is actually under test.
-  def caps_caveat
-    "Your category caps are spending limits, not claims on your income — " \
-      "no distribution fills one, so none of them is counted in what your rules need."
-  end
 
   # ------------------------------------------------------------------------------------------
   # State 1 — pool-covered
@@ -146,8 +142,8 @@ RSpec.describe "Categories Show - Budget block", type: :system do
   # The fourth state §8.1 does not name — the category points at an ACCOUNT
   # ------------------------------------------------------------------------------------------
 
-  # `Category#pool_covered?` is `expense? && pool_id.present?`, which says yes to an ACCOUNT, so the
-  # first version of this block told such a category it had an envelope, printed the ACCOUNT's name
+  # The deleted `Category#pool_covered?` was `expense? && pool_id.present?`, which said yes to an
+  # ACCOUNT, so the first version of this block told such a category it had an envelope, printed the ACCOUNT's name
   # as that envelope and the account's whole balance as this one category's standing, and spoke of
   # "the rule that fills the envelope" — which `Budget#pool_must_not_be_an_account` guarantees can
   # never exist. Every clause was false, and none of it was reachable before this block widened to
@@ -175,9 +171,9 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       end
     end
 
-    # THE OTHER DIRECTION, AND IT IS THE HALF THAT WAS WRONG: no envelope name, no standing, no
-    # "rule that fills the envelope", and still no cap editor — the model forbids a cap for a
-    # category pointing at any pool, so the arm that tells the truth must not grow one.
+    # THE OTHER DIRECTION, AND IT IS THE HALF THAT WAS WRONG: no envelope name, no standing and no
+    # "rule that fills the envelope" — an account can carry no rule, so the arm that tells the truth
+    # must not speak as though it could.
     it "claims no envelope and no standing for it" do
       visit category_path(category("Streaming Spending"))
 
@@ -190,7 +186,7 @@ RSpec.describe "Categories Show - Budget block", type: :system do
       end
     end
 
-    # THE SHARPEST HALF. `Category#buffer_funded?` — no pool, or a pool that IS an account — is
+    # THE SHARPEST HALF. `Category#buffer_funded?` — a category pointing at an ACCOUNT — is
     # `SuggestionEngine#rates`' own population, so this is precisely the shape the panel is most
     # likely to be proposing an envelope for, and an envelope is this category's only way out. The
     # first version ran the engine on the uncapped arm only, so the category that needed the
@@ -313,89 +309,39 @@ RSpec.describe "Categories Show - Budget block", type: :system do
   end
 
   # ------------------------------------------------------------------------------------------
-  # State 2 — budgetable with a cap
+  # The suggestion pointer — §8.1's one addition, now on the buffer arm only
   # ------------------------------------------------------------------------------------------
 
-  # §8.1: the editor STAYS, and the caveat joins it. Nothing here is new except the sentence —
-  # which is why the editor is asserted rather than assumed still to be there.
-  describe "a category with a cap", :aggregate_failures do
-    let!(:cap) { create(:budget, category: create(:category, :expense, user: user, name: "Food"), amount: 500) }
-
-    before { visit category_path(category("Food")) }
-
-    it "keeps the cap editor" do
-      expect(block["data-budget-state"]).to eq("capped")
-      within(block) do
-        expect(page).to have_content("Budget Amount")
-        expect(page).to have_content(ActionController::Base.helpers.number_to_currency(500))
-        expect(page).to have_link("Update Budget", href: edit_budget_path(cap))
-      end
-    end
-
-    it "says the cap is not counted in what the rules need" do
-      within(block) { expect(page).to have_content(caps_caveat) }
-    end
-
-    # ONE SPELLING, ASSERTED ACROSS THE TWO SCREENS THAT OWE IT. This user's only rule is a cap, so
-    # `rules_need` is $0.00 and the structural check prints the same sentence under that zero — the
-    # exact state §8.1's "one spelling, not two" is about. Same literal, both pages.
-    it "prints the same sentence as the Budget page's structural check" do
-      visit budget_page_path
-
-      within("[data-caps-note]") { expect(page).to have_content(caps_caveat) }
-    end
-
-    it "shows no envelope standing" do
-      within(block) do
-        expect(page).to have_no_content("Rules on the Budget page")
-        expect(page).to have_no_content("Standing")
-      end
-    end
-  end
-
-  # ------------------------------------------------------------------------------------------
-  # State 3 — budgetable, no cap
-  # ------------------------------------------------------------------------------------------
-
-  # §8.1: unchanged, plus a pointer that renders only where the engine currently proposes. Both
-  # directions on the pointer, because a pointer that always renders would send a user to a panel
-  # with nothing in it for them, and one that never renders is indistinguishable from the old page.
-  describe "a category with neither an envelope nor a cap", :aggregate_failures do
-    it "keeps the create-a-cap invitation" do
-      target = create(:category, :expense, user: user, name: "Transport")
-
-      visit category_path(target)
-
-      expect(block["data-budget-state"]).to eq("uncapped")
-      within(block) do
-        expect(page).to have_content("No budget set")
-        expect(page).to have_link("Create Budget", href: new_budget_path(category_id: target.id))
-        expect(page).to have_no_content(caps_caveat)
-      end
-    end
-
-    it "points at the Budget page when a rule is being proposed there" do
-      bill(create(:category, :expense, user: user, name: "Utilities"), amount: 220)
-
-      visit category_path(category("Utilities"))
-
-      within(block) do
-        expect(page).to have_content("the Budget page is proposing")
-        expect(page).to have_link("See it on the Budget page", href: budget_page_path(anchor: "suggestions-dated_bill"))
-      end
-    end
-
+  # THE POSITIVE DIRECTION is on the account arm above, where the category that most needs a
+  # pointer lives; these are the two negatives. A pointer that always renders would send a user to
+  # a panel with nothing in it for them, and one that never renders is indistinguishable from the
+  # old page. `CategoryBudgetPresenter#proposable?` used to be `buffer_funded? && cap.blank?`; the
+  # second clause is gone with the cap and the gate is the buffer arm itself.
+  describe "the pointer to a proposal", :aggregate_failures do
     # A single $50 purchase is neither a bill (one occurrence, under the engine's $100 floor) nor
     # a rate (one period, against a floor of three), so the panel proposes nothing for it — and
-    # the block must say nothing rather than point at an empty run.
-    it "stays silent when the engine is proposing nothing for it" do
-      spender = create(:category, :expense, user: user, name: "Shopping")
+    # the block must make its standing offer rather than point at an empty run.
+    it "makes the standing offer when the engine is proposing nothing for it" do
+      spender = create(:category, :expense, user: user, name: "Shopping", pool: checking)
       create(:entry, item: create(:item, category: spender), amount: 50, date: Date.current - 3.days)
 
       visit category_path(spender)
 
       expect(block).to have_no_css("[data-suggestion-pointer]")
-      within(block) { expect(page).to have_no_content("the Budget page is proposing") }
+      within(block) do
+        expect(page).to have_no_content("the Budget page is proposing")
+        expect(page).to have_link("Give it an envelope on the Budget page", href: budget_page_path)
+      end
+    end
+
+    # The enveloped arm never runs the engine at all — see #suggestions' cost note.
+    it "never renders on an enveloped category" do
+      covered("Groceries")
+
+      visit category_path(category("Groceries Spending"))
+
+      expect(block["data-budget-state"]).to eq("pool_covered")
+      expect(block).to have_no_css("[data-suggestion-pointer]")
     end
   end
 

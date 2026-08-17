@@ -10,29 +10,31 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
 
   before { sign_in user, scope: :user }
 
+  # THE PERIOD LABELS AN EXPENSE CATEGORY GETS. `Monthly Budget` / `YTD Budget` belonged to the
+  # cap arm, which is deleted (plan 3, task 3) — an expense category names a pool now, so it takes
+  # the pooled arm and the period word rides on `Spent`.
   describe "expense category labels", :aggregate_failures do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }
     let!(:item) { create(:item, category: category, name: "Groceries") }
 
-    before do
-      create(:budget, category: category, amount: 500)
-      create(:entry, item: item, amount: 100, date: base_date + 5.days)
-    end
+    before { create(:entry, item: item, amount: 100, date: base_date + 5.days) }
 
     it "shows Monthly labels in default view" do
       visit category_path(category)
 
-      expect(page).to have_content("Monthly Budget")
+      expect(page).to have_content("Spent this month")
       expect(page).to have_content("Monthly Spending Trend")
       expect(page).to have_content("Items This Month")
+      expect(page).to have_no_content("Monthly Budget")
     end
 
     it "shows YTD labels in YTD view" do
       visit category_path(category, period: "ytd")
 
-      expect(page).to have_content("YTD Budget")
+      expect(page).to have_content("Spent this year")
       expect(page).to have_content("YTD Spending Trend")
       expect(page).to have_content("Items This Year")
+      expect(page).to have_no_content("YTD Budget")
     end
   end
 
@@ -109,35 +111,10 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     end
   end
 
-  describe "prorated budget summary", :aggregate_failures do
-    let(:april15) { Date.new(2026, 4, 15) }
-    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
-    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
-
-    before do
-      create(:budget, category: groceries, amount: 300, prorated: true)
-      create(:entry, item: groceries_item, amount: 200, date: Date.new(2026, 4, 10))
-      travel_to april15
-      visit category_path(groceries)
-    end
-
-    it "shows cap-based '% used' (bar width) and pace-based status label" do
-      # Day 15 of 30. Spent $200 / $300 cap → 67% used (bar).
-      # Pace = $150, over pace → status label reflects pace.
-      expect(page).to have_content("67% used")
-      expect(page).to have_content("Budget exceeded")
-    end
-
-    it "shows $ spent / $ full-cap in the header" do
-      expect(page).to have_content("$200.00")
-      expect(page).to have_content("$300.00")
-    end
-
-    it "shows the expected-by-today pace amount" do
-      # Day 15 of 30, $300 budget → pace = $150
-      expect(page).to have_content("Expected by today: $150.00")
-    end
-  end
+  # THE PRORATED SUMMARY IS DELETED (plan 3, task 3). Three examples planted a $300 prorated cap
+  # and read the daily ramp off the card — "67% used", "Budget exceeded" against a $150 pace, and
+  # "Expected by today: $150.00". The cap and the `prorated` ramp are both gone, so the fixture is
+  # unbuildable and the sentences are unrenderable; they are deleted with the behaviour.
 
   # THE POOL BALANCE THE LEFT COLUMN STILL PRINTS, AND THE KEY THAT NOW BUSTS IT (2d task 6).
   #

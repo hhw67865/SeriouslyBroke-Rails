@@ -41,7 +41,7 @@ module BudgetPageHelper
   # thing the row was otherwise missing — and an orphan row, which has no group heading above it,
   # has no other way to say whose rule it is.
   def budget_rule_name(budget)
-    budget.item&.name || budget.pool&.name || budget.category&.name
+    budget.item&.name || budget.pool&.name
   end
 
   # "$400.00 / period", "$600.00 every 6 months" — the amount and what it is an amount PER.
@@ -67,30 +67,6 @@ module BudgetPageHelper
     when :one_off then "once"
     else "every #{budget.interval_months} months"
     end
-  end
-
-  # WHAT A CATEGORY CAP IS NOT — THE APP'S ONE SPELLING OF IT, and the reason it is a method rather
-  # than two paragraphs of copy.
-  #
-  # Two screens owe the user this sentence. The structural check owes it because `rules_need` counts
-  # POOL-MODE rules only, so a user whose only rules are caps reads `$0.00 a period` above a page
-  # listing eight of their own rules; the Categories page's budget block owes it because it is where
-  # a cap is WRITTEN, and §8.1 requires the caveat to sit beside the editor rather than only on the
-  # page that reports the consequence. Spec §8.1 asks for one spelling of it, not two, for the
-  # ordinary reason: two hand-maintained wordings of one rule drift, and then the app is telling a
-  # user two different things about the same cap on two screens.
-  #
-  # "COUNTED IN WHAT YOUR RULES NEED", NOT THE ORIGINAL "counted here". "Here" was a deictic that
-  # only worked underneath the figure — on the Categories page it would point at nothing — and the
-  # replacement names the structural check's own first line, which is truthful from both screens
-  # and is the phrase a reader can then go and find on /budget.
-  #
-  # It stays PLURAL ("your category caps") on a page showing exactly one cap, deliberately: the
-  # sentence is about what the whole class of rule is, and a singular variant for this screen would
-  # be the second spelling the spec forbids.
-  def caps_not_counted_sentence
-    "Your category caps are spending limits, not claims on your income — no distribution fills " \
-      "one, so none of them is counted in what your rules need."
   end
 
   # THE LIST `PATCH /budget/reorder` TAKES, with one pool moved one place. `offset` is -1 for ▲
@@ -119,19 +95,23 @@ module BudgetPageHelper
 
   # WHY THIS RULE IS NOT IN THE FILL ORDER, and never merely that it is not.
   #
-  # The account-less clause is Home's own row phrasing, verbatim
-  # (`HomeHelper#pool_problem_label`): it is the same fact about the same pool, and two wordings
-  # for one setup problem would have the two screens disagree about what the user must do next.
+  # ONE REASON NOW, WHERE THERE WERE TWO. The other was "caps a category — no envelope to fill",
+  # and it named a shape the app can no longer hold (plan 3, task 3): `BudgetPagePresenter
+  # #orphan_reason` cannot answer `:category` any more, so a clause for it would be copy for a row
+  # that never renders. The signature keeps the rule rather than the reason, because the reason
+  # still rides on the row and a future third kind belongs here.
   #
-  # A CLAUSE RATHER THAN A SENTENCE, and that is a correction made at the browser. Both reasons
-  # were first written as full sentences on their own line under the row; on the demo seeds that
-  # rendered the identical sentence seven times down one band, which reads as a rendering fault
-  # rather than as seven rules with the same problem. Each row still says why — it says it beside
-  # its own name, in the length the rest of this app's rows use.
-  def budget_rule_reason(rule)
-    return "no account — nothing can fund it" if rule.reason == :no_account
-
-    "caps a category — no envelope to fill"
+  # The wording is Home's own row phrasing, verbatim (`HomeHelper#pool_problem_label`): it is the
+  # same fact about the same pool, and two wordings for one setup problem would have the two
+  # screens disagree about what the user must do next.
+  #
+  # A CLAUSE RATHER THAN A SENTENCE, and that is a correction made at the browser. It was first
+  # written as a full sentence on its own line under the row; on the demo seeds that rendered the
+  # identical sentence seven times down one band, which reads as a rendering fault rather than as
+  # seven rules with the same problem. Each row still says why — it says it beside its own name, in
+  # the length the rest of this app's rows use.
+  def budget_rule_reason(_rule)
+    "no account — nothing can fund it"
   end
 
   # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the pool-mode clause is restored rather than
@@ -144,9 +124,11 @@ module BudgetPageHelper
   # Keyed on `schedule_shown:` rather than on "is this a proposal", because the two are not the
   # same set — a suggestion that reuses an envelope by id arrives with no envelope half at all and
   # still renders its schedule.
-  def budget_amount_hint(budget, owner:, schedule_shown: false)
-    return "Enter the maximum amount you want to spend in this category" unless owner
-
+  #
+  # THE `owner:` ARM IS GONE with the category-mode cap: it answered "Enter the maximum amount you
+  # want to spend in this category", which is a sentence about a spending limit on a form that can
+  # only write funding rules now.
+  def budget_amount_hint(budget, schedule_shown: false)
     basis = "What this rule asks for #{budget_rule_basis(budget)}"
     schedule_shown ? "#{basis}." : "#{basis} — the schedule itself is set on the pool."
   end
@@ -180,10 +162,9 @@ module BudgetPageHelper
   end
 
   # THE ENVELOPE HALF IS RENAMED ON THE WIRE, and only here. The engine states it as `pool:` plus
-  # a top-level `category_id`; `budgets#new` already reads a top-level `category_id` as the OWNER
-  # of a category-mode cap, and the engine means the category to be MOVED INTO the new envelope.
-  # Two meanings for one key on one form is a request that caps a category when it was asked to
-  # fund an envelope, so the half travels as `envelope:` — see BudgetsController#set_envelope.
+  # a top-level `category_id`, and the half travels as `envelope:` — see
+  # BudgetsController#set_envelope for what the nesting buys now that the collision it was invented
+  # for (a top-level `category_id` naming the owner of a category-mode cap) is deleted.
   #
   # `pool_type` is dropped rather than carried: an envelope is a budget pool by definition and the
   # controller does not permit the key at all.

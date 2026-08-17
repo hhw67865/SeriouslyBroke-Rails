@@ -13,7 +13,6 @@ class User < ApplicationRecord
   has_many :pools, dependent: :destroy
   has_many :items, through: :categories
   has_many :entries, through: :items
-  has_many :budgets, through: :categories
 
   belongs_to :default_account, class_name: "Pool", optional: true
 
@@ -70,11 +69,14 @@ class User < ApplicationRecord
   # per-period rule never consults this at all — `steady_ask` returns its amount directly.
   def periods_per_year = PERIODS_PER_YEAR.fetch(period_cadence, 12)
 
-  # EVERY funding rule this user owns, both modes. `budgets` above is the category-mode half
-  # only — it is kept because a category's own screens ask exactly that question — so this is
-  # deliberately a second, WIDER reader rather than a redefinition of the first.
+  # EVERY funding rule this user owns. There used to be two readers — `has_many :budgets, through:
+  # :categories` reached the category-mode caps and this one reached both modes — and the pair is
+  # collapsed to this one now that a rule is owned by a pool, full stop. The association is deleted
+  # rather than left pointing at a link that can no longer be set (`budgets.category_id` is nil on
+  # every row and nothing writes it), because a relation that always returns empty is a reader
+  # waiting to be believed.
   #
-  # Delegating to Budget.for_user rather than spelling the union again: one place decides what
+  # Delegating to Budget.for_user rather than spelling the scope again: one place decides what
   # "a user's rules" means, so a screen and the controller lookup guarding it cannot disagree
   # about which rules exist.
   def all_budgets = Budget.for_user(self)

@@ -413,9 +413,11 @@ class Pool < ApplicationRecord
   # only its movement half.
   #
   # `update!` per record and not `update_all`, for the reason `.apply_fill_order` gives and one
-  # specific to this table: `Category#destroy_budget_if_pool_linked` fires on a pool link and
-  # `income_must_land_in_an_account` polices where income may land, and a deletion must not be the
-  # request that routes around either. It costs one UPDATE per category, and a pool has a handful.
+  # specific to this table: `income_must_land_in_an_account` polices where income may land and the
+  # required `belongs_to :pool` polices that it lands somewhere, and a deletion must not be the
+  # request that routes around either. (`destroy_budget_if_pool_linked` used to fire here too and
+  # destroy the category's cap; the cap is deleted in plan 3, task 3.) It costs one UPDATE per
+  # category, and a pool has a handful.
   #
   # Guarded on `account`, which cannot be nil here — the refusal above has already returned for the
   # account-less pool that has any category at all. Stated so the guard reads as the invariant it

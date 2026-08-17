@@ -675,14 +675,9 @@ RSpec.describe BudgetCalculator, type: :model do
       expect(budget.calculator(today: Date.new(2026, 6, 3)).required(0)).to be_a(BigDecimal)
     end
 
-    # Budget#calculator is defined on every budget, and a category-mode one has no
-    # anchor or interval at all — it must still read as a plain monthly rate rule.
-    it "treats a category-mode budget as a monthly rate rule" do
-      groceries = create(:category, :expense, user: user, name: "Groceries")
-      budget = create(:budget, category: groceries, amount: 400)
-
-      # due Feb 28; boundaries Feb 6 and Feb 20.
-      expect(budget.calculator(today: today).required(0)).to eq(200.00)
-    end
+    # The example that stood here treated a CATEGORY-MODE budget as a monthly rate rule — a cap
+    # carries no anchor and no interval, so the calculator had to read it as one. That shape is
+    # deleted (plan 3, task 3) and the example with it; the anchorless monthly rule above is the
+    # only way to reach the same branch now, and it is asserted there.
   end
 end

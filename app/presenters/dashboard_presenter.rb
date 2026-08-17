@@ -161,13 +161,42 @@ class DashboardPresenter
     @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :pool, items: :entries)
   end
 
+  # ---------------------------------------------------------------------------------------------
+  # THE FINDING-1 BRIDGE (plan 3, task 3). TASK 4 OWNS THE SEMANTICS OF THIS PAGE; THIS TASK OWES
+  # IT ONLY THAT IT COMPILES AND RENDERS.
+  #
+  # The four readers below used to split expense spending by `Category#budgetable?` ("no pool at
+  # all") against `#pool_covered?` ("any pool"). Both predicates and both `Entry` scopes are gone
+  # with the cap: a category with no pool is not a shape this app can hold any more, so the first
+  # set would be empty and the second everything, and every figure built on the pair would read
+  # $0.00 / 100% without saying why.
+  #
+  # Re-pointed MECHANICALLY to the nearest post-cutover truth: the buffer-funded set (an expense
+  # category pointing at an ACCOUNT — money nothing reserves) where "budgetable" stood, and the
+  # enveloped set (pointing at a budget envelope or a savings goal) where "pool-covered" stood.
+  # That is the same line `Category#buffer_funded?` draws for the suggestion engine and the
+  # Categories page, so this page at least agrees with the two screens beside it.
+  #
+  # IT IS NOT THE RIGHT ANSWER AND IS NOT MEANT TO BE. "Budgeted" on this page still means "against
+  # a category CAP", and there are no caps — so `total_budget` is $0.00 and the budget-health block
+  # says nothing useful whatever set it is fed. Task 4 replaces or deletes each chart with a
+  # pool-level reader; the report for this task says exactly what these figures read in the
+  # meantime.
+  # ---------------------------------------------------------------------------------------------
   def tracked_budgetable_expense_categories
-    @tracked_budgetable_expense_categories ||= tracked_expense_categories.select(&:budgetable?)
+    @tracked_budgetable_expense_categories ||= tracked_expense_categories.select(&:buffer_funded?)
   end
 
   def tracked_pool_covered_expense_categories
-    @tracked_pool_covered_expense_categories ||= tracked_expense_categories.select(&:pool_covered?)
+    @tracked_pool_covered_expense_categories ||= tracked_expense_categories.reject(&:buffer_funded?)
   end
+
+  # The entry-level half of the same bridge, over the same line. `account_pool_ids` is a sub-SELECT
+  # rather than a loaded array so these compose into the `group_by_day`/`group_by_month` scopes the
+  # charts build on without a second round trip.
+  def buffer_funded_expenses = @user.entries.expenses.where(categories: { pool_id: account_pool_ids })
+
+  def enveloped_expenses = @user.entries.expenses.where.not(categories: { pool_id: account_pool_ids })
 
   def tracked_income_categories
     @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)
@@ -204,23 +233,28 @@ class DashboardPresenter
 
   private
 
+  def account_pool_ids = @user.pools.accounts.select(:id)
+
   def build_category_entry(category)
     calc = category.calculator(@date, period: period)
     entry = { id: category.id, name: category.name, amount: calc.total_amount }
-    enrich_with_budget(entry, category, calc)
+    enrich_with_budget(entry, calc)
     entry
   end
 
-  def enrich_with_budget(entry, category, calc)
-    return unless category.budgetable? && calc.effective_budget.to_f.positive?
+  # `category` is no longer consulted: the gate was `category.budgetable? && effective_budget
+  # positive`, and with the cap deleted `CategoryCalculator#effective_budget` is nil for every
+  # category — so the positive test is the whole gate and this block never fires. The `prorated`
+  # and `budget_pace` keys went with it (a pace is a cap spread across the days of a month), and
+  # `over_budget` is measured against the budget itself, which is what it always was for a rule
+  # that did not prorate.
+  def enrich_with_budget(entry, calc)
+    return unless calc.effective_budget.to_f.positive?
 
-    pace = calc.budget_pace
     spent = calc.total_amount
     entry[:budget] = calc.effective_budget
-    entry[:prorated] = category.budget.prorated?
     entry[:budget_percentage] = calc.budget_percentage
-    entry[:budget_pace] = pace
-    entry[:over_budget] = spent > pace
-    entry[:budget_diff] = (spent - pace).abs
+    entry[:over_budget] = spent > calc.effective_budget
+    entry[:budget_diff] = (spent - calc.effective_budget).abs
   end
 end

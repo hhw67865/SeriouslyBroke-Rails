@@ -1,21 +1,23 @@
 <%# Budget Form Partial - matches Categories design patterns
 
-    MODE-AWARE, and it has to be. A rule belongs to a category OR a pool (Budget#exactly_one_owner)
-    and this one form serves both, but until the Budget page existed nothing linked a pool-mode
-    rule here, so the form only ever spoke about categories. It offered a pool-mode rule a category
-    picker — a control whose every option makes the record invalid ("cannot belong to both") — and
-    called the pool's own funding rule a spending limit. Now that §8's page links every rule to
-    this form, that is user-reachable, so each mode is asked about the owner it actually has.
+    POOL-MODE ONLY (plan 3, task 3). This form used to be MODE-AWARE because a rule could belong to
+    a category OR a pool, and it served both: a category picker offering a monthly spending cap,
+    and a pool branch about how an envelope gets filled. The cap is deleted, so the two category
+    arms — the picker for a new one and the read-only name for an existing one — are gone with it,
+    along with the `prorated` switch, which spread a monthly cap across the days of the month and
+    was already omitted from the pool branch for reading nothing there.
 
-    THE THIRD MODE IS A PROPOSAL (§8's suggestion panel, amendment A): the form grew an OPTIONAL
-    ENVELOPE HALF rather than the accept flow growing a second controller. What that half makes
+    THE SECOND SHAPE IS A PROPOSAL (§8's suggestion panel, amendment A): the form has an OPTIONAL
+    ENVELOPE HALF rather than the accept flow having a second controller. What that half makes
     happen is BudgetProposal's to explain; what matters here is that the form must say which of the
     two things it is about to do — JOIN an envelope the user already has, or MAKE one — because
     those are different acts and the panel sentence one click earlier already named one of them.
 
-    The pool branch omits `prorated` deliberately: it spreads a monthly category cap across the
-    days of the month (CategoryCalculator#prorated_active?) and nothing reads it for a pool-mode
-    rule, so offering it would be a switch that does nothing. %>
+    A BARE `/budgets/new` NOW RENDERS NO OWNER CONTROL AT ALL, and that is the honest state: every
+    link into this form carries an owner (the Budget page's Edit links carry a rule, the panel's
+    accept links carry a pool id or an envelope half), and a rule typed into existence with no
+    owner is what `Budget#must_belong_to_a_pool` refuses. The form says so in its error
+    notification rather than offering a picker for a mode that no longer exists. %>
 <% pool_mode = @budget.pool_mode? %>
 <% proposal = @envelope.present? %>
 <%# THE ENVELOPE THIS WOULD JOIN, or nil where it would create one. Resolved by
@@ -26,12 +28,11 @@
     measured by the engine and submitted back; changing it later is the edit form's business, and
     an existing rule's shape is not this partial's to re-offer. %>
 <% new_pool_rule = @budget.new_record? && (pool_mode || proposal) %>
-<% subtitle = "Set spending limits for #{@budget.category&.name || "this category"}" %>
+<% subtitle = "How an envelope gets filled each period" %>
 <% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode %>
 <% subtitle = "A new #{@envelope.name} envelope, and the rule that fills it" if proposal %>
 <% subtitle = "Joining your #{joining.name} envelope, and the rule that adds to it" if joining %>
-<% cancel_path = @budget.category ? category_path(@budget.category) : categories_path %>
-<% cancel_path = budget_page_path if pool_mode || proposal %>
+<% cancel_path = budget_page_path %>
 <%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
 
 <div class="max-w-2xl mx-auto">
@@ -124,38 +125,19 @@
             </div>
             <%= f.hidden_field :pool_id %>
           </div>
-        <% elsif @budget.category_id %>
-          <%# Show category name for existing budgets %>
-          <div>
-            <label class="form-label">Category</label>
-            <div class="form-input flex items-center bg-gray-50">
-              <%= @budget.category.name %>
-            </div>
-            <%= f.hidden_field :category_id %>
-          </div>
-        <% else %>
-          <%# Category Selection (only for new budgets without category_id) %>
-          <div>
-            <%= f.association :category,
-                collection: current_user.categories.expenses.budgetable.order(:name),
-                label_method: :name,
-                value_method: :id,
-                include_blank: "Select an expense category",
-                label: "Category" %>
-          </div>
         <% end %>
 
         <%# Budget Amount %>
         <div>
           <%= f.input :amount,
               as: :decimal,
-              label: pool_mode || proposal ? "Rule Amount" : "Budget Amount",
+              label: "Rule Amount",
               input_html: {
                 placeholder: "0.00",
                 step: 0.01,
                 min: 0
               },
-              hint: budget_amount_hint(@budget, owner: pool_mode || proposal, schedule_shown: new_pool_rule) %>
+              hint: budget_amount_hint(@budget, schedule_shown: new_pool_rule) %>
 
           <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
               The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts
@@ -213,26 +195,13 @@
           <% end %>
         <% end %>
 
-        <% unless pool_mode || proposal %>
-          <%# Prorated toggle %>
-          <div>
-            <div class="flex items-center gap-2 mb-2">
-              <%= f.check_box :prorated, class: "form-checkbox" %>
-              <%= f.label :prorated, "Prorate daily", class: "form-label mb-0 cursor-pointer" %>
-            </div>
-            <p class="form-hint">
-              Spread the budget evenly across the month so you can see if you're on pace day-to-day. Turn off for expenses that happen in one-time chunks (like rent or subscriptions).
-            </p>
-          </div>
-        <% end %>
-
       </div>
     </div>
 
     <%# Action Buttons %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
       <%# Back where the rule is listed, which for a pool-mode rule is the Budget page and never
-          the pool page — the same destination BudgetsController#owner_path sends a save to. %>
+          the pool page — the same destination BudgetsController sends a save to. %>
       <%= link_to "Cancel", cancel_path, class: "btn btn-secondary" %>
 
       <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",

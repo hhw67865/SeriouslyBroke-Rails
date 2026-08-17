@@ -187,11 +187,11 @@ class BudgetProposal
   # reaches the new envelope from now on, which is why the suggestion panel says so out loud
   # before the user clicks. A no-op when the category already points at the reused pool.
   #
-  # `Category#destroy_budget_if_pool_linked` fires here: a category cap is destroyed by the
-  # re-point, because a category cannot hold both a cap and a pool. That is the model's existing
-  # rule and it is the honest trade — the cap reserved nothing (`Budget.steady_need` counts
-  # pool-mode rules only) and the rule replacing it does — but it is a DELETION, so the panel
-  # names the cap and its amount before the click.
+  # THE RE-POINT USED TO DELETE SOMETHING TOO. `Category#destroy_budget_if_pool_linked` fired here
+  # and destroyed the category's monthly cap, because a category could not hold both a cap and a
+  # pool — an honest trade (the cap reserved nothing) but a DELETION, which is why the panel named
+  # the cap and its amount before the click. The cap is deleted outright in plan 3, task 3, so this
+  # write now moves the category and nothing else, and the panel is one clause shorter.
   def re_point(pool)
     category = envelope.category
     return category if category.pool_id == pool.id

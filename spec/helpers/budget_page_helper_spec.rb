@@ -6,7 +6,7 @@ RSpec.describe BudgetPageHelper, type: :helper do
   # Real Budget records rather than doubles: every branch below reads a combination of `basis`,
   # `interval_months` and `anchor_date` that Budget's own validations decide is legal, and a
   # double is free to claim a shape the model would refuse.
-  def pool_rule(*traits, **attrs) = build(:pool_budget, *traits, category: nil, **attrs)
+  def pool_rule(*traits, **attrs) = build(:pool_budget, *traits, **attrs)
 
   describe "#budget_rule_name" do
     it "names the item it pays" do
@@ -21,11 +21,9 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_rule_name(budget)).to eq("Groceries")
     end
 
-    it "falls back to the category for a category-mode rule" do
-      budget = build(:budget, category: build(:category, :expense, name: "Shopping"))
-
-      expect(helper.budget_rule_name(budget)).to eq("Shopping")
-    end
+    # The third arm was "falls back to the category for a category-mode rule". A rule owned by a
+    # category is deleted (plan 3, task 3), and so is the `|| budget.category&.name` it fell back
+    # to, so the example goes with the behaviour.
   end
 
   # THE FIGURE AND WHAT IT IS A FIGURE PER. $600 a period and $600 every six months are the same
@@ -47,15 +45,6 @@ RSpec.describe BudgetPageHelper, type: :helper do
 
     it "says a one-off rule happens once" do
       expect(helper.budget_rule_amount(pool_rule(:one_time, amount: 300))).to eq("$300.00 once")
-    end
-
-    # A category-mode rule is a monthly spending cap and carries no interval at all —
-    # Budget#shape_must_be_valid only runs in pool mode — so the interval branches would call
-    # every one of them a one-off.
-    it "calls a category-mode rule monthly rather than one-off" do
-      budget = build(:budget, category: build(:category, :expense), amount: 200)
-
-      expect(helper.budget_rule_amount(budget)).to eq("$200.00 a month")
     end
   end
 
@@ -105,8 +94,7 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_rule_reason(rule(:no_account))).to eq("no account — nothing can fund it")
     end
 
-    it "says a category rule caps rather than fills" do
-      expect(helper.budget_rule_reason(rule(:category))).to eq("caps a category — no envelope to fill")
-    end
+    # The second reason — "caps a category — no envelope to fill" — named a rule owned by a
+    # category, which #orphan_reason can no longer answer. Deleted with the shape.
   end
 end

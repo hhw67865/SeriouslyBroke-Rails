@@ -51,6 +51,56 @@ type,
             <p class="form-error"><%= category.errors[:category_type].first %></p>
           <% end %>
         </div>
+
+        <%# WHERE THIS CATEGORY'S MONEY LIVES — required since plan 3 decision 3.
+            `categories.pool_id` used to be nullable and a nil was documented as meaning "the user's
+            default account", which no reader implemented: `PoolBalanceLedger::ENTRY_POOL_ID`
+            resolves `COALESCE(entries.pool_id, categories.pool_id)` to NOTHING, so a pool-less
+            category's spending left the pool tree entirely while `Σ pools == your bank balance`
+            claimed otherwise. The cutover migration filled every nil with the user's default
+            account; this control is how a new one gets an answer instead of a null.
+
+            DEFAULTED TO THE DEFAULT ACCOUNT (CategoriesController#new) rather than to a blank, and
+            the default is the honest one: an account IS the buffer (§7.1), so "this spending comes
+            out of my buffer" is what a category means before the user has given it an envelope, and
+            it is the state the Budget page's rate detector then proposes an envelope for.
+
+            GROUPED BY POOL TYPE, in `Pool::NOUNS`' words rather than the enum's, because those are
+            the nouns the rest of the app uses on screen — a user who reads "Envelope" on the
+            Categories page should not meet "budget" here.
+
+            NO `include_blank`: the choice is required, and a prompt option that submits an empty
+            string would offer the one answer the model refuses. An INCOME category must name an
+            account (Category#income_must_land_in_an_account); the list is not filtered by type
+            because the type is switched client-side on this same form, and a picker whose options
+            changed under the user would be worse than a legible 422. %>
+        <% pools_by_noun = current_user.pools.order(:pool_type, :name).group_by { |pool| pool.noun.capitalize } %>
+        <div class="mt-5">
+          <% if pools_by_noun.any? %>
+            <%= f.input :pool_id,
+                collection: pools_by_noun,
+                as: :grouped_select,
+                group_method: :last,
+                group_label_method: :first,
+                label_method: :name,
+                value_method: :id,
+                include_blank: false,
+                label: "Where this money lives",
+                hint: "A buffer is money you simply hold; an envelope or a goal reserves it. You can move this later." %>
+          <% else %>
+            <%# A USER WITH NO POOLS AT ALL, and the form has to say so rather than offer an empty
+                picker. Requiring a pool makes this state reachable for the first time: a brand-new
+                account has no pools, nothing in the app creates one for them, and a select with no
+                options would submit blank and meet "Pool must exist" with no way to act on it.
+                Naming the route is the whole fix — every user needs an account before anything
+                else in this app means anything. %>
+            <label class="form-label">Where this money lives</label>
+            <p class="form-hint" data-no-pools>
+              Every category has to say where its money lives, and you have no accounts yet.
+            </p>
+            <%= link_to "Make an account first", new_pool_path, class: "btn btn-secondary mt-2" %>
+          <% end %>
+        </div>
       </div>
     </div>
 

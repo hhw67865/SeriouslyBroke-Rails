@@ -72,11 +72,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
   def wild_categories(user, pools)
     {
-      groceries: create(:category, :expense, user: user, name: "Groceries", pool: nil),
-      utilities: create(:category, :expense, user: user, name: "Utilities", pool: nil),
-      rent: create(:category, :expense, user: user, name: "Rent", pool: nil),
-      salary: create(:category, :income, user: user, name: "Salary", pool: nil),
-      coffee: create(:category, :expense, user: user, name: "Coffee", pool: nil),
+      groceries: plant_unpooled_category(:expense, user: user, name: "Groceries"),
+      utilities: plant_unpooled_category(:expense, user: user, name: "Utilities"),
+      rent: plant_unpooled_category(:expense, user: user, name: "Rent"),
+      salary: plant_unpooled_category(:income, user: user, name: "Salary"),
+      coffee: plant_unpooled_category(:expense, user: user, name: "Coffee"),
       health: create(:category, :expense, user: user, name: "Health", pool: pools[:medical]),
       vacation: create(:category, :savings, user: user, name: "Vacation", pool: pools[:holiday])
     }
@@ -84,10 +84,43 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
   def wild_caps(categories)
     {
-      groceries_cap: create(:budget, category: categories[:groceries], amount: 400.00),
-      utilities_cap: create(:budget, category: categories[:utilities], amount: 150.00),
-      rent_cap: create(:budget, category: categories[:rent], amount: 1_200.00)
+      groceries_cap: plant_cap(categories[:groceries], 400.00),
+      utilities_cap: plant_cap(categories[:utilities], 150.00),
+      rent_cap: plant_cap(categories[:rent], 1_200.00)
     }
+  end
+
+  # ---------------------------------------------------------------------------------------------
+  # PLANTING LEGACY SHAPES PAST TODAY'S MODEL — and the reason it has to be done this way is the
+  # whole point of this file.
+  #
+  # This spec's subject is data the app can no longer hold. Plan 3, task 3 landed
+  # `Category belongs_to :pool` (required) and deleted `Budget belongs_to :category`, so
+  # `create(:category, pool: nil)` raises RecordInvalid and `create(:budget, category: x)` raises
+  # NoMethodError. Written through the app's models, this fixture stops building before the
+  # migration is ever called — and the one migration in the project that rewrites user data loses
+  # its only test, silently, on a green suite that no longer exercises it.
+  #
+  # THE FIX IS ON THIS SIDE AND NEVER ON THE VALIDATION'S. A migration exists precisely to meet rows
+  # written under older rules, so a spec for one must be able to write them; a validation weakened
+  # so a test can build its fixture is a validation that stops protecting production. The migration
+  # itself makes the same move for the same reason (decision 1: `update_all` and migration-local
+  # table classes throughout, so no callback and no future validation can fire), and
+  # #misfile_a_pool_inside_an_envelope below was already written past the model deliberately.
+  #
+  # `save!(validate: false)` rather than raw INSERT: the factories still supply the columns and the
+  # timestamps, `save!` still raises on a database refusal, and the only thing skipped is the set of
+  # rules that postdate the rows being planted.
+  # ---------------------------------------------------------------------------------------------
+  def plant_unpooled_category(type, **attrs)
+    build(:category, type, pool: nil, **attrs).tap { |category| category.save!(validate: false) }
+  end
+
+  def plant_cap(category, amount)
+    Budget.new(amount: amount).tap do |cap|
+      cap.category_id = category.id
+      cap.save!(validate: false)
+    end
   end
 
   def wild_entries(categories)
@@ -138,8 +171,8 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     old_account = create(:pool, :account, user: user, name: "Old Account")
     main = create(:pool, :account, user: user, name: "Main")
     user.update!(default_account: main)
-    dining = create(:category, :expense, user: user, name: "Dining", pool: nil)
-    bonus = create(:category, :income, user: user, name: "Bonus", pool: nil)
+    dining = plant_unpooled_category(:expense, user: user, name: "Dining")
+    bonus = plant_unpooled_category(:income, user: user, name: "Bonus")
     entry_on(item_in(dining, "Bistro"), 45.00, 7, 6)
     entry_on(item_in(bonus, "Q2 Bonus"), 200.00, 7, 7)
 
@@ -191,7 +224,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   def plant_namesake
     user = create(:user, email: "namesake@example.com")
     goal = create(:pool, user: user, name: "Checking", account: nil, target_amount: 300.00)
-    books = create(:category, :expense, user: user, name: "Books", pool: nil)
+    books = plant_unpooled_category(:expense, user: user, name: "Books")
     entry_on(item_in(books, "Bookshop"), 30.00, 7, 8)
 
     { user: user, goal: goal, books: books }
@@ -593,8 +626,8 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # ROLLBACK, PROVEN RATHER THAN ASSERTED: the failing run has real work to do before it
     # verifies, and none of that work may survive the raise.
     it "rolls the whole user back when verification fails after real work", :aggregate_failures do
-      gym = create(:category, :expense, user: wild[:user], name: "Gym", pool: nil)
-      cap = create(:budget, category: gym, amount: 60.00)
+      gym = plant_unpooled_category(:expense, user: wild[:user], name: "Gym")
+      cap = plant_cap(gym, 60.00)
       steal_a_movement
 
       expect { migrate! }.to raise_error(described_class::VerificationFailed)
@@ -633,7 +666,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
   def break_every_structural_invariant
     unpool_a_category_and_evict_a_goal
-    create(:budget, category: create(:category, :expense, user: wild[:user], name: "Gym", pool: nil), amount: 60.00)
+    plant_cap(plant_unpooled_category(:expense, user: wild[:user], name: "Gym"), 60.00)
     # A savings entry that came back: it revives the category count, the entry count, AND — because
     # it lands in the goal's lane — moves the goal's balance from 400.00 to 410.00.
     revived = create(:category, :savings, user: wild[:user], name: "Revived", pool: wild[:holiday])

@@ -18,15 +18,18 @@ RSpec.describe "Categories Index - Cards", type: :system do
     sign_in user, scope: :user
   end
 
-  describe "expense card shows correct monthly budget and links to show", :aggregate_failures do
-    let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food") }
+  # THE CARD'S CAP ARM IS DELETED (plan 3, task 3). Every expense category points at a pool now, so
+  # the card takes its pooled arm — "Spent <period>" and the pool's name — and the "Monthly Budget
+  # $150.00 / $1,000.00 · 15% used" arm it used to take has no rule left to read. The figures under
+  # test move from the cap's percentage to the spending itself, which is the half the card still
+  # renders and the half the month navigation is about.
+  describe "expense card shows the period's spending and links to show", :aggregate_failures do
+    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food", pool: checking) }
     let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
     let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
 
     before do
-      # Create budget for expense category
-      create(:budget, category: expense_category, amount: 1000)
-
       # Month A entries (total 150)
       create(:entry, item: groceries_item, amount: 100, date: base_date + 2.days)
       create(:entry, item: dining_item, amount: 50, date: base_date + 10.days)
@@ -40,11 +43,10 @@ RSpec.describe "Categories Index - Cards", type: :system do
       visit categories_path(type: "expense", month: base_date.month, year: base_date.year)
     end
 
-    it "displays correct monthly budget, percentage, and top items for selected month" do
-      # Budget totals and percentage
+    it "displays the period's spending, its pool and the top items for selected month" do
       expect(page).to have_content(currency(150))
-      expect(page).to have_content("/ #{currency(1000)}")
-      expect(page).to have_content("15% used")
+      expect(page).to have_content("Pool: Checking")
+      expect(page).to have_no_content("% used")
 
       # Top items with amounts (expense shows negative sign)
       expect(page).to have_content("Groceries")
@@ -56,22 +58,20 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_current_path(category_path(expense_category))
     end
 
-    it "updates budget info when navigating to next month via navbar and keeps type" do
+    it "updates the spending when navigating to next month via navbar and keeps type" do
       find("button[title='Next month']").click
 
       expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content(currency(300))
-      expect(page).to have_content("30% used")
       expect(page).to have_content("-#{currency(200)}")
       expect(page).to have_content("-#{currency(100)}")
     end
 
-    it "updates budget info when navigating to previous month via navbar" do
+    it "updates the spending when navigating to previous month via navbar" do
       find("button[title='Previous month']").click
 
       expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content(currency(120))
-      expect(page).to have_content("12% used")
     end
   end
 

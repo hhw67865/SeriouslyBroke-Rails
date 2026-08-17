@@ -46,7 +46,13 @@ RSpec.describe PoolBalanceLedger, type: :model do
   # own pool_id, which is the other arm of the entries-for-pool predicate. Each entry gets a
   # category of its own, counted rather than generated because Category validates name uniqueness
   # per user and two Faker names can collide.
-  def entry(kind, amount, on:, category_pool: nil, on_pool: nil)
+  #
+  # `category_pool:` DEFAULTS TO THE ACCOUNT rather than to nil. It used to default to nil — a
+  # category naming no pool, which reached no pool at all through `COALESCE(entries.pool_id,
+  # categories.pool_id)` — and that is the shape plan 3 deleted (`Category belongs_to :pool`). The
+  # account is the post-cutover spelling of the same fixture: it reaches a pool nothing else in
+  # these examples measures, so an entry planted with it still contributes to no envelope's terms.
+  def entry(kind, amount, on:, category_pool: checking, on_pool: nil)
     category = create(:category, kind, user: user, name: "Category #{category_numbers.next}", pool: category_pool)
     create(:entry, item: create(:item, category: category), amount: amount, date: on, pool: on_pool)
   end

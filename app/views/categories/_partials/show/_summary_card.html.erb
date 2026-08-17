@@ -3,7 +3,10 @@
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
   <% calc = category.calculator(selected_date, period: current_period) %>
-  <% if category.pool_covered? %>
+  <%# EVERY EXPENSE CATEGORY POINTS AT A POOL (plan 3, task 3), so this arm and `expense?` are the
+      same set and the cap arm that used to sit between them — a monthly budget bar, a pace line and
+      a "No budget set" empty state — is deleted with the cap it read. %>
+  <% if category.expense? %>
     <!-- Pool-Covered Expense Category Summary -->
     <div class="space-y-6">
       <div>
@@ -12,14 +15,14 @@
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
         <%# THE THIRD CARD ON THIS PAGE, AND IT HELD THE SAME DEFECT AS THE OTHER TWO (2d
-            whole-plan review, fix 2, found in the visual check). This arm is `pool_covered?` —
-            an expense category pointing at ANY pool — and it said "Funded by savings pool" about
+            whole-plan review, fix 2, found in the visual check). This arm is every EXPENSE
+            category — each of which points at some pool — and it said "Funded by savings pool" about
             all of them: about a budget ENVELOPE, which is not a savings pool, and about a savings
             goal this category SPENDS from rather than is funded by. Both halves are now read from
             the pool: `Pool#noun` for the word, and the direction from what an expense category
             actually does to a pool it points at (`PoolBalanceLedger::ENTRY_POOL_ID` subtracts it).
-            The trailing clause is unchanged and is true of both kinds — no cap counts this
-            spending, whichever pool it comes out of. %>
+            The trailing clause is true of both kinds — this spending is separate from whatever
+            else the user's budget is doing, whichever pool it comes out of. %>
         <p class="text-xs text-gray-500">
           Spending here comes out of the <%= category.pool.noun %>
           <%= link_to category.pool.name, pool_path(category.pool), class: "text-brand hover:text-brand-dark" %>
@@ -38,67 +41,6 @@
                             end
           %>
           <%= line_chart [{ name: "Spending", data: spending_data }], curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand]], prefix: "$ " %>
-        </div>
-      </div>
-    </div>
-
-  <% elsif category.expense? %>
-    <!-- Budgeted Expense Category Summary -->
-    <div class="space-y-6">
-      <div>
-        <div class="flex justify-between text-sm mb-2">
-          <span class="text-gray-500"><%= period_budget_label %></span>
-          <span class="font-medium text-gray-900">
-            <%= number_to_currency(calc.total_amount) %> /
-            <%= calc.effective_budget ? number_to_currency(calc.effective_budget) : "N/A" %>
-          </span>
-        </div>
-
-        <% if calc.effective_budget %>
-          <% cap_percentage = calc.budget_percentage %>
-          <% pace_percentage = calc.budget_pace_percentage %>
-          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div class="h-3 rounded-full <%= budget_status_color(pace_percentage) %>" style="width: <%= [cap_percentage, 100].min %>%;"></div>
-          </div>
-
-          <div class="flex justify-between mt-2">
-            <p class="text-sm text-gray-500"><%= cap_percentage %>% used</p>
-            <p class="text-sm <%= budget_status_color(pace_percentage).gsub("bg-", "text-") %>">
-              <%= budget_status(pace_percentage) %>
-            </p>
-          </div>
-
-          <% if category.budget&.prorated? && calc.budget_pace != calc.effective_budget %>
-            <p class="text-xs text-gray-500 mt-1">
-              Expected by today: <%= number_to_currency(calc.budget_pace) %>
-            </p>
-          <% end %>
-        <% else %>
-          <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div class="bg-gray-300 h-3 rounded w-0"></div>
-          </div>
-
-          <div class="flex justify-between mt-2">
-            <p class="text-sm text-gray-500">No budget set</p>
-            <p class="text-sm text-gray-500">Set budget to track spending</p>
-          </div>
-        <% end %>
-      </div>
-
-      <div class="border-t border-gray-200 pt-4">
-        <h3 class="text-base font-medium mb-3"><%= period_trend_label %> Spending Trend</h3>
-        <div class="bg-gray-50 rounded p-4 flex items-center justify-center">
-          <%
-            spending_data = if current_period == :ytd
-                              calculate_running_total(category.entries.group_by_month(:date, range: calc.date_range).sum(:amount))
-                            else
-                              calculate_running_total(category.entries.group_by_day(:date, range: calc.date_range).sum(:amount))
-                            end
-            budget_curve = calc.budget_curve
-            chart_data = [{ name: "Spending", data: spending_data }]
-            chart_data << { name: "Budget", data: budget_curve } if budget_curve.any?
-          %>
-          <%= line_chart chart_data, curve: false, points: false, colors: [DashboardPresenter::COLORS[:brand], DashboardPresenter::COLORS[:dusty_teal]], prefix: "$ " %>
         </div>
       </div>
     </div>

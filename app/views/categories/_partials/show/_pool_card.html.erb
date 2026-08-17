@@ -9,9 +9,9 @@
     sentences was true of either. Task 5 then landed the budget block directly ABOVE this card, so
     the page said "Envelope" and "Savings Pool" about one pool, four inches apart.
 
-    THE TYPE IS ASKED OF THE POOL, not of the category. `Category#pool_covered?` is
-    `expense? && pool_id.present?` and says yes to an account, which is exactly how the account
-    arm of the block above went wrong before it was corrected; the pool's own enum cannot.
+    THE TYPE IS ASKED OF THE POOL, not of the category. The deleted `Category#pool_covered?` was
+    `expense? && pool_id.present?` and said yes to an account, which is exactly how the account arm
+    of the block above went wrong before it was corrected; the pool's own enum cannot.
 
     ONE VOCABULARY, NOT A NEW ONE. The envelope arm says how the envelope is doing through
     `shared/_pool_status` — the same span, the same words and the same red as Home's pools band

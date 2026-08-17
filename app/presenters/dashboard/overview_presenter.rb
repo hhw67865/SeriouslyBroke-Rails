@@ -45,8 +45,12 @@ module Dashboard
       @savings_contributions_total ||= @user.entries.savings.tracked.where(date: period_range).sum(:amount)
     end
 
+    # THE FINDING-1 BRIDGE — `Entry.pool_covered_expenses` is deleted; see
+    # DashboardPresenter#tracked_budgetable_expense_categories. Task 4 owns what this figure should
+    # be: post-cutover a savings contribution is a `PoolMovement`, not an entry, so "withdrawals"
+    # measured off expense entries is already the wrong question and reads far too large.
     def savings_withdrawals_total
-      @savings_withdrawals_total ||= @user.entries.pool_covered_expenses.tracked.where(date: period_range).sum(:amount)
+      @savings_withdrawals_total ||= @parent.enveloped_expenses.tracked.where(date: period_range).sum(:amount)
     end
 
     def net_savings
@@ -157,7 +161,7 @@ module Dashboard
 
     def monthly_savings_delta(range)
       contributions = monthly_totals(@user.entries.savings.tracked, range)
-      withdrawals = monthly_totals(@user.entries.pool_covered_expenses.tracked, range)
+      withdrawals = monthly_totals(@parent.enveloped_expenses.tracked, range)
       contributions.each_with_object({}) do |(month, amount), result|
         result[month] = amount - withdrawals.fetch(month, 0)
       end

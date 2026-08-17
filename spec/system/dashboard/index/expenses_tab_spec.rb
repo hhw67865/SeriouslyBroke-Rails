@@ -2,9 +2,20 @@
 
 require "rails_helper"
 
+# THE CAP IS DELETED (plan 3, task 3) AND THIS PAGE IS TASK 4's TO REWORK. What this task owes it
+# is that it renders; what these examples pin is what it renders NOW.
+#
+# `DashboardPresenter`'s FINDING-1 bridge re-points the two bands: "budgeted" is buffer-funded
+# spending (a category pointing at an ACCOUNT) and "pool-covered" is enveloped spending, where the
+# split used to be "no pool" against "any pool". The figures in the split examples are unchanged
+# because the fixture already divided that way.
+#
+# WHAT WENT WITH THE CAP: every example reading a per-category budget figure — "$650.00 / $500.00",
+# "+$150.00 over", "$120.00 left", the over-budget ordering, the budget totals, the whole prorated
+# scenario, and the "Monthly Budget"/"YTD Budget" stat card, which is gated on
+# `total_budget.positive?` and `total_budget` sums a category's cap. They are deleted with the
+# behaviour rather than rewritten against a cap that cannot exist.
 RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
-  include ActiveSupport::Testing::TimeHelpers
-
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
 
@@ -32,13 +43,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     let!(:car_repair_item) { create(:item, category: car_repair, name: "Mechanic") }
 
     before do
-      create(:budget, category: groceries, amount: 500)
       create(:entry, item: groceries_item, amount: 150.00, date: base_date + 5.days)
       create(:entry, item: car_repair_item, amount: 200.00, date: base_date + 10.days)
       visit reports_path(tab: "expenses")
     end
 
-    it "shows Monthly Budget section with only budgetable categories" do
+    it "shows Monthly Budget section with only buffer-funded categories" do
       within monthly_budget_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
@@ -54,9 +64,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       end
     end
 
-    it "shows budget total only for budgetable categories" do
+    # THE STAT CARD IS GONE UNTIL TASK 4: it printed the sum of the user's caps and is gated on
+    # that sum being positive, which it can no longer be. The section HEADING of the same name
+    # stays, so the negative is on the figure rather than on the words.
+    it "no longer prints a budget total" do
       expect(page).to have_content("Monthly Budget")
-      expect(page).to have_content("$500.00")
+      expect(page).to have_no_content("$500.00")
     end
 
     it "excludes pool-covered spending from budgeted totals" do
@@ -70,7 +83,6 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     let!(:expense_item) { create(:item, category: expense_category, name: "Weekly Shopping") }
 
     before do
-      create(:budget, category: expense_category, amount: 500)
       create(:entry, item: expense_item, amount: 150.00, date: base_date + 5.days)
       visit reports_path(tab: "expenses")
     end
@@ -109,55 +121,35 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
   end
 
-  describe "budget details in budgeted section", :aggregate_failures do
+  # WHAT THE ROWS SAY NOW. Four examples stood here reading each category's cap off the row —
+  # "$650.00 / $500.00", "+$150.00 over" / "$120.00 left", the ordering by most-over-budget and the
+  # column total — and `DashboardPresenter#enrich_with_budget` writes none of those keys any more,
+  # because `CategoryCalculator#effective_budget` is nil for every category. One example replaces
+  # them, and it is the negative the bridge has to keep true: the rows render, with the spending
+  # and nothing that claims to be a budget.
+  describe "rows in the budgeted section", :aggregate_failures do
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
     let!(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
     let!(:utilities_item) { create(:item, category: utilities, name: "Electric") }
-    let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
-    let!(:dining_item) { create(:item, category: dining, name: "Restaurant") }
 
     before do
-      create(:budget, category: groceries, amount: 500)
-      create(:budget, category: utilities, amount: 200)
-      create(:budget, category: dining, amount: 300)
-
-      # Groceries: $650 spent on $500 budget → +$150 over
       create(:entry, item: groceries_item, amount: 650, date: base_date + 1.day)
-      # Utilities: $80 spent on $200 budget → $120 left
       create(:entry, item: utilities_item, amount: 80, date: base_date + 2.days)
-      # Dining: $400 spent on $300 budget → +$100 over
-      create(:entry, item: dining_item, amount: 400, date: base_date + 3.days)
 
       visit reports_path(tab: "expenses")
     end
 
-    it "shows budget amount next to spent amount" do
+    it "prints the spending, and no budget clause of any kind" do
       within monthly_budget_section do
-        expect(page).to have_content("$650.00 / $500.00")
-        expect(page).to have_content("$80.00 / $200.00")
-        expect(page).to have_content("$400.00 / $300.00")
-      end
-    end
+        expect(page).to have_link("Groceries")
+        expect(page).to have_content("$650.00")
+        expect(page).to have_link("Utilities")
+        expect(page).to have_content("$80.00")
 
-    it "shows over/remaining amounts" do
-      within monthly_budget_section do
-        expect(page).to have_content("+$150.00 over")
-        expect(page).to have_content("+$100.00 over")
-        expect(page).to have_content("$120.00 left")
-      end
-    end
-
-    it "orders categories by most over budget first" do
-      within monthly_budget_section do
-        names = all("a[href^='/categories']").map(&:text)
-        expect(names).to eq(["Groceries", "Dining", "Utilities"])
-      end
-    end
-
-    it "shows budget totals" do
-      within monthly_budget_section do
-        expect(page).to have_content("$1,130.00 / $1,000.00")
+        expect(page).to have_no_content(" / $")
+        expect(page).to have_no_content("over")
+        expect(page).to have_no_content("left")
       end
     end
   end
@@ -167,7 +159,6 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     let!(:expense_item) { create(:item, category: expense_category, name: "Electric") }
 
     before do
-      create(:budget, category: expense_category, amount: 200)
       create(:entry, item: expense_item, amount: 100.00, date: base_date)
       create(:entry, item: expense_item, amount: 120.00, date: base_date - 1.month)
       visit reports_path(tab: "expenses", period: "ytd")
@@ -181,49 +172,17 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       expect(page).to have_content("YTD Tracked Budgeted")
     end
 
-    it "shows YTD Budget label" do
-      expect(page).to have_content("YTD Budget")
+    # "YTD Budget" was the stat card printing the sum of the user's caps; it is gated on that sum
+    # being positive and is gone with the cap. "YTD Budgeted Spending" above is the chart heading
+    # and is unrelated, which is why the negative is scoped to the stat strip.
+    it "no longer shows the YTD Budget stat card" do
+      expect(page).to have_no_css("p.text-sm.text-gray-500", text: "YTD Budget", exact_text: true)
     end
   end
 
-  describe "prorated budget scenario", :aggregate_failures do
-    let(:april15) { Date.new(2026, 4, 15) }
-    let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
-    let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
-    let!(:rent) { create(:category, :expense, user: user, name: "Rent") }
-    let!(:rent_item) { create(:item, category: rent, name: "Monthly Rent") }
-
-    before do
-      create(:budget, category: groceries, amount: 300, prorated: true)
-      create(:budget, category: rent, amount: 200) # not prorated
-      create(:entry, item: groceries_item, amount: 200, date: Date.new(2026, 4, 10))
-      create(:entry, item: rent_item, amount: 50, date: Date.new(2026, 4, 1))
-      travel_to april15
-      visit reports_path(tab: "expenses")
-    end
-
-    it "shows prorated row with over-pace text and expected pace amount" do
-      # Groceries pace on day 15 = 300 * 15 / 30 = 150. Spent $200. Over pace by $50.
-      within(".space-y-3") do
-        expect(page).to have_content("Groceries")
-        expect(page).to have_content("$200.00")
-        expect(page).to have_content("$300.00")
-        expect(page).to have_content("+$50.00 over pace")
-        expect(page).to have_content("expected today: $150.00")
-      end
-    end
-
-    it "shows flat (non-prorated) row with normal 'left' text" do
-      within(".space-y-3") do
-        expect(page).to have_content("Rent")
-        expect(page).to have_content("$150.00 left")
-      end
-    end
-
-    it "keeps Monthly Budget stat as full sum of caps" do
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$500.00") }
-    end
-  end
+  # THE PRORATED SCENARIO IS DELETED with `budgets.prorated` (plan 3, task 3): it planted a $300
+  # prorated cap beside a $200 flat one and read "over pace", "expected today: $150.00" and the
+  # flat row's "$150.00 left" off the same screen. Neither cap nor ramp exists.
 
   private
 

@@ -109,11 +109,12 @@ class BudgetPagePresenter
       .map { |account, groups| Band.new(account: account, groups: groups) }
   end
 
-  # THE RULES NO DISTRIBUTION CAN REACH, each saying which of the two reasons it is.
+  # THE RULES NO DISTRIBUTION CAN REACH, each saying why.
   #
-  # A category-mode rule funds a category rather than an envelope, so no pool ever fills it; an
-  # account-less pool has no account whose money could arrive. Both are setup states with a
-  # different fix, which is why the reason rides on the row.
+  # ONE REASON NOW: an account-less pool has no account whose money could arrive. The other was a
+  # category-mode rule, which funded a category rather than an envelope so no pool ever filled it —
+  # a shape deleted in plan 3, task 3. The reason still rides on the row rather than on the section,
+  # because it is the row that has to say what the fix is.
   #
   # Ordered by owner name and then by the same #due_order the groups use, because this is a
   # rendered list and `all_budgets` carries no ORDER BY: without a key its order is whatever
@@ -138,8 +139,6 @@ class BudgetPagePresenter
   # them spell the sum themselves they are free to disagree about which rules count. One reader,
   # measured: see the query note in the task report.
   #
-  # It counts POOL-MODE rules only, deliberately — a category cap is a spending limit, not a claim
-  # on income. #caps_not_counted? below is what keeps that exclusion from reading as a bug.
   def rules_need = @rules_need ||= Budget.steady_need(user, today: today)
 
   # NIL, NOT ZERO, for a user who has not declared one. Zero is a claim — "you bring in nothing"
@@ -181,20 +180,6 @@ class BudgetPagePresenter
   # not said how long a period is states a figure with no unit.
   def declared? = user.typical_income.present? && user.period_cadence.present?
 
-  # WHEN "$0.00 A PERIOD" NEEDS EXPLAINING. A user whose only rules are category caps — the shape
-  # every pre-envelope user of this app has — reads `rules need $0.00` and trivially covered, and
-  # that is CORRECT: no distribution fills a cap, so nothing yet claims their income. The envelope
-  # rules that would are exactly what Tasks 6-7's suggestion engine exists to propose.
-  #
-  # Correct is not the same as legible, though. Zero printed above a page listing eight of the
-  # user's own rules reads as a figure that failed to compute, so the block says in one sentence
-  # which rules it is not counting and why. Gated on the zero, not merely on caps existing: beside
-  # a real pool-mode figure the sentence would be a footnote about an exclusion nobody noticed.
-  #
-  # Off `#rules`, which is already loaded — `user.all_budgets` reaches both modes, so this asks no
-  # new question of the database.
-  def caps_not_counted? = rules_need.zero? && rules.any?(&:category_mode?)
-
   # §8'S BOTTOM HALF, straight from the engine and in the engine's order. Not re-sorted, not
   # filtered and not truncated here: `SuggestionEngine#ordered` sorts by [kind, per-period cost,
   # id] for reasons its own comments give (a $1,600 annual bill costs $61.54 a period and must not
@@ -218,25 +203,6 @@ class BudgetPagePresenter
   # Every suggestion the engine returned is in exactly one group and every group is rendered in
   # full; the index above them is navigation, not a filter.
   def suggestions_by_kind = @suggestions_by_kind ||= suggestions.group_by(&:kind)
-
-  # THE MONTHLY CAP A RATE SUGGESTION'S CATEGORY ALREADY CARRIES, or nil.
-  #
-  # `Category#buffer_funded?` — the rate detector's population — is "an expense category funded by
-  # the buffer", which says nothing about a cap, so five of the demo's rate suggestions are for
-  # categories the user has already budgeted. The sentence must name the cap: a cap funds nothing
-  # (`Budget.steady_need` counts pool-mode rules only, Task 4's ruling), so the suggestion is
-  # correct — but printed silently beside a category the user capped last month it reads as the
-  # app failing to notice.
-  #
-  # AND IT APPLIES TO A DATED BILL TOO, harder: accepting one RE-POINTS the category, and
-  # `Category#destroy_budget_if_pool_linked` destroys the cap when it does. A sentence that did not
-  # name the cap would let a click delete a rule the user wrote, silently.
-  #
-  # ONE QUERY FOR THE WHOLE PANEL rather than `category.budget` per row, and none at all when no
-  # suggestion on screen would re-point anything. Keyed off `prefill[:category_id]`, which is
-  # exactly the set of categories an acceptance would move — already in memory, so this asks the
-  # database nothing it does not have to.
-  def cap_for(suggestion) = caps_by_category_id[suggestion.prefill[:category_id]]
 
   # THE NAME OF THE ENVELOPE THIS ACCEPTANCE WOULD JOIN, or nil if it would make a new one — the
   # difference between "joins your existing Utilities envelope" and "puts all Utilities spending in
@@ -284,32 +250,20 @@ class BudgetPagePresenter
       end
   end
 
-  # `user.budgets` and not a bare `Budget.where`, for the same reason every other read on this
-  # presenter goes through the user: `has_many :budgets, through: :categories` walks the category
-  # link, which is exactly and only the category-mode caps this asks about, and it cannot reach a
-  # row the user does not own even if a `category_id` ever arrived from somewhere it should not.
-  def caps_by_category_id
-    @caps_by_category_id ||=
-      begin
-        ids = suggestions.filter_map { |suggestion| suggestion.prefill[:category_id] }
-        ids.empty? ? {} : user.budgets.where(category_id: ids).index_by(&:category_id)
-      end
-  end
-
-  # THE ONE READER FOR BOTH RULE MODES. `user.all_budgets` reaches category-mode and pool-mode
-  # rules alike; `user.budgets` walks the category link only and would render this page's main
-  # list empty.
+  # EVERY RULE THE USER OWNS. `user.all_budgets` is `Budget.for_user`, the app's one answer to
+  # which rules are a user's.
   #
   # `pool: :budgets` is preloaded because PoolStatus reads `pool.budgets` for every anchored rule
   # it ranks — without it every group header is one SELECT per pool, on the widest per-rule screen
   # in the app.
   #
-  # `:user` on both owners because `Budget#user` walks whichever one the rule has, and
-  # BudgetCalculator#periods_until_due asks it for every dated rule on the page. Measured on the
-  # demo seeds: eleven `SELECT users WHERE id = ?` for one user, and the page's whole cost fell
-  # from 37 queries to 26 when they were preloaded.
+  # `pool: :user` because `Budget#user` walks the pool and BudgetCalculator#periods_until_due asks
+  # it for every dated rule on the page. Measured on the demo seeds: eleven
+  # `SELECT users WHERE id = ?` for one user, and the page's whole cost fell from 37 queries to 26
+  # when they were preloaded. (`category: :user` rode alongside while a rule could be category-owned
+  # and is dropped with that mode — it now preloads a link that is nil on every row.)
   def rules
-    @rules ||= user.all_budgets.includes(:item, category: :user, pool: [:user, :budgets, :account]).to_a
+    @rules ||= user.all_budgets.includes(:item, pool: [:user, :budgets, :account]).to_a
   end
 
   def rules_by_pool
@@ -352,12 +306,10 @@ class BudgetPagePresenter
     build_rule(budget, reason) if reason
   end
 
-  # `:category` before `:no_account`, and the order is not arbitrary: Budget#exactly_one_owner
-  # means a rule has one owner or the other, so a category-mode rule has no pool to ask about an
-  # account. Testing the pool first would call `.account_id` on nil.
+  # `budget.pool &&` is kept though every rule the page loads is pool-owned: `#rules` is
+  # `Budget.for_user`, which is pool-scoped, but an unsaved rule assigned no pool would reach here
+  # through a future caller and `.account_id` on nil is a 500 on a money screen.
   def orphan_reason(budget)
-    return :category if budget.category.present?
-
     :no_account if budget.pool && budget.pool.account_id.nil?
   end
 
@@ -385,7 +337,7 @@ class BudgetPagePresenter
   # nil as a cache key would hand every such rule the first one's calculator.
   def calculator_for(budget) = (@calculators ||= {})[budget] ||= budget.calculator(today: today)
 
-  def owner_name(budget) = budget.pool&.name || budget.category&.name.to_s
+  def owner_name(budget) = budget.pool&.name.to_s
 
   # ONE LEDGER FOR THE WHOLE PAGE, over every pool that owns a rule — five grouped queries for the
   # set instead of five aggregates per pool per status. Orphan pools are in it too: they cost the

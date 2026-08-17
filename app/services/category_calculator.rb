@@ -21,11 +21,6 @@ class CategoryCalculator
     (total_amount / effective_budget * 100).round
   end
 
-  def budget_pace_percentage
-    return 0 unless category.expense? && budget_pace.to_f.positive?
-    (total_amount / budget_pace * 100).round
-  end
-
   def monthly_budget_rate
     return nil unless category.expense?
     category.budget&.amount
@@ -37,12 +32,12 @@ class CategoryCalculator
     period == :ytd ? monthly_budget_rate * months_in_range(date_range) : monthly_budget_rate
   end
 
-  def budget_pace(today: Date.current)
-    return nil unless monthly_budget_rate
-    return effective_budget unless prorated_active?
-    ramp_value(pace_day(today), @date.end_of_month.day)
-  end
-
+  # THE DAILY RAMP IS GONE WITH `budgets.prorated` (plan 3, task 3). `#budget_pace`,
+  # `#budget_pace_percentage` and the `#ramp_value`/`#pace_day` pair spread a monthly category cap
+  # across the days of the month so a user could read "expected by today"; a cap is not a shape
+  # this app holds any more, and every one of those readers answered `effective_budget` for a rule
+  # that did not prorate — which is now every rule. So the curve is flat and there is one figure
+  # rather than two that agree.
   def budget_curve
     return {} unless monthly_budget_rate
     period == :ytd ? ytd_budget_curve : monthly_budget_curve
@@ -129,26 +124,8 @@ class CategoryCalculator
     ((current - previous) / previous.to_f * 100).round
   end
 
-  def prorated_active?
-    period == :monthly && category.budget&.prorated?
-  end
-
-  def pace_day(today)
-    return 0 if today < @date.beginning_of_month
-    return @date.end_of_month.day if today > @date.end_of_month
-    today.day
-  end
-
-  def ramp_value(day, days_in_month)
-    (monthly_budget_rate * day / days_in_month.to_f).round(2)
-  end
-
   def monthly_budget_curve
-    days = @date.end_of_month.day
-    return @date.all_month.index_with { effective_budget } unless prorated_active?
-    @date.all_month.each_with_index.with_object({}) do |(d, i), h|
-      h[d] = ramp_value(i + 1, days)
-    end
+    @date.all_month.index_with { effective_budget }
   end
 
   def ytd_budget_curve

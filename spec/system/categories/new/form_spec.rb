@@ -5,7 +5,14 @@ require "rails_helper"
 RSpec.describe "Categories New - Form", type: :system do
   let!(:user) { create(:user) }
 
-  before { sign_in user, scope: :user }
+  # EVERY CATEGORY NAMES A POOL (plan 3 decision 3), so this form now needs one to offer — and a
+  # brand-new user has none, which is a state this file has to hold BOTH sides of.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+  before do
+    user.update!(default_account: checking)
+    sign_in user, scope: :user
+  end
 
   describe "form display", :aggregate_failures do
     before { visit new_category_path }
@@ -34,6 +41,45 @@ RSpec.describe "Categories New - Form", type: :system do
     it "shows navigation elements" do
       expect(page).to have_link("Categories", href: categories_path)
       expect(page).to have_link("Cancel")
+    end
+
+    # DECISION 3'S CONTROL. The pool is required, so the form must ask — and it must OPEN on the
+    # default account rather than on a blank, because a blank is the one answer the model refuses
+    # and a new category's honest default is "this comes out of my buffer".
+    it "asks where the money lives and opens on the default account", :aggregate_failures do
+      expect(page).to have_select("Where this money lives", selected: "Checking")
+      # No blank option: the choice is required, and a prompt that submits an empty string would
+      # offer the one answer the model refuses.
+      expect(page).to have_css("select[name='category[pool_id]'] option", count: 1)
+    end
+
+    # The pools are grouped by what they ARE, in the nouns the rest of the app prints.
+    it "groups the pools by their noun", :aggregate_failures do
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation")
+
+      visit new_category_path
+
+      expect(page).to have_css("optgroup[label='Buffer'] option", text: "Checking")
+      expect(page).to have_css("optgroup[label='Envelope'] option", text: envelope.name)
+      expect(page).to have_css("optgroup[label='Goal'] option", text: "Vacation")
+    end
+  end
+
+  # THE STATE DECISION 3 MAKES REACHABLE FOR THE FIRST TIME: a user with no pools at all. An empty
+  # picker would submit blank and meet "Pool must exist" with nothing the user could do about it,
+  # so the form says what is missing and names the route to it.
+  describe "a user with no pools", :aggregate_failures do
+    before do
+      user.update!(default_account: nil)
+      checking.destroy!
+      visit new_category_path
+    end
+
+    it "says so and points at the pool form rather than offering an empty picker" do
+      expect(page).to have_no_select("Where this money lives")
+      expect(page).to have_css("[data-no-pools]", text: "you have no accounts yet")
+      expect(page).to have_link("Make an account first", href: new_pool_path)
     end
   end
 
@@ -144,6 +190,28 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("Category was successfully created")
       expect(page).to have_current_path(categories_path(type: "savings"))
       expect(page).to have_content("New Savings Category")
+    end
+
+    it "keeps the pool the picker was opened on" do
+      fill_in "Name", with: "Buffer Spending"
+      find("label", text: "Expense").click
+      click_button "Create Category"
+
+      expect(page).to have_content("Category was successfully created")
+      expect(Category.find_by(name: "Buffer Spending").pool).to eq(checking)
+    end
+
+    it "writes the pool the user picked instead" do
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+      visit new_category_path
+
+      fill_in "Name", with: "Weekly Shop"
+      find("label", text: "Expense").click
+      select envelope.name, from: "Where this money lives"
+      click_button "Create Category"
+
+      expect(page).to have_content("Category was successfully created")
+      expect(Category.find_by(name: "Weekly Shop").pool).to eq(envelope)
     end
 
     it "creates category with custom color" do

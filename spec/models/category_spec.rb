@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe Category, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to belong_to(:pool).optional }
+    it { is_expected.to belong_to(:pool) }
     it { is_expected.to have_many(:items).dependent(:destroy) }
     it { is_expected.to have_many(:entries).through(:items) }
     it { is_expected.to have_one(:budget).dependent(:destroy) }
@@ -15,33 +15,22 @@ RSpec.describe Category, type: :model do
     it { is_expected.to validate_presence_of(:name) }
     it { is_expected.to validate_presence_of(:category_type) }
 
-    context "when category has a budget" do
-      let(:category) { create(:category, :income) }
+    # EVERY CATEGORY NAMES ITS LANE (plan 3 decision 3). Both directions, because the whole point of
+    # the line is that the nil is no longer expressible: a nil `pool_id` used to be documented as
+    # "the user's default account" and `PoolBalanceLedger::ENTRY_POOL_ID` resolved it to nowhere, so
+    # such a category's spending left the pool tree while `Σ pools == bank truth` claimed otherwise.
+    context "when the category names no pool" do
+      let(:user) { create(:user) }
 
-      it "only allows budgets for expense categories", :aggregate_failures do
-        budget = build(:budget, category: category)
-        expect(budget).not_to be_valid
-        expect(budget.errors[:category]).to include("must be an expense category")
-      end
-    end
+      it "is refused", :aggregate_failures do
+        category = build(:category, :expense, user: user, pool: nil)
 
-    context "when changing category_type from expense to non-expense" do
-      let(:category) { create(:category, :expense) }
-      let!(:budget) { create(:budget, category: category) }
-
-      it "destroys the budget when changing to income" do
-        category.update!(category_type: :income)
-        expect(Budget.exists?(budget.id)).to be false
+        expect(category).not_to be_valid
+        expect(category.errors[:pool]).to include("must exist")
       end
 
-      it "destroys the budget when changing to savings" do
-        category.update!(category_type: :savings)
-        expect(Budget.exists?(budget.id)).to be false
-      end
-
-      it "keeps the budget when remaining as expense" do
-        category.update!(name: "Updated Name")
-        expect(Budget.exists?(budget.id)).to be true
+      it "is accepted the moment a pool is named" do
+        expect(build(:category, :expense, user: user, pool: create(:pool, :account, user: user))).to be_valid
       end
     end
   end
@@ -75,61 +64,20 @@ RSpec.describe Category, type: :model do
         expect(described_class.savings).to contain_exactly(savings_category)
       end
     end
-
-    describe ".budgetable" do
-      it "returns only expense categories without a savings pool" do
-        expect(described_class.budgetable).to contain_exactly(expense_category)
-      end
-    end
-
-    describe ".pool_covered" do
-      it "returns only expense categories with a savings pool" do
-        expect(described_class.pool_covered).to contain_exactly(pool_covered_category)
-      end
-    end
   end
 
-  describe "#budgetable? and #pool_covered?" do
-    let(:user) { create(:user) }
-    let(:pool) { create(:pool, user: user) }
-
-    it "budgetable? is true for expense without pool, false with pool", :aggregate_failures do
-      plain = create(:category, :expense, user: user)
-      covered = create(:category, :expense, user: user, pool: pool)
-      income = create(:category, :income, user: user)
-
-      expect(plain).to be_budgetable
-      expect(covered).not_to be_budgetable
-      expect(income).not_to be_budgetable
-    end
-
-    it "pool_covered? is the inverse of budgetable? for expenses", :aggregate_failures do
-      plain = create(:category, :expense, user: user)
-      covered = create(:category, :expense, user: user, pool: pool)
-
-      expect(plain).not_to be_pool_covered
-      expect(covered).to be_pool_covered
-    end
-  end
-
-  # THE RATE DETECTOR'S POPULATION, and deliberately NOT the same set as #budgetable?. The two
-  # answer different questions — "may this carry a category-mode cap" and "does this spending come
-  # out of the buffer" — and they part company on exactly one shape, so that shape is pinned by
-  # both readers at once.
+  # THE RATE DETECTOR'S POPULATION, and after plan 3 it is exactly the account-pointed set: an
+  # account IS the buffer (§7.1), so an expense category pointing at one is spending nothing
+  # reserves. The "no pool at all" half this predicate used to admit is not a shape any more —
+  # `belongs_to :pool` refuses it — and the `#budgetable?` reader it used to diverge from is gone
+  # with the category cap.
   describe "#buffer_funded?" do
     let(:user) { create(:user) }
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }
     let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
 
-    it "is true for an expense category with no pool at all" do
-      expect(create(:category, :expense, user: user, pool: nil)).to be_buffer_funded
-    end
-
-    it "is true for a category pointing at an account, where budgetable? is false", :aggregate_failures do
-      category = create(:category, :expense, user: user, pool: checking)
-
-      expect(category).to be_buffer_funded
-      expect(category).not_to be_budgetable
+    it "is true for a category pointing at an account" do
+      expect(create(:category, :expense, user: user, pool: checking)).to be_buffer_funded
     end
 
     it "is false once an envelope holds the spending" do
@@ -142,33 +90,12 @@ RSpec.describe Category, type: :model do
     end
   end
 
-  describe "destroy_budget_if_pool_linked callback" do
-    let(:user) { create(:user) }
-    let(:pool) { create(:pool, user: user) }
-    let(:category) { create(:category, :expense, user: user) }
-    let!(:budget) { create(:budget, category: category) }
-
-    it "destroys the budget when category gets linked to a savings pool" do
-      category.update!(pool: pool)
-      expect(Budget.exists?(budget.id)).to be false
-    end
-
-    it "keeps the budget when pool is not changed" do
-      category.update!(name: "Updated Name")
-      expect(Budget.exists?(budget.id)).to be true
-    end
-  end
-
   describe "income categories" do
     let(:user) { create(:user) }
     let(:checking) { create(:pool, :account, user: user) }
 
     it "may point at an account pool" do
       expect(build(:category, :income, user: user, pool: checking)).to be_valid
-    end
-
-    it "may point at no pool at all" do
-      expect(build(:category, :income, user: user, pool: nil)).to be_valid
     end
 
     it "may not point at a budget pool", :aggregate_failures do
@@ -223,10 +150,12 @@ RSpec.describe Category, type: :model do
     # method agreeing with a ledger is a claim about the ledger, so the ledger is asked.
     it "ignores the user's default account, because the ledger does", :aggregate_failures do
       user.update!(default_account: checking)
-      category = create(:category, :expense, user: user, pool: nil)
+      groceries = create(:pool, :budget_pool, user: user, account: checking)
+      category = create(:category, :expense, user: user, pool: groceries)
       create(:entry, item: create(:item, category: category), amount: 60, date: Date.current)
 
-      expect(category.effective_pool).to be_nil
+      expect(category.effective_pool).to eq(groceries)
+      expect(groceries.calculator.balance).to eq(-60)
       expect(checking.calculator.balance).to eq(0)
     end
 
@@ -234,10 +163,6 @@ RSpec.describe Category, type: :model do
       groceries = create(:pool, :budget_pool, user: user, account: checking)
 
       expect(create(:category, :expense, user: user, pool: groceries).effective_pool).to eq(groceries)
-    end
-
-    it "is nil when the category has no pool and the user has no default account" do
-      expect(create(:category, :expense, user: user, pool: nil).effective_pool).to be_nil
     end
 
     # Matches the guard Entry#effective_pool needs on its own link in the chain.

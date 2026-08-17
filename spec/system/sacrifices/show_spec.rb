@@ -302,19 +302,9 @@ RSpec.describe "Sacrifice view", type: :system do
   end
 
   describe "the rules that never appear here" do
-    # A CATEGORY CAP IS NOT A CLAIM ON INCOME (Task 4's ruling). Nothing fills one, so cutting one
-    # frees nothing — it could not be a cut even in principle — and it is absent from the gap the
-    # page is closing. Absent from BOTH lists, not merely from the cuttable one.
-    it "leaves category caps off the page entirely", :aggregate_failures do
-      rate("Groceries", 3_000)
-      create(:budget, category: create(:category, :expense, user: user, name: "Food & Dining"), amount: 600)
-
-      visit sacrifice_path
-
-      expect(page).to have_content("Groceries")
-      expect(page).to have_no_content("Food & Dining")
-      expect(figure("rules-need")).to have_content("$3,000.00")
-    end
+    # The category-cap example is deleted with the shape (plan 3, task 3): it planted a $600 cap and
+    # checked that it appeared in neither list and in neither figure, and a rule owned by a category
+    # is not something this app can hold. Nothing is left out of this page's arithmetic now.
 
     # A one-off is dated rather than fixed, and the two markings say different things about what
     # the user could do next: a dentist appointment can sometimes be moved, a landlord's rent

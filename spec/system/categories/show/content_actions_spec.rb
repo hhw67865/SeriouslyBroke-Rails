@@ -10,10 +10,10 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
   describe "expense category", :aggregate_failures do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }
 
-    before do
-      create(:budget, category: category, amount: 1000)
-      visit category_path(category)
-    end
+    # The cap this planted (`create(:budget, category: …)`) is deleted with the shape, and the
+    # summary card's "Monthly Budget" arm went with it: an expense category names a pool now, so
+    # the card says what it spent and which pool it came out of.
+    before { visit category_path(category) }
 
     it "shows key sections and expense summary" do
       expect(page).to have_content("Food")
@@ -22,7 +22,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_content("Items This Month")
       expect(page).to have_content("Details")
       expect(page).to have_content("Recent Activity")
-      expect(page).to have_content("Monthly Budget")
+      expect(page).to have_content("Spent this month")
+      expect(page).to have_no_content("Monthly Budget")
     end
 
     it "navigates with Edit button" do

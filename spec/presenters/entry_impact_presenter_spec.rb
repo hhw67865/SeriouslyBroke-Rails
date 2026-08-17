@@ -154,9 +154,9 @@ RSpec.describe EntryImpactPresenter do
     end
 
     it "has none on a card with no envelope behind it" do
-      unpooled = create(:category, user: user, name: "Shopping", category_type: :expense, pool: nil)
+      on_the_buffer = create(:category, user: user, name: "Shopping", category_type: :expense, pool: checking)
 
-      expect(present(unpooled).bar?).to be(false)
+      expect(present(on_the_buffer).bar?).to be(false)
     end
   end
 
@@ -286,43 +286,31 @@ RSpec.describe EntryImpactPresenter do
     end
   end
 
-  describe "a category with no envelope" do
-    let(:unpooled) { create(:category, user: user, name: "Shopping", category_type: :expense, pool: nil) }
+  # ONE SHAPE REACHES THIS CARD NOW, WHERE TWO DID. `#unbudgeted?` reads
+  # `pool.nil? || pool.pool_type_account?`, and the first arm used to be an ordinary saved
+  # category that named no pool at all. Plan 3 requires a pool on every category, so the arm
+  # survives only for a card with no CATEGORY selected yet (`pool` is `category&.effective_pool`),
+  # which `#render?` already refuses to draw. The account-pointed shape is what a user actually
+  # meets, and it was already asserted here beside the pool-less one.
+  describe "a category funded by the buffer" do
+    let(:on_the_buffer) { create(:category, user: user, name: "Shopping", category_type: :expense, pool: checking) }
 
     it "is told the truth rather than shown an envelope", :aggregate_failures do
-      impact = present(unpooled, amount: "55")
+      impact = present(on_the_buffer, amount: "55")
 
       expect(impact.render?).to be(true)
       expect(impact.unbudgeted?).to be(true)
       expect(impact.figures?).to be(false)
-      expect(impact.pool).to be_nil
+      expect(impact.pool).to eq(checking)
     end
 
     it "cannot overdraw anything, and does not raise being asked" do
-      expect(present(unpooled, amount: "55").overdrawn?).to be(false)
-    end
-
-    it "says the same of a category pointing at an ACCOUNT, which is the buffer", :aggregate_failures do
-      on_the_account = create(:category, user: user, name: "Estimated Taxes", category_type: :expense, pool: checking)
-
-      expect(present(on_the_account, amount: "55").unbudgeted?).to be(true)
-      expect(present(on_the_account, amount: "55").figures?).to be(false)
-    end
-
-    # THE TWO ARMS ARE DIFFERENT SENTENCES, and #contribution? is what picks between them. A
-    # contribution with nowhere to land does not come OUT of the buffer — under ENTRY_POOL_ID it
-    # counts toward no pool at all, so the money STAYS there — and the Budget page's rate suggestion
-    # is `expense?`-gated, so it would never offer this category anything.
-    it "says it of a savings category whose goal is gone too, in the contribution's own words", :aggregate_failures do
-      orphan = create(:category, user: user, name: "Old Goal", category_type: :savings, pool: nil)
-
-      expect(present(orphan).unbudgeted?).to be(true)
-      expect(present(orphan).contribution?).to be(true)
+      expect(present(on_the_buffer, amount: "55").overdrawn?).to be(false)
     end
 
     it "does not call an expense a contribution", :aggregate_failures do
-      expect(present(unpooled).contribution?).to be(false)
-      expect(present(unpooled).unbudgeted?).to be(true)
+      expect(present(on_the_buffer).contribution?).to be(false)
+      expect(present(on_the_buffer).unbudgeted?).to be(true)
     end
 
     it "calls a savings category on an ACCOUNT a contribution too" do

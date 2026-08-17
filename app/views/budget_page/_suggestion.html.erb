@@ -2,10 +2,10 @@
     (SuggestionEngine::Suggestion), `presenter`.
 
     The sentence is per kind (§8's table is the copy target) and lives in its own partial; what is
-    shared is the frame, the accept control and the two clauses every PROPOSING kind carries — what
-    accepting does to the category, and which cap it would replace. Those two are here rather than
-    in each kind's partial precisely so a bill and a rate cannot come to describe the same act in
-    two different ways.
+    shared is the frame, the accept control and the clause every PROPOSING kind carries — what
+    accepting does to the category. It is here rather than in each kind's partial precisely so a
+    bill and a rate cannot come to describe the same act in two different ways. (A second clause
+    named the cap the acceptance would destroy; it is deleted with the cap.)
 
     `data-suggestion` is kind AND subject id: a category and a pool may share a name, and
     `Capybara.exact` is unset, so a name-keyed row is one rename away from matching two. %>
@@ -32,9 +32,9 @@
             date bound and `PoolCalculator#balance` is start-date-agnostic, so the re-point moves
             the category's WHOLE history: a new envelope opens at minus its lifetime spend — the
             demo's read `overdrawn $496.00` — and the user who was not told reads a red row they
-            did nothing to earn. Three warnings on one row is one too many, though, and this is the
-            least of them: burying the re-point or the cap it deletes would be worse than omitting
-            this. So it rides on the sentence already saying which spending moves.
+            did nothing to earn. It rides on the sentence already saying which spending moves
+            rather than taking a line of its own, because burying the re-point itself would be
+            worse than saying its consequence briefly.
 
             THE TWO BRANCHES SAY IT DIFFERENTLY BECAUSE THEY DO DIFFERENT THINGS. A NEW envelope
             OPENS at minus the lifetime spend, which is a starting balance. A JOINED one already
@@ -53,19 +53,10 @@
           <% end %>
         </p>
 
-        <% cap = presenter.cap_for(suggestion) %>
-        <% if cap %>
-          <%# THE CAP THIS WOULD DESTROY, named with its own figure. A category cannot hold both a
-              cap and a pool, so `Category#destroy_budget_if_pool_linked` deletes the cap the
-              moment the re-point lands. The trade is honest — a cap is a spending limit that
-              reserves nothing (`Budget.steady_need` counts pool-mode rules only) and the rule
-              replacing it is a real claim on the period's income — but it is a DELETION of something the
-              user wrote, so it is stated rather than discovered. %>
-          <p class="text-gray-500" data-suggestion-cap>
-            Your <%= number_to_currency(cap.amount) %> <%= budget_rule_basis(cap) %> cap here is a spending limit,
-            not a claim on your income — nothing fills one — and accepting this replaces it with a rule that is.
-          </p>
-        <% end %>
+        <%# THE CAP WARNING IS DELETED (plan 3, task 3). Accepting a proposal used to destroy the
+            category's monthly cap as a side effect of re-pointing it, so the row had to name the
+            rule the click was about to delete. There is no cap to delete, so the row is one clause
+            shorter and the re-point sentence above is the whole of what accepting does. %>
       <% elsif joined %>
         <%# THE SHARING CASE, and it is the whole reason the envelope is the CATEGORY's rather than
             the item's. Phone, Internet and Streaming Services are three bills in one Utilities

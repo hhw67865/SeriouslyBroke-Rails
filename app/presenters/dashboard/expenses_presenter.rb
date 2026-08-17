@@ -93,20 +93,26 @@ module Dashboard
       @user.entries.expenses.tracked
     end
 
+    # THE FINDING-1 BRIDGE — see DashboardPresenter#tracked_budgetable_expense_categories for what
+    # these now mean and why Task 4 owns the answer. `Entry.budgetable_expenses` and
+    # `.pool_covered_expenses` split on `categories.pool_id IS NULL`, a shape the app can no longer
+    # hold; the two readers on the parent split on whether the category's pool is an ACCOUNT, and
+    # these four take the same line so the entry totals and the category breakdowns beside them
+    # cannot describe different money.
     def budgetable_expenses_scope
-      @user.entries.budgetable_expenses
+      @parent.buffer_funded_expenses
     end
 
     def tracked_budgetable_expenses_scope
-      @user.entries.budgetable_expenses.tracked
+      @parent.buffer_funded_expenses.tracked
     end
 
     def pool_covered_expenses_scope
-      @user.entries.pool_covered_expenses
+      @parent.enveloped_expenses
     end
 
     def tracked_pool_covered_expenses_scope
-      @user.entries.pool_covered_expenses.tracked
+      @parent.enveloped_expenses.tracked
     end
 
     def monthly_budget_rate

@@ -1,39 +1,38 @@
 # frozen_string_literal: true
 
 class Budget < ApplicationRecord
-  belongs_to :category, optional: true, touch: true
+  # NO `belongs_to :category`. A RULE IS POOL-MODE, FULL STOP (plan 3, task 3): the cutover
+  # migration leaves `budgets.category_id` nil on every row and no code path can write one again,
+  # so the Ruby support for the category-mode cap dies here. The COLUMN drops in Task 6 with the
+  # rest of the schema work — one migration for the lot rather than one per deletion.
   belongs_to :pool, optional: true, touch: true
   belongs_to :item, optional: true
 
   enum :basis, { monthly: 0, per_period: 1 }, prefix: true
 
   # EVERY RULE A USER OWNS, IN ONE RELATION — the reader `User has_many :budgets, through:
-  # :categories` cannot be. That association walks the category link only, so it reaches
-  # category-mode rules and nothing else, and every pool-mode rule — which is every rule the
-  # Budget page manages — is invisible to it. `current_user.budgets.find` therefore answered
-  # RecordNotFound for rules the user plainly owns.
+  # :categories` cannot be. That association walks the category link only, which after the cutover
+  # reaches NOTHING at all, and every rule the Budget page manages is invisible to it.
+  # `current_user.budgets.find` therefore answered RecordNotFound for rules the user plainly owns.
   #
-  # Two `where`s OR-ed rather than a join, because a rule has exactly one owner (see
-  # #exactly_one_owner) and the two owners live on different tables: a join would have to be
-  # a LEFT OUTER pair and would then need a DISTINCT to undo itself. Sub-SELECTs keep it one
-  # statement over the same `budgets` rows the association returns.
+  # THE CATEGORY ARM IS GONE, AND ITS TWO ARMED TRAPS ARE RETIRED DELIBERATELY. This scope used to
+  # be `where(category_id: user.categories).or(where(pool_id: user.pools))`, and Plan 2's task
+  # reports pinned both halves on purpose — a cap-owning rule had to stay findable by
+  # `BudgetsController#set_budget` and by `BudgetPagePresenter#rules`, and an example asserted it.
+  # A cap is not a shape this app can hold any more, so the pin is not "left failing": it is
+  # withdrawn, here, with the examples that carried it (see the task report). What survives is the
+  # half that was always the point — a rule is owned by a pool, and a pool is owned by a user.
   #
   # Scoped by the OWNER's user, not by a `user_id` on this table — a budget carries no user
   # column, and inventing one would give the invariant two places to be wrong.
-  scope :for_user,
-        lambda { |user|
-          where(category_id: user.categories.select(:id))
-            .or(where(pool_id: user.pools.select(:id)))
-        }
+  scope :for_user, ->(user) { where(pool_id: user.pools.select(:id)) }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :interval_months, numericality: { greater_than: 0 }, allow_nil: true
 
-  validate :exactly_one_owner
-  validate :category_must_be_expense, if: :category_mode?
-  validate :category_must_not_have_pool, if: :category_mode?
+  validate :must_belong_to_a_pool
   validate :pool_must_not_be_an_account, if: :pool_mode?
   validate :shape_must_be_valid, if: :pool_mode?
   validate :item_must_belong_to_pool, if: :pool_mode?
@@ -41,12 +40,11 @@ class Budget < ApplicationRecord
 
   # An assigned-but-unsaved association has no foreign key yet, so consult the
   # target too — otherwise `Budget.new(pool: unsaved_pool)` reads as owner-less.
-  def category_mode? = category_id.present? || category.present?
   def pool_mode? = pool_id.present? || pool.present?
 
   # nil-safe: an owner-less budget is exactly the state the form re-renders in
   # after a failed submission.
-  def user = category&.user || pool&.user
+  def user = pool&.user
 
   def calculator(today: Date.current)
     BudgetCalculator.new(self, today: today)
@@ -66,12 +64,12 @@ class Budget < ApplicationRecord
   # `basis_per_period?` FIRST: a per-period rule carries no interval either, so testing the
   # interval first would call every rate rule a one-off.
   #
-  # A CATEGORY-MODE RULE IS MONTHLY, and it is answered before the interval branches. It is a
-  # monthly spending cap that carries no interval at all — #shape_must_be_valid only runs in pool
-  # mode — so the nil-interval branch would call every category cap a one-off.
+  # THE CATEGORY-CAP ARM IS GONE. A cap carried no interval at all (#shape_must_be_valid ran in
+  # pool mode only), so it needed answering before the nil-interval branch could call it a one-off.
+  # There is no cap to answer for now, and every rule reaching here has been through
+  # #shape_must_be_valid — so a blank interval really does mean a one-time bill.
   def cadence
     return :per_period if basis_per_period?
-    return :monthly if category_mode?
     return :one_off if interval_months.blank?
     return :monthly if interval_months == 1
 
@@ -140,39 +138,25 @@ class Budget < ApplicationRecord
   # alike. Two screens asking the same question of two different sums is how one page tells a user
   # their budget fits while the other says it does not.
   #
-  # POOL-MODE RULES ONLY. CATEGORY-MODE CAPS ARE EXCLUDED, and the boundary is the whole point of
-  # the figure rather than an optimisation:
+  # THE EXCLUSION THIS FIGURE WAS BUILT AROUND IS NOW EMPTY, AND THAT IS THE HONEST THING TO SAY.
+  # It used to read `for_user(user).where.not(pool_id: nil)`, and the `where.not` was the whole
+  # argument: a category-mode cap is a SPENDING LIMIT on tracking, not a funding claim on income —
+  # `AllocationCalculator` never read one, so no distribution ever asked for a penny on account of
+  # one, and counting one would have inflated "your rules need" by money that will never be asked
+  # for. On the pre-cutover demo that was $1,523.08 a period of double-counting, a "Housing" cap of
+  # $1,500 a month sitting over the top of the $1,500 Rent rule that actually filled the envelope.
   #
-  #   The structural check asks "does your income cover what your rules will CLAIM from it". The
-  #   thing that claims money from a period's income is the fill, and the fill funds POOLS —
-  #   AllocationCalculator never reads a category-mode budget, so no distribution has ever asked
-  #   for a penny on account of one. A category cap is a SPENDING LIMIT on tracking, not a funding
-  #   claim on income: cutting one frees no income, so it could not appear in §9's cut list even
-  #   in principle, and counting one inflates "your rules need" by money that will never be asked
-  #   for.
+  # Caps do not exist. `#for_user` is pool-scoped by construction now, so the mode filter it used to
+  # stack on top of it would be a `where.not` that can never exclude a row — a condition kept for
+  # the sentence it lets a comment say, which is how dead filters survive. It is gone; the boundary
+  # it drew survives as a fact about the data rather than a clause in a query.
   #
-  # Measured on the demo seeds, and the measurement corrected the estimate that prompted the
-  # ruling — a "~$2,900 of caps" figure I reported was a MONTHLY total read as a per-period one,
-  # which is the exact mixed-unit slip #steady_ask exists to prevent, made in prose instead of in
-  # code. The real figures: of $4,125 a period, $1,523.08 was category caps, leaving $2,601.92.
-  #
-  # The DUPLICATION the ruling names is real and visible in that breakdown — a "Housing" cap of
-  # $1,500 a month ($692.31 a period) sitting beside the $1,500 Rent rule that actually fills the
-  # envelope, the same $692.31 counted twice; "Food & Dining" $600 a month over the top of
-  # Groceries, Dining Out and Household Supplies. What is NOT true is that excluding caps makes
-  # the demo comfortable: it still needs $2,601.92 against $2,400 of income. The overstatement was
-  # $1,523.08 a period, not the whole gap.
-  #
-  # TASK 9 INHERITS THIS BOUNDARY: the sacrifice view's cut list is pool-mode rules and nothing
-  # else, because the gap it is closing is this sum. It should not re-decide the question.
+  # TASK 9 INHERITS THE SAME SUM: the sacrifice view's cut list is exactly the rules counted here,
+  # because the gap it is closing is this figure. It should not re-derive the population.
   #
   # ORPHAN POOL RULES STAY IN. A rule on an account-less pool is a real claim the user declared —
   # the fix is giving the pool an account, not pretending the claim away — which is the same line
   # 2b drew when orphans left the waterfall but stayed in HomePresenter#total_required.
-  #
-  # `for_user(user).where.not(pool_id: nil)` rather than a bare `where(pool_id: user.pools)`, so
-  # ownership keeps being decided in exactly one place (#for_user) and this adds only the mode
-  # filter on top of it.
   #
   # `sum(0.to_d)` with an explicit BigDecimal seed. An empty relation's `sum` is Integer `0`, and
   # this figure is compared against `typical_income` and subtracted from it — the seed keeps a
@@ -191,7 +175,6 @@ class Budget < ApplicationRecord
   # walks whichever owner the rule has, and in this relation that is always the pool.
   def self.steady_need(user, today: Date.current)
     for_user(user)
-      .where.not(pool_id: nil)
       .includes(:item, pool: :user)
       .sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
   end
@@ -217,17 +200,15 @@ class Budget < ApplicationRecord
     (amount.to_d / calc.periods_until_due).round(2)
   end
 
-  def exactly_one_owner
-    errors.add(:base, "must belong to either a category or a pool") if !category_mode? && !pool_mode?
-    errors.add(:base, "cannot belong to both a category and a pool") if category_mode? && pool_mode?
-  end
-
-  def category_must_be_expense
-    errors.add(:category, "must be an expense category") unless category&.expense?
-  end
-
-  def category_must_not_have_pool
-    errors.add(:category, "cannot have a budget when linked to a savings pool") if category&.pool_id?
+  # ONE OWNER, AND IT IS A POOL. The predecessor was `#exactly_one_owner`, which had to refuse both
+  # "neither" and "both" because a rule could be owned by a category instead; with the category mode
+  # deleted there is one owner to have or lack.
+  #
+  # ON `:base` RATHER THAN `:pool`, deliberately: `budgets/_form` renders `errors[:base]` in its own
+  # notification, and an owner-less rule is a fact about the whole record rather than about a
+  # control the form offers — the form does not offer a pool picker at all (see its header).
+  def must_belong_to_a_pool
+    errors.add(:base, "must belong to a pool") unless pool_mode?
   end
 
   def pool_must_not_be_an_account

@@ -8,30 +8,28 @@ RSpec.describe User, type: :model do
     it { is_expected.to have_many(:pools).dependent(:destroy) }
     it { is_expected.to have_many(:items).through(:categories) }
     it { is_expected.to have_many(:entries).through(:items) }
-    it { is_expected.to have_many(:budgets).through(:categories) }
+
+    # `has_many :budgets, through: :categories` is deleted with the category-mode cap it reached
+    # (plan 3, task 3): `budgets.category_id` is nil on every row and nothing writes one, so the
+    # association could only ever answer empty.
+    it "has no budgets association through categories" do
+      expect(described_class.reflect_on_association(:budgets)).to be_nil
+    end
   end
 
-  # The wider reader beside the narrow one. Both are asserted here, against the SAME
-  # fixtures, so "all_budgets is just budgets" can never pass unnoticed.
+  # ONE READER NOW, WHERE THERE WERE TWO. This describe held three examples asserting that
+  # `#all_budgets` was WIDER than `#budgets` — the narrow association reached the category-mode
+  # caps, this one reached both modes — and that pairing is what the cap's deletion retires.
   describe "#all_budgets" do
     let(:user) { create(:user) }
     let(:account) { create(:pool, :account, user: user) }
     let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
 
-    let!(:category_rule) { create(:budget, category: create(:category, :expense, user: user)) }
-    let!(:pool_rule) { create(:budget, :rate, pool: pool, category: nil) }
-    let!(:stranger_rule) { create(:budget, category: create(:category, :expense)) }
+    let!(:pool_rule) { create(:budget, :rate, pool: pool) }
+    let!(:stranger_rule) { create(:budget, :rate) }
 
-    it "returns every rule the user owns, in both modes" do
-      expect(user.all_budgets).to contain_exactly(category_rule, pool_rule)
-    end
-
-    it "is wider than #budgets, which reaches only the category-mode half", :aggregate_failures do
-      expect(user.budgets).to contain_exactly(category_rule)
-      expect(user.all_budgets).to include(pool_rule)
-    end
-
-    it "excludes another user's rules" do
+    it "returns every rule the user owns and nobody else's", :aggregate_failures do
+      expect(user.all_budgets).to contain_exactly(pool_rule)
       expect(user.all_budgets).not_to include(stranger_rule)
     end
   end

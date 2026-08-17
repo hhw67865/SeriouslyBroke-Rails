@@ -23,7 +23,12 @@ RSpec.describe SuggestionEngine do
 
   def of_kind(kind, ...) = suggestions(...).select { |suggestion| suggestion.kind == kind }
 
-  def category(name, pool: nil) = create(:category, :expense, user: user, name: name, pool: pool)
+  # `pool:` DEFAULTS TO THE ACCOUNT, not to nil. Every example here that leaves it out wants a
+  # BUFFER-FUNDED category — the rate detector's population, and the shape whose proposals travel
+  # down `#envelope_half`'s creation branch. That used to be spelled "no pool at all"; plan 3
+  # requires a pool on every category, and an account IS the buffer (§7.1), so the account is the
+  # same fixture in the vocabulary that survived. `Category#buffer_funded?` answers true for both.
+  def category(name, pool: checking) = create(:category, :expense, user: user, name: name, pool: pool)
 
   def item(name, in_category:) = create(:item, category: in_category, name: name)
 
@@ -796,7 +801,11 @@ RSpec.describe SuggestionEngine do
       large = query_count { engine.suggestions }
 
       expect(small).to eq(large)
-      expect(large).to eq(4) # categories, items, entries, rules — no pool preload and no drift query
+      # categories, their pools, items, entries, rules — no drift query, because no rule exists to
+      # drift. The pool preload was FREE before plan 3 (`includes(:pool)` skips its query when every
+      # `pool_id` is nil, and a category could name no pool); every category names one now, so the
+      # figure is five. O(1) in bills either way, which is what the first expectation pins.
+      expect(large).to eq(5)
     end
 
     # The exact number, on a fixture that exercises every read the engine makes. `eq`, not `<=`: a

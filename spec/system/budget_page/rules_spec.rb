@@ -79,10 +79,13 @@ RSpec.describe "Budget page rules", type: :system do
     end
   end
 
+  # ONE REASON NOW. The band used to carry two — a rule that CAPPED a category, and a rule on an
+  # account-less pool — and the first is deleted with the cap (plan 3, task 3). The band itself and
+  # its separation from the fill order are unchanged, so the examples keep their shape and lose the
+  # fixture and the clause that named the deleted reason.
   describe "rules no distribution reaches", :aggregate_failures do
     before do
       rate(envelope("Groceries"), 400)
-      create(:budget, category: create(:category, :expense, user: user, name: "Shopping"), amount: 200)
       rate(create(:pool, :savings_pool, user: user, account: nil, name: "Retirement"), 150)
       visit budget_page_path
     end
@@ -90,8 +93,8 @@ RSpec.describe "Budget page rules", type: :system do
     it "lists them apart from the fill order, each with its own reason" do
       within(orphan_band) do
         expect(page).to have_content("Not in the fill order")
-        expect(page).to have_content("caps a category — no envelope to fill")
         expect(page).to have_content("no account — nothing can fund it")
+        expect(page).to have_no_content("caps a category")
       end
     end
 
@@ -100,7 +103,7 @@ RSpec.describe "Budget page rules", type: :system do
     it "keeps them out of the pool groups, and keeps a real rule out of them" do
       expect(pool_groups).to eq(["Groceries"])
       expect(page).to have_css("[data-orphan-group]")
-      within(group("Groceries")) { expect(page).to have_no_content("no envelope to fill") }
+      within(group("Groceries")) { expect(page).to have_no_content("nothing can fund it") }
     end
   end
 
@@ -108,7 +111,7 @@ RSpec.describe "Budget page rules", type: :system do
   # none above a list of their own rules would be a screen contradicting itself.
   describe "a user whose every rule is an orphan", :aggregate_failures do
     before do
-      create(:budget, category: create(:category, :expense, user: user, name: "Shopping"), amount: 200)
+      rate(create(:pool, :savings_pool, user: user, account: nil, name: "Retirement"), 150)
       visit budget_page_path
     end
 
@@ -116,7 +119,7 @@ RSpec.describe "Budget page rules", type: :system do
       expect(page).to have_content("Nothing is in the fill order yet")
       expect(page).to have_no_content("No funding rules yet")
       expect(pool_groups).to be_empty
-      within(orphan_band) { expect(page).to have_content("Shopping") }
+      within(orphan_band) { expect(page).to have_content("Retirement") }
     end
   end
 
