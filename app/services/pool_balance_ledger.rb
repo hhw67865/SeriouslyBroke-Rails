@@ -74,6 +74,12 @@ class PoolBalanceLedger
   # path (which merges these same scopes) never sees.
   ENTRY_POOL_ID = Arel.sql("COALESCE(entries.pool_id, categories.pool_id)")
 
+  # WHAT A SHARED LEDGER IS REFUSED FOR. Raised by #for_as_of! and named as a constant because a
+  # `rescue` of it would be a caller deciding to read figures from a moment it did not ask about;
+  # there is no such caller and there should not be one, but a bare RuntimeError could be swallowed
+  # by a broad rescue without anyone noticing which rule had fired.
+  class AsOfMismatch < StandardError; end
+
   attr_reader :as_of
 
   # `pools` is the WHOLE set a screen is going to ask about, records rather than ids so callers
@@ -125,6 +131,33 @@ class PoolBalanceLedger
 
     MONEY_TERMS.index_with { |term| totals(term).fetch(pool.id, 0.to_d) }
       .merge(FUNDED_ON => totals(FUNDED_ON)[pool.id])
+  end
+
+  # THIS LEDGER, IF IT IS ABOUT THE MOMENT THE CALLER IS ASKING ABOUT — the `as_of` half of
+  # PoolCalculator's "SAME `as_of` OR NOTHING", turned from a sentence in a comment into a raise.
+  #
+  # Every consumer that accepts a ledger from somebody else calls this instead of trusting it:
+  # AllocationCalculator#share_ledger and ReallocationPresenter#initialize today. It returns SELF
+  # on a match so it reads as a checked handover (`@ledger = other.for_as_of!(nil)`) rather than
+  # as a predicate somebody can forget to branch on — an `agrees_with?` returning a boolean is the
+  # same guard with an ignorable answer.
+  #
+  # WHY IT MATTERS EVEN THOUGH IT CANNOT FIRE TODAY. Nothing on either injecting path has an
+  # `as_of` at all — both consumers build unbounded ledgers, so both hand `nil` in — and that is
+  # the reason to write it now rather than later: the mismatch it forbids is INVISIBLE when it
+  # happens. A ledger bounded to Jul 31 answers with real, well-formed figures for a screen asking
+  # about today; the balance is simply from a month ago, on every pool at once, and no reader
+  # downstream has any way to tell. It is the one wrong answer this whole batching seam can
+  # produce that would not look wrong.
+  #
+  # The message names both moments and the rule, because "one ledger per `as_of`" is the fact the
+  # person reading the backtrace needs, not the two values on their own.
+  def for_as_of!(wanted)
+    return self if as_of == wanted
+
+    raise AsOfMismatch,
+          "this ledger is bounded at #{as_of.inspect} and the caller is asking about " \
+          "#{wanted.inspect}: one ledger per `as_of`, never one shared across two"
   end
 
   private

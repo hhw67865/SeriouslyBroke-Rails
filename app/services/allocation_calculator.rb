@@ -57,23 +57,22 @@ class AllocationCalculator
   #
   # Coerced once, here, so nothing downstream has to wonder whether it is holding a String.
   #
-  # `ledger:` IS A COST KEYWORD AND NOT A QUESTION, the same axis `PoolCalculator#terms:` is two
-  # levels down: it changes who ran the five aggregates and nothing about what is being asked. It
-  # defaults to nothing, so every caller in the app and every spec builds its own as before.
-  #
-  # THERE IS EXACTLY ONE WAY TO SUPPLY IT AND IT IS #with_overrides, which is where the rule that
-  # makes sharing safe is written down. Do not reach for this keyword from anywhere else without
-  # reading that rule first: a ledger is a SNAPSHOT memoised at its first read, so one handed
-  # across a write is a set of figures from before it — and this is the class a distribution is
-  # decided by.
-  def initialize(user:, account:, today: Date.current, overrides: {}, ledger: nil)
+  # THERE IS NO `ledger:` KEYWORD HERE, DELIBERATELY, AND THAT IS THE POINT OF #share_ledger.
+  # A shared ledger is safe under one condition and one only — the sharer was CONSTRUCTED after
+  # the last write, so its snapshot cannot pre-date it — and the only object that can honestly
+  # promise that about another is another instance of this class, built for the same account on
+  # the same day. A constructor keyword would have offered the same thing to every caller in the
+  # app on the strength of a comment; #share_ledger is `protected`, so the offer is unreachable
+  # from outside instead of merely discouraged. Mutation-tested, and it is not theoretical: made
+  # AllocationCommitter share its stale proposal's ledger across the deletion and the re-run
+  # examples fail at once (see #with_overrides).
+  def initialize(user:, account:, today: Date.current, overrides: {})
     @user = user
     @account = account
     @today = today
     @overrides = overrides.transform_keys(&:to_s)
       .compact_blank
       .transform_values(&:to_d)
-    @ledger = ledger
   end
 
   # THE SAME DISTRIBUTION WITH A DIFFERENT SET OF OVERRIDES, over THIS proposal's ledger.
@@ -107,8 +106,20 @@ class AllocationCalculator
   # answer inherits that currency. It may not be used to carry a ledger past a write, and there is
   # no caller that could — DistributionPresenter's baseline and per-row fills are the only ones,
   # and they run inside the rolled-back read of one GET.
+  #
+  # THE STRONGEST FORM OF THAT GUARANTEE IS ABOUT CONSTRUCTION, NOT ABOUT MATERIALISATION, and it
+  # is worth stating because it is what makes the lazy `@ledger ||=` below harmless: the twin is
+  # built HERE, from an object that already exists, so its ledger cannot pre-date that object no
+  # matter when its grouped queries actually run. When the sharer was constructed after the
+  # deletion — which is exactly what AllocationCommitter#live_proposal is — the shared snapshot is
+  # post-deletion too, whichever fill happens to read it first.
+  #
+  # `.tap` WITH A PROTECTED WRITER RATHER THAN A CONSTRUCTOR KEYWORD: see #initialize. The object
+  # is complete before it is returned, so nothing outside ever sees a half-built one; what is
+  # bought is that no caller anywhere else can supply a ledger at all.
   def with_overrides(overrides)
-    self.class.new(user: user, account: account, today: today, overrides: overrides, ledger: ledger)
+    self.class.new(user: user, account: account, today: today, overrides: overrides)
+      .tap { |twin| twin.share_ledger(ledger) }
   end
 
   # Whether the USER typed a figure into this row, as opposed to this row's figure having moved
@@ -181,6 +192,28 @@ class AllocationCalculator
   # `total_allocated < Σ needed` — those disagree the moment a zero-need pool or a rejected
   # row enters the picture, and only the rows can say WHICH envelope is starved.
   def short? = rows.any? { |row| row.short.positive? }
+
+  protected
+
+  # ONE INSTANCE HANDING ANOTHER ITS OWN SNAPSHOT, and `protected` is the whole mechanism: in Ruby
+  # it means the RECEIVER has to be an AllocationCalculator too, which is exactly the condition
+  # under which the promise in #with_overrides holds — only another fill of the same account on
+  # the same day can honestly claim to have been constructed at the same moment. Nothing outside
+  # this class can reach it, so the surface the committer mutation proved dangerous is closed by
+  # the language rather than by a comment asking nicely.
+  #
+  # It sits between the public readers and #ledger's memo on purpose: this is the one writer of
+  # `@ledger` that is not that memo, and a reader looking for how a ledger gets in here should
+  # find both without going hunting.
+  #
+  # SAME `as_of` OR NOTHING, raised rather than trusted — PoolBalanceLedger owns the rule and the
+  # message (see #for_as_of!). `nil` is what this class's own ledgers carry, because #ledger builds
+  # one with no bound; a bounded ledger arriving here describes a different world and there is no
+  # figure it could produce that would be right. Latent today, since nothing on this path has an
+  # `as_of` at all — which is why it is written down now rather than after one grows.
+  def share_ledger(other)
+    @ledger = other.for_as_of!(nil)
+  end
 
   private
 
@@ -279,11 +312,12 @@ class AllocationCalculator
   # `envelopes` is read here rather than `account.child_pools` again, so the ledger and the fill
   # cannot be built over different sets.
   #
-  # THIS IS ALSO THE INJECTED LEDGER'S MEMO — see #initialize's `ledger:` and #with_overrides. A
-  # shared ledger is over the same `envelopes + [account]` by construction, because the only way
-  # to share one is from a proposal over the same account. `||=` rather than `defined?` for the
-  # reason PoolCalculator states: a ledger object is never falsy, so the two forms cost the same
-  # and `defined?` would imply an answer this method cannot give.
+  # THIS IS ALSO WHERE A SHARED LEDGER LANDS — see #share_ledger, the only other writer of
+  # `@ledger`, and #with_overrides for the rule. A shared ledger is over the same
+  # `envelopes + [account]` by construction, because the only way to share one is from a proposal
+  # over the same account. `||=` rather than `defined?` for the reason PoolCalculator states: a
+  # ledger object is never falsy, so the two forms cost the same and `defined?` would imply an
+  # answer this method cannot give.
   def ledger = @ledger ||= PoolBalanceLedger.new(envelopes + [account])
 
   # The post-sweep calculator: what this pool would need if its sweep had already happened.

@@ -554,6 +554,9 @@ class PoolCalculator
   # each rule back the very pool it came from — measured at 0 queries either way. It costs nothing
   # to keep and it is the one thing standing between BudgetCalculator#user (`category&.user ||
   # pool&.user`) and a lookup per rule if that inverse is ever lost.
+  #
+  # UNMEMOISED BECAUSE IT HAS ONE MEMOISED CALLER. Re-running the Preloader is a no-op, but the
+  # `to_a` dup is per call — memoise here before adding a second caller.
   def rules
     budgets = pool.budgets.to_a
     ActiveRecord::Associations::Preloader.new(records: budgets, associations: [:item, :pool]).call

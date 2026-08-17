@@ -150,6 +150,20 @@ class ReallocationPresenter
   # it. Home writes nothing during a render, which is why it may share. Nothing that writes may
   # pass one here.
   #
+  # THE `as_of` HALF OF THAT RULE IS ENFORCED RATHER THAN ASKED FOR: `for_as_of!` below raises
+  # unless the ledger's bound matches the one #ledger would have built with, which is `nil` — this
+  # screen reads the ledger as it stands. A ledger from another moment would answer with real,
+  # well-formed figures about a world that is not the one on screen, and that is the failure this
+  # seam can produce that would not look like one.
+  #
+  # AllocationCalculator HAD THE SAME KEYWORD AND IT WAS DELIBERATELY CLOSED (it now shares through
+  # a `protected` writer, reachable only from another instance of that class). This one stays open,
+  # and the difference is not taste: there, the only object that can honestly promise "I was
+  # CONSTRUCTED after the last write" is another fill of the same account, so `protected` is
+  # exactly the condition; here, the sharer is a DIFFERENT class — HomePresenter, which holds a
+  # ledger this class has no way to build for itself — so there is no receiver test that would say
+  # anything, and the surface has to be a documented keyword with a checked handover instead.
+  #
   # `rubocop:disable Metrics/ParameterLists` — six keywords, and the disable is stated rather than
   # the limit raised for the whole app, which is the choice PoolCalculator's own signature made
   # before Plan 2d decision 4 took two axes off it. Five of these are the movement being proposed
@@ -161,7 +175,7 @@ class ReallocationPresenter
     @from_pool = from_pool
     @amount = amount.presence&.to_d
     @today = today
-    @ledger = ledger
+    @ledger = ledger&.for_as_of!(nil)
   end
 
   # The arithmetic's view of the box: zero when nothing has been typed. Kept apart from #amount
@@ -413,7 +427,9 @@ class ReallocationPresenter
   # A CALLER'S LEDGER MAY COVER MORE POOLS THAN THIS ONE WOULD, never fewer, and neither direction
   # can move a figure: PoolBalanceLedger#terms_for returns nil for a pool it was not built over
   # and PoolCalculator then runs its own five aggregates, so a ledger that misses a pool costs
-  # queries and cannot cost accuracy. What it may NOT differ in is `as_of`, and nothing here has
-  # one — this screen reads the ledger as it stands.
+  # queries and cannot cost accuracy. What it may NOT differ in is `as_of` — and that one is no
+  # longer left to the caller's care: #initialize hands an injected ledger through
+  # PoolBalanceLedger#for_as_of!, which raises unless its bound matches the `nil` this line builds
+  # with.
   def ledger = @ledger ||= PoolBalanceLedger.new(all_pools)
 end
