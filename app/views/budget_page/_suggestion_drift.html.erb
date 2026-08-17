@@ -1,0 +1,31 @@
+<%# AN EXISTING RULE THAT NO LONGER MATCHES THE SPENDING. Local: `suggestion`.
+
+    §8's copy target: `Groceries has averaged $470 for 4 periods, your rule says $420`. This and
+    the dead rule are the reason §8 is a permanent page rather than a wizard — drift is how a
+    budget quietly stops being true, and a one-time setup can never catch it.
+
+    BOTH FIGURES ARE PER PERIOD, and neither is `budgets.amount`. The rule's side is
+    `Budget#steady_ask` — a $260-a-month rule under a biweekly user claims $120 a period — so the
+    two numbers in this sentence are in the same unit and can honestly be subtracted. The amount
+    the ACCEPT link carries is a different figure again: the engine inverts `steady_ask` back into
+    the rule's own column unit before putting it on the wire, and the edit form labels it there.
+
+    DRIFT TO ZERO IS THE STARKEST SENTENCE ON THE PANEL and it renders like any other: an envelope
+    a category feeds, four complete periods, and $0.00 observed. %>
+<p>
+  <span class="font-medium text-gray-900"><%= suggestion.detail[:pool_name] %></span> has averaged
+  <span class="tabular-nums"><%= number_to_currency(suggestion.detail[:observed]) %></span> a period for
+  <%= pluralize(suggestion.detail[:periods], "period") %>, and your rule asks for
+  <span class="tabular-nums"><%= number_to_currency(suggestion.detail[:rule_amount]) %></span> a period.
+</p>
+
+<p class="text-gray-500">
+  <% gap = (suggestion.detail[:observed] - suggestion.detail[:rule_amount]).abs %>
+  <% if suggestion.detail[:direction] == :up %>
+    You are spending <%= number_to_currency(gap) %> a period more than the rule reserves — the difference
+    is coming out of something else.
+  <% else %>
+    The rule is reserving <%= number_to_currency(gap) %> a period more than you spend — that money is
+    sitting in the envelope instead of funding anything else.
+  <% end %>
+</p>

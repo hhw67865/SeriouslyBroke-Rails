@@ -1,0 +1,37 @@
+<%# §8'S BOTTOM HALF: suggestions, always running, derived from entry history. Local: `presenter`.
+
+    THIS SECTION IS WHY THE PAGE IS PERMANENT RATHER THAN A WIZARD. Two of the four kinds — drift
+    and a dead rule — are about rules that already exist and have quietly stopped matching what the
+    user actually spends, and a one-time setup can never catch either.
+
+    THERE IS DELIBERATELY NO DISMISS CONTROL (spec §8). Dismissal is state, and the state it would
+    hide is drift; the alternative — resurfacing after N periods — is nagging with extra machinery.
+    A suggestion leaves this list by being ACTED ON: write the rule and the engine stops proposing
+    it on the next load, because the item now carries one.
+
+    EVERY suggestion the engine returns is rendered, in the engine's own order (per-period cost,
+    not sticker size) — nothing is truncated here, because a panel that hid the cheapest half
+    would be a dismissal with no button. %>
+<section class="bg-white border border-gray-200 rounded" data-suggestions>
+  <div class="px-6 py-4 border-b border-gray-200">
+    <h3 class="text-sm font-semibold text-gray-900">What your spending suggests</h3>
+    <p class="mt-1 text-sm text-gray-500">
+      Read from your entries every time this page loads. Nothing here changes anything until you accept it.
+    </p>
+  </div>
+
+  <% if presenter.suggestions.empty? %>
+    <%# THE EMPTY STATE, and it is a real answer rather than a gap: the detectors ran and found
+        nothing. A brand-new user with no entries at all lands here too, and so does a user whose
+        every bill already has a rule — which is the state this panel exists to get them to. %>
+    <div class="px-6 py-8 text-center">
+      <p class="text-sm text-gray-500">
+        Nothing to suggest — every bill and rate we can see in your entries already has a rule.
+      </p>
+    </div>
+  <% else %>
+    <% presenter.suggestions.each do |suggestion| %>
+      <%= render "budget_page/suggestion", suggestion: suggestion, presenter: presenter %>
+    <% end %>
+  <% end %>
+</section>

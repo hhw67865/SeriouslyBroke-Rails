@@ -1,0 +1,85 @@
+<%# ONE SUGGESTION: its sentence, and the control that acts on it. Locals: `suggestion`
+    (SuggestionEngine::Suggestion), `presenter`.
+
+    The sentence is per kind (§8's table is the copy target) and lives in its own partial; what is
+    shared is the frame, the accept control and the two clauses every PROPOSING kind carries — what
+    accepting does to the category, and which cap it would replace. Those two are here rather than
+    in each kind's partial precisely so a bill and a rate cannot come to describe the same act in
+    two different ways.
+
+    `data-suggestion` is kind AND subject id: a category and a pool may share a name, and
+    `Capybara.exact` is unset, so a name-keyed row is one rename away from matching two. %>
+<article class="px-6 py-4 border-b border-gray-100 last:border-b-0" data-suggestion="<%= suggestion_key(suggestion) %>">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div class="text-sm text-gray-700 space-y-1">
+      <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>
+
+      <% joined = presenter.joined_envelope_name(suggestion) %>
+      <% if suggestion_re_points_category?(suggestion) %>
+        <%# THE RE-POINT, SAID BEFORE THE CLICK. Accepting a $45 Parking proposal moves EVERY
+            Transportation entry into the envelope — the gas, the rideshares, all of it — and a
+            user who was not told that has had several hundred dollars of unrelated flow moved for
+            them. `Budget#item_must_belong_to_pool` is why it has to happen at all: a rule's item
+            must sit in a category pointing at the rule's pool.
+
+            WHETHER THE ENVELOPE IS NEW IS A SEPARATE QUESTION from whether the category moves, and
+            the two are said separately because they are two acts. A user who already has an
+            envelope by that name is JOINING it, not creating a second — the demo's "Utilities" is
+            exactly that shape — and a sentence promising a new one would be describing something
+            the save is not going to do. %>
+        <p class="text-gray-500" data-suggestion-effect>
+          <% if joined %>
+            This rule joins your existing <%= joined %> envelope, and points all
+            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it.
+          <% else %>
+            Accepting this puts all <%= suggestion.detail[:category_name] || suggestion.subject.name %>
+            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope.
+          <% end %>
+        </p>
+
+        <% cap = presenter.cap_for(suggestion) %>
+        <% if cap %>
+          <%# THE CAP THIS WOULD DESTROY, named with its own figure. A category cannot hold both a
+              cap and a pool, so `Category#destroy_budget_if_pool_linked` deletes the cap the
+              moment the re-point lands. The trade is honest — a cap is a spending limit that
+              reserves nothing (`Budget.steady_need` counts pool-mode rules only) and the rule
+              replacing it is a real claim on the paycheck — but it is a DELETION of something the
+              user wrote, so it is stated rather than discovered. %>
+          <p class="text-gray-500" data-suggestion-cap>
+            Your <%= number_to_currency(cap.amount) %> <%= budget_rule_basis(cap) %> cap here is a spending limit,
+            not a claim on your income — nothing fills one — and accepting this replaces it with a rule that is.
+          </p>
+        <% end %>
+      <% elsif joined %>
+        <%# THE SHARING CASE, and it is the whole reason the envelope is the CATEGORY's rather than
+            the item's. Phone, Internet and Streaming Services are three bills in one Utilities
+            category: the first acceptance settles the envelope, and from then on the engine's own
+            payload reuses it (the category is pool-covered), so this rule ADDS to the envelope
+            rather than making a second one — and the category does not move again. %>
+        <p class="text-gray-500" data-suggestion-effect>
+          This rule joins your existing <%= joined %> envelope, alongside what is already in it.
+        </p>
+      <% end %>
+    </div>
+
+    <div class="shrink-0 flex flex-wrap items-center gap-2">
+      <%= link_to suggestion_accept_label(suggestion),
+                  suggestion_accept_path(suggestion),
+                  class: "btn btn-primary whitespace-nowrap",
+                  data: { suggestion_accept: true } %>
+
+      <% if suggestion.kind == :dead_rule %>
+        <%# THE PAGE DOES NOT DELETE — the user does. Both doors are open on the row because the
+            decision is genuinely theirs: a bill that stopped because the subscription was
+            cancelled wants the rule gone, and one that stopped because the card was replaced wants
+            it kept. Offering only "review" would hide the answer most dead rules deserve; deleting
+            on "accept" would take a rule off a money screen on one click. %>
+        <%= button_to "Delete the rule",
+                      budget_path(suggestion.subject),
+                      method: :delete,
+                      class: "btn btn-secondary whitespace-nowrap",
+                      form: { data: { turbo_confirm: "Delete this rule? Nothing else about #{suggestion.detail[:item_name]} changes." } } %>
+      <% end %>
+    </div>
+  </div>
+</article>

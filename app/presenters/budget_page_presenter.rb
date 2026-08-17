@@ -154,7 +154,88 @@ class BudgetPagePresenter
   # new question of the database.
   def caps_not_counted? = rules_need.zero? && rules.any?(&:category_mode?)
 
+  # §8'S BOTTOM HALF, straight from the engine and in the engine's order. Not re-sorted, not
+  # filtered and not truncated here: `SuggestionEngine#ordered` sorts by [kind, per-period cost,
+  # id] for reasons its own comments give (a $1,600 annual bill costs $61.54 a period and must not
+  # outrank a $1,500 monthly one), and a second ordering on this side would be a screen deciding
+  # to disagree with the reader it renders.
+  #
+  # THERE IS NO DISMISS AND NO CAP ON THE LIST (spec §8). Dismissal is state, and the state it
+  # would hide is drift.
+  def suggestions = @suggestions ||= SuggestionEngine.new(user: user, today: today).suggestions
+
+  # THE MONTHLY CAP A RATE SUGGESTION'S CATEGORY ALREADY CARRIES, or nil.
+  #
+  # `Category.budgetable` — the rate detector's population — is "an expense category with no pool",
+  # which says nothing about a cap, so five of the demo's rate suggestions are for categories the
+  # user has already budgeted. The sentence must name the cap: a cap funds nothing
+  # (`Budget.steady_need` counts pool-mode rules only, Task 4's ruling), so the suggestion is
+  # correct — but printed silently beside a category the user capped last month it reads as the
+  # app failing to notice.
+  #
+  # AND IT APPLIES TO A DATED BILL TOO, harder: accepting one RE-POINTS the category, and
+  # `Category#destroy_budget_if_pool_linked` destroys the cap when it does. A sentence that did not
+  # name the cap would let a click delete a rule the user wrote, silently.
+  #
+  # ONE QUERY FOR THE WHOLE PANEL rather than `category.budget` per row, and none at all when no
+  # suggestion on screen would re-point anything. Keyed off `prefill[:category_id]`, which is
+  # exactly the set of categories an acceptance would move — already in memory, so this asks the
+  # database nothing it does not have to.
+  def cap_for(suggestion) = caps_by_category_id[suggestion.prefill[:category_id]]
+
+  # THE NAME OF THE ENVELOPE THIS ACCEPTANCE WOULD JOIN, or nil if it would make a new one — the
+  # difference between "joins your existing Utilities envelope" and "puts all Utilities spending in
+  # a new Utilities envelope", which are two different acts and must not share a sentence.
+  #
+  # TWO WAYS TO JOIN ONE, and they are the two `BudgetProposal#find_or_create_envelope` reuses on:
+  #
+  #   1. the category already points at an envelope — the engine says so itself, with `pool_id`,
+  #      and it is the state the SECOND bill in a category is in once the first was accepted;
+  #   2. the user already has a budget pool by the proposed name. The engine names a proposal after
+  #      the CATEGORY and cannot see pools it did not propose, so this one is only visible here —
+  #      and on the demo seeds it is the ordinary case, not the edge one.
+  #
+  # Two queries for the whole panel, and neither is per row.
+  # NIL FOR THE TWO KINDS THAT PROPOSE NOTHING, and the guard is explicit rather than left to a
+  # `&.`: drift and a dead rule are about a rule that already has an envelope, so their payloads
+  # carry neither half and asking this of them is a question with no answer.
+  def joined_envelope_name(suggestion)
+    prefill = suggestion.prefill
+    return reused_envelope_names[prefill[:pool_id]] if prefill.key?(:pool_id)
+    return nil unless prefill.key?(:pool)
+
+    existing_envelope_names[prefill[:pool][:name].to_s.downcase]
+  end
+
   private
+
+  def reused_envelope_names
+    @reused_envelope_names ||=
+      begin
+        ids = suggestions.filter_map { |suggestion| suggestion.prefill[:pool_id] }
+        ids.empty? ? {} : user.pools.where(id: ids).pluck(:id, :name).to_h
+      end
+  end
+
+  # Every envelope the user already has, keyed by its lower-cased name — the same
+  # case-insensitivity `Pool`'s uniqueness validation and `BudgetProposal`'s lookup use, so the
+  # sentence and the write cannot disagree about whether a name is taken.
+  def existing_envelope_names
+    @existing_envelope_names ||=
+      if suggestions.any? { |suggestion| suggestion.prefill.key?(:pool) }
+        user.pools.budget_pools.pluck(:name).index_by(&:downcase)
+      else
+        {}
+      end
+  end
+
+  def caps_by_category_id
+    @caps_by_category_id ||=
+      begin
+        ids = suggestions.filter_map { |suggestion| suggestion.prefill[:category_id] }
+        ids.empty? ? {} : Budget.where(category_id: ids).index_by(&:category_id)
+      end
+  end
 
   # THE ONE READER FOR BOTH RULE MODES. `user.all_budgets` reaches category-mode and pool-mode
   # rules alike; `user.budgets` walks the category link only and would render this page's main

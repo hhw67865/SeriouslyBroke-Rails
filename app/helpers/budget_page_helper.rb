@@ -102,4 +102,81 @@ module BudgetPageHelper
 
     "caps a category — no envelope to fill"
   end
+
+  # -----------------------------------------------------------------------------------------
+  # §8's bottom half — the suggestions panel
+  # -----------------------------------------------------------------------------------------
+
+  # A STABLE HANDLE FOR ONE SUGGESTION. Kind AND subject id, because a category and a pool can
+  # share a name — "Transportation" is a rate suggestion's category and could equally be the pool
+  # a drift suggestion names — and `Capybara.exact` is unset in this suite, so a name-keyed
+  # selector is one rename away from matching two rows.
+  def suggestion_key(suggestion) = "#{suggestion.kind}:#{suggestion.subject.id}"
+
+  # WHERE ACCEPTING GOES, one destination per kind. `SuggestionEngine` deliberately knows no URLs
+  # (its report says so), so the mapping lives here — and `prefill` travels verbatim, in the units
+  # the engine already put it in.
+  #
+  # The two PROPOSING kinds land on the budget form with the whole payload in the query string;
+  # the two kinds ABOUT AN EXISTING RULE land on that rule's own edit form, drift carrying the
+  # observed figure and a dead rule carrying nothing — the user decides there between keeping it
+  # and deleting it, and this page deletes nothing on its own.
+  def suggestion_accept_path(suggestion)
+    prefill = suggestion.prefill
+
+    case suggestion.kind
+    when :drift then edit_budget_path(prefill[:id], budget: prefill[:budget])
+    when :dead_rule then edit_budget_path(prefill[:id])
+    else new_budget_path(**proposal_query(prefill))
+    end
+  end
+
+  # THE ENVELOPE HALF IS RENAMED ON THE WIRE, and only here. The engine states it as `pool:` plus
+  # a top-level `category_id`; `budgets#new` already reads a top-level `category_id` as the OWNER
+  # of a category-mode cap, and the engine means the category to be MOVED INTO the new envelope.
+  # Two meanings for one key on one form is a request that caps a category when it was asked to
+  # fund an envelope, so the half travels as `envelope:` — see BudgetsController#set_envelope.
+  #
+  # `pool_type` is dropped rather than carried: an envelope is a budget pool by definition and the
+  # controller does not permit the key at all.
+  def proposal_query(prefill)
+    return { budget: prefill[:budget].merge(pool_id: prefill[:pool_id]) } if prefill.key?(:pool_id)
+
+    {
+      budget: prefill[:budget],
+      envelope: { name: prefill[:pool][:name], account_id: prefill[:pool][:account_id], category_id: prefill[:category_id] }
+    }
+  end
+
+  # WHETHER ACCEPTING THIS PROPOSAL WOULD MOVE THE CATEGORY. True when the payload carries the
+  # creation half, false when it reuses the envelope the category already points at — which is
+  # exactly the state the SECOND bill in one category is in once the first has been accepted.
+  # WHETHER ACCEPTING WOULD MOVE THE CATEGORY. True when the payload carries the creation half —
+  # which is the half that also re-points — and false when it reuses the envelope the category
+  # already points at, the state the SECOND bill in a category is in once the first was accepted.
+  #
+  # Not the same question as "would it create a pool": a name already taken by an envelope is
+  # JOINED rather than created, and the category still moves. See
+  # BudgetPagePresenter#joined_envelope_name.
+  def suggestion_re_points_category?(suggestion) = suggestion.prefill.key?(:pool)
+
+  # The name the ENGINE proposed, read straight off the payload — no query, because this is only
+  # ever printed on the branch where the presenter has already established nothing by that name
+  # exists.
+  def suggestion_proposed_envelope_name(suggestion) = suggestion.prefill[:pool][:name]
+
+  # WHAT THE BUTTON SAYS IT WILL DO, per kind. "Accept" on all four would be one word covering
+  # four different acts — two of them write a new rule and an envelope, one changes a figure on an
+  # existing rule, and one opens a rule for a decision this page refuses to make for the user.
+  def suggestion_accept_label(suggestion)
+    case suggestion.kind
+    when :drift then "Update the rule"
+    when :dead_rule then "Review the rule"
+    else "Write this rule"
+    end
+  end
+
+  # "every month" / "every 6 months", said of a PROPOSED interval rather than of a saved rule.
+  # `budget_rule_basis` reads a Budget and there is no Budget yet, so this reads the integer.
+  def suggestion_interval_label(months) = months == 1 ? "every month" : "every #{months} months"
 end

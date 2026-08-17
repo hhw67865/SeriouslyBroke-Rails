@@ -1,0 +1,29 @@
+<%# A DATED BILL NOBODY HAS WRITTEN A RULE FOR. Local: `suggestion`.
+
+    §8's copy target: `$600 in Mar and Sep → every 6 months, next Mar 1`. The lead is the BILL —
+    what leaves the account, on what schedule, next when — and the per-period cost is the second
+    line, because that is the figure the panel is ORDERED by and the one the structural check will
+    add this rule to.
+
+    THE GUESS IS SAID IN THE SENTENCE, not marked with a badge. A single-occurrence item is
+    proposed with an interval nothing measured (§8's own rule), and three of the demo's ten bills
+    are one-off purchases wearing a guessed annual interval — if a guessed row read the same as a
+    measured one, a third of the panel would be noise the user could not tell from evidence. %>
+<p>
+  <span class="font-medium text-gray-900"><%= suggestion.subject.name %></span> —
+  <span class="tabular-nums"><%= number_to_currency(suggestion.amount) %></span>
+  <%= suggestion_interval_label(suggestion.detail[:interval_months]) %>,
+  next due <%= suggestion.detail[:due_on].strftime("%b %-d, %Y") %>.
+</p>
+
+<p class="text-gray-500">
+  <% if suggestion.detail[:guessed] %>
+    Seen once, on <%= suggestion.detail[:last_seen_on].strftime("%b %-d, %Y") %> — one payment is not a schedule,
+    so <%= suggestion_interval_label(suggestion.detail[:interval_months]) %> is a guess.
+    That makes <%= number_to_currency(suggestion.detail[:per_period_cost]) %> a period a guess too.
+  <% else %>
+    Paid <%= pluralize(suggestion.detail[:occurrences], "time") %>, last on
+    <%= suggestion.detail[:last_seen_on].strftime("%b %-d, %Y") %>.
+    Costs <%= number_to_currency(suggestion.detail[:per_period_cost]) %> a period.
+  <% end %>
+</p>

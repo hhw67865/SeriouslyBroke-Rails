@@ -3,20 +3,49 @@
 class BudgetsController < ApplicationController
   before_action :set_budget, only: [:edit, :update, :destroy]
   before_action :set_category, only: [:new, :create]
+  before_action :set_envelope, only: [:new, :create]
+
+  # EVERY COLUMN THIS FORM MAY WRITE. `basis`, `interval_months`, `anchor_date` and `item_id`
+  # joined the list for §8's suggestion panel: a proposed dated bill is "$85 every month, next due
+  # Sep 21, paying the Phone item", and none of those four is derivable from the amount.
+  #
+  # Each carries a validation consequence — `shape_must_be_valid` on the first three,
+  # `item_must_belong_to_pool` and `item_must_not_be_claimed` on the last — so shape is answered by
+  # `Budget` and only OWNERSHIP is answered below.
+  BUDGET_FIELDS = [:amount, :category_id, :pool_id, :prorated, :basis, :interval_months, :anchor_date, :item_id].freeze
 
   # GET /budgets/new
+  #
+  # PREFILLED FROM THE QUERY STRING when the suggestion panel sent the user here, and the prefill
+  # goes through the same ownership scoping the POST does — a stranger's `item_id` in a GET would
+  # render THEIR item's name on this user's form, which is the read-shaped half of the same leak.
   def new
     @budget = @category ? @category.build_budget : Budget.new
+    @budget.assign_attributes(prefill_attributes)
   end
 
   # GET /budgets/1/edit
-  def edit; end
+  #
+  # A DRIFT SUGGESTION PREFILLS THE AMOUNT AND THE FORM SHOWS THE CURRENT ONE BESIDE IT. The
+  # figure arrives in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts
+  # `Budget#steady_ask` before putting it on the wire, precisely so nothing downstream converts —
+  # so this assigns it and the form LABELS it with the rule's basis. Nothing is written: the
+  # assignment is to the in-memory record the form renders, and the user still has to submit.
+  def edit
+    @current_amount = @budget.amount
+    @budget.amount = prefill_attributes[:amount] if prefill_attributes.key?(:amount)
+  end
 
   # POST /budgets
+  #
+  # ONE FORM AND ONE POST for the whole accept flow. Where the request carries an envelope half,
+  # `BudgetProposal` finds-or-creates the envelope, re-points the category at it and writes the
+  # rule inside ONE transaction; where it does not, it is `budget.save` and this action behaves
+  # exactly as it did. Both outcomes render the same two branches.
   def create
     @budget = Budget.new(budget_params)
 
-    if @budget.save
+    if BudgetProposal.new(budget: @budget, envelope: @envelope).save
       redirect_to owner_path(@budget), notice: "Budget was successfully created."
     else
       render :new, status: :unprocessable_content
@@ -105,10 +134,68 @@ class BudgetsController < ApplicationController
   # this pool" are Budget's own validations. Scoping to `.budget_pools` here would turn a user
   # naming their OWN account into a 404 — their record vanishing — where the model gives a
   # legible 422.
-  def budget_params
-    permitted = params.expect(budget: [:amount, :category_id, :pool_id, :prorated])
+  def budget_params = scoped_owners(params.expect(budget: BUDGET_FIELDS))
+
+  # THE SAME LIST AND THE SAME SCOPING, read off a GET. `expect` raises ParameterMissing on a
+  # bare `/budgets/new`, which is the ordinary way this form is reached, so the absence of the
+  # key is an empty prefill rather than a 400.
+  def prefill_attributes
+    @prefill_attributes ||=
+      if params[:budget].blank?
+        {}
+      else
+        scoped_owners(params.expect(budget: BUDGET_FIELDS))
+      end
+  end
+
+  # `item_id` IS THE THIRD APPEARANCE OF §7a'S CLASS, AND IT IS THE SHARPEST OF THE THREE. A rule
+  # names the item it pays; `Budget` validates that the item sits in a category pointing at the
+  # rule's pool, never WHOSE item it is. Unscoped, `POST /budgets` with a stranger's item id
+  # writes a funding rule against THEIR spending — the rule then reads their entries through
+  # `BudgetCalculator#paid_since_anchor` and reports their bills as paid or unpaid on this user's
+  # page. `current_user.items` walks the user's categories, so a stranger's id is not found.
+  #
+  # The line stays exactly where Task 2 drew it: whose, here; what shape, in the model. An item
+  # of the user's OWN in the wrong category is `item_must_belong_to_pool`'s 422, not a 404.
+  def scoped_owners(permitted)
     permitted = scoped_owner(permitted, :category_id, current_user.categories)
-    scoped_owner(permitted, :pool_id, current_user.pools)
+    permitted = scoped_owner(permitted, :pool_id, current_user.pools)
+    scoped_owner(permitted, :item_id, current_user.items)
+  end
+
+  # THE OPTIONAL ENVELOPE HALF (amendment A): the pool a proposing suggestion would create and the
+  # category it would re-point at it. Present only when the panel sent one — every other request
+  # to this controller leaves `@envelope` nil and `BudgetProposal` degrades to `budget.save`.
+  #
+  # `envelope[category_id]` RATHER THAN THE FORM'S OWN `category_id`, and the rename is
+  # load-bearing: `#set_category` already reads a top-level `category_id` as the OWNER of a
+  # category-mode cap, and the engine's payload means something entirely different by the same
+  # word — the category to be MOVED into the new envelope. One key with two meanings on one form
+  # is a rule that quietly caps a category when it was asked to fund an envelope.
+  #
+  # KEYED ON THE CATEGORY, not on the presence of the `envelope` key: without a category there is
+  # nothing to re-point, so there is no envelope half — and the rule then has no owner at all,
+  # which `Budget#exactly_one_owner` answers with a legible 422 rather than this raising.
+  #
+  # `pool_type` IS NOT PERMITTED. See BudgetProposal#create_envelope.
+  #
+  # Ownership, both ids, through `current_user`: `find` on the category so a stranger's is the
+  # same 404 every other owner id gives, and the account through `current_user.pools` — not
+  # `.accounts` — so that a user naming one of their OWN envelopes gets `Pool`'s legible
+  # "Account must be an account" instead of their own record vanishing. `account_id` may be
+  # legitimately blank (the engine reads `users.default_account_id`, which is nullable); the form
+  # asks for one and `require_account_for_budget_pools` refuses the blank.
+  def set_envelope
+    return if params[:envelope].blank?
+
+    permitted = params.expect(envelope: [:name, :account_id, :category_id])
+    return if permitted[:category_id].blank?
+
+    @envelope = BudgetProposal::Envelope.new(
+      name: permitted[:name],
+      account: permitted[:account_id].presence && current_user.pools.find(permitted[:account_id]),
+      category: current_user.categories.find(permitted[:category_id])
+    )
   end
 
   # `find`, so a stranger's id raises RecordNotFound and arrives as the same 404 #set_budget

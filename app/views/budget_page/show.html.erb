@@ -32,4 +32,10 @@
       `period_cadence` and `period_anchor_date` in the app unreachable until they had made a rule.
       The check reads $0.00 for them, which is true. %>
   <%= render "structural_check", presenter: @presenter %>
+
+  <%# §8'S BOTTOM HALF, and it renders for EVERY user — including the one with no rules at all,
+      whose top half is the empty state. That user is exactly who this panel is for: a brand-new
+      account sees an empty top half and a full bottom one, which is the spec's own reason there
+      is no separate onboarding flow to build or maintain. %>
+  <%= render "suggestions", presenter: @presenter %>
 </div>

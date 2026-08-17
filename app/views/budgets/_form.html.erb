@@ -7,14 +7,26 @@
     called the pool's own funding rule a spending limit. Now that §8's page links every rule to
     this form, that is user-reachable, so each mode is asked about the owner it actually has.
 
+    THE THIRD MODE IS A PROPOSAL (§8's suggestion panel, amendment A). Accepting a dated bill or a
+    rate needs an envelope the user does not have yet, the category re-pointed at it, and the rule
+    written — so the form grew an OPTIONAL ENVELOPE HALF rather than the flow growing a second
+    controller. One form, one POST, one transaction: BudgetsController#create hands both halves to
+    BudgetProposal and a failure anywhere writes nothing.
+
     The pool branch omits `prorated` deliberately: it spreads a monthly category cap across the
     days of the month (CategoryCalculator#prorated_active?) and nothing reads it for a pool-mode
     rule, so offering it would be a switch that does nothing. %>
 <% pool_mode = @budget.pool_mode? %>
+<% proposal = @envelope.present? %>
+<%# THE SCHEDULE IS ONLY EDITABLE ON THE WAY IN. A rule's shape (basis, interval, anchor, item) is
+    measured by the engine and submitted back; changing it later is the edit form's business, and
+    an existing rule's shape is not this partial's to re-offer. %>
+<% new_pool_rule = @budget.new_record? && (pool_mode || proposal) %>
 <% subtitle = "Set spending limits for #{@budget.category&.name || "this category"}" %>
 <% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode %>
+<% subtitle = "A new #{@envelope.name} envelope, and the rule that fills it" if proposal %>
 <% cancel_path = @budget.category ? category_path(@budget.category) : categories_path %>
-<% cancel_path = budget_page_path if pool_mode %>
+<% cancel_path = budget_page_path if pool_mode || proposal %>
 <%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
 
 <div class="max-w-2xl mx-auto">
@@ -25,7 +37,40 @@
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
-        <% if pool_mode %>
+        <% if proposal %>
+          <%# THE ENVELOPE HALF. Editable, because both fields can legitimately need changing: the
+              proposed name is the CATEGORY's name and the user may already have a pool called
+              that (Pool validates name uniqueness per user), and `account_id` is read from
+              `users.default_account_id`, which is nullable — a user who has nominated no account
+              must be ASKED for one rather than have a blank submitted on their behalf, since
+              `require_account_for_budget_pools` refuses an account-less budget pool outright.
+
+              `envelope[category_id]` is hidden and is NOT the rule's owner: it is the category to
+              be re-pointed at the new envelope. See BudgetsController#set_envelope for why it
+              cannot travel under the form's own `category_id`. %>
+          <div>
+            <%= label_tag "envelope_name", "New envelope", class: "form-label" %>
+            <%= text_field_tag "envelope[name]", @envelope.name, id: "envelope_name", class: "form-input" %>
+            <p class="form-hint">
+              Accepting this points <%= @envelope.category.name %> at this envelope, so all
+              <%= @envelope.category.name %> spending comes out of it from now on.
+            </p>
+          </div>
+
+          <div>
+            <%= label_tag "envelope_account_id", "Funded from", class: "form-label" %>
+            <%= select_tag "envelope[account_id]",
+                           options_from_collection_for_select(
+                             current_user.pools.accounts.order(:name), :id, :name, @envelope.account&.id
+                           ),
+                           include_blank: "Select an account",
+                           id: "envelope_account_id",
+                           class: "form-input" %>
+            <p class="form-hint">The account this envelope is filled from when you distribute a paycheck.</p>
+          </div>
+
+          <%= hidden_field_tag "envelope[category_id]", @envelope.category.id %>
+        <% elsif pool_mode %>
           <%# THE FORM DOES NOT OFFER THE POOL, which is not the same as the pool being
               unwritable: `budget_params` permits `pool_id`, so a tampered submission DOES
               re-parent the rule — within the user's own pools and nowhere else, because
@@ -68,17 +113,72 @@
         <div>
           <%= f.input :amount,
               as: :decimal,
-              label: pool_mode ? "Rule Amount" : "Budget Amount",
+              label: pool_mode || proposal ? "Rule Amount" : "Budget Amount",
               input_html: {
                 placeholder: "0.00",
                 step: 0.01,
                 min: 0
               },
-              hint: pool_mode ? "What this rule asks for #{budget_rule_basis(@budget)} — the schedule itself is set on the pool." :
+              hint: pool_mode || proposal ? "What this rule asks for #{budget_rule_basis(@budget)}." :
                 "Enter the maximum amount you want to spend in this category" %>
+
+          <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
+              The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts
+              `Budget#steady_ask` before putting it on the wire, precisely so that nothing here
+              converts it — and the label above already names that unit, so the two figures on
+              screen are directly comparable. Shown only when they differ: on every other edit the
+              field IS the current amount and repeating it would be one number printed twice. %>
+          <% if @current_amount.present? && @budget.amount.to_d != @current_amount.to_d %>
+            <p class="mt-2 text-sm text-gray-500" data-current-amount>
+              Currently <%= number_to_currency(@current_amount) %> <%= budget_rule_basis(@budget) %>.
+            </p>
+          <% end %>
         </div>
 
-        <% unless pool_mode %>
+        <% if new_pool_rule %>
+          <%# THE SHAPE OF THE RULE, measured by the suggestion engine and submitted back. `basis`
+              and `anchor_date` ride hidden because neither is a decision the user is being asked
+              to make here — the anchor is the bill's own next due date and the basis is which of
+              the two rule shapes was detected — while the INTERVAL is offered, because a
+              single-occurrence bill is proposed with a GUESSED interval and the panel says so.
+              Correcting the guess in the form it came from is cheaper than writing a wrong rule
+              and editing it afterwards, and it cannot produce an invalid shape: this branch only
+              renders the field where an anchor exists, which is exactly the row of §3.1 that
+              accepts any interval ≥ 1. %>
+          <%= f.hidden_field :basis %>
+
+          <% if @budget.anchor_date.present? %>
+            <%= f.hidden_field :anchor_date %>
+            <div>
+              <%= f.input :interval_months,
+                  as: :integer,
+                  label: "Comes round every (months)",
+                  input_html: { min: 1, step: 1 },
+                  hint: "First due #{@budget.anchor_date.strftime("%b %-d, %Y")}. Change this if the bill runs on a different cycle." %>
+            </div>
+          <% else %>
+            <%= f.hidden_field :interval_months %>
+          <% end %>
+
+          <% if @budget.item %>
+            <%# THE ITEM THIS RULE PAYS, shown and submitted back rather than picked. It is what
+                makes the rule payable at all — BudgetCalculator reads its entries to decide
+                whether the bill has been settled this cycle — and it arrived from the engine,
+                which chose it by measuring the item's own history. `item_id` is ownership-scoped
+                on the way in (BudgetsController#scoped_owners): a stranger's id would write a
+                rule against THEIR spending, so it 404s rather than rendering their item's name
+                here. %>
+            <div>
+              <label class="form-label">Pays</label>
+              <div class="form-input flex items-center bg-gray-50">
+                <%= @budget.item.name %>
+              </div>
+              <%= f.hidden_field :item_id %>
+            </div>
+          <% end %>
+        <% end %>
+
+        <% unless pool_mode || proposal %>
           <%# Prorated toggle %>
           <div>
             <div class="flex items-center gap-2 mb-2">
