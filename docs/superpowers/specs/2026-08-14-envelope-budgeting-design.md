@@ -533,6 +533,12 @@ Each is a decision deliberately deferred, not an oversight.
 
 ### Plan 2 (allocation flow) must
 
+> **ALL CLOSED** as of the conversion's delivery. Eight done in Plans 2a–2d (each verified in
+> Plan 3's closing audit); the preload item was resolved differently (in-memory pools with
+> `:account` eager-loaded); `allocated`-netting-partial-payments stays deliberately open (it
+> over-reserves, the safe direction) and is on the leaves-open list. Item-level homes are in the
+> conversion-closing table in Plan 3's ledger and the 2d plan doc's inheritance list.
+
 - **Validate `pay_anchor_date` presence when `pay_cadence` is set.** Without it
   `User#pay_dates` returns `[]`, the `[count, 1].max` clamp reports "1 paycheck
   before this bill", and the app demands the entire bill every paycheck. Highest
@@ -559,6 +565,10 @@ Each is a decision deliberately deferred, not an oversight.
   direction).
 
 ### Plan 2c (budget page & structural check) must
+
+> **CLOSED** — the field, param and controller shipped in Plan 2c Task 4
+> (`budget_page/_declaration_form`, `BudgetPageController#user_params`); the §9 branch and the
+> sacrifice view are live.
 
 - **Give `users.typical_income` a form field, a permitted param and a controller.**
   The column exists, `User` validates it, and `HomePresenter#structurally_underwater?`
@@ -631,8 +641,9 @@ Annotated item by item. "Task N" is Plan 3's task; the commits are in
 
 ### What Plan 3 leaves open
 
-Two follow-ups, both created by task 6's tightening and both larger than the task that created
-them. Neither is a defect today.
+Follow-ups, none a defect today. The first two were created by task 6's tightening and are
+larger than the task that created them; the rest were consolidated by the conversion's closing
+review.
 
 1. **Delete the orphan apparatus.** Listed above. It renders for nobody and its examples are
    gone, so it is dead code carrying no tests — kept because the shape it refuses (a destroy that
@@ -643,6 +654,28 @@ them. Neither is a defect today.
    still nullable. The cost of closing it is that `spec/migrations/cutover_spec.rb`'s central
    planting idiom — a pool-less category, the shape the migration exists to repair — would have to
    go through the schema rewind that file already uses for the other two tightenings.
+3. **THE BUFFER QUESTION — an open USER decision, default implemented.** The migration zeroes
+   every lifetime-overdrawn budget envelope with a transfer from its own account, which on data
+   whose nominal savings exceed actual cash lands the deficit at the buffer (the demo: Checking
+   opens `overdrawn $3,699.00`). The alternatives — floor the zeroing at what the buffer holds,
+   or shrink savings balances to fit cash — were presented to the user and NOT yet answered; the
+   code ships the "accept" default. Changing the answer costs near zero until the first real run
+   (edit `#zero_the_envelopes` + relax `#envelope_failures`; "shrink" also collides with
+   `#savings_drift_failures`, which pins savings to the cent). After a real run it is a repair
+   migration over rows identified by (kind transfer, migration-dated, budget-pool destination,
+   nil source_entry) — good but not unique; the run log prints the inserted ids as the undo list.
+4. **`TightenPoolShape` can refuse a database the cutover accepted** — duplicate pool names
+   (the migration never dedupes pre-existing ones) and an account carrying an `account_id`
+   (repaired in neither direction of the housing step). Two pre-flight `SELECT`s in the
+   cutover's verifier close it; its header's claim of full compliance is corrected in code.
+5. **No repair or runbook for a cross-user `categories.pool_id`.** The verifier catches it
+   (both users' Σ mismatch) but aborts the whole all-or-nothing run with an unnamed cause; a
+   pre-flight naming the offending categories turns the abort into a work item.
+6. **`Category` has no model-level ownership validator on `pool`** — the guard is
+   controller-only (both controllers verified clean); the durable form is the validator its two
+   siblings (`Entry`, `Pool`) already have, comparing records not ids.
+7. **The perf/design inheritance from 2d** stands unchanged at the bottom of
+   `docs/superpowers/plans/2026-08-17-logging-and-tracking.md`.
 
 ## 8. Testing
 
