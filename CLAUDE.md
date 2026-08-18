@@ -144,6 +144,8 @@ bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file 
 
 Procedure: confirm the machine is quiet; run the file 3× looking only at the first failure each time; if it is stable, read that example for a missing wait; run an unrelated system spec as a control — if the control passes, the fault is in the spec.
 
+**A third cause, rarer: the wall clock.** A fixture that reads `Date.current` lazily inside `travel_to` (a lazy `let` first evaluated inside the block counts, whatever its comment claims) can land money in the wrong period and fail only during the first hours of the UTC day. Its signature: the same examples by name fail at one hour and pass at another, on commits that never touched the code path. **Re-running at the same time of day cannot distinguish a regression from the clock** — before attributing a stable-by-name failure to a commit, shift the fixture's offsets (or wait out the window) and see if it survives, and check `git diff` actually touches the failing path.
+
 ---
 
 ## Summary: Implementation Checklist
