@@ -110,10 +110,11 @@ class CategoryBudgetPresenter
       .changed_after_distributing?(pool)
   end
 
-  # ---- The two unfunded arms -------------------------------------------------------------------
+  # ---- The buffer arm --------------------------------------------------------------------------
 
-  # WHETHER THE BUDGET PAGE IS CURRENTLY PROPOSING A RULE FOR THIS CATEGORY (§8.1's one addition to
-  # the unchanged third state, and the account-pointed arm's only way out).
+  # WHETHER THE BUDGET PAGE IS CURRENTLY PROPOSING A RULE FOR THIS CATEGORY — §8.1 put this on its
+  # third state, which is deleted; the account-pointed arm is the one that carries it now, and an
+  # envelope is that category's only way out.
   #
   # `SuggestionEngine` itself, never a re-derivation of the four detectors' conditions: the pointer
   # exists to say that something is waiting on /budget, and a second reader of "is there" that

@@ -80,12 +80,21 @@ RSpec.describe "Budget proposals", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
+    # THE POOL IS CAPTURED BEFORE THE REQUEST, and that is not stylistic. `expect(foreign.reload.pool)
+    # .to eq(foreign.pool)` reads as a claim and is a TAUTOLOGY: `reload` mutates the receiver, so
+    # both sides read the same object after the request and it passes whatever the controller did.
+    # It replaced `be_nil`, which stopped being expressible when every category gained a pool — the
+    # claim under test (a stranger's category is NOT re-pointed) has to be pinned against a value
+    # captured beforehand, and the pool's OWNER is asserted too so a re-point onto one of THIS
+    # user's pools could not slip through a plain equality on a stale id.
     it "refuses a stranger's category in the envelope half and writes nothing" do
       foreign = create(:category, :expense, user: stranger)
+      pool_before = foreign.pool
 
       expect { accept(envelope: { category_id: foreign.id }) }.not_to change(Pool, :count)
       expect(response).to have_http_status(:not_found)
-      expect(foreign.reload.pool).to eq(foreign.pool)
+      expect(foreign.reload.pool).to eq(pool_before)
+      expect(foreign.pool.user).to eq(stranger)
     end
 
     it "refuses a stranger's account in the envelope half and writes nothing" do

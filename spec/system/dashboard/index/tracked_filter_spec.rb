@@ -28,7 +28,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_content("$1,000.00")
+      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
     end
 
     it "reduces tracked total and budget when a budgeted category is untracked" do
@@ -37,7 +37,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_content("$800.00")
+      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
     end
 
     it "shows untracked category separately in breakdown" do
@@ -68,7 +68,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       expect(page).to have_content("$300.00") # wait for page reload
       within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
       within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_content("$800.00")
+      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
     end
 
     it "applies multiple toggle changes in a single submission" do
@@ -173,6 +173,13 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
   end
 
   private
+
+  # THE STAT CARD'S OWN LABEL, so the negatives above say "this card is gone" rather than "this
+  # figure appears nowhere on the page". A page-wide `have_no_content("$800.00")` would pass for
+  # the wrong reason the day any unrelated figure changed, and would fail for the wrong reason the
+  # day an unrelated one landed on $800. The section HEADING is an <h2> of the same words, which is
+  # exactly why this is scoped to the card's <p>.
+  def stat_card_label = "div.bg-gray-50 p.text-sm"
 
   def within_stat_card(label, &)
     card = find("div.md\\:grid-cols-3 > div", text: label)

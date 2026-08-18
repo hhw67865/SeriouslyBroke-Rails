@@ -157,6 +157,17 @@ class DashboardPresenter
     @all_categories_by_type ||= @user.categories.order(:name).group_by(&:category_type)
   end
 
+  # `includes(:budget)` STAYS THOUGH THE LINK IS NIL ON EVERY ROW, and it is deliberately NOT the
+  # same call as the one dropped from `Category.with_type` in the same commit. There the reader went
+  # away — the Categories index stopped printing `category.budget&.amount` — so the preload was
+  # loading a link nothing asked for. Here the reader is still live: `CategoryCalculator
+  # #monthly_budget_rate` asks `category.budget` for every category behind `#total_budget` and
+  # `#budget_line_data`, and those are Task 4's to delete, not this task's.
+  #
+  # MEASURED, because "preloading a dead association" sounds like pure waste and is not: on a
+  # fourteen-category fixture `#total_budget` costs **5 statements with the preload and 18 without**
+  # — one `SELECT budgets WHERE category_id = ?` per category, each returning nothing. One query for
+  # a set against O(n) queries for the same empty answer. It goes when its reader does.
   def tracked_expense_categories
     @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :pool, items: :entries)
   end

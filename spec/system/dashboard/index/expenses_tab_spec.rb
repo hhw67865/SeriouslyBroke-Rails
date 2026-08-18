@@ -68,8 +68,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     # that sum being positive, which it can no longer be. The section HEADING of the same name
     # stays, so the negative is on the figure rather than on the words.
     it "no longer prints a budget total" do
-      expect(page).to have_content("Monthly Budget")
-      expect(page).to have_no_content("$500.00")
+      expect(page).to have_css("h2", text: "Monthly Budget")
+      expect(page).to have_no_css("div.bg-gray-50 p.text-sm", text: "Monthly Budget", exact_text: true)
     end
 
     it "excludes pool-covered spending from budgeted totals" do
@@ -176,7 +176,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     # being positive and is gone with the cap. "YTD Budgeted Spending" above is the chart heading
     # and is unrelated, which is why the negative is scoped to the stat strip.
     it "no longer shows the YTD Budget stat card" do
-      expect(page).to have_no_css("p.text-sm.text-gray-500", text: "YTD Budget", exact_text: true)
+      expect(page).to have_no_css("div.bg-gray-50 p.text-sm", text: "YTD Budget", exact_text: true)
     end
   end
 

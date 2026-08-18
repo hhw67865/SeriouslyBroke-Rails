@@ -135,6 +135,20 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     # category stayed connected, and the page said "Categories updated successfully!" over it. The
     # destination is the one `Pool#hand_categories_to_the_account` already uses when a pool is
     # destroyed, so the category's history moves into the buffer rather than out of the pool tree.
+    # THE LONE-UNCHECK, and it is the case the screen has ALWAYS got wrong. Rails emits a hidden
+    # `""` per checkbox, so unchecking everything submits `[""]`; on a uuid column that casts to nil
+    # and a single-element array renders `id != NULL`, which is NULL for every row — so `where.not`
+    # matched nothing and the disconnect silently did nothing. The example below never caught it
+    # because it checks another box in the same submission, which puts a real id in the array.
+    it "disconnects the only connected category when nothing else is checked", :aggregate_failures do
+      uncheck_category("Connected Savings")
+      click_button "Update Connected Categories"
+
+      expect(page).to have_content("Categories updated successfully!")
+      expect(connected_savings.reload.pool).to eq(checking)
+      expect(pool.categories.reload).to be_empty
+    end
+
     it "disconnects a category by connecting a different one", :aggregate_failures do
       uncheck_category("Connected Savings")
       check_category("Other Savings")
@@ -143,6 +157,72 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       expect(page).to have_content("Categories updated successfully!")
       expect(connected_savings.reload.pool).to eq(checking)
       expect(other_savings.reload.pool).to eq(pool)
+    end
+  end
+
+  # THE TWO ARMS WHERE THE DISCONNECT HAS NOWHERE TO GO. Both used to be silent: `update(pool: nil)`
+  # (and then `update(pool: <nil destination>)`) returns FALSE, unchecked, and the user was
+  # redirected with "Categories updated successfully!" over a category that had not moved. Each is
+  # refused up front now, with its own sentence, and NOTHING is written on either — not even the
+  # connect half, because a screen that added categories while silently declining to remove others
+  # leaves the checkboxes and the data disagreeing.
+  describe "disconnecting with nowhere to hand the category back to" do
+    let!(:stranded) { create(:pool, :savings_pool, name: "Stranded Goal", user: user, account: nil) }
+    let!(:connected) do
+      create(:category, name: "Connected Savings", category_type: "savings", user: user, pool: stranded)
+    end
+    let!(:other_savings) { create(:category, name: "Other Savings", category_type: "savings", user: user) }
+
+    before do
+      user.update!(default_account: nil)
+      visit categories_pool_path(stranded)
+    end
+
+    it "refuses and says why, writing neither half", :aggregate_failures do
+      uncheck_category("Connected Savings")
+      check_category("Other Savings")
+      click_button "Update Connected Categories"
+
+      expect(page).to have_content("Disconnecting a category needs an account to hand its spending back to")
+      expect(page).to have_no_content("Categories updated successfully!")
+      expect(connected.reload.pool).to eq(stranded)
+      expect(other_savings.reload.pool).not_to eq(stranded)
+    end
+
+    # THE OTHER DIRECTION on the same screen: with nothing being disconnected there is nothing to
+    # refuse, so a pure connect still goes through. Without this the refusal could be unconditional
+    # and the example above would still pass.
+    it "still connects when nothing is being disconnected", :aggregate_failures do
+      check_category("Other Savings")
+      click_button "Update Connected Categories"
+
+      expect(page).to have_content("Categories updated successfully!")
+      expect(other_savings.reload.pool).to eq(stranded)
+      expect(connected.reload.pool).to eq(stranded)
+    end
+  end
+
+  # THE NO-OP ARM, and it is the subtler of the two: managing the categories of the very account
+  # that disconnected categories are handed BACK to. The destination and the pool are the same
+  # record, so "disconnect" would leave the category exactly where it is — which is not a failure
+  # the model can report, and was therefore reported as a success.
+  describe "disconnecting from the account the categories would be handed back to" do
+    let!(:on_the_buffer) do
+      create(:category, name: "Buffer Spending", category_type: "expense", user: user, pool: checking)
+    end
+
+    before do
+      user.update!(default_account: checking)
+      visit categories_pool_path(checking)
+    end
+
+    it "refuses and says so rather than reporting a move that did not happen", :aggregate_failures do
+      uncheck_category("Buffer Spending")
+      click_button "Update Connected Categories"
+
+      expect(page).to have_content("Checking is where disconnected spending goes")
+      expect(page).to have_no_content("Categories updated successfully!")
+      expect(on_the_buffer.reload.pool).to eq(checking)
     end
   end
 

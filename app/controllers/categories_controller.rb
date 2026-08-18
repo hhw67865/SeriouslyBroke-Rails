@@ -107,8 +107,34 @@ class CategoriesController < ApplicationController
     @recent_entries = @category.entries.includes(:item).order(date: :desc).limit(5)
   end
 
+  # §7a'S WIDENED-PARAMETER CLASS, FOURTH APPEARANCE — and the widening is decision 3's. `pool_id`
+  # has been permitted here for a long time, but it was a corner of the form nothing routinely
+  # wrote; requiring a pool on every category made it the ORDINARY payload of every create and
+  # every update, which is exactly when an unscoped write starts to matter.
+  #
+  # WHAT IT COSTS UNSCOPED, and it is the invariant rather than a leak of one screen.
+  # `PoolBalanceLedger::ENTRY_POOL_ID` resolves an entry through
+  # `COALESCE(entries.pool_id, categories.pool_id)` and joins on pool id with NO user filter — so a
+  # stranger's `pool_id` here puts THIS user's whole spending history into THAT user's pool balance,
+  # and `Σ pools == your bank balance` becomes false for both of them at once. `categories#show`
+  # then renders the stranger's pool name, noun and status back to this user.
+  #
+  # `find` through `current_user.pools`, so a stranger's id raises RecordNotFound and arrives as the
+  # same 404 `#set_category` gives — the identical shape `BudgetsController#scoped_owner` uses two
+  # files away, for the identical reason.
+  #
+  # WHERE THE LINE SITS, deliberately: ownership here, SHAPE in the model. A user naming one of
+  # their OWN budget pools on an income category is `Category#income_must_land_in_an_account`'s
+  # legible 422, not a 404 — scoping to `.accounts` here would make the user's own record vanish
+  # instead. Both directions are pinned in spec/requests/categories_spec.rb.
+  #
+  # Skipped when blank, because a blank pool is the owner-less create re-rendering, which the
+  # required `belongs_to :pool` already answers, and which is not a stranger's id.
   def category_params
-    params.expect(category: [:name, :category_type, :color, :pool_id])
+    permitted = params.expect(category: [:name, :category_type, :color, :pool_id])
+    return permitted if permitted[:pool_id].blank?
+
+    permitted.merge(pool_id: current_user.pools.find(permitted[:pool_id]).id)
   end
 
   def set_categories
