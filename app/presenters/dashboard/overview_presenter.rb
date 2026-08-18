@@ -1,33 +1,37 @@
 # frozen_string_literal: true
 
 module Dashboard
+  # THE ALL TAB, AFTER THE SAVINGS-ENTRY ERA (plan 3, task 4, decision 6).
+  #
+  # DELETED, each because the question it answered is not a question this app's data can answer any
+  # more:
+  #
+  # * `#savings_contributions_total` — savings-typed ENTRIES. A contribution is a `PoolMovement`
+  #   now, so this summed an empty set for every user: the "Savings Contrib $0.00" segment.
+  # * `#savings_withdrawals_total` and `#net_savings` — enveloped spending, called a savings
+  #   WITHDRAWAL. Spending an envelope you funded is not a raid on savings, and the figure was the
+  #   page's loudest untruth ("100.0% From Savings" before Task 3's bridge, 23.7% after). The
+  #   movement-based equivalent is not a conversion of this reader but a second reader of pool
+  #   funding, on a page organised by calendar month rather than by funding period — the pools
+  #   strip four inches below already answers "what do my goals hold", from `PoolCalculator`.
+  # * `#income_remaining` — income minus buffer spending minus contributions. With contributions
+  #   gone it is `#net_amount` under a second name, and one of them had to go.
+  # * `#budgeted_total` and `#budget_used_percentage` — the Budget Used card. `#total_budget` is
+  #   the sum of the user's category caps; there are none.
+  # * `#overview_chart_data`/`#overview_chart_colors` and `#income_change`/`#expenses_change` —
+  #   grepped callerless across `app lib spec`. The chart's third series was the same net-savings
+  #   delta, so the one unrendered thing on this page was also carrying the lie.
   class OverviewPresenter
-    include CategoriesHelper
-
     def initialize(parent)
       @parent = parent
       @user = parent.user
     end
 
-    # === Chart: Income vs Expenses with Savings net delta ===
-
-    def overview_chart_data
-      @overview_chart_data ||= compute_overview_chart_data
-    end
-
-    def overview_chart_colors
-      [
-        DashboardPresenter::COLORS[:brand_dark],
-        DashboardPresenter::COLORS[:terracotta],
-        DashboardPresenter::COLORS[:dusty_teal]
-      ]
-    end
-
     # === Cash-flow stats ===
 
-    # Pure cash flow: what came in vs what actually left.
-    # Savings contributions are tracked separately via net_savings — they are
-    # an allocation of money you still hold, not money spent.
+    # What came in against what actually left, and after the cutover that is the whole of it:
+    # money moved into an envelope has not left, and money spent OUT of an envelope is counted
+    # here like any other spending, because it is.
     def net_amount
       @net_amount ||= @parent.total_tracked_income - @parent.total_tracked_expenses
     end
@@ -39,132 +43,20 @@ module Dashboard
       (@parent.total_tracked_expenses / income.to_f * 100).round(1)
     end
 
-    # === Savings flow (separate from net) ===
-
-    def savings_contributions_total
-      @savings_contributions_total ||= @user.entries.savings.tracked.where(date: period_range).sum(:amount)
-    end
-
-    # THE FINDING-1 BRIDGE — `Entry.pool_covered_expenses` is deleted; see
-    # DashboardPresenter#tracked_budgetable_expense_categories. Task 4 owns what this figure should
-    # be: post-cutover a savings contribution is a `PoolMovement`, not an entry, so "withdrawals"
-    # measured off expense entries is already the wrong question and reads far too large.
-    def savings_withdrawals_total
-      @savings_withdrawals_total ||= @parent.enveloped_expenses.tracked.where(date: period_range).sum(:amount)
-    end
-
-    def net_savings
-      savings_contributions_total - savings_withdrawals_total
-    end
-
-    # Income remaining after budgetable expenses and savings contributions.
-    # Can be negative when budgetable + contributions > income.
-    def income_remaining
-      @parent.total_tracked_income -
-        @parent.total_tracked_budgetable_expenses -
-        savings_contributions_total
-    end
-
-    # === Month-over-month comparison (monthly mode only) ===
-
-    def income_change
-      return nil if @parent.ytd?
-
-      @income_change ||= percentage_change(
-        @user.entries.incomes.tracked.where(date: previous_range).sum(:amount),
-        @parent.total_tracked_income
-      )
-    end
-
-    def expenses_change
-      return nil if @parent.ytd?
-
-      @expenses_change ||= percentage_change(
-        @user.entries.expenses.tracked.where(date: previous_range).sum(:amount),
-        @parent.total_tracked_expenses
-      )
-    end
-
-    # === Budget health (budgetable expenses only) ===
-
-    def budgeted_total
-      @budgeted_total ||= all_budgeted_breakdown.sum { |c| c[:amount] }
-    end
-
-    def budget_used_percentage
-      budget = @parent.total_budget
-      return 0 if budget.zero?
-
-      (budgeted_total / budget.to_f * 100).round
-    end
-
     # === Top spending (all expense categories combined — cash flow view) ===
 
     def top_expense_categories
       @top_expense_categories ||= @parent.expense_categories_breakdown.first(5)
     end
 
-    # === Expense split ===
+    # === Expense split, by the lane the money came out of ===
 
-    def all_budgeted_categories_breakdown
-      all_budgeted_breakdown
+    def buffer_categories_breakdown
+      @buffer_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_buffer_funded_categories)
     end
 
-    def pool_covered_total
-      @pool_covered_total ||= pool_covered_categories_breakdown.sum { |c| c[:amount] }
-    end
-
-    def pool_covered_categories_breakdown
-      @pool_covered_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_pool_covered_expense_categories)
-    end
-
-    private
-
-    delegate :period_range, :six_month_range, to: :@parent
-
-    def previous_range
-      @previous_range ||= @parent.previous_month_range
-    end
-
-    def all_budgeted_breakdown
-      # Sort by most over-budget first, then by highest spend for non-budgeted
-      @all_budgeted_breakdown ||= @parent.build_category_breakdown(@parent.tracked_budgetable_expense_categories)
-        .sort_by { |c| [c[:budget] ? -(c[:amount] - c[:budget]) : 1, -c[:amount]] }
-    end
-
-    def percentage_change(previous, current)
-      return 0 if previous.zero?
-
-      ((current - previous) / previous.to_f * 100).round
-    end
-
-    def compute_overview_chart_data
-      range = @parent.ytd? ? period_range : six_month_range
-      series = build_chart_series(range)
-      series.all? { |s| s[:data].values.all?(&:zero?) } ? [] : series
-    end
-
-    def build_chart_series(range)
-      [
-        { name: "Income", data: monthly_totals(@user.entries.incomes.tracked, range) },
-        { name: "Expenses", data: monthly_totals(@user.entries.expenses.tracked, range) },
-        { name: "Net Savings", data: monthly_savings_delta(range) }
-      ]
-    end
-
-    def monthly_totals(scope, range)
-      scope
-        .group_by_month(:date, range: range, default_value: 0)
-        .sum(:amount)
-        .transform_keys { |d| d.strftime("%b %Y") }
-    end
-
-    def monthly_savings_delta(range)
-      contributions = monthly_totals(@user.entries.savings.tracked, range)
-      withdrawals = monthly_totals(@parent.enveloped_expenses.tracked, range)
-      contributions.each_with_object({}) do |(month, amount), result|
-        result[month] = amount - withdrawals.fetch(month, 0)
-      end
+    def envelope_categories_breakdown
+      @envelope_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_enveloped_categories)
     end
   end
 end

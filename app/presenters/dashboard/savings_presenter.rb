@@ -66,8 +66,6 @@ module Dashboard
         {
           id: pool.id,
           name: pool.name,
-          period_contributions: pool_period_contributions(pool),
-          period_withdrawals: pool_period_withdrawals(pool),
           balance: calc.current_balance,
           target_amount: pool.target_amount,
           progress_percentage: calc.progress_percentage
@@ -109,14 +107,6 @@ module Dashboard
 
     def savings_scope
       tracked_savings_scope
-    end
-
-    def pool_period_contributions(pool)
-      pool.contribution_entries.where(date: period_range).sum(:amount)
-    end
-
-    def pool_period_withdrawals(pool)
-      pool.withdrawal_entries.where(date: period_range).sum(:amount)
     end
 
     def compute_savings_chart_data

@@ -1,8 +1,22 @@
 # frozen_string_literal: true
 
+# WHAT A CATEGORY SPENT, AND NOTHING ABOUT WHAT IT WAS ALLOWED TO SPEND.
+#
+# The cap family is deleted with the cap era (plan 3, task 4, decision 6): `#budget_percentage`,
+# `#monthly_budget_rate`, `#effective_budget`, `#budget_curve` and the two private curve builders
+# all resolved `category.budget&.amount`, and `budgets.category_id` is nil on every row — so each
+# answered its empty form for every category the app can hold. `#budget_pace`,
+# `#budget_pace_percentage` and the prorated ramp went one task earlier with `budgets.prorated`.
+#
+# HOW MUCH A CATEGORY MAY SPEND IS A POOL QUESTION NOW, and the pool answers it: an envelope holds
+# what a rule put in it, and `PoolCalculator#balance` is the one reader for that. A category-level
+# second opinion is exactly what the cutover abolished.
+#
+# `#monthly_contribution` goes with them for a different reason: it was `#total_amount` behind a
+# `category.savings?` gate, so it was one reader wearing two names. Its two call sites (the
+# category summary card and the category index card) read `#total_amount` directly; the savings
+# ARMS around them are Task 5's to delete with the category type.
 class CategoryCalculator
-  include CategoriesHelper
-
   attr_reader :category, :date, :date_range, :period
 
   def initialize(category, date = Date.current, period: :monthly)
@@ -16,33 +30,6 @@ class CategoryCalculator
     category.entries.where(date: date_range).sum(:amount)
   end
 
-  def budget_percentage
-    return 0 unless category.expense? && effective_budget.to_f.positive?
-    (total_amount / effective_budget * 100).round
-  end
-
-  def monthly_budget_rate
-    return nil unless category.expense?
-    category.budget&.amount
-  end
-
-  def effective_budget
-    return nil unless monthly_budget_rate
-
-    period == :ytd ? monthly_budget_rate * months_in_range(date_range) : monthly_budget_rate
-  end
-
-  # THE DAILY RAMP IS GONE WITH `budgets.prorated` (plan 3, task 3). `#budget_pace`,
-  # `#budget_pace_percentage` and the `#ramp_value`/`#pace_day` pair spread a monthly category cap
-  # across the days of the month so a user could read "expected by today"; a cap is not a shape
-  # this app holds any more, and every one of those readers answered `effective_budget` for a rule
-  # that did not prorate — which is now every rule. So the curve is flat and there is one figure
-  # rather than two that agree.
-  def budget_curve
-    return {} unless monthly_budget_rate
-    period == :ytd ? ytd_budget_curve : monthly_budget_curve
-  end
-
   def previous_month_change_percentage
     return 0 unless category.income? && !previous_month_amount.zero?
 
@@ -52,11 +39,6 @@ class CategoryCalculator
   def previous_month_trend
     percentage = previous_month_change_percentage
     percentage >= 0 ? :up : :down
-  end
-
-  def monthly_contribution
-    return 0 unless category.savings?
-    total_amount
   end
 
   def top_items(limit = 3)
@@ -122,21 +104,5 @@ class CategoryCalculator
 
   def calculate_percentage_change(current, previous)
     ((current - previous) / previous.to_f * 100).round
-  end
-
-  def monthly_budget_curve
-    @date.all_month.index_with { effective_budget }
-  end
-
-  def ytd_budget_curve
-    current = date_range.begin.beginning_of_month
-    acc = 0
-    {}.tap do |h|
-      while current <= date_range.end
-        acc += monthly_budget_rate
-        h[current] = acc
-        current = current.next_month
-      end
-    end
   end
 end

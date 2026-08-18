@@ -35,13 +35,20 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
       end
     end
 
-    it "shows period In/Out for current month" do
+    # THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4), and the example that read it goes
+    # with the behaviour. "In" was `Pool#contribution_entries` — savings-TYPED entries — so on the
+    # post-cutover demo it printed $0.00 on every card while those goals were receiving $525 a
+    # period as PoolMovements. This fixture, which plants a savings CATEGORY, is one of the last
+    # places the figure was still non-zero, and that is exactly why it could not be trusted.
+    it "shows the card's balance against its target, and no per-period flow" do
       visit reports_path(tab: "savings")
 
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
-        expect(page).to have_content("$500.00") # In this month
-        expect(page).to have_content("$100.00") # Out this month
+        expect(page).to have_content("$1,000.00")
+        expect(page).to have_content("of $5,000.00")
+        expect(page).to have_no_content("In")
+        expect(page).to have_no_content("Out")
       end
     end
   end

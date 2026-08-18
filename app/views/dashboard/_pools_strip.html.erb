@@ -49,19 +49,16 @@
           <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
             <div class="h-3 rounded-full <%= bar_class %>" style="width: <%= progress.clamp(0, 100) %>%"></div>
           </div>
-          <div class="flex items-center justify-between text-xs text-gray-500 mb-3">
+          <%# THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4). "In" read
+              `Pool#contribution_entries` — savings-TYPED entries — so it printed $0.00 on every
+              card while the demo's goals were visibly receiving $525 a period as PoolMovements:
+              a figure that denies money that arrived is worse than no figure. "Out" alone is half
+              a story, and its movement-based partner would be a second reader of pool funding
+              (see Dashboard::OverviewPresenter). The balance, the target and the progress bar are
+              `PoolCalculator`'s — the app's one reader for what a pool holds — and stay. %>
+          <div class="flex items-center justify-between text-xs text-gray-500">
             <span class="font-medium"><%= number_to_currency(pool[:balance]) %></span>
             <span>of <%= number_to_currency(pool[:target_amount]) %></span>
-          </div>
-          <div class="flex items-center justify-between text-xs">
-            <div>
-              <span class="text-gray-400">In </span>
-              <span class="font-medium text-brand-dark"><%= number_to_currency(pool[:period_contributions]) %></span>
-            </div>
-            <div>
-              <span class="text-gray-400">Out </span>
-              <span class="font-medium <%= pool[:period_withdrawals].positive? ? "text-status-danger" : "text-gray-700" %>"><%= number_to_currency(pool[:period_withdrawals]) %></span>
-            </div>
           </div>
         <% end %>
       <% end %>

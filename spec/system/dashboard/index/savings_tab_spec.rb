@@ -69,15 +69,17 @@ RSpec.describe "Dashboard Index - Savings Tab", type: :system do
       visit reports_path(tab: "savings")
     end
 
-    it "shows pool balance, progress, and period flow" do
+    # THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4): "In" read savings-TYPED entries
+    # and printed $0.00 for every pool the post-cutover app can hold. The `$600.00` and `$200.00`
+    # legs of this example went with it; the balance is still the sum of all three entries, so what
+    # this fixture proves is unchanged.
+    it "shows pool balance and progress" do
       pool_card = find("a[href='#{pool_path(pool)}']")
       within(pool_card) do
         expect(page).to have_content("House Fund")
         expect(page).to have_content("$1,400.00")
         expect(page).to have_content("$10,000.00")
         expect(page).to have_content("14%")
-        expect(page).to have_content("$600.00")
-        expect(page).to have_content("$200.00")
       end
     end
   end

@@ -68,14 +68,12 @@ class DashboardPresenter
   delegate :expenses_chart_data,
            :total_expenses,
            :total_tracked_expenses,
-           :total_budgetable_expenses,
-           :total_tracked_budgetable_expenses,
-           :total_pool_covered_expenses,
-           :total_tracked_pool_covered_expenses,
+           :total_buffer_expenses,
+           :total_tracked_buffer_expenses,
+           :total_envelope_expenses,
+           :total_tracked_envelope_expenses,
            :expense_categories_breakdown,
            :untracked_expense_categories_breakdown,
-           :total_budget,
-           :budget_line_data,
            :expenses_chart_colors,
            to: :expenses
 
@@ -109,22 +107,11 @@ class DashboardPresenter
 
   # === All/Overview Tab (delegated) ===
 
-  delegate :overview_chart_data,
-           :overview_chart_colors,
-           :net_amount,
+  delegate :net_amount,
            :expense_ratio,
-           :income_change,
-           :expenses_change,
-           :savings_contributions_total,
-           :savings_withdrawals_total,
-           :net_savings,
-           :income_remaining,
-           :budgeted_total,
-           :budget_used_percentage,
            :top_expense_categories,
-           :pool_covered_total,
-           :all_budgeted_categories_breakdown,
-           :pool_covered_categories_breakdown,
+           :buffer_categories_breakdown,
+           :envelope_categories_breakdown,
            to: :overview
 
   # === Tracked Filter ===
@@ -157,54 +144,48 @@ class DashboardPresenter
     @all_categories_by_type ||= @user.categories.order(:name).group_by(&:category_type)
   end
 
-  # `includes(:budget)` STAYS THOUGH THE LINK IS NIL ON EVERY ROW, and it is deliberately NOT the
-  # same call as the one dropped from `Category.with_type` in the same commit. There the reader went
-  # away — the Categories index stopped printing `category.budget&.amount` — so the preload was
-  # loading a link nothing asked for. Here the reader is still live: `CategoryCalculator
-  # #monthly_budget_rate` asks `category.budget` for every category behind `#total_budget` and
-  # `#budget_line_data`, and those are Task 4's to delete, not this task's.
-  #
-  # MEASURED, because "preloading a dead association" sounds like pure waste and is not: on a
-  # fourteen-category fixture `#total_budget` costs **5 statements with the preload and 18 without**
-  # — one `SELECT budgets WHERE category_id = ?` per category, each returning nothing. One query for
-  # a set against O(n) queries for the same empty answer. It goes when its reader does.
+  # `includes(:budget)` IS GONE WITH ITS READER (plan 3, task 4). Task 3 measured the preload at
+  # 5 statements against 18 without it and kept it on that number — but the 18 were 18 queries for
+  # an answer that was nil every time, and what justified paying for them was `#total_budget`,
+  # which this task deletes. `Category has_one :budget` goes with it.
   def tracked_expense_categories
-    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :pool, items: :entries)
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:pool, items: :entries)
   end
 
   # ---------------------------------------------------------------------------------------------
-  # THE FINDING-1 BRIDGE (plan 3, task 3). TASK 4 OWNS THE SEMANTICS OF THIS PAGE; THIS TASK OWES
-  # IT ONLY THAT IT COMPILES AND RENDERS.
+  # WHICH LANE A CATEGORY SPENDS FROM — the split this page is built on, and the only split it
+  # draws. Task 3 landed these four as a mechanical bridge with the semantics deferred here;
+  # decision 6 keeps the line and drops the cap-era names that sat on top of it.
   #
-  # The four readers below used to split expense spending by `Category#budgetable?` ("no pool at
-  # all") against `#pool_covered?` ("any pool"). Both predicates and both `Entry` scopes are gone
-  # with the cap: a category with no pool is not a shape this app can hold any more, so the first
-  # set would be empty and the second everything, and every figure built on the pair would read
-  # $0.00 / 100% without saying why.
+  # BUFFER: an expense category pointing at an ACCOUNT. Nothing reserves this money — it is spent
+  # straight out of the account it lands in.
+  # ENVELOPE: a category pointing at a budget envelope or a savings goal. The money was moved
+  # there before it was spent.
   #
-  # Re-pointed MECHANICALLY to the nearest post-cutover truth: the buffer-funded set (an expense
-  # category pointing at an ACCOUNT — money nothing reserves) where "budgetable" stood, and the
-  # enveloped set (pointing at a budget envelope or a savings goal) where "pool-covered" stood.
-  # That is the same line `Category#buffer_funded?` draws for the suggestion engine and the
-  # Categories page, so this page at least agrees with the two screens beside it.
+  # ONE PREDICATE, and it is `Category#buffer_funded?`'s — the same line the suggestion engine's
+  # rate detector, the Categories page's `account_pointed` arm and the entry form's impact card
+  # all draw. The four readers below are its SQL twin (`categories.pool_id IN (accounts)`) so the
+  # entry sums and the category breakdowns beside them cannot describe different money.
   #
-  # IT IS NOT THE RIGHT ANSWER AND IS NOT MEANT TO BE. "Budgeted" on this page still means "against
-  # a category CAP", and there are no caps — so `total_budget` is $0.00 and the budget-health block
-  # says nothing useful whatever set it is fed. Task 4 replaces or deletes each chart with a
-  # pool-level reader; the report for this task says exactly what these figures read in the
-  # meantime.
+  # THE CATEGORY'S POOL, NOT `PoolBalanceLedger::ENTRY_POOL_ID`. The ledger resolves an entry
+  # through `COALESCE(entries.pool_id, categories.pool_id)` because an entry may name the pool it
+  # actually landed in; this page groups BY CATEGORY, so its rows and its totals have to answer
+  # the same question or the breakdown would not sum to the stat card above it. Nothing writes
+  # `entries.pool_id` today (it is not permitted by EntriesController and is nil on every row), so
+  # the two readers agree — but they are answers to different questions and the day an override
+  # can be written this page still wants the category's lane.
   # ---------------------------------------------------------------------------------------------
-  def tracked_budgetable_expense_categories
-    @tracked_budgetable_expense_categories ||= tracked_expense_categories.select(&:buffer_funded?)
+  def tracked_buffer_funded_categories
+    @tracked_buffer_funded_categories ||= tracked_expense_categories.select(&:buffer_funded?)
   end
 
-  def tracked_pool_covered_expense_categories
-    @tracked_pool_covered_expense_categories ||= tracked_expense_categories.reject(&:buffer_funded?)
+  def tracked_enveloped_categories
+    @tracked_enveloped_categories ||= tracked_expense_categories.reject(&:buffer_funded?)
   end
 
-  # The entry-level half of the same bridge, over the same line. `account_pool_ids` is a sub-SELECT
-  # rather than a loaded array so these compose into the `group_by_day`/`group_by_month` scopes the
-  # charts build on without a second round trip.
+  # The entry-level half of the same line. `account_pool_ids` is a sub-SELECT rather than a loaded
+  # array so these compose into the `group_by_day`/`group_by_month` scopes the charts build on
+  # without a second round trip.
   def buffer_funded_expenses = @user.entries.expenses.where(categories: { pool_id: account_pool_ids })
 
   def enveloped_expenses = @user.entries.expenses.where.not(categories: { pool_id: account_pool_ids })
@@ -218,7 +199,7 @@ class DashboardPresenter
   end
 
   def untracked_expense_categories
-    @untracked_expense_categories ||= @user.categories.expenses.untracked.includes(:budget, items: :entries)
+    @untracked_expense_categories ||= @user.categories.expenses.untracked.includes(items: :entries)
   end
 
   def untracked_income_categories
@@ -237,35 +218,17 @@ class DashboardPresenter
     @previous_month_range ||= (@date - 1.month).all_month
   end
 
+  # A NAME AND A FIGURE, and that is the whole row now. `#enrich_with_budget` used to add
+  # `:budget`, `:budget_percentage`, `:over_budget` and `:budget_diff` off the category's cap;
+  # the cap is gone and so are the four keys and every view arm that read them (decision 6).
   def build_category_breakdown(categories)
-    results = categories.map { |category| build_category_entry(category) }
+    results = categories.map do |category|
+      { id: category.id, name: category.name, amount: category.calculator(@date, period: period).total_amount }
+    end
     results.reject { |c| c[:amount].zero? }.sort_by { |c| -c[:amount] }
   end
 
   private
 
   def account_pool_ids = @user.pools.accounts.select(:id)
-
-  def build_category_entry(category)
-    calc = category.calculator(@date, period: period)
-    entry = { id: category.id, name: category.name, amount: calc.total_amount }
-    enrich_with_budget(entry, calc)
-    entry
-  end
-
-  # `category` is no longer consulted: the gate was `category.budgetable? && effective_budget
-  # positive`, and with the cap deleted `CategoryCalculator#effective_budget` is nil for every
-  # category — so the positive test is the whole gate and this block never fires. The `prorated`
-  # and `budget_pace` keys went with it (a pace is a cap spread across the days of a month), and
-  # `over_budget` is measured against the budget itself, which is what it always was for a rule
-  # that did not prorate.
-  def enrich_with_budget(entry, calc)
-    return unless calc.effective_budget.to_f.positive?
-
-    spent = calc.total_amount
-    entry[:budget] = calc.effective_budget
-    entry[:budget_percentage] = calc.budget_percentage
-    entry[:over_budget] = spent > calc.effective_budget
-    entry[:budget_diff] = (spent - calc.effective_budget).abs
-  end
 end

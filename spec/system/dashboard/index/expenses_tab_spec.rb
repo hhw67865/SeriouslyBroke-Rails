@@ -2,19 +2,18 @@
 
 require "rails_helper"
 
-# THE CAP IS DELETED (plan 3, task 3) AND THIS PAGE IS TASK 4's TO REWORK. What this task owes it
-# is that it renders; what these examples pin is what it renders NOW.
+# THE EXPENSES TAB AFTER DECISION 6 (plan 3, task 4).
 #
-# `DashboardPresenter`'s FINDING-1 bridge re-points the two bands: "budgeted" is buffer-funded
-# spending (a category pointing at an ACCOUNT) and "pool-covered" is enveloped spending, where the
-# split used to be "no pool" against "any pool". The figures in the split examples are unchanged
-# because the fixture already divided that way.
+# The two sections are the two lanes spending comes out of, and they are named that way now:
+# "Out of the Buffer" (a category pointing at an ACCOUNT — nothing reserved the money) and "Out of
+# an Envelope" (a category pointing at an envelope or a goal). The FIGURES are unchanged from the
+# bridge Task 3 left; the words "Monthly Budget", "Budgeted" and "Pool-Covered" are not.
 #
-# WHAT WENT WITH THE CAP: every example reading a per-category budget figure — "$650.00 / $500.00",
-# "+$150.00 over", "$120.00 left", the over-budget ordering, the budget totals, the whole prorated
-# scenario, and the "Monthly Budget"/"YTD Budget" stat card, which is gated on
-# `total_budget.positive?` and `total_budget` sums a category's cap. They are deleted with the
-# behaviour rather than rewritten against a cap that cannot exist.
+# WHAT WENT WITH THE CAP HERE: the "Budget" line drawn across the chart, the Monthly/YTD Budget
+# stat card (already gated away in Task 3, deleted with its reader here) and the two column totals
+# that paired a breakdown's sum with a cap. The column totals are also the second reader decision 6
+# forbids — each printed the sum of the category rows, which is the same figure as the "Tracked"
+# stat card directly above the list.
 RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   let!(:user) { create(:user) }
   let(:base_date) { Date.current.beginning_of_month }
@@ -24,21 +23,18 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   describe "empty state", :aggregate_failures do
     before { visit reports_path(tab: "expenses") }
 
-    it "shows empty message when no expense data" do
-      expect(page).to have_content("No budgeted expense data")
-      expect(page).to have_content("No budgeted expenses")
-      expect(page).to have_content("No pool-covered expenses")
+    it "shows empty messages for both lanes" do
+      expect(page).to have_content("No buffer spending")
+      expect(page).to have_content("No envelope spending")
     end
   end
 
-  describe "budgeted vs pool-covered split", :aggregate_failures do
+  describe "buffer vs envelope split", :aggregate_failures do
     let!(:pool) { create(:pool, user: user, name: "Car Fund", target_amount: 5000, start_date: 1.year.ago) }
 
-    # Budgeted expense category
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
 
-    # Pool-covered expense category
     let!(:car_repair) { create(:category, :expense, user: user, name: "Car Repair", pool: pool) }
     let!(:car_repair_item) { create(:item, category: car_repair, name: "Mechanic") }
 
@@ -48,33 +44,34 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows Monthly Budget section with only buffer-funded categories" do
-      within monthly_budget_section do
+    it "shows the buffer section with only account-pointed categories" do
+      within buffer_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
         expect(page).not_to have_link("Car Repair")
       end
     end
 
-    it "shows Pool-Covered section with only pool-linked categories" do
-      within pool_covered_section do
+    it "shows the envelope section with only pool-pointed categories" do
+      within envelope_section do
         expect(page).to have_link("Car Repair")
         expect(page).to have_content("$200.00")
         expect(page).not_to have_link("Groceries")
       end
     end
 
-    # THE STAT CARD IS GONE UNTIL TASK 4: it printed the sum of the user's caps and is gated on
-    # that sum being positive, which it can no longer be. The section HEADING of the same name
-    # stays, so the negative is on the figure rather than on the words.
-    it "no longer prints a budget total" do
-      expect(page).to have_css("h2", text: "Monthly Budget")
-      expect(page).to have_no_css("div.bg-gray-50 p.text-sm", text: "Monthly Budget", exact_text: true)
+    it "keeps each lane's spending out of the other lane's totals" do
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Tracked Envelope Spending") { expect(page).to have_content("$200.00") }
+      within_stat_card("Total Envelope Spending") { expect(page).to have_content("$200.00") }
     end
 
-    it "excludes pool-covered spending from budgeted totals" do
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$150.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$150.00") }
+    # The other direction: the cap-era vocabulary is gone from the page, headings included.
+    it "names no budget, cap or pool-covered spending anywhere" do
+      expect(page).to have_no_content("Monthly Budget")
+      expect(page).to have_no_content("Pool-Covered")
+      expect(page).to have_no_content("Budgeted")
     end
   end
 
@@ -112,22 +109,16 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows tracked and total budgeted stats with category links" do
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
+    it "shows tracked and total buffer stats with category links" do
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_link("Groceries", href: category_path(groceries))
       expect(page).to have_link("Dining", href: category_path(dining))
     end
   end
 
-  # WHAT THE ROWS SAY NOW. Four examples stood here reading each category's cap off the row —
-  # "$650.00 / $500.00", "+$150.00 over" / "$120.00 left", the ordering by most-over-budget and the
-  # column total — and `DashboardPresenter#enrich_with_budget` writes none of those keys any more,
-  # because `CategoryCalculator#effective_budget` is nil for every category. One example replaces
-  # them, and it is the negative the bridge has to keep true: the rows render, with the spending
-  # and nothing that claims to be a budget.
-  describe "rows in the budgeted section", :aggregate_failures do
+  describe "rows in the buffer section", :aggregate_failures do
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
     let!(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
@@ -140,16 +131,14 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "prints the spending, and no budget clause of any kind" do
-      within monthly_budget_section do
-        expect(page).to have_link("Groceries")
-        expect(page).to have_content("$650.00")
-        expect(page).to have_link("Utilities")
-        expect(page).to have_content("$80.00")
-
-        expect(page).to have_no_content(" / $")
-        expect(page).to have_no_content("over")
-        expect(page).to have_no_content("left")
+    # A name and a figure, exactly — no "$650.00 / $500.00" pair, no "+$150.00 over" / "$120.00
+    # left" clause, and no column total under the list (the "Tracked Buffer Spending" card above
+    # it is the one reader of that figure).
+    it "prints a name and a figure per row, highest first, and closes the list there" do
+      within buffer_section do
+        rows = all("div.space-y-3 > div").map { |row| row.text.split("\n") }
+        expect(rows).to eq([["Groceries", "$650.00"], ["Utilities", "$80.00"]])
+        expect(page).to have_no_css("div.border-t")
       end
     end
   end
@@ -164,38 +153,29 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses", period: "ytd")
     end
 
-    it "shows YTD Budgeted Spending heading" do
-      expect(page).to have_content("YTD Budgeted Spending")
+    it "carries the YTD prefix into the chart heading and the stat cards", :aggregate_failures do
+      expect(page).to have_content("YTD Buffer Spending")
+      within_stat_card("YTD Tracked Buffer Spending") { expect(page).to have_content("$220.00") }
+      within_stat_card("YTD Total Buffer Spending") { expect(page).to have_content("$220.00") }
     end
 
-    it "shows YTD Tracked Budgeted label in summary stats" do
-      expect(page).to have_content("YTD Tracked Budgeted")
-    end
-
-    # "YTD Budget" was the stat card printing the sum of the user's caps; it is gated on that sum
-    # being positive and is gone with the cap. "YTD Budgeted Spending" above is the chart heading
-    # and is unrelated, which is why the negative is scoped to the stat strip.
-    it "no longer shows the YTD Budget stat card" do
+    it "shows no YTD Budget card" do
       expect(page).to have_no_css("div.bg-gray-50 p.text-sm", text: "YTD Budget", exact_text: true)
     end
   end
 
-  # THE PRORATED SCENARIO IS DELETED with `budgets.prorated` (plan 3, task 3): it planted a $300
-  # prorated cap beside a $200 flat one and read "over pace", "expected today: $150.00" and the
-  # flat row's "$150.00 left" off the same screen. Neither cap nor ramp exists.
-
   private
 
-  def monthly_budget_section
-    find("h2", text: "Monthly Budget").ancestor("section")
+  def buffer_section
+    find("h2", text: "Out of the Buffer").ancestor("section")
   end
 
-  def pool_covered_section
-    find("h2", text: "Pool-Covered Spending").ancestor("section")
+  def envelope_section
+    find("h2", text: "Out of an Envelope").ancestor("section")
   end
 
   def within_stat_card(label, &)
-    card = find("p", text: label).ancestor("div.bg-gray-50")
+    card = find("div.bg-gray-50 p.text-sm", text: label, exact_text: true).ancestor("div.bg-gray-50")
     within(card, &)
   end
 end

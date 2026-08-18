@@ -14,10 +14,9 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
     let!(:dining_item) { create(:item, category: dining, name: "Restaurants") }
 
-    # THE TWO CAPS THIS PLANTED ARE DELETED (plan 3, task 3), and with them the "Monthly Budget"
-    # stat card they fed — it is gated on `total_budget.positive?`, which sums a category's cap. The
-    # tracked/untracked totals below are entry sums and are untouched, which is what this file is
-    # actually about.
+    # THE STAT CARDS ARE NAMED FOR THE LANE NOW (plan 3, task 4): both categories point at an
+    # ACCOUNT (the factory's default), so both spend out of the buffer. The FIGURES are untouched —
+    # they are entry sums, which is what this file is actually about.
     before do
       create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
       create(:entry, item: dining_item, amount: 150.00, date: base_date + 2.days)
@@ -26,18 +25,16 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     it "shows all expenses as tracked by default" do
       visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
     end
 
-    it "reduces tracked total and budget when a budgeted category is untracked" do
+    it "reduces the tracked total when a category is untracked" do
       dining.update!(tracked: false)
       visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "shows untracked category separately in breakdown" do
@@ -66,9 +63,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$300.00") # wait for page reload
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      expect(page).to have_no_css(stat_card_label, text: "Monthly Budget", exact_text: true)
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "applies multiple toggle changes in a single submission" do
@@ -79,8 +75,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       apply_tracked
 
       expect(page).to have_content("$0.00")
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$0.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$0.00") }
+      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
       expect(groceries.reload).not_to be_tracked
       expect(dining.reload).not_to be_tracked
     end
@@ -174,15 +170,17 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
   private
 
-  # THE STAT CARD'S OWN LABEL, so the negatives above say "this card is gone" rather than "this
-  # figure appears nowhere on the page". A page-wide `have_no_content("$800.00")` would pass for
-  # the wrong reason the day any unrelated figure changed, and would fail for the wrong reason the
-  # day an unrelated one landed on $800. The section HEADING is an <h2> of the same words, which is
-  # exactly why this is scoped to the card's <p>.
+  # THE STAT CARD'S OWN LABEL. Scoped to the card's <p> rather than matched page-wide: a section
+  # HEADING can carry the same words, and a page-wide dollar assertion passes and fails for
+  # unrelated reasons the day any other figure moves.
+  #
+  # The three "Monthly Budget" card negatives that stood beside these figures are deleted with the
+  # card (plan 3, task 4) — `spec/system/dashboard/index/expenses_tab_spec.rb` holds the one
+  # page-wide negative that says the cap vocabulary is gone.
   def stat_card_label = "div.bg-gray-50 p.text-sm"
 
   def within_stat_card(label, &)
-    card = find("div.md\\:grid-cols-3 > div", text: label)
+    card = find(stat_card_label, text: label, exact_text: true).ancestor("div.bg-gray-50")
     within(card, &)
   end
 

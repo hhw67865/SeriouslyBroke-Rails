@@ -84,7 +84,7 @@
       <div>
         <div class="flex justify-between text-sm mb-2">
           <span class="text-gray-500"><%= period_amount_label(:savings) %></span>
-          <span class="font-medium text-gray-900"><%= number_to_currency(calc.monthly_contribution) %></span>
+          <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
         
         <% if category.pool.present? %>

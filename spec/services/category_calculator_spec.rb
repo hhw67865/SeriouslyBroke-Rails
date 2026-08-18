@@ -2,49 +2,22 @@
 
 require "rails_helper"
 
-# WHAT IS LEFT OF THIS FILE, AND WHY (plan 3, task 3).
+# WHAT IS LEFT OF THIS FILE, AND WHY.
 #
-# Every example here was about the monthly category CAP: the flat curve, the prorated daily ramp,
-# `#budget_pace`, `#budget_pace_percentage` and `#budget_percentage`, each planting
-# `create(:budget, category: ...)` as its fixture. A rule owned by a category is not a shape this
-# app can hold any more, and the ramp is deleted with the `prorated` flag it read — so those
-# examples are deleted WITH the behaviour rather than rewritten against a cap that cannot exist.
+# Task 3 deleted the cap FIXTURES (`create(:budget, category: ...)` is not a shape this app can
+# hold) and left four examples asserting that `#monthly_budget_rate`, `#effective_budget`,
+# `#budget_curve` and `#budget_percentage` answered their empty forms — the fact the dashboard's
+# bridge stood on. Task 4 deletes the four readers themselves, so those four examples go with the
+# behaviour: there is nothing left to answer nil.
 #
-# WHAT REPLACES THEM IS THE FACT THE DASHBOARD BRIDGE STANDS ON: with no cap reachable, these
-# readers answer their empty forms for every category, which is why `DashboardPresenter
-# #enrich_with_budget` never fires and why the budget chart is empty until Task 4 replaces it. That
-# is a claim about behaviour, so it is asserted rather than assumed.
+# `#monthly_contribution` went too, and it was `#total_amount` behind a `category.savings?` gate —
+# so `#total_amount` below is now the only reader of a category's spend in a period, which is what
+# the category page, the category cards and every dashboard breakdown read.
 RSpec.describe CategoryCalculator do
   let(:user) { create(:user) }
   let(:category) { create(:category, :expense, user: user, name: "Groceries") }
   let(:april1) { Date.new(2026, 4, 1) }
 
-  describe "the cap readers, with no cap left to read" do
-    it "has no budget to read at all" do
-      expect(category.reload.budget).to be_nil
-    end
-
-    it "answers nil for the monthly rate and the effective budget", :aggregate_failures do
-      calc = described_class.new(category.reload, april1, period: :monthly)
-
-      expect(calc.monthly_budget_rate).to be_nil
-      expect(calc.effective_budget).to be_nil
-    end
-
-    it "answers an empty curve in both periods", :aggregate_failures do
-      expect(described_class.new(category.reload, april1, period: :monthly).budget_curve).to eq({})
-      expect(described_class.new(category.reload, april1, period: :ytd).budget_curve).to eq({})
-    end
-
-    it "answers zero for the progress bar, however much was spent" do
-      create(:entry, item: create(:item, category: category), amount: 200, date: Date.new(2026, 4, 10))
-
-      expect(described_class.new(category.reload, april1, period: :monthly).budget_percentage).to eq(0)
-    end
-  end
-
-  # THE SPENDING SIDE IS UNTOUCHED and is what the category page still reads, so it is pinned here
-  # rather than left to the deleted cap examples' coverage.
   describe "#total_amount" do
     it "sums the category's entries over the month" do
       item = create(:item, category: category)

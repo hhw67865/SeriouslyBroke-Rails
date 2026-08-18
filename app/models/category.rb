@@ -19,15 +19,11 @@ class Category < ApplicationRecord
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
 
-  # KEPT, THOUGH THE CAP IS GONE — and the check the plan asked for is written down here rather
-  # than left to be re-run. `budgets.category_id` is nil on every row after the cutover, so this
-  # association answers nil for every category the app can now hold; the two callbacks that were
-  # its reason for being (`destroy_budget_if_*`) are deleted below. It is not callerless, though:
-  # `CategoryCalculator#monthly_budget_rate` reads `category.budget&.amount`, and the dashboard's
-  # budget chart and totals are built on it. Those readers are Task 4's, the COLUMN is Task 6's,
-  # and deleting the association here would take the dashboard down with it for one intermediate
-  # commit. So it stays, dead but compiling, until the task that owns its readers arrives.
-  has_one :budget, dependent: :destroy
+  # `has_one :budget` IS GONE (plan 3, task 4). Task 3 kept it alive for one commit because
+  # `CategoryCalculator#monthly_budget_rate` still read `category.budget&.amount` and the
+  # dashboard's budget chart stood on it; both are deleted with decision 6, so the association is
+  # callerless as well as answerless. A Budget belongs to a POOL — `budgets.category_id` is a
+  # column with no Ruby left, and Task 6 drops it.
 
   normalizes :name, with: ->(name) { name.squish }
 

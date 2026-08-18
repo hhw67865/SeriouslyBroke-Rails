@@ -8,7 +8,8 @@ RSpec.describe Category, type: :model do
     it { is_expected.to belong_to(:pool) }
     it { is_expected.to have_many(:items).dependent(:destroy) }
     it { is_expected.to have_many(:entries).through(:items) }
-    it { is_expected.to have_one(:budget).dependent(:destroy) }
+    # `have_one(:budget)` IS DELETED WITH THE ASSOCIATION (plan 3, task 4). A Budget belongs to a
+    # POOL; `budgets.category_id` is nil on every row and Task 6 drops the column.
   end
 
   describe "validations" do
