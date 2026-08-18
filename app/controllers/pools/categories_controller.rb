@@ -9,8 +9,13 @@ module Pools
       # Only load what's actually accessed in Ruby code:
       # - pool for conflict detection ("Connected to other goal")
       # CategoryCalculator uses direct SQL queries, not Ruby associations
+      # EXPENSE CATEGORIES ONLY (plan 3, task 5). This was `["savings", "expense"]` — the two types
+      # that could reach a pool's balance — and the savings half is gone: money arrives in a pool as
+      # a `PoolMovement`. An INCOME category is excluded for the reason it always was: it must name
+      # an account (`Category#income_must_land_in_an_account`), so it is not a connection this
+      # screen can offer or take away.
       @all_categories = current_user.categories
-        .where(category_type: ["savings", "expense"])
+        .expenses
         .includes(:pool)
         .order(:name)
       @connected_category_ids = @pool.categories.pluck(:id)

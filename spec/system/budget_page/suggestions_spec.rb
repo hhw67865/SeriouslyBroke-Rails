@@ -286,6 +286,30 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
   end
 
+  # THE REUSE ARM ACCEPTS ANY NON-ACCOUNT POOL, GOALS INCLUDED, and the sentence used to call every
+  # one of them an envelope (plan 3, task 5 — Task 2's second stale noun). The demo read *"This rule
+  # joins your existing Vacation to Europe envelope"* about a GOAL, three inches from a category
+  # page saying "Goal" about the same pool. `BudgetPagePresenter#joined_pool` hands the record back
+  # and the row asks `Pool#noun`, which is the one mapping.
+  describe "a category already pointing at a goal", :aggregate_failures do
+    let(:vacation) { create(:pool, :savings_pool, user: user, account: checking, name: "Vacation to Europe") }
+    let(:travel) { create(:category, :expense, user: user, name: "Travel", pool: vacation) }
+    let(:flights) { create(:item, category: travel, name: "Flights") }
+
+    before do
+      plant_bill(flights, 180)
+      visit budget_page_path
+    end
+
+    # BOTH DIRECTIONS ON ONE ROW: the pool's own noun is printed, and the envelope's is not.
+    it "calls the goal a goal rather than an envelope" do
+      within(effect_of(:dated_bill, flights)) do
+        expect(page).to have_content("joins your existing Vacation to Europe goal")
+        expect(page).to have_no_content("Vacation to Europe envelope")
+      end
+    end
+  end
+
   # THE DEMO SEEDS' OWN SHAPE, and it is why this branch exists at all: the engine names a proposed
   # envelope after the CATEGORY, and the demo already holds a "Utilities" envelope beside a
   # "Utilities" category pointing at nothing — so every one of its three bills proposed a pool

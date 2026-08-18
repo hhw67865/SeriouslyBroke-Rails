@@ -2,11 +2,16 @@
 
 require "rails_helper"
 
+# TWO TOTALS PER DAY, NOT THREE (plan 3, task 5). The grid's columns are
+# `CategoryTypeHelper::CATEGORY_TYPES`, so the savings one left with the enum value — and what a
+# contribution BECAME does not arrive in its place: a `PoolMovement` is the user's own money
+# changing pockets, not money entering or leaving their life. Both directions asserted below.
 RSpec.describe "Calendar Index - Grid", type: :system do
   let!(:user) { create(:user) }
-  let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries") }
-  let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let!(:savings_category) { create(:category, :savings, user: user, name: "Emergency Fund") }
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let!(:goal) { create(:pool, :savings_pool, user: user, name: "Emergency Fund", account: checking) }
+  let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries", pool: checking) }
+  let!(:income_category) { create(:category, :income, user: user, name: "Salary", pool: checking) }
 
   before { sign_in user, scope: :user }
 
@@ -33,11 +38,12 @@ RSpec.describe "Calendar Index - Grid", type: :system do
     before do
       expense_item = create(:item, category: expense_category)
       income_item = create(:item, category: income_category)
-      savings_item = create(:item, category: savings_category)
 
       create(:entry, item: expense_item, amount: 50.00, date: Date.current)
       create(:entry, item: income_item, amount: 1000.00, date: Date.current)
-      create(:entry, item: savings_item, amount: 200.00, date: Date.current)
+      # A $200 contribution ON THE SAME DAY, as the movement it is now. Nothing on this grid may
+      # report it: the presenters read `Entry` and nothing else.
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 200.00, date: Date.current)
 
       visit calendar_path
     end
@@ -50,8 +56,19 @@ RSpec.describe "Calendar Index - Grid", type: :system do
       expect(page).to have_css(".text-status-success", text: "$1k")
     end
 
-    it "shows savings total in brand color" do
-      expect(page).to have_css(".text-brand-dark", text: "$200")
+    # BOTH DIRECTIONS ON THE NO-MOVEMENTS RULE: the two entry totals ARE drawn, and the movement
+    # of the same day is drawn nowhere and in no colour.
+    #
+    # SCOPED TO THE GRID, because `.text-brand-dark` is the app's chrome colour too — the sidebar
+    # heading and the avatar carry it — so a page-wide negative would be asserting something about
+    # the layout rather than about the calendar.
+    it "draws nothing at all for the movement", :aggregate_failures do
+      within(".calendar-grid") do
+        expect(page).to have_no_css(".text-brand-dark")
+        expect(page).to have_no_content("$200")
+        expect(page).to have_content("$50")
+        expect(page).to have_content("$1k")
+      end
     end
   end
 

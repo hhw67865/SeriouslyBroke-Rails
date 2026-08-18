@@ -5,8 +5,9 @@ require "rails_helper"
 RSpec.describe "Calendar Week - Entries", type: :system do
   let!(:user) { create(:user) }
   let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
-  let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let!(:savings_category) { create(:category, :savings, user: user, name: "Emergency") }
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let!(:goal) { create(:pool, :savings_pool, user: user, name: "Emergency", account: checking) }
+  let!(:income_category) { create(:category, :income, user: user, name: "Salary", pool: checking) }
   let(:test_date) { Date.current }
 
   before { sign_in user, scope: :user }
@@ -15,11 +16,12 @@ RSpec.describe "Calendar Week - Entries", type: :system do
     before do
       expense_item = create(:item, category: expense_category, name: "Groceries")
       income_item = create(:item, category: income_category, name: "Paycheck")
-      savings_item = create(:item, category: savings_category, name: "Deposit")
 
       create(:entry, item: expense_item, amount: 75.50, date: test_date)
       create(:entry, item: income_item, amount: 2500.00, date: test_date)
-      create(:entry, item: savings_item, amount: 500.00, date: test_date)
+      # The contribution, as the movement it is now (plan 3, task 5). The week grid must not show
+      # it: `WeeklyCalendarPresenter#fetch_entries` reads `Entry` alone.
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 500.00, date: test_date)
 
       visit calendar_week_path(date: test_date.strftime("%Y-%m-%d"))
     end
@@ -34,15 +36,17 @@ RSpec.describe "Calendar Week - Entries", type: :system do
       expect(page).to have_content("$2,500.00")
     end
 
-    it "shows savings entries with item name and amount" do
-      expect(page).to have_content("Deposit")
-      expect(page).to have_content("$500.00")
+    # BOTH DIRECTIONS: the two entry groups render, and the movement of the same day renders in
+    # neither of them and in no group of its own.
+    it "shows no row at all for a movement", :aggregate_failures do
+      expect(page).to have_no_content("$500.00")
+      expect(page).to have_no_content("Emergency")
     end
 
-    it "groups entries by type with labels" do
+    it "groups entries by type with labels", :aggregate_failures do
       expect(page).to have_content("Expense")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
     end
   end
 

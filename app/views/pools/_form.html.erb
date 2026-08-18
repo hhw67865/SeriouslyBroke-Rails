@@ -151,14 +151,13 @@
         <h4 class="text-sm font-medium text-gray-900 mb-1">Create categories automatically (optional)</h4>
         <p class="text-sm text-gray-600 mb-3">Save time by creating linked categories now. Each category will be named after this pool.</p>
 
+        <%# ONE BOX, NOT TWO (plan 3, task 5). The second created a SAVINGS category, and there is
+            no such type: a pool is filled by moving money into it, and the category a pool needs is
+            the one that spends OUT of it. %>
         <div class="space-y-2">
           <%= f.input :create_expense_category,
               as: :boolean,
               label: "Create an expense category" %>
-
-          <%= f.input :create_savings_category,
-              as: :boolean,
-              label: "Create a savings category" %>
         </div>
       </div>
     <% end %>
@@ -175,8 +174,8 @@
             <ul class="list-disc list-inside space-y-1">
               <li>Money arrives in an <strong>account</strong>, then fills the pools inside it in priority order</li>
               <li>A pool with no account can never be funded — Home says so on every one</li>
-              <li>Connect categories to a pool to track what it spends and receives</li>
-              <li>Savings categories <strong>add money</strong>; expense categories <strong>subtract</strong> it</li>
+              <li>Connect categories to a pool to track what it spends</li>
+              <li>Money <strong>arrives</strong> in a pool by being moved into it; connected categories <strong>spend</strong> it</li>
             </ul>
           </div>
         </div>

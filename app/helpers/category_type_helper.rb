@@ -9,10 +9,21 @@
 #   format_amount_with_sign(100, :expense) # => "-$100.00"
 #
 module CategoryTypeHelper
+  # TWO TYPES (plan 3, task 5). The `savings:` row went with the enum value, and it is what the
+  # CALENDAR was built out of: both calendar presenters key their per-day totals and their weekly
+  # breakdown off `CATEGORY_TYPES`, and four calendar views iterate it. Dropping the row here is
+  # what takes the savings column off the grid, out of the legend and out of the week summary — one
+  # deletion rather than five, because the calendar was already reading the type list rather than
+  # naming the types.
+  #
+  # MOVEMENTS STILL DO NOT RENDER ON THE CALENDAR, and that is not an omission this leaves behind.
+  # The calendar is a story about ENTRIES — money entering or leaving the user's life on a day —
+  # and a `PoolMovement` is neither; it is the user's own money changing pockets. Both presenters
+  # fetch from `Entry` and nothing else, so there is nothing to gate. Asserted both ways in
+  # spec/system/calendar.
   TYPE_CONFIG = {
     expense: { label: "Expense", plural: "Expenses", color: "text-status-danger", bg: "bg-status-danger", sign: "-" },
-    income: { label: "Income", plural: "Income", color: "text-status-success", bg: "bg-status-success", sign: "+" },
-    savings: { label: "Savings", plural: "Savings", color: "text-brand-dark", bg: "bg-brand-dark", sign: "+" }
+    income: { label: "Income", plural: "Income", color: "text-status-success", bg: "bg-status-success", sign: "+" }
   }.freeze
 
   CATEGORY_TYPES = TYPE_CONFIG.keys.freeze

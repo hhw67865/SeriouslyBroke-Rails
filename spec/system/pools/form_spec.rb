@@ -185,17 +185,20 @@ RSpec.describe "Pools Form", type: :system do
       end
     end
 
+    # ONE CHECKBOX, NOT TWO (plan 3, task 5). "Create a savings category" minted a SAVINGS
+    # category, which is not a type any more: a pool is filled by moving money into it, and the
+    # category a pool needs is the one that spends out of it.
     describe "auto-create categories" do
-      it "renders both checkboxes unchecked by default", :aggregate_failures do
+      it "renders the one checkbox, unchecked by default", :aggregate_failures do
         expect(page).to have_field("Create an expense category", type: "checkbox", checked: false)
-        expect(page).to have_field("Create a savings category", type: "checkbox", checked: false)
+        expect(page).to have_no_field("Create a savings category", type: "checkbox")
       end
 
       # Each example below waits on the flash before reading the model. Without a Capybara
       # call after the click the example returns with the POST still in flight, and
       # teardown's `reset_sessions!` navigates the renderer away mid-request — which
       # surfaces as `InvalidSessionIdError` here and takes the rest of the file with it.
-      it "creates only the pool when neither box is checked", :aggregate_failures do
+      it "creates only the pool when the box is unchecked", :aggregate_failures do
         fill_in "Pool Name", with: "Plain Pool"
         fill_in "Target Amount", with: "1000"
         click_button "Create Pool"
@@ -216,33 +219,6 @@ RSpec.describe "Pools Form", type: :system do
         category = pool.categories.first
         expect(category.name).to eq("Expense Pool Expense")
         expect(category.category_type).to eq("expense")
-      end
-
-      it "creates a linked savings category when the savings box is checked", :aggregate_failures do
-        fill_in "Pool Name", with: "Savings Pool"
-        fill_in "Target Amount", with: "1000"
-        check "Create a savings category"
-        click_button "Create Pool"
-
-        expect(page).to have_content("Pool was successfully created")
-        pool = Pool.last
-        expect(pool.categories.count).to eq(1)
-        category = pool.categories.first
-        expect(category.name).to eq("Savings Pool Savings")
-        expect(category.category_type).to eq("savings")
-      end
-
-      it "creates both linked categories when both boxes are checked", :aggregate_failures do
-        fill_in "Pool Name", with: "Dual Pool"
-        fill_in "Target Amount", with: "1000"
-        check "Create an expense category"
-        check "Create a savings category"
-        click_button "Create Pool"
-
-        expect(page).to have_content("Pool was successfully created")
-        expect(Pool.last.categories.pluck(:name)).to contain_exactly(
-          "Dual Pool Expense", "Dual Pool Savings"
-        )
       end
     end
   end
@@ -270,11 +246,10 @@ RSpec.describe "Pools Form", type: :system do
     end
 
     describe "progress indicator with data", :aggregate_failures do
-      let!(:savings_category) { create(:category, category_type: "savings", user: user, pool: pool) }
-      let!(:savings_item) { create(:item, category: savings_category) }
-
+      # $300 moved in, which is what a contribution is (plan 3, task 5). It was a $300 entry in a
+      # savings category; the balance and the percentage below are unchanged.
       before do
-        create(:entry, item: savings_item, amount: 300)
+        create(:pool_movement, from_pool: create(:pool, :account, user: user), to_pool: pool, amount: 300)
         visit edit_pool_path(pool)
       end
 

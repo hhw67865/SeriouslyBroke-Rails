@@ -68,16 +68,15 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_select("category_id", selected: "Select a category")
       end
 
-      it "groups categories by type" do
-        create(:category, user: user, name: "Vacation Fund", category_type: :savings)
-
+      # TWO GROUPS, NOT THREE (plan 3, task 5) — the picker's optgroups are the category types.
+      it "groups categories by type", :aggregate_failures do
         visit new_entry_path
         find("#category_id-ts-control").click
 
         within("#category_id-ts-dropdown") do
           expect(page).to have_css(".optgroup-header", text: /expenses/i)
           expect(page).to have_css(".optgroup-header", text: /incomes/i)
-          expect(page).to have_css(".optgroup-header", text: /savings/i)
+          expect(page).to have_no_css(".optgroup-header", text: /savings/i)
         end
       end
 

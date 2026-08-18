@@ -24,13 +24,18 @@ class WeeklyCalendarPresenter
   end
 
   # Returns array of days, each containing:
-  # { date:, entries_by_type: { expense: [...], income: [...], savings: [...] } }
+  # { date:, entries_by_type: { expense: [...], income: [...] } }
+  #
+  # TWO TYPES, NOT THREE (plan 3, task 5) — the keys are `CategoryTypeHelper::CATEGORY_TYPES` and
+  # the savings one is gone with the enum value. A `PoolMovement` does not take its place here:
+  # #fetch_entries reads `Entry` alone, because a transfer between the user's own pools is not a
+  # day in their financial life the way a purchase or a paycheck is.
   def days
     @days ||= build_days
   end
 
   # Returns weekly breakdown:
-  # { expense: { total:, categories: { "Food" => 100 } }, income: {...}, savings: {...} }
+  # { expense: { total:, categories: { "Food" => 100 } }, income: {...} }
   def weekly_breakdown
     @weekly_breakdown ||= calculate_weekly_breakdown
   end

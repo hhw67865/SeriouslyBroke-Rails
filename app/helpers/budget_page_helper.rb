@@ -183,7 +183,7 @@ module BudgetPageHelper
   #
   # Not the same question as "would it create a pool": a name already taken by an envelope is
   # JOINED rather than created, and the category still moves. See
-  # BudgetPagePresenter#joined_envelope_name.
+  # BudgetPagePresenter#joined_pool.
   def suggestion_re_points_category?(suggestion) = suggestion.prefill.key?(:pool)
 
   # The name the ENGINE proposed, read straight off the payload — no query, because this is only

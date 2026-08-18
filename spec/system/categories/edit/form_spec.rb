@@ -20,10 +20,11 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_button("Update Category")
     end
 
-    it "shows category type options" do
+    # TWO TILES, NOT THREE (plan 3, task 5) — `Category.category_types` drives the loop.
+    it "shows category type options", :aggregate_failures do
       expect(page).to have_content("Expense")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
     end
 
     it "shows color selection options" do
@@ -54,15 +55,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       expect(page).to have_field("Name", with: "Salary Income")
       expect(page).to have_checked_field("category_category_type_income")
-    end
-
-    it "pre-fills savings category correctly" do
-      pool = create(:pool, user: user)
-      savings_category = create(:category, :savings, name: "Emergency Fund", user: user, pool: pool)
-      visit edit_category_path(savings_category)
-
-      expect(page).to have_field("Name", with: "Emergency Fund")
-      expect(page).to have_checked_field("category_category_type_savings")
     end
   end
 
@@ -138,16 +130,16 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
     it "updates multiple fields simultaneously" do
       fill_in "Name", with: "Completely Updated"
-      find("label", text: "Savings").click
+      find("label", text: "Income").click
       fill_in "Color", with: "#00FF00"
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(page).to have_current_path(categories_path(type: "savings"))
+      expect(page).to have_current_path(categories_path(type: "income"))
 
       category.reload
       expect(category.name).to eq("Completely Updated")
-      expect(category.category_type).to eq("savings")
+      expect(category.category_type).to eq("income")
       expect(category.color).to eq("#00FF00")
     end
   end
@@ -192,18 +184,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       expect(page).to have_current_path(categories_path(type: "income"))
       expect(page).to have_content("Income Categories")
-    end
-
-    it "redirects to savings index when updating savings category" do
-      pool = create(:pool, user: user)
-      savings_category = create(:category, :savings, user: user, pool: pool)
-      visit edit_category_path(savings_category)
-
-      fill_in "Name", with: "Updated Savings"
-      click_button "Update Category"
-
-      expect(page).to have_current_path(categories_path(type: "savings"))
-      expect(page).to have_content("Savings Categories")
     end
   end
 end

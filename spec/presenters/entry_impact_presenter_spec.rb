@@ -80,10 +80,13 @@ RSpec.describe EntryImpactPresenter do
       expect(present(groceries).denominator).to be_a(BigDecimal)
     end
 
+    # `#direction` IS GONE (plan 3, task 5) — with no savings category there is one sign, so the
+    # method was the constant -1 and `data-direction` was a constant handed to the browser. The
+    # claim it carried is asserted here as arithmetic instead, both ways.
     it "subtracts an expense and never adds it", :aggregate_failures do
-      expect(present(groceries, amount: "55").direction).to eq(-1)
       expect(present(groceries, amount: "55").balance_after).to eq(BigDecimal("185"))
       expect(present(groceries, amount: "55").balance_after).not_to eq(BigDecimal("295"))
+      expect(present(groceries, amount: "55")).not_to respond_to(:direction)
     end
 
     it "runs the bar to the day before the next period boundary" do
@@ -251,37 +254,26 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance_after).to eq(BigDecimal("55"))
     end
 
-    # A SAVINGS ENTRY WENT IN, so removing it takes money OUT — the opposite sign from an expense,
-    # and getting it backwards would move the figure by twice the entry.
-    it "gives back a savings contribution rather than adding it a second time", :aggregate_failures do
+    # THE TWO CROSS-SIGN EXAMPLES THAT STOOD HERE ARE DELETED (plan 3, task 5). Both planted a
+    # SAVINGS entry and asserted that removing it took money OUT — the opposite sign from an
+    # expense — and one of them re-categorised such an entry into an expense category to prove the
+    # exclusion sign and the subtraction sign were read off different records. Neither entry is a
+    # shape the app can hold: `#own_contribution` has one sign now, and the same-pool/other-pool
+    # distinction it still makes is pinned by the two examples above.
+    #
+    # WHAT SURVIVES OF THEM is the edit case on a GOAL, which is the arm the brief keeps: an
+    # expense entry already counted against a goal, re-read on the edit form.
+    it "gives back an expense already counted against a goal rather than spending it twice", :aggregate_failures do
       vacation_pool = create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
-      vacation = create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
-      contribution = create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.new(2026, 2, 6))
-
-      impact = present(vacation, amount: "150", entry: contribution)
-
-      expect(vacation_pool.calculator(today: today).balance).to eq(BigDecimal("150"))
-      expect(impact.balance).to eq(0)
-      expect(impact.balance_after).to eq(BigDecimal("150"))
-    end
-
-    # RE-CATEGORISING ACROSS TYPES, which is where the two signs are read from two different places
-    # at once: the SAVED category decides what the ledger counted (a savings entry went IN), and the
-    # category now in the form decides what the save would do (an expense comes OUT). Reading either
-    # sign off the wrong record moves the figure by twice the entry.
-    it "reads the exclusion off the saved category and the subtraction off the chosen one", :aggregate_failures do
-      vacation_pool = create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
-      vacation = create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
       education = create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
       fund(vacation_pool, 600)
-      contribution = create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.new(2026, 2, 6))
+      spent = create(:entry, item: create(:item, category: education), amount: 150, date: Date.new(2026, 2, 6))
 
-      impact = present(education, amount: "150", entry: contribution)
+      impact = present(education, amount: "150", entry: spent)
 
-      # Ledger: 600 funded + 150 contributed. Without the contribution: 600. Spending 150: 450.
-      expect(vacation_pool.calculator(today: today).balance).to eq(BigDecimal("750"))
+      # Ledger: 600 funded − 150 spent. Without this entry: 600. Spending 150: 450.
+      expect(vacation_pool.calculator(today: today).balance).to eq(BigDecimal("450"))
       expect(impact.balance).to eq(BigDecimal("600"))
-      expect(impact.direction).to eq(-1)
       expect(impact.balance_after).to eq(BigDecimal("450"))
     end
   end
@@ -308,15 +300,12 @@ RSpec.describe EntryImpactPresenter do
       expect(present(on_the_buffer, amount: "55").overdrawn?).to be(false)
     end
 
-    it "does not call an expense a contribution", :aggregate_failures do
-      expect(present(on_the_buffer).contribution?).to be(false)
+    # `#contribution?` IS GONE (plan 3, task 5). It split this card into a spending arm and a
+    # contribution arm ("No goal — this contribution has nowhere to land", pointing at /pools/new);
+    # only the spending arm is reachable now, so the method and the second arm went together.
+    it "has no contribution arm to choose between", :aggregate_failures do
+      expect(present(on_the_buffer)).not_to respond_to(:contribution?)
       expect(present(on_the_buffer).unbudgeted?).to be(true)
-    end
-
-    it "calls a savings category on an ACCOUNT a contribution too" do
-      on_the_account = create(:category, user: user, name: "Buffer Top-up", category_type: :savings, pool: checking)
-
-      expect(present(on_the_account).contribution?).to be(true)
     end
 
     it "is not what an enveloped category gets", :aggregate_failures do
@@ -331,38 +320,42 @@ RSpec.describe EntryImpactPresenter do
     let(:vacation_pool) do
       create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
     end
-    let(:vacation) { create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool) }
+    # THE GOAL ARM IS KEYED ON THE POOL, NOT ON THE CATEGORY, which is why it survives task 5
+    # intact: an EXPENSE category pointing at a savings goal is the demo's own shape (Vacation
+    # Spending → Vacation to Europe), and spending from a goal is still spending against a goal.
+    # The category planted here was a SAVINGS one and is an expense one now; the noun, the target
+    # and the bar are unchanged, and only the sign of the arithmetic moved — which is the whole of
+    # what the enum value carried.
+    let(:vacation) { create(:category, user: user, name: "Vacation", category_type: :expense, pool: vacation_pool) }
 
     before { fund(vacation_pool, 600) }
 
-    it "takes the goal shape and fills rather than empties", :aggregate_failures do
+    it "takes the goal shape and measures against the target", :aggregate_failures do
       impact = present(vacation, amount: "150")
 
       expect(impact.goal?).to be(true)
       expect(impact.noun).to eq("goal")
-      expect(impact.direction).to eq(1)
       expect(impact.balance).to eq(BigDecimal("600"))
-      expect(impact.balance_after).to eq(BigDecimal("750"))
+      expect(impact.balance_after).to eq(BigDecimal("450"))
       expect(impact.goal_target).to eq(BigDecimal("2400"))
     end
 
     it "measures its bar against the goal and not against its rules", :aggregate_failures do
-      # A $500-a-period rule would draw this bar FULL; the goal draws it at 750 of 2,400.
+      # A $500-a-period rule would draw this bar FULL; the goal draws it at 450 of 2,400.
       rate(vacation_pool, 500)
 
       expect(present(vacation, amount: "150").denominator).to eq(BigDecimal("2400"))
       expect(present(vacation, amount: "150").denominator).not_to eq(BigDecimal("500"))
-      expect(present(vacation, amount: "150").bar_percent).to eq(31)
+      expect(present(vacation, amount: "150").bar_percent).to eq(19)
     end
 
-    # An EXPENSE category can point at a savings pool — spending out of a goal is still spending.
-    it "empties when the category spending it is an expense", :aggregate_failures do
-      education = create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
-      impact = present(education, amount: "150")
+    # BOTH DIRECTIONS ON THE SURVIVING ARM: a goal empties, and it says so in red once it is empty.
+    it "goes negative and reports the overdraw like any other pool", :aggregate_failures do
+      impact = present(vacation, amount: "900")
 
       expect(impact.goal?).to be(true)
-      expect(impact.direction).to eq(-1)
-      expect(impact.balance_after).to eq(BigDecimal("450"))
+      expect(impact.balance_after).to eq(BigDecimal("-300"))
+      expect(impact.overdrawn?).to be(true)
     end
 
     # `Pool` validates a savings pool's target as PRESENT, not as positive, so zero is the only

@@ -5,27 +5,31 @@ require "rails_helper"
 RSpec.describe PoolCalculator, type: :model do
   let(:user) { create(:user) }
 
-  # These fixtures build a pool balance out of savings-category entries — the pre-envelope
-  # shape #balance still has to answer for until Plan 3 converts those entries to movements.
+  # A GOAL'S BALANCE, FUNDED THE WAY A GOAL IS FUNDED (plan 3, task 5). These four contributions
+  # were entries in a savings CATEGORY — the pre-envelope shape #balance answered for until the
+  # cutover converted them — and they are `PoolMovement`s now, which is what a contribution IS.
+  # EVERY FIGURE BELOW IS UNCHANGED, to the cent: the term moved from `savings_entries_total` to
+  # `movements_in_total` and both were inside `#contributions` and `#balance` at the same sign.
   # Scoped to this group so they do not leak into the envelope examples below.
   describe "savings-pool balances" do
     let(:base_date) { Date.current.beginning_of_month }
-    let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, start_date: base_date - 6.months) }
-
-    # Savings category (contributions)
-    let!(:savings_cat) { create(:category, :savings, user: user, name: "Emergency Savings", pool: pool) }
-    let!(:savings_item) { create(:item, category: savings_cat, name: "Monthly Transfer") }
+    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, start_date: base_date - 6.months, account: checking) }
 
     # Expense category linked to pool (withdrawals)
     let!(:expense_cat) { create(:category, :expense, user: user, name: "Emergency Expense", pool: pool) }
     let!(:expense_item) { create(:item, category: expense_cat, name: "Withdrawal") }
 
+    def contribute(amount, on)
+      create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+    end
+
     before do
       # Contributions: $200 month-3, $300 month-2, $500 month-1, $400 this month
-      create(:entry, item: savings_item, amount: 200.00, date: base_date - 3.months + 1.day)
-      create(:entry, item: savings_item, amount: 300.00, date: base_date - 2.months + 1.day)
-      create(:entry, item: savings_item, amount: 500.00, date: base_date - 1.month + 1.day)
-      create(:entry, item: savings_item, amount: 400.00, date: base_date + 1.day)
+      contribute(200.00, base_date - 3.months + 1.day)
+      contribute(300.00, base_date - 2.months + 1.day)
+      contribute(500.00, base_date - 1.month + 1.day)
+      contribute(400.00, base_date + 1.day)
 
       # Withdrawals: $100 month-2, $150 this month
       create(:entry, item: expense_item, amount: 100.00, date: base_date - 2.months + 5.days)
@@ -99,9 +103,12 @@ RSpec.describe PoolCalculator, type: :model do
   # The cap is asserted with it, since one clamp now does both jobs and a mutation to either bound
   # has to fail something.
   describe "#progress_percentage clamps at both ends", :aggregate_failures do
-    let(:goal) { create(:pool, user: user, name: "Clamped", target_amount: 1_000) }
-    let(:contributions) { create(:item, category: create(:category, :savings, user: user, pool: goal)) }
+    let(:checking) { create(:pool, :account, user: user, name: "Clamp Checking") }
+    let(:goal) { create(:pool, user: user, name: "Clamped", target_amount: 1_000, account: checking) }
     let(:spending) { create(:item, category: create(:category, :expense, user: user, pool: goal)) }
+
+    # A contribution is a movement (plan 3, task 5); it was an entry in a savings category here.
+    def contribute(amount) = create(:pool_movement, from_pool: checking, to_pool: goal, amount: amount)
 
     it "floors at zero on an overdrawn pool and reports the true figure on a partial one" do
       create(:entry, item: spending, amount: 300)
@@ -109,14 +116,14 @@ RSpec.describe PoolCalculator, type: :model do
       expect(goal.calculator.current_balance).to eq(-300) # the balance itself still says so
       expect(goal.calculator.progress_percentage).to eq(0)
 
-      create(:entry, item: contributions, amount: 550)
+      contribute(550)
 
       expect(goal.calculator.current_balance).to eq(250)
       expect(goal.calculator.progress_percentage).to eq(25)
     end
 
     it "still caps at 100 when the goal is overfunded" do
-      create(:entry, item: contributions, amount: 2_500)
+      contribute(2_500)
 
       expect(goal.calculator.progress_percentage).to eq(100)
     end
@@ -168,8 +175,10 @@ RSpec.describe PoolCalculator, type: :model do
         expect(car.calculator(today: today).balance).to eq(-50.00)
       end
 
-      # Dashboard::SavingsPresenter calls pool.calculator(as_of:), so the date cutoff
-      # has to reach the movements too, not only the entries it used to filter.
+      # `Dashboard::OverviewPresenter#pools_summary` calls pool.calculator(as_of:), so the date
+      # cutoff has to reach the movements too, not only the entries it used to filter. (It was
+      # `Dashboard::SavingsPresenter`'s until plan 3 task 5 deleted that class with its tab; the
+      # reader moved to the presenter behind the tab that renders the strip.)
       it "applies as_of to movements", :aggregate_failures do
         create(:pool_movement, from_pool: checking, to_pool: car, amount: 500, date: Date.new(2026, 1, 10))
         create(:pool_movement, from_pool: car, to_pool: checking, amount: 100, date: Date.new(2026, 2, 10))

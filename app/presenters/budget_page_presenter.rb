@@ -220,31 +220,40 @@ class BudgetPagePresenter
   # NIL FOR THE TWO KINDS THAT PROPOSE NOTHING, and the guard is explicit rather than left to a
   # `&.`: drift and a dead rule are about a rule that already has an envelope, so their payloads
   # carry neither half and asking this of them is a question with no answer.
-  def joined_envelope_name(suggestion)
+  #
+  # THE POOL, NOT ITS NAME (plan 3, task 5 — Task 2's second stale noun). This returned a String and
+  # the row printed "your existing <name> envelope" after it, which is FALSE for the reuse arm: the
+  # `pool_id` branch accepts any non-account pool, savings goals included (see
+  # `BudgetProposal`'s own note), so the demo read *"This rule joins your existing Vacation to
+  # Europe envelope"* about a GOAL — three inches from a category page saying "Goal" about the same
+  # pool. Handing the record back lets the row say `pool.noun`, which is the one-noun helper
+  # `Pool::NOUNS` exists to be. The NAME branch is unaffected — it looks in `budget_pools` only, so
+  # it was always an envelope — and it goes through the same reader so the two arms cannot drift.
+  def joined_pool(suggestion)
     prefill = suggestion.prefill
-    return reused_envelope_names[prefill[:pool_id]] if prefill.key?(:pool_id)
+    return reused_pools[prefill[:pool_id]] if prefill.key?(:pool_id)
     return nil unless prefill.key?(:pool)
 
-    existing_envelope_names[prefill[:pool][:name].to_s.downcase]
+    existing_envelopes[prefill[:pool][:name].to_s.downcase]
   end
 
   private
 
-  def reused_envelope_names
-    @reused_envelope_names ||=
+  def reused_pools
+    @reused_pools ||=
       begin
         ids = suggestions.filter_map { |suggestion| suggestion.prefill[:pool_id] }
-        ids.empty? ? {} : user.pools.where(id: ids).pluck(:id, :name).to_h
+        ids.empty? ? {} : user.pools.where(id: ids).index_by(&:id)
       end
   end
 
   # Every envelope the user already has, keyed by its lower-cased name — the same
   # case-insensitivity `Pool`'s uniqueness validation and `BudgetProposal`'s lookup use, so the
   # sentence and the write cannot disagree about whether a name is taken.
-  def existing_envelope_names
-    @existing_envelope_names ||=
+  def existing_envelopes
+    @existing_envelopes ||=
       if suggestions.any? { |suggestion| suggestion.prefill.key?(:pool) }
-        user.pools.budget_pools.pluck(:name).index_by(&:downcase)
+        user.pools.budget_pools.index_by { |pool| pool.name.downcase }
       else
         {}
       end

@@ -33,25 +33,29 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   describe "empty state with no categories", :aggregate_failures do
     before { visit categories_pool_path(pool) }
 
-    it "does not show category section headings when no categories exist" do
-      expect(page).not_to have_css("h3", text: /Savings Categories \(\d+\)/)
-      expect(page).not_to have_css("h3", text: /Expense Categories \(\d+\)/)
+    it "shows the section with a zero count and no rows", :aggregate_failures do
+      expect(page).to have_content("Expense Categories (0)")
+      expect(page).to have_content("No expense categories found")
+      expect(page).to have_no_content("Savings Categories")
     end
   end
 
+  # ONE GROUP, NOT TWO (plan 3, task 5). The screen offered SAVINGS categories as contributors and
+  # EXPENSE ones as withdrawers; nothing contributes through a category any more, so the controller
+  # loads expense categories only and the type heading has one arm.
   describe "category display", :aggregate_failures do
     before do
-      create(:category, name: "Monthly Savings", category_type: "savings", user: user, pool: checking)
+      create(:category, name: "Household Bills", category_type: "expense", user: user, pool: checking)
       create(:category, name: "Vacation Expenses", category_type: "expense", user: user, pool: checking)
       create(:category, name: "Salary", category_type: "income", user: user, pool: checking)
       visit categories_pool_path(pool)
     end
 
-    it "shows savings and expense categories separated" do
-      expect(page).to have_content("Savings Categories (1)")
-      expect(page).to have_content("Expense Categories (1)")
-      expect(page).to have_content("Monthly Savings")
+    it "lists the expense categories under one heading", :aggregate_failures do
+      expect(page).to have_content("Expense Categories (2)")
+      expect(page).to have_content("Household Bills")
       expect(page).to have_content("Vacation Expenses")
+      expect(page).to have_no_content("Savings Categories")
     end
 
     it "does not show income categories" do
@@ -64,7 +68,7 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     # to something, and the row says which, which is the more useful sentence anyway: it is where
     # the money currently lives.
     it "names the pool an unconnected category's money currently lives in" do
-      within(:xpath, "//label[contains(., 'Monthly Savings')]") do
+      within(:xpath, "//label[contains(., 'Household Bills')]") do
         expect(page).to have_content("Connected to Checking")
         expect(page).to have_no_content("Available to connect")
       end
@@ -76,58 +80,50 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   end
 
   describe "connecting categories" do
-    let!(:savings_category) { create(:category, name: "Monthly Savings", category_type: "savings", user: user) }
+    let!(:household) { create(:category, name: "Household Bills", category_type: "expense", user: user) }
     let!(:expense_category) { create(:category, name: "Vacation Expenses", category_type: "expense", user: user) }
 
     before { visit categories_pool_path(pool) }
 
-    it "connects a single savings category", :aggregate_failures do
-      check_category("Monthly Savings")
+    it "connects a single category", :aggregate_failures do
+      check_category("Household Bills")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
       expect(page).to have_current_path(pool_path(pool))
-      expect(savings_category.reload.pool).to eq(pool)
-    end
-
-    it "connects a single expense category", :aggregate_failures do
-      check_category("Vacation Expenses")
-      click_button "Update Connected Categories"
-
-      expect(page).to have_content("Categories updated successfully!")
-      expect(expense_category.reload.pool).to eq(pool)
+      expect(household.reload.pool).to eq(pool)
     end
 
     it "connects multiple categories at once", :aggregate_failures do
-      check_category("Monthly Savings")
+      check_category("Household Bills")
       check_category("Vacation Expenses")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(savings_category.reload.pool).to eq(pool)
+      expect(household.reload.pool).to eq(pool)
       expect(expense_category.reload.pool).to eq(pool)
     end
   end
 
   describe "disconnecting categories" do
-    let!(:connected_savings) do
+    let!(:connected_spending) do
       create(
         :category,
-        name: "Connected Savings",
-        category_type: "savings",
+        name: "Connected Spending",
+        category_type: "expense",
         user: user,
         pool: pool
       )
     end
-    let!(:other_savings) do
-      create(:category, name: "Other Savings", category_type: "savings", user: user)
+    let!(:other_spending) do
+      create(:category, name: "Other Spending", category_type: "expense", user: user)
     end
 
     before { visit categories_pool_path(pool) }
 
     it "shows connected status for connected categories", :aggregate_failures do
-      expect(category_label("Connected Savings")).to have_content("Connected")
-      expect(category_checkbox("Connected Savings")).to be_checked
+      expect(category_label("Connected Spending")).to have_content("Connected")
+      expect(category_checkbox("Connected Spending")).to be_checked
     end
 
     # DISCONNECTING HANDS THE CATEGORY BACK TO THE GOAL'S ACCOUNT (plan 3, task 3). It used to null
@@ -141,22 +137,22 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     # matched nothing and the disconnect silently did nothing. The example below never caught it
     # because it checks another box in the same submission, which puts a real id in the array.
     it "disconnects the only connected category when nothing else is checked", :aggregate_failures do
-      uncheck_category("Connected Savings")
+      uncheck_category("Connected Spending")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(connected_savings.reload.pool).to eq(checking)
+      expect(connected_spending.reload.pool).to eq(checking)
       expect(pool.categories.reload).to be_empty
     end
 
     it "disconnects a category by connecting a different one", :aggregate_failures do
-      uncheck_category("Connected Savings")
-      check_category("Other Savings")
+      uncheck_category("Connected Spending")
+      check_category("Other Spending")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(connected_savings.reload.pool).to eq(checking)
-      expect(other_savings.reload.pool).to eq(pool)
+      expect(connected_spending.reload.pool).to eq(checking)
+      expect(other_spending.reload.pool).to eq(pool)
     end
   end
 
@@ -169,9 +165,9 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   describe "disconnecting with nowhere to hand the category back to" do
     let!(:stranded) { create(:pool, :savings_pool, name: "Stranded Goal", user: user, account: nil) }
     let!(:connected) do
-      create(:category, name: "Connected Savings", category_type: "savings", user: user, pool: stranded)
+      create(:category, name: "Connected Spending", category_type: "expense", user: user, pool: stranded)
     end
-    let!(:other_savings) { create(:category, name: "Other Savings", category_type: "savings", user: user) }
+    let!(:other_spending) { create(:category, name: "Other Spending", category_type: "expense", user: user) }
 
     before do
       user.update!(default_account: nil)
@@ -179,25 +175,25 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
     end
 
     it "refuses and says why, writing neither half", :aggregate_failures do
-      uncheck_category("Connected Savings")
-      check_category("Other Savings")
+      uncheck_category("Connected Spending")
+      check_category("Other Spending")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Disconnecting a category needs an account to hand its spending back to")
       expect(page).to have_no_content("Categories updated successfully!")
       expect(connected.reload.pool).to eq(stranded)
-      expect(other_savings.reload.pool).not_to eq(stranded)
+      expect(other_spending.reload.pool).not_to eq(stranded)
     end
 
     # THE OTHER DIRECTION on the same screen: with nothing being disconnected there is nothing to
     # refuse, so a pure connect still goes through. Without this the refusal could be unconditional
     # and the example above would still pass.
     it "still connects when nothing is being disconnected", :aggregate_failures do
-      check_category("Other Savings")
+      check_category("Other Spending")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(other_savings.reload.pool).to eq(stranded)
+      expect(other_spending.reload.pool).to eq(stranded)
       expect(connected.reload.pool).to eq(stranded)
     end
   end
@@ -232,7 +228,7 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       create(
         :category,
         name: "Conflicting Category",
-        category_type: "savings",
+        category_type: "expense",
         user: user,
         pool: other_pool
       )

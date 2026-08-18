@@ -95,18 +95,7 @@ RSpec.describe "Categories Show - Items This Month", type: :system do
     end
   end
 
-  describe "savings items list", :aggregate_failures do
-    let!(:pool) { create(:pool, user: user) }
-    let!(:category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency Fund") }
-    let!(:transfer_item) { create(:item, category: category, name: "Transfer") }
-
-    before do
-      create(:entry, item: transfer_item, amount: 300, date: base_date + 7.days)
-      visit category_path(category, month: base_date.month, year: base_date.year)
-    end
-
-    it "shows brand-colored positive amounts for savings" do
-      expect(page).to have_content(ActionController::Base.helpers.number_to_currency(300))
-    end
-  end
+  # THE SAVINGS ITEMS LIST IS DELETED WITH THE TYPE (plan 3, task 5). Its one example read an
+  # unsigned, brand-coloured amount off a category type that no longer exists; the expense and
+  # income lists above pin the two signs that survive.
 end

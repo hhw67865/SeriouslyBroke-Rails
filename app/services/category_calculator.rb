@@ -14,8 +14,9 @@
 #
 # `#monthly_contribution` goes with them for a different reason: it was `#total_amount` behind a
 # `category.savings?` gate, so it was one reader wearing two names. Its two call sites (the
-# category summary card and the category index card) read `#total_amount` directly; the savings
-# ARMS around them are Task 5's to delete with the category type.
+# category summary card and the category index card) read `#total_amount` directly, and the savings
+# ARMS around them are DELETED in plan 3 task 5 with the category type — so the gate has no
+# predicate to be, either.
 class CategoryCalculator
   attr_reader :category, :date, :date_range, :period
 

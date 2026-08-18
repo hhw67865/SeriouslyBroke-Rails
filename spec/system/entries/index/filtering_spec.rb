@@ -6,17 +6,14 @@ RSpec.describe "Entries Index - Filtering", type: :system do
   let!(:user) { create(:user) }
   let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let!(:savings_category) { create(:category, :savings, user: user, name: "Emergency Fund") }
 
   let!(:expense_item) { create(:item, category: expense_category, name: "Groceries") }
   let!(:income_item) { create(:item, category: income_category, name: "Monthly Pay") }
-  let!(:savings_item) { create(:item, category: savings_category, name: "Emergency Savings") }
 
   before do
     sign_in user, scope: :user
     create(:entry, item: expense_item, amount: 150, description: "Weekly shopping")
     create(:entry, item: income_item, amount: 3000, description: "Salary payment")
-    create(:entry, item: savings_item, amount: 500, description: "Emergency fund deposit")
   end
 
   describe "type tab filtering", :aggregate_failures do
@@ -26,7 +23,6 @@ RSpec.describe "Entries Index - Filtering", type: :system do
       expect(page).to have_content("All")
       expect(page).to have_content("Groceries")
       expect(page).to have_content("Monthly Pay")
-      expect(page).to have_content("Emergency Savings")
     end
 
     it "filters to expense entries only" do
@@ -36,7 +32,6 @@ RSpec.describe "Entries Index - Filtering", type: :system do
       expect(page).to have_content("Groceries")
       expect(page).to have_content("Food")
       expect(page).not_to have_content("Monthly Pay")
-      expect(page).not_to have_content("Emergency Savings")
     end
 
     it "filters to income entries only" do
@@ -46,17 +41,21 @@ RSpec.describe "Entries Index - Filtering", type: :system do
       expect(page).to have_content("Monthly Pay")
       expect(page).to have_content("Salary")
       expect(page).not_to have_content("Groceries")
-      expect(page).not_to have_content("Emergency Savings")
     end
 
-    it "filters to savings entries only" do
+    # A STALE `?type=savings` LINK FALLS THROUGH TO EVERYTHING (plan 3, task 5). The filter's
+    # `case` has no savings arm any more and its `else` returns the unfiltered scope, which is the
+    # same answer the All tab gives — a bookmark that shows the user their entries rather than an
+    # empty list under a tab that is not there.
+    it "has no savings tab, and a stale savings link shows everything", :aggregate_failures do
+      visit entries_path
+
+      expect(page).to have_no_link("Savings")
+
       visit entries_path(type: "savings")
 
-      expect(page).to have_content("Savings")
-      expect(page).to have_content("Emergency Savings")
-      expect(page).to have_content("Emergency Fund")
-      expect(page).not_to have_content("Groceries")
-      expect(page).not_to have_content("Monthly Pay")
+      expect(page).to have_content("Groceries")
+      expect(page).to have_content("Monthly Pay")
     end
   end
 
@@ -73,12 +72,6 @@ RSpec.describe "Entries Index - Filtering", type: :system do
       click_link "Income"
       expect(page).to have_current_path(entries_path(type: "income"))
       expect(page).to have_css("a.border-brand.text-brand", text: "Income")
-    end
-
-    it "switches to savings tab" do
-      click_link "Savings"
-      expect(page).to have_current_path(entries_path(type: "savings"))
-      expect(page).to have_css("a.border-brand.text-brand", text: "Savings")
     end
 
     it "switches back to all tab" do
@@ -98,12 +91,6 @@ RSpec.describe "Entries Index - Filtering", type: :system do
 
     it "shows empty state for income when none exist" do
       visit entries_path(type: "income")
-
-      expect(page).to have_content("No entries found")
-    end
-
-    it "shows empty state for savings when none exist" do
-      visit entries_path(type: "savings")
 
       expect(page).to have_content("No entries found")
     end

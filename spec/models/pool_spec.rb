@@ -262,42 +262,16 @@ RSpec.describe Pool, type: :model do
 
     # PoolCalculator#current_balance is (savings-category entries) - (expense-category
     # entries), both dated on or after the pool's start_date.
-    def deposit(pool, amount)
-      category = create(:category, :savings, user: pool.user, pool: pool, name: "#{pool.name} In")
-      create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
-    end
-
     def withdraw(pool, amount)
       category = create(:category, :expense, user: pool.user, pool: pool, name: "#{pool.name} Out")
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
-    it "sums the account's own balance and its child pools", :aggregate_failures do
-      checking = create(:pool, :account, user: user)
-      groceries = create(:pool, :budget_pool, user: user, account: checking)
-      vacation = create(:pool, :savings_pool, user: user, account: checking)
-
-      deposit(checking, 100) # unallocated cash
-      deposit(groceries, 60)
-      withdraw(groceries, 35) # groceries nets 25
-      deposit(vacation, 40)
-
-      expect(checking.child_pools).to contain_exactly(groceries, vacation)
-      expect(groceries.calculator.current_balance).to eq(25)
-      expect(checking.total).to eq(165)
-    end
-
-    it "equals the pool's own balance when it has no child pools" do
-      pool = create(:pool, :account, user: user)
-
-      deposit(pool, 70)
-
-      expect(pool.total).to eq(70)
-    end
-
-    # The envelope-native counterpart to the two examples above: same structure, funded the
-    # way PoolCalculator#balance will read money once Plan 3 lands — income entries and
-    # movements rather than savings-category entries. Both shapes must total the same.
+    # THE SAVINGS-FUNDED TWINS OF THESE TWO ARE DELETED (plan 3, task 5). They built the same two
+    # structures with a `deposit` helper that made a SAVINGS category and paid an entry into it,
+    # and asserted the same totals — a pairing that existed to prove the envelope-native shape
+    # below totalled the same as the savings-entry one. There is no savings-entry shape any more,
+    # so the pair is one example twice and the surviving half is the one that describes the app.
     it "sums the account's own balance and its child pools, funded by movements", :aggregate_failures do
       checking, groceries, vacation = funded_account
 
@@ -345,41 +319,67 @@ RSpec.describe Pool, type: :model do
     end
   end
 
-  describe "#timeline_entries" do
-    it "includes contributions and withdrawals after start_date", :aggregate_failures do
-      user = create(:user)
-      pool = create(:pool, user: user, start_date: Date.new(2025, 6, 1))
-      savings_item = create(:item, category: create(:category, :savings, user: user, pool: pool))
-      expense_item = create(:item, category: create(:category, :expense, user: user, pool: pool))
+  # THE POOL'S HISTORY, POST-CUTOVER. This replaces `#timeline_entries`, which OR'd savings-typed
+  # entries with expense-typed ones and, once the savings category was gone, could only ever return
+  # the second half — an empty list on every goal, beside a "Total Contributions" tile printing
+  # real money.
+  describe "#timeline" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let(:goal) { create(:pool, :savings_pool, user: user, account: checking, start_date: Date.new(2025, 6, 1)) }
 
-      contribution = create(:entry, item: savings_item, date: Date.new(2025, 7, 1))
-      withdrawal = create(:entry, item: expense_item, date: Date.new(2025, 8, 1))
-      before_start = create(:entry, item: savings_item, date: Date.new(2025, 5, 1))
+    it "lists movements in and out and the spending of its own categories", :aggregate_failures do
+      spending = create(:item, name: "Flights", category: create(:category, :expense, user: user, pool: goal, name: "Trip"))
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 200, date: Date.new(2025, 7, 1))
+      create(:pool_movement, from_pool: goal, to_pool: checking, amount: 30, date: Date.new(2025, 7, 15))
+      create(:entry, item: spending, amount: 45, date: Date.new(2025, 8, 1))
 
-      results = pool.timeline_entries
+      rows = goal.timeline(limit: 8)
 
-      expect(results).to include(contribution, withdrawal)
-      expect(results).not_to include(before_start)
+      expect(rows.map(&:label)).to eq(["Spent", "Moved out", "Moved in"])
+      expect(rows.map(&:sign)).to eq([-1, -1, 1])
+      expect(rows.map { |row| row.amount.to_i }).to eq([45, 30, 200])
+      expect(rows.map(&:name)).to eq(["Flights", "Checking", "Checking"])
+      expect(rows.map(&:detail)).to eq(["Trip", "moved by hand", "moved by hand"])
+    end
+
+    # BOTH DIRECTIONS ON THE CUTOFF. `#timeline_entries` bounded its rows at `start_date` while
+    # `PoolCalculator#balance` ignores it, so a pre-start row counted toward the balance without
+    # appearing in the list explaining it. The list is now the rows behind #contributions and
+    # #withdrawals, and those have no cutoff either.
+    it "includes rows from before start_date, because the balance beside it does" do
+      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 90, date: Date.new(2025, 5, 1))
+
+      expect(goal.timeline(limit: 8).map { |row| row.amount.to_i }).to eq([90])
+    end
+
+    it "takes the newest `limit` rows across both sources", :aggregate_failures do
+      5.times { |n| create(:pool_movement, from_pool: checking, to_pool: goal, amount: 10, date: Date.new(2025, 7, 1) + n.days) }
+      spending = create(:item, category: create(:category, :expense, user: user, pool: goal, name: "Trip"))
+      create(:entry, item: spending, amount: 45, date: Date.new(2025, 9, 1))
+
+      rows = goal.timeline(limit: 2)
+
+      expect(rows.size).to eq(2)
+      expect(rows.map(&:label)).to eq(["Spent", "Moved in"])
+    end
+
+    it "is empty for a pool nothing has reached" do
+      expect(create(:pool, :budget_pool, user: user, account: checking).timeline(limit: 8)).to be_empty
     end
   end
 
   describe "auto-created categories on create" do
     let(:user) { create(:user) }
 
-    it "does not create any categories when both flags are nil" do
+    it "does not create any categories when the flag is nil" do
       pool = create(:pool, user: user, name: "Emergency Fund")
 
       expect(pool.categories.count).to eq(0)
     end
 
-    it "does not create any categories when both flags are '0'" do
-      pool = create(
-        :pool,
-        user: user,
-        name: "Emergency Fund",
-        create_expense_category: "0",
-        create_savings_category: "0"
-      )
+    it "does not create any categories when the flag is '0'" do
+      pool = create(:pool, user: user, name: "Emergency Fund", create_expense_category: "0")
 
       expect(pool.categories.count).to eq(0)
     end
@@ -394,22 +394,14 @@ RSpec.describe Pool, type: :model do
       expect(category.user).to eq(user)
     end
 
-    it "creates a savings category when create_savings_category is truthy", :aggregate_failures do
-      pool = create(:pool, user: user, name: "Emergency Fund", create_savings_category: "1")
-      category = pool.categories.first
+    # `create_savings_category` IS GONE (plan 3, task 5) — the second checkbox on the pool form
+    # minted a SAVINGS category. Asserted absent rather than left to a NoMethodError, and asserted
+    # INERT as a param too: the attribute is unwritable, so a stale form post cannot make one.
+    it "has no savings-category flag at all", :aggregate_failures do
+      pool = build(:pool, user: user, name: "Emergency Fund")
 
-      expect(pool.categories.count).to eq(1)
-      expect(category.name).to eq("Emergency Fund Savings")
-      expect(category.category_type).to eq("savings")
-      expect(category.user).to eq(user)
-    end
-
-    it "creates both categories when both flags are truthy", :aggregate_failures do
-      pool = create(:pool, user: user, name: "Emergency Fund", create_expense_category: "1", create_savings_category: "1")
-
-      expect(pool.categories.count).to eq(2)
-      expect(pool.categories.pluck(:name)).to contain_exactly("Emergency Fund Expense", "Emergency Fund Savings")
-      expect(pool.categories.pluck(:category_type)).to contain_exactly("expense", "savings")
+      expect(pool).not_to respond_to(:create_savings_category)
+      expect { pool.create_savings_category = "1" }.to raise_error(NoMethodError)
     end
 
     it "appends ' 2' when the base name is taken" do

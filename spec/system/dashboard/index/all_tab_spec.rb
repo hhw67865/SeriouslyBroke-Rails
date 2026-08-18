@@ -146,14 +146,17 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   def seed_mixed_financial_data
     pool = create(:pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
     # `Groceries` points at an ACCOUNT (the factory's default) — buffer-funded spending — while
-    # `Car Repair` points at a pool. The $500 savings entry is deliberately still here: it is what
-    # makes the "no savings vocabulary" negative above a real claim rather than an empty fixture.
+    # `Car Repair` points at a pool. The $500 arriving in the goal is deliberately still here: it is
+    # what makes the "no savings vocabulary" negative above a real claim rather than an empty
+    # fixture. It was a $500 entry in a SAVINGS category until plan 3 task 5; it is the movement
+    # such an entry became, at the same amount on the same day, and the pool's balance on the strip
+    # ($500 in, $200 spent) is unchanged.
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
 
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)
     create_entry_for(create(:category, :expense, user: user, name: "Car Repair", pool: pool), "Mechanic", 200.00, 3)
-    create_entry_for(create(:category, :savings, user: user, name: "Emergency Savings", pool: pool), "Transfer", 500.00, 4)
+    create(:pool_movement, from_pool: expense_cat.pool, to_pool: pool, amount: 500.00, date: base_date + 4.days)
   end
 
   def create_entry_for(category, item_name, amount, day_offset)

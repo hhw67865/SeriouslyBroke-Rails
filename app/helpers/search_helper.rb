@@ -79,10 +79,6 @@ module SearchHelper
       "income" => {
         title: "Income",
         description: "Monitor your income sources and earnings"
-      },
-      "savings" => {
-        title: "Savings",
-        description: "Record your savings deposits and contributions"
       }
     }
 
@@ -120,7 +116,7 @@ module SearchHelper
       "description" => "e.g., Monthly payment, Grocery shopping",
       "category" => "e.g., Food, Housing, Income",
       "name" => "e.g., Coffee, Food, Emergency Fund",
-      "category_type" => "e.g., expense, income, savings",
+      "category_type" => "e.g., expense, income",
       "target_amount" => "e.g., 1000, 5000"
     }
   end

@@ -28,12 +28,6 @@ FactoryBot.define do
       name { Faker::Commerce.department + Faker::Number.number(digits: 2).to_s }
     end
 
-    trait :savings do
-      category_type { :savings }
-      name { "Savings for #{Faker::Commerce.product_name} + Faker::Number.number(digits: 2).to_s" }
-      pool { association :pool, :savings_pool, user: user }
-    end
-
     trait :with_items_and_entries do
       transient do
         items_count { rand(2..4) }

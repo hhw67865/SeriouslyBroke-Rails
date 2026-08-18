@@ -78,7 +78,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       salary: plant_unpooled_category(:income, user: user, name: "Salary"),
       coffee: plant_unpooled_category(:expense, user: user, name: "Coffee"),
       health: create(:category, :expense, user: user, name: "Health", pool: pools[:medical]),
-      vacation: create(:category, :savings, user: user, name: "Vacation", pool: pools[:holiday])
+      vacation: plant_savings_category(user: user, name: "Vacation", pool: pools[:holiday])
     }
   end
 
@@ -114,6 +114,22 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # ---------------------------------------------------------------------------------------------
   def plant_unpooled_category(type, **attrs)
     build(:category, type, pool: nil, **attrs).tap { |category| category.save!(validate: false) }
+  end
+
+  # A SAVINGS CATEGORY, WHICH IS NOT A TYPE ANY MORE (plan 3, task 5). `savings: 2` left
+  # `Category`'s enum with the cutover's last code slice, so `create(:category, :savings)` raises
+  # ArgumentError and the very shape step 5 exists to convert could no longer be built through the
+  # model — the same trap Amendment C armed for task 3's required `belongs_to :pool`, one task
+  # later. The fix is on THIS side again: the integer goes in with `update_all`, and it is
+  # `described_class::SAVINGS_CATEGORY` rather than a literal 2, so the fixture and the migration
+  # read the retired value from one place. The migration's own table classes never consult the app
+  # enum, so what it meets here is exactly what it would meet in a real database.
+  def plant_savings_category(user:, name:, pool:)
+    create(:category, :expense, user: user, name: name, pool: pool).tap do |category|
+      # rubocop:disable Rails/SkipsModelValidations -- the enum refuses this value; a database does not
+      Category.where(id: category.id).update_all(category_type: described_class::SAVINGS_CATEGORY)
+      # rubocop:enable Rails/SkipsModelValidations
+    end
   end
 
   def plant_cap(category, amount)
@@ -205,7 +221,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # transfer between two real banks: the shape §5.4 defers and `#crosses_accounts?` reports.
   def settled_lodging_goal(user, old_account)
     goal = create(:pool, user: user, name: "Retirement", account: old_account, target_amount: 9_000.00)
-    category = create(:category, :savings, user: user, name: "Retirement", pool: goal)
+    category = plant_savings_category(user: user, name: "Retirement", pool: goal)
     entry_on(item_in(category, "Monthly Top-up"), 120.00, 7, 10)
 
     { retirement: goal }
@@ -258,12 +274,38 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     user.pools.reload.to_a.sum(0.to_d) { |pool| pool.calculator.balance }
   end
 
+  # ---------------------------------------------------------------------------------------------
+  # THE BALANCE THE PRE-CUTOVER APP WOULD HAVE REPORTED — and it has to be spelled out here because
+  # the app can no longer report one (plan 3, task 5).
+  #
+  # `PoolCalculator#balance` had a `savings_entries_total` term: entries in a savings CATEGORY were
+  # money IN. That term and the category type died in the same commit, so the live reader now
+  # answers 0 for a legacy goal funded entirely by savings entries — which is correct for every
+  # database the app will ever be pointed at, and wrong for the three moments below, all of which
+  # describe the world BEFORE `up` has run.
+  #
+  # This is NOT a second reader of anything live. It is `#balance` plus the one term that was
+  # removed, used only on the far side of `migrate!`, and it is what keeps the strongest claim in
+  # this file — a goal's balance is BYTE-IDENTICAL across the entry→movement swap — a real claim
+  # rather than an assertion that zero equals zero.
+  # ---------------------------------------------------------------------------------------------
+  def legacy_savings_in(pool)
+    savings_categories = Category.where(pool_id: pool.id, category_type: described_class::SAVINGS_CATEGORY)
+    Entry.where(item_id: Item.where(category_id: savings_categories.select(:id)).select(:id)).sum(:amount)
+  end
+
+  def legacy_balance(pool) = pool.calculator.balance + legacy_savings_in(pool)
+
+  def legacy_app_total(user)
+    user.pools.reload.to_a.sum(0.to_d) { |pool| legacy_balance(pool) }
+  end
+
   describe "the invariant it exists to create" do
     it "does not hold before the migration and does hold after it", :aggregate_failures do
       # The three savings entries are money the app invented — they enter a pool without ever
       # entering the user's life — and every paycheck ever recorded reaches no pool at all, because
       # Salary points at nothing. So the pools claim $340.00 against a bank balance of $1,830.25.
-      expect(app_total(wild[:user])).to eq(BigDecimal("340.00"))
+      expect(legacy_app_total(wild[:user])).to eq(BigDecimal("340.00"))
 
       migrate!
 
@@ -440,7 +482,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     it "deletes the entries, their items and the savings categories", :aggregate_failures do
       expect(Entry.where(item_id: Item.where(category_id: wild[:vacation].id)).count).to eq(0)
       expect(Item.where(category_id: wild[:vacation].id).count).to eq(0)
-      expect(Category.where(category_type: :savings).count).to eq(0)
+      expect(Category.where(category_type: described_class::SAVINGS_CATEGORY).count).to eq(0)
     end
 
     it "conserves the count — three entries in, three movements out, none left behind", :aggregate_failures do
@@ -506,7 +548,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # `+amount`, and no step re-points a category away from a goal or zeroes one.
   describe "what the migration promises not to move" do
     it "leaves every savings pool's balance exactly where it found it" do
-      before_run = wild[:user].pools.savings_pools.to_h { |pool| [pool.id, pool.calculator.balance] }
+      before_run = wild[:user].pools.savings_pools.to_h { |pool| [pool.id, legacy_balance(pool)] }
 
       migrate!
 
@@ -515,7 +557,10 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     end
 
     it "and those balances are figures, not a coincidence of zeroes", :aggregate_failures do
-      expect(wild[:holiday].calculator.balance).to eq(BigDecimal("400.00"))
+      expect(legacy_balance(wild[:holiday])).to eq(BigDecimal("400.00"))
+      expect(legacy_balance(wild[:medical])).to eq(BigDecimal("-60.00"))
+      # The medical goal holds no savings entries at all, so the legacy reading and the live one
+      # are the same number for it — which is what says the helper adds a term rather than a figure.
       expect(wild[:medical].calculator.balance).to eq(BigDecimal("-60.00"))
     end
   end
@@ -669,7 +714,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     plant_cap(plant_unpooled_category(:expense, user: wild[:user], name: "Gym"), 60.00)
     # A savings entry that came back: it revives the category count, the entry count, AND — because
     # it lands in the goal's lane — moves the goal's balance from 400.00 to 410.00.
-    revived = create(:category, :savings, user: wild[:user], name: "Revived", pool: wild[:holiday])
+    revived = plant_savings_category(user: wild[:user], name: "Revived", pool: wild[:holiday])
     entry_on(item_in(revived, "Deposit"), 10.00, 7, 20)
     # Spending that arrived after the envelope was zeroed, putting it back into deficit.
     entry_on(item_in(wild[:groceries], "Late Receipt"), 25.00, 7, 21)

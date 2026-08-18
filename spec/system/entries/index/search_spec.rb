@@ -14,9 +14,11 @@ RSpec.describe "Entries Index - Search", type: :system do
   before do
     sign_in user, scope: :user
 
-    # Create savings categories and items
-    vacation_category = create(:category, :savings, user: user, name: "Vacation Savings", pool: vacation_pool)
-    emergency_category = create(:category, :savings, user: user, name: "Emergency Savings", pool: emergency_pool)
+    # Categories pointing at the two GOALS. They were savings-typed until plan 3 task 5; the
+    # search this file exercises resolves an entry through `ENTRY_POOL_ID`, which does not care
+    # what type the category is, so every result below is unchanged.
+    vacation_category = create(:category, :expense, user: user, name: "Vacation Savings", pool: vacation_pool)
+    emergency_category = create(:category, :expense, user: user, name: "Emergency Savings", pool: emergency_pool)
     vacation_item = create(:item, category: vacation_category, name: "Vacation Contribution")
     emergency_item = create(:item, category: emergency_category, name: "Emergency Contribution")
 
@@ -242,7 +244,7 @@ RSpec.describe "Entries Index - Search", type: :system do
 
     context "with multiple categories in same pool" do
       before do
-        another_vacation_category = create(:category, :savings, user: user, name: "Travel Savings", pool: vacation_pool)
+        another_vacation_category = create(:category, :expense, user: user, name: "Travel Savings", pool: vacation_pool)
         another_vacation_item = create(:item, category: another_vacation_category, name: "Travel Fund")
         create(:entry, item: another_vacation_item, amount: 250, description: "Travel contribution", date: Date.parse("2024-03-15"))
 
@@ -282,7 +284,7 @@ RSpec.describe "Entries Index - Search", type: :system do
     # item, so the only thing separating them is the override.
     context "with an entry that names its own pool" do
       before do
-        travel_category = create(:category, :savings, user: user, name: "Travel Savings", pool: vacation_pool)
+        travel_category = create(:category, :expense, user: user, name: "Travel Savings", pool: vacation_pool)
         travel_item = create(:item, category: travel_category, name: "Travel Fund")
         create(
           :entry,

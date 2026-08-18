@@ -21,6 +21,9 @@ module Dashboard
   # * `#overview_chart_data`/`#overview_chart_colors` and `#income_change`/`#expenses_change` —
   #   grepped callerless across `app lib spec`. The chart's third series was the same net-savings
   #   delta, so the one unrendered thing on this page was also carrying the lie.
+  #
+  # ARRIVED, from `Dashboard::SavingsPresenter` when the savings TAB was deleted (task 5):
+  # `#pools_summary` and `#total_pools_balance`, the goals strip this tab renders. See below.
   class OverviewPresenter
     def initialize(parent)
       @parent = parent
@@ -58,5 +61,31 @@ module Dashboard
     def envelope_categories_breakdown
       @envelope_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_enveloped_categories)
     end
+
+    # === The goals strip ===
+    #
+    # MOVED HERE FROM `Dashboard::SavingsPresenter`, WHICH IS DELETED (plan 3, task 5). The strip
+    # (`dashboard/_pools_strip`) is rendered by the ALL tab, and its two readers lived on the
+    # presenter behind the SAVINGS tab — so deleting that class with its tab would have taken this
+    # tab down with it (Task 4's coordination note). Nothing here is category-type machinery:
+    # `pools.savings_pools` is a POOL type and `PoolCalculator` is the app's one reader for what a
+    # pool holds, so neither has anything to do with the enum value that died.
+    #
+    # `as_of: period_range.end` is what makes the figures period-aware — a YTD strip and a monthly
+    # strip describe different moments — and it is `PoolCalculator`'s own bound, not a second one.
+    def pools_summary
+      @pools_summary ||= @user.pools.savings_pools.includes(categories: { items: :entries }).map do |pool|
+        calculator = pool.calculator(as_of: @parent.period_range.end)
+        {
+          id: pool.id,
+          name: pool.name,
+          balance: calculator.current_balance,
+          target_amount: pool.target_amount,
+          progress_percentage: calculator.progress_percentage
+        }
+      end
+    end
+
+    def total_pools_balance = pools_summary.sum { |pool| pool[:balance] }
   end
 end

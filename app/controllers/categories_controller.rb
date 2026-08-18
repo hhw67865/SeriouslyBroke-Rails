@@ -24,10 +24,10 @@ class CategoriesController < ApplicationController
   # on a buffer — so it now asks what its pool IS, which is exactly the question this presenter
   # already answers for the block above it.
   #
-  # It is built for every pooled category, not just `expense?` ones: a SAVINGS category points at a
-  # pool too, and that is the arm whose rendering does not change. Memoised, so an expense category
-  # pointing at an envelope builds ONE PoolStatus for both blocks rather than two that could
-  # disagree about the same envelope on the same page.
+  # It is built for every pooled category, not just `expense?` ones: an INCOME category names the
+  # account its money lands in, and the card renders that pool honestly. Memoised, so an expense
+  # category pointing at an envelope builds ONE PoolStatus for both blocks rather than two that
+  # could disagree about the same envelope on the same page.
   def show
     @budget_block = category_pool_presenter if @category.expense?
     @pool_card = category_pool_presenter if @category.pool.present?
@@ -43,9 +43,14 @@ class CategoriesController < ApplicationController
   #
   # `default_account` is nullable on `users`, so this can still leave the field unset — the form
   # then opens on the first pool in the list and the validation is what refuses a genuine blank.
+  # `?type=` IS CHECKED AGAINST THE ENUM HERE TOO (plan 3, task 5), and this arm is a 500 rather
+  # than a wrong heading: assigning an enum value the mapping does not hold raises ArgumentError,
+  # so `/categories/new?type=savings` — a bookmark, a browser history entry, a link in an old email
+  # — took the whole page down. `#known_type` is the same check `#set_categories` runs; an
+  # unrecognised type simply selects nothing, which is what this form does with no `type` at all.
   def new
     @category = current_user.categories.new(pool: current_user.default_account)
-    @category.category_type = params[:type] if params[:type].present?
+    @category.category_type = known_type(params[:type]) if known_type(params[:type])
   end
 
   # GET /categories/1/edit
@@ -137,8 +142,18 @@ class CategoriesController < ApplicationController
     permitted.merge(pool_id: current_user.pools.find(permitted[:pool_id]).id)
   end
 
+  # THE ONE CHECK BOTH `?type=` READERS RUN. A type the enum does not hold is a stale bookmark now
+  # — `savings` left the mapping in plan 3 task 5 — and it broke two screens in two different ways:
+  # here it reached `Category.with_type`'s three-armed case, came back NIL and 500ed inside
+  # `apply_search`, and in `#new` it raised ArgumentError on assignment. nil for anything unknown,
+  # and each caller says what it does with that.
+  def known_type(type) = Category.category_types.key?(type) ? type : nil
+
+  # Anything unrecognised lands on expenses — the page's own default — rather than heading a list
+  # of expenses "Savings Categories", which is what would happen if only the scope were made total
+  # and `@type` were left as typed.
   def set_categories
-    @type = params[:type] || "expense"
+    @type = known_type(params[:type]) || "expense"
     @search_state = current_search_state(params)
     @query = @search_state[:query] # For backward compatibility
 

@@ -31,11 +31,20 @@ class Category < ApplicationRecord
   validates :category_type, presence: true
   validates :name, uniqueness: { scope: :user_id, case_sensitive: false }
 
+  # TWO TYPES, NOT THREE (plan 3 decision 5). `savings: 2` is gone: money moving into a goal is a
+  # `PoolMovement`, not an entry in a savings CATEGORY, and the cutover migration converted every
+  # savings entry this app ever wrote. A category now says one of two things — money left your life
+  # (expense) or money entered it (income) — and where it LANDS is `pool_id`'s answer, which is
+  # where a goal lives.
+  #
+  # INTEGER 2 IS RETIRED AND NEVER REUSED. `categories.category_type` still holds the column and
+  # nothing writes a 2 any more; a third type added later takes 3. Reusing 2 would silently
+  # re-type any row that survived in a backup, an export or a staging database that missed the
+  # migration.
   enum :category_type,
        {
          expense: 0,
-         income: 1,
-         savings: 2
+         income: 1
        }
 
   validate :income_must_land_in_an_account
@@ -43,19 +52,24 @@ class Category < ApplicationRecord
   # Basic scopes
   scope :expenses, -> { where(category_type: :expense) }
   scope :incomes, -> { where(category_type: :income) }
-  scope :savings, -> { where(category_type: :savings) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
 
   # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed: the Categories index used to print
   # `category.budget&.amount` and now prints the pool the spending comes out of, so preloading the
   # association would be one query for a link that is nil on every row.
+  #
+  # EXPENSE IS THE `else`, NOT A THIRD `when`. This was a three-armed case returning NIL for
+  # anything it did not recognise, and `?type=savings` is now exactly that — a bookmark, a browser
+  # history entry or a link in an old email — which reached `apply_search(nil, …)` and 500ed.
+  # CategoriesController sanitises `@type` for the same reason (the heading and the tab strip must
+  # not say "Savings" over a list of expenses); this arm is the model-side half, so a caller that
+  # forgets still gets a relation.
   scope :with_type,
         lambda { |type|
           case (type || :expense).to_sym
-          when :expense then expenses.includes(:pool, :items)
           when :income then incomes.includes(:items)
-          when :savings then savings.includes(:items, :pool)
+          else expenses.includes(:pool, :items)
           end
         }
 

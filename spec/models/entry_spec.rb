@@ -38,13 +38,11 @@ RSpec.describe Entry, type: :model do
     let(:user) { create(:user) }
     let!(:expense_entry) { create(:entry, :expense, user: user) }
     let!(:income_entry) { create(:entry, :income, user: user) }
-    let!(:savings_entry) { create(:entry, :savings, user: user) }
 
     describe ".expenses" do
       it "returns only expense entries", :aggregate_failures do
         expect(described_class.expenses).to include(expense_entry)
         expect(described_class.expenses).not_to include(income_entry)
-        expect(described_class.expenses).not_to include(savings_entry)
       end
     end
 
@@ -52,16 +50,13 @@ RSpec.describe Entry, type: :model do
       it "returns only income entries", :aggregate_failures do
         expect(described_class.incomes).to include(income_entry)
         expect(described_class.incomes).not_to include(expense_entry)
-        expect(described_class.incomes).not_to include(savings_entry)
       end
     end
 
-    describe ".savings" do
-      it "returns only savings entries", :aggregate_failures do
-        expect(described_class.savings).to include(savings_entry)
-        expect(described_class.savings).not_to include(expense_entry)
-        expect(described_class.savings).not_to include(income_entry)
-      end
+    # `Entry.savings` IS GONE (plan 3, task 5) — it was the scope `PoolCalculator#savings_entries_total`
+    # and `PoolBalanceLedger`'s `:savings` term both summed, and both died in the same commit.
+    it "does not answer .savings at all" do
+      expect(described_class).not_to respond_to(:savings)
     end
   end
 

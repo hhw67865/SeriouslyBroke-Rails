@@ -117,45 +117,9 @@ RSpec.describe "Categories Index - Cards", type: :system do
     end
   end
 
-  describe "savings card shows correct monthly contribution and links to show", :aggregate_failures do
-    let!(:pool) { create(:pool, user: user, name: "Main Pool") }
-    let!(:savings_category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency Fund") }
-    let!(:transfer_item) { create(:item, category: savings_category, name: "Transfer") }
-    let!(:rollover_item) { create(:item, category: savings_category, name: "Rollover") }
-
-    before do
-      # Month A entries (total 250)
-      create(:entry, item: transfer_item, amount: 200, date: base_date + 7.days)
-      create(:entry, item: rollover_item, amount: 50, date: base_date + 14.days)
-      # Month B entries (total 300)
-      create(:entry, item: transfer_item, amount: 200, date: next_date + 1.day)
-      create(:entry, item: rollover_item, amount: 100, date: next_date + 8.days)
-
-      visit categories_path(type: "savings", month: base_date.month, year: base_date.year)
-    end
-
-    it "displays correct monthly contribution, savings pool, and top items for selected month" do
-      expect(page).to have_content(currency(250))
-
-      # Shows associated savings pool
-      expect(page).to have_content("Savings Pool: Main Pool")
-
-      # Top items with amounts (savings shows plain amounts)
-      expect(page).to have_content("Transfer")
-      expect(page).to have_content("Rollover")
-      expect(page).to have_content(currency(200))
-      expect(page).to have_content(currency(50))
-
-      find("div.group.cursor-pointer", text: savings_category.name).click
-      expect(page).to have_current_path(category_path(savings_category))
-    end
-
-    it "updates savings info when navigating to next month via navbar" do
-      find("button[title='Next month']").click
-
-      expect(page).to have_content(currency(300))
-      expect(page).to have_content(currency(200))
-      expect(page).to have_content(currency(100))
-    end
-  end
+  # THE SAVINGS CARD IS DELETED WITH THE TYPE (plan 3, task 5). Two examples read a "Monthly
+  # Contribution" figure, a "Savings Pool: Main Pool" line and plain (unsigned) top-item amounts off
+  # a card arm that no longer exists — money reaches a goal as a `PoolMovement`, and the goal's own
+  # page lists them. The expense and income card arms above make the same month-navigation claim
+  # over the two types that survive.
 end

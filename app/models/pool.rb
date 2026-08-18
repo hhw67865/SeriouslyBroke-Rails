@@ -132,7 +132,7 @@ class Pool < ApplicationRecord
   # Ruby, as BudgetPagePresenter does with its `[priority, name]` sort.
   scope :in_fill_order, -> { joins(:budgets).distinct }
 
-  attr_accessor :create_expense_category, :create_savings_category
+  attr_accessor :create_expense_category
 
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
   validates :target_amount, presence: true, if: :pool_type_savings?
@@ -295,26 +295,47 @@ class Pool < ApplicationRecord
   end
   private_class_method :fill_order_account
 
-  # Entries scoped to start_date and filtered by category type.
+  # ONE ROW OF #timeline, whichever table it came out of. `sign` is +1 for money arriving and -1
+  # for money leaving — the same two directions `PoolCalculator#contributions` and `#withdrawals`
+  # sum — so the view branches on a number rather than on which class it is holding.
+  TimelineRow = Data.define(:date, :name, :detail, :label, :amount, :sign) do
+    def inflow? = sign.positive?
+  end
+
+  # HOW A MOVEMENT GOT WRITTEN, in the words the rest of the app uses for it. `PoolMovement#kind`
+  # is the column; `transfer` is its default and is what every hand-made move and every
+  # entry-driven one carries, while a distribution writes the other two.
+  MOVEMENT_DETAILS = {
+    "transfer" => "moved by hand",
+    "allocation" => "this period's distribution",
+    "sweep" => "swept back"
+  }.freeze
+
+  # THE POOL'S HISTORY, AND POST-CUTOVER IT IS MOSTLY MOVEMENTS (plan 3, task 5).
   #
-  # The `start_date..` filter is a deliberate divergence from PoolCalculator#balance, which
-  # dropped it: these three feed the savings-goal *timeline*, which is a story about a goal
-  # and rightly begins when the goal did, while the balance is all the money in the pool
-  # regardless of when it arrived. PoolsController#show therefore renders a timeline and a
-  # balance computed on different rules, on purpose — a pre-start entry counts toward the
-  # balance without appearing in the list above it.
-  # TODO(plan-3): revisit once savings-category entries become movements; the timeline will
-  # need a movement-aware source and this is the moment to decide if the cutoff survives.
-  def contribution_entries
-    entries.joins(item: :category).where(categories: { category_type: :savings }).where(date: start_date..)
-  end
-
-  def withdrawal_entries
-    entries.joins(item: :category).where(categories: { category_type: :expense }).where(date: start_date..)
-  end
-
-  def timeline_entries
-    contribution_entries.or(withdrawal_entries)
+  # WHAT THIS REPLACES, and why the old shape could not survive. `#contribution_entries` selected
+  # entries in a SAVINGS-TYPE category and `#timeline_entries` OR'd it with the expense half. The
+  # savings category is gone, so the contributing half selected nothing — every goal's timeline
+  # rendered empty while the same goal was visibly receiving money every period, which the pool
+  # page's own "Total Contributions" tile printed two inches above the gap. That is the
+  # `TODO(plan-3)` this method answers: a contribution IS a `PoolMovement` now, so the timeline
+  # reads `movements_in` / `movements_out` — the SAME associations `PoolCalculator#contributions`
+  # and `#withdrawals` sum — plus the expense entries of the categories pointing here, which is
+  # the other leg of `#withdrawals`. The list and the two tiles above it are the same rows.
+  #
+  # THE `start_date..` CUTOFF DID NOT SURVIVE, and that was the second half of the TODO's
+  # question. It was a deliberate divergence from `PoolCalculator#balance` (which is
+  # start-date-agnostic) on the argument that a goal's story begins when the goal did — so a
+  # pre-start row counted toward the balance without appearing in the list explaining it. With the
+  # list now built out of exactly the rows the two tiles beside it add up, a cutoff on one and not
+  # the other is the two-readers defect this branch has found in every task. `start_date` keeps its
+  # other job: it is a display attribute, and `Pool#set_default_start_date` still fills it.
+  #
+  # `limit` PER SIDE AND AGAIN AFTER THE MERGE. The newest `limit` rows of the union are always
+  # inside the union of each side's newest `limit`, so three bounded queries answer what one
+  # UNION ALL would — without teaching this model to write SQL across two tables.
+  def timeline(limit:)
+    (movement_rows(limit) + spending_rows(limit)).sort_by { |row| -row.date.to_i }.first(limit)
   end
 
   # `terms:` threads straight through to the calculator underneath and DEFAULTS TO NOTHING, which
@@ -357,6 +378,51 @@ class Pool < ApplicationRecord
   end
 
   private
+
+  # MONEY IN AND MONEY OUT, from the two associations every balance on every screen is built from.
+  # The counterpart pool is the row's name because that is the fact the user needs — where the
+  # money came from, or where it went — and it is preloaded so a list of eight rows is two queries
+  # rather than ten.
+  def movement_rows(limit)
+    incoming = movements_in.includes(:from_pool).order(date: :desc).limit(limit).map do |movement|
+      timeline_row(movement, movement.from_pool.name, 1)
+    end
+    outgoing = movements_out.includes(:to_pool).order(date: :desc).limit(limit).map do |movement|
+      timeline_row(movement, movement.to_pool.name, -1)
+    end
+
+    incoming + outgoing
+  end
+
+  def timeline_row(movement, counterpart, sign)
+    TimelineRow.new(
+      date: movement.date,
+      name: counterpart,
+      detail: MOVEMENT_DETAILS.fetch(movement.kind),
+      label: sign.positive? ? "Moved in" : "Moved out",
+      amount: movement.amount,
+      sign: sign
+    )
+  end
+
+  # The other leg of `PoolCalculator#withdrawals`: what was spent out of this pool through the
+  # categories that point at it. `#entries` is `has_many through: :items`, so this is the
+  # category's-pool half of `ENTRY_POOL_ID` — an entry carrying its own `pool_id` override is
+  # counted by the calculator and is not listed here, which is the one place the list and the tile
+  # can differ. Nothing in this app writes that column (see `#override_entries`), and the day
+  # something does, this is the method that has to learn about it.
+  def spending_rows(limit)
+    entries.merge(Entry.expenses).includes(:item, item: :category).order(date: :desc).limit(limit).map do |entry|
+      TimelineRow.new(
+        date: entry.date,
+        name: entry.item.name,
+        detail: entry.category.name,
+        label: "Spent",
+        amount: entry.amount,
+        sign: -1
+      )
+    end
+  end
 
   # Every movement this pool is an end of, and every category that points at it, handed to the
   # account that is about to hold its money. Runs inside `destroy`'s own transaction, so a
@@ -534,17 +600,16 @@ class Pool < ApplicationRecord
     self.start_date ||= Date.current
   end
 
+  # ONE CHECKBOX, NOT TWO (plan 3, task 5). `create_savings_category` minted a SAVINGS category,
+  # which is not a type any more — a pool is filled by movements, and the category a pool needs is
+  # the one that spends OUT of it.
   def create_auto_categories
-    create_linked_category(:expense) if boolean_cast(create_expense_category)
-    create_linked_category(:savings) if boolean_cast(create_savings_category)
-  end
+    return unless boolean_cast(create_expense_category)
 
-  def create_linked_category(type)
-    base_name = "#{name} #{type.to_s.capitalize}"
     categories.create!(
       user: user,
-      name: unique_category_name(base_name),
-      category_type: type
+      name: unique_category_name("#{name} Expense"),
+      category_type: :expense
     )
   end
 

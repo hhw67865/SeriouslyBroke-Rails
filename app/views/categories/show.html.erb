@@ -54,10 +54,17 @@
         measured page cost is in the task report.
 
         AND THE POOL IS IN THE KEY, because moving the reader out was not available for the one
-        that stayed (2d task 6). `_summary_card`'s savings arm prints
+        that stayed (2d task 6). `_summary_card`'s savings arm printed
         `pool.calculator.{current_balance,progress_percentage}` from INSIDE the gray box in the
         middle of that partial — taking the reader outside this cache would have meant taking the
-        box out of the card it is drawn in, which relocates the UI to fix a staleness bug. So the
+        box out of the card it is drawn in, which relocates the UI to fix a staleness bug.
+
+        THAT ARM IS DELETED (plan 3, task 5) AND THE POOL STAYS IN THE KEY, for a smaller reason
+        that was always true: the surviving expense arm prints the pool's NOUN and NAME — "Spending
+        here comes out of the envelope Groceries" — so a renamed or re-typed pool would go on being
+        described by its old words here while the pool card in the uncached right column showed the
+        new ones. No pool FIGURE is left under this cache, so a movement no longer changes anything
+        it holds; it still busts the key, which costs a render and cannot be wrong. So the
         cache is keyed on the pool instead, which is the other half of the amendment's own offer
         and works because the bust chain exists on that side: `PoolMovement belongs_to :from_pool,
         touch: true` and `:to_pool, touch: true` move `pool.updated_at` on every distribution line

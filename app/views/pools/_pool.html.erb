@@ -5,8 +5,9 @@
   target_amount = pool.target_amount
   progress = calculator.progress_percentage
 
-  # Get recent entries for this savings pool (preloaded in controller)
-  recent_entries = @recent_entries_by_pool&.dig(pool.id) || []
+  # This goal's three most recent movements and entries (built in the controller, one bounded
+  # query per side per pool). See `Pool#timeline` for why this is no longer entries alone.
+  timeline = @timelines_by_pool&.dig(pool.id) || []
 %>
 
 <div class="group cursor-pointer" onclick="window.location='<%= pool_path(pool) %>'">
@@ -69,22 +70,19 @@
     </div>
 
     <%# Recent Activity (if any) %>
-    <% if recent_entries.any? %>
+    <% if timeline.any? %>
       <div class="mt-4 pt-4 border-t border-gray-100">
         <div class="text-xs text-gray-500 mb-2">Recent activity</div>
         <div class="space-y-1">
-          <% recent_entries.each do |entry| %>
+          <% timeline.each do |row| %>
             <div class="flex items-center justify-between text-xs">
               <div class="flex items-center truncate">
-                <% if entry.category.savings? %>
-                  <%= heroicon "arrow-up", options: { class: "h-3 w-3 text-status-success mr-1 flex-shrink-0" } %>
-                <% else %>
-                  <%= heroicon "arrow-down", options: { class: "h-3 w-3 text-status-danger mr-1 flex-shrink-0" } %>
-                <% end %>
-                <span class="text-gray-600 truncate"><%= entry.item.name %></span>
+                <%= heroicon row.inflow? ? "arrow-up" : "arrow-down",
+                    options: { class: "h-3 w-3 mr-1 flex-shrink-0 #{row.inflow? ? "text-status-success" : "text-status-danger"}" } %>
+                <span class="text-gray-600 truncate"><%= row.name %></span>
               </div>
-              <span class="font-medium <%= entry.category.savings? ? "text-status-success" : "text-status-danger" %> ml-2">
-                <%= entry.category.savings? ? "+" : "-" %><%= number_to_currency(entry.amount) %>
+              <span class="font-medium <%= row.inflow? ? "text-status-success" : "text-status-danger" %> ml-2">
+                <%= row.inflow? ? "+" : "-" %><%= number_to_currency(row.amount) %>
               </span>
             </div>
           <% end %>

@@ -138,8 +138,6 @@ class EntriesController < ApplicationController
       entries.expenses
     when "income"
       entries.incomes
-    when "savings"
-      entries.savings
     else
       entries
     end

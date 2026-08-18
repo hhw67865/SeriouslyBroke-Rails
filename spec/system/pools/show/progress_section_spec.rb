@@ -2,21 +2,25 @@
 
 require "rails_helper"
 
+# EVERY CONTRIBUTION HERE IS A MOVEMENT (plan 3, task 5). They were entries in a savings CATEGORY,
+# the shape the cutover converted; every balance, percentage, badge and tile below is unchanged,
+# because `PoolCalculator#balance` counted that term and counts `movements_in` at the same sign.
 RSpec.describe "Savings Pools Show - Progress Section", type: :system do
   let(:user) { create(:user) }
-  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000) }
-  let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let!(:pool) { create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, account: checking) }
   let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
 
   before { sign_in user, scope: :user }
 
+  def contribute(amount) = create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount)
+
   describe "progress metrics", :aggregate_failures do
-    let!(:savings_item) { create(:item, category: savings_category) }
     let!(:expense_item) { create(:item, category: expense_category) }
 
     before do
       # Contributions: 3 × $200 = $600
-      create_list(:entry, 3, item: savings_item, amount: 200.0)
+      3.times { contribute(200.0) }
       # Withdrawals: 2 × $50 = $100
       create_list(:entry, 2, item: expense_item, amount: 50.0)
       # Current balance: $600 - $100 = $500
@@ -54,10 +58,8 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
 
   describe "progress states" do
     context "with 50% progress", :aggregate_failures do
-      let!(:savings_item) { create(:item, category: savings_category) }
-
       before do
-        create(:entry, item: savings_item, amount: 5000.0)
+        contribute(5000.0)
         visit pool_path(pool)
       end
 
@@ -74,10 +76,8 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
     end
 
     context "with 80% progress", :aggregate_failures do
-      let!(:savings_item) { create(:item, category: savings_category) }
-
       before do
-        create(:entry, item: savings_item, amount: 8000.0)
+        contribute(8000.0)
         visit pool_path(pool)
       end
 
@@ -88,10 +88,8 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
     end
 
     context "when goal is reached", :aggregate_failures do
-      let!(:savings_item) { create(:item, category: savings_category) }
-
       before do
-        create(:entry, item: savings_item, amount: 10_000.0)
+        contribute(10_000.0)
         visit pool_path(pool)
       end
 
@@ -187,8 +185,9 @@ RSpec.describe "Savings Pools Show - Progress Section", type: :system do
     # no status — so the figure the user typed is still printed back, under a label that does not
     # call it a goal, and without the bar or the "Still Needed" shortfall.
     it "prints a budget envelope's target without calling it a goal" do
-      account = create(:pool, :account, user: user, name: "Checking")
-      envelope = create(:pool, :budget_pool, user: user, account: account, name: "Groceries", target_amount: 400)
+      # The `checking` account is already this user's (the goal above lives in it), and Pool
+      # validates its name unique per user.
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries", target_amount: 400)
 
       visit pool_path(envelope)
 

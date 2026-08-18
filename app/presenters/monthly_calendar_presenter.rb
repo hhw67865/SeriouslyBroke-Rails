@@ -22,7 +22,13 @@ class MonthlyCalendarPresenter
   end
 
   # Returns 6 weeks of days, each day containing:
-  # { date:, in_month:, totals: { expense:, income:, savings: } }
+  # { date:, in_month:, totals: { expense:, income: } }
+  #
+  # TWO TOTALS, NOT THREE (plan 3, task 5). The keys are `CategoryTypeHelper::CATEGORY_TYPES`, so
+  # the savings column left this grid when the enum value did — nothing here names a type. And what
+  # a contribution BECAME does not arrive in its place: a `PoolMovement` is the user's own money
+  # changing pockets, not money entering or leaving their life, and #fetch_entries reads `Entry`
+  # only. The calendar has never rendered a movement and still does not.
   def weeks
     @weeks ||= build_weeks
   end

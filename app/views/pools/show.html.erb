@@ -188,7 +188,11 @@
       <div class="text-2xl font-bold text-status-success mb-2">
         +<%= number_to_currency(calculator.contributions) %>
       </div>
-      <p class="text-sm text-gray-600">From savings categories</p>
+      <%# "FROM SAVINGS CATEGORIES" WAS THE STALE NOUN TASK 2 FOUND (plan 3, task 5). It credited
+          this figure to a kind of category that no longer exists, while the money it counts had
+          arrived as transfers — `PoolCalculator#contributions` is `movements_in` and nothing else
+          now. The timeline below lists the very rows this adds up. %>
+      <p class="text-sm text-gray-600">Money moved in</p>
     </div>
 
     <div class="bg-white rounded shadow-sm border border-gray-100 p-6">
@@ -201,55 +205,59 @@
       <div class="text-2xl font-bold text-status-danger mb-2">
         -<%= number_to_currency(calculator.withdrawals) %>
       </div>
-      <p class="text-sm text-gray-600">From expense categories</p>
+      <p class="text-sm text-gray-600">Money moved out, and spending from this pool</p>
     </div>
   </div>
 
-  <%# Recent Activity %>
-  <% if @recent_entries.any? %>
+  <%# THE TIMELINE, CONVERTED TO MOVEMENTS (plan 3, task 5). It listed savings-TYPED entries as
+      contributions and expense entries as withdrawals; the first half selected nothing after the
+      cutover, so every goal's history rendered EMPTY while the tile above it printed real money
+      arriving. `Pool#timeline` is the fix and it is one reader: `movements_in`/`movements_out` —
+      which IS the post-cutover contribution history — plus the spending of the categories pointing
+      here. Those are exactly the rows "Total Contributions" and "Total Withdrawals" add up, so the
+      list explains the two figures above it instead of describing different money.
+
+      "SHOW ALL ACTIVITY" STILL POINTS AT THE ENTRY SEARCH, which only knows about entries: a
+      movement is not an entry and there is no screen listing them yet. The link is honest about
+      that below — it says what it will show. %>
+  <% if @timeline.any? %>
     <div class="bg-white rounded shadow-sm border border-gray-100 p-6 mb-8">
       <div class="flex items-center justify-between mb-6">
         <h3 class="text-lg font-semibold text-gray-900">Recent Activity</h3>
         <div class="flex items-center gap-3">
-          <span class="text-sm text-gray-500">Last 8 transactions</span>
+          <span class="text-sm text-gray-500">Last 8 movements and entries</span>
           <%= link_to entries_path(field: "pool", q: @pool.name), class: "inline-flex items-center px-3 py-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
-            <span>Show All Activity</span>
+            <span>Show all spending</span>
             <%= heroicon "arrow-right", options: { class: "h-4 w-4 ml-1.5" } %>
           <% end %>
         </div>
       </div>
 
       <div class="space-y-3">
-        <% @recent_entries.each do |entry| %>
-          <div class="flex items-center justify-between p-4 bg-gray-50 rounded hover:bg-gray-100 transition-colors">
+        <% @timeline.each do |row| %>
+          <div class="flex items-center justify-between p-4 bg-gray-50 rounded hover:bg-gray-100 transition-colors" data-timeline-row="<%= row.inflow? ? "in" : "out" %>">
             <div class="flex items-center">
               <div class="mr-4">
-                <% if entry.category.savings? %>
-                  <div class="w-10 h-10 rounded-full bg-status-success-light flex items-center justify-center">
-                    <%= heroicon "plus", options: { class: "h-5 w-5 text-status-success" } %>
-                  </div>
-                <% else %>
-                  <div class="w-10 h-10 rounded-full bg-status-danger-light flex items-center justify-center">
-                    <%= heroicon "minus", options: { class: "h-5 w-5 text-status-danger" } %>
-                  </div>
-                <% end %>
+                <div class="w-10 h-10 rounded-full flex items-center justify-center <%= row.inflow? ? "bg-status-success-light" : "bg-status-danger-light" %>">
+                  <%= heroicon row.inflow? ? "plus" : "minus", options: { class: "h-5 w-5 #{row.inflow? ? "text-status-success" : "text-status-danger"}" } %>
+                </div>
               </div>
               <div>
-                <div class="font-medium text-gray-900"><%= entry.item.name %></div>
+                <div class="font-medium text-gray-900"><%= row.name %></div>
                 <div class="text-sm text-gray-500 flex items-center">
-                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-2 <%= entry.category.savings? ? "bg-status-success-light text-status-success" : "bg-status-danger-light text-status-danger" %>">
-                    <%= entry.category.savings? ? "Savings" : "Expense" %>
+                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mr-2 <%= row.inflow? ? "bg-status-success-light text-status-success" : "bg-status-danger-light text-status-danger" %>">
+                    <%= row.label %>
                   </span>
-                  <%= entry.category.name %> • <%= time_ago_in_words(entry.date) %> ago
+                  <%= row.detail %> • <%= time_ago_in_words(row.date) %> ago
                 </div>
               </div>
             </div>
             <div class="text-right">
-              <div class="font-semibold <%= entry.category.savings? ? "text-status-success" : "text-status-danger" %>">
-                <%= entry.category.savings? ? "+" : "-" %><%= number_to_currency(entry.amount) %>
+              <div class="font-semibold <%= row.inflow? ? "text-status-success" : "text-status-danger" %>">
+                <%= row.inflow? ? "+" : "-" %><%= number_to_currency(row.amount) %>
               </div>
               <div class="text-xs text-gray-500">
-                <%= entry.date.strftime("%b %d, %Y") %>
+                <%= row.date.strftime("%b %d, %Y") %>
               </div>
             </div>
           </div>
@@ -269,79 +277,42 @@
       <% end %>
     </div>
 
+    <%# ONE LIST, NOT TWO COLUMNS (plan 3, task 5). This split the connected categories into
+        "Contributing" (savings-typed) and "Withdrawing" (expense-typed). Nothing contributes
+        through a category any more — money arrives as a `PoolMovement`, which the timeline above
+        lists — so the contributing column was an empty box on every pool.
+
+        THE ROW STILL ASKS WHICH WAY THE MONEY GOES, because two directions survive and the answer
+        is still the CATEGORY's type: an expense category spends out of this pool, and an INCOME
+        category lands its paychecks in it — which only an account can be
+        (`Category#income_must_land_in_an_account`). Collapsing both into one sentence would have
+        the buffer's own salary category read "spends from this buffer". Income rows were rendered
+        by NEITHER old column, so this arm is new: the two-column shape had no place to put them. %>
     <% if @connected_categories.any? %>
-      <%# Separate savings and expense categories %>
-      <% savings_categories = @connected_categories.select(&:savings?) %>
-      <% expense_categories = @connected_categories.select(&:expense?) %>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <%# Savings Categories (Contributing) %>
-        <div>
-          <h4 class="text-sm font-medium text-status-success mb-4 flex items-center">
-            <%= heroicon "plus-circle", options: { class: "h-4 w-4 mr-2" } %>
-            Contributing Categories (<%= savings_categories.count %>)
-          </h4>
-          <% if savings_categories.any? %>
-            <div class="space-y-3">
-              <% savings_categories.each do |category| %>
-                <%= link_to category_path(category),
-                    class: "flex items-center justify-between p-3 bg-status-success-light border border-status-success rounded hover:shadow-md transition" do %>
-                  <div class="flex items-center">
-                    <div class="w-8 h-8 rounded-full bg-status-success-light flex items-center justify-center mr-3">
-                      <%= heroicon "arrow-up", options: { class: "h-4 w-4 text-status-success" } %>
-                    </div>
-                    <div>
-                      <div class="font-medium text-gray-900"><%= category.name %></div>
-                      <div class="text-sm text-gray-600">Savings category</div>
-                    </div>
-                  </div>
-                  <div class="text-right">
-                    <div class="text-sm font-medium text-status-success">
-                      +<%= number_to_currency(category.calculator(selected_date).total_amount) %>
-                    </div>
-                    <div class="text-xs text-gray-500"><%= format_month_year %></div>
-                  </div>
-                <% end %>
-              <% end %>
+      <div class="space-y-3">
+        <% @connected_categories.each do |category| %>
+          <% inflow = category.income? %>
+          <%= link_to category_path(category),
+              class: "flex items-center justify-between p-3 rounded hover:shadow-md transition border #{inflow ? "bg-status-success-light border-status-success" : "bg-status-danger-light border-status-danger"}" do %>
+            <div class="flex items-center">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center mr-3 <%= inflow ? "bg-status-success-light" : "bg-status-danger-light" %>">
+                <%= heroicon inflow ? "arrow-up" : "arrow-down", options: { class: "h-4 w-4 #{inflow ? "text-status-success" : "text-status-danger"}" } %>
+              </div>
+              <div>
+                <div class="font-medium text-gray-900"><%= category.name %></div>
+                <div class="text-sm text-gray-600">
+                  <%= inflow ? "Lands in" : "Spends from" %> this <%= @pool.noun %>
+                </div>
+              </div>
             </div>
-          <% else %>
-            <div class="text-center py-4 text-gray-500 text-sm">No contributing categories connected</div>
-          <% end %>
-        </div>
-
-        <%# Expense Categories (Withdrawing) %>
-        <div>
-          <h4 class="text-sm font-medium text-status-danger mb-4 flex items-center">
-            <%= heroicon "minus-circle", options: { class: "h-4 w-4 mr-2" } %>
-            Withdrawing Categories (<%= expense_categories.count %>)
-          </h4>
-          <% if expense_categories.any? %>
-            <div class="space-y-3">
-              <% expense_categories.each do |category| %>
-                <%= link_to category_path(category),
-                    class: "flex items-center justify-between p-3 bg-status-danger-light border border-status-danger rounded hover:shadow-md transition" do %>
-                  <div class="flex items-center">
-                    <div class="w-8 h-8 rounded-full bg-status-danger-light flex items-center justify-center mr-3">
-                      <%= heroicon "arrow-down", options: { class: "h-4 w-4 text-status-danger" } %>
-                    </div>
-                    <div>
-                      <div class="font-medium text-gray-900"><%= category.name %></div>
-                      <div class="text-sm text-gray-600">Expense category</div>
-                    </div>
-                  </div>
-                  <div class="text-right">
-                    <div class="text-sm font-medium text-status-danger">
-                      -<%= number_to_currency(category.calculator(selected_date).total_amount) %>
-                    </div>
-                    <div class="text-xs text-gray-500"><%= format_month_year %></div>
-                  </div>
-                <% end %>
-              <% end %>
+            <div class="text-right">
+              <div class="text-sm font-medium <%= inflow ? "text-status-success" : "text-status-danger" %>">
+                <%= inflow ? "+" : "-" %><%= number_to_currency(category.calculator(selected_date).total_amount) %>
+              </div>
+              <div class="text-xs text-gray-500"><%= format_month_year %></div>
             </div>
-          <% else %>
-            <div class="text-center py-4 text-gray-500 text-sm">No withdrawing categories connected</div>
           <% end %>
-        </div>
+        <% end %>
       </div>
     <% else %>
       <div class="text-center py-12">

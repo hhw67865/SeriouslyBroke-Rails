@@ -47,11 +47,14 @@ RSpec.describe "Categories Show - Pool card", type: :system do
   # A savings pool — one noun, and the verb the category earns
   # ------------------------------------------------------------------------------------------
 
+  # THE CATEGORY IS AN EXPENSE ONE (plan 3, task 5). It was a SAVINGS category, which is not a type
+  # any more; every noun, figure and negative below is unchanged, because this card asks the POOL's
+  # type for its words and only its closing sentence ever asked the category's.
   describe "a category pointing at a savings pool" do
     let(:goal) { create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000) }
 
     before do
-      create(:category, :savings, user: user, name: "Emergency Fund Saving", pool: goal)
+      create(:category, :expense, user: user, name: "Emergency Fund Saving", pool: goal)
       create(:pool_movement, from_pool: checking, to_pool: goal, amount: 500, date: Date.current)
       visit category_path(user.categories.find_by!(name: "Emergency Fund Saving"))
     end
@@ -79,11 +82,14 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       expect(card).to have_no_content("buffer now")
     end
 
-    # THE VERB IS THE CATEGORY'S, NOT THE POOL'S (fix 2's other half). A savings category really
-    # does contribute.
-    it "says a savings category contributes to it", :aggregate_failures do
-      expect(card).to have_content("This category contributes to a shared goal")
-      expect(card).to have_no_content("draws from")
+    # THE VERB NO LONGER BRANCHES (plan 3, task 5). Fix 2 split it — "contributes to" for a savings
+    # category, "draws from" for an expense one — and only the second arm is reachable now: money
+    # ARRIVES in a goal as a `PoolMovement`, which no category is party to. Both directions here:
+    # the surviving sentence is on screen and the retired one is not.
+    it "says the category draws from the goal, and never that it contributes", :aggregate_failures do
+      expect(card).to have_content("This category's spending draws from a shared goal")
+      expect(card).to have_content("money is moved into it rather than spent into it")
+      expect(card).to have_no_content("contributes to")
     end
   end
 

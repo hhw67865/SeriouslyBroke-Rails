@@ -67,10 +67,10 @@ class PoolCalculator
   # Default `Adjustment.none`, so a calculator built without one is the ledger as it stands and no
   # figure on a screen that asks no projected question can move.
   #
-  # `terms:` IS THE SAME AGGREGATES, ALREADY RUN — a `{income:, savings:, expense:, movements_in:,
+  # `terms:` IS THE SAME AGGREGATES, ALREADY RUN — a `{income:, expense:, movements_in:,
   # movements_out:, last_funded_on:}` hash from PoolBalanceLedger, which computes them for a whole
   # set of pools in one grouped query per term instead of that many per calculator. When it is
-  # present the five `*_total` readers and #funded_at return the injected values and NO aggregate
+  # present the four `*_total` readers and #funded_at return the injected values and NO aggregate
   # runs here; when it is absent this class queries exactly as it always has.
   #
   # It is a COST keyword and not a money one, which is the whole of why it is safe: the ledger
@@ -116,7 +116,7 @@ class PoolCalculator
   #
   # `.to_d` on the RESULT. Every `sum(:amount)` term here returns the Integer literal 0 when
   # its set is empty, and a pool holding nothing at all — a fresh envelope, the first shape a
-  # sweep meets — made all five Integers, so #balance, #reserve, #free_amount and
+  # sweep meets — made all four Integers, so #balance, #reserve, #free_amount and
   # PoolStatus#balance/#amount all changed TYPE on exactly the pools that are emptiest. Coerced
   # once here so every reader downstream inherits the guarantee, and INSIDE the memo so what is
   # stored is already a BigDecimal.
@@ -132,13 +132,13 @@ class PoolCalculator
   #
   # (The same sentence used to name #sweep_adjustment, which was the BigDecimal operand before
   # decision 4 moved the sweep to PoolProjection. The guarantee did not move: what enters this sum
-  # from outside the five aggregates is still a BigDecimal by construction, and it is still the
+  # from outside the four aggregates is still a BigDecimal by construction, and it is still the
   # only operand that is.)
   #
-  # Memoised. These are five aggregates and almost every other reader in this class starts
+  # Memoised. These are four aggregates and almost every other reader in this class starts
   # here — #allocated_balances, #free_amount, #sweepable_amount, #progress_percentage and
   # #remaining_amount all ask — so a single render of a single pool ran them several times
-  # over: measured at ten entry/movement aggregates for one closed envelope, now five.
+  # over: measured at ten entry/movement aggregates for one closed envelope, now four.
   #
   # `||=`, matching #allocated_balances below, and NOT the `defined?` form. That form is not a
   # house style to be applied evenly: it is reserved in this class for the three readers whose
@@ -147,7 +147,7 @@ class PoolCalculator
   # would re-run on every hit. This reader cannot return nil or false. A zero balance is the
   # tempting counter-example and it is not one: `0`, and `BigDecimal("0")` with it, are TRUTHY
   # in Ruby, so `||=` memoises the entry-less envelope exactly as well as any other. Measured
-  # both ways — three #balance calls on an entry-less pool cost five aggregates under either
+  # both ways — three #balance calls on an entry-less pool cost four aggregates under either
   # form. Using `defined?` here would imply a falsy answer this method cannot produce.
   #
   # STALE AFTER A WRITE, deliberately and not newly. #allocated_balances, #period_closed?,
@@ -157,7 +157,7 @@ class PoolCalculator
   # hazard honest rather than adding a new class of it. The rule it rests on, which Task 2 and
   # Task 3 carry: anything that writes movements builds fresh calculators afterward.
   def balance
-    @balance ||= (income_entries_total + savings_entries_total + movements_in_total + @adjustment.net -
+    @balance ||= (income_entries_total + movements_in_total + @adjustment.net -
       movements_out_total - expense_entries_total).to_d
   end
 
@@ -294,9 +294,10 @@ class PoolCalculator
   # reading of anything — a bar measures how much of a target is there, and less than none of it is
   # there is still none of it.
   #
-  # ONE READER, SIX SITES. `pools/show`, `pools/_pool`, `pools/_form`'s live preview,
-  # `dashboard/_pools_strip` (through `Dashboard::SavingsPresenter`), `categories/_summary_card` and
-  # `categories/_pool_card` all print this figure and four of them also branch on its sign; fixing
+  # ONE READER, FIVE SITES. `pools/show`, `pools/_pool`, `pools/_form`'s live preview,
+  # `dashboard/_pools_strip` (through `Dashboard::OverviewPresenter` since plan 3 task 5 deleted the
+  # savings tab's) and `categories/_pool_card` all print this figure and most of them also branch on
+  # its sign; fixing
   # it in any one of them would have left the other five saying the other thing. The impact card's
   # bar is NOT a seventh site and deliberately so — `EntryImpactPresenter#bar_fraction` measures a
   # DIFFERENT quantity (balance-after over the period's claim) and does its own 0..1 clamp, matched
@@ -394,14 +395,23 @@ class PoolCalculator
     [(balance - anchored_reserve).to_d, 0.to_d].max.to_d
   end
 
+  # WHAT CAME INTO THIS POOL AND WHAT LEFT IT — the pool page's two money-flow tiles, and the two
+  # figures its timeline lists the rows behind (`Pool#timeline`).
+  #
+  # `+ savings_entries_total` IS GONE FROM #contributions (plan 3, task 5), in the same commit as
+  # the enum value. Money arriving in a pool is a `PoolMovement`; the savings-typed entries this
+  # term summed were converted by the cutover migration and the term read zero for every user
+  # before it was deleted. #withdrawals keeps both legs because both still exist: a transfer out,
+  # and spending from a category that points here.
+  #
   # `.to_d` ON THE SUM, and it is the type guarantee holding at the one place `terms:` could
-  # otherwise break it. Both operands are `0` the Integer on an empty pool when this calculator
-  # runs its own aggregates, and both are BigDecimal when a ledger hands them over — so without
+  # otherwise break it. The operands are `0` the Integer on an empty pool when this calculator
+  # runs its own aggregates, and BigDecimal when a ledger hands them over — so without
   # this, these two readers changed SHAPE with which caller built the calculator, which is
   # exactly what "inert by default" is supposed to forbid. No rendered figure moved (nothing
   # divides by these), and a keyword whose inertness is true only of the figures is not inert.
   # Asserted by type on an empty pool down BOTH paths.
-  def contributions = (movements_in_total + savings_entries_total).to_d
+  def contributions = movements_in_total.to_d
 
   def withdrawals = (movements_out_total + expense_entries_total).to_d
 
@@ -511,21 +521,24 @@ class PoolCalculator
     @last_funded_on = [funded_at, @adjustment.funded_on].compact.max&.to_date
   end
 
-  # THE THREE MAX(date)s, BEHIND THE SAME GATE AS THE FIVE SUMS. Injected when a ledger ran them
+  # THE TWO MAX(date)s, BEHIND THE SAME GATE AS THE FOUR SUMS. Injected when a ledger ran them
   # for the whole pool set — 24 of /budget's 50 queries and 48 of Home's, measured — and run here
-  # when it did not, over exactly the three money-IN scopes of #balance.
+  # when it did not, over exactly the two money-IN scopes of #balance.
+  #
+  # THERE WERE THREE (plan 3, task 5): a MAX(date) over `Entry.savings` stood between these two and
+  # died with the enum value in the same commit. The money it dated is a `PoolMovement` now, which
+  # the first line already covers.
   #
   # The pre-`to_date` maximum rather than the finished answer, because that is what the ledger can
   # honestly compute: a TimeWithZone or nil, the same shape `maximum(:date)` returns below. Nil
   # travels through `term` untouched — `@terms.fetch` finds the key and returns its nil value
   # rather than yielding — which is what keeps #last_funded_on's `defined?` memo from re-running
-  # three aggregates on the never-funded envelope this whole reader exists to answer nil for.
+  # two aggregates on the never-funded envelope this whole reader exists to answer nil for.
   def funded_at
     term(PoolBalanceLedger::FUNDED_ON) do
       [
         scoped(pool.movements_in).maximum(:date),
-        scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date),
-        scoped(Entry.savings.merge(entries_for_pool)).maximum(:date)
+        scoped(Entry.incomes.merge(entries_for_pool)).maximum(:date)
       ].compact.max
     end
   end
@@ -603,8 +616,8 @@ class PoolCalculator
   # miss and run the three MAX(date)s anyway, on exactly the emptiest pools this term exists to
   # answer cheaply: the same falsy-answer trap #period_closed?, #last_funded_on and #fulfilled?
   # each dodge one level up with `defined?` and keyed `fetch`. Mutation-tested — `|| yield` here
-  # leaves a batched calculator running three maxima of its own, and the ledger spec's
-  # "runs three grouped maxima where per-pool calculators run three each" says so.
+  # leaves a batched calculator running two maxima of its own, and the ledger spec's
+  # "runs two grouped maxima where per-pool calculators run two each" says so.
   #
   # (`fetch(name) { yield }` would be safe on nil and is still not used: the block would swallow
   # the missing-key case that must raise.)
@@ -623,13 +636,6 @@ class PoolCalculator
 
   def expense_entries_total
     term(:expense) { scoped(Entry.expenses.merge(entries_for_pool)).sum(:amount) }
-  end
-
-  # TODO(plan-3): delete once §6.1 step 5 converts savings-category entries to movements.
-  # Becomes a no-op the moment that migration runs (Entry.savings is then empty), so the
-  # removal is mechanical and cannot double-count during the cutover.
-  def savings_entries_total
-    term(:savings) { scoped(Entry.savings.merge(entries_for_pool)).sum(:amount) }
   end
 
   # One predicate rather than .or — Entry.incomes already carries the categories

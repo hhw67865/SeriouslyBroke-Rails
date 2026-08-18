@@ -9,8 +9,6 @@
               <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
             <% when "income" %>
               <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-            <% when "savings" %>
-              <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
             <% end %>
           </div>
           <div class="ml-3">
@@ -57,20 +55,6 @@
             </span>
           </div>
         </div>
-        
-      <% elsif category.savings? %>
-        <div class="mb-4">
-          <div class="flex justify-between text-sm mb-1">
-            <span class="text-gray-500">Monthly Contribution</span>
-            <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
-          </div>
-          
-          <% if category.pool.present? %>
-            <p class="text-xs text-gray-500 mt-2">
-              Savings Pool: <%= category.pool.name %>
-            </p>
-          <% end %>
-        </div>
       <% end %>
       
       <% if category.items.any? %>
@@ -85,8 +69,6 @@
                   <span class="text-status-danger font-medium">-<%= number_to_currency(amount) %></span>
                 <% when "income" %>
                   <span class="text-status-success font-medium">+<%= number_to_currency(amount) %></span>
-                <% when "savings" %>
-                  <span class="text-brand font-medium"><%= number_to_currency(amount) %></span>
                 <% end %>
               </li>
             <% end %>

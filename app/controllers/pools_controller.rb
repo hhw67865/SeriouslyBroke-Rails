@@ -9,15 +9,16 @@ class PoolsController < ApplicationController
   def index
     setup_search_state
     @pools = load_filtered_pools
-    @recent_entries_by_pool = load_recent_entries_by_pool
+    @timelines_by_pool = load_timelines_by_pool
   end
 
   # GET /pools/1
+  # `Pool#timeline` IS THE POST-CUTOVER CONTRIBUTION HISTORY (plan 3, task 5) — movements in and
+  # out plus the spending of the categories pointing here, which is exactly what the two money-flow
+  # tiles on this page sum. It preloads and limits itself, so the controller no longer builds the
+  # scope by hand.
   def show
-    @recent_entries = @pool.timeline_entries
-      .includes(item: :category)
-      .order(date: :desc)
-      .limit(8)
+    @timeline = @pool.timeline(limit: 8)
 
     # Load categories for connected categories section
     # CategoryCalculator uses direct SQL queries, so no eager loading needed
@@ -79,17 +80,14 @@ class PoolsController < ApplicationController
     pools.order(:name)
   end
 
-  def load_recent_entries_by_pool
-    # Load recent entries for each savings pool to avoid N+1 in the view
-    # This is more efficient than preloading all entries
-    recent_entries = {}
-    @pools.each do |pool|
-      recent_entries[pool.id] = pool.timeline_entries
-        .includes(item: :category)
-        .order(date: :desc)
-        .limit(3)
-    end
-    recent_entries
+  # The card's three-row activity strip, per goal. Bounded per pool rather than loaded whole, the
+  # same shape it has always had; `Pool#timeline` does its own preloading.
+  # KEYED BY ID, not by the record — `_pool.html.erb` looks its row up with `dig(pool.id)`, and an
+  # `index_with` keyed on the pool object misses every time, silently: the card falls through to its
+  # no-activity branch and prints "Still needed" for a goal that has a history. Caught at the
+  # browser, not by a type error.
+  def load_timelines_by_pool
+    @pools.to_h { |pool| [pool.id, pool.timeline(limit: 3)] }
   end
 
   def set_pool
@@ -110,8 +108,7 @@ class PoolsController < ApplicationController
         :pool_type,
         :account_id,
         :priority,
-        :create_expense_category,
-        :create_savings_category
+        :create_expense_category
       ]
     )
   end

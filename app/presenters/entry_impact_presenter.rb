@@ -88,27 +88,16 @@ class EntryImpactPresenter
   #
   # That pair is `Category#buffer_funded?`, the model's own reader and the suggestion engine's
   # population, and its sentence ("currently comes out of your buffer") is the register this card
-  # borrows so the two screens say one thing. It is not CALLED here for one reason, stated rather
-  # than left to be found: `buffer_funded?` is `expense? && ...`, and a SAVINGS category with no
-  # pool — a contribution to a goal that was deleted — must get the honest card too. Widening the
-  # model's predicate to cover it would change the suggestion engine's population; asking the same
-  # two-armed question here does not.
+  # borrows so the two screens say one thing. It is not CALLED here only because it re-asks
+  # `expense?`, which `#render?` has already settled: every category that reaches this method is an
+  # expense one, so the model's predicate and this pair are the same question with the same answer.
+  #
+  # THE SECOND ARM IS GONE (plan 3, task 5). `#contribution?` split this card in two — a savings
+  # category with nowhere to land got "No goal — this contribution has nowhere to land", pointing
+  # at `/pools/new` rather than at the Budget page, because a contribution does not come OUT of the
+  # buffer. There is no savings category any more, so there is one honest card and it is the
+  # spending one.
   def unbudgeted? = pool.nil? || pool.pool_type_account?
-
-  # WHICH HONEST CARD, and the two are not one sentence with a different noun.
-  #
-  # A CONTRIBUTION IS NOT SPENDING, and every clause of the expense sentence is false of it. Nothing
-  # "comes out of" the buffer: under `PoolBalanceLedger::ENTRY_POOL_ID` a savings entry whose
-  # category names no pool counts toward NO pool at all, so the money it moves stays exactly where
-  # it was — unclaimed cash in the account, which is the buffer. Saying it comes out is the precise
-  # opposite of what happens. And the Budget page is the wrong destination: the rate suggestion that
-  # would fix an unbudgeted EXPENSE has `Category#buffer_funded?` for its population, which is
-  # `expense? && …`, so that screen will never offer this category anything. The fix for a
-  # contribution with nowhere to land is a savings pool, and it is made on `/pools/new`.
-  #
-  # Keyed on the CATEGORY's type, unlike #goal?, which is keyed on the pool's — here there is no
-  # pool to ask, and the question is what the user is doing rather than where it would land.
-  def contribution? = category.present? && category.savings?
 
   # A SAVINGS POOL IS A GOAL, so the card takes the goal shape (`$X → $Y of $Z goal`) rather than
   # the envelope's. `target_amount` is the existing goal reader — `PoolCalculator#progress_percentage`
@@ -150,12 +139,6 @@ class EntryImpactPresenter
   # envelope with money it never held.
   def balance = @balance ||= (pool.calculator(today: today).balance - own_contribution).to_d
 
-  # WHAT THIS ENTRY DOES TO THE ENVELOPE, SIGNED BY THE CATEGORY'S TYPE and not assumed downward.
-  # `PoolCalculator#balance` adds savings entries and subtracts expense entries, so a contribution
-  # to a goal RAISES the balance — `$1,200 → $1,350 of $2,400 goal` is the honest card for one, and
-  # a card that subtracted would tell a saver they were emptying the pool they are filling.
-  def direction = category.savings? ? 1 : -1
-
   # The figure the amount box currently holds, as money. See TYPED_AMOUNT for what "currently holds"
   # is allowed to mean.
   def amount
@@ -166,7 +149,13 @@ class EntryImpactPresenter
                 end
   end
 
-  def balance_after = @balance_after ||= (balance + (amount * direction)).to_d
+  # SPENDING ALWAYS SUBTRACTS (plan 3, task 5). This read `balance + amount * #direction`, where
+  # `#direction` was `+1` for a savings category and `-1` otherwise, because `PoolCalculator#balance`
+  # used to ADD savings entries. It no longer does, and there is no savings category to sign: every
+  # card this class renders describes an expense (income is silent — see `#render?`), and an expense
+  # takes money out of whatever pool it reaches. The GOAL arm is unaffected and still renders —
+  # spending from a goal is spending against a goal, which is `#goal?`'s own note.
+  def balance_after = @balance_after ||= (balance - amount).to_d
 
   # WHETHER THERE ARE FIGURES TO PRINT AT ALL — the envelope and goal cards have them, the honest
   # no-envelope card has none. Every money reader below is gated on it, because there is no balance
@@ -250,9 +239,12 @@ class EntryImpactPresenter
   # `PoolCalculator` keeps for the same reason, one layer up.
   def steady_claim = pool.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
 
-  # WHAT THE LEDGER ALREADY COUNTS FOR THIS ENTRY, in the ledger's own signs (savings in, expense
-  # out). Zero for a new entry, and zero for one whose money is in a DIFFERENT pool than the card is
-  # describing.
+  # WHAT THE LEDGER ALREADY COUNTS FOR THIS ENTRY, in the ledger's own sign. Zero for a new entry,
+  # and zero for one whose money is in a DIFFERENT pool than the card is describing.
+  #
+  # NEGATIVE, UNCONDITIONALLY (plan 3, task 5). This was `counted.category.savings? ? 1 : -1` — the
+  # ledger's own two signs — and the ledger has one sign for entries reaching a pool now: an
+  # expense subtracts. `#render?` keeps income off this path, so there is no third case.
   #
   # THE RECORD ON DISK, NOT THE ONE IN THE FORM. Both the sign and the amount are facts about what
   # the ledger already counted, and the object handed in is not always that: a failed `update`
@@ -264,7 +256,7 @@ class EntryImpactPresenter
     counted = counted_entry
     return 0.to_d unless counted && counted.effective_pool == pool
 
-    counted.amount.to_d * (counted.category.savings? ? 1 : -1)
+    -counted.amount.to_d
   end
 
   # The entry AS THE LEDGER HOLDS IT, or nil when the ledger holds none: nothing at all for a new

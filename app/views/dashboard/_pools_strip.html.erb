@@ -1,3 +1,5 @@
+<%# THE GOALS STRIP. Rendered by the ALL tab; its two readers are `Dashboard::OverviewPresenter`'s
+    since task 5 moved them off the deleted `Dashboard::SavingsPresenter`. %>
 <% pools = @presenter.pools_summary %>
 <% if pools.any? %>
   <div class="mb-8">
@@ -55,7 +57,9 @@
               a figure that denies money that arrived is worse than no figure. "Out" alone is half
               a story, and its movement-based partner would be a second reader of pool funding
               (see Dashboard::OverviewPresenter). The balance, the target and the progress bar are
-              `PoolCalculator`'s — the app's one reader for what a pool holds — and stay. %>
+              `PoolCalculator`'s — the app's one reader for what a pool holds — and stay.
+              (Task 5 deleted `#contribution_entries` itself; `Pool#timeline` is what the pool page
+              lists now, and it is movements plus spending.) %>
           <div class="flex items-center justify-between text-xs text-gray-500">
             <span class="font-medium"><%= number_to_currency(pool[:balance]) %></span>
             <span>of <%= number_to_currency(pool[:target_amount]) %></span>

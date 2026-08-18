@@ -10,7 +10,10 @@
         <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation Fund" %>
 
         <div class="space-y-2 mt-5">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <%# TWO TYPES, TWO TILES (plan 3, task 5). `Category.category_types` drives the loop, so
+              the savings tile disappeared with the enum value; the grid closes at two rather than
+              leaving a third of the row empty. %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <% Category.category_types.keys.each do |type| %>
               <div>
                 <label class="cursor-pointer flex flex-col">
@@ -33,8 +36,6 @@ type,
                           <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
                         <% when "income" %>
                           <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-                        <% when "savings" %>
-                          <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
                         <% end %>
                       </div>
                       <span class="text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"

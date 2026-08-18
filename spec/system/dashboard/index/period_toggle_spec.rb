@@ -56,13 +56,5 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
       expect(page).to have_current_path(reports_path(tab: "income"))
       expect(page).to have_css("a.bg-brand", text: "Monthly")
     end
-
-    it "resets to Monthly when switching to Savings tab" do
-      click_link "Year to Date"
-      within("nav[aria-label='Tabs']") { click_link "Savings" }
-
-      expect(page).to have_current_path(reports_path(tab: "savings"))
-      expect(page).to have_css("a.bg-brand", text: "Monthly")
-    end
   end
 end

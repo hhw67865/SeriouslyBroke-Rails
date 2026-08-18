@@ -252,7 +252,7 @@ RSpec.describe "Entry impact card", type: :system do
     end
 
     it "is told the truth and pointed at the Budget page", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='spending']")
+      expect(page).to have_css("[data-impact-card='unbudgeted']")
 
       within(card) do
         expect(figure("headline")).to have_text("No envelope — this spending isn't budgeted.")
@@ -261,10 +261,14 @@ RSpec.describe "Entry impact card", type: :system do
       end
     end
 
-    # THE CONTRIBUTION'S SENTENCE IS NOT THIS ONE — see the goalless-savings example below. Pinned
-    # from this side too, because "same card, different noun" is exactly the shape that would pass
-    # a one-sided assertion.
-    it "does not borrow the contribution's words", :aggregate_failures do
+    # THE CONTRIBUTION'S SENTENCE IS GONE FROM THE APP (plan 3, task 5) — this card had two arms
+    # keyed on `EntryImpactPresenter#contribution?`, and the savings one is deleted with the type.
+    # Kept as a page-wide negative rather than deleted with it: the copy and the `/pools/new` link
+    # were real words on a real screen, and this is what says they are not still reachable from
+    # some other branch.
+    it "has no contribution arm left to fall into", :aggregate_failures do
+      expect(page).to have_no_css("[data-unbudgeted-arm]")
+
       within(card) do
         expect(page).not_to have_text("No goal")
         expect(page).not_to have_text("The money stays in your buffer")
@@ -290,39 +294,11 @@ RSpec.describe "Entry impact card", type: :system do
     # `Shopping` above IS the account-pointed one — so the pair collapsed into it.
   end
 
-  # A CONTRIBUTION IS NOT SPENDING, and the expense sentence is false of it in every clause: nothing
-  # comes OUT of the buffer (under ENTRY_POOL_ID this entry counts toward no pool, so the money stays
-  # there), and the Budget page's rate suggestion is `expense?`-gated, so it would never offer this
-  # category anything. The fix is a savings pool, and the link goes where that is made.
-  # POINTED AT THE ACCOUNT rather than at nothing: plan 3 requires a pool on every category, and a
-  # savings category naming an ACCOUNT is the surviving spelling of "this contribution has nowhere
-  # to land" — an account is the buffer, which is exactly where the money stays.
-  describe "a savings category with no goal behind it" do
-    before do
-      create(:category, user: user, name: "Old Goal", category_type: :savings, pool: checking)
-
-      visit new_entry_path
-      select_category("Old Goal")
-    end
-
-    it "gets the contribution's own sentence and the fix that exists", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='unbudgeted'][data-unbudgeted-arm='contribution']")
-
-      within(card) do
-        expect(figure("headline")).to have_text("No goal — this contribution has nowhere to land.")
-        expect(page).to have_text("The money stays in your buffer.")
-        expect(page).to have_link("Make a savings goal for it", href: new_pool_path)
-      end
-    end
-
-    it "does not borrow the spending sentence", :aggregate_failures do
-      within(card) do
-        expect(page).not_to have_text("No envelope")
-        expect(page).not_to have_text("It comes out of your buffer")
-        expect(page).not_to have_link("Give it an envelope on the Budget page")
-      end
-    end
-  end
+  # THE "a savings category with no goal behind it" DESCRIBE IS DELETED WITH THE ARM (plan 3, task
+  # 5). Its two examples pinned the contribution card — "No goal — this contribution has nowhere to
+  # land", "The money stays in your buffer", and a link to `/pools/new` — against a savings category
+  # pointing at an account. There is no savings category, so there is nothing to select and one
+  # honest card is left. The negative above is what keeps the deleted copy from creeping back.
 
   # An empty grey track beside "$240.00 left" would say "nothing left" an inch under a figure saying
   # otherwise, so an envelope with nothing to claim gets no bar at all.
@@ -407,46 +383,61 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
+  # THE GOAL ARM SURVIVES, KEYED ON THE POOL (plan 3, task 5). The category selected here was a
+  # SAVINGS one and is an EXPENSE one now — which is the demo's own shape (Vacation Spending →
+  # Vacation to Europe) — so the card still takes the goal shape and still measures against the
+  # target. What changed is the SIGN: spending from a goal subtracts, which is what
+  # `EntryImpactPresenter#direction` used to invert for a contribution and what the browser used to
+  # read off `data-direction`.
   describe "a savings goal" do
     let(:vacation_pool) do
       create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
     end
 
     before do
-      create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
+      create(:category, user: user, name: "Vacation", category_type: :expense, pool: vacation_pool)
       create(:pool_movement, from_pool: checking, to_pool: vacation_pool, amount: 600, date: Time.zone.now)
 
       visit new_entry_path
       select_category("Vacation")
     end
 
-    it "takes the goal shape and fills rather than empties", :aggregate_failures do
+    it "takes the goal shape and subtracts what is spent", :aggregate_failures do
       expect(page).to have_css("[data-impact-card='goal']")
       fill_in "Amount", with: "150"
 
       within(card) do
         expect(figure("envelope")).to have_text("Vacation goal")
         expect(figure("balance")).to have_text("$600.00")
-        expect(figure("balance-after")).to have_text("$750.00")
+        expect(figure("balance-after")).to have_text("$450.00")
         expect(figure("goal")).to have_text("of $2,400.00 goal")
       end
     end
 
+    # THE ATTRIBUTE THE BROWSER USED TO MULTIPLY BY IS GONE. It carried +1 for a savings category,
+    # and with one direction left it would be the constant -1 on every render.
+    it "sends the browser no direction to decide", :aggregate_failures do
+      expect(page).to have_no_css("[data-direction]")
+      fill_in "Amount", with: "150"
+      within(card) { expect(figure("balance-after")).to have_text("$450.00") }
+    end
+
     it "measures the bar against the goal", :aggregate_failures do
       fill_in "Amount", with: "150"
-      within(card) { expect(figure("balance-after")).to have_text("$750.00") }
+      within(card) { expect(figure("balance-after")).to have_text("$450.00") }
 
-      # 750 of 2,400.
-      expect(page).to have_css("[data-figure='bar'][style*='width: 31%']")
+      # 450 of 2,400.
+      expect(page).to have_css("[data-figure='bar'][style*='width: 19%']")
       expect(page).not_to have_css("[data-figure='bar'][style*='width: 100%']")
     end
 
-    it "never reads as an envelope going negative", :aggregate_failures do
+    # THE OTHER DIRECTION ON THE SURVIVING ARM: a goal CAN go negative, and it says so in the app's
+    # ordinary overdraw vocabulary rather than being exempted from it.
+    it "reads as the goal going negative when it is emptied", :aggregate_failures do
       fill_in "Amount", with: "5000"
 
-      within(card) { expect(figure("balance-after")).to have_text("$5,600.00") }
-      expect(page).to have_button("Create Entry")
-      expect(page).not_to have_button("Save anyway")
+      within(card) { expect(figure("balance-after")).to have_text("-$4,400.00") }
+      expect(page).to have_button("Save anyway")
     end
   end
 
@@ -506,27 +497,31 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE TWO SIGNS COME FROM TWO RECORDS AT ONCE, and the fragment endpoint has to carry the entry id
-  # for the first of them to be readable at all: the SAVED category says a contribution went IN, the
-  # category now in the select says an expense comes OUT. Reading either off the wrong record moves
-  # the figure by twice the entry.
-  describe "re-categorising a contribution as spending" do
+  # THE EDIT CASE ON A GOAL, and the fragment endpoint has to carry the entry id for it to be
+  # readable at all: an entry the ledger has already counted must be given back before the typed
+  # amount is subtracted, or the card shows it spent twice.
+  #
+  # IT WAS A CROSS-SIGN EXAMPLE (plan 3, task 5): the saved category was a SAVINGS one, so the
+  # exclusion was `+150` and the subtraction `-150`, read off two different records. One sign is
+  # left, and the same figures fall out of it — which is what says the give-back is real rather
+  # than an artefact of the two signs cancelling.
+  describe "re-categorising spending inside one goal" do
     let(:vacation_pool) do
       create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
     end
-    let!(:contribution) do
-      vacation = create(:category, user: user, name: "Vacation", category_type: :savings, pool: vacation_pool)
+    let!(:already_spent) do
+      vacation = create(:category, user: user, name: "Vacation", category_type: :expense, pool: vacation_pool)
       create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
       create(:pool_movement, from_pool: checking, to_pool: vacation_pool, amount: 600, date: Time.zone.now)
       create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.current)
     end
 
-    it "gives the contribution back before subtracting the expense", :aggregate_failures do
-      visit edit_entry_path(contribution)
+    it "gives the counted entry back before subtracting it again", :aggregate_failures do
+      visit edit_entry_path(already_spent)
       select_category("Education")
 
-      # Ledger: 600 funded + 150 contributed. Without the contribution: 600. Spending 150: 450.
-      expect(vacation_pool.calculator.balance).to eq(BigDecimal("750"))
+      # Ledger: 600 moved in − 150 spent. Without this entry: 600. Spending 150: 450.
+      expect(vacation_pool.calculator.balance).to eq(BigDecimal("450"))
       within(card) do
         expect(figure("balance")).to have_text("$600.00")
         expect(figure("balance-after")).to have_text("$450.00")

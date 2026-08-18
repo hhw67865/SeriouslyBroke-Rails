@@ -89,47 +89,32 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     end
   end
 
-  describe "savings category labels", :aggregate_failures do
-    let!(:pool) { create(:pool, user: user) }
-    let!(:category) { create(:category, category_type: "savings", user: user, pool: pool, name: "Emergency") }
-    let!(:item) { create(:item, category: category, name: "Transfer") }
-
-    before { create(:entry, item: item, amount: 200, date: base_date + 7.days) }
-
-    it "shows Monthly labels in default view" do
-      visit category_path(category)
-
-      expect(page).to have_content("Monthly Contribution")
-      expect(page).to have_content("Items This Month")
-    end
-
-    it "shows YTD labels in YTD view" do
-      visit category_path(category, period: "ytd")
-
-      expect(page).to have_content("YTD Contribution")
-      expect(page).to have_content("Items This Year")
-    end
-  end
+  # THE "savings category labels" DESCRIBE IS DELETED WITH THE ARM (plan 3, task 5). It pinned
+  # "Monthly Contribution" / "YTD Contribution" — `CategoriesHelper#period_amount_label(:savings)`,
+  # deleted with the type — over the card's savings arm, which is gone with the goal box and the
+  # running-total chart inside it. The expense and income label pairs above make the same claim
+  # over the two types that survive.
 
   # THE PRORATED SUMMARY IS DELETED (plan 3, task 3). Three examples planted a $300 prorated cap
   # and read the daily ramp off the card — "67% used", "Budget exceeded" against a $150 pace, and
   # "Expected by today: $150.00". The cap and the `prorated` ramp are both gone, so the fixture is
   # unbuildable and the sentences are unrenderable; they are deleted with the behaviour.
 
-  # THE POOL BALANCE THE LEFT COLUMN STILL PRINTS, AND THE KEY THAT NOW BUSTS IT (2d task 6).
+  # THE POOL'S WORDS INSIDE THE FRAGMENT CACHE, AND THE KEY THAT BUSTS IT (2d task 6, revised in
+  # plan 3 task 5).
   #
-  # Task 5 narrowed this fragment cache to the left column because an envelope's balance is not
-  # derived from THIS category's entries — a `PoolMovement` moves it and touches nothing here — and
-  # moved the two readers it found outside. It missed one: `_summary_card`'s savings arm prints
-  # `pool.calculator.{current_balance,progress_percentage}` from inside the gray box in the middle
-  # of the partial, where taking the reader out would mean taking the box out of the card it is
-  # drawn in. So the POOL is in the key instead, which works because the bust chain exists on that
-  # side: `PoolMovement belongs_to :from_pool/:to_pool, touch: true`.
+  # 2d narrowed this cache to the left column because an envelope's BALANCE is not derived from THIS
+  # category's entries, and put the POOL in the key for the one balance it could not move out —
+  # `_summary_card`'s savings arm. That arm is deleted with the savings category, and no pool FIGURE
+  # is left under this cache. The pool stays in the key for what remains: the expense arm prints the
+  # pool's NOUN and NAME ("Spending here comes out of the envelope Groceries"), so a renamed pool
+  # would go on being described by its old name here while the pool card in the uncached right
+  # column showed the new one — one page, two names.
   #
   # THE ENVIRONMENT MAKES THIS INVISIBLE BY DEFAULT — `config.cache_store = :null_store` in test —
   # so every other example in this suite would pass against a key that never busts anything. These
   # two turn a real store on, which is the only way either half means anything.
-  describe "the pool figure inside the fragment cache" do
+  describe "the pool's words inside the fragment cache" do
     around do |example|
       cache = Rails.cache
       controller_cache = ActionController::Base.cache_store
@@ -146,22 +131,24 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
 
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }
     let(:goal) { create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000) }
-    let!(:savings) { create(:category, category_type: "savings", user: user, name: "Rainy Day", pool: goal) }
+    let!(:spending) { create(:category, category_type: "expense", user: user, name: "Rainy Day", pool: goal) }
 
     def fund(amount) = create(:pool_movement, from_pool: checking, to_pool: goal, amount: amount, date: Date.current)
 
-    # THE STALENESS FIX ITSELF: a movement, and the figure has moved on the next load. Before the
-    # pool joined the key this second load served the first load's fragment — `$500.00 / $2,000.00`
-    # under a live "View details" link pointing at a pool screen reading $800.
-    it "moves when a movement funds the pool", :aggregate_failures do
+    # THE STALENESS FIX ITSELF: the pool is renamed, and the sentence has moved on the next load.
+    # `Category belongs_to :pool, touch: true` is not the chain that saves this — the CATEGORY is
+    # untouched by a pool edit — the pool's own `updated_at` in the key is.
+    it "moves when the pool is renamed", :aggregate_failures do
       fund(500)
-      visit category_path(savings)
-      expect(page).to have_content("$500.00 / $2,000.00")
+      visit category_path(spending)
+      expect(page).to have_content("comes out of the goal")
+      expect(page).to have_content("Emergency Fund")
 
-      fund(300)
-      visit category_path(savings)
+      goal.update!(name: "Renamed Fund")
+      visit category_path(spending)
 
-      expect(page).to have_content("$800.00 / $2,000.00")
+      expect(page).to have_content("Renamed Fund")
+      expect(page).to have_no_content("Emergency Fund")
     end
 
     # AND THE CACHE IS GENUINELY ON, which the example above cannot show on its own — it would read
@@ -171,14 +158,14 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     # the pool card in the uncached right column already shows the new one. One load, both halves.
     it "still serves a cached left column when nothing in the key moved", :aggregate_failures do
       fund(500)
-      visit category_path(savings)
+      visit category_path(spending)
       expect(page).to have_content("Emergency Fund")
 
       # SKIPPING THE CALLBACKS IS THE POINT, not a shortcut: `update!` would move `updated_at`,
       # which is exactly what this example needs NOT to happen — a key that moved would prove
       # nothing about whether anything was ever stored.
       goal.update_column(:name, "Renamed Fund") # rubocop:disable Rails/SkipsModelValidations
-      visit category_path(savings)
+      visit category_path(spending)
 
       expect(page).to have_content("Emergency Fund")
       expect(page).to have_content("Renamed Fund")

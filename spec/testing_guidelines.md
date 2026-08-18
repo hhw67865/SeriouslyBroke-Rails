@@ -1151,7 +1151,7 @@ describe "search with type filtering" do
   before do
     # Background data that won't be directly referenced
     create(:category, name: "Freelance Tools", category_type: "expense", user: user)
-    create(:category, name: "Freelance Savings", category_type: "savings", user: user)
+    create(:category, name: "Freelance Tooling", category_type: "expense", user: user)
     
     visit categories_path(type: "income")
   end

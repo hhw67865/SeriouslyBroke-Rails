@@ -113,23 +113,18 @@
       the money "comes out of your buffer" — and the envelope sentence is the budget block's,
       because the two blocks are on one page and must not describe one envelope two ways.
 
-      THE SAVINGS ARM ASKS WHICH WAY THE MONEY GOES, and it is the CATEGORY that answers (2d
-      whole-plan review, fix 2). It used to say "This category contributes to a shared savings
-      pool" for every category handed to it, which is the opposite of the truth for an EXPENSE
-      category pointing at a goal — the demo's Health → Emergency Fund and Education → Retirement
-      Supplement, an ordinary shape rather than a corner. That category WITHDRAWS: under
-      `PoolBalanceLedger::ENTRY_POOL_ID` its entries are subtracted from the pool's balance, and
-      `EntryImpactPresenter#direction` signs them -1 on the entry form an inch from where the money
-      is typed in. The pool's TYPE picks the noun; the CATEGORY's type picks the verb, exactly as
-      `#contribution?` and `#goal?` split the same two questions there. %>
+      THE GOAL ARM NO LONGER ASKS WHICH WAY THE MONEY GOES, because only one way is left (plan 3,
+      task 5). It used to branch on `presenter.category.savings?` — "contributes to" for a savings
+      category, "draws from" for an expense one — a distinction 2d's review introduced because the
+      single sentence was the opposite of the truth for the demo's Health → Emergency Fund shape.
+      There is no savings category now: every category that can point at a goal spends out of it,
+      under `PoolBalanceLedger::ENTRY_POOL_ID`, and money ARRIVES in a goal as a `PoolMovement`,
+      which no category is party to. So the branch collapses onto the arm that was already true of
+      every reachable case, and the second clause says where the money comes from instead. %>
   <p class="text-sm text-gray-500 mb-4">
     <% if pool.pool_type_savings? %>
-      <% if presenter.category.savings? %>
-        This category contributes to a shared goal.
-      <% else %>
-        This category's spending draws from a shared goal.
-      <% end %>
-      Other categories may contribute to it or draw from it too.
+      This category's spending draws from a shared goal.
+      Other categories may draw from it too, and money is moved into it rather than spent into it.
     <% elsif pool.pool_type_account? %>
       This category points at an account, and an account is your buffer. Nothing reserves money for this category, and no rule can fill an account.
     <% else %>

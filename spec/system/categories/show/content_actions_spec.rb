@@ -72,19 +72,23 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     end
   end
 
-  describe "savings category", :aggregate_failures do
-    let!(:pool) { create(:pool, user: user, name: "Main Pool") }
-    let!(:category) { create(:category, category_type: "savings", user: user, name: "Emergency Fund", pool: pool) }
+  # AN EXPENSE CATEGORY POINTING AT A GOAL (plan 3, task 5). This described a SAVINGS category and
+  # read "Savings category details and management" / "Monthly Contribution" off the summary arm
+  # deleted with the type. The claim worth keeping is the noun one — the page calls a savings POOL a
+  # Goal and never a "Savings Pool" — and it belongs to the shape that survives.
+  describe "a category pointing at a goal", :aggregate_failures do
+    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    let!(:pool) { create(:pool, user: user, name: "Main Pool", account: checking) }
+    let!(:category) { create(:category, category_type: "expense", user: user, name: "Emergency Fund", pool: pool) }
 
     before { visit category_path(category) }
 
-    it "shows key sections and savings summary" do
+    it "shows key sections and the goal's one noun" do
       expect(page).to have_content("Emergency Fund")
-      expect(page).to have_content("Savings category details and management")
+      expect(page).to have_content("Expense category details and management")
       expect(page).to have_content("Summary")
-      expect(page).to have_content("Monthly Contribution")
       # CHANGED WITH THE ONE NAMER (2d whole-plan review, fix 2): a savings pool is a "Goal" in
-      # every sentence the app writes about one, this page's summary box included.
+      # every sentence the app writes about one.
       expect(page).to have_content("Goal")
       expect(page).to have_no_content("Savings Pool")
       expect(page).to have_content("Main Pool")
@@ -100,7 +104,7 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
 
       accept_confirm { click_button "Delete" }
 
-      expect(page).to have_current_path(categories_path(type: "savings"))
+      expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content("Category was successfully deleted")
       expect(page).not_to have_content(category.name)
       expect(Category.exists?(category.id)).to be(false)

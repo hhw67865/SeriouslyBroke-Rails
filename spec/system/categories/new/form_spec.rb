@@ -26,10 +26,13 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_button("Create Category")
     end
 
-    it "shows category type options" do
+    # TWO TILES, NOT THREE (plan 3, task 5). The form loops `Category.category_types`, so the
+    # savings tile disappeared with the enum value and the grid closes at two.
+    it "shows category type options", :aggregate_failures do
       expect(page).to have_content("Expense")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
+      expect(page).to have_no_field("category_category_type_savings", visible: :all)
     end
 
     it "shows color selection options" do
@@ -89,7 +92,6 @@ RSpec.describe "Categories New - Form", type: :system do
 
       expect(page).to have_checked_field("category_category_type_expense")
       expect(page).not_to have_checked_field("category_category_type_income")
-      expect(page).not_to have_checked_field("category_category_type_savings")
     end
 
     it "prepopulates income type when accessed with type=income" do
@@ -97,13 +99,17 @@ RSpec.describe "Categories New - Form", type: :system do
 
       expect(page).to have_checked_field("category_category_type_income")
       expect(page).not_to have_checked_field("category_category_type_expense")
-      expect(page).not_to have_checked_field("category_category_type_savings")
     end
 
-    it "prepopulates savings type when accessed with type=savings" do
+    # `?type=savings` NAMES A TYPE THE ENUM NO LONGER HAS (plan 3, task 5), and this action USED TO
+    # ASSIGN THE PARAMETER STRAIGHT THROUGH — `category_type = "savings"` raises ArgumentError, so a
+    # stale bookmark took the whole page down with a 500. Measured at the browser before it was
+    # fixed. The controller checks the parameter now and an unknown type selects nothing, which is
+    # what the form does with no `type` at all.
+    it "opens with nothing selected when accessed with the retired type=savings", :aggregate_failures do
       visit new_category_path(type: "savings")
 
-      expect(page).to have_checked_field("category_category_type_savings")
+      expect(page).to have_content("Create New Category")
       expect(page).not_to have_checked_field("category_category_type_expense")
       expect(page).not_to have_checked_field("category_category_type_income")
     end
@@ -113,7 +119,6 @@ RSpec.describe "Categories New - Form", type: :system do
 
       expect(page).not_to have_checked_field("category_category_type_expense")
       expect(page).not_to have_checked_field("category_category_type_income")
-      expect(page).not_to have_checked_field("category_category_type_savings")
     end
   end
 
@@ -180,16 +185,6 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("Category was successfully created")
       expect(page).to have_current_path(categories_path(type: "income"))
       expect(page).to have_content("New Income Category")
-    end
-
-    it "creates savings category and redirects to savings index" do
-      fill_in "Name", with: "New Savings Category"
-      find("label", text: "Savings").click
-      click_button "Create Category"
-
-      expect(page).to have_content("Category was successfully created")
-      expect(page).to have_current_path(categories_path(type: "savings"))
-      expect(page).to have_content("New Savings Category")
     end
 
     it "keeps the pool the picker was opened on" do

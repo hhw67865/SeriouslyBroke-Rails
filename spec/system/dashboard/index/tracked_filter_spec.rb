@@ -128,45 +128,12 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
   end
 
-  describe "savings tab", :aggregate_failures do
-    let!(:emergency_pool) { create(:pool, user: user, name: "Emergency") }
-    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", pool: emergency_pool) }
-    let!(:emergency_item) { create(:item, category: emergency, name: "Monthly Transfer") }
-    let!(:vacation_pool) { create(:pool, user: user, name: "Vacation") }
-    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", pool: vacation_pool) }
-    let!(:vacation_item) { create(:item, category: vacation, name: "Deposit") }
-
-    before do
-      create(:entry, item: emergency_item, amount: 500.00, date: base_date + 1.day)
-      create(:entry, item: vacation_item, amount: 200.00, date: base_date + 2.days)
-    end
-
-    it "reduces tracked savings totals when a category is untracked" do
-      vacation.update!(tracked: false)
-      visit reports_path(tab: "savings")
-
-      within_stat_card("Contributed") { expect(page).to have_content("$500.00") }
-    end
-
-    it "shows untracked category separately in breakdown" do
-      vacation.update!(tracked: false)
-      visit reports_path(tab: "savings")
-
-      expect(page).to have_content("Emergency Fund")
-      expect(page).to have_css("p.uppercase", text: /untracked/i)
-      expect(page).to have_content("Vacation Fund")
-    end
-
-    it "shows only savings categories in the tracked filter" do
-      create(:category, :expense, user: user, name: "Groceries")
-      visit reports_path(tab: "savings")
-
-      open_tracked_filter
-      expect(page).to have_content("Emergency Fund")
-      expect(page).to have_content("Vacation Fund")
-      expect(page).not_to have_content("Groceries")
-    end
-  end
+  # THE "savings tab" DESCRIBE IS DELETED WITH THE TAB (plan 3, task 5). Its three examples pinned
+  # the tracked filter over savings CATEGORIES — a Contributed stat card, an untracked breakdown
+  # row, and a filter list containing only savings categories. None of those three things exists:
+  # the tab, its four partials and `Dashboard::SavingsPresenter` are gone, and so is the type the
+  # filter was filtering. The expenses and income tabs above keep the same claims over the types
+  # that survive.
 
   private
 

@@ -2,26 +2,33 @@
 
 require "rails_helper"
 
+# EVERY CONTRIBUTION HERE IS A MOVEMENT (plan 3, task 5). They were entries in a savings CATEGORY,
+# which is the shape the cutover converted; every balance, percentage and card state below is
+# unchanged, because `PoolCalculator#balance` counted that term and counts `movements_in` at the
+# same sign. The card's activity strip is `Pool#timeline` now — see the "recent activity" group.
 RSpec.describe "Savings Pools Index - Cards", type: :system do
   let(:user) { create(:user) }
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let!(:pool) do
-    create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000)
+    create(:pool, user: user, name: "Emergency Fund", target_amount: 10_000, account: checking)
   end
 
   before { sign_in user, scope: :user }
 
+  def contribute(amount, on: Date.current)
+    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+  end
+
   describe "savings pool card display", :aggregate_failures do
-    let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
     let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
-    let!(:savings_item) { create(:item, category: savings_category) }
     let!(:expense_item) { create(:item, category: expense_category) }
 
-    # Current balance: (3 savings × $200) - (2 expenses × $50) = $600 - $100 = $500
+    # Current balance: (3 movements × $200) - (2 expenses × $50) = $600 - $100 = $500
     # Target: $10,000
     # Progress: ($500 / $10,000) × 100 = 5%
 
     before do
-      create_list(:entry, 3, item: savings_item, amount: 200.0)
+      3.times { contribute(200.0) }
       create_list(:entry, 2, item: expense_item, amount: 50.0)
       visit pools_path
     end
@@ -57,15 +64,12 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
 
   describe "progress states" do
     context "with 50% progress", :aggregate_failures do
-      let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
-      let!(:savings_item) { create(:item, category: savings_category) }
-
       # Current balance: $5,000
       # Target: $10,000
       # Progress: 50%
 
       before do
-        create(:entry, item: savings_item, amount: 5000.0)
+        contribute(5000.0)
         visit pools_path
       end
 
@@ -81,15 +85,12 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
 
     context "when goal is reached", :aggregate_failures do
-      let!(:savings_category) { create(:category, user: user, category_type: :savings, pool: pool) }
-      let!(:savings_item) { create(:item, category: savings_category) }
-
       # Current balance: $10,000
       # Target: $10,000
       # Progress: 100%
 
       before do
-        create(:entry, item: savings_item, amount: 10_000.0)
+        contribute(10_000.0)
         visit pools_path
       end
 
@@ -136,36 +137,23 @@ RSpec.describe "Savings Pools Index - Cards", type: :system do
     end
   end
 
+  # THE CARD'S ACTIVITY STRIP IS `Pool#timeline` (plan 3, task 5): movements in and out plus the
+  # spending of the categories pointing here. A movement's row names the pool at the OTHER end,
+  # which is the fact a goal's history is about; an entry's names its item, exactly as before.
   describe "recent activity section", :aggregate_failures do
-    let!(:savings_category) do
-      create(
-        :category,
-        user: user,
-        category_type: :savings,
-        pool: pool
-      )
-    end
-    let!(:expense_category) do
-      create(
-        :category,
-        user: user,
-        category_type: :expense,
-        pool: pool
-      )
-    end
-    let!(:deposit_item) { create(:item, category: savings_category, name: "Monthly Deposit") }
+    let!(:expense_category) { create(:category, user: user, category_type: :expense, pool: pool) }
     let!(:withdrawal_item) { create(:item, category: expense_category, name: "Emergency Withdrawal") }
 
     before do
-      create(:entry, item: deposit_item, amount: 1000, date: Date.current)
+      contribute(1000, on: Date.current)
       create(:entry, item: withdrawal_item, amount: 200, date: Date.current - 1.day)
       visit pools_path
     end
 
-    it "shows recent activity with correct entry details" do
+    it "shows recent activity with both directions" do
       within(".bg-white.rounded", text: "Emergency Fund") do
         expect(page).to have_content("Recent activity")
-        expect(page).to have_content("Monthly Deposit")
+        expect(page).to have_content("Checking")
         expect(page).to have_content("+$1,000.00")
         expect(page).to have_content("Emergency Withdrawal")
         expect(page).to have_content("-$200.00")

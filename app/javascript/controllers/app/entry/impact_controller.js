@@ -62,11 +62,12 @@ export default class extends Controller {
     const figures = this.figuresTarget
     const balance = this.cents(parseFloat(figures.dataset.balance))
     const denominator = this.cents(parseFloat(figures.dataset.denominator))
-    // The ledger's own sign for this entry's category: a savings contribution RAISES the pool it
-    // fills. Read off the card rather than decided here — which way money moves is the server's
-    // fact about a category type, not the browser's guess.
-    const direction = Number(figures.dataset.direction)
-    const after = balance + direction * this.cents(this.typedAmount())
+    // SPENDING SUBTRACTS, and that is the whole of it (plan 3, task 5). This multiplied by a
+    // `data-direction` the server sent — +1 for a savings category, because a contribution RAISED
+    // the pool it filled. There is no savings category, `PoolCalculator#balance` no longer adds
+    // entries to a pool, and every card the server renders describes an expense, so the attribute
+    // was a constant. `EntryImpactPresenter#balance_after` is this same line.
+    const after = balance - this.cents(this.typedAmount())
 
     this.afterTarget.textContent = this.money(after)
     this.afterTarget.classList.toggle("text-status-danger", after < 0)

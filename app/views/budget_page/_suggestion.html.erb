@@ -14,7 +14,7 @@
     <div class="text-sm text-gray-700 space-y-1">
       <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>
 
-      <% joined = presenter.joined_envelope_name(suggestion) %>
+      <% joined = presenter.joined_pool(suggestion) %>
       <% if suggestion_re_points_category?(suggestion) %>
         <%# THE RE-POINT, SAID BEFORE THE CLICK. Accepting a $45 Parking proposal moves EVERY
             Transportation entry into the envelope — the gas, the rideshares, all of it — and a
@@ -43,9 +43,13 @@
             resulting number is least predictable from anything else on the row. %>
         <p class="text-gray-500" data-suggestion-effect>
           <% if joined %>
-            This rule joins your existing <%= joined %> envelope, and points all
+            <%# `joined.noun`, NOT THE WORD "envelope" (plan 3, task 5). The reuse arm accepts any
+                non-account pool, so this sentence was calling the demo's Vacation to Europe GOAL an
+                envelope while the category page said "Goal" about it. `Pool::NOUNS` is the one
+                mapping. %>
+            This rule joins your existing <%= joined.name %> <%= joined.noun %>, and points all
             <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it,
-            past and future — so the envelope takes on what has already been spent.
+            past and future — so the <%= joined.noun %> takes on what has already been spent.
           <% else %>
             Accepting this puts all <%= suggestion.detail[:category_name] || suggestion.subject.name %>
             spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope,
@@ -64,7 +68,7 @@
             payload reuses it (the category is pool-covered), so this rule ADDS to the envelope
             rather than making a second one — and the category does not move again. %>
         <p class="text-gray-500" data-suggestion-effect>
-          This rule joins your existing <%= joined %> envelope, alongside what is already in it.
+          This rule joins your existing <%= joined.name %> <%= joined.noun %>, alongside what is already in it.
         </p>
       <% end %>
     </div>

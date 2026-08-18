@@ -55,10 +55,6 @@ class DashboardPresenter
     @income ||= Dashboard::IncomePresenter.new(self)
   end
 
-  def savings
-    @savings ||= Dashboard::SavingsPresenter.new(self)
-  end
-
   def overview
     @overview ||= Dashboard::OverviewPresenter.new(self)
   end
@@ -88,30 +84,20 @@ class DashboardPresenter
            :income_chart_colors,
            to: :income
 
-  # === Savings Tab (delegated) ===
-
-  delegate :savings_chart_data,
-           :total_savings_contribution,
-           :total_tracked_savings_contribution,
-           :total_savings_balance,
-           :savings_categories_breakdown,
-           :untracked_savings_categories_breakdown,
-           :savings_chart_colors,
-           :flow_chart_data,
-           :flow_chart_colors,
-           :total_withdrawals,
-           :pools_summary,
-           :total_pools_balance,
-           :savings_rate,
-           to: :savings
-
   # === All/Overview Tab (delegated) ===
-
+  #
+  # THE SAVINGS TAB'S THIRTEEN DELEGATIONS ARE GONE (plan 3, task 5) — the chart, the flow chart,
+  # the two contribution totals, the balance, the two breakdowns, the withdrawals and
+  # `#savings_rate`, all of them summing entries in a savings CATEGORY. `#pools_summary` and
+  # `#total_pools_balance` are the two that survived the tab, because the ALL tab renders the goals
+  # strip they feed; they moved to `Dashboard::OverviewPresenter` rather than dying with the class.
   delegate :net_amount,
            :expense_ratio,
            :top_expense_categories,
            :buffer_categories_breakdown,
            :envelope_categories_breakdown,
+           :pools_summary,
+           :total_pools_balance,
            to: :overview
 
   # === Tracked Filter ===
@@ -194,20 +180,12 @@ class DashboardPresenter
     @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)
   end
 
-  def tracked_savings_categories
-    @tracked_savings_categories ||= @user.categories.savings.tracked.includes(items: :entries)
-  end
-
   def untracked_expense_categories
     @untracked_expense_categories ||= @user.categories.expenses.untracked.includes(items: :entries)
   end
 
   def untracked_income_categories
     @untracked_income_categories ||= @user.categories.incomes.untracked.includes(items: :entries)
-  end
-
-  def untracked_savings_categories
-    @untracked_savings_categories ||= @user.categories.savings.untracked.includes(items: :entries)
   end
 
   def month_range

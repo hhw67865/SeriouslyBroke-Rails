@@ -36,8 +36,11 @@ RSpec.describe Category, type: :model do
     end
   end
 
+  # TWO VALUES, AND `savings: 2` IS RETIRED RATHER THAN RENUMBERED (plan 3, task 5). This is the
+  # planted literal that says integer 2 is not reused: a third type added later takes 3, and this
+  # example fails if anybody puts one at 2.
   describe "enums" do
-    it { is_expected.to define_enum_for(:category_type).with_values(expense: 0, income: 1, savings: 2) }
+    it { is_expected.to define_enum_for(:category_type).with_values(expense: 0, income: 1) }
   end
 
   describe "scopes" do
@@ -46,7 +49,6 @@ RSpec.describe Category, type: :model do
     let!(:expense_category) { create(:category, category_type: :expense, user: user) }
     let!(:pool_covered_category) { create(:category, category_type: :expense, user: user, pool: pool) }
     let!(:income_category) { create(:category, category_type: :income, user: user) }
-    let!(:savings_category) { create(:category, category_type: :savings, user: user, pool: create(:pool, user: user)) }
 
     describe ".expenses" do
       it "returns only expense categories" do
@@ -60,10 +62,10 @@ RSpec.describe Category, type: :model do
       end
     end
 
-    describe ".savings" do
-      it "returns only savings categories" do
-        expect(described_class.savings).to contain_exactly(savings_category)
-      end
+    # `.savings` IS GONE with the enum value (plan 3, task 5), and its absence is asserted rather
+    # than left to a NoMethodError somebody reads as a typo.
+    it "does not answer .savings at all" do
+      expect(described_class).not_to respond_to(:savings)
     end
   end
 
@@ -85,9 +87,8 @@ RSpec.describe Category, type: :model do
       expect(create(:category, :expense, user: user, pool: groceries)).not_to be_buffer_funded
     end
 
-    it "is false for income and savings categories, whichever pool they name", :aggregate_failures do
+    it "is false for an income category, whichever pool it names" do
       expect(create(:category, :income, user: user, pool: checking)).not_to be_buffer_funded
-      expect(create(:category, :savings, user: user, pool: groceries)).not_to be_buffer_funded
     end
   end
 
@@ -121,10 +122,10 @@ RSpec.describe Category, type: :model do
       expect(build(:category, :expense, user: user, pool: groceries)).to be_valid
     end
 
-    it "does not constrain savings categories, which may point at a savings pool" do
+    it "does not constrain expense categories, which may point at a savings goal" do
       vacation = create(:pool, :savings_pool, user: user, account: checking)
 
-      expect(build(:category, :savings, user: user, pool: vacation)).to be_valid
+      expect(build(:category, :expense, user: user, pool: vacation)).to be_valid
     end
   end
 

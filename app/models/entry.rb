@@ -24,7 +24,6 @@ class Entry < ApplicationRecord
 
   scope :expenses, -> { joins(item: :category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(item: :category).where(categories: { category_type: :income }) }
-  scope :savings, -> { joins(item: :category).where(categories: { category_type: :savings }) }
   scope :tracked, -> { where(categories: { tracked: true }) }
 
   # EVERY ENTRY WHOSE POOL IS NAMED `name`, ASKED THE WAY EVERY BALANCE ASKS IT.
