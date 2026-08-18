@@ -53,6 +53,7 @@ class Category < ApplicationRecord
          income: 1
        }
 
+  validate :pool_must_belong_to_user
   validate :income_must_land_in_an_account
 
   # Basic scopes
@@ -148,6 +149,35 @@ class Category < ApplicationRecord
   end
 
   private
+
+  # A CATEGORY'S LANE IS ONE OF ITS OWN USER'S POOLS — the third instance of a rule its two siblings
+  # already carry (`Entry#pool_must_belong_to_user`, `Pool#account_is_this_users_account`), and it
+  # is written the same way for the same reasons.
+  #
+  # WHY IT IS HERE WHEN THE CONTROLLERS ALREADY GUARD IT. Both writers of this column scope their
+  # lookup to `current_user` — `CategoriesController` builds through `current_user.categories` and
+  # picks the pool out of `current_user.pools`, and `PoolsController` never sets it — so no request
+  # can reach this validator today. That is a fact about two controllers, not about the column: a
+  # console, a rake task, an import, a future API or a `pool_id` that arrives through a nested form
+  # writes it with nothing in the way, and a category pointing at a stranger's pool is a leak the
+  # app cannot render honestly. Its entries would reach a pool the owner does not own, which makes
+  # BOTH users' `Σ pools` disagree with their bank truth — the cutover migration's #preflight!
+  # refuses exactly this shape by name for exactly that reason. The controllers are the first layer;
+  # this is the durable one.
+  #
+  # RECORDS, NOT IDS, and both precedents say so in their own comments: under `build` an unsaved
+  # association leaves `user_id` nil on both sides, and `nil == nil` would wave a foreign pool
+  # through. `pool.user == user` compares two records, so an unsaved pair is compared on identity
+  # rather than on two nils that happen to match.
+  #
+  # SILENT ON NILS, because a missing pool or a missing user is another validator's sentence to say:
+  # `belongs_to :pool` and `belongs_to :user` are both required, and adding "must belong to the same
+  # user" to a record that names no user at all is a second error about a first error.
+  def pool_must_belong_to_user
+    return if pool.blank? || user.blank?
+
+    errors.add(:pool, "must belong to the same user") unless pool.user == user
+  end
 
   # Income lands in an account, never directly in an envelope: the allocation rules
   # move it out of the account afterwards.

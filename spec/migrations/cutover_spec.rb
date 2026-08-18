@@ -644,6 +644,94 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     }
   end
 
+  # THE PRE-FLIGHT BLOCK. Three shapes the migration meets, repairs in neither direction and cannot
+  # survive downstream: `TightenPoolShape` refuses the first two one migration later, and the third
+  # is a cross-user link no migration can honestly untangle. Each is planted PAST THE MODEL — the
+  # same idiom every other fixture in this file uses, and for the same reason: `Pool`'s
+  # case-insensitive uniqueness, `#account_matches_pool_type` and `Category`'s controller-side
+  # ownership guard all refuse these rows, which is exactly why a database can still hold one.
+  #
+  # BOTH DIRECTIONS. Each example asserts the raise NAMES the offending rows — a refusal that says
+  # only "duplicate names exist" leaves the operator where an `add_index` error would have — and the
+  # last one asserts the run wrote NOTHING, which is the whole reason the check sits before the loop
+  # rather than beside the other eight in #verify!.
+  describe "the pre-flight, before a single write" do
+    it "refuses two pools of one user whose names differ only in case, and names both", :aggregate_failures do
+      twin = plant_duplicate_of(wild[:utilities_pool], "utilities")
+
+      expect { migrate! }.to raise_error(described_class::PreflightFailed) { |error|
+        expect(error.message).to include("user #{wild[:user].id} has 2 pools named \"utilities\"")
+        expect(error.message).to include(wild[:utilities_pool].id, twin.id)
+      }
+    end
+
+    it "refuses an account that is itself filed inside another pool, and names it", :aggregate_failures do
+      misfile_an_account_inside(wild[:checking], wild[:utilities_pool])
+
+      expect { migrate! }.to raise_error(described_class::PreflightFailed) { |error|
+        expect(error.message).to include("account pool #{wild[:checking].id}")
+        expect(error.message).to include("is filed inside pool #{wild[:utilities_pool].id}")
+      }
+    end
+
+    # THE ONE THE VERIFIER ALREADY CAUGHT, AND WHY IT MOVED. A category pointing at a stranger's
+    # pool makes BOTH users' `Σ pools` disagree with their bank truth, so the run already refused
+    # it — with an arithmetic mismatch, after the writes, naming no category. The shape is the same;
+    # what changed is that the abort is now a work item with three ids in it.
+    it "refuses a category pointing at another user's pool, and names both owners", :aggregate_failures do
+      point_a_category_at(wild[:coffee], settled[:main])
+
+      expect { migrate! }.to raise_error(described_class::PreflightFailed) { |error|
+        expect(error.message).to include("category #{wild[:coffee].id} (\"Coffee\", user #{wild[:user].id})")
+        expect(error.message).to include("points at pool #{settled[:main].id}, owned by user #{settled[:user].id}")
+      }
+    end
+
+    # THE POINT OF IT BEING A PRE-FLIGHT. Not "it rolls back" — the run is all-or-nothing and would
+    # have rolled back anyway — but that the FIRST user is never touched, so the refusal costs the
+    # database nothing and can be re-run the moment the named rows are fixed.
+    it "leaves every user exactly as it found them", :aggregate_failures do
+      misfile_an_account_inside(wild[:checking], wild[:utilities_pool])
+      before_state = snapshot
+
+      expect { migrate! }.to raise_error(described_class::PreflightFailed)
+      expect(snapshot).to eq(before_state)
+    end
+
+    # THE CLEAN PATH, SAID ONCE HERE TOO. Four planted worlds hold none of the three shapes, so the
+    # pre-flight is invisible to every other example in this file — which is the claim those
+    # examples all quietly depend on.
+    it "passes a database holding none of the three, and lets the migration run" do
+      expect { migrate! }.not_to raise_error
+    end
+  end
+
+  # A SECOND POOL UNDER A NAME THE USER ALREADY HAS, differing only in case. `Pool` validates
+  # uniqueness `case_sensitive: false` and `TightenPoolShape`'s index says the same thing in SQL, so
+  # this row needs the same past-the-model planting every legacy shape in this file needs.
+  def plant_duplicate_of(pool, name)
+    build(:pool, user: pool.user, name: name, pool_type: :budget, account: pool.account, target_amount: nil)
+      .tap { |twin| twin.save!(validate: false) }
+  end
+
+  # AN ACCOUNT WITH A PARENT — `#account_matches_pool_type` refuses it ("cannot be set on an
+  # account") and `TightenPoolShape`'s CHECK refuses it again, past the model. The housing step
+  # excludes ACCOUNT pools by type, so nothing in the migration ever looks at this row.
+  def misfile_an_account_inside(account, parent)
+    # rubocop:disable Rails/SkipsModelValidations -- the model refuses this row; a database does not
+    Pool.where(id: account.id).update_all(account_id: parent.id)
+    # rubocop:enable Rails/SkipsModelValidations
+  end
+
+  # A STRANGER'S POOL THAT ALREADY EXISTS — `settled`'s account rather than `bare`'s, because
+  # `bare` has no pool at all until step 1 creates one and this shape has to be planted in the
+  # PRE-cutover world the pre-flight actually reads.
+  def point_a_category_at(category, pool)
+    # rubocop:disable Rails/SkipsModelValidations -- as above; the guard for this is controller-side
+    Category.where(id: category.id).update_all(pool_id: pool.id)
+    # rubocop:enable Rails/SkipsModelValidations
+  end
+
   # THE SABOTAGE BLOCK. The migration re-verifies on EVERY run, so a second run over a database
   # somebody has since broken is the verifier's own test bench.
   describe "the verification, shown failing" do
@@ -655,13 +743,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect { migrate! }.to raise_error(described_class::VerificationFailed, /#{wild[:user].id}.*Σ pools/)
     end
 
-    it "catches a category re-pointed at somebody else's pool" do
-      # rubocop:disable Rails/SkipsModelValidations -- as above
-      Category.where(id: wild[:coffee].id).update_all(pool_id: bare.reload.default_account_id)
-      # rubocop:enable Rails/SkipsModelValidations
-
-      expect { migrate! }.to raise_error(described_class::VerificationFailed, /#{wild[:user].id}.*Σ pools/)
-    end
+    # A CATEGORY RE-POINTED AT SOMEBODY ELSE'S POOL used to be asserted here, as a `Σ pools`
+    # mismatch on a second run. It is now refused one step earlier and by name, so the example lives
+    # in the pre-flight block above rather than being asserted twice against two different errors.
+    # The arithmetic arm it used to exercise is the example above this comment, which breaks the
+    # invariant in the one way no pre-flight can see: a movement whose two ends stop sharing a user.
 
     # THE STRUCTURAL ARMS, ASKED DIRECTLY. Every one of them names a condition the migration's own
     # steps REPAIR — a pool-less category is re-pointed by step 4, an account-less pool housed by

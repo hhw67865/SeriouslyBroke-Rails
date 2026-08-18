@@ -92,6 +92,42 @@ RSpec.describe Category, type: :model do
     end
   end
 
+  # BOTH DIRECTIONS, AND THE UNSAVED PAIR IS THE ONE THAT MATTERS. The validator compares RECORDS
+  # rather than `user_id`s precisely because two unsaved records both answer nil — an id comparison
+  # would call a foreign pool valid on `build` and only refuse it once both sides had been saved,
+  # which is after the form has already offered it.
+  describe "the pool it names belongs to its own user" do
+    let(:user) { create(:user) }
+    let(:stranger) { create(:user) }
+
+    it "accepts a pool of the category's own user" do
+      expect(build(:category, :expense, user: user, pool: create(:pool, :account, user: user))).to be_valid
+    end
+
+    it "refuses a pool belonging to somebody else", :aggregate_failures do
+      category = build(:category, :expense, user: user, pool: create(:pool, :account, user: stranger))
+
+      expect(category).not_to be_valid
+      expect(category.errors[:pool]).to include("must belong to the same user")
+    end
+
+    it "refuses a foreign pool even when neither record is saved yet", :aggregate_failures do
+      category = build(:category, :expense, user: build(:user), pool: build(:pool, :account, user: build(:user)))
+
+      expect(category).not_to be_valid
+      expect(category.errors[:pool]).to include("must belong to the same user")
+    end
+
+    # NOT A SECOND ERROR ABOUT A FIRST ONE. `belongs_to :user` already refuses a category with no
+    # user; this validator stays quiet rather than adding "must belong to the same user" beside it.
+    it "says nothing about ownership when there is no user to compare against", :aggregate_failures do
+      category = build(:category, :expense, user: nil, pool: create(:pool, :account, user: user))
+
+      expect(category).not_to be_valid
+      expect(category.errors[:pool]).not_to include("must belong to the same user")
+    end
+  end
+
   describe "income categories" do
     let(:user) { create(:user) }
     let(:checking) { create(:pool, :account, user: user) }

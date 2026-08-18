@@ -35,12 +35,27 @@
 # The reasoning is on that method. Everything else here re-records a fact the database already held
 # in a shape the new model can read.
 #
+# WHAT IT REFUSES BEFORE IT WRITES ANYTHING. Three shapes this migration neither repairs nor
+# survives are checked ONCE, across every user, before the first write of the run: duplicate pool
+# names, an account filed inside another pool, and a category pointing at a stranger's pool. See
+# #preflight! for why each one is a refusal rather than a repair. They are separated from the
+# verifier because they are questions about the database this migration MEETS, not about the one it
+# leaves — and because the run is all-or-nothing, a refusal that arrives after step 5b has written
+# rows costs the same rollback and names none of the rows responsible.
+#
 # IDEMPOTENT. A second run finds no account to create, no pool to house, no cap to convert, no
 # category to point, no savings entry to move and no envelope in deficit — and still verifies, which
 # is what makes a re-run a usable audit of a database somebody else's script has since touched.
 class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # Raised inside the user's transaction, so a user is either wholly migrated or wholly untouched.
   class VerificationFailed < StandardError; end
+
+  # Raised OUTSIDE every transaction and before every write, which is the whole difference between
+  # the two: a VerificationFailed is this migration refusing its own output, a PreflightFailed is it
+  # refusing its input. A caller that rescues one is asking "did the conversion go wrong"; a caller
+  # that rescues the other is asking "is this database convertible yet", and the answers need
+  # different work, so they get different classes rather than one message a `case` has to parse.
+  class PreflightFailed < StandardError; end
 
   # The integers as the schema holds them TODAY. Written out rather than read off the app's enums
   # for rule one's reason: `Category`'s `savings: 2` is deleted in Task 5, and a migration whose
@@ -87,6 +102,8 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   end
 
   def up
+    preflight!
+
     MigrationUser.order(:created_at, :id).pluck(:id, :email).each do |user_id, email|
       migrate_user(user_id, email)
     end
@@ -100,6 +117,95 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   end
 
   private
+
+  # PRE-FLIGHT — THE THREE SHAPES THIS MIGRATION MEETS AND CANNOT ANSWER FOR, refused before the
+  # first write of the run rather than discovered after it.
+  #
+  # WHY BEFORE, AND NOT AS THREE MORE ARMS OF #verify!. The run is all-or-nothing (see
+  # #migrate_user): a raise on the last user rolls back the first, so a refusal that arrives late
+  # costs exactly the rollback an early one costs and buys nothing for the delay. What it LOSES is
+  # the only thing that matters to whoever has to fix the database — every check in #verify! is
+  # scoped to the user being committed and reports counts, so the operator gets "3 categories still
+  # have no pool" and a rollback, with no id to go and look at. These three name their rows.
+  #
+  # WHY REFUSED AND NOT REPAIRED, one at a time:
+  #
+  #   * DUPLICATE POOL NAMES. `TightenPoolShape` adds `UNIQUE (user_id, lower(name))` one migration
+  #     later, and this one dedupes nothing — #unique_pool_name only suffixes names it is about to
+  #     WRITE, so two "Groceries" that were already in the table sail through and meet the index.
+  #     Repairing them means renaming one, and which one keeps the name is a question about the
+  #     user's money (BudgetProposal's accept flow reuses a pool BY NAME; the loser stops being
+  #     found) that no migration should answer on their behalf.
+  #
+  #   * AN ACCOUNT CARRYING AN `account_id`. The same tightening adds
+  #     `CHECK ((pool_type = 0) = (account_id IS NULL))`, and #house_the_pools deliberately excludes
+  #     ACCOUNT pools — it repairs the other direction only, an envelope or goal with no house — so
+  #     this shape passes through untouched and hits the CHECK. It is not repaired here because the
+  #     row is ambiguous in a way the others are not: it is either an account that was wrongly given
+  #     a parent (clear the column) or a pool that was wrongly typed as an account (change the type),
+  #     and the two answers put the pool's money in different places.
+  #
+  #   * A CATEGORY POINTING AT A STRANGER'S POOL. #verify! already refuses this, twice over and by
+  #     accident: the category's entries reach a pool outside their owner's set, so BOTH users'
+  #     `Σ pools` disagrees with their bank truth and the whole run rolls back on an arithmetic
+  #     mismatch that names no category. There is no honest repair — the migration cannot know which
+  #     of the two users the spending belongs to — so the useful thing it can do is turn an opaque
+  #     abort into a work item with ids in it.
+  #
+  # ASKED OF THE WHOLE TABLE, ONCE, rather than per user inside the loop: two of the three are about
+  # a pair of rows, and the cross-user one is about a pair of USERS, so a per-user question would
+  # have to be asked twice to see it.
+  def preflight!
+    failures = duplicate_pool_name_failures + misfiled_account_failures + cross_user_category_failures
+    return if failures.empty?
+
+    raise PreflightFailed, "pre-flight: #{failures.join('; ')}"
+  end
+
+  # `LOWER(name)`, THE INDEX'S OWN FORM. `TightenPoolShape`'s index is functional
+  # (`user_id, lower(name)`) and `Pool`'s validation is `case_sensitive: false`, so asking about the
+  # raw column here would pass a database holding "Groceries" and "groceries" and leave the index to
+  # find them — which is the failure this check exists to pre-empt, one migration early.
+  #
+  # Every id in the group is listed, not just the survivors of some arbitrary pick: the operator has
+  # to look at both rows to decide which keeps the name.
+  def duplicate_pool_name_failures
+    rows = ActiveRecord::Base.connection.select_rows(<<~SQL.squish)
+      SELECT user_id, LOWER(name), STRING_AGG(id::text, ', ' ORDER BY created_at, id), COUNT(*)
+        FROM pools
+       GROUP BY user_id, LOWER(name)
+      HAVING COUNT(*) > 1
+       ORDER BY user_id, LOWER(name)
+    SQL
+
+    rows.map do |user_id, name, ids, count|
+      "user #{user_id} has #{count} pools named #{name.inspect} (pools #{ids})"
+    end
+  end
+
+  # THE HOUSING STEP'S UNEXAMINED MIRROR DIRECTION. #house_the_pools asks about non-account pools
+  # with no valid house; this asks about ACCOUNT pools that have one, which nothing repairs.
+  def misfiled_account_failures
+    MigrationPool.where(pool_type: ACCOUNT_POOL).where.not(account_id: nil)
+                 .order(:user_id, :created_at, :id)
+                 .pluck(:id, :user_id, :name, :account_id)
+                 .map do |id, user_id, name, account_id|
+      "account pool #{id} (user #{user_id}, #{name.inspect}) is filed inside pool #{account_id}"
+    end
+  end
+
+  # BOTH OWNERS NAMED, because neither one alone identifies the work: the category belongs to one
+  # user and the money it has been spending has been landing in another's pool, and whoever repairs
+  # this has to talk to both sides before deciding where the history goes.
+  def cross_user_category_failures
+    MigrationCategory.joins("JOIN pools p ON p.id = categories.pool_id")
+                     .where("p.user_id <> categories.user_id")
+                     .order(Arel.sql("categories.user_id, categories.name"))
+                     .pluck(Arel.sql("categories.id, categories.name, categories.user_id, p.id, p.user_id"))
+                     .map do |id, name, user_id, pool_id, owner_id|
+      "category #{id} (#{name.inspect}, user #{user_id}) points at pool #{pool_id}, owned by user #{owner_id}"
+    end
+  end
 
   # THE TRANSACTION BOUNDARY IS THE WHOLE MIGRATION, NOT THE USER — and the earlier wording here
   # ("one transaction per user") was wrong about production, so it is corrected rather than quietly
@@ -211,6 +317,14 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # nulling the original's `category_id` would leave a budget row owned by nothing at all —
   # `Budget#exactly_one_owner` calls that invalid, no screen can reach it, and every rule total in
   # the app would count it. One row in, one row out, same id.
+  #
+  # `item_id: nil` IS A DELIBERATE LOSS, NOT A TIDY-UP. A cap could name an item — that is what made
+  # it a bill-shaped cap rather than a plain monthly ceiling — and the uniform conversion below
+  # drops the link, so it becomes a plain rate at the same figure. It is dropped for the same reason
+  # `anchor_date: nil` and `interval_months: 1` sit beside it: this step converts every cap by ONE
+  # rule, and a cap carries no schedule to convert an item-backed rule's due dates FROM. Guessing
+  # one would date bills the user never agreed to; the Budget page's dated-bill detector proposes
+  # the item-backed rule back, in front of the user, out of the spending history that is still there.
   #
   # Returns the cap count and the pool-mode rule count taken BEFORE any of them moved, which is
   # what lets the verification compare two figures measured from the database rather than
@@ -404,6 +518,18 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # expression the invariant is (see #balance_expression) and why the verifier gained a check of its
   # own: a movement of the wrong size still nets to zero, so it would leave the envelope wrong and
   # the invariant serene.
+  # DATED `now`, WHICH GIVES EVERY ZEROED ENVELOPE A `last_funded_on` IT DID NOT EARN — raised as a
+  # minor against task 1 and CLOSED HERE, because the funding date is inert in both directions.
+  #
+  # ON CUTOVER DAY the marker is off: `PoolCalculator#compute_period_closed` asks whether every rate
+  # rule's `period_end`, computed FROM `last_funded_on`, is already `< today` — and a period that
+  # opened today has not ended today, so it answers false for exactly the envelopes this step
+  # touched. ON ANY LATER DAY the marker may turn on, and it moves nothing: `#sweepable_amount` is
+  # bounded by what the envelope HOLDS, this step leaves it holding $0, and any real funding after
+  # the cutover moves `last_funded_on` off the migration's date to the date it actually happened.
+  # So there is no day on which the inherited date sweeps a dollar. Measured on the demo when it was
+  # raised: the distribution preview still listed every envelope with a non-zero ask.
+  #
   # FROM THE ENVELOPE'S OWN ACCOUNT (#home_accounts), not from the user's default one. The ruling
   # this step implements says "from the buffer", and the buffer that historically paid a Health
   # Savings envelope's bills is Health Savings — so this is that instruction read literally rather

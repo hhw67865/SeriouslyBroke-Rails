@@ -3,8 +3,17 @@
 # THE THREE POOL TIGHTENINGS THE BACKFILL UNBLOCKS (spec §7a, plan 3 task 6). Every one of them
 # was written down as an obligation the day the column landed and deferred for the same reason:
 # the database still held pre-cutover shapes that would have refused. `CutoverToEnvelopeBudgeting`
-# houses every pool, dedupes every name and verifies both in raw SQL before it commits, so the
-# three are now assertions about a database that already complies rather than changes to it.
+# houses every pool and verifies it in raw SQL before it commits, so the housing half below is an
+# assertion about a database that already complies rather than a change to it.
+#
+# IT DOES NOT DEDUPE A NAME, AND AN EARLIER WORDING HERE SAID IT DID. Nothing in that migration
+# renames an existing pool — `#unique_pool_name` only suffixes names it is about to WRITE — so two
+# pools a user already had under one name would arrive at the `add_index` below and fail it, mid
+# `change`, with a Postgres error naming an index and not the rows. The cutover's #preflight!
+# closes that gap in the only honest direction available to a migration: it REFUSES a database
+# holding duplicates, and names the pools, rather than choosing which of the user's two envelopes
+# stops being found by name. So the index below is an assertion about a database that has already
+# been made to comply BY HAND, and the pre-flight is where the operator is told what to do.
 #
 # REVERSIBLE, as `change` — each of the three has an exact inverse (`change_column_default` is
 # given both directions explicitly, an index and a check constraint drop by name). Rolling this

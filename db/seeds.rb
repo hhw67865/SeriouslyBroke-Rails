@@ -11,13 +11,40 @@
 # file for the legacy constructs AND asserts the database after a replant, so the two halves of
 # that promise cannot drift apart.
 #
-# THE SCREEN STATES ARE THE DELIVERABLE. Four accounts carry four distinct distribution screens —
-# short with a partial waterfall and a cutoff, covered but opened by an alert, overdrawn with a
-# negative available, and all-clear collapsed — and every envelope below is annotated with the
-# state it exists to put on a screen. The table in `.superpowers/sdd/2026-08-17-cutover/
-# task-2-report.md` lists them; check it before editing an account, not after. These states are
-# each carried by exactly ONE account, so a change to an account's balance or rules can retire a
-# screen silently.
+# THE SCREEN STATES ARE THE DELIVERABLE, AND THE TABLE IS BELOW rather than in a scratch report
+# that is not in the repository. Four accounts carry four distinct distribution screens — short
+# with a partial waterfall and a cutoff, covered but opened by an alert, overdrawn with a negative
+# available, and all-clear collapsed — and every envelope further down is annotated with the state
+# it exists to put on a screen. Each state is carried by exactly ONE account, so a change to an
+# account's balance or rules can retire a screen silently: read this table before editing an
+# account, not after. `spec/seeds_spec.rb` plants these figures as literals, so a change to the
+# demo has to argue with them rather than quietly restate them.
+#
+#   THE FOUR ACCOUNTS, THE SCREEN EACH ONE CARRIES, AND ITS HEADLINE FIGURES
+#
+#   CHECKING (the default account, target $2,000) — SHORT: the full waterfall, the cutoff line
+#     drawn, both sweep clauses. `Distribute $560.00`; `Buffer carried over $408.00` · `Income this
+#     period $2,600.00` · `Spent and moved this period -$2,573.00` · `Swept back from Household
+#     Supplies and Pet Care $125.00` · `Available $560.00`; `$593.43 of what your envelopes asked
+#     for isn't there`; 8 rows, with `— ran out here · $593.43 unfunded —` after row 3; and
+#     `Stays in buffer · you wanted $2,000.00  $408.00 → $0.00`.
+#
+#   ALLY SAVINGS (target $5,000) — COVERED, EXPANDED BY THE ALERTS BAND ALONE, which is the only
+#     screen where an alert is the sole cause of expansion. `Distribute $1,620.00`; `$620.00` /
+#     `$1,000.00` / `$1,620.00`; the header `Every envelope gets what it asked for, but something
+#     below still needs you`; one alert row (`Renters Insurance · overdue · was Aug 11 · Its money
+#     is already there`); one waterfall row (`1 Holiday Gifts $200.00`); no cutoff.
+#
+#   SIDE GIG CHECKING (target $1,000) — OVERDRAWN, so Available is negative and there is nothing to
+#     distribute. `Nothing to distribute`; `Side Gig Checking is $300.00 in the red, sweeps
+#     included`; `Buffer carried over -$700.00` · `Income this period $400.00` · `Available
+#     -$300.00`; the cutoff is drawn ABOVE row 1 (`1 Quarterly Taxes $0.00 of $200.00`).
+#
+#   HEALTH SAVINGS (target $1,500) — ALL CLEAR, COLLAPSED, plus the "Show every envelope" control.
+#     `Distribute $400.00`; `$200.00` / `$200.00` / `$400.00`; `2 envelopes funded in full, $95.00
+#     out — $305.00 stays in your buffer · you wanted $1,500.00.`; no table and no boxes until the
+#     link is followed to `expand=1`, which is the only place the third header branch renders
+#     (`Every envelope gets what it asked for. You asked to see the whole split, so here it is.`).
 #
 # NO `rand`, ANYWHERE. The previous seeds sprinkled `rand` through their entries and needed an
 # `srand` to stay reproducible; every figure here is written down, so a replant lands on the same

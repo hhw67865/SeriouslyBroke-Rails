@@ -112,9 +112,16 @@ class HomePresenter
   end
 
   # Pools belonging to no account. #pools_for filters on account_id, so a view built as
-  # "for each account, render pools_for" would render these nowhere at all. Savings pools
-  # stay account-less until Plan 3's backfill, so today this is the ordinary shape for a
-  # savings goal, not a rare edge.
+  # "for each account, render pools_for" would render these nowhere at all.
+  #
+  # THE SHAPE THIS READS FOR NO LONGER EXISTS. The note here said "savings pools stay
+  # account-less until Plan 3's backfill, so today this is the ordinary shape for a savings goal";
+  # the backfill has run. `CutoverToEnvelopeBudgeting#house_the_pools` houses every non-account
+  # pool and refuses to commit while one is left, `Pool#account_matches_pool_type` refuses a new
+  # one, and `CHECK ((pool_type = 0) = (account_id IS NULL))` refuses it past the model — so this
+  # method answers `[]` for every user and every band built on it renders for nobody. It is kept
+  # only until the follow-up that deletes the apparatus whole; `Pool::REFUSALS` carries that
+  # follow-up's blast radius, and this method is on it.
   #
   # These no longer appear in #waterfall or #shortfall (see #fill_waterfall). An orphan is
   # a SETUP problem, not a funding one — the money may be sitting in Checking already and

@@ -139,16 +139,31 @@ class Pool < ApplicationRecord
   # Nullifying instead is the `Σ pools` break this fix round exists to refuse, so it is refused
   # here rather than absorbed silently.
   #
-  # BOTH ARE UNREACHABLE SINCE PLAN 3 TASK 6, AND KEPT AS BACKSTOPS RATHER THAN DELETED. Every
-  # branch below turns on a non-account pool whose `account` is blank, which
-  # `#account_matches_pool_type` now refuses and `CHECK ((pool_type = 0) = (account_id IS NULL))`
-  # refuses again past the model — so no persisted row can reach either arm, and the five examples
-  # that covered them are deleted with their reason in `spec/models/pool_destroy_spec.rb`. They
-  # stay because they cost nothing to hold and because the shape they refuse — a destroy that
-  # takes money out of the pool tree — is the one this app must never absorb silently, whatever a
-  # future import, backfill or console session writes. Deleting the whole orphan apparatus (these,
-  # `HomePresenter#orphan_pools`, `BudgetPagePresenter#orphan_rules`, `ReallocationPresenter`'s
-  # "No account" group) is the follow-up this tightening creates; it is not this task's.
+  # BOTH ARE UNREACHABLE SINCE PLAN 3 TASK 6, AND THE REASON GIVEN HERE FOR KEEPING THEM WAS WRONG
+  # — corrected rather than quietly deleted, because the wrong version is the kind that gets
+  # believed. Every branch below turns on a non-account pool whose `account` is BLANK, which
+  # `#account_matches_pool_type` refuses and `CHECK ((pool_type = 0) = (account_id IS NULL))`
+  # refuses again past the model, and the five examples that covered them are deleted with their
+  # reason in `spec/models/pool_destroy_spec.rb`.
+  #
+  # THE WITHDRAWN CLAIM was that they are worth holding as a net for "whatever a future import,
+  # backfill or console session writes". A CHECK constraint is not a validation: it holds against
+  # `update_all`, against a fixture and against a console alike, so the shape these test —
+  # `account_id IS NULL` on a non-account — is not something a console CAN write. What a console
+  # can still write is the MIS-HOUSED pool: an `account_id` naming an envelope or a stranger's
+  # account, which no CHECK can refuse (the rule needs a subquery; see #account_is_this_users_
+  # account). That row's `account` is PRESENT, so it satisfies every branch below and these
+  # backstops do not catch it — they are a net over the one hole the database already covers and
+  # not over the one it leaves. `CutoverToEnvelopeBudgeting#preflight!` is what names that shape.
+  #
+  # SO THEY STAY FOR THE HONEST REASON: they are retained pending the follow-up that deletes the
+  # whole orphan apparatus, not as a guard against anything. That follow-up is larger than this
+  # constant and its blast radius is written down so it can be scoped rather than rediscovered:
+  # these two refusals and `#absorbing_account_for`'s counterparty fallback here;
+  # `HomePresenter#orphan_pools`, `#orphan_required`, `#orphan_pools_owed`, `Row#orphan` and the
+  # exclusion in `#fill_waterfall` that keeps orphans out of the waterfall; the `home/_orphans`
+  # partial and the `orphan_pools_owed` term in `home/_attention`; `BudgetPagePresenter`'s
+  # `#orphan_rules` and `#orphan_reason`; and `ReallocationPresenter`'s "No account" group.
   REFUSALS = {
     categories: "can't be deleted while categories point at it and it sits in no account — its " \
                 "spending would stop counting toward any pool. Assign it to an account first.",

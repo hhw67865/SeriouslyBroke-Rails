@@ -29,3 +29,35 @@
 
 en:
   hello: "Hello world"
+
+  # THE ONE REFUSAL RAILS WRITES FOR US, SAID IN THIS APP'S VOICE (plan 3, closing review M4).
+  #
+  # `Pool` declares `dependent: :restrict_with_error` twice — on `#child_pools` and on
+  # `#categories` — and both are REACHABLE on an account: `#return_holdings_to_the_account` returns
+  # on its first line for an account, so nothing re-points its categories, and an account is the
+  # only pool type another pool can sit inside. The refusal itself is right; the sentence was
+  # Rails' own, and "Cannot delete record because dependent child pools exist" names a class of
+  # thing this app calls an envelope, tells the user nothing about what to do, and sat on a real
+  # screen (`spec/system/pools/show/header_actions_spec.rb`).
+  #
+  # CUSTOMISED HERE RATHER THAN GUARDED AGAIN IN THE MODEL. `Pool::REFUSALS` — the app's two
+  # hand-written refusals — is the same MECHANISM (an error on `:base`, a halted callback chain,
+  # rendered by `PoolsController#destroy`'s existing alert branch), so all this needed was the
+  # message. Adding a second `before_destroy` beside `restrict_with_error` would have bought the
+  # same words and a second guard to keep in step with the first.
+  #
+  # `%{record}` IS THE ASSOCIATION'S HUMAN NAME, downcased by Rails, which is why the two
+  # attribute names below are set: `child_pools` humanises to "child pools", which is the schema's
+  # word for it and not the product's.
+  activerecord:
+    attributes:
+      pool:
+        categories: "categories"
+        child_pools: "envelopes and goals"
+    errors:
+      models:
+        pool:
+          attributes:
+            base:
+              restrict_dependent_destroy:
+                has_many: "This pool can't be deleted while %{record} still belong to it — move them to another account first."

@@ -12,8 +12,16 @@
     this is why. Every orphan used to count here regardless of status, so a healthy user
     with five account-less savings goals opened the root route on "You're covered this
     period" above "5 things need you", with five rows saying nothing can fund goals that
-    were asking for nothing. An account-less savings pool is the ORDINARY shape until Plan
-    3's backfill, so that was not an edge; it was the common screen.
+    were asking for nothing. An account-less savings pool was the ORDINARY shape then, so
+    that was not an edge; it was the common screen.
+
+    IT IS NO SCREEN AT ALL NOW, and the sentence above used to say "is the ORDINARY shape
+    until Plan 3's backfill". The backfill has run: every pool names an account, the model
+    refuses a new orphan and so does a CHECK constraint, so both `orphan_pools_owed` and
+    `orphan_pools` are empty for every user and neither term below contributes a row. The
+    narrowing is still the right narrowing and is recorded because the follow-up that
+    deletes the apparatus has to delete a middle term that is CORRECT rather than one that
+    was a bug. Pool::REFUSALS carries that follow-up's list, and this file is on it.
 
     `orphan_pools_owed` is exactly the set whose ask #orphan_required is made of, so this
     heading now counts the same pools the standing band's clause above already names — one

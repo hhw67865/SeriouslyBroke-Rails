@@ -1,10 +1,17 @@
 <%# The pools that belong to no account. Local: `presenter` (HomePresenter).
 
     A group of their own, because HomePresenter#pools_for filters on account_id: a band
-    built purely as "for each account, render its pools" renders these NOWHERE — and an
+    built purely as "for each account, render its pools" renders these NOWHERE. The heading
+    is what they are, said once, so the rows below can speak the same §4.4 vocabulary as
+    every other row.
+
+    THIS PARTIAL RENDERS FOR NOBODY, and the sentence that used to be here — "an
     account-less savings pool is the ordinary shape until Plan 3's backfill, not a rare
-    edge. The heading is what they are, said once, so the rows below can speak the same
-    §4.4 vocabulary as every other row.
+    edge" — is out of date rather than merely optimistic: the backfill has run, every pool
+    names an account, and a CHECK constraint refuses a new one. `presenter.orphan_pools`
+    is empty for every user, so the `if` below is always false. Kept until the follow-up
+    that deletes the apparatus whole; Pool::REFUSALS carries that list, and this file is
+    on it.
 
     Silent when there are none: an empty "No account" heading invents a problem out of a
     healthy screen (principle 3). %>

@@ -17,8 +17,8 @@ require Rails.root.join("db/migrate/20260817000000_cutover_to_envelope_budgeting
 #
 # EVERY EXPECTED FIGURE IS A PLANTED LITERAL. Reading a count out of the same objects the seeds
 # just created would assert that the seeds equal themselves; these numbers are the demo's state
-# table (`.superpowers/sdd/2026-08-17-cutover/task-2-report.md`) written down where a change to
-# the seeds has to argue with them.
+# table — the account → screen-state table in `db/seeds.rb`'s own header, beside the data it
+# describes — written down where a change to the seeds has to argue with them.
 #
 # LOADING THE SEEDS PER EXAMPLE is deliberate and costs about a second. `before(:context)` would
 # put ~200 rows outside the per-example transaction, where DatabaseCleaner cleans them out from

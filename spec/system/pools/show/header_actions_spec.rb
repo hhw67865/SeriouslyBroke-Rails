@@ -41,6 +41,11 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
   end
 
   describe "delete action", :aggregate_failures do
+    let(:refusal) do
+      "This pool can't be deleted while envelopes and goals still belong to it — " \
+        "move them to another account first."
+    end
+
     it "shows delete button with confirmation" do
       delete_button = find("button", text: "Delete")
 
@@ -147,7 +152,10 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
         click_button "Delete"
       end
 
-      expect(page).to have_content("Cannot delete record because dependent child pools exist")
+      # THE APP'S OWN SENTENCE, NOT RAILS' (plan 3, closing review M4). `restrict_with_error` is
+      # still the guard; only its message is written down, in `config/locales/en.yml`, where the
+      # reasoning is. "child pools" was the schema's word for a thing this app calls an envelope.
+      expect(page).to have_content(refusal)
       expect(Pool.exists?(checking.id)).to be(true)
     end
   end
