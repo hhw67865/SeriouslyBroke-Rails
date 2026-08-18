@@ -90,3 +90,7 @@ node_modules/
 
 # Superpowers scratch (SDD ledgers, brainstorm mockups)
 .superpowers/
+
+# Local prod-data dumps — real user data, never commit
+*.dir.tar.gz
+.playwright-mcp/
