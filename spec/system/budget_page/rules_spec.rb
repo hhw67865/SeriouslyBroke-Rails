@@ -199,23 +199,33 @@ RSpec.describe "Budget page rules", type: :system do
   # movement's `created_at`, and both must be written by the app the way the app writes them —
   # `created_at`, never `date` (a period marker compared to a timestamp is a unit mismatch, see
   # `DistributionClock`).
+  #
+  # BUT THE MOVEMENT'S `date` IS STILL A PERIOD MARKER, AND IT IS CAPTURED OUTSIDE EVERY
+  # `travel_to` BELOW. `Date.current` read inside one is the TRAVELLED day: between 00:00 and
+  # 02:00 UTC, `Date.current` two hours back is yesterday, the movement is dated into the previous
+  # period, `DistributionClock` — correctly bounded to the period the page renders — does not see
+  # it as this period's distribution, and both examples fail for two hours a night against an app
+  # that is working perfectly. Same capture, and the same reason, as
+  # categories/show/budget_spec.rb's copy of this block.
   describe "an envelope whose rule moved after the money did" do
     include ActiveSupport::Testing::TimeHelpers
 
     before do
       deposit(2_000)
+      on = Date.current
+      anchor = on + 3.months
       raised = steady = raised_rule = nil
 
       travel_to(3.hours.ago) do
         raised = envelope("Car Insurance", priority: 1)
         steady = envelope("Property Tax", priority: 2)
-        raised_rule = rolling(raised, amount: 1_200, anchor: Date.current + 3.months, every: 6)
-        rolling(steady, amount: 1_200, anchor: Date.current + 3.months, every: 6)
+        raised_rule = rolling(raised, amount: 1_200, anchor: anchor, every: 6)
+        rolling(steady, amount: 1_200, anchor: anchor, every: 6)
       end
 
       # Small enough to leave both behind: the clause explains a `behind` row, so the row has to
       # still be behind.
-      [raised, steady].each { |pool| distribute(pool, 10, at: 2.hours.ago) }
+      [raised, steady].each { |pool| distribute(pool, 10, at: 2.hours.ago, on: on) }
       travel_to(1.hour.ago) { raised_rule.update!(amount: 1_800) }
 
       visit budget_page_path
@@ -226,7 +236,10 @@ RSpec.describe "Budget page rules", type: :system do
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
-    def distribute(pool, amount, at:)
+    # `at:` is the instant the money moved — the `created_at` the clause compares against — and
+    # `on:` is the period day it is FOR, handed in from real now rather than read off the
+    # travelled clock inside the block.
+    def distribute(pool, amount, at:, on:)
       travel_to(at) do
         create(
           :pool_movement,
@@ -234,7 +247,7 @@ RSpec.describe "Budget page rules", type: :system do
           from_pool: checking,
           to_pool: pool,
           amount: amount,
-          date: Date.current
+          date: on
         )
       end
     end

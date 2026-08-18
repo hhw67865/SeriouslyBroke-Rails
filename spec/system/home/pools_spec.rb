@@ -351,7 +351,16 @@ RSpec.describe "Home Pools", type: :system do
     # a day early falls in the PREVIOUS period, `#latest_distributions` filters it out, and both
     # positive examples fail for three hours a night on a page that is working perfectly. That is
     # the flake class this branch has just finished deleting; it does not get a new member.
+    #
+    # AND THE PARAGRAPH ABOVE WAS A CLAIM THIS BLOCK DID NOT KEEP, because `let` is LAZY. Nothing
+    # read `today` until `accumulating_rule` did, and every example calls that from inside
+    # `travel_to(3.hours.ago)` — so the value sworn to be "resolved ONCE at real now" was in fact
+    # resolved three hours back, and between 00:00 and 03:00 UTC it was yesterday. The `before`
+    # below is what actually resolves it at real now, outside every `travel_to`, exactly as
+    # categories/show/pool_card_spec.rb does for its copy of this fixture.
     let(:today) { Date.current }
+
+    before { today }
 
     def accumulating_rule(name, amount:, priority:)
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
