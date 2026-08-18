@@ -154,7 +154,18 @@ class Pool < ApplicationRecord
   # account, which no CHECK can refuse (the rule needs a subquery; see #account_is_this_users_
   # account). That row's `account` is PRESENT, so it satisfies every branch below and these
   # backstops do not catch it — they are a net over the one hole the database already covers and
-  # not over the one it leaves. `CutoverToEnvelopeBudgeting#preflight!` is what names that shape.
+  # not over the one it leaves.
+  #
+  # AND NOTHING ELSE NAMES IT EITHER, WHICH IS THE POINT. `#account_matches_pool_type` refuses a
+  # NEW one at the model, and `CutoverToEnvelopeBudgeting#house_the_pools` re-housed the ones that
+  # existed at the cutover — SILENTLY, in the default account, which is a repair rather than a
+  # report — with the verifier's "is not an account of this user" arm behind it. None of those is
+  # available to a row written after the cutover: the migration has run, and no pre-flight of it can
+  # see a console session that comes later. (`#misfiled_account_failures`, the one pre-flight in the
+  # neighbourhood, asks the MIRROR question — an ACCOUNT carrying a parent — and never looks at a
+  # non-account pool at all.) So the mis-housed pool is a shape the app refuses at its front door,
+  # repairs nowhere, and reports through no screen. That is an argument for the deletion follow-up
+  # below rather than for keeping these two, which do not help with it.
   #
   # SO THEY STAY FOR THE HONEST REASON: they are retained pending the follow-up that deletes the
   # whole orphan apparatus, not as a guard against anything. That follow-up is larger than this

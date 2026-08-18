@@ -49,6 +49,15 @@ en:
   # `%{record}` IS THE ASSOCIATION'S HUMAN NAME, downcased by Rails, which is why the two
   # attribute names below are set: `child_pools` humanises to "child pools", which is the schema's
   # word for it and not the product's.
+  #
+  # "ANOTHER POOL", NOT "ANOTHER ACCOUNT", AND THE SECOND ARM IS WHY. One key serves both
+  # associations — the error is on `:base`, so Rails cannot be given a per-association message —
+  # and the destination has to be true of both. An envelope or a goal does move to another ACCOUNT;
+  # a CATEGORY's home is a POOL, and for an expense category it is usually an envelope rather than
+  # an account. "Another account" was right for one arm and wrong for the arm a user is at least as
+  # likely to hit, since an account keeps its own categories (`#return_holdings_to_the_account`
+  # re-points a non-account's before the refusal is asked, and returns on its first line for an
+  # account). "Pool" is the app's noun for the whole family and is true of both.
   activerecord:
     attributes:
       pool:
@@ -60,4 +69,4 @@ en:
           attributes:
             base:
               restrict_dependent_destroy:
-                has_many: "This pool can't be deleted while %{record} still belong to it — move them to another account first."
+                has_many: "This pool can't be deleted while %{record} still belong to it — move them to another pool first."

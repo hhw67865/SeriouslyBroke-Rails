@@ -32,8 +32,10 @@
 #   ALLY SAVINGS (target $5,000) — COVERED, EXPANDED BY THE ALERTS BAND ALONE, which is the only
 #     screen where an alert is the sole cause of expansion. `Distribute $1,620.00`; `$620.00` /
 #     `$1,000.00` / `$1,620.00`; the header `Every envelope gets what it asked for, but something
-#     below still needs you`; one alert row (`Renters Insurance · overdue · was Aug 11 · Its money
-#     is already there`); one waterfall row (`1 Holiday Gifts $200.00`); no cutoff.
+#     below still needs you`; one alert row (`Renters Insurance · overdue · was <today - 6> · Its
+#     money is already there` — the date is written relative because it IS relative: that bill's
+#     anchor is `today - 6`, so the printed day moves with the run day while every money figure in
+#     this table does not); one waterfall row (`1 Holiday Gifts $200.00`); no cutoff.
 #
 #   SIDE GIG CHECKING (target $1,000) — OVERDRAWN, so Available is negative and there is nothing to
 #     distribute. `Nothing to distribute`; `Side Gig Checking is $300.00 in the red, sweeps

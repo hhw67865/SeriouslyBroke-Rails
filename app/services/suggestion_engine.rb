@@ -19,8 +19,10 @@
 # a panel that proposed a per-period rule to someone with no period would be proposing in units the
 # app cannot yet compute.
 #
-# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
-# .superpowers/sdd/2026-08-16-budget-page/task-6-brief.md.
+# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8, which is the committed record of
+# this design and the one a reader can actually open. (It was worked out in
+# `.superpowers/sdd/2026-08-16-budget-page/task-6-brief.md` — a gitignored working ledger, named
+# here for provenance rather than as somewhere to go.)
 class SuggestionEngine
   # ONE SUGGESTION. `subject` is the record the sentence is about — an Item for a dated bill, a
   # Category for a rate, a Budget for drift and a dead rule — `amount` is the figure the sentence

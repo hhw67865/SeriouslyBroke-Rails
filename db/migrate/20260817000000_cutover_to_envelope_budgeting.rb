@@ -246,7 +246,7 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
                                                   savings_before: savings_before,
                                                   written: savings_movements + zeroing_movements)
 
-      report(email, account_id, counts, pooled, bank)
+      report(email, account_id, counts, pooled, bank, zeroed_ids: zeroing_movements)
     end
   end
 
@@ -779,12 +779,38 @@ class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
 
   def now = Time.current
 
-  def report(email, account_id, counts, pooled, bank)
+  def report(email, account_id, counts, pooled, bank, zeroed_ids: [])
     say "#{email}: buffer #{MigrationPool.where(id: account_id).pick(:name)}; " \
         "#{counts[:housed]} pools housed; #{counts[:caps]} caps -> #{counts[:rules]} envelope rules; " \
         "#{counts[:pointed]} categories -> buffer; " \
         "#{counts[:deleted]} savings entries -> #{counts[:moved]} movements; " \
         "#{counts[:zeroed]} envelopes zeroed; " \
         "Σ pools #{format('%.2f', pooled)} == bank truth #{format('%.2f', bank)}"
+    report_the_undo_list(email, zeroed_ids)
+  end
+
+  # THE UNDO LIST FOR THE ONLY STEP THAT INVENTS A FACT, PRINTED AS IDS — the line above is a
+  # receipt, and a receipt is not enough for this one step.
+  #
+  # WHY THIS STEP AND NOT THE OTHERS. Every other write here re-records something the database
+  # already held, so undoing one means re-deriving it. Step 5b's zeroing movements are the one thing
+  # the old database never held (see #zero_the_envelopes), and the ruling behind them — where a
+  # lifetime deficit should land, at the buffer or somewhere else — is an OPEN decision at the time
+  # of writing. If it is ever answered differently, the repair is a migration over these exact rows.
+  #
+  # WHY IDS AND NOT A PREDICATE. Those rows can be identified after the fact by their signature —
+  # `kind` transfer, dated on the migration's run, destination a budget pool, `source_entry_id` nil
+  # — and that signature is good but NOT UNIQUE: an ordinary hand-made transfer into an envelope on
+  # cutover day matches it exactly. The ids are unique, and this is the only moment anything knows
+  # them, so they go into the run log while there is still somewhere to put them. Migration output
+  # is what an operator captures; nothing else about this run survives it.
+  #
+  # SILENT WHEN THERE IS NOTHING TO UNDO, so the ordinary run — a user with no overdrawn envelope —
+  # does not print an empty list beside its receipt.
+  def report_the_undo_list(email, ids)
+    return if ids.empty?
+
+    say "#{email}: zeroing movements written, and the undo list if the buffer ruling changes: " \
+        "#{ids.join(', ')}"
   end
 end

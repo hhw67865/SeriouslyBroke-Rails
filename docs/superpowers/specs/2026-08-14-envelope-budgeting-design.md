@@ -583,8 +583,9 @@ Each is a decision deliberately deferred, not an oversight.
 
 ### Plan 3 (cutover) must — **ALL CLOSED**
 
-Annotated item by item. "Task N" is Plan 3's task; the commits are in
-`.superpowers/sdd/2026-08-17-cutover/`.
+Annotated item by item. "Task N" is Plan 3's task; the working record of those tasks is
+`.superpowers/sdd/2026-08-17-cutover/` (a gitignored working ledger — cited for provenance; the
+commits themselves are in git history, and this section is the surviving account of them).
 
 - **Reverse §6.1 steps 2 and 4, or use `update_all`.** `Category#destroy_budget_if_pool_linked`
   destroys a category's budget the moment a `pool_id` is assigned, so pointing
@@ -643,7 +644,9 @@ Annotated item by item. "Task N" is Plan 3's task; the commits are in
 
 Follow-ups, none a defect today. The first two were created by task 6's tightening and are
 larger than the task that created them; the rest were consolidated by the conversion's closing
-review.
+review. Three more items stood here and have since been closed — they are listed as closed at the
+bottom rather than deleted, because this document is the surviving record and a reader has to be
+able to tell "not done" from "never raised".
 
 1. **Delete the orphan apparatus.** Listed above. It renders for nobody and its examples are
    gone, so it is dead code carrying no tests — kept because the shape it refuses (a destroy that
@@ -663,19 +666,31 @@ review.
    (edit `#zero_the_envelopes` + relax `#envelope_failures`; "shrink" also collides with
    `#savings_drift_failures`, which pins savings to the cent). After a real run it is a repair
    migration over rows identified by (kind transfer, migration-dated, budget-pool destination,
-   nil source_entry) — good but not unique; the run log prints the inserted ids as the undo list.
-4. **`TightenPoolShape` can refuse a database the cutover accepted** — duplicate pool names
-   (the migration never dedupes pre-existing ones) and an account carrying an `account_id`
-   (repaired in neither direction of the housing step). Two pre-flight `SELECT`s in the
-   cutover's verifier close it; its header's claim of full compliance is corrected in code.
-5. **No repair or runbook for a cross-user `categories.pool_id`.** The verifier catches it
-   (both users' Σ mismatch) but aborts the whole all-or-nothing run with an unnamed cause; a
-   pre-flight naming the offending categories turns the abort into a work item.
-6. **`Category` has no model-level ownership validator on `pool`** — the guard is
-   controller-only (both controllers verified clean); the durable form is the validator its two
-   siblings (`Entry`, `Pool`) already have, comparing records not ids.
-7. **The perf/design inheritance from 2d** stands unchanged at the bottom of
+   nil source_entry) — good but not unique, which is why `#report_the_undo_list` prints the
+   inserted movement ids under each user's email in the migration's run log. That log is the only
+   place those ids exist; capture it.
+4. **The perf/design inheritance from 2d** stands unchanged at the bottom of
    `docs/superpowers/plans/2026-08-17-logging-and-tracking.md`.
+
+Closed since this list was written, in the closing fix round:
+
+> **CLOSED — `TightenPoolShape` could refuse a database the cutover accepted.** Duplicate pool
+> names (the migration dedupes none) and an account carrying an `account_id` (repaired in neither
+> direction of the housing step) are now refused by `CutoverToEnvelopeBudgeting#preflight!`, which
+> runs as the first line of `up` — BEFORE any write, not in the verifier, and raising its own
+> `PreflightFailed` for that reason. The two arms are `#duplicate_pool_name_failures` (grouped on
+> `LOWER(name)`, the functional index's own form) and `#misfiled_account_failures`, and both name
+> the offending rows by id. `TightenPoolShape`'s header no longer claims the cutover dedupes.
+
+> **CLOSED — cross-user `categories.pool_id` had no runbook.** `#preflight!`'s third arm,
+> `#cross_user_category_failures`, names each offending category with its owner and the pool's
+> owner, so the abort is a work item rather than an unnamed Σ mismatch. The verifier's arithmetic
+> arm still stands behind it.
+
+> **CLOSED — `Category` now carries the model-level ownership validator.**
+> `Category#pool_must_belong_to_user` compares RECORDS not ids, matching
+> `Entry#pool_must_belong_to_user` and `Pool#account_is_this_users_account`. The controller guards
+> were and are clean; this is the durable second layer.
 
 ## 8. Testing
 

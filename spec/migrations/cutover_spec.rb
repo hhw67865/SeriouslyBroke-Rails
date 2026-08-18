@@ -609,6 +609,49 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # Savings entries are deleted, their categories and items with them, and a converted cap cannot be
   # told from a rule somebody wrote by hand afterwards. Undoing this means restoring a backup, and
   # the migration says so rather than offering a `down` that would lose more.
+  # THE RUN LOG IS AN ARTEFACT OF THIS MIGRATION, NOT DECORATION. Step 5b's rows are the only thing
+  # here the old database never held, the ruling behind them is still open, and their after-the-fact
+  # signature (a `transfer`, dated on the run, into a budget pool, with no source entry) is matched
+  # by an ordinary hand-made transfer on cutover day. The ids are the unique handle, and this run is
+  # the only moment anything knows them. See #report_the_undo_list.
+  describe "the run log" do
+    it "names every zeroing movement it wrote, under the email that owns it", :aggregate_failures do
+      output = captured_migration_output
+
+      # Dated on the run day; every planted entry is in July, so nothing else lands on today.
+      wild_ids = PoolMovement.where(from_pool: wild[:checking], date: Time.zone.today.all_day).pluck(:id)
+      settled_id = PoolMovement.find_by(to_pool: settled[:travel]).id
+
+      expect(wild_ids.size).to eq(3)
+      expect(output).to include(*wild_ids, settled_id)
+      expect(output).to match(/wild@example\.com: zeroing movements written/)
+      expect(output).to match(/settled@example\.com: zeroing movements written/)
+    end
+
+    # THE OTHER DIRECTION. `bare` has no pool, no entry and nothing to zero, so it gets its receipt
+    # and no undo list — an empty list beside a receipt is a line an operator has to read to learn
+    # nothing.
+    it "says nothing about an undo list for a user with no envelope to zero", :aggregate_failures do
+      output = captured_migration_output
+
+      expect(output).to match(/bare@example\.com: buffer Checking/)
+      expect(output).not_to match(/bare@example\.com: zeroing movements written/)
+    end
+  end
+
+  # `#migrate!` suppresses the migration's own output; this is the same run with the log KEPT, which
+  # is the thing the undo list exists to land in. Same `$stdout` swap `spec/seeds_spec.rb` uses.
+  def captured_migration_output
+    migration = described_class.new
+    migration.verbose = true
+    original = $stdout
+    $stdout = StringIO.new
+    migration.up
+    $stdout.string
+  ensure
+    $stdout = original
+  end
+
   describe "reversal" do
     it "refuses to run backwards" do
       expect { described_class.new.down }.to raise_error(ActiveRecord::IrreversibleMigration)
@@ -648,8 +691,9 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # survive downstream: `TightenPoolShape` refuses the first two one migration later, and the third
   # is a cross-user link no migration can honestly untangle. Each is planted PAST THE MODEL — the
   # same idiom every other fixture in this file uses, and for the same reason: `Pool`'s
-  # case-insensitive uniqueness, `#account_matches_pool_type` and `Category`'s controller-side
-  # ownership guard all refuse these rows, which is exactly why a database can still hold one.
+  # case-insensitive uniqueness, `#account_matches_pool_type` and — since the commit that added
+  # these examples — `Category#pool_must_belong_to_user` all refuse these rows at the model, which
+  # is exactly why a database can still hold one and why the plants have to go past it.
   #
   # BOTH DIRECTIONS. Each example asserts the raise NAMES the offending rows — a refusal that says
   # only "duplicate names exist" leaves the operator where an `add_index` error would have — and the
@@ -690,8 +734,16 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # THE POINT OF IT BEING A PRE-FLIGHT. Not "it rolls back" — the run is all-or-nothing and would
     # have rolled back anyway — but that the FIRST user is never touched, so the refusal costs the
     # database nothing and can be re-run the moment the named rows are fixed.
+    #
+    # THE PLANT IS THE DUPLICATE NAME, AND ONLY THAT ONE CAN CARRY THIS CLAIM. Measured, by moving
+    # `preflight!` from the first line of `up` to the last: with a MISFILED ACCOUNT planted the
+    # snapshot assertion still passes under the mutant, because that shape independently trips the
+    # verifier's cross-account arm and the all-or-nothing run rolls back either way — the example
+    # would be asserting the transaction, not the ordering. The duplicate name reaches the verifier
+    # and SURVIVES it, so with the check at the end the migration writes every user and commits
+    # before raising; the snapshot is what notices.
     it "leaves every user exactly as it found them", :aggregate_failures do
-      misfile_an_account_inside(wild[:checking], wild[:utilities_pool])
+      plant_duplicate_of(wild[:utilities_pool], "utilities")
       before_state = snapshot
 
       expect { migrate! }.to raise_error(described_class::PreflightFailed)
@@ -727,7 +779,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # `bare` has no pool at all until step 1 creates one and this shape has to be planted in the
   # PRE-cutover world the pre-flight actually reads.
   def point_a_category_at(category, pool)
-    # rubocop:disable Rails/SkipsModelValidations -- as above; the guard for this is controller-side
+    # rubocop:disable Rails/SkipsModelValidations -- `Category#pool_must_belong_to_user` refuses this
     Category.where(id: category.id).update_all(pool_id: pool.id)
     # rubocop:enable Rails/SkipsModelValidations
   end

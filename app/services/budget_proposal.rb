@@ -48,8 +48,10 @@
 # Pinned by spec/system/budget_page/suggestions_spec.rb ("an envelope that opens carrying the
 # category's past spending"), against planted literals on both sides.
 #
-# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
-# .superpowers/sdd/2026-08-16-budget-page/task-7-brief.md amendment A.
+# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8, which is the committed record of
+# this design and the one a reader can actually open. (Amendment A of
+# `.superpowers/sdd/2026-08-16-budget-page/task-7-brief.md` is where it was settled — a gitignored
+# working ledger, named here for provenance rather than as somewhere to go.)
 class BudgetProposal
   # THE OPTIONAL ENVELOPE HALF of the budget form. `category` is the category to be re-pointed —
   # never the rule's owner, which is why it does not travel as the form's `category_id` — `name`

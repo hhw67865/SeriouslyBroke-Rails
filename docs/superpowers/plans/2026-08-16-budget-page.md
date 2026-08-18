@@ -24,7 +24,7 @@
 - **`InvalidSessionIdError` is never environmental.** See `CLAUDE.md` → *Diagnosing `InvalidSessionIdError`*. Stable first failure → a missing waiting assertion; unstable → a concurrent rspec process (`pgrep -f "[r]spec spec/system"`). An example whose last action is `click_*` must make a waiting Capybara assertion before any model assertion.
 - Run `bundle exec rubocop -A` before finishing. Run spec files **one at a time** — two concurrent rspec processes deadlock in DatabaseCleaner truncation.
 - **Tailwind:** classes not already in the codebase need `bin/rails tailwindcss:build`. Colours from `app/assets/stylesheets/custom.css`. Use `rounded`, never `rounded-lg/xl`.
-- **Do not edit `db/seeds.rb` without reading `.superpowers/sdd/2026-08-16-distribution/seeds-report.md` first.** The demo carries four accounts holding four distinct screens, one state per account; a balance change can silently retire a screen.
+- **Do not edit `db/seeds.rb` without reading its own header first.** The account → screen-state table now lives in that file's header (Plan 3 moved it there out of `.superpowers/sdd/`, a gitignored working ledger). The demo carries four accounts holding four distinct screens, one state per account; a balance change can silently retire a screen.
 - **Visual verification is mandatory on every UI task** (CLAUDE.md). On Plan 2b the browser caught defects specs passed on five separate occasions. 1440px, `demo@example.com` / `password123`, report what was *seen* with figures, `rm -f *.png` after.
 - Follow `docs/coding-standards.md`. Calculators in `app/services/`, presenters in `app/presenters/`.
 

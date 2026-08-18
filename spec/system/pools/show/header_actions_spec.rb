@@ -43,7 +43,7 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
   describe "delete action", :aggregate_failures do
     let(:refusal) do
       "This pool can't be deleted while envelopes and goals still belong to it — " \
-        "move them to another account first."
+        "move them to another pool first."
     end
 
     it "shows delete button with confirmation" do

@@ -3,8 +3,17 @@
 # THE THREE POOL TIGHTENINGS THE BACKFILL UNBLOCKS (spec §7a, plan 3 task 6). Every one of them
 # was written down as an obligation the day the column landed and deferred for the same reason:
 # the database still held pre-cutover shapes that would have refused. `CutoverToEnvelopeBudgeting`
-# houses every pool and verifies it in raw SQL before it commits, so the housing half below is an
-# assertion about a database that already complies rather than a change to it.
+# houses every pool and verifies it in raw SQL before it commits, so the CHECK's `non-account ⇒
+# account_id NOT NULL` half is an assertion about a database that already complies rather than a
+# change to it.
+#
+# ONLY THAT HALF, THOUGH — the CHECK is written as an equality between two booleans and is therefore
+# bidirectional, and the cutover repairs one direction. Its OTHER half, `account ⇒ account_id IS
+# NULL`, is guaranteed the same way the index below is: by a REFUSAL rather than a repair.
+# `#house_the_pools` excludes ACCOUNT pools by type and never touches one, so the cutover's
+# `#misfiled_account_failures` pre-flight names any account carrying a parent and makes the operator
+# fix it by hand. Both directions of this constraint are met on arrival; they are met by two
+# different mechanisms, and the difference is what a rollback would restore.
 #
 # IT DOES NOT DEDUPE A NAME, AND AN EARLIER WORDING HERE SAID IT DID. Nothing in that migration
 # renames an existing pool — `#unique_pool_name` only suffixes names it is about to WRITE — so two
