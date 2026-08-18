@@ -657,12 +657,21 @@ able to tell "not done" from "never raised".
    still nullable. The cost of closing it is that `spec/migrations/cutover_spec.rb`'s central
    planting idiom — a pool-less category, the shape the migration exists to repair — would have to
    go through the schema rewind that file already uses for the other two tightenings.
-3. **THE BUFFER QUESTION — an open USER decision, default implemented.** The migration zeroes
+3. **THE BUFFER QUESTION — ANSWERED 2026-08-18: fresh start for everyone.** The migration zeroes
    every lifetime-overdrawn budget envelope with a transfer from its own account, which on data
-   whose nominal savings exceed actual cash lands the deficit at the buffer (the demo: Checking
-   opens `overdrawn $3,699.00`). The alternatives — floor the zeroing at what the buffer holds,
-   or shrink savings balances to fit cash — were presented to the user and NOT yet answered; the
-   code ships the "accept" default. Changing the answer costs near zero until the first real run
+   whose nominal savings exceed actual cash lands the deficit at the buffer. The three options
+   originally posed (accept the negative buffer — the implemented default — floor the zeroing,
+   or shrink savings) were all declined for a fourth: after the cutover runs, a follow-up reset
+   wipes every user's pool STRUCTURE while keeping all entries and categories — delete pool
+   movements, envelope rules, and every non-account pool; re-point all categories at the account
+   — so each user opens on a single buffer holding exactly income − expenses, and rebuilds
+   envelopes and goals through the UI. Proven on the restored prod copy against
+   mingguan0809@gmail.com's data (13 pools, 11 rules, 21 movements collapsed to one buffer of
+   $113,627.95, invariant verified to the cent, Home rendering clean). Aligning that buffer with
+   the user's REAL bank balance is the reconciliation/onboarding feature (opening-balance
+   adjustment entries), designed next — the caveat being every income-fed account must be
+   entered for the derived opening balance to be true. The cutover migration itself stays as
+   written and proven; the reset is a separate follow-up step, not a rewrite. Changing the answer costs near zero until the first real run
    (edit `#zero_the_envelopes` + relax `#envelope_failures`; "shrink" also collides with
    `#savings_drift_failures`, which pins savings to the cent). After a real run it is a repair
    migration over rows identified by (kind transfer, migration-dated, budget-pool destination,
