@@ -94,3 +94,4 @@ node_modules/
 # Local prod-data dumps — real user data, never commit
 *.dir.tar.gz
 .playwright-mcp/
+*.dump
