@@ -22,11 +22,12 @@ RSpec.describe "Home Standing", type: :system do
   end
 
   # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
-  def orphan(name, amount)
-    pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
-    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
-    pool
-  end
+  # `#orphan` IS DELETED WITH THE SHAPE IT BUILT (plan 3, task 6): a pool attached to no account,
+  # which `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` now
+  # refuse — the second past the model. FIVE examples went with it, named where they stood. The
+  # standing band's "of what you need belongs to N pools with no account" clause is KEPT and now
+  # fires for nobody; deleting the orphan apparatus is the follow-up this tightening creates, named
+  # in `Pool::REFUSALS` and in the task 6 report.
 
   it "says you're covered when the money is there", :aggregate_failures do
     envelope("Groceries", 400)
@@ -42,44 +43,11 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_no_content("of what you need belongs to")
   end
 
-  # Being covered is true of the ACCOUNTS. It says nothing about a pool no account can reach,
-  # and the covered branch used to say nothing either — so a user was told they were fine
-  # while $200 of what they owe this period could not be funded at all. Same figure, same
-  # gate and the same fix as the short branch; only the framing changes.
-  #
-  # The second orphan here owns none of the figure, and the count must leave it out: the
-  # clause names a sum and a size side by side, and describing two different sets with them
-  # invites the reader to divide one by the other. "$200.00 … belongs to 2 pools" reads as
-  # about $100 each, and one of those pools is asking for nothing at all.
-  it "names the unfundable part even when you're covered", :aggregate_failures do
-    orphan("Old Goal", 200)
-    create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 2)
-    envelope("Rent", 400)
-    deposit(1_000)
-
-    visit root_path
-
-    expect(page).to have_css("h2", text: "You're covered")
-    expect(page).to have_content("$600.00 stays in your buffer after this period")
-    expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
-    expect(page).to have_no_content("2 pools with no account")
-    # Both are still problems and both are still named — it is only the arithmetic the
-    # sentence claims that has to describe one set.
-    expect(page).to have_content("Finished Goal")
-  end
-
-  it "counts only the pools the unfundable figure came from when short", :aggregate_failures do
-    orphan("Old Goal", 200)
-    create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 2)
-    envelope("Rent", 400)
-    deposit(100)
-
-    visit root_path
-
-    expect(page).to have_css("h2", text: "$300.00 short")
-    expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
-    expect(page).to have_no_content("2 pools with no account")
-  end
+  # DELETED (plan 3, task 6): "names the unfundable part even when you're covered" and "counts
+  # only the pools the unfundable figure came from when short". Both planted `#orphan` and both
+  # pinned the same care — the clause names a sum and a SIZE side by side, so the two must describe
+  # the same set or a reader dividing one by the other gets a figure about a pool asking for
+  # nothing. See the note on `#orphan`'s deletion above.
 
   it "states the gap when you're short", :aggregate_failures do
     envelope("Groceries", 400)
@@ -97,42 +65,20 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_no_content("with no account")
   end
 
-  # The figures a reader can subtract must reach the headline, or be told why not. Here
-  # $600 - $100 implies a $500 gap under a $300 headline, and the missing $200 is a pool
-  # no account can fund — with the buffer at zero, as it always is when one account is
-  # short, so gating the explanation on the buffer alone said nothing at all.
-  it "reconciles the figures when a pool no account can fund is part of what you owe", :aggregate_failures do
-    orphan("Old Goal", 200)
-    envelope("Rent", 400)
-    deposit(100)
-
-    visit root_path
-
-    expect(page).to have_css("h2", text: "$300.00 short")
-    expect(page).to have_content("You need $600.00")
-    expect(page).to have_content("You have $100.00")
-    expect(page).to have_content("$200.00 of what you need belongs to 1 pool with no account")
-    expect(page).to have_no_content("can't close the gap")
-  end
-
-  # The other half of the clause above, and the reason it is gated on the FIGURE rather than
-  # on there being an orphan at all: a pool with no account whose own requirement is already
-  # zero — a dateless goal sitting at target, a fulfilled anchored rule, or as here a goal
-  # with no rule on it yet — leaves the figures reconciling exactly. Gated on `orphan_pools.any?`
-  # this printed "$0.00 of what you need belongs to 1 pool with no account": accurate, and
-  # about a cause that is not live. It is still a problem, and the band below still says so.
-  it "stays silent about a pool with no account that needs nothing this period", :aggregate_failures do
-    create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
-    envelope("Rent", 400)
-    deposit(100)
-
-    visit root_path
-
-    expect(page).to have_css("h2", text: "$300.00 short")
-    expect(page).to have_no_content("with no account")
-    expect(page).to have_no_content("$0.00 of what you need")
-    expect(page).to have_content("Old Goal")
-  end
+  # DELETED (plan 3, task 6), three more on the same fixture:
+  #
+  #   * "reconciles the figures when a pool no account can fund is part of what you owe" — the
+  #     headline arithmetic explained when $600 − $100 implies a $500 gap under a $300 headline.
+  #   * "stays silent about a pool with no account that needs nothing this period" — why the clause
+  #     is gated on the FIGURE rather than on `orphan_pools.any?`, which printed "$0.00 of what you
+  #     need belongs to 1 pool". This one had already gone GREEN-BUT-WRONG when the `:pool` factory
+  #     started housing its pools: it asserts an absence, so a housed goal satisfied it too.
+  #   * "keeps the buffer honest when a pool belongs to no account" — `available - total_required`
+  #     would print "-$400.00 stays in your buffer" at a user whose accounts are in order. (It sat
+  #     further down the file, beside the stranded-in-another-account example.)
+  #
+  # The other reconciliation clause — money stranded in ANOTHER ACCOUNT — is reachable and is
+  # asserted below; it is the same sentence shape with a live cause.
 
   # With more than one account the two headline figures cannot be subtracted to reach the
   # shortfall — the difference is cash sitting where this period's pools cannot reach it.
@@ -146,20 +92,6 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("You need $400.00")
     expect(page).to have_content("You have $1,000.00")
     expect(page).to have_content("$1,000.00 of that sits in accounts with nothing left to fund")
-  end
-
-  # A pool no account can fund is owed but is not a gap, so the period stays covered — and
-  # the buffer must be what is actually left in the accounts. `available - total_required`
-  # would print "-$400.00 stays in your buffer" at a user whose accounts are in order.
-  it "keeps the buffer honest when a pool belongs to no account", :aggregate_failures do
-    orphan("Old Goal", 500)
-    deposit(100)
-
-    visit root_path
-
-    expect(page).to have_css("h2", text: "You're covered")
-    expect(page).to have_content("$100.00 stays in your buffer after this period")
-    expect(page).to have_no_content("-$")
   end
 
   # An overdraft is excluded from both headline figures by design, so the band has to name

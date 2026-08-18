@@ -92,7 +92,9 @@ RSpec.describe "db/seeds.rb" do
     it "writes no cap, no savings category and no savings entry", :aggregate_failures do
       savings_categories = Category.where(category_type: savings_category_type)
 
-      expect(Budget.where.not(category_id: nil).count).to eq(0)
+      # `budgets.category_id` is DROPPED (plan 3, task 6), so "no cap" is now asked as "every
+      # rule names the pool that owns it" — the post-drop spelling of the same claim.
+      expect(Budget.where(pool_id: nil).count).to eq(0)
       expect(savings_categories.count).to eq(0)
       expect(Entry.joins(item: :category).where(categories: { category_type: savings_category_type }).count).to eq(0)
     end
@@ -156,6 +158,11 @@ RSpec.describe "db/seeds.rb" do
   # migration finds nothing; this proves the FIRST run finds nothing to convert, because the seeds
   # already wrote what the migration exists to produce.
   describe "the cutover migration run against fresh seeds" do
+    # The migration reads and writes `budgets.category_id`, which a later migration drops. Only
+    # that one is rewound — the seeds already satisfy `TightenPoolShape` and this file asserts as
+    # much two examples up ("gives every category a lane and every pool a home").
+    include_context "with the schema its subject was written for", DropCapEraBudgetColumns
+
     before { replant }
 
     # ALL FIVE CONVERSION COUNTERS ARE ZERO, which is the whole of the claim: no pool to house, no

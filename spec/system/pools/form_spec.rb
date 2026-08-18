@@ -10,6 +10,17 @@ RSpec.describe "Pools Form", type: :system do
   describe "New Form" do
     before { visit new_pool_path }
 
+    # THE FORM OPENS ON "Budget envelope" NOW, AND NO POOL BUT A BANK ACCOUNT MAY BE HOUSELESS
+    # (plan 3, task 6). `pools.pool_type`'s column default went 2 -> 1, so `Pool.new` is an
+    # envelope rather than a goal, and `Pool#account_matches_pool_type` requires an account for
+    # both. The goal examples below therefore SAY both things where they used to lean on the
+    # defaults — which is the honest shape: a user making a savings goal picks its kind and picks
+    # where it lives.
+    def compose_a_goal
+      select "Savings goal", from: "What kind of pool is this?"
+      select "Checking", from: "Account it sits inside"
+    end
+
     describe "form display", :aggregate_failures do
       it "shows all form elements" do
         expect(page).to have_field("Pool Name")
@@ -32,8 +43,14 @@ RSpec.describe "Pools Form", type: :system do
     end
 
     describe "form validation", :aggregate_failures do
+      before do
+        create(:pool, :account, user: user, name: "Checking")
+        visit new_pool_path
+      end
+
       it "shows error for missing name" do
         fill_in "Target Amount", with: "1000"
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("can't be blank")
@@ -42,6 +59,7 @@ RSpec.describe "Pools Form", type: :system do
 
       it "shows error for missing target amount" do
         fill_in "Pool Name", with: "Emergency Fund"
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("can't be blank")
@@ -49,6 +67,7 @@ RSpec.describe "Pools Form", type: :system do
       end
 
       it "shows errors for both missing fields" do
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("can't be blank", count: 2)
@@ -56,9 +75,14 @@ RSpec.describe "Pools Form", type: :system do
     end
 
     describe "successful submission", :aggregate_failures do
+      let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+      before { visit new_pool_path }
+
       it "creates savings pool and redirects to show page" do
         fill_in "Pool Name", with: "Emergency Fund"
         fill_in "Target Amount", with: "5000"
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("Pool was successfully created")
@@ -69,6 +93,7 @@ RSpec.describe "Pools Form", type: :system do
       it "creates savings pool with correct attributes" do
         fill_in "Pool Name", with: "Vacation Fund"
         fill_in "Target Amount", with: "2500"
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("Pool was successfully created")
@@ -76,6 +101,8 @@ RSpec.describe "Pools Form", type: :system do
         expect(pool.name).to eq("Vacation Fund")
         expect(pool.target_amount).to eq(2500)
         expect(pool.user).to eq(user)
+        # The account it went into, which the form now has to be told and the model now requires.
+        expect(pool.account).to eq(checking)
       end
     end
 
@@ -157,7 +184,7 @@ RSpec.describe "Pools Form", type: :system do
 
         expect(page).to have_select(
           "Account it sits inside",
-          options: ["No account — nothing can fund this pool", "Ally"]
+          options: ["None — this pool IS a bank account", "Ally"]
         )
       end
 
@@ -168,7 +195,7 @@ RSpec.describe "Pools Form", type: :system do
         select "Budget envelope", from: "What kind of pool is this?"
         click_button "Create Pool"
 
-        expect(page).to have_content("must be set for budget pools")
+        expect(page).to have_content("must be set for envelopes and goals")
         expect(Pool.where(name: "Groceries")).to be_empty
       end
     end
@@ -189,6 +216,11 @@ RSpec.describe "Pools Form", type: :system do
     # category, which is not a type any more: a pool is filled by moving money into it, and the
     # category a pool needs is the one that spends out of it.
     describe "auto-create categories" do
+      before do
+        create(:pool, :account, user: user, name: "Checking")
+        visit new_pool_path
+      end
+
       it "renders the one checkbox, unchecked by default", :aggregate_failures do
         expect(page).to have_field("Create an expense category", type: "checkbox", checked: false)
         expect(page).to have_no_field("Create a savings category", type: "checkbox")
@@ -201,6 +233,7 @@ RSpec.describe "Pools Form", type: :system do
       it "creates only the pool when the box is unchecked", :aggregate_failures do
         fill_in "Pool Name", with: "Plain Pool"
         fill_in "Target Amount", with: "1000"
+        compose_a_goal
         click_button "Create Pool"
 
         expect(page).to have_content("Pool was successfully created")
@@ -210,13 +243,12 @@ RSpec.describe "Pools Form", type: :system do
       it "creates a linked expense category when the expense box is checked", :aggregate_failures do
         fill_in "Pool Name", with: "Expense Pool"
         fill_in "Target Amount", with: "1000"
+        compose_a_goal
         check "Create an expense category"
         click_button "Create Pool"
 
         expect(page).to have_content("Pool was successfully created")
-        pool = Pool.last
-        expect(pool.categories.count).to eq(1)
-        category = pool.categories.first
+        category = Pool.last.categories.sole
         expect(category.name).to eq("Expense Pool Expense")
         expect(category.category_type).to eq("expense")
       end
@@ -320,17 +352,21 @@ RSpec.describe "Pools Form", type: :system do
         expect(pool.reload.account).to eq(checking)
       end
 
-      # And back again, because savings pools may legitimately have none until Plan 3's
-      # backfill — the blank option has to actually clear the field, not be inert.
-      it "takes the account away again when the blank option is chosen", :aggregate_failures do
+      # AND NOT BACK AGAIN (plan 3, task 6). This example asserted that the blank option cleared
+      # the field, "because savings pools may legitimately have none until Plan 3's backfill".
+      # They may not: `Pool#account_matches_pool_type` requires an account for every envelope and
+      # goal, and the blank option now reads "None — this pool IS a bank account" because that is
+      # the only pool it applies to. The blank is still not inert — choosing it on a GOAL is
+      # refused, with the reason on the field, which is the direction that matters now.
+      it "refuses to take the account away from a goal", :aggregate_failures do
         pool.update!(account: checking)
 
         visit edit_pool_path(pool)
-        select "No account — nothing can fund this pool", from: "Account it sits inside"
+        select "None — this pool IS a bank account", from: "Account it sits inside"
         click_button "Update Pool"
 
-        expect(page).to have_content("Pool was successfully updated")
-        expect(pool.reload.account).to be_nil
+        expect(page).to have_content("must be set for envelopes and goals")
+        expect(pool.reload.account).to eq(checking)
       end
     end
 
@@ -400,7 +436,11 @@ RSpec.describe "Pools Form", type: :system do
     # had no bank accounts and should make this one — a bank account — a bank account.
     describe "the account panel on a user's only bank account" do
       it "does not claim the user has no bank accounts", :aggregate_failures do
-        checking = create(:pool, :account, user: user, name: "Checking")
+        # The `:pool` factory houses its pools now (plan 3, task 6), so `pool` above already made
+        # this user's one and only account. Creating a second here would have destroyed the very
+        # premise — "a user's ONLY bank account" — while leaving the example green on the wrong
+        # branch.
+        checking = user.pools.accounts.sole
 
         visit edit_pool_path(checking)
 

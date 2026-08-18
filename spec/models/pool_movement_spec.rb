@@ -312,14 +312,13 @@ RSpec.describe PoolMovement, type: :model do
       expect(build(:pool_movement, from_pool: from_pool, to_pool: to_pool)).not_to be_crosses_accounts
     end
 
-    # Savings pools may still be account-less until Plan 3 backfills accounts; such a pool
-    # stands in for its own account, so any movement touching one reads as a crossing.
-    it "is true when an account-less savings pool is involved" do
-      orphan = create(:pool, user: user, account: nil)
-      movement = build(:pool_movement, from_pool: checking, to_pool: orphan)
-
-      expect(movement).to be_crosses_accounts
-    end
+    # DELETED (plan 3, task 6): "is true when an account-less savings pool is involved". Its
+    # opening line was "savings pools may still be account-less until Plan 3 backfills accounts",
+    # and the backfill has landed: `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) =
+    # (account_id IS NULL))` refuse the pool. `#crosses_accounts?` still falls back to the pool
+    # itself when it names no account — the arm is unreachable and kept, like the rest of the
+    # orphan apparatus (see `Pool::REFUSALS` and the task 6 report). Every crossing this app can
+    # now express is between two housed pools, which the examples above cover in both directions.
   end
 
   # `create(:entry, :income)` builds its own user, so these two used to name a STRANGER'S

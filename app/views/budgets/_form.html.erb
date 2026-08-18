@@ -80,7 +80,7 @@
               that (Pool validates name uniqueness per user), and `account_id` is read from
               `users.default_account_id`, which is nullable — a user who has nominated no account
               must be ASKED for one rather than have a blank submitted on their behalf, since
-              `require_account_for_budget_pools` refuses an account-less budget pool outright.
+              `account_matches_pool_type` refuses an account-less budget pool outright.
 
               `envelope[category_id]` is hidden and is NOT the rule's owner: it is the category to
               be re-pointed at the new envelope. See BudgetsController#set_envelope for why it

@@ -74,7 +74,14 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
       expect(confirm).to include("transfers and spending both re-read as Checking's")
     end
 
-    it "keeps the plain warning on a pool with no account above it to absorb anything" do
+    # THE OTHER DIRECTION, ON AN ACCOUNT (plan 3, task 6). This read "keeps the plain warning on a
+    # pool with no account above it" and was planted on the file's own `pool`, an account-less
+    # goal — a shape `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS
+    # NULL))` now refuse. An ACCOUNT is the pool that has nothing above it by its own rule, so it
+    # is where the plain warning survives, and the assertion is unchanged.
+    it "keeps the plain warning on an account, which has nothing above it to absorb anything" do
+      visit pool_path(create(:pool, :account, user: user, name: "Checking"))
+
       confirm = find("button", text: "Delete")["data-turbo-confirm"]
 
       expect(confirm).to eq("Are you sure you want to delete this pool? This action cannot be undone.")

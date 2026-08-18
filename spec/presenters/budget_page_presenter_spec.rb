@@ -23,12 +23,15 @@ RSpec.describe BudgetPagePresenter do
     create(:pool_budget, pool: pool, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
-  # `#category_rule` is deleted with the shape it built (plan 3, task 3): a rule owned by a
-  # category. Every example that used it is either deleted below or re-planted on the ORPHAN shape
-  # that survives — a rule on a pool no account can reach.
-  def stranded_rule(name, amount)
-    create(:pool_budget, :per_period_rate, pool: create(:pool, :savings_pool, user: user, account: nil, name: name), amount: amount)
-  end
+  # `#stranded_rule` IS DELETED WITH THE SHAPE IT BUILT (plan 3, task 6). It planted a rule on an
+  # account-less pool — the one `#orphan_reason` still answers about — and task 3 had already
+  # re-planted the deleted category-mode examples onto it. `Pool#account_matches_pool_type` now
+  # requires an account for goals as well as envelopes and `CHECK ((pool_type = 0) = (account_id
+  # IS NULL))` requires it again past the model, so nothing in this suite can build one.
+  #
+  # `#orphan_rules`, `#orphan_reason` and the `_orphans` partial they feed are KEPT and now answer
+  # empty on every database; deleting the whole orphan apparatus is the follow-up this tightening
+  # creates. See `Pool::REFUSALS` and the task 6 report.
 
   def names(rules) = rules.map { |rule| rule.budget.id }
 
@@ -141,43 +144,16 @@ RSpec.describe BudgetPagePresenter do
   end
 
   describe "#orphan_rules" do
-    # The category-mode arm — a rule that funded a category rather than an envelope — is deleted
-    # with the shape (plan 3, task 3). `#orphan_reason` answers one reason now, and the example
-    # below is it.
-
-    it "collects a rule on an account-less pool and says why", :aggregate_failures do
-      # A SAVINGS pool: `Pool#account_matches_pool_type` refuses an account-less budget pool
-      # outright, and an account-less savings goal is the ordinary shape until Plan 3's backfill.
-      stranded = create(:pool, :savings_pool, user: user, account: nil, name: "Retirement")
-      budget = rate(stranded, 150)
-
-      expect(names(presenter.orphan_rules)).to eq([budget.id])
-      expect(presenter.orphan_rules.first.reason).to eq(:no_account)
-      expect(presenter.pool_groups).to be_empty
-    end
-
+    # THREE EXAMPLES DELETED (plan 3, task 6): the rule on an account-less pool with its
+    # `:no_account` reason, the ordering of two such rules, and the stranger's stranded rule left
+    # out. All three planted the shape the tightening abolished — see the note on
+    # `#stranded_rule`'s deletion above. What survives is the direction that is now the only one:
+    # a rule that fills an envelope is not an orphan, and nothing is.
     it "leaves a rule that does fill an envelope out of the orphans", :aggregate_failures do
       budget = rate(envelope("Groceries"), 400)
 
       expect(presenter.orphan_rules).to be_empty
       expect(names(presenter.pool_groups.first.rules)).to eq([budget.id])
-    end
-
-    # Ordered by owner name and then by due order, on a fixture where insertion order is the
-    # reverse. `all_budgets` carries no ORDER BY, so an unsorted list renders in heap order.
-    it "orders orphans by owner name and then by due order", :aggregate_failures do
-      zebra = stranded_rule("Zebra", 100)
-      alpha_small = stranded_rule("Alpha", 50)
-
-      expect(names(presenter.orphan_rules)).to eq([alpha_small.id, zebra.id])
-      expect(alpha_small.created_at).to be > zebra.created_at
-    end
-
-    it "leaves another user's stranded rule out" do
-      other = create(:user)
-      create(:pool_budget, :per_period_rate, pool: create(:pool, :savings_pool, user: other, account: nil), amount: 300)
-
-      expect(presenter.orphan_rules).to be_empty
     end
   end
 
@@ -188,12 +164,10 @@ RSpec.describe BudgetPagePresenter do
       expect(presenter).to be_no_rules
     end
 
-    it "is false once any rule exists, including one no distribution reaches", :aggregate_failures do
-      stranded_rule("Shopping", 200)
-
-      expect(presenter).not_to be_no_rules
-      expect(presenter.pool_groups).to be_empty
-    end
+    # DELETED (plan 3, task 6): "is false once any rule exists, including one no distribution
+    # reaches", which planted `#stranded_rule`'s account-less pool. `#no_rules?` still asks about
+    # every rule the user has rather than about `#pool_groups`, and the example below is the
+    # reachable half of that claim.
 
     it "is false for a rule in the fill order" do
       rate(envelope("Groceries"), 400)

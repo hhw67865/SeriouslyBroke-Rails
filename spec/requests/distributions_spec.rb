@@ -228,6 +228,11 @@ RSpec.describe "Distributions", type: :request do
     end
 
     it "sends a user with no account back home with a reason" do
+      # The categories go first, and that is plan 3 task 6's rule showing through the fixture: an
+      # account refuses to be destroyed while any category still points at it (`has_many
+      # :categories, dependent: :restrict_with_error`), and this describe's `#deposit` gave
+      # Checking an income category.
+      user.categories.destroy_all
       groceries.destroy!
       checking.destroy!
 

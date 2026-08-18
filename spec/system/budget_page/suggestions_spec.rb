@@ -24,7 +24,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   let(:internet) { create(:item, category: utilities, name: "Internet") }
 
   # THE NOMINATED ACCOUNT IS WHAT A PROPOSED ENVELOPE WOULD SIT INSIDE — the engine reads
-  # `users.default_account_id` for the pool half, `require_account_for_budget_pools` refuses an
+  # `users.default_account_id` for the pool half, `account_matches_pool_type` refuses an
   # account-less budget pool, and a user who has nominated none is the case the form ASKS about
   # rather than submits blank (pinned in spec/requests/budgets_spec.rb, not here).
   before do

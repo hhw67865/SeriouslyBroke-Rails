@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_020000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -19,14 +19,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000000) do
     t.money "amount", scale: 2, null: false
     t.date "anchor_date"
     t.integer "basis", default: 0, null: false
-    t.uuid "category_id"
     t.datetime "created_at", null: false
     t.integer "interval_months"
     t.uuid "item_id"
     t.uuid "pool_id"
-    t.boolean "prorated", default: false, null: false
     t.datetime "updated_at", null: false
-    t.index ["category_id"], name: "index_budgets_on_category_id"
     t.index ["item_id"], name: "index_budgets_on_item_id"
     t.index ["item_id"], name: "index_budgets_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
     t.index ["pool_id"], name: "index_budgets_on_pool_id"
@@ -87,15 +84,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000000) do
     t.uuid "account_id"
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.integer "pool_type", default: 2, null: false
+    t.integer "pool_type", default: 1, null: false
     t.integer "priority", default: 0, null: false
     t.date "start_date"
     t.money "target_amount", scale: 2
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
+    t.index "user_id, lower((name)::text)", name: "index_pools_on_user_id_and_lower_name", unique: true
     t.index ["account_id"], name: "index_pools_on_account_id"
     t.index ["user_id", "priority"], name: "index_pools_on_user_id_and_priority"
     t.index ["user_id"], name: "index_pools_on_user_id"
+    t.check_constraint "(pool_type = 0) = (account_id IS NULL)", name: "pools_account_matches_pool_type"
   end
 
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -124,7 +123,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_000000) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
-  add_foreign_key "budgets", "categories"
   add_foreign_key "budgets", "items"
   add_foreign_key "budgets", "pools"
   add_foreign_key "categories", "pools"

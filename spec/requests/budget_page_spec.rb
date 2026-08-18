@@ -189,16 +189,13 @@ RSpec.describe "Budget page declaration", type: :request do
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
 
-      # A pool no account holds is in no fill order, so an order naming one is meaningless
-      # rather than merely wrong.
-      it "refuses an account-less pool" do
-        loose = create(:pool, :savings_pool, user: user, account: nil, name: "Retirement")
-
-        reorder([loose.id])
-
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(loose.reload.priority).to eq(0)
-      end
+      # DELETED (plan 3, task 6): "refuses an account-less pool". A pool no account holds is in
+      # no fill order, so an order naming one was meaningless rather than merely wrong — but
+      # `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` now
+      # refuse the pool itself, so the request cannot be composed. `.fill_order_account`'s
+      # account-less arm is kept and now selects nothing; see `Pool::REFUSALS` and the task 6
+      # report. The refusals above — a foreign id, a short list, a duplicate — cover the same
+      # branch through shapes that still exist.
 
       it "says nothing was changed rather than failing silently" do
         reorder([groceries.id])

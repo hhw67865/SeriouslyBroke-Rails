@@ -272,23 +272,14 @@ RSpec.describe "Home Fixes", type: :system do
       within(problem_row("Dentist")) { expect(page).to have_link("Take $300.00 from Checking buffer") }
     end
 
-    # THE OTHER NO-BUTTON CASE, and it is a different answer rather than the same one twice. No
-    # account's money can reach a pool that sits in no account, whatever anyone moves — and the
-    # gap sentence would be nonsense here anyway, since PoolStatus#amount on an owed savings goal
-    # is the pool's own BALANCE. So the band names the step that does fix it.
-    it "tells a pool with no account to get one, rather than offering a move", :aggregate_failures do
-      stranded = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 8)
-      create(:pool_budget, :per_period_rate, pool: stranded, amount: 200)
-
-      visit root_path
-
-      within(problem_row("Old Goal")) do
-        expect(page).to have_content("Assign it to an account before any money can reach it.")
-        expect(page).to have_no_link(text: /\ATake/)
-        expect(page).to have_no_content("Nothing in")
-      end
-      within(problem_row("Dentist")) { expect(page).to have_link("Take $300.00 from Checking buffer") }
-    end
+    # DELETED (plan 3, task 6): "tells a pool with no account to get one, rather than offering a
+    # move". It was the other no-button case — no account's money can reach a pool that sits in no
+    # account, so the band named the step that does fix it ("Assign it to an account before any
+    # money can reach it") instead of a move. `HomePresenter#fix_for` still returns nil for an
+    # orphan and the copy is still in `home/_pool_row`; the pool cannot exist, because
+    # `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` refuse
+    # it. The no-button case above — a gap nothing has the spare cash for — is the one that
+    # survives. See `Pool::REFUSALS` and the task 6 report.
 
     # AN ACCOUNT IS A DESTINATION TOO. An overdraft is the loudest state in the app and it is the
     # one problem whose fix comes from INSIDE it: the envelopes it funded are the only things that

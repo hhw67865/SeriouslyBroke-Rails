@@ -5,7 +5,7 @@ require "rails_helper"
 RSpec.describe Pool, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to have_many(:categories).dependent(:nullify) }
+    it { is_expected.to have_many(:categories).dependent(:restrict_with_error) }
     it { is_expected.to have_many(:items).through(:categories) }
     it { is_expected.to have_many(:entries).through(:items) }
     it { is_expected.to have_many(:override_entries).dependent(:nullify) }
@@ -42,7 +42,12 @@ RSpec.describe Pool, type: :model do
 
   describe "validations" do
     it { is_expected.to validate_presence_of(:name) }
-    it { is_expected.to validate_presence_of(:target_amount) }
+
+    # A BARE `Pool.new` IS AN ENVELOPE NOW (plan 3, task 6 flipped `pools.pool_type`'s column
+    # default from 2 to 1), and `target_amount` is required on GOALS alone — so the bare subject
+    # no longer exercises this rule at all and the matcher needs a goal to ask about. The default
+    # flip is asserted directly in "the column defaults" below.
+    it { expect(build(:pool, :savings_pool)).to validate_presence_of(:target_amount) }
   end
 
   # The buffer is not a special object: it is the money in an account no envelope has
@@ -85,13 +90,23 @@ RSpec.describe Pool, type: :model do
       pool = build(:pool, :budget_pool, account: nil)
 
       expect(pool).not_to be_valid
-      expect(pool.errors[:account]).to include("must be set for budget pools")
+      expect(pool.errors[:account]).to include("must be set for envelopes and goals")
     end
 
-    # TODO(plan-3): once the account backfill lands, savings pools must require an account
-    # too and this example flips to `not_to be_valid`. It is deliberately red-on-tighten.
-    it "exempts savings pools from the account requirement until Plan 3 backfills accounts" do
-      expect(build(:pool, pool_type: :savings, account: nil)).to be_valid
+    # THE TODO(plan-3) FLIPPED, EXACTLY AS IT SAID IT WOULD. This example read
+    # "exempts savings pools from the account requirement until Plan 3 backfills accounts" and
+    # asserted `be_valid`; the cutover houses every goal and verifies it did, so the exemption is
+    # gone and the example is its own opposite. Deliberately red-on-tighten, and it was.
+    it "requires savings pools to name an account too", :aggregate_failures do
+      pool = build(:pool, pool_type: :savings, account: nil)
+
+      expect(pool).not_to be_valid
+      expect(pool.errors[:account]).to include("must be set for envelopes and goals")
+    end
+
+    # The other direction of the same rule, and the shape the tightening must NOT refuse.
+    it "accepts a goal that names one" do
+      expect(build(:pool, :savings_pool)).to be_valid
     end
 
     it "forbids account pools from naming an account", :aggregate_failures do
@@ -254,6 +269,94 @@ RSpec.describe Pool, type: :model do
       create(:pool, user: create(:user), name: "Emergency Fund")
 
       expect(build(:pool, user: create(:user), name: "Emergency Fund")).to be_valid
+    end
+  end
+
+  # ===============================================================================================
+  # THE DATABASE'S OWN HALF OF THESE RULES (plan 3, task 6, spec §7a).
+  #
+  # EVERY EXAMPLE HERE WRITES PAST THE MODEL — `save!(validate: false)` and `update_column` — and
+  # that is the entire point. The model already refuses all four shapes and its refusals are
+  # asserted above; what these prove is that the refusal survives a writer that never asked it: a
+  # console session, an `update_all`, a fixture, a future controller. A constraint tested through
+  # the validation stack is a test of the validation stack.
+  #
+  # Both directions on both constraints: the violating write raises, and the conforming write of
+  # the same shape lands. A CHECK constraint that refused everything would pass a one-sided test.
+  # ===============================================================================================
+  describe "the constraints in the schema" do
+    let(:user) { create(:user) }
+    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+    describe "pools_account_matches_pool_type" do
+      # rubocop:disable Rails/SkipsModelValidations -- writing past the model IS the subject here
+      it "refuses an envelope whose account is cleared past the model" do
+        envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+
+        expect { envelope.update_column(:account_id, nil) }
+          .to raise_error(ActiveRecord::StatementInvalid, /pools_account_matches_pool_type/)
+      end
+
+      it "refuses a goal whose account is cleared past the model" do
+        goal = create(:pool, :savings_pool, user: user, account: checking, name: "Holiday")
+
+        expect { goal.update_column(:account_id, nil) }
+          .to raise_error(ActiveRecord::StatementInvalid, /pools_account_matches_pool_type/)
+      end
+
+      # The other end of the equality. `(pool_type = 0) = (account_id IS NULL)` is one expression
+      # refusing two opposite mistakes, and an OR of two ANDs could have shipped with one half.
+      it "refuses an account that names a parent past the model" do
+        second = create(:pool, :account, user: user, name: "Savings Account")
+
+        expect { second.update_column(:account_id, checking.id) }
+          .to raise_error(ActiveRecord::StatementInvalid, /pools_account_matches_pool_type/)
+      end
+      # rubocop:enable Rails/SkipsModelValidations
+
+      it "accepts the two shapes it exists to allow", :aggregate_failures do
+        envelope = build(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+        account = build(:pool, :account, user: user, name: "Savings Account")
+
+        expect { envelope.save!(validate: false) }.not_to raise_error
+        expect { account.save!(validate: false) }.not_to raise_error
+      end
+    end
+
+    describe "index_pools_on_user_id_and_lower_name" do
+      it "refuses a duplicate name past the model" do
+        create(:pool, :savings_pool, user: user, account: checking, name: "Emergency Fund")
+        twin = build(:pool, :savings_pool, user: user, account: checking, name: "Emergency Fund")
+
+        expect { twin.save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+      end
+
+      # THE FUNCTIONAL HALF, and the reason the index is on `lower(name)` rather than on the
+      # column: the model's uniqueness is case-insensitive, so an index on the raw name would
+      # accept a pair the model refuses and guard nothing the model does not already guard.
+      it "refuses a name differing only in case past the model" do
+        create(:pool, :savings_pool, user: user, account: checking, name: "Emergency Fund")
+        twin = build(:pool, :savings_pool, user: user, account: checking, name: "emergency fund")
+
+        expect { twin.save!(validate: false) }.to raise_error(ActiveRecord::RecordNotUnique)
+      end
+
+      it "accepts the same name under a different user, which is what the scope is for" do
+        create(:pool, :savings_pool, user: user, account: checking, name: "Emergency Fund")
+        stranger = create(:user)
+
+        expect { create(:pool, :savings_pool, user: stranger, name: "Emergency Fund") }.not_to raise_error
+      end
+    end
+
+    # THE COLUMN DEFAULT, FLIPPED 2 -> 1 (§7a). `savings` was the default because the table was
+    # `savings_pools` and every row in it was one; an envelope is the ordinary pool now. Asserted
+    # on a bare `Pool.new` rather than through the factory, which sets the type explicitly — the
+    # default is only ever met by a writer that names no type.
+    describe "the column defaults" do
+      it "opens a typeless pool as an envelope" do
+        expect(described_class.new.pool_type).to eq("budget")
+      end
     end
   end
 

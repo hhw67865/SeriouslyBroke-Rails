@@ -41,6 +41,12 @@ class Category < ApplicationRecord
   # nothing writes a 2 any more; a third type added later takes 3. Reusing 2 would silently
   # re-type any row that survived in a backup, an export or a staging database that missed the
   # migration.
+  #
+  # THE ONE PLACE 2 IS STILL WRITTEN DOWN is `CutoverToEnvelopeBudgeting::SAVINGS_CATEGORY`, which
+  # is the value the migration goes looking for — a fact about the rows it meets, not a type this
+  # app has. Plan 3 task 6 checked the column for a change and there is none to make: a `CHECK
+  # (category_type IN (0,1))` would refuse the very rows the cutover exists to convert, and it
+  # would have to be added and dropped around every run of `spec/migrations/cutover_spec.rb`.
   enum :category_type,
        {
          expense: 0,
@@ -145,6 +151,11 @@ class Category < ApplicationRecord
 
   # Income lands in an account, never directly in an envelope: the allocation rules
   # move it out of the account afterwards.
+  #
+  # ITS TWIN ON `Entry` STAYS, AND IS NOT A DUPLICATE (§7a's "merge the duplicate income
+  # validators", resolved in plan 3, task 6). This one guards `categories.pool_id`; that one
+  # guards `entries.pool_id`, the per-entry override that WINS the `COALESCE` this one's value
+  # loses. `Entry#income_must_land_in_an_account` carries the full reasoning.
   def income_must_land_in_an_account
     return if pool.blank? || !income?
 

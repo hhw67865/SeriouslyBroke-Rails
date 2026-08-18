@@ -229,63 +229,54 @@ RSpec.describe "Home Pools", type: :system do
     expect(row("Groceries")["data-expanded"]).to eq("false")
   end
 
-  # A pool with no account is excluded from #pools_for, so a band built purely as
-  # "for each account, render its pools" renders it nowhere at all — and an account-less
-  # savings pool is the ordinary shape until Plan 3's backfill.
-  it "gives a pool with no account a group of its own", :aggregate_failures do
-    create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
-    envelope("Groceries", rate: 400)
+  # DELETED (plan 3, task 6): "gives a pool with no account a group of its own". It planted
+  # `create(:pool, user: user, ...)` with no account — the ordinary savings pool before the cutover
+  # backfilled one — and asserted Home's "No account" band. `Pool#account_matches_pool_type` now
+  # requires an account for goals as well as envelopes and `CHECK ((pool_type = 0) = (account_id IS
+  # NULL))` requires it again past the model, so no user can be in that state. `home/_orphans`,
+  # `HomePresenter#orphan_pools` and the band's "nothing can fund it" copy are KEPT and now render
+  # for nobody; deleting the orphan apparatus is the follow-up this tightening creates, named in
+  # `Pool::REFUSALS` and in the task 6 report.
 
-    visit root_path
-
-    expect(group("No account")).to have_content("Old Goal")
-    expect(group("No account")).to have_content("nothing can fund")
-    # And it must not be filed under an account it does not belong to.
-    expect(group("Checking")).to have_no_content("Old Goal")
-    expect(group("No account")).to have_no_content("Groceries")
-    # Its own status is quiet — a goal at $0 of $5,000 with no dated rule reads `saving` —
-    # so only the "nothing can fund it" half makes this a problem, and
-    # the row still has to open with the rest of the trouble rather than sit collapsed
-    # under a red heading.
-    expect(row("Old Goal")["data-expanded"]).to eq("true")
-    expect(row("Old Goal")).to have_content("no distribution can reach it")
-  end
-
-  # ** THE DUE DATE ON A QUIET ORPHAN — the row the 2d task 6 refactor silently changed, and the
+  # ** THE DUE DATE ON A QUIET ROW — the row the 2d task 6 refactor silently changed, and the
   #    one shape the byte-for-byte diff of Home could not see. **
   #
   # `_pool_row`'s date clause gates on the STATUS being quiet. Moved onto the row object it briefly
-  # gated on the ROW being quiet, and a row is not quiet when it is an orphan — so an orphan whose
-  # own status is `on track` and which has an anchored rule went from
-  # `$300.00 · on track · Oct 17` to `$300.00 · on track`, losing the only date on the line.
-  # `pool_status_label` knows nothing about orphanhood, so the "the label already said the date"
-  # argument that makes the gate safe for attention rows is false here.
+  # gated on the ROW being quiet, and the two are not the same question — so a goal whose own
+  # status is `on track` and which has an anchored rule went from `$300.00 · on track · Oct 17` to
+  # `$300.00 · on track`, losing the only date on the line. `pool_status_label` knows nothing about
+  # the row's other flags, so the "the label already said the date" argument that makes the gate
+  # safe for attention rows is false here.
   #
-  # THE BLIND SPOT IS WORTH NAMING: the refactor was verified by diffing Home's whole rendered HTML
-  # against the demo database, byte for byte, and that diff was clean — because no pool on the demo
-  # is BOTH orphaned and quiet-with-a-dated-rule. A rendering diff can only see the states its data
-  # reaches; this pair is the assertion that does not depend on which pools happen to exist.
+  # THE FIXTURE WAS AN ORPHAN AND IS NOW A HOUSED GOAL (plan 3, task 6). Orphanhood was the flag
+  # that made `Row#needs_attention?` diverge from `status.needs_attention?` on a quiet pool, and
+  # the tightening abolished the shape — `Row#orphan` is structurally false now. What the pair
+  # still pins is the gate itself: quiet status prints the date, attention status suppresses it,
+  # which is the claim the refactor broke.
   #
-  # Scoped to `span.text-sm`, which is the status line: an orphan row is auto-expanded, and the
-  # detail underneath it prints every dated rule's own date — so `have_no_content(date)` against the
-  # whole row would fail on text that is supposed to be there.
-  describe "an orphan pool's due date", :aggregate_failures do
+  # THE BLIND SPOT IS STILL WORTH NAMING: the refactor was verified by diffing Home's whole
+  # rendered HTML against the demo database, byte for byte, and that diff was clean, because no
+  # pool on the demo held this pair of states. A rendering diff can only see the states its data
+  # reaches.
+  #
+  # Scoped to `span.text-sm`, which is the status line: the detail underneath a row prints every
+  # dated rule's own date, so `have_no_content(date)` against the whole row would fail on text that
+  # is supposed to be there.
+  describe "a quiet pool's due date", :aggregate_failures do
     def status_line(name) = find("[data-pool-name='#{name}'] span.text-sm")
 
-    # A SAVINGS pool, because it is the only kind that can be an orphan at all — `Pool` refuses a
-    # budget pool with no account ("Account must be set for budget pools"), which is why
-    # HomePresenter#orphan_pools calls an account-less savings goal the ordinary shape. The anchored
-    # rule is what takes it OUT of the `saving` state (`PoolStatus#saving?` requires no anchored
-    # rule) and into the quiet `on track` one, which is the only quiet state carrying a date.
-    def orphan_with_rule(name, amount:, due:)
-      pool = create(:pool, user: user, name: name, target_amount: 5_000, priority: 1)
+    # A SAVINGS pool with an anchored rule: the anchor is what takes it OUT of the `saving` state
+    # (`PoolStatus#saving?` requires no anchored rule) and into the quiet `on track` one, which is
+    # the only quiet state carrying a date.
+    def goal_with_rule(name, amount:, due:)
+      pool = create(:pool, :savings_pool, user: user, account: checking, name: name, target_amount: 5_000, priority: 1)
       create(:pool_budget, pool: pool, amount: amount, interval_months: 1, anchor_date: due)
       pool
     end
 
     it "prints it when the pool's own status is quiet" do
       due = Date.current + 2.months
-      pool = orphan_with_rule("Old Goal", amount: 300, due: due)
+      pool = goal_with_rule("Old Goal", amount: 300, due: due)
       create(:pool_movement, from_pool: checking, to_pool: pool, amount: 300, date: Date.current)
 
       visit root_path
@@ -301,7 +292,7 @@ RSpec.describe "Home Pools", type: :system do
     # deadline that belongs to something else.
     it "leaves it off when the pool's own status needs attention" do
       due = Date.current + 2.months
-      pool = orphan_with_rule("Late Goal", amount: 300, due: due)
+      pool = goal_with_rule("Late Goal", amount: 300, due: due)
       create(:pool_movement, from_pool: pool, to_pool: checking, amount: 50, date: Date.current)
 
       visit root_path
@@ -343,25 +334,15 @@ RSpec.describe "Home Pools", type: :system do
   # milliseconds apart and this is a coin toss. The page itself renders at real now, as every other
   # example here does.
   describe "a pool that went behind because a rule was changed" do
-    include ActiveSupport::Testing::TimeHelpers
+    include_context "with a rule changed after the money went out"
 
-    # EVERY DATE IN THIS BLOCK COMES FROM HERE, resolved ONCE at real now and never inside a
-    # `travel_to`. `Date.current` evaluated three hours back is a different day between midnight and
-    # 03:00 — and this user is anchored to `Date.current` on a biweekly cadence, so a movement dated
-    # a day early falls in the PREVIOUS period, `#latest_distributions` filters it out, and both
-    # positive examples fail for three hours a night on a page that is working perfectly. That is
-    # the flake class this branch has just finished deleting; it does not get a new member.
-    #
-    # AND THE PARAGRAPH ABOVE WAS A CLAIM THIS BLOCK DID NOT KEEP, because `let` is LAZY. Nothing
-    # read `today` until `accumulating_rule` did, and every example calls that from inside
-    # `travel_to(3.hours.ago)` — so the value sworn to be "resolved ONCE at real now" was in fact
-    # resolved three hours back, and between 00:00 and 03:00 UTC it was yesterday. The `before`
-    # below is what actually resolves it at real now, outside every `travel_to`, exactly as
-    # categories/show/pool_card_spec.rb does for its copy of this fixture.
-    let(:today) { Date.current }
-
-    before { today }
-
+    # EVERY DATE IN THIS BLOCK COMES FROM THE SHARED CONTEXT, resolved ONCE at real now and never
+    # inside a `travel_to` — which is the fix commit 437eabd made here by hand and plan 3 task 6
+    # moved to `spec/support/changed_after_distributing_context.rb` so that the four screens
+    # asserting this clause cannot drift apart again. The reasoning is there; the short version is
+    # that this user is anchored to `Date.current` on a biweekly cadence, so a movement dated off a
+    # travelled clock falls in the previous period and the positive examples fail for the first
+    # hours of every UTC day against a page that is working perfectly.
     def accumulating_rule(name, amount:, priority:)
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
       rule = create(
@@ -374,21 +355,6 @@ RSpec.describe "Home Pools", type: :system do
       [pool, rule]
     end
 
-    # One allocation per envelope, small enough to leave both of them behind: the clause explains a
-    # `behind` row, so the row has to still be behind.
-    def distribute(pool, amount, at:)
-      travel_to(at) do
-        create(
-          :pool_movement,
-          kind: :allocation,
-          from_pool: checking,
-          to_pool: pool,
-          amount: amount,
-          date: today
-        )
-      end
-    end
-
     # THE PAIR THE CLAUSE HAS TO TELL APART: two envelopes with the same shape of rule, the same
     # distribution and the same `behind` state, differing only in which side of that distribution
     # their rule was last edited on.
@@ -396,13 +362,15 @@ RSpec.describe "Home Pools", type: :system do
       deposit(2_000)
       raised_pool = raised_rule = steady_pool = nil
 
-      travel_to(3.hours.ago) do
+      before_distributing do
         raised_pool, raised_rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1)
         steady_pool, = accumulating_rule("Property Tax", amount: 1_200, priority: 2)
       end
 
-      [raised_pool, steady_pool].each { |pool| distribute(pool, 10, at: 2.hours.ago) }
-      travel_to(1.hour.ago) { raised_rule.update!(amount: 1_800) }
+      # One allocation per envelope, small enough to leave both of them behind: the clause explains
+      # a `behind` row, so the row has to still be behind.
+      [raised_pool, steady_pool].each { |pool| distribute(pool, 10) }
+      after_distributing { raised_rule.update!(amount: 1_800) }
     end
 
     # BOTH DIRECTIONS ON ONE SCREEN, and that is the point rather than a convenience. Two envelopes
@@ -443,9 +411,9 @@ RSpec.describe "Home Pools", type: :system do
       deposit(2_000)
       pool = rule = nil
 
-      travel_to(3.hours.ago) { pool, rule = accumulating_rule("Car Insurance", amount: 1_800, priority: 1) }
-      distribute(pool, 10, at: 2.hours.ago)
-      travel_to(1.hour.ago) { rule.update!(amount: 1_200) }
+      before_distributing { pool, rule = accumulating_rule("Car Insurance", amount: 1_800, priority: 1) }
+      distribute(pool, 10)
+      after_distributing { rule.update!(amount: 1_200) }
 
       visit root_path
 
@@ -461,8 +429,8 @@ RSpec.describe "Home Pools", type: :system do
       deposit(2_000)
       rule = nil
 
-      travel_to(3.hours.ago) { _, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
-      travel_to(1.hour.ago) { rule.update!(amount: 1_800) }
+      before_distributing { _, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
+      after_distributing { rule.update!(amount: 1_800) }
 
       visit root_path
 
@@ -479,8 +447,8 @@ RSpec.describe "Home Pools", type: :system do
       pool = payable("Utilities", amount: 120, due: Date.current - 10.days)
       rule = pool.budgets.first
 
-      distribute(pool, 10, at: 2.hours.ago)
-      travel_to(1.hour.ago) { rule.update!(amount: 180) }
+      distribute(pool, 10)
+      after_distributing { rule.update!(amount: 180) }
 
       visit root_path
 

@@ -4,7 +4,41 @@ class Pool < ApplicationRecord
   include ModelSearchable
 
   belongs_to :user, touch: true
-  has_many :categories, dependent: :nullify
+
+  # `dependent: :nullify` IS GONE, AND IT WAS A LIVE TRAP RATHER THAN A BACKSTOP (plan 3 task 6,
+  # the decision task 3 handed forward). It issued `update_all` over `Category.where(pool_id: id)`,
+  # which walks straight past the required `belongs_to :pool` and past
+  # `income_must_land_in_an_account`: destroying a pool wrote NULL `pool_id`s that no validation
+  # would have allowed, and `ENTRY_POOL_ID`'s `COALESCE(entries.pool_id, categories.pool_id)` then
+  # resolved every entry those categories carried to NOTHING — `Σ pools` rising by the pool's
+  # lifetime spending while the bank had obviously paid it.
+  #
+  # THE REAL DESTROY ORDER, TRACED RATHER THAN ASSUMED, is why the replacement is a refusal and not
+  # a second re-point:
+  #
+  #   * an ENVELOPE or GOAL never reaches this callback with a category still pointing at it.
+  #     `#return_holdings_to_the_account` is `prepend: true`, so it runs FIRST, and it either
+  #     re-points every category to the pool's own account (`#hand_categories_to_the_account`) or
+  #     refuses the destroy outright. By the time this dependency is consulted the scope is empty —
+  #     which the old comment on `#hand_categories_to_the_account` already recorded, measured:
+  #     dropping its `reset` failed nothing, because nullify never had a row to find.
+  #   * an ACCOUNT returns from that callback on its first line (`return if pool_type_account?`).
+  #     It has no account of its own to absorb anything, so there was nowhere to re-point to and
+  #     the nullify fired for real. That is the one case the option ever ran in, and it ran
+  #     wrongly.
+  #
+  # So the option is unreachable where it would have been harmless and harmful where it was
+  # reachable, and it is REPLACED rather than left standing. `restrict_with_error` is the pattern
+  # `#child_pools` already uses one screen away: an error on `:base`, a halted callback chain, and
+  # PoolsController#destroy rendering it through the branch that already exists for an account
+  # holding pools. An account whose categories still point at it refuses to be deleted, and the
+  # user moves them somewhere first — there is no other honest answer, because a category must
+  # name a pool and this app cannot guess which of the user's other accounts should inherit one.
+  #
+  # It costs the envelope path one `SELECT COUNT(*)` that answers zero. `#empty?` re-queries
+  # because `#hand_categories_to_the_account` resets the association, so the count sees the
+  # re-pointed world rather than the loaded target.
+  has_many :categories, dependent: :restrict_with_error
   has_many :budgets, dependent: :destroy
   has_many :items, through: :categories
   has_many :entries, through: :items
@@ -14,19 +48,31 @@ class Pool < ApplicationRecord
   # `COALESCE(entries.pool_id, categories.pool_id)`, so clearing the override hands the entry to
   # its category's pool — rather than blocking the delete on a foreign key.
   #
-  # NOT "for the same reason categories are", WHICH TASK 8 REVERSED. Categories are no longer
-  # nullified in practice: `#return_holdings_to_the_account` re-points them to the destroyed pool's
-  # account before the association's own callback can fire, precisely because nullifying them took
-  # every entry they carried out of the pool tree and raised `Σ pools` by the pool's lifetime
-  # spending. The `dependent: :nullify` on `#categories` survives only as the backstop for an
-  # ACCOUNT, which has no account of its own to absorb anything. This line is a different case with
-  # a different answer, and citing that one as its reason is now backwards.
+  # NOT "for the same reason categories are", WHICH TASK 8 REVERSED AND PLAN 3 TASK 6 FINISHED.
+  # Categories are not nullified at all any more: `#return_holdings_to_the_account` re-points them
+  # to the destroyed pool's account before the association's own callback can fire, and the
+  # callback itself is now `restrict_with_error` — precisely because nullifying them took every
+  # entry they carried out of the pool tree and raised `Σ pools` by the pool's lifetime spending.
+  # This line is a different case with a different answer, and citing that one as its reason is
+  # now backwards.
   #
-  # THE RESIDUAL, RECORDED HERE RATHER THAN ONLY IN THE SDD LEDGER: an override entry whose
-  # CATEGORY points at no pool leaves the tree. Clearing `entries.pool_id` makes `ENTRY_POOL_ID`
-  # `COALESCE(NULL, NULL)` — NULL — so that entry counts toward no pool at all and `Σ pools` rises
-  # by its amount, the same shape Task 8 fixed for categories. It is unreachable from the UI today,
-  # and that was grepped rather than assumed: `EntriesController#entry_params` permits
+  # WHY THIS ONE IS STILL A NULLIFY when its sibling became a refusal: `entries.pool_id` is an
+  # OVERRIDE of a value the entry already has by another route, so clearing it hands the entry
+  # back to its category's pool rather than to nothing. `categories.pool_id` is the only answer
+  # its row has, so clearing that one is the deletion of a fact. The residual below is the one
+  # shape where the two coincide.
+  #
+  # THE RESIDUAL, RECORDED HERE RATHER THAN ONLY IN THE SDD LEDGER, AND NARROWED TWICE SINCE: an
+  # override entry whose CATEGORY points at no pool would leave the tree. Clearing
+  # `entries.pool_id` makes `ENTRY_POOL_ID` `COALESCE(NULL, NULL)` — NULL — so that entry counts
+  # toward no pool at all and `Σ pools` rises by its amount, the same shape Task 8 fixed for
+  # categories. Plan 3 decision 3 made `belongs_to :pool` REQUIRED on `Category`, and task 6
+  # replaced the one writer that walked past it (`dependent: :nullify` on `#categories`, which
+  # reached `update_all`), so nothing in the app can produce the pool-less category this residual
+  # needs. `categories.pool_id` is still nullable AT THE DATABASE — the remaining tightening, named
+  # in the task 6 report — so the residual is a Ruby-level impossibility rather than a structural
+  # one. It was already unreachable from the UI, and that was grepped rather than assumed:
+  # `EntriesController#entry_params` permits
   # `[:amount, :date, :description, :item_id]` and nothing else, so no request can set
   # `entries.pool_id` at all, and no other writer of it exists in `app/`. The column is a schema
   # affordance the UI has not yet grown into. The honest fix, when something can reach it, is the
@@ -92,6 +138,17 @@ class Pool < ApplicationRecord
   # names a counterparty that is itself account-less, and either end being housed resolves it.
   # Nullifying instead is the `Σ pools` break this fix round exists to refuse, so it is refused
   # here rather than absorbed silently.
+  #
+  # BOTH ARE UNREACHABLE SINCE PLAN 3 TASK 6, AND KEPT AS BACKSTOPS RATHER THAN DELETED. Every
+  # branch below turns on a non-account pool whose `account` is blank, which
+  # `#account_matches_pool_type` now refuses and `CHECK ((pool_type = 0) = (account_id IS NULL))`
+  # refuses again past the model — so no persisted row can reach either arm, and the five examples
+  # that covered them are deleted with their reason in `spec/models/pool_destroy_spec.rb`. They
+  # stay because they cost nothing to hold and because the shape they refuse — a destroy that
+  # takes money out of the pool tree — is the one this app must never absorb silently, whatever a
+  # future import, backfill or console session writes. Deleting the whole orphan apparatus (these,
+  # `HomePresenter#orphan_pools`, `BudgetPagePresenter#orphan_rules`, `ReallocationPresenter`'s
+  # "No account" group) is the follow-up this tightening creates; it is not this task's.
   REFUSALS = {
     categories: "can't be deleted while categories point at it and it sits in no account — its " \
                 "spending would stop counting toward any pool. Assign it to an account first.",
@@ -178,17 +235,22 @@ class Pool < ApplicationRecord
   # buffer's lane instead of the envelope's. What is left is the buffer holding EXACTLY what the
   # envelope held, to the penny, and a history that reads as the buffer's own.
   #
-  # `prepend: true` IS LOAD-BEARING. `has_many … dependent:` registers its own `before_destroy`
-  # when the association is declared, and callbacks run in declaration order — so a plain
-  # `before_destroy` here would run AFTER the movements had already been deleted and the
-  # categories already nullified, and would have nothing left to re-point.
+  # `prepend: true` IS LOAD-BEARING, AND MORE SO SINCE PLAN 3 TASK 6. `has_many … dependent:`
+  # registers its own `before_destroy` when the association is declared, and callbacks run in
+  # declaration order — so a plain `before_destroy` here would run AFTER the movements had already
+  # been deleted, and it would now run after `restrict_with_error` on #categories had ABORTED the
+  # destroy of every envelope that has one. The re-point has to happen before the guard asks.
   #
   # ACCOUNTS ARE EXCLUDED BY TYPE, not by whether they have somewhere to go. An account has no
-  # `account` to absorb anything, `restrict_with_error` on #child_pools already refuses the only
-  # shape that matters, and the movements left on a CHILDLESS account are by construction
-  # cross-account transfers — which spec §5 puts out of scope. `dependent: :destroy` and
-  # `dependent: :nullify` therefore stay as the backstop for that one case rather than being
-  # replaced.
+  # `account` to absorb anything, `restrict_with_error` on #child_pools already refuses one that
+  # holds pools, and the movements left on a CHILDLESS account are by construction cross-account
+  # transfers — which spec §5 puts out of scope, so `dependent: :destroy` on the two movement
+  # associations stays as the backstop for that one case.
+  #
+  # WHAT DOES NOT STAY IS #categories' `dependent: :nullify` (task 6). It was the ACCOUNT's
+  # backstop and it was writing NULL `pool_id`s past a required `belongs_to`; the account's answer
+  # is now a refusal, spelled `restrict_with_error` like #child_pools'. The full trace is at the
+  # association.
   before_destroy :return_holdings_to_the_account, prepend: true
 
   # Configure searchable fields
@@ -489,13 +551,20 @@ class Pool < ApplicationRecord
   # account-less pool that has any category at all. Stated so the guard reads as the invariant it
   # is rather than as a nil-check somebody could delete.
   #
-  # `reset` afterwards, AND IT DOES NOT FIRE — stated rather than left claiming a protection the
-  # measurement does not show. `dependent: :nullify` reaches `update_all` over a re-queried scope
-  # (`Category.where(pool_id: <this pool>)`), which after the re-point matches nothing, so the
-  # loaded target is never consulted. That is exactly where it differs from the two movement
-  # associations, whose `dependent: :destroy` DOES walk the loaded target — mutation-tested both
-  # ways: dropping the movement resets fails an example, dropping this one fails nothing. It stays
-  # for symmetry and because it is the line that absorbs a change of `nullify` to `destroy` one day.
+  # `reset` afterwards, AND IT IS NOW LOAD-BEARING — the previous note here said, correctly at the
+  # time, that it "does not fire": `dependent: :nullify` reached `update_all` over a re-queried
+  # scope (`Category.where(pool_id: <this pool>)`), which after the re-point matched nothing, so
+  # the loaded target was never consulted. Plan 3 task 6 replaced that option with
+  # `restrict_with_error`, which asks `#empty?` — and `#empty?` TRUSTS A LOADED TARGET over the
+  # database. Without this line the `each` above leaves three re-pointed categories sitting in the
+  # association's target, the guard counts them, and an envelope that has just handed everything
+  # to its account refuses to be destroyed.
+  #
+  # Mutation-tested at the swap, both before and after: deleting this line failed NOTHING under
+  # `nullify` and fails THREE examples in `spec/models/pool_destroy_spec.rb` under
+  # `restrict_with_error` (the buffer figure, the re-point and the allocation collapse — the whole
+  # envelope-with-history block). The comment it replaces was true when written; the line it
+  # describes was kept "for symmetry", and symmetry is what caught this.
   def hand_categories_to_the_account
     return if account.blank?
 
@@ -515,8 +584,11 @@ class Pool < ApplicationRecord
   # Where this movement's money is going once this pool is gone: this pool's own account, and
   # for an account-less pool the COUNTERPARTY's account instead.
   #
-  # The fallback is not a courtesy. Savings pools may still be account-less until Plan 3's
-  # backfill (see #require_account_for_budget_pools), and a movement of an orphan's is by
+  # The fallback WAS not a courtesy and is now unreachable, for the reason `REFUSALS` gives: a
+  # non-account pool with no account is refused by the model and by a CHECK constraint since plan
+  # 3 task 6. It is kept as that constant's other half. The paragraph below is why it was written,
+  # and it is left standing because it is also why it is safe to keep: savings pools were
+  # account-less until Plan 3's backfill, and a movement of an orphan's is by
   # definition a same-user transfer with a real pool on the other end — so the counterparty's
   # buffer is the one place in the tree the money can land while staying inside the account it
   # is already sitting in. A counterparty that is ITSELF an account stands in as its own, which
@@ -562,12 +634,31 @@ class Pool < ApplicationRecord
     throw(:abort)
   end
 
+  # EVERY POOL IS EITHER AN ACCOUNT OR LIVES IN ONE (spec §3.2; §7a's Plan-3 item, done here).
+  # The `TODO(plan-3)` this replaces exempted SAVINGS pools, because until the cutover backfilled
+  # them an account-less goal was the ordinary shape a user had — the table was `savings_pools`
+  # and nothing in it named an account. `CutoverToEnvelopeBudgeting#house_the_pools` houses every
+  # one and its verifier refuses to commit while a single non-account pool has no account, so the
+  # exemption now protects nothing and hides the state Home has been asking users to fix in three
+  # places since Plan 2a.
+  #
+  # The database says the same thing one level down (`pools_account_matches_pool_type`, a CHECK
+  # over `(pool_type = 0) = (account_id IS NULL)`), which is what makes it true of rows written
+  # past this model — `update_all`, a fixture, a console. What the CHECK cannot say is the rest of
+  # this method: that the named parent is an ACCOUNT belonging to the SAME user needs a subquery,
+  # and a CHECK constraint may not contain one.
   def account_matches_pool_type
     return errors.add(:account, "cannot be set on an account") if pool_type_account? && account_id.present?
     return if pool_type_account?
 
-    return require_account_for_budget_pools if account.blank?
+    return errors.add(:account, "must be set for envelopes and goals") if account.blank?
 
+    account_is_this_users_account
+  end
+
+  # The half a CHECK constraint cannot hold, split out so the whole rule stays inside one AbcSize:
+  # both questions are about the pool NAMED as the parent rather than about this row's own columns.
+  def account_is_this_users_account
     errors.add(:account, "must be an account") unless account.pool_type_account?
     # Records, not ids: with neither the pool nor its parent saved both `user_id`s are nil,
     # and `nil == nil` waves another user's account through.
@@ -587,13 +678,6 @@ class Pool < ApplicationRecord
     return unless child_pools.exists?
 
     errors.add(:pool_type, "can't be changed while other pools sit inside this account — move them out first")
-  end
-
-  # Savings pools may stay account-less until Plan 3's data migration backfills them;
-  # budget pools are new in this plan and must name an account from day one.
-  # TODO(plan-3): tighten to include savings pools once the account backfill lands
-  def require_account_for_budget_pools
-    errors.add(:account, "must be set for budget pools") if pool_type_budget?
   end
 
   def set_default_start_date

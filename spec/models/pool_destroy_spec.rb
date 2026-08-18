@@ -249,81 +249,72 @@ RSpec.describe Pool, "#destroy", type: :model do
     end
   end
 
-  # Savings pools may still be account-less until Plan 3's backfill, so an orphan's movements
-  # have to land in the COUNTERPARTY's account — and when the counterparty names none either,
-  # there is nowhere in the tree for the row to go.
-  describe "an account-less pool" do
-    let(:orphan) { create(:pool, user: user, name: "Old Vacation Fund", account: nil) }
+  # ── THE ACCOUNT-LESS POOL BLOCK IS DELETED, AND THE SHAPE WITH IT (plan 3, task 6) ────────
+  #
+  # Five examples stood here, all planted on `create(:pool, account: nil)`: an orphan's transfers
+  # re-pointed into the COUNTERPARTY's account, the refusal when the counterparty named none
+  # either, the refusal when categories pointed at it, and the two quiet directions. Their opening
+  # comment began "Savings pools may still be account-less until Plan 3's backfill" — and the
+  # backfill has landed. `Pool#account_matches_pool_type` refuses an account-less envelope or goal
+  # and `CHECK ((pool_type = 0) = (account_id IS NULL))` refuses it again past the model, so the
+  # fixture cannot be built by any writer this app or this suite has.
+  #
+  # The guards they covered — `Pool::REFUSALS`, `#refuse_for_want_of_an_account`,
+  # `#absorbing_account_for`'s counterparty fallback — are KEPT and are now unreachable backstops.
+  # That is written down rather than dressed up: re-planting the fixture by clearing `account` in
+  # memory before `destroy` (which skips validations) would make every example pass again while
+  # testing a shape no caller produces, and a fake test is worse than an acknowledged gap. The
+  # deletion of the orphan apparatus — these guards, `HomePresenter#orphan_pools` and its
+  # attention band, `BudgetPagePresenter#orphan_rules`, `ReallocationPresenter`'s "No account"
+  # group — is the follow-up this tightening creates, and it is larger than the task that created
+  # it.
+  #
+  # What replaces them is the destroy this task DID make reachable: an account whose categories
+  # still point at it.
 
-    it "re-points its transfers into the counterparty's account", :aggregate_failures do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Car")
-      transfer = create(:pool_movement, from_pool: orphan, to_pool: envelope, amount: 75)
-      pay(checking, deposit, named: "Salary")
+  # ── THE THIRD GUARD, BOTH DIRECTIONS (plan 3, task 6) ─────────────────────────────────────
+  # `has_many :categories` was `dependent: :nullify`, which reached `update_all` and wrote NULL
+  # `pool_id`s past the required `belongs_to` — every entry those categories carried leaving the
+  # pool tree, `Σ pools` rising by the account's lifetime spending. An ENVELOPE never reached it
+  # (`#return_holdings_to_the_account` re-points first, and the block above pins that); an ACCOUNT
+  # returns from that callback on its first line, so the account was the one case it ever ran in.
+  describe "an account whose categories still point at it" do
+    let!(:spending) { create(:category, :expense, user: user, pool: checking, name: "Bank Fees") }
 
-      expect(orphan.destroy).to be_truthy
+    before { pay(checking, deposit, named: "Salary") }
 
-      expect(transfer.reload.from_pool).to eq(checking)
-      expect(transfer.to_pool).to eq(envelope)
-      expect(balance(envelope)).to eq(75)
-      expect(balance(checking)).to eq(425) # 500 paid in, 75 now leaving the buffer instead
+    it "refuses, and writes nothing", :aggregate_failures do
+      expect(checking.destroy).to be(false)
+
+      expect(checking.errors[:base]).to be_present
+      expect(described_class.exists?(checking.id)).to be(true)
+      expect(spending.reload.pool).to eq(checking)
     end
 
-    it "refuses when its transfers name no account anywhere", :aggregate_failures do
-      other_orphan = create(:pool, user: user, name: "Old Rainy Day Fund", account: nil)
-      transfer = create(:pool_movement, from_pool: orphan, to_pool: other_orphan, amount: 75)
+    # THE ASSERTION THAT DISCRIMINATES THE OLD BEHAVIOUR FROM THE NEW, and it is the data rather
+    # than the flash: `dependent: :nullify` returned TRUE from this destroy and left the category
+    # pointing at nothing. Both halves are pinned because the refusal alone would pass against a
+    # nullify that happened to fail for some other reason.
+    it "leaves the category resolving to a pool, which nullify did not" do
+      checking.destroy
 
-      expect(orphan.destroy).to be(false)
-
-      expect(orphan.errors[:base]).to include(a_string_matching(/no buffer for its money to return to/))
-      expect(described_class.exists?(orphan.id)).to be(true)
-      expect(transfer.reload.from_pool).to eq(orphan)
-      expect(transfer.to_pool).to eq(other_orphan)
+      expect(spending.reload.pool_id).not_to be_nil
     end
 
-    it "is destroyed without ceremony when it holds no movements and no categories" do
-      expect { orphan.destroy }.to change { described_class.exists?(orphan.id) }.from(true).to(false)
-    end
-
-    # Nullifying is the `Σ pools` break the fix round refused, so the destroy is refused instead.
-    # The counterpart reach is the "both movement and entry history" block above, where an account
-    # exists and the category re-points into it.
-    it "refuses when categories point at it and no account can take them", :aggregate_failures do
-      category = create(:category, :expense, user: user, pool: orphan, name: "Old Fund Spending")
-      create(:entry, item: create(:item, category: category), amount: 30, date: Date.current)
-
-      expect(orphan.destroy).to be(false)
-
-      expect(orphan.errors[:base]).to include(a_string_matching(/Assign it to an account first/))
-      expect(described_class.exists?(orphan.id)).to be(true)
-      expect(category.reload.pool).to eq(orphan)
-    end
-
-    # THIS EXAMPLE DOES NOT DISCRIMINATE THE WRITE ORDERING, and it is written down rather than
-    # claimed otherwise — the same honesty the `categories.reset` note in `Pool` carries.
+    # EVERY category, not just the expense one: `#pay` gives this account an income category too,
+    # and an account a real user owns always has both. Moving one and not the other is the state
+    # the refusal is for.
     #
-    # An INTERLEAVED implementation (movement loop first, refusal after) would `update!` the
-    # transfer and then `throw(:abort)`, and `destroy`'s own transaction would unwind the write, so
-    # every `reload` below passes under either ordering. What it does pin is the OUTCOME — a pool
-    # holding both an absorbable transfer and an unabsorbable category is refused whole, with
-    # nothing left half-moved — which is worth pinning on its own.
-    #
-    # The ordering is still the right one, for a reason no example here can reach: inside an
-    # already-open JOINABLE transaction `ActiveRecord::Rollback` is swallowed and the outer
-    # transaction commits, so an interleaved implementation would leave the transfer re-pointed
-    # beside a pool that still exists. Reproducing that would mean committing a real outer
-    # transaction from a spec that runs inside one; the reason lives in
-    # `Pool#return_holdings_to_the_account`'s comment instead of in a fixture that would have to
-    # fight the test harness to exist.
-    it "refuses whole when its transfers could move but its categories could not", :aggregate_failures do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Car")
-      transfer = create(:pool_movement, from_pool: orphan, to_pool: envelope, amount: 75)
-      category = create(:category, :expense, user: user, pool: orphan, name: "Old Fund Spending")
+    # Reached through `user.categories` RATHER THAN `checking.categories`, and the difference is
+    # the behaviour: `restrict_with_error` asks `#empty?`, which trusts a LOADED target over the
+    # database, so re-pointing through the pool's own association and then destroying refuses a
+    # pool that has nothing left pointing at it. That is why `#hand_categories_to_the_account`
+    # ends in a `reset` — a line whose comment used to say it fired against nothing.
+    it "is destroyed once its categories point somewhere else, the other direction of the rule" do
+      second = create(:pool, :account, user: user, name: "Ally")
+      user.categories.each { |category| category.update!(pool: second) }
 
-      expect(orphan.destroy).to be(false)
-
-      expect(transfer.reload.from_pool).to eq(orphan)
-      expect(category.reload.pool).to eq(orphan)
-      expect(described_class.exists?(orphan.id)).to be(true)
+      expect { checking.destroy }.to change { described_class.exists?(checking.id) }.from(true).to(false)
     end
   end
 

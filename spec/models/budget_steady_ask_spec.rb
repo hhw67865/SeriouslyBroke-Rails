@@ -262,18 +262,12 @@ RSpec.describe Budget, type: :model do
     # pool-scoped by construction, and the filter is gone; examples asserting an exclusion that can
     # no longer exclude anything would be green whatever the code did.
 
-    # An account-less pool's rule is still money the user has committed. It is unreachable by any
-    # distribution — which is exactly why leaving it out of the need would understate the budgets
-    # that are hardest to fix, and it is the line 2b already drew when orphans left the waterfall
-    # but stayed in HomePresenter#total_required. The contrast with the cap above is the whole
-    # ruling that survives the cap's deletion: an orphan is a real claim with a broken route.
-    it "counts a rule on a pool no account can reach" do
-      rate(300)
-      orphan = create(:pool, :savings_pool, user: user, account: nil)
-      create(:pool_budget, :per_period_rate, pool: orphan, amount: 150)
-
-      expect(described_class.steady_need(user, today: today)).to eq(450)
-    end
+    # DELETED (plan 3, task 6): "counts a rule on a pool no account can reach". It pinned 2b's
+    # ruling that an orphan's rule is a real claim with a broken route — in the need, out of the
+    # waterfall. `#steady_need` has no account filter to lose (it sums every rule `Budget.for_user`
+    # answers), so the ruling survives its example; the shape does not, because
+    # `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` refuse
+    # an account-less pool. See `Pool::REFUSALS` and the task 6 report.
 
     it "does not count another user's rules" do
       rate(300)

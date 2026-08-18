@@ -262,31 +262,23 @@ RSpec.describe "Categories Show - Budget block", type: :system do
   # signal is `budgets.updated_at` against the movement's `created_at` and both have to be written
   # the way the app writes them (see DistributionClock).
   describe "the changed-after-distributing clause", :aggregate_failures do
-    include ActiveSupport::Testing::TimeHelpers
+    # The clock is the shared context's (plan 3, task 6) — `today`, the three travelled moments
+    # and the movement itself, in one place for all four screens that assert this clause.
+    include_context "with a rule changed after the money went out"
 
-    # Captured outside every `travel_to` below: `Date.current` read inside one is the travelled
-    # day, and a movement dated on a day the period boundaries do not cover is not this period's
-    # distribution at all.
     before do
-      on = Date.current
-      anchor = on + 3.months
+      anchor = today + 3.months
       raised = steady = nil
 
-      travel_to(3.hours.ago) do
+      before_distributing do
         raised = covered_dated("Raised", anchor: anchor)
         steady = covered_dated("Steady", anchor: anchor)
       end
 
       # Ten dollars against a $1,200 bill three months out leaves both behind, which is the state
       # the clause explains.
-      [raised, steady].each { |pool| distribute(pool, 10, on: on) }
-      travel_to(1.hour.ago) { raised.budgets.sole.update!(amount: 1_800) }
-    end
-
-    def distribute(pool, amount, on:)
-      travel_to(2.hours.ago) do
-        create(:pool_movement, kind: :allocation, from_pool: checking, to_pool: pool, amount: amount, date: on)
-      end
+      [raised, steady].each { |pool| distribute(pool, 10) }
+      after_distributing { raised.budgets.sole.update!(amount: 1_800) }
     end
 
     it "says why this envelope is behind" do

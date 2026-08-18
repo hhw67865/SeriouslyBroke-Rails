@@ -63,39 +63,36 @@ RSpec.describe HomePresenter do
     end
   end
 
-  describe "#orphan_pools" do
-    it "returns account-less pools, by priority then name, and nothing else", :aggregate_failures do
-      envelope("Has An Account", priority: 1)
-      # Reverse alphabetical at a shared priority, so the name tie-break is visible.
-      zoo = create(:pool, user: user, name: "Zoo Fund", target_amount: 500, priority: 2)
-      apples = create(:pool, user: user, name: "Apples Fund", target_amount: 500, priority: 2)
-      urgent = create(:pool, user: user, name: "Urgent Fund", target_amount: 500, priority: 1)
+  # ── THE ORPHAN BAND'S EXAMPLES ARE DELETED (plan 3, task 6) ───────────────────────────────
+  # Five examples here planted `create(:pool, user: user, ...)` with no account — the ordinary
+  # savings pool before the cutover backfilled one. `Pool#account_matches_pool_type` now requires
+  # an account for every envelope and goal and `CHECK ((pool_type = 0) = (account_id IS NULL))`
+  # requires it again past the model, so the fixture cannot be built by any writer this suite has;
+  # the `:pool` factory houses its pools for the same reason.
+  #
+  # `#orphan_pools`, `#orphan_pools_owed` and `#orphan_required` are KEPT and now answer empty and
+  # zero on every database. Deleting them, the attention band that renders them and the arithmetic
+  # identity they close is the follow-up this tightening creates and is larger than the task that
+  # created it — see `Pool::REFUSALS` and the task 6 report. What survives here is each reader's
+  # empty direction, which is the only one left, plus this note so the gap is acknowledged rather
+  # than mistaken for coverage.
 
-      expect(presenter.orphan_pools).to eq([urgent, apples, zoo])
-      # The complement of #pools_for: between them they must cover every pool, or a
-      # view that renders both still leaves something invisible.
-      expect(presenter.orphan_pools & presenter.pools_for(checking)).to be_empty
+  describe "#orphan_pools" do
+    # The complement of #pools_for: between them they must cover every pool, or a view that
+    # renders both still leaves something invisible. Post-tightening the complement is empty and
+    # #pools_for carries everything, which is the claim worth pinning.
+    it "is empty, because every pool now names an account", :aggregate_failures do
+      envelope("Has An Account", priority: 1)
+      envelope("Also Housed", priority: 2)
+
+      expect(presenter.orphan_pools).to be_empty
+      expect(presenter.pools_for(checking).map(&:name)).to contain_exactly("Has An Account", "Also Housed")
     end
   end
 
   describe "#orphan_pools_owed" do
-    # The set #orphan_required is summed from, which is NOT every orphan: the standing band
-    # prints the figure and this count in one sentence, and a reader who divides them has to
-    # get an answer about the same pools the figure came from.
-    it "returns only the account-less pools asking for something", :aggregate_failures do
-      owed = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
-      rate(owed, 200)
-      # A goal with no rule on it yet asks for nothing this period, so it owns none of the figure.
-      create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 2)
-      rate(envelope("Rent", priority: 3), 400)
-
-      expect(presenter.orphan_pools_owed).to eq([owed])
-      expect(presenter.orphan_pools.size).to eq(2)
-      expect(presenter.orphan_required).to eq(200)
-    end
-
-    it "is empty when no account-less pool asks for anything", :aggregate_failures do
-      create(:pool, user: user, name: "Finished Goal", target_amount: 5_000, priority: 1)
+    it "is empty, and asks for nothing", :aggregate_failures do
+      rate(envelope("Rent", priority: 1), 400)
 
       expect(presenter.orphan_pools_owed).to be_empty
       expect(presenter.orphan_required).to eq(0)
@@ -382,27 +379,11 @@ RSpec.describe HomePresenter do
       expect(presenter.shortfall).to eq(600)
     end
 
-    # The reversal of Task 4's ruling. An orphan used to sit here funded at zero, which put
-    # its ask into #shortfall: a setup problem — the money may be in Checking already, with
-    # nowhere to go — reported as money the user does not have. It also dragged the cutoff
-    # line above rows funded in full, since an orphan at priority 1 has `funded == 0`.
-    it "leaves an account-less pool out of the rows entirely", :aggregate_failures do
-      deposit(checking, 1_000)
-      # Savings pools may stay account-less until Plan 3's backfill, so this shape is
-      # reachable today — and must not help itself to whichever pot comes first.
-      orphan = create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1)
-      rate(orphan, 200)
-      rate(envelope_in(checking, "Rent", priority: 2), 400)
-
-      expect(presenter.waterfall.map { |r| r[:pool].name }).to eq(["Rent"])
-      expect(presenter.available).to eq(1_000)
-      # Still owed — the Budget page needs the honest total — but not a funding gap.
-      expect(presenter.total_required).to eq(600)
-      expect(presenter.shortfall).to eq(0)
-      expect(presenter).to be_covered
-      # Which leaves the attention list as the one place it is spoken for.
-      expect(presenter.orphan_pools).to eq([orphan])
-    end
+    # DELETED (plan 3, task 6): "leaves an account-less pool out of the rows entirely". It pinned
+    # Task 4's ruling — an orphan is a setup problem, not a funding gap, so it stays out of
+    # #waterfall and out of #shortfall while staying in #total_required. The clause it guarded is
+    # still in `#fill_waterfall` and now selects nothing; the shape it planted is refused by the
+    # model and by a CHECK constraint. See the band note above `#orphan_pools`.
 
     # Seen on the screen, not in a spec: a pool that asks for nothing rendered "$0.00 of
     # $0.00" — and below the red "ran out here" line that reads as "this got nothing because
@@ -491,18 +472,9 @@ RSpec.describe HomePresenter do
       expect(presenter.projected_buffer).to eq(400)
     end
 
-    # The bug the orphan ruling would otherwise introduce: an account-less pool counts in
-    # #total_required and can never be funded, so `available - total_required` prints a
-    # negative buffer at a user whose accounts are in perfect order.
-    it "is never negative because of a pool no account can fund", :aggregate_failures do
-      deposit(checking, 100)
-      rate(create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1), 500)
-
-      expect(presenter.total_required).to eq(500)
-      expect(presenter.available - presenter.total_required).to eq(-400)
-      expect(presenter).to be_covered
-      expect(presenter.projected_buffer).to eq(100)
-    end
+    # DELETED (plan 3, task 6): "is never negative because of a pool no account can fund". The
+    # clamp it pinned is still in `#projected_buffer`; the account-less pool that made it matter
+    # cannot be built. See the band note above `#orphan_pools`.
 
     it "is zero when a single account is short, where the two figures already agree", :aggregate_failures do
       deposit(checking, 150)
@@ -535,18 +507,11 @@ RSpec.describe HomePresenter do
   end
 
   describe "#orphan_required" do
-    it "is what the account-less pools ask for", :aggregate_failures do
-      deposit(checking, 100)
-      rate(envelope_in(checking, "Rent", priority: 2), 400)
-      rate(create(:pool, user: user, name: "Old Goal", target_amount: 5_000, priority: 1), 200)
-
-      expect(presenter.total_required).to eq(600)
-      expect(presenter.orphan_required).to eq(200)
-      # Exactly what a reader subtracting the two headline figures is left holding.
-      expect((presenter.total_required - presenter.available) - presenter.shortfall)
-        .to eq(presenter.orphan_required - presenter.projected_buffer)
-    end
-
+    # DELETED (plan 3, task 6): "is what the account-less pools ask for", which also pinned the
+    # identity `(total_required - available) - shortfall == orphan_required - projected_buffer`.
+    # The identity still holds — with `orphan_required` structurally zero it collapses to the
+    # example below, which is now its only reachable form. See the band note above
+    # `#orphan_pools`.
     it "is zero when every pool has an account", :aggregate_failures do
       deposit(checking, 100)
       rate(envelope("Rent", priority: 1), 400)

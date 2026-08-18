@@ -23,6 +23,14 @@ require Rails.root.join("db/migrate/20260817000000_cutover_to_envelope_budgeting
 # named after the migration class, which would put a timestamp-shaped filename in a plan document.
 # rubocop:disable RSpec/SpecFilePathFormat
 RSpec.describe CutoverToEnvelopeBudgeting do
+  # THE SCHEMA THIS MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF THE FILE — plan 3 task 6
+  # adds two tightenings after this migration by timestamp, and both refuse shapes this file has to
+  # plant. The shared context carries the whole reasoning and runs both migrations' `down` and `up`,
+  # which is also what proves them reversible.
+  include_context "with the schema its subject was written for",
+                  TightenPoolShape,
+                  DropCapEraBudgetColumns
+
   # Four worlds, planted in creation order — the migration walks users by `created_at`, and the
   # sabotage examples below name which user is expected to raise first.
   #
@@ -52,7 +60,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     checking = create(:pool, :account, user: user, name: "Checking")
     {
       checking: checking,
-      holiday: create(:pool, user: user, name: "Holiday Fund", account: nil, target_amount: 2_000.00),
+      holiday: plant_houseless_pool(user: user, name: "Holiday Fund", target_amount: 2_000.00),
       utilities_pool: create(
         :pool,
         user: user,
@@ -130,6 +138,17 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       Category.where(id: category.id).update_all(category_type: described_class::SAVINGS_CATEGORY)
       # rubocop:enable Rails/SkipsModelValidations
     end
+  end
+
+  # AN ACCOUNT-LESS GOAL, WHICH IS THE SHAPE STEP 2 EXISTS TO HOUSE (plan 3, task 6). Before the
+  # backfill this was the ordinary savings pool — the table was `savings_pools` and nothing in it
+  # named an account. `Pool#account_matches_pool_type` now refuses it and the
+  # `pools_account_matches_pool_type` CHECK refuses it again at the database, which is why the
+  # rewind above is what makes this insert land at all. Third instance on this branch of the same
+  # trap: the tightening that lands one task after the migration spec that has to plant what it
+  # tightens.
+  def plant_houseless_pool(**attrs)
+    build(:pool, account: nil, **attrs).tap { |pool| pool.save!(validate: false) }
   end
 
   def plant_cap(category, amount)
@@ -239,7 +258,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # No account at all, and a GOAL already sitting on the name the migration reaches for.
   def plant_namesake
     user = create(:user, email: "namesake@example.com")
-    goal = create(:pool, user: user, name: "Checking", account: nil, target_amount: 300.00)
+    goal = plant_houseless_pool(user: user, name: "Checking", target_amount: 300.00)
     books = plant_unpooled_category(:expense, user: user, name: "Books")
     entry_on(item_in(books, "Bookshop"), 30.00, 7, 8)
 

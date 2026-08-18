@@ -1,7 +1,9 @@
 # Budgeting UI — Design
 
 **Date:** 2026-08-15
-**Status:** Approved design, pending implementation plan
+**Status:** **DELIVERED.** Plans 2a–2d built these screens and Plan 3's cutover retired the
+tracking-era shapes underneath them — there is no category cap and no savings category type left
+for any screen here to render. The domain spec's status line carries the conversion's receipt.
 **Builds on:** `docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md` (the domain model, delivered by Plan 1)
 
 ## 1. What this is

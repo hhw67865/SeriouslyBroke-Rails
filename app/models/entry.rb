@@ -87,9 +87,26 @@ class Entry < ApplicationRecord
     errors.add(:pool, "must belong to the same user") unless pool.user == resolved_category.user
   end
 
-  # The counterpart to Category#income_must_land_in_an_account. The override is a second
-  # channel to the same destination, so it carries the same rule: income lands in an
-  # account, never directly in an envelope.
+  # THE SECOND CHANNEL, NOT A SECOND COPY — §7a's "merge the duplicate income validators on
+  # `Entry` and `Category`", resolved by reading both (plan 3, task 6). They share a NAME and a
+  # sentence and they guard DIFFERENT COLUMNS ON DIFFERENT TABLES:
+  #
+  #   * `Category#income_must_land_in_an_account` polices `categories.pool_id` — where an income
+  #     category's spending lands by default, for every entry it will ever carry.
+  #   * this one polices `entries.pool_id`, the per-entry OVERRIDE. `ENTRY_POOL_ID` is
+  #     `COALESCE(entries.pool_id, categories.pool_id)`, so the override is the half that WINS:
+  #     an income category correctly pointed at Checking could still have a single paycheck
+  #     entry re-pointed into an envelope, and the category's validator never sees that write.
+  #
+  # So neither can delegate to the other — the two are the two halves of the COALESCE, and a rule
+  # about a resolved value has to be asserted at every place the value can be set. What is shared
+  # is the PREDICATE (`pool.pool_type_account?`), which is one method on `Pool` and already the
+  # single home for "is this an account". Collapsing them into one validator on one model would
+  # mean one of the two writes going unguarded, which is the defect this branch has found in every
+  # task, not the fix for it.
+  #
+  # The rule itself: income lands in an account, never directly in an envelope — the allocation
+  # rules move it out of the account afterwards.
   def income_must_land_in_an_account
     return if pool.blank? || !resolved_category&.income?
 

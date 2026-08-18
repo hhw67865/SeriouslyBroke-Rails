@@ -162,8 +162,15 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   # refused up front now, with its own sentence, and NOTHING is written on either — not even the
   # connect half, because a screen that added categories while silently declining to remove others
   # leaves the checkboxes and the data disagreeing.
+  # THE FIXTURE IS AN ACCOUNT NOW, NOT AN ACCOUNT-LESS GOAL (plan 3, task 6). The refusal fires
+  # when `@pool.account || current_user.default_account` is nil, and a goal can no longer supply
+  # the first half of that — `Pool#account_matches_pool_type` and
+  # `CHECK ((pool_type = 0) = (account_id IS NULL))` require every goal and envelope to name an
+  # account. An ACCOUNT is the pool that has none by its own rule, so it is the one that can still
+  # reach this arm, and with `default_account` un-nominated it does. The refusal is unchanged and
+  # so are both assertions; only the pool that gets there is different.
   describe "disconnecting with nowhere to hand the category back to" do
-    let!(:stranded) { create(:pool, :savings_pool, name: "Stranded Goal", user: user, account: nil) }
+    let!(:stranded) { create(:pool, :account, name: "Stranded Account", user: user) }
     let!(:connected) do
       create(:category, name: "Connected Spending", category_type: "expense", user: user, pool: stranded)
     end

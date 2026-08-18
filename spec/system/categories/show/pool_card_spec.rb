@@ -177,7 +177,10 @@ RSpec.describe "Categories Show - Pool card", type: :system do
   # OBJECT to `shared/_pool_status` rather than two optional keywords — but "cannot" is a claim, so
   # both suffixes are asserted in both directions.
   describe "the label's two suffixes" do
-    include ActiveSupport::Testing::TimeHelpers
+    # The changed-after-distributing half of this block runs on the shared clock (plan 3, task 6);
+    # its `today` is this file's own, resolved identically and forced outside every `travel_to` by
+    # the outer `before` as well as by the context's.
+    include_context "with a rule changed after the money went out"
 
     it "marks an envelope whose period has ended" do
       pointed_at(envelope("Groceries"))
@@ -208,18 +211,12 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       [pool, rule]
     end
 
-    def distribute(pool, amount, at:)
-      travel_to(at) do
-        create(:pool_movement, kind: :allocation, from_pool: checking, to_pool: pool, amount: amount, date: today)
-      end
-    end
-
     it "says a rule changed after the money went out" do
       pool = rule = nil
-      travel_to(3.hours.ago) { pool, rule = accumulating("Car Insurance", amount: 1_200) }
+      before_distributing { pool, rule = accumulating("Car Insurance", amount: 1_200) }
       pointed_at(pool)
-      distribute(pool, 10, at: 2.hours.ago)
-      travel_to(1.hour.ago) { rule.update!(amount: 1_800) }
+      distribute(pool, 10)
+      after_distributing { rule.update!(amount: 1_800) }
 
       visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
 
@@ -230,9 +227,9 @@ RSpec.describe "Categories Show - Pool card", type: :system do
     # positive above would pass against a card that printed the clause unconditionally.
     it "stays silent when the rule was not touched afterwards", :aggregate_failures do
       pool = nil
-      travel_to(3.hours.ago) { pool, = accumulating("Car Insurance", amount: 1_200) }
+      before_distributing { pool, = accumulating("Car Insurance", amount: 1_200) }
       pointed_at(pool)
-      distribute(pool, 10, at: 2.hours.ago)
+      distribute(pool, 10)
 
       visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
 

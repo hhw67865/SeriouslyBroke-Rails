@@ -79,49 +79,18 @@ RSpec.describe "Budget page rules", type: :system do
     end
   end
 
-  # ONE REASON NOW. The band used to carry two — a rule that CAPPED a category, and a rule on an
-  # account-less pool — and the first is deleted with the cap (plan 3, task 3). The band itself and
-  # its separation from the fill order are unchanged, so the examples keep their shape and lose the
-  # fixture and the clause that named the deleted reason.
-  describe "rules no distribution reaches", :aggregate_failures do
-    before do
-      rate(envelope("Groceries"), 400)
-      rate(create(:pool, :savings_pool, user: user, account: nil, name: "Retirement"), 150)
-      visit budget_page_path
-    end
-
-    it "lists them apart from the fill order, each with its own reason" do
-      within(orphan_band) do
-        expect(page).to have_content("Not in the fill order")
-        expect(page).to have_content("no account — nothing can fund it")
-        expect(page).to have_no_content("caps a category")
-      end
-    end
-
-    # The band is outside the pool namespace entirely, so the fill order is a list of POOLS —
-    # this assertion used to end in the band's own heading.
-    it "keeps them out of the pool groups, and keeps a real rule out of them" do
-      expect(pool_groups).to eq(["Groceries"])
-      expect(page).to have_css("[data-orphan-group]")
-      within(group("Groceries")) { expect(page).to have_no_content("nothing can fund it") }
-    end
-  end
-
-  # THE THIRD STATE, and it is not the empty one: this user HAS rules, so telling them they have
-  # none above a list of their own rules would be a screen contradicting itself.
-  describe "a user whose every rule is an orphan", :aggregate_failures do
-    before do
-      rate(create(:pool, :savings_pool, user: user, account: nil, name: "Retirement"), 150)
-      visit budget_page_path
-    end
-
-    it "says the fill order is empty rather than that there are no rules" do
-      expect(page).to have_content("Nothing is in the fill order yet")
-      expect(page).to have_no_content("No funding rules yet")
-      expect(pool_groups).to be_empty
-      within(orphan_band) { expect(page).to have_content("Retirement") }
-    end
-  end
+  # ── THE ORPHAN BAND'S THREE EXAMPLES ARE DELETED (plan 3, task 6) ─────────────────────────
+  # "rules no distribution reaches" (two examples) and "a user whose every rule is an orphan"
+  # (one) each planted `create(:pool, :savings_pool, account: nil)` — a rule on a pool no account
+  # can fund. `Pool#account_matches_pool_type` now requires an account for goals as well as
+  # envelopes, and `CHECK ((pool_type = 0) = (account_id IS NULL))` requires it again past the
+  # model, so the fixture cannot be built.
+  #
+  # `budget_page/_orphans`, `BudgetPagePresenter#orphan_rules` and the "Nothing is in the fill
+  # order yet" third state are KEPT and now render for nobody. Deleting the whole orphan apparatus
+  # is the follow-up this tightening creates; it is named in `Pool::REFUSALS` and in the task 6
+  # report. The `#pool_groups` and empty-state examples that survive elsewhere in this file cover
+  # the two states a user can still be in.
 
   describe "a brand-new user", :aggregate_failures do
     before { visit budget_page_path }
@@ -200,23 +169,19 @@ RSpec.describe "Budget page rules", type: :system do
   # `created_at`, never `date` (a period marker compared to a timestamp is a unit mismatch, see
   # `DistributionClock`).
   #
-  # BUT THE MOVEMENT'S `date` IS STILL A PERIOD MARKER, AND IT IS CAPTURED OUTSIDE EVERY
-  # `travel_to` BELOW. `Date.current` read inside one is the TRAVELLED day: between 00:00 and
-  # 02:00 UTC, `Date.current` two hours back is yesterday, the movement is dated into the previous
-  # period, `DistributionClock` — correctly bounded to the period the page renders — does not see
-  # it as this period's distribution, and both examples fail for two hours a night against an app
-  # that is working perfectly. Same capture, and the same reason, as
-  # categories/show/budget_spec.rb's copy of this block.
+  # THE CLOCK IS THE SHARED CONTEXT'S (plan 3, task 6). This block hand-rolled the three-moment
+  # recipe, as three other screens did, and two of the four copies drifted into the same wall-clock
+  # flake — so `today`, the three travelled moments and the movement's own creation live in
+  # `spec/support/changed_after_distributing_context.rb` and the assertions stay here.
   describe "an envelope whose rule moved after the money did" do
-    include ActiveSupport::Testing::TimeHelpers
+    include_context "with a rule changed after the money went out"
 
     before do
       deposit(2_000)
-      on = Date.current
-      anchor = on + 3.months
+      anchor = today + 3.months
       raised = steady = raised_rule = nil
 
-      travel_to(3.hours.ago) do
+      before_distributing do
         raised = envelope("Car Insurance", priority: 1)
         steady = envelope("Property Tax", priority: 2)
         raised_rule = rolling(raised, amount: 1_200, anchor: anchor, every: 6)
@@ -225,8 +190,8 @@ RSpec.describe "Budget page rules", type: :system do
 
       # Small enough to leave both behind: the clause explains a `behind` row, so the row has to
       # still be behind.
-      [raised, steady].each { |pool| distribute(pool, 10, at: 2.hours.ago, on: on) }
-      travel_to(1.hour.ago) { raised_rule.update!(amount: 1_800) }
+      [raised, steady].each { |pool| distribute(pool, 10) }
+      after_distributing { raised_rule.update!(amount: 1_800) }
 
       visit budget_page_path
     end
@@ -234,22 +199,6 @@ RSpec.describe "Budget page rules", type: :system do
     def deposit(amount)
       category = create(:category, :income, user: user, pool: checking, name: "Pay")
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
-    end
-
-    # `at:` is the instant the money moved — the `created_at` the clause compares against — and
-    # `on:` is the period day it is FOR, handed in from real now rather than read off the
-    # travelled clock inside the block.
-    def distribute(pool, amount, at:, on:)
-      travel_to(at) do
-        create(
-          :pool_movement,
-          kind: :allocation,
-          from_pool: checking,
-          to_pool: pool,
-          amount: amount,
-          date: on
-        )
-      end
     end
 
     it "says so on that group and on no other", :aggregate_failures do

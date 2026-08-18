@@ -147,7 +147,7 @@ class BudgetsController < ApplicationController
   # `.accounts` — so that a user naming one of their OWN envelopes gets `Pool`'s legible
   # "Account must be an account" instead of their own record vanishing. `account_id` may be
   # legitimately blank (the engine reads `users.default_account_id`, which is nullable); the form
-  # asks for one and `require_account_for_budget_pools` refuses the blank.
+  # asks for one and `account_matches_pool_type` refuses the blank.
   def set_envelope
     return if params[:envelope].blank?
 

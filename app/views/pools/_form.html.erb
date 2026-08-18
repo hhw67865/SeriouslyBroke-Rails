@@ -2,11 +2,19 @@
     two live inside an account. Local: `pool`.
 
     This form used to render `name`, `target_amount` and `start_date` alone, with a submit
-    button reading "Create Savings Pool". `pools.pool_type` defaults to 2 (savings) and
+    button reading "Create Savings Pool". `pools.pool_type` defaulted to 2 (savings) and
     `account_id` is nullable, so every pool anybody could make here was an account-less
     savings goal — while Home told those same users, in three separate places, to give their
     pools an account. There was no field on earth to do it with. `pool_params` has permitted
-    `pool_type`, `account_id` and `priority` since Plan 2a; this is the form catching up. %>
+    `pool_type`, `account_id` and `priority` since Plan 2a; this is the form catching up.
+
+    THE BLANK OPTION IS THE ACCOUNT'S OWN ANSWER AND NOBODY ELSE'S (plan 3, task 6). It used to
+    read "No account — nothing can fund this pool", which was a real state a goal could be left
+    in; `Pool#account_matches_pool_type` now requires an account for every envelope and goal, and
+    a CHECK constraint requires it again at the database, so the only pool that may leave this
+    blank is a bank account. Left as it was, the select offered a choice that is refused on
+    submit for two of the three types. `pools.pool_type` now defaults to 1 (budget) too, so a
+    form opened for a brand-new pool starts on "Budget envelope". %>
 <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
   <%= simple_form_for pool, html: { class: "space-y-6" } do |f| %>
     <%= f.error_notification %>
@@ -48,10 +56,10 @@
             collection: accounts,
             label_method: :name,
             value_method: :id,
-            include_blank: "No account — nothing can fund this pool",
+            include_blank: "None — this pool IS a bank account",
             label: "Account it sits inside",
-            hint: "Envelopes must name one. A bank account leaves this blank — it is where the " \
-                  "money already is." %>
+            hint: "Envelopes and goals must name one. A bank account leaves this blank — it is " \
+                  "where the money already is." %>
       <% elsif pool.user.pools.accounts.exists? %>
         <%# The collection is empty and yet the user does have an account: the only one they
             have is this pool. Keyed off `accounts.any?` alone, that user was told on their own

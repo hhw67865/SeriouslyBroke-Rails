@@ -106,14 +106,19 @@ RSpec.describe "Budgets", type: :request do
 
     # `category_id` IS NO LONGER PERMITTED, and the refusal is silent by design: an unpermitted key
     # is dropped, so the request is exactly the owner-less one above rather than a 404 or a cap.
-    # Both directions — nothing is written, and nothing lands on the category either.
+    #
+    # Both directions — nothing is written, and nothing CAN land on the category, which since plan
+    # 3 task 6 is a fact about the schema rather than a row count: `DropCapEraBudgetColumns`
+    # removed the column, so the second assertion moved from "no row carries this category_id" to
+    # "there is no such column to carry one".
     it "ignores a category_id entirely and writes no rule", :aggregate_failures do
       own_category = create(:category, :expense, user: user)
 
       expect { post budgets_path, params: { budget: { amount: "40.00", category_id: own_category.id } } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(Budget.where(category_id: own_category.id)).to be_empty
+      expect(own_category.reload).to be_present
+      expect(Budget.column_names).not_to include("category_id")
     end
   end
 

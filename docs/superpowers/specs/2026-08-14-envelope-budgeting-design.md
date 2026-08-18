@@ -1,7 +1,13 @@
 # Envelope Budgeting — Design
 
 **Date:** 2026-08-14
-**Status:** Approved design, pending implementation plan
+**Status:** **DELIVERED.** Plans 1, 2a–2d and 3 are shipped; the cutover (Plan 3, migration
+`20260817000000_cutover_to_envelope_budgeting`) is complete, and the app this document describes
+is the only app there is. No legacy shape survives in code or in data: every dollar sits in
+exactly one pool, every category names its lane, and `Σ pools == the user's bank balance` is
+verified in SQL by the migration itself before any screen displays it. §6 and §6.1 are marked
+EXECUTED below; §7a's Plan-3 list is annotated item by item. What remains open is listed in §7
+(out of scope) and in the two follow-ups §7a names at the end.
 
 ## 1. Motivation
 
@@ -113,7 +119,7 @@ create_table "pool_movements", id: :uuid do |t|
 end
 
 # CHANGED
-categories.savings_pool_id -> pool_id   # nullable; nil => the user's default account
+categories.savings_pool_id -> pool_id   # AS BUILT: required. See decision 3 below.
 categories.category_type                # drops :savings — now expense | income only
 entries + pool_id :uuid                 # nullable override; falls back to category's pool
 users   + pay_cadence :integer          # weekly | biweekly | semimonthly | monthly
@@ -123,6 +129,27 @@ users   + pay_cadence :integer          # weekly | biweekly | semimonthly | mont
 # UNTOUCHED
 items
 ```
+
+**AS BUILT — three schema corrections (Plan 3, task 6).** The block above is the design; these
+are the differences the implementation settled on, recorded here rather than left for a reader to
+discover from `db/schema.rb`.
+
+1. **`categories.pool_id` is REQUIRED, and "nil => the user's default account" is deleted.**
+   That fallback was a promise nothing kept: `PoolBalanceLedger::ENTRY_POOL_ID` resolves an entry
+   through `COALESCE(entries.pool_id, categories.pool_id)` with no default account anywhere, so a
+   pool-less category's spending reached NOTHING while `Σ pools == bank truth` claimed otherwise —
+   measured on the demo at $3,949 of income that had silently left the tree. The cutover points
+   every nil at the user's default account and verifies it; `Category belongs_to :pool` (no
+   `optional:`) is what stops one coming back. The column is still nullable at the database — the
+   remaining tightening, named at the end of §7a.
+2. **`pools` carries `CHECK ((pool_type = 0) = (account_id IS NULL))`**, which is §3.2's first two
+   rules at the database. NOT NULL cannot express it: an account's `account_id` must be nil by the
+   same rule that makes an envelope's mandatory.
+3. **`pools` carries `UNIQUE (user_id, lower(name))`** — functional, matching the model's
+   case-insensitive uniqueness, because an index on the raw column would accept a pair the model
+   refuses. `budgets.category_id` and `budgets.prorated` are DROPPED
+   (`20260817020000_drop_cap_era_budget_columns`); `entries.pool_id` STAYS — it is the documented
+   override lane in `ENTRY_POOL_ID`'s `COALESCE`.
 
 ### 3.1 The four budget shapes
 
@@ -402,7 +429,15 @@ Accounts are pools of `pool_type: account`, managed through `PoolsController`
 with a type filter. This avoids colliding with the existing
 `accounts_controller.rb`, which handles user settings.
 
-## 6. Blast radius
+## 6. Blast radius — **EXECUTED (Plan 3, tasks 3–5)**
+
+Every deletion below has landed, with the greps in the task reports.
+`Pool#contribution_entries` / `#withdrawal_entries` / `#timeline_entries` are gone — resolved in
+task 5 rather than deferred, converted into `Pool#timeline` over movements (which also settled
+§7a's "`start_date..` while `#balance` does not" item: the cutoff did not survive, because the
+balance beside it has none). `categories.category_type: savings` is retired and integer 2 is
+never reused; the one place it is still written down is
+`CutoverToEnvelopeBudgeting::SAVINGS_CATEGORY`, a fact about the rows the migration meets.
 
 24 spec files reference `budget` or `savings_pool`. All of the following needs
 rework, not just renaming.
@@ -445,7 +480,26 @@ What survives: `total_amount`, `top_items`, `current_month_items`,
 **Seeds** — `db/seeds.rb` (474 lines) needs a full rewrite around accounts,
 pools, rules, and a pay cadence.
 
-### 6.1 Data migration
+### 6.1 Data migration — **EXECUTED**
+
+Shipped as `db/migrate/20260817000000_cutover_to_envelope_budgeting.rb`
+(`CutoverToEnvelopeBudgeting`), with `spec/migrations/cutover_spec.rb` against four planted
+legacy worlds. Two departures from the five steps below, both deliberate and both in the task 1
+report:
+
+* **Step 4 runs BEFORE step 2** — envelopes first — which is §7a's "reverse steps 2 and 4"
+  warning, taken. See the annotation on that item.
+* **A sixth step: budget envelopes open at ZERO.** An envelope inheriting its category's lifetime
+  spending is technically true and practically a lie about the user's position, so the migration
+  writes one identifiable transfer per overdrawn budget envelope (goals excluded — their balances
+  are the one number the old app got right, and are asserted byte-identical across the
+  entry→movement swap). This resolves §7's "opening balances" deferral for pre-cutover data,
+  because this migration is the only code that will ever see it.
+
+The migration verifies itself in raw SQL before committing — `Σ pools == bank truth` per user,
+plus structural arms for pool-less categories, account-less pools, surviving caps and surviving
+savings rows — and re-verifies on every run, so a second run over a database somebody has since
+broken raises rather than passes.
 
 1. Create one `account` pool per user ("Checking"), flagged default.
 2. Point every existing category at it (`pool_id`).
@@ -517,25 +571,78 @@ Each is a decision deliberately deferred, not an oversight.
   block, which is the right home for it: the figure is user-declared and never
   inferred (§3), and it belongs next to the total it is compared against.
 
-### Plan 3 (cutover) must
+### Plan 3 (cutover) must — **ALL CLOSED**
+
+Annotated item by item. "Task N" is Plan 3's task; the commits are in
+`.superpowers/sdd/2026-08-17-cutover/`.
 
 - **Reverse §6.1 steps 2 and 4, or use `update_all`.** `Category#destroy_budget_if_pool_linked`
   destroys a category's budget the moment a `pool_id` is assigned, so pointing
   categories at pools *before* migrating budgets silently destroys every user's
   budgets. **This is the step that loses data.**
+  **DONE — the shipped migration runs envelopes-first**, and belt-and-braces: it also writes
+  through `update_all` and migration-local table classes throughout, so no callback and no future
+  validation can fire. Both guards, because either alone would have been enough and neither is
+  free to add later. Nobody needs to fear this one again (task 1).
 - **Tighten `Pool#account_matches_pool_type`** to require an account for savings
   pools once the backfill lands (marked `TODO(plan-3)` in the model).
+  **DONE HERE (task 6).** The `TODO(plan-3)` and `#require_account_for_budget_pools` are deleted;
+  one message covers both kinds ("must be set for envelopes and goals"), and
+  `CHECK ((pool_type = 0) = (account_id IS NULL))` says the same thing at the database, past the
+  model. *Consequence, recorded because it is larger than the change:* an account-less pool is no
+  longer expressible, so the whole ORPHAN apparatus — `Pool::REFUSALS`,
+  `HomePresenter#orphan_pools` and its attention band, `BudgetPagePresenter#orphan_rules` and
+  `budget_page/_orphans`, `ReallocationPresenter`'s "No account" group — is unreachable code that
+  now answers empty on every database. It is KEPT, with the ~15 examples that planted the shape
+  deleted and their reasons written at each site. **Deleting it is follow-up 1 below.**
 - **Flip the `pools.pool_type` column default** from `2` (savings) to `1` (budget)
   per §3 — the current default exists only to preserve pre-migration rows.
+  **DONE HERE (task 6)**, in `20260817010000_tighten_pool_shape`. Visible where you would expect:
+  `/pools/new` opens on "Budget envelope" rather than "Savings goal".
 - **Delete `PoolCalculator#savings_entries_total`** in the same commit as the
   entry→movement conversion. It becomes a no-op first, so removal cannot
   double-count during the cutover.
+  **DONE (task 5)**, same-commit rule honoured — the term, its funding-date leg and the
+  `#contributions` operand all went with the enum value.
 - **Add `UNIQUE (user_id, lower(name))` on pools** once the backfill can dedupe.
+  **DONE HERE (task 6)**, functional index `index_pools_on_user_id_and_lower_name`. The accept
+  flow's reuse-by-name (`BudgetProposal::Envelope#existing`) leans on it: it finds a pool by
+  `LOWER(name)` and creates one if there is none, which is a race a validation cannot win.
 - **Rewrite `db/seeds.rb` teardown** for `PoolMovement` and the self-referential
   `pools.account_id` FK.
+  **DONE (task 2)**, and it was a live defect rather than a precaution: `Item` before `Budget` in
+  the delete loop raised `PG::ForeignKeyViolation` and left the database with zero entries. Order
+  is now `[PoolMovement, Entry, Budget, Item, Category, Pool, User]`, pinned by `spec/seeds_spec.rb`.
 - Resolve `Pool#contribution_entries` / `#withdrawal_entries` / `#timeline_entries`,
   which still filter on `start_date..` while `#balance` deliberately does not.
+  **RESOLVED IN TASK 5, not deferred to task 6** — all three are deleted, replaced by
+  `Pool#timeline` (movements in and out plus the spending of the categories pointing at the pool).
+  The `start_date` cutoff did NOT survive: the balance beside it has none, and two readers of one
+  question is the defect this conversion found in every task. Verified callerless in task 6.
 - Merge the duplicate income validators on `Entry` and `Category`.
+  **RESOLVED HERE AS "NOT DUPLICATES" (task 6), which is a decision rather than a skip.** They
+  share a name and a sentence and guard different columns on different tables: `Category`'s
+  polices `categories.pool_id`, `Entry`'s polices `entries.pool_id` — the per-entry override, and
+  the half that WINS `COALESCE(entries.pool_id, categories.pool_id)`. An income category correctly
+  pointed at Checking can still have one paycheck entry re-pointed into an envelope, and the
+  category's validator never sees that write. Neither can delegate to the other; what is shared is
+  the predicate (`Pool#pool_type_account?`), which is already one method. The reasoning lives at
+  `Entry#income_must_land_in_an_account`.
+
+### What Plan 3 leaves open
+
+Two follow-ups, both created by task 6's tightening and both larger than the task that created
+them. Neither is a defect today.
+
+1. **Delete the orphan apparatus.** Listed above. It renders for nobody and its examples are
+   gone, so it is dead code carrying no tests — kept because the shape it refuses (a destroy that
+   takes money out of the pool tree) is the one thing this app must never absorb silently.
+2. **`categories.pool_id NOT NULL` at the database.** `belongs_to :pool` is required in Ruby and
+   the one writer that walked past it (`dependent: :nullify` on `Pool#categories`) was replaced
+   with `restrict_with_error` in task 6, so nothing in the app can write a NULL. The column is
+   still nullable. The cost of closing it is that `spec/migrations/cutover_spec.rb`'s central
+   planting idiom — a pool-less category, the shape the migration exists to repair — would have to
+   go through the schema rewind that file already uses for the other two tightenings.
 
 ## 8. Testing
 
