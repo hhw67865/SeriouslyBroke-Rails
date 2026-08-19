@@ -16,9 +16,19 @@ RSpec.describe "Home Standing", type: :system do
     pool
   end
 
+  # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so the
+  # category here is always Checking's, never `into`'s. The money still ends up in `into` — the
+  # entry lands in Checking and a `transfer` PoolMovement carries the same amount on to `into`,
+  # exactly the write Task 3's routing feature automates for a real "deposit into another
+  # account" choice. Checking's own balance nets to unchanged (income in, movement out); `into`
+  # gains exactly what it always gained.
   def deposit(amount, into: checking)
-    category = create(:category, :income, user: user, pool: into)
-    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    category = create(:category, :income, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    return entry if into == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: Date.current, source_entry: entry)
+    entry
   end
 
   # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.

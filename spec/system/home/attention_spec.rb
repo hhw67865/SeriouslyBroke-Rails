@@ -16,9 +16,19 @@ RSpec.describe "Home Attention", type: :system do
     pool
   end
 
+  # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so the
+  # category here is always Checking's, never `into`'s. The money still ends up in `into` — the
+  # entry lands in Checking and a `transfer` PoolMovement carries the same amount on to `into`,
+  # exactly the write Task 3's routing feature automates for a real "deposit into another
+  # account" choice. Checking's own balance nets to unchanged (income in, movement out); `into`
+  # gains exactly what it always gained.
   def deposit(amount, into: checking)
-    category = create(:category, :income, user: user, pool: into)
-    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    category = create(:category, :income, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    return entry if into == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: Date.current, source_entry: entry)
+    entry
   end
 
   # `#orphan` AND `#quiet_orphan` ARE DELETED WITH THE SHAPE THEY BUILT (plan 3, task 6). Both
@@ -185,8 +195,11 @@ RSpec.describe "Home Attention", type: :system do
   # Each account drains its own pot, so there is no single moment the money ran out: a line
   # here would print above rows that were funded in full out of another account's cash.
   it "draws no cutoff when the user has more than one account", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
+    # Checking minted first, so it is the user's main account (main-account spec §6) — the only
+    # account an income category may point at. `envelope` touches `checking` and has to run
+    # before `ally` is created for that to hold.
     envelope("Rent", 400)
+    ally = create(:pool, :account, user: user, name: "Ally")
     deposit(100)
     spare = create(:pool, :budget_pool, user: user, account: ally, name: "Gas", priority: 2)
     create(:pool_budget, :per_period_rate, pool: spare, amount: 200)

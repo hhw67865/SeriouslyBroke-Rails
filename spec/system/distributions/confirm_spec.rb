@@ -300,11 +300,24 @@ RSpec.describe "Distribution Confirm", type: :system do
         amount: 100,
         pool: create(:pool, :budget_pool, user: user, account: ally, name: "Holiday")
       )
-      create(
+      # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so
+      # this paycheck's category is Checking's, same as every other income category on this
+      # page. The money still lands in Ally — a `transfer` PoolMovement main -> Ally carries it,
+      # exactly the write Task 3's routing feature automates for a real second-account choice.
+      # Checking's own balance nets to unchanged; Ally gains exactly the $300 it always gained.
+      ally_paycheck = create(
         :entry,
         amount: 300,
         date: Date.current,
-        item: create(:item, category: create(:category, :income, user: user, pool: ally))
+        item: create(:item, category: create(:category, :income, user: user, pool: checking))
+      )
+      create(
+        :pool_movement,
+        from_pool: checking,
+        to_pool: ally,
+        amount: 300,
+        date: Date.current,
+        source_entry: ally_paycheck
       )
       visit new_distribution_path(account_id: ally.id)
     end
