@@ -1,0 +1,30 @@
+<%# THE ADD-ACCOUNT CARD (onboarding step 1). Sits after the last account section: the screen
+    that lists accounts is the screen that grows them. One field — a bank account needs only a
+    name at birth; its balance is the NEXT onboarding step, so the card invites no number here
+    (the new section's own "buffer now $0.00" line says where it starts).
+
+    The hint carries the correctness rule of the whole setup: a buffer derived later is only
+    true if every account income reaches is in this list. Locals: `bank_account` (an
+    account-type Pool from HomeController — unsaved, or rejected with its errors when
+    BankAccountsController re-renders this screen at 422). %>
+<section class="bg-white border border-gray-200 rounded" aria-labelledby="new-account-heading">
+  <div class="px-6 py-3 border-b border-gray-200">
+    <h3 id="new-account-heading" class="text-sm font-semibold text-gray-900">Add a bank account</h3>
+  </div>
+  <%= simple_form_for bank_account, as: :bank_account, url: bank_accounts_path do |f| %>
+    <%# Stacked on narrow screens; side by side from sm up. `sm:pt-7` drops the button to the
+        input's row by the label's height rather than anchoring to the bottom of a hint that
+        may wrap. %>
+    <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
+      <div class="flex-1">
+        <%= f.input :name,
+            label: "Account name",
+            placeholder: "e.g., Ally Savings",
+            hint: "Add every account your income reaches — balances come later." %>
+      </div>
+      <div class="sm:pt-7">
+        <%= f.button :submit, "Add account", class: "btn btn-primary" %>
+      </div>
+    </div>
+  <% end %>
+</section>

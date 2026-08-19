@@ -8,6 +8,7 @@
   <% @presenter.accounts.each do |account| %>
     <%= render "account", presenter: @presenter, account: account %>
   <% end %>
+  <%= render "new_account", bank_account: @new_bank_account %>
   <%# Last, after the accounts: the attention band has already named these at the top of
       the screen, so down here they are the appendix — everything that has nowhere to live. %>
   <%= render "orphans", presenter: @presenter %>

@@ -12,6 +12,11 @@ Rails.application.routes.draw do
   # The former dashboard: still the backward-looking view, no longer the front door.
   get "reports", to: "dashboard#index", as: :reports
 
+  # WHERE BANK ACCOUNTS ARE CREATED — from Home, where accounts render. Plural `bank_accounts`
+  # because `resource :account` below is already the user-settings page. Create-only: rename and
+  # delete stay on the pool's own edit screen, which already handles every pool type.
+  resources :bank_accounts, only: [:create]
+
   resources :pools do
     member do
       get :categories, to: "pools/categories#index"
