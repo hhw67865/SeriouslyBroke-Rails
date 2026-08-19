@@ -14,39 +14,46 @@
 # account, whose item) and the model's is shape; this is the ORDER of three writes, which is
 # neither. `BudgetsController#create` calls #save and renders the same two outcomes it always did.
 #
-# WHAT THIS DOES TO `Σ pools == your bank balance`, MEASURED RATHER THAN REASONED. This header used
-# to claim the invariant was untouched, on the grounds that a new pool has no movements and so adds
-# zero. The first half is true and the conclusion is not, because the re-point does not move FUTURE
-# spending — it moves the category's WHOLE ENTRY HISTORY, in one click.
+# WHAT THIS DOES TO `Σ pools == your bank balance`: NOTHING, AND THE REASON IS NEW.
 #
-# `PoolBalanceLedger::ENTRY_POOL_ID` is `COALESCE(entries.pool_id, categories.pool_id)` with NO date
-# bound, and `PoolCalculator#balance` is deliberately start-date-agnostic (an envelope's balance is
-# every dollar that ever reached it, minus every dollar that ever left). So the instant
-# `category.pool_id` is written, every entry that category has ever carried — years of it — is
-# inside the new envelope's lane. The envelope has no movements in, so it opens at exactly
-# `-lifetime spend`, and `Σ pools` falls by that same figure. Nothing was written to `pool_movements`
-# and no money moved.
+# THE TWO SENTENCES THAT USED TO STAND HERE ARE BOTH DEAD, in opposite directions, and the history
+# is worth keeping because each was right about the code of its day. The first claimed the invariant
+# was untouched because a new pool has no movements. The second corrected it: `ENTRY_POOL_ID` was
+# `COALESCE(entries.pool_id, categories.pool_id)` with NO date bound, so the instant
+# `category.pool_id` was written every entry that category had ever carried — years of it — fell
+# inside the new envelope's lane, the envelope opened at `-lifetime spend`, and `Σ pools` fell by
+# that figure with nothing written to `pool_movements`. That was called "the direction toward
+# truth", because a pool-less category's spending had been outside the pool tree entirely.
 #
-# THE DIRECTION IS TOWARD TRUTH, which is why the code is right and the old sentence was wrong. A
-# pool-less expense category's spending was outside the pool tree entirely: it left the bank and no
-# pool's balance recorded it, so `Σ pools` was OVERSTATING the bank by exactly that lifetime total.
-# The re-point does not break the invariant — it closes a gap the invariant had, moving Σ to the
-# bank-true figure in one step.
+# THE START-DATE RULE (main-account spec §3) SETTLED IT A THIRD WAY, and the third answer is the
+# first sentence's conclusion reached honestly. An envelope counts its categories' spending only
+# from its `start_date` on, and this proposal's envelope is minted TODAY
+# (`Pool#set_default_start_date`), so the re-point moves NO history: everything the category has
+# ever spent predates the envelope and reads against the user's MAIN account, exactly where it
+# physically happened. The envelope opens at $0, the buffer keeps what it always held, and Σ does
+# not move because no entry changed which pool it reaches — only which entries the new pool claims.
 #
-# MEASURED ON THE DEMO, TWICE. Task 7's browser pass opened an envelope at `overdrawn $754.00`;
-# this fix round re-measured on Entertainment, whose panel row proposes `$84.00 a period` and
-# reports `$251.00 spent in 3 of the last 6 periods`. Accepting it opened the envelope at
-# `overdrawn $496.00` — the category's LIFETIME spend, half of it older than any window the page
-# measures — and `Σ pools` fell from $6,063.00 to $5,567.00, by exactly $496.00, with
-# `PoolMovement.count` unchanged at 6. The panel's own figures cannot predict that balance, which
-# is why the row has to say so in words.
+# THE GAP THE SECOND SENTENCE CLOSED IS STILL CLOSED, by a different step: a category with NO pool
+# is not a shape this app can hold any more (plan 3's required `belongs_to`), so its spending was
+# already inside the tree, in the account it points at, before this class was ever called.
 #
-# THE USER IS TOLD BEFORE THE CLICK. `_suggestion.html.erb`'s re-point paragraph carries the clause;
-# an envelope that opens deep in the red on a screen whose other rows all read `$0.00 left` is the
-# app looking broken, and it is not broken.
+# WHAT THE DEMO MEASURED, AND WHY THE MEASUREMENT IS KEPT. Task 7's browser pass opened an envelope
+# at `overdrawn $754.00`, and a later round re-measured on Entertainment — panel row proposing
+# `$84.00 a period` against `$251.00 spent in 3 of the last 6 periods` — which opened at
+# `overdrawn $496.00`, the category's LIFETIME spend, half of it older than any window the page
+# measures, with `Σ pools` falling by exactly $496.00 and `PoolMovement.count` unchanged. Those
+# figures are HISTORY now: under the start-date rule the same click opens the envelope at $0.00 and
+# moves Σ by nothing. They are left on the record because they are what made the rule necessary —
+# §1 of the main-account spec opens with the same shape on real data, at $46,739.63.
 #
-# Pinned by spec/system/budget_page/suggestions_spec.rb ("an envelope that opens carrying the
-# category's past spending"), against planted literals on both sides.
+# THE USER IS STILL TOLD BEFORE THE CLICK, and the clause inverted with the rule.
+# `_suggestion.html.erb`'s re-point paragraph now says WHEN the envelope starts counting rather than
+# that it opens carrying everything — "from today onward — spending before today stays with your
+# main account" for a new envelope, and the joined envelope's own start date where the rule joins
+# one that already exists.
+#
+# Pinned by spec/system/budget_page/suggestions_spec.rb ("opens the envelope at nothing, leaving the
+# lifetime spending behind", and its buffer twin), against planted literals on both sides.
 #
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8, which is the committed record of
 # this design and the one a reader can actually open. (Amendment A of

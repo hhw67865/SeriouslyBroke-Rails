@@ -411,13 +411,21 @@ class Pool < ApplicationRecord
   # and `#withdrawals` sum — plus the expense entries of the categories pointing here, which is
   # the other leg of `#withdrawals`. The list and the two tiles above it are the same rows.
   #
-  # THE `start_date..` CUTOFF DID NOT SURVIVE, and that was the second half of the TODO's
-  # question. It was a deliberate divergence from `PoolCalculator#balance` (which is
-  # start-date-agnostic) on the argument that a goal's story begins when the goal did — so a
-  # pre-start row counted toward the balance without appearing in the list explaining it. With the
-  # list now built out of exactly the rows the two tiles beside it add up, a cutoff on one and not
-  # the other is the two-readers defect this branch has found in every task. `start_date` keeps its
-  # other job: it is a display attribute, and `Pool#set_default_start_date` still fills it.
+  # THE `start_date..` CUTOFF CAME BACK, AND IT IS NOT THIS METHOD'S ANY MORE. The rule this list
+  # follows is and has always been "list exactly the rows the two tiles beside it add up"; what
+  # changed underneath it is the tiles. It once ran its OWN `start_date..` filter while
+  # `PoolCalculator#balance` ignored the date entirely, and that divergence was rightly deleted —
+  # a pre-start row counted toward the balance without appearing in the list explaining it. The
+  # START-DATE RULE (main-account spec §3) then moved the date INTO the balance: an envelope counts
+  # its categories' spending only from its `start_date` on, and earlier spending reads against the
+  # user's main account. So the cutoff is in the list again, arriving the only way it may — through
+  # `Entry.reaching_pool`, the one expression both the tile and the row now come from — rather than
+  # as a second filter this method applies for itself.
+  #
+  # MOVEMENTS TAKE NO SUCH CUTOFF, and the asymmetry is §3's own: a movement is money put into this
+  # pool BY NAME, with no category to date and nothing to relocate, so a pre-start transfer is
+  # still in here and still listed. `start_date` also keeps its display job, and
+  # `Pool#set_default_start_date` still fills it.
   #
   # `limit` PER SIDE AND AGAIN AFTER THE MERGE. The newest `limit` rows of the union are always
   # inside the union of each side's newest `limit`, so three bounded queries answer what one
@@ -493,23 +501,29 @@ class Pool < ApplicationRecord
     )
   end
 
-  # The other leg of `PoolCalculator#withdrawals`: what was spent out of this pool through the
-  # categories that point at it. `#entries` is `has_many through: :items`, so this is the
-  # category's-pool half of `ENTRY_POOL_ID` — an entry carrying its own `pool_id` override is
-  # counted by the calculator and is not listed here, which is the one place the list and the tile
-  # can differ. Nothing in this app writes that column (see `#override_entries`), and the day
-  # something does, this is the method that has to learn about it.
+  # The other leg of `PoolCalculator#withdrawals`, ASKED WITH THE CALCULATOR'S OWN QUESTION.
+  #
+  # It used to read `#entries` — `has_many through: :items` — which is the category's-pool arm of
+  # `ENTRY_POOL_ID` with the other two missing, and the comment here said so: an entry carrying its
+  # own `pool_id` override was counted by the tile and not listed by this, "the one place the list
+  # and the tile can differ", left standing because nothing wrote that column. The start-date rule
+  # (main-account spec §3) added a second and much louder difference — every entry predating the
+  # envelope was listed under it while the tile above had already sent that money to main — so the
+  # gap is closed rather than documented: `Entry.reaching_pool` is the calculator's own narrowing,
+  # and asking it here makes the list and the tile the same rows by construction. The override arm
+  # comes along for free, which is what that old note asked the next person to do.
   def spending_rows(limit)
-    entries.merge(Entry.expenses).includes(:item, item: :category).order(date: :desc).limit(limit).map do |entry|
-      TimelineRow.new(
-        date: entry.date,
-        name: entry.item.name,
-        detail: entry.category.name,
-        label: "Spent",
-        amount: entry.amount,
-        sign: -1
-      )
-    end
+    Entry.reaching_pool(self).merge(Entry.expenses)
+      .includes(item: :category).order(date: :desc).limit(limit).map do |entry|
+        TimelineRow.new(
+          date: entry.date,
+          name: entry.item.name,
+          detail: entry.category.name,
+          label: "Spent",
+          amount: entry.amount,
+          sign: -1
+        )
+      end
   end
 
   # Every movement this pool is an end of, and every category that points at it, handed to the

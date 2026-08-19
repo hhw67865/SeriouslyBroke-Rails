@@ -107,7 +107,19 @@ class Category < ApplicationRecord
     CategoryCalculator.new(self, date, period: period)
   end
 
-  # WHICH POOL THIS CATEGORY'S SPENDING REACHES, and it is now the same rule the ledger runs on.
+  # WHICH POOL THIS CATEGORY'S SPENDING REACHES *ON A GIVEN DAY*, and it is the same rule the
+  # ledger runs on — THE START-DATE RULE INCLUDED (main-account spec §3).
+  #
+  # `on:` IS THE WHOLE OF WHAT §3 ADDED, and the reason this reader could not stay date-free. An
+  # envelope only counts its categories' spending from its `start_date` onward; earlier spending
+  # reads against the user's MAIN account. So "which pool does this category's spending reach" has
+  # no answer without a day attached — the same category answers `Groceries` for June and
+  # `Checking` for May. It defaults to `Date.current` because the question asked without a date is
+  # the question asked about spending happening now, which is what every caller that omits it means.
+  #
+  # THE DAY IS THE USER'S DAY, taken through `#local_day`, because ENTRY_POOL_ID renders
+  # `entries.date` in the owner's zone before comparing. One rule in two languages only holds if
+  # both languages agree about when midnight was.
   #
   # It used to read `pool || user&.default_account`, and that fallback was a promise nothing kept.
   # `PoolCalculator` and `PoolBalanceLedger` both resolve an entry through
@@ -144,11 +156,34 @@ class Category < ApplicationRecord
   # (The claim before that one — "PoolCalculator calls it" — had been untrue since Plan 2b moved
   # the calculator onto ENTRY_POOL_ID. A grep pasted into a comment is a fact with an expiry date;
   # what stays true is WHY this agrees with the SQL, which is the paragraph above.)
-  def effective_pool
-    pool
+  #
+  # THE THREE ARMS ARE ENTRY_POOL_ID'S OWN, minus the entry override that belongs to
+  # `Entry#effective_pool`: a pool-less category reaches NOTHING (nil, never the main account — the
+  # fallback is reserved for history displaced by a start date), an ACCOUNT has no date gate, and
+  # an envelope or goal answers for itself only from its start date on.
+  def effective_pool(on: Date.current)
+    return pool if pool.nil? || pool.pool_type_account?
+
+    local_day(on) >= pool.start_date ? pool : user&.default_account
   end
 
   private
+
+  # THE CALENDAR DAY AN INSTANT FELL ON, IN THE OWNER'S ZONE — the Ruby half of ENTRY_POOL_ID's
+  # `AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(category_users.timezone, 'UTC')`. `entries.date` is a
+  # datetime, so a Tokyo user's Aug 1 is stored as Jul 31 15:00 UTC and `.to_date` under an ambient
+  # UTC zone (a job, a console, a spec outside a request) would answer Jul 31 while the SQL answers
+  # Aug 1. Re-zoning from the USER rather than from `Time.zone` is what makes the two agree wherever
+  # this runs, not only inside the request ApplicationController has already wrapped.
+  #
+  # A DATE PASSES THROUGH UNTOUCHED, and the `DateTime` exclusion is load-bearing: `DateTime < Date`
+  # in Ruby, so a plain `is_a?(Date)` test would let a real instant skip the conversion. A Date has
+  # no instant to re-zone — `Date#in_time_zone` would invent midnight and shift the day.
+  def local_day(moment)
+    return moment if moment.is_a?(Date) && !moment.is_a?(DateTime)
+
+    moment.in_time_zone(user&.timezone.presence || "UTC").to_date
+  end
 
   # A CATEGORY'S LANE IS ONE OF ITS OWN USER'S POOLS — the third instance of a rule its two siblings
   # already carry (`Entry#pool_must_belong_to_user`, `Pool#account_is_this_users_account`), and it

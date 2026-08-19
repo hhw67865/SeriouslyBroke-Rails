@@ -79,7 +79,16 @@ class EntryImpactPresenter
   # own `pool_id` override is not consulted: it has no UI, `EntriesController#entry_params` cannot
   # set it, and the card must describe the pool the chosen CATEGORY reaches or it would answer a
   # question about a different envelope than the one the save will touch.
-  def pool = category&.effective_pool
+  #
+  # ON THE DAY THE ENTRY IS ABOUT, which is what the start-date rule (main-account spec §3) made
+  # this card have to say. An envelope only counts its categories' spending from its `start_date`
+  # on, so a category answers with the envelope for today and with the user's MAIN account for a
+  # date before it. On EDIT that day is the entry's own; on NEW there is no entry and the day is
+  # `today`, the same clock every other figure on this card is read at. Get it wrong and the card
+  # names an envelope, prints its balance and offers a "left" figure for money that is never going
+  # to come out of it — the one failure this card cannot have, because the whole of it is a promise
+  # about where the money the user is typing will land.
+  def pool = category&.effective_pool(on: entry&.date || today)
 
   # THE HONEST CARD (decision 2). Two shapes reach it and both are the same sentence:
   #

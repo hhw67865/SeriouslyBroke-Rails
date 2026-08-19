@@ -51,6 +51,24 @@ RSpec.describe "The start-date rule", type: :model do
     expect(balance(envelope)).to eq(0)
   end
 
+  # THE BOUNDARY DAY IS THE USER'S DAY, NOT UTC'S. `entries.date` is a DATETIME column and
+  # ApplicationController wraps every request in `Time.use_zone(current_user.timezone)`, so an entry
+  # a Tokyo user files on Aug 1 is stored `2026-07-31 15:00:00` — nine hours before the UTC day
+  # begins. Compared raw against a DATE, that entry is "before" a start date it is actually on, and
+  # the rule would exile every east-of-UTC user's first-day spending to main.
+  #
+  # BOTH SIDES OF ONE MIDNIGHT, an hour apart, so the example pins where the line falls rather than
+  # that a line exists: 15:00 UTC is Tokyo's Aug 1 and lands in the envelope, 14:00 UTC is still
+  # Tokyo's Jul 31 and lands in main.
+  it "reads the boundary in the user's own timezone rather than UTC", :aggregate_failures do
+    user.update!(timezone: "Asia/Tokyo")
+    create(:entry, item: item, amount: 30, date: Time.utc(2026, 7, 31, 15, 0))
+    create(:entry, item: item, amount: 7, date: Time.utc(2026, 7, 31, 14, 0))
+
+    expect(balance(envelope)).to eq(-30)
+    expect(balance(main)).to eq(-7)
+  end
+
   it "keeps Σ pools == bank truth while relocating, by raw SQL on both sides" do
     create(:entry, item: item, amount: 100, date: Date.new(2026, 7, 31))
     create(:entry, item: item, amount: 40, date: Date.new(2026, 8, 2))

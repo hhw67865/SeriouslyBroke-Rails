@@ -655,17 +655,14 @@ class PoolCalculator
   # to GROUP BY it — the OR form cannot be grouped, so the COALESCE is the shape with the strictly
   # wider job, and it is the batched path that would otherwise be free to drift.
   #
-  # `ENTRY_POOL_JOINS` COMES WITH IT, and that is the constant's contract rather than an extra
-  # here: since the start-date rule (main-account spec §3) the expression reads the category's
-  # pool and the category's user, neither of which the `item: :category` join every caller already
-  # carries can reach. The `item: :category` join is restated because this relation is MERGED into
-  # `Entry.incomes` / `Entry.expenses`, which carry it — Rails dedupes an association join, so
-  # naming it here costs nothing and keeps the relation legal on its own.
-  def entries_for_pool
-    Entry.joins(item: :category)
-      .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
-      .where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
-  end
+  # IT IS `Entry.reaching_pool` NOW, AND THAT MOVE IS THE SAME ARGUMENT ONE LEVEL OUT. A THIRD
+  # reader appeared — `Pool#spending_rows`, building the pool page's timeline out of
+  # `has_many :entries, through: :items`, which is the category's-pool arm with the override and
+  # (after the start-date rule) the DATE arm both missing. It could not share a PRIVATE method of
+  # this class, so the narrowing moved to the model as a scope and this method is now a name for
+  # it. Nothing about what it returns changes; what changes is that the pool page cannot drift from
+  # the balance it sits under. The joins the expression needs travel inside the scope.
+  def entries_for_pool = Entry.reaching_pool(pool)
 
   def movements_in_total = term(:movements_in) { scoped(pool.movements_in).sum(:amount) }
 

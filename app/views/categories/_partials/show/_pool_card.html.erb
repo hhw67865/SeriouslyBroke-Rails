@@ -120,7 +120,13 @@
       There is no savings category now: every category that can point at a goal spends out of it,
       under `PoolBalanceLedger::ENTRY_POOL_ID`, and money ARRIVES in a goal as a `PoolMovement`,
       which no category is party to. So the branch collapses onto the arm that was already true of
-      every reachable case, and the second clause says where the money comes from instead. %>
+      every reachable case, and the second clause says where the money comes from instead.
+
+      BOUNDED BY THE POOL'S START DATE since the start-date rule (main-account spec §3), which the
+      sentences below state in the present tense and mean from that date onward: spending this
+      category recorded BEFORE the envelope or goal existed reads against the user's main account,
+      not this pool. The account arm is unaffected — an account takes no date gate. Saying so on
+      screen is a separate copy question from this branch's noun problem and is not answered here. %>
   <p class="text-sm text-gray-500 mb-4">
     <% if pool.pool_type_savings? %>
       This category's spending draws from a shared goal.

@@ -92,13 +92,29 @@ class PoolBalanceLedger
   # joined twice — and it is an INNER join on both paths, which is what keeps them identical. A
   # LEFT JOIN here would let the batched path see item-less or category-less rows the per-pool
   # path (which merges these same scopes) never sees.
+  #
+  # THE BOUNDARY IS THE USER'S DAY, AND THE TWO `AT TIME ZONE`s ARE WHY. `entries.date` is a
+  # DATETIME column while `pools.start_date` is a DATE, and ApplicationController wraps every
+  # request in `Time.use_zone(current_user.timezone)` — so an entry a Tokyo user files ON Aug 1 is
+  # stored `2026-07-31 15:00:00`, nine hours before the UTC day it belongs to begins. Compared raw,
+  # that entry is "before" a start date it is actually on, and every east-of-UTC user's first day of
+  # an envelope would be exiled to main. The first `AT TIME ZONE 'UTC'` reads the naive timestamp as
+  # the UTC instant Rails wrote, the second renders that instant in the OWNER'S zone, and `::date`
+  # takes the calendar day the user was living in. `users.timezone` is nullable and validated
+  # against `TZInfo::Timezone.all_identifiers`, which is the same IANA set Postgres knows, so the
+  # COALESCE to 'UTC' covers the user who has not chosen one and nothing else can reach it.
+  #
+  # `Pool.pool_types[:account]` RATHER THAN THE LITERAL 0. The enum's numbering is a mapping this
+  # codebase has renumbered before, and a bare 0 in a string of SQL is the one copy of it a rename
+  # cannot reach.
   ENTRY_POOL_ID = Arel.sql(<<~SQL.squish)
     COALESCE(
       entries.pool_id,
       CASE
         WHEN categories.pool_id IS NULL THEN NULL
-        WHEN category_pools.pool_type = 0 THEN categories.pool_id
-        WHEN entries.date >= category_pools.start_date THEN categories.pool_id
+        WHEN category_pools.pool_type = #{Pool.pool_types[:account]} THEN categories.pool_id
+        WHEN (entries.date AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(category_users.timezone, 'UTC'))::date
+             >= category_pools.start_date THEN categories.pool_id
         ELSE category_users.default_account_id
       END
     )

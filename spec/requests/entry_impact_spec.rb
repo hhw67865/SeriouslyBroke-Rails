@@ -88,4 +88,45 @@ RSpec.describe "Entry impact", type: :request do
       expect(response.body).not_to include("$240.00")
     end
   end
+
+  # THE CARD ANSWERS THE SAME QUESTION THE LEDGER DOES, ON THE SAME DATE (main-account spec §3).
+  #
+  # This is the divergence the start-date rule opened and the one the card cannot survive: the
+  # ledger relocates an entry dated before its envelope's `start_date` to the user's main account,
+  # while `Category#effective_pool` — which `#pool` here is — answered with the envelope regardless
+  # of when the spending happened. The card would have named the Groceries envelope, printed its
+  # balance, and offered a "left" figure for money that was never going to come out of it.
+  #
+  # ASSERTED THROUGH THE FRAGMENT rather than on the presenter, because the whole failure is that
+  # the two halves of the screen disagree, and only a rendered card shows which one the user reads.
+  # `data-impact-card` is the partial's own switch: "unbudgeted" is the honest buffer card an
+  # account gets, "envelope" is the figures card. Both directions on one fixture — the SAME category
+  # and the SAME envelope, one entry either side of the start date — so an example cannot pass by
+  # a card that never renders figures at all.
+  describe "the start-date rule" do
+    before do
+      user.update!(default_account: checking)
+      groceries_pool.update!(start_date: Date.current)
+    end
+
+    it "shows the buffer card for an entry that predates the envelope", :aggregate_failures do
+      old = create(:entry, item: create(:item, category: groceries), amount: 45, date: 30.days.ago)
+
+      get impact_entries_path(category_id: groceries.id, amount: "10", entry_id: old.id)
+
+      expect(response.body).to include('data-impact-card="unbudgeted"')
+      expect(response.body).to include("No envelope")
+      expect(response.body).not_to include("Groceries envelope")
+    end
+
+    it "still shows the envelope for an entry on the start date itself", :aggregate_failures do
+      today = create(:entry, item: create(:item, category: groceries), amount: 45, date: Date.current)
+
+      get impact_entries_path(category_id: groceries.id, amount: "10", entry_id: today.id)
+
+      expect(response.body).to include('data-impact-card="envelope"')
+      expect(response.body).to include("Groceries envelope")
+      expect(response.body).not_to include("No envelope")
+    end
+  end
 end

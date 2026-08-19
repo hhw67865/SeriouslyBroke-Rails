@@ -470,6 +470,23 @@ RSpec.describe Pool, type: :model do
     it "is empty for a pool nothing has reached" do
       expect(create(:pool, :budget_pool, user: user, account: checking).timeline(limit: 8)).to be_empty
     end
+
+    # THE LIST OBEYS THE START-DATE RULE BECAUSE THE TILES ABOVE IT DO (main-account spec §3). This
+    # is the same argument the movement example above makes in the other direction: the timeline is
+    # built out of exactly the rows `#contributions` and `#withdrawals` add up, so a row the ledger
+    # has relocated to main cannot still be listed under the envelope explaining a figure it is no
+    # longer part of. BOTH SIDES ARE ASSERTED on one fixture — the row leaves one list and arrives
+    # in the other — because an example that only watched it vanish would pass against a reader
+    # that had simply dropped it.
+    it "sends a pre-start entry to the main account's list and off the envelope's", :aggregate_failures do
+      user.update!(default_account: checking)
+      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Trips", start_date: Date.new(2025, 6, 1))
+      spending = create(:item, name: "Flights", category: create(:category, :expense, user: user, pool: envelope, name: "Trip"))
+      create(:entry, item: spending, amount: 45, date: Date.new(2025, 5, 31))
+
+      expect(envelope.timeline(limit: 8)).to be_empty
+      expect(checking.timeline(limit: 8).map(&:name)).to eq(["Flights"])
+    end
   end
 
   describe "auto-created categories on create" do

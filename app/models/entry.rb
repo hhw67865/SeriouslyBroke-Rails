@@ -56,6 +56,28 @@ class Entry < ApplicationRecord
             .where("pools.name ILIKE ?", "%#{name}%")
         }
 
+  # EVERY ENTRY THAT REACHES ONE POOL — `PoolBalanceLedger::ENTRY_POOL_ID` narrowed to a single id,
+  # and THE ONE PLACE THAT NARROWING IS SPELLED.
+  #
+  # It lives here rather than inside PoolCalculator because it had grown a second reader that was
+  # not a reader of it at all: `Pool#spending_rows` built the pool page's timeline out of
+  # `has_many :entries, through: :items` — the category's-pool half of the rule with the override
+  # arm and (after main-account spec §3) the DATE arm both missing. The pool page therefore listed
+  # a pre-start entry under an envelope whose balance, two inches above it, had already sent that
+  # money to main; the list and the tiles it explains described different money. Promoting the
+  # narrowing to a scope is what makes "one rule, one reader" true of the pool page as well as of
+  # the balances — `PoolCalculator#entries_for_pool` is this scope now, not a sibling of it.
+  #
+  # The joins are the constant's contract (see `ENTRY_POOL_JOINS`); `item: :category` comes first
+  # because the expression reads `categories.pool_id`, and it is the same inner join `.expenses`
+  # and `.incomes` carry, so a caller composing this with one of those joins nothing twice.
+  scope :reaching_pool,
+        lambda { |pool|
+          joins(item: :category)
+            .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
+            .where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
+        }
+
   # Define searchable fields using the DSL
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"
@@ -65,16 +87,23 @@ class Entry < ApplicationRecord
   # `.in_pool_named` above and ModelSearchable::SearchMethods#search_by.
   searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
 
-  # entry override -> category's pool -> nowhere.
+  # entry override -> category's pool, from its start date -> the user's main account -> nowhere.
   #
-  # The chain ENDS at the category, and the sibling half says why: Task 8 removed
-  # `Category#effective_pool`'s `|| user&.default_account` because no ledger implemented it —
-  # every balance resolves an entry through `COALESCE(entries.pool_id, categories.pool_id)`
-  # (`PoolBalanceLedger::ENTRY_POOL_ID`), and `Σ pools == your bank balance` turned on which of the
-  # two answers you asked for. This line and that one are one rule in two halves, so this comment
-  # is kept in step with it rather than left describing a third step that no longer exists.
+  # THE RUBY HALF OF `PoolBalanceLedger::ENTRY_POOL_ID`, arm for arm, and the pair is where this
+  # app's one landing rule is written down in Ruby. The override is this method's own; everything
+  # after it belongs to `Category#effective_pool`, which is why THIS is the half that supplies the
+  # DATE — an entry knows when it happened and a category does not.
+  #
+  # `date` IS PASSED RATHER THAN LEFT TO THE DEFAULT, and that is the whole of what the start-date
+  # rule (main-account spec §3) changed here. Without it this method answered about TODAY for an
+  # entry filed last year: the ledger had the money in the user's main account and this said the
+  # envelope, an inch apart on the entry form's impact card. Task 8's note about the two readers of
+  # one question stands — it was simply a different question that came apart this time.
+  #
+  # `|| Date.current` because a keyword default cannot rescue an explicit nil, and a half-built
+  # entry (validated for `date` presence, so never a saved one) still has to answer something.
   def effective_pool
-    pool || resolved_category&.effective_pool
+    pool || resolved_category&.effective_pool(on: date || Date.current)
   end
 
   private

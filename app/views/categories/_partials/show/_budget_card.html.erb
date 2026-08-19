@@ -76,10 +76,14 @@
         A BUDGET POOL AND A SAVINGS POOL SHARE THIS ARM, and the line is the model's:
         `Budget#pool_must_not_be_an_account` lets a rule sit on either of them, `PoolStatus` gives
         both a row-vocabulary state (a savings pool's is `$424.00 of $2,400.00`), and
-        `ENTRY_POOL_ID` resolves this category's entries into either the same way. Every clause of
-        the sentence below is therefore true of both, and an expense category pointing at a savings
-        goal is an ordinary shape on the demo — Health → Emergency Fund, Education → Retirement
-        Supplement. An ACCOUNT is the one pool none of that is true of, and it took the arm above.
+        `ENTRY_POOL_ID` resolves this category's entries into either the same way — INCLUDING the
+        start-date rule (main-account spec §3), which gates a budget pool and a savings goal
+        identically: both count this category's spending only from their own `start_date` on, and
+        earlier spending reads against the user's main account. Every clause of the sentence below
+        is therefore true of both, and an expense category pointing at a savings goal is an ordinary
+        shape on the demo — Health → Emergency Fund, Education → Retirement Supplement. An ACCOUNT
+        is the one pool none of that is true of — it takes no date gate either — and it took the
+        arm above.
 
         `pool_status_label` with BOTH suffixes, exactly as Home's pools band and the Budget page's
         group header pass them — this block says how the envelope STANDS RIGHT NOW, and a screen
