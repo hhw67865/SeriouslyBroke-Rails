@@ -654,8 +654,17 @@ class PoolCalculator
   # The constant lives on PoolBalanceLedger rather than here because that is the class that has
   # to GROUP BY it — the OR form cannot be grouped, so the COALESCE is the shape with the strictly
   # wider job, and it is the batched path that would otherwise be free to drift.
+  #
+  # `ENTRY_POOL_JOINS` COMES WITH IT, and that is the constant's contract rather than an extra
+  # here: since the start-date rule (main-account spec §3) the expression reads the category's
+  # pool and the category's user, neither of which the `item: :category` join every caller already
+  # carries can reach. The `item: :category` join is restated because this relation is MERGED into
+  # `Entry.incomes` / `Entry.expenses`, which carry it — Rails dedupes an association join, so
+  # naming it here costs nothing and keeps the relation legal on its own.
   def entries_for_pool
-    Entry.where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
+    Entry.joins(item: :category)
+      .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
+      .where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
   end
 
   def movements_in_total = term(:movements_in) { scoped(pool.movements_in).sum(:amount) }

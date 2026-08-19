@@ -155,17 +155,26 @@ RSpec.describe PoolCalculator, type: :model do
         expect(checking.calculator(today: today).balance).to eq(2_000.00)
       end
 
-      # The balance is deliberately start-date-agnostic. The old #contributions scoped to
-      # `start_date..`; #balance does not, and must not — a pool's balance is all the money
-      # in it, full stop. Pinned as a semantic rather than left as an incidental omission,
-      # so re-adding the filter is a test failure and not a silent "fix".
-      it "counts entries and movements dated before the pool's start_date", :aggregate_failures do
+      # THE START DATE GATES ENTRIES AND NOT MOVEMENTS, and the two halves are one semantic rather
+      # than a rule with an exception. An entry is dated SPENDING, and the start-date rule
+      # (main-account spec §3) says an envelope only counts the spending of its own life — earlier
+      # spending happened against the main account and reads there. A movement is money PUT INTO
+      # the envelope by name; it names its two pools outright, there is no category to date, and
+      # money someone deliberately moved in before the start date is still in there.
+      #
+      # This example used to pin the opposite of its first half ("the balance is deliberately
+      # start-date-agnostic", asserting 60.00), which was the law until the rule landed. It is
+      # rewritten rather than deleted because the movement half is unchanged and still worth a
+      # failing test if someone "fixes" the asymmetry by filtering both.
+      it "gates pre-start entries to main and still counts pre-start movements", :aggregate_failures do
+        envelope_user.update!(default_account: checking)
         car.update!(start_date: Date.new(2026, 6, 1))
         create(:pool_movement, from_pool: checking, to_pool: car, amount: 100, date: Date.new(2026, 1, 20))
         create(:entry, item: create(:item, category: car_category), amount: 40, date: Date.new(2026, 1, 15))
 
         expect(car.start_date).to be > Date.new(2026, 1, 20)
-        expect(car.calculator(today: today).balance).to eq(60.00)
+        expect(car.calculator(today: today).balance).to eq(100.00)
+        expect(checking.calculator(today: today).balance).to eq(-140.00)
       end
 
       it "goes negative when a pool is overspent" do

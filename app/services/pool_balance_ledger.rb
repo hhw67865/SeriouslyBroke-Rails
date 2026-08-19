@@ -63,12 +63,26 @@ class PoolBalanceLedger
   # Every member of #terms_for, which is the hash PoolCalculator consumes whole.
   TERMS = [*MONEY_TERMS, FUNDED_ON].freeze
 
-  # WHICH POOL AN ENTRY REACHES — the one expression, shared with PoolCalculator#entries_for_pool
-  # rather than restated there.
+  # WHICH POOL AN ENTRY REACHES — the one expression, THE START-DATE RULE included
+  # (main-account spec §3), shared with PoolCalculator#entries_for_pool rather than restated there.
   #
-  # The entry's own pool wins where it has one, and its category's pool answers where it does not;
-  # an entry with neither reaches no pool, because `COALESCE(NULL, NULL) = :id` is NULL and NULL
-  # is not true. That is the same rule the unbatched path used to spell as
+  # In order: the entry's own pool override; else its category's pool, but an envelope/goal only
+  # from its start_date onward — earlier entries fall to the user's MAIN account
+  # (users.default_account_id), because that is where history physically happened. Account pools
+  # have no date gate, and a pool-less category still reaches no pool: NULL, never the
+  # main-account fallback, which is reserved for history displaced by a start date.
+  #
+  # THE START DATE IS THE ENVELOPE'S, NOT THE CATEGORY'S CONNECTION DATE (ruled 2026-08-18).
+  # Connecting an old category to a mid-life envelope counts its spending back to that date and no
+  # further; before the rule, the re-point dragged the category's whole lifetime into a
+  # never-funded envelope, which is the defect §1 opens with. It is a READ-side rule only — no row
+  # is rewritten, and `Σ pools == bank truth` is untouched, because every displaced entry lands in
+  # the main account rather than nowhere.
+  #
+  # The first two arms are the rule this used to be in full: the entry's own pool wins where it
+  # has one, and an entry with neither pool nor category-pool reaches no pool, because
+  # `COALESCE(NULL, NULL) = :id` is NULL and NULL is not true. That is the same rule the unbatched
+  # path used to spell as
   # `entries.pool_id = :id OR (entries.pool_id IS NULL AND categories.pool_id = :id)`, arm for
   # arm — and it is written this way round because a COALESCE can be GROUPED BY while an OR
   # cannot: the OR asks "does this row belong to THIS pool", this asks "which pool does this row
@@ -78,7 +92,33 @@ class PoolBalanceLedger
   # joined twice — and it is an INNER join on both paths, which is what keeps them identical. A
   # LEFT JOIN here would let the batched path see item-less or category-less rows the per-pool
   # path (which merges these same scopes) never sees.
-  ENTRY_POOL_ID = Arel.sql("COALESCE(entries.pool_id, categories.pool_id)")
+  ENTRY_POOL_ID = Arel.sql(<<~SQL.squish)
+    COALESCE(
+      entries.pool_id,
+      CASE
+        WHEN categories.pool_id IS NULL THEN NULL
+        WHEN category_pools.pool_type = 0 THEN categories.pool_id
+        WHEN entries.date >= category_pools.start_date THEN categories.pool_id
+        ELSE category_users.default_account_id
+      END
+    )
+  SQL
+
+  # The two joins ENTRY_POOL_ID now needs beside the `item: :category` join every caller
+  # already carries. ALIASED — `Entry.in_pool_named` joins bare `pools` itself, and a second
+  # bare `pools` would be ambiguous. Every consumer of the constant consumes these with it.
+  #
+  # LEFT on the pool and INNER on the user, and the asymmetry is the two columns' own: a category
+  # with no pool is a shape the database still holds (the belongs_to is required at the model, not
+  # below it), and an INNER join there would DROP its entries from the query entirely rather than
+  # resolve them to NULL — the CASE's first arm exists to answer for exactly those rows and would
+  # never be reached. `categories.user_id` is NOT NULL with a foreign key, so its join adds no row
+  # and removes none; it is INNER so the expression cannot silently read a NULL default account
+  # from a missing row instead of from a user who has not chosen one.
+  ENTRY_POOL_JOINS = [
+    "LEFT JOIN pools AS category_pools ON category_pools.id = categories.pool_id",
+    "INNER JOIN users AS category_users ON category_users.id = categories.user_id"
+  ].freeze
 
   # WHAT A SHARED LEDGER IS REFUSED FOR. Raised by #for_as_of! and named as a constant because a
   # `rescue` of it would be a caller deciding to read figures from a moment it did not ask about;
@@ -228,8 +268,13 @@ class PoolBalanceLedger
   # SHARED BY THE SUM AND THE MAX rather than written twice: the two aggregates answer about the
   # same rows by construction, so a term that moved would move both together instead of letting a
   # balance and its funding date describe different sets of entries.
+  #
+  # `ENTRY_POOL_JOINS` travels with the expression, here and in every other reader of it — the
+  # start-date rule reads two tables the `item: :category` join does not reach. The movement lanes
+  # take neither: a PoolMovement names its two pools outright and has no category to date-gate.
   def grouped_entries(scope)
-    scoped(scope).where("#{ENTRY_POOL_ID} IN (:ids)", ids: @pool_ids).group(ENTRY_POOL_ID)
+    scoped(scope).joins(*ENTRY_POOL_JOINS)
+      .where("#{ENTRY_POOL_ID} IN (:ids)", ids: @pool_ids).group(ENTRY_POOL_ID)
   end
 
   # `pool.movements_in` / `#movements_out` are `to_pool_id` / `from_pool_id` on PoolMovement and

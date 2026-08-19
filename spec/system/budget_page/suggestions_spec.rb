@@ -451,27 +451,30 @@ RSpec.describe "Budget page suggestions", type: :system do
   # WHAT ACCEPTING DOES TO `Σ pools == your bank balance` — the consequence `BudgetProposal`'s
   # header used to deny and nothing asserted.
   #
-  # THE RE-POINT MOVES THE CATEGORY'S WHOLE ENTRY HISTORY, not its future spending.
-  # `PoolBalanceLedger::ENTRY_POOL_ID` is `COALESCE(entries.pool_id, categories.pool_id)` with no
-  # date bound and `PoolCalculator#balance` is start-date-agnostic, so the instant
-  # `category.pool_id` is written, every entry that category ever carried is inside the new
-  # envelope's lane. The envelope has no movements in, so it opens at exactly minus that total.
+  # THE RE-POINT MOVES NO HISTORY AT ALL, and it USED TO MOVE ALL OF IT. Before the start-date rule
+  # (main-account spec §3) `PoolBalanceLedger::ENTRY_POOL_ID` had no date bound, so the instant
+  # `category.pool_id` was written every entry that category ever carried fell inside the new
+  # envelope's lane and the envelope opened at minus its lifetime spend. That is §1's opening
+  # complaint in miniature — Ming's Food & Grocery envelope opened $46,739.63 overdrawn on the day
+  # she created it — and this pair of examples pinned it as law.
   #
-  # THE DIRECTION IS TOWARD TRUTH, and that is the whole reason the code is right. A pool-less
-  # expense category's spending was outside the pool tree: it left the bank and no pool recorded
-  # it, so `Σ pools` was OVERSTATING the bank by exactly that lifetime figure. Both sides are
-  # asserted, before and after, so the assertion is about the direction and not merely about a
-  # number moving.
+  # NOW THE ENVELOPE IS DATED TODAY (`Pool#set_default_start_date`) and only counts spending from
+  # today onward, so the acceptance moves nothing: the envelope opens at $0 and the buffer keeps
+  # the history it always physically held. The examples are INVERTED rather than deleted, because
+  # the fact worth pinning is the same one — what accepting does to WHERE the money reads — and a
+  # rule that silently went back to dragging history would pass a suite that had merely dropped
+  # these.
   #
   # EVERY FIGURE IS A PLANTED LITERAL AND THE TWO SIDES ARE INDEPENDENT. $2,000 goes in, $1,400
   # goes out, $600 is what the bank holds — three literals written here, never one computed from
   # the other two and never `Pool#total` compared against its own parts.
   #
-  # THE ANCIENT ENTRY IS THE POINT OF THE FIXTURE. $500 spent 400 days ago is outside every window
-  # this page measures — `#rates` indexes only the last six periods, so it moves neither the
-  # proposed $300 a period nor the "$900.00 spent in 3 of the last 6 periods" the row prints — and
-  # it lands in the envelope anyway. The panel's own figures cannot predict the balance the click
-  # produces, which is why the row has to say so in words.
+  # THE ANCIENT ENTRY IS STILL THE POINT OF THE FIXTURE, and it now makes the OPPOSITE point. $500
+  # spent 400 days ago is outside every window this page measures — `#rates` indexes only the last
+  # six periods, so it moves neither the proposed $300 a period nor the "$900.00 spent in 3 of the
+  # last 6 periods" the row prints — and under the old law it landed in the envelope anyway. Under
+  # the rule it is the entry FURTHEST from qualifying, so an envelope that somehow counted it would
+  # be visible at a glance.
   describe "the balance an accepted rate suggestion opens with", :aggregate_failures do
     before do
       deposit(2_000)
@@ -497,10 +500,10 @@ RSpec.describe "Budget page suggestions", type: :system do
     # THE ROW SAYS SO BEFORE THE CLICK (finding 2c). One clause, on the sentence already naming
     # which spending moves — burying the re-point to make room for it would be worse than omitting
     # it.
-    it "warns that the envelope will open carrying the category's past spending" do
+    it "says the envelope starts today and leaves earlier spending with main" do
       within(effect_of(:rate, groceries)) do
-        expect(page).to have_content("past and future")
-        expect(page).to have_content("carrying what has already been spent")
+        expect(page).to have_content("from today onward")
+        expect(page).to have_content("spending before today stays with your main account")
       end
     end
 
@@ -508,28 +511,31 @@ RSpec.describe "Budget page suggestions", type: :system do
     # pool, so its $1,400 of spending reached NO pool at all: `Σ pools` read $2,000 against a bank
     # holding $600, and the acceptance closed that $1,400 gap. A category with no pool is not a
     # shape the app can hold any more — its spending comes out of the ACCOUNT, and the sum is
-    # bank-true from the start — so the claim under test becomes CONSERVATION: the acceptance moves
-    # $1,400 of history out of the buffer and into the envelope without changing the total, and
-    # without writing a movement to do it.
+    # bank-true from the start — so the claim under test became CONSERVATION. The start-date rule
+    # then made even the relocation stop happening: the acceptance moves NOTHING, the $1,400 stays
+    # in the buffer, and this example's job is to plant the "before" the two below are measured
+    # against rather than to make a claim of its own.
     it "starts with the sum already agreeing with the bank" do
       expect(pool_total).to eq(600)
     end
 
-    it "opens the envelope at minus the category's lifetime spending", :aggregate_failures do
+    it "opens the envelope at nothing, leaving the lifetime spending behind", :aggregate_failures do
       accept_and_create(:rate, groceries)
 
       expect(page).to have_content("Budget was successfully created")
-      within("[data-pool-group='Groceries']") { expect(page).to have_content("overdrawn $1,400.00") }
-      expect(groceries.reload.pool.calculator.balance).to eq(-1_400)
+      within("[data-pool-group='Groceries']") { expect(page).to have_no_content("overdrawn") }
+      expect(groceries.reload.pool.calculator.balance).to eq(0)
     end
 
-    # BOTH SIDES OF THE MOVE, INDEPENDENTLY: the buffer gives up exactly the history the envelope
-    # takes on, the total does not move, and no `pool_movements` row was written to make it happen.
-    it "moves the history out of the buffer without moving the total", :aggregate_failures do
+    # BOTH SIDES OF THE NON-MOVE, INDEPENDENTLY: the buffer still holds every dollar of the history,
+    # the total does not move either, and no `pool_movements` row was written. The second and third
+    # assertions were already true under the old law — it is the FIRST that inverted, and it is the
+    # one that says the history stayed put rather than merely that the sum was conserved.
+    it "leaves the history in the buffer without moving the total", :aggregate_failures do
       expect { accept_and_create(:rate, groceries) }.not_to change(PoolMovement, :count)
 
       expect(page).to have_content("Budget was successfully created")
-      expect(checking.calculator.balance).to eq(2_000)
+      expect(checking.calculator.balance).to eq(600)
       expect(pool_total).to eq(600)
     end
   end

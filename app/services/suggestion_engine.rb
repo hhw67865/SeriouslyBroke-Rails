@@ -572,8 +572,14 @@ class SuggestionEngine
   # Task 8's fix round decided it: the fallback was a promise no ledger kept, `Σ pools` turned on
   # the difference, and `Category#effective_pool` now says what this SQL says. The Ruby pair and
   # this constant are one rule in two languages, which is what they always claimed to be.
+  #
+  # `ENTRY_POOL_JOINS` travels with the constant (its contract): since the start-date rule
+  # (main-account spec §3) the expression reads the category's pool and the category's user, so a
+  # reader that took the SQL without the joins would not compile — and one that took it with a
+  # DIFFERENT pair of joins would be the third spelling this comment exists to forbid.
   def pool_spend(pool_ids, window)
     Entry.expenses
+      .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
       .where(categories: { user_id: user.id })
       .where(date: datetimes_over(window))
       .where.not(item_id: item_backed_ids.to_a)

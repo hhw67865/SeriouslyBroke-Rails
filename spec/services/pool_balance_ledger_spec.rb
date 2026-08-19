@@ -484,4 +484,78 @@ RSpec.describe PoolBalanceLedger, type: :model do
       expect(batched_sums).to be_empty
     end
   end
+
+  # THE START-DATE RULE ON THE GROUPED PATH (main-account spec §3). spec/services/start_date_rule_spec.rb
+  # states the rule against unbatched calculators; this states it against the one query that has to
+  # GROUP BY it, which is the harder half — a CASE that resolved right in a WHERE and wrong in a
+  # GROUP BY would file the same entry under two different pools and split Σ without either figure
+  # looking wrong on its own.
+  #
+  # `start_date` IS PLANTED RATHER THAN LEFT TO THE FACTORY, which dates every pool `1.year.ago`:
+  # under that default a July 2026 entry is comfortably past the start and the rule never fires, so
+  # an example that meant to test displacement would test nothing and stay green forever.
+  describe "the start-date rule" do
+    let!(:groceries) do
+      create(:pool, :budget_pool, user: user, account: checking, name: "Groceries", start_date: Date.new(2026, 8, 1))
+    end
+    let(:ledger) { described_class.new([checking, groceries]) }
+
+    # The fallback lane has to exist for the displaced money to land anywhere: without a default
+    # account the ELSE arm is NULL and the pre-start entry reaches no pool at all, which is the one
+    # outcome that would break Σ rather than relocate it.
+    before { user.update!(default_account: checking) }
+
+    # $100 spent the day BEFORE the envelope opened, $40 the day after, and $500 of income into the
+    # account. Three literals, one on each side of the start date and one that the rule cannot
+    # touch at all.
+    def relocating_history
+      entry(:expense, 100, on: Date.new(2026, 7, 31), category_pool: groceries)
+      entry(:expense, 40, on: Date.new(2026, 8, 2), category_pool: groceries)
+      entry(:income, 500, on: Date.new(2026, 8, 3), category_pool: checking)
+    end
+
+    # The bank's own side of the invariant, from `entries` alone and keyed by CATEGORY OWNERSHIP —
+    # never by pool membership, which is the thing under test. Income is category_type 1.
+    def bank_truth
+      ActiveRecord::Base.connection.select_value(<<~SQL.squish)
+        SELECT SUM(CASE WHEN c.category_type = 1 THEN e.amount::numeric ELSE -e.amount::numeric END)
+        FROM entries e
+        JOIN items i ON i.id = e.item_id
+        JOIN categories c ON c.id = i.category_id
+        WHERE c.user_id = '#{user.id}'
+      SQL
+    end
+
+    it "groups a pre-start entry under main and a later one under the envelope", :aggregate_failures do
+      entry(:expense, 100, on: Date.new(2026, 7, 31), category_pool: groceries)
+      entry(:expense, 40, on: Date.new(2026, 8, 1), category_pool: groceries)
+
+      expect(ledger.terms_for(groceries)[:expense]).to eq(40)
+      expect(ledger.terms_for(checking)[:expense]).to eq(100)
+    end
+
+    # The batched reader answering to the per-pool one over exactly the fixture that moved, because
+    # the two now share a CASE as well as a COALESCE and only a comparison catches one of them
+    # taking the joins and the other not.
+    it "agrees with an unbatched calculator across the relocation", :aggregate_failures do
+      relocating_history
+
+      [checking, groceries].each do |pool|
+        expect(pool.calculator(today: today, terms: ledger.terms_for(pool)).balance)
+          .to eq(pool.calculator(today: today).balance)
+      end
+      expect(checking.calculator(today: today).balance).to eq(400)
+      expect(groceries.calculator(today: today).balance).to eq(-40)
+    end
+
+    # Σ IS UNTOUCHED BY THE RULE — spec §3's own claim, asserted here against raw SQL over the
+    # entries table rather than against another reader of the same expression.
+    it "relocates without changing the sum of every pool" do
+      relocating_history
+
+      pool_side = user.pools.sum { |pool| pool.calculator(today: today).balance }
+
+      expect(pool_side).to eq(bank_truth)
+    end
+  end
 end

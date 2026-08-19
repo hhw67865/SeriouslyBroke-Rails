@@ -140,12 +140,23 @@ account = lambda do |name, target|
   user.pools.create!(name: name, pool_type: :account, target_amount: target)
 end
 
+# EVERY ENVELOPE AND GOAL PREDATES THE HISTORY BELOW, and that is the start-date rule
+# (main-account spec §3) rather than decoration. An envelope only counts category spending dated
+# on or after its `start_date`; `Pool#set_default_start_date` fills that with TODAY, which is the
+# right default for a real envelope somebody creates now — but a demo whose pools all start today
+# would displace its entire seeded history into Checking and open every envelope empty. Six months
+# clears the deepest thing this file writes (three calendar months of rent, seven biweekly
+# periods of paychecks), so every entry below lands where the sentence around it says it does.
+demo_start = today - 6.months
+
 envelope = lambda do |name, home, priority|
-  user.pools.create!(name: name, pool_type: :budget, account: home, priority: priority)
+  user.pools.create!(name: name, pool_type: :budget, account: home, priority: priority,
+                     start_date: demo_start)
 end
 
 goal = lambda do |name, target, home, priority|
-  user.pools.create!(name: name, pool_type: :savings, target_amount: target, account: home, priority: priority)
+  user.pools.create!(name: name, pool_type: :savings, target_amount: target, account: home,
+                     priority: priority, start_date: demo_start)
 end
 
 # A CATEGORY ALWAYS NAMES ITS POOL. There is no arity here that leaves `pool` nil, which is the

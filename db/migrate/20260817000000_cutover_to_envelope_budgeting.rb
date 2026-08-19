@@ -46,6 +46,10 @@
 # IDEMPOTENT. A second run finds no account to create, no pool to house, no cap to convert, no
 # category to point, no savings entry to move and no envelope in deficit — and still verifies, which
 # is what makes a re-run a usable audit of a database somebody else's script has since touched.
+#
+# NOTE (2026-08-18): the app's ledger has since adopted the start-date rule (main-account spec §3);
+# this migration's verifier deliberately speaks the pre-rule COALESCE and remains internally
+# consistent.
 class CutoverToEnvelopeBudgeting < ActiveRecord::Migration[8.1]
   # Raised inside the user's transaction, so a user is either wholly migrated or wholly untouched.
   class VerificationFailed < StandardError; end

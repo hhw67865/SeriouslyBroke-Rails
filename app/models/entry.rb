@@ -42,9 +42,16 @@ class Entry < ApplicationRecord
   # `joins(item: :category)` is required by the expression itself (it reads `categories.pool_id`)
   # and is the same inner join `Entry.expenses` and its siblings carry, so a search composed on top
   # of a type filter joins nothing twice.
+  #
+  # `ENTRY_POOL_JOINS` sits BETWEEN the two, because the bare `pools` join below reads the
+  # expression and the expression reads the aliased `category_pools` — a join cannot be defined
+  # after the term it resolves. Those two are aliased for this scope's sake specifically: the
+  # `INNER JOIN pools` here is the one bare `pools` in the app that composes with the constant, and
+  # a second unaliased one would make every `pools.*` reference in this query ambiguous.
   scope :in_pool_named,
         lambda { |name|
           joins(item: :category)
+            .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
             .joins("INNER JOIN pools ON pools.id = #{PoolBalanceLedger::ENTRY_POOL_ID}")
             .where("pools.name ILIKE ?", "%#{name}%")
         }

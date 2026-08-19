@@ -28,19 +28,19 @@
             exactly that shape — and a sentence promising a new one would be describing something
             the save is not going to do.
 
-            "PAST AND FUTURE", AND IT IS A CLAUSE RATHER THAN A PARAGRAPH. `ENTRY_POOL_ID` has no
-            date bound and `PoolCalculator#balance` is start-date-agnostic, so the re-point moves
-            the category's WHOLE history: a new envelope opens at minus its lifetime spend — the
-            demo's read `overdrawn $496.00` — and the user who was not told reads a red row they
-            did nothing to earn. It rides on the sentence already saying which spending moves
-            rather than taking a line of its own, because burying the re-point itself would be
-            worse than saying its consequence briefly.
+            THE CLAUSE USED TO READ "PAST AND FUTURE", AND THE START-DATE RULE INVERTED IT
+            (main-account spec §3). `ENTRY_POOL_ID` had no date bound, so the re-point dragged the
+            category's WHOLE history and a new envelope opened at minus its lifetime spend — the
+            demo read `overdrawn $496.00`, a red row the user did nothing to earn, and §1 opens
+            with exactly that complaint from real data. The rule bounds the lane at the pool's
+            `start_date` now, so the clause says WHEN instead of "everything": earlier spending
+            reads against the main account and the envelope opens at $0.
 
-            THE TWO BRANCHES SAY IT DIFFERENTLY BECAUSE THEY DO DIFFERENT THINGS. A NEW envelope
-            OPENS at minus the lifetime spend, which is a starting balance. A JOINED one already
-            exists and already holds money; the re-point DROPS that balance by the same figure, so
-            it "takes on" the history rather than starting out with it — and it is the join whose
-            resulting number is least predictable from anything else on the row. %>
+            THE TWO BRANCHES STILL SAY IT DIFFERENTLY BECAUSE THEY STILL DO DIFFERENT THINGS. A NEW
+            envelope is dated TODAY by `Pool#set_default_start_date`, so its bound is today and its
+            opening balance is nothing. A JOINED one already exists and carries its OWN start date,
+            which may be months back — so joining it CAN move history, bounded by that date, and
+            the date is printed because it is the only thing on the row that predicts how much. %>
         <p class="text-gray-500" data-suggestion-effect>
           <% if joined %>
             <%# `joined.noun`, NOT THE WORD "envelope" (plan 3, task 5). The reuse arm accepts any
@@ -48,12 +48,13 @@
                 envelope while the category page said "Goal" about it. `Pool::NOUNS` is the one
                 mapping. %>
             This rule joins your existing <%= joined.name %> <%= joined.noun %>, and points all
-            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it,
-            past and future — so the <%= joined.noun %> takes on what has already been spent.
+            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it
+            from <%= joined.start_date.strftime("%b %-d, %Y") %> onward — spending before that
+            stays with your main account.
           <% else %>
             Accepting this puts all <%= suggestion.detail[:category_name] || suggestion.subject.name %>
-            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope,
-            past and future — so it opens carrying what has already been spent.
+            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope
+            from today onward — spending before today stays with your main account.
           <% end %>
         </p>
 
