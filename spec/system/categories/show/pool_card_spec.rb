@@ -269,4 +269,54 @@ RSpec.describe "Categories Show - Pool card", type: :system do
       expect(card).to have_no_css("[style*='width:']")
     end
   end
+
+  # ------------------------------------------------------------------------------------------
+  # The start-date bound on the card's own sentence
+  # ------------------------------------------------------------------------------------------
+
+  # THE SENTENCE USED TO PROMISE MORE THAN THE LEDGER DELIVERS. "This category's spending comes out
+  # of this envelope", stated in the present tense with no date on it, was true until the start-date
+  # rule (main-account spec §3) landed: an envelope counts its categories' spending only from its
+  # own `start_date` on, and everything earlier reads against the user's MAIN account. The card was
+  # naming the envelope for all of it — the same unbounded promise the Budget page's re-point clause
+  # was flipped for, on a smaller surface.
+  #
+  # THE DATE IS A PLANTED LITERAL, never read back off the pool under test. `Jun 1, 2025` is written
+  # into the fixture and asserted as a string, so an example cannot pass by printing whatever date
+  # the record happens to hold — which is what `pool.start_date.strftime(...)` on both sides would
+  # be. The factory's own `start_date` is a year back from the run day and would drift with it.
+  #
+  # ALL THREE ARMS, because the bound is not uniform: an envelope and a goal both take it, and an
+  # ACCOUNT takes none at all — a date gate on the buffer would invent a limit the ledger does not
+  # apply, so its paragraph must stay bare. The third example is the one that would catch a clause
+  # pasted into every branch.
+  describe "the start date its sentence is bounded by" do
+    def dated(pool) = pool.tap { |record| record.update!(start_date: Date.new(2025, 6, 1)) }
+
+    it "bounds the envelope sentence and names the day", :aggregate_failures do
+      pointed_at(dated(envelope("Groceries")))
+      visit category_path(user.categories.find_by!(name: "Groceries Spending"))
+
+      expect(card).to have_content("comes out of this envelope from Jun 1, 2025 onward")
+      expect(card).to have_content("spending before then stays with your main account")
+    end
+
+    it "bounds the goal sentence the same way", :aggregate_failures do
+      goal = dated(create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000))
+      pointed_at(goal)
+      visit category_path(user.categories.find_by!(name: "Emergency Fund Spending"))
+
+      expect(card).to have_content("draws from a shared goal, from Jun 1, 2025 onward")
+      expect(card).to have_content("spending before then stays with your main account")
+    end
+
+    it "leaves the account sentence unbounded, because an account has no date gate", :aggregate_failures do
+      pointed_at(dated(create(:pool, :account, user: user, name: "Side Gig Checking")))
+      visit category_path(user.categories.find_by!(name: "Side Gig Checking Spending"))
+
+      expect(card).to have_content("an account is your buffer")
+      expect(card).to have_no_content("Jun 1, 2025")
+      expect(card).to have_no_content("stays with your main account")
+    end
+  end
 end
