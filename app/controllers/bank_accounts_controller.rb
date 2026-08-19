@@ -24,6 +24,10 @@ class BankAccountsController < HomeController
     pool = Pool.new(user: current_user, pool_type: :account, **bank_account_params)
 
     if pool.save
+      # The FIRST account a user creates is their main account (spec §2) — the place income
+      # lands and displaced history reads against. Later accounts never steal the role;
+      # changing main is a deliberate future affordance, not a side effect of adding a bank.
+      current_user.update!(default_account: pool) if current_user.default_account.blank?
       redirect_to root_path, notice: "#{pool.name} added."
     else
       # Same shape as BudgetPageController#update, the other inline form on a presenter-heavy

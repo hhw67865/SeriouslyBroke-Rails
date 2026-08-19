@@ -16,7 +16,15 @@ FactoryBot.define do
     # `user: user` rather than a bare `association :pool, :account`: that would mint a pool owned by
     # a DIFFERENT user, and a category whose pool belongs to someone else is a fixture no screen can
     # render honestly.
-    pool { association :pool, :account, user: user }
+    #
+    # `user.default_account || association(...)` (main-account spec §6, `Category#pool_must_be_
+    # reachable`): a category may point only at the user's MAIN account, singular — minting a fresh
+    # account on every implicit-pool category would give a user with two such categories two
+    # different accounts, and the validator refuses the second. Reusing the user's existing default
+    # account when there is one keeps every implicit-pool category on the SAME account; minting one
+    # only happens for that user's first, and the `:account` trait's own `after(:create)` is what
+    # makes that first one the default.
+    pool { user.default_account || association(:pool, :account, user: user) }
 
     trait :income do
       category_type { :income }

@@ -34,6 +34,27 @@ RSpec.describe Category, type: :model do
         expect(build(:category, :expense, user: user, pool: create(:pool, :account, user: user))).to be_valid
       end
     end
+
+    describe "pool reachability (main-account spec §6)" do
+      let(:user) { create(:user) }
+      let(:main) { create(:pool, :account, user: user, name: "Main") }
+      let(:other) { create(:pool, :account, user: user, name: "Ally") }
+
+      before { user.update!(default_account: main) }
+
+      it "accepts the main account and refuses any other account", :aggregate_failures do
+        expect(build(:category, user: user, pool: main)).to be_valid
+        refused = build(:category, user: user, pool: other)
+        expect(refused).not_to be_valid
+        expect(refused.errors[:pool]).to include("must be your main account or an envelope inside one")
+      end
+
+      it "refuses an envelope when the user has no main account to anchor its history" do
+        envelope = create(:pool, :budget_pool, user: user, account: main)
+        user.update!(default_account: nil)
+        expect(build(:category, user: user, pool: envelope)).not_to be_valid
+      end
+    end
   end
 
   # TWO VALUES, AND `savings: 2` IS RETIRED RATHER THAN RENUMBERED (plan 3, task 5). This is the

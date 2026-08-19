@@ -51,6 +51,27 @@ RSpec.describe "The start-date rule", type: :model do
     expect(balance(envelope)).to eq(0)
   end
 
+  # THE OTHER SHAPE `Category#pool_must_be_reachable` (main-account spec §6) EXISTS TO REFUSE:
+  # an envelope category for a user with no main account at all. The ELSE arm of the landing rule
+  # (`PoolBalanceLedger::ENTRY_POOL_ID`, and `Category#effective_pool` beside it) sends a pre-start
+  # entry to `user&.default_account` — a NULL there resolves the whole COALESCE to nothing, so the
+  # entry reaches no pool and Σ pools drops below bank truth by exactly its amount. The validator
+  # is what keeps this from happening for real; this proves it is worth keeping.
+  it "loses a pre-start entry from every pool when the category's user has no main account", :aggregate_failures do
+    # Planted past the model: Category#pool_must_be_reachable would refuse an envelope category
+    # for a user with no default_account.
+    orphaned = build(:category, :expense, user: user, pool: envelope, name: "Orphaned")
+    user.update!(default_account: nil)
+    orphaned.save!(validate: false)
+    create(:entry, item: create(:item, category: orphaned), amount: 15, date: Date.new(2026, 7, 1))
+
+    expect(balance(main)).to eq(0)
+    expect(balance(envelope)).to eq(0)
+
+    pool_side = user.pools.sum { |pool| PoolCalculator.new(pool).balance }
+    expect(pool_side).not_to eq(bank_truth_for(user))
+  end
+
   # THE BOUNDARY DAY IS THE USER'S DAY, NOT UTC'S. `entries.date` is a DATETIME column and
   # ApplicationController wraps every request in `Time.use_zone(current_user.timezone)`, so an entry
   # a Tokyo user files on Aug 1 is stored `2026-07-31 15:00:00` — nine hours before the UTC day

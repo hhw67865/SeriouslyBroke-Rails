@@ -45,5 +45,14 @@ RSpec.describe "BankAccounts", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(user.pools.count).to eq(1)
     end
+
+    it "makes the first account the main account, and only the first", :aggregate_failures do
+      user.update!(default_account: nil)
+      post bank_accounts_path, params: { bank_account: { name: "First" } }
+      expect(user.reload.default_account.name).to eq("First")
+
+      post bank_accounts_path, params: { bank_account: { name: "Second" } }
+      expect(user.reload.default_account.name).to eq("First")
+    end
   end
 end

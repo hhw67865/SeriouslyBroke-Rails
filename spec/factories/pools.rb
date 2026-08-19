@@ -25,6 +25,14 @@ FactoryBot.define do
       sequence(:name) { |n| "#{Faker::Bank.name} #{n}" }
       target_amount { nil }
       account { nil }
+
+      # MAIN-ACCOUNT SPEC §6, VIA `Category#pool_must_be_reachable`: a category may point only
+      # at the user's default account or an envelope, so a bare `create(:pool, :account)` used
+      # as a category's pool is refused the instant that user already has no default set. The
+      # FIRST account any fixture mints for a user becomes that user's main account here, the
+      # same rule `BankAccountsController#create` applies for real — later accounts for the same
+      # user are left alone, exactly as a second bank account never steals the role.
+      after(:create) { |p| p.user.update!(default_account: p) if p.pool_type_account? && p.user.default_account.blank? }
     end
 
     trait :budget_pool do

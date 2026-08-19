@@ -66,8 +66,11 @@ RSpec.describe Entry, type: :model do
     let(:groceries) { create(:pool, :budget_pool, user: user, account: checking) }
 
     it "uses the entry's own pool when set" do
-      savings_account = create(:pool, :account, user: user, name: "Savings Account")
+      # `checking` minted first, so it is the user's main account (main-account spec §6) — the
+      # only account an income category may point at. `savings_account` only ever needs to hold
+      # the entry's override; nothing requires it to be main.
       category = create(:category, :income, user: user, pool: checking)
+      savings_account = create(:pool, :account, user: user, name: "Savings Account")
       entry = create(:entry, item: create(:item, category: category), pool: savings_account)
 
       expect(entry.effective_pool).to eq(savings_account)

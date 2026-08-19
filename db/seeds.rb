@@ -150,13 +150,24 @@ end
 demo_start = today - 6.months
 
 envelope = lambda do |name, home, priority|
-  user.pools.create!(name: name, pool_type: :budget, account: home, priority: priority,
-                     start_date: demo_start)
+  user.pools.create!(
+    name: name,
+    pool_type: :budget,
+    account: home,
+    priority: priority,
+    start_date: demo_start
+  )
 end
 
 goal = lambda do |name, target, home, priority|
-  user.pools.create!(name: name, pool_type: :savings, target_amount: target, account: home,
-                     priority: priority, start_date: demo_start)
+  user.pools.create!(
+    name: name,
+    pool_type: :savings,
+    target_amount: target,
+    account: home,
+    priority: priority,
+    start_date: demo_start
+  )
 end
 
 # A CATEGORY ALWAYS NAMES ITS POOL. There is no arity here that leaves `pool` nil, which is the
@@ -165,7 +176,9 @@ lane = lambda do |name, type, pool, color|
   user.categories.create!(name: name, category_type: type, color: color, pool: pool)
 end
 
-log = ->(item, amount, on, description) { item.entries.create!(amount: amount, date: on, description: description) }
+log = lambda do |item, amount, on, description, pool: nil|
+  item.entries.create!(amount: amount, date: on, description: description, pool: pool)
+end
 
 # MONEY THE USER MOVED BY HAND — `kind` stays at its default `transfer`, which is what every
 # movement in this demo is. A distribution writes `allocation` and `sweep` rows and DELETES them
@@ -484,11 +497,17 @@ log.call(pet_food, 34, periods_ago[1] + 2, "Kibble and litter")
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating Ally Savings, its overdue-but-funded premium and its rate envelope..."
 
-ally_transfers = lane.call("Ally Transfers", :income, ally, "#42A5F5")
+# THE CATEGORY NAMES CHECKING, NOT ALLY (main-account spec §6): a category may only point at the
+# MAIN account or an envelope, never at a non-main account, so "Ally Transfers" is filed under
+# Checking like every other income lane. Each entry below still LANDS in Ally — the per-entry
+# `pool:` override is the escape hatch the design keeps open for exactly this ("an employer
+# splitting a paycheck across two accounts is two deposits"), and `ENTRY_POOL_ID` resolves through
+# it first, so every balance below is unchanged from before this rule existed.
+ally_transfers = lane.call("Ally Transfers", :income, checking, "#42A5F5")
 transfer_in = ally_transfers.items.create!(name: "Transfer In")
-log.call(transfer_in, 400, periods_ago[4], "Moved to Ally Savings")
-log.call(transfer_in, 400, periods_ago[2], "Moved to Ally Savings")
-log.call(transfer_in, 1_000, today, "Moved to Ally Savings")
+log.call(transfer_in, 400, periods_ago[4], "Moved to Ally Savings", pool: ally)
+log.call(transfer_in, 400, periods_ago[2], "Moved to Ally Savings", pool: ally)
+log.call(transfer_in, 1_000, today, "Moved to Ally Savings", pool: ally)
 
 renters_insurance = envelope.call("Renters Insurance", ally, 8)
 insurance_bills = lane.call("Insurance Bills", :expense, renters_insurance, "#4DB6AC")
@@ -532,13 +551,25 @@ Budget.create!(pool: holiday_gifts, amount: 200, basis: :per_period)
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the overdrawn third account..."
 
-side_gig_income = lane.call("Side Gig Income", :income, side_gig, "#26C6DA")
+# BOTH LANES NAME CHECKING, NOT SIDE GIG (main-account spec §6, same reasoning as Ally's
+# transfers above): a category may only point at the main account or an envelope. Every entry
+# below still overrides its own `pool:` to Side Gig, so it is still the account that goes red —
+# `buffer_funded?` (which drives the "accepting it creates a new envelope" behavior noted below)
+# reads the category's pool type, not which account, so pointing at Checking instead of Side Gig
+# leaves that read unchanged.
+side_gig_income = lane.call("Side Gig Income", :income, checking, "#26C6DA")
 invoices = side_gig_income.items.create!(name: "Client Invoice")
-log.call(invoices, 900, periods_ago[2], "Invoice #114 paid")
-log.call(invoices, 400, today, "Invoice #117 paid")
+log.call(invoices, 900, periods_ago[2], "Invoice #114 paid", pool: side_gig)
+log.call(invoices, 400, today, "Invoice #117 paid", pool: side_gig)
 
-estimated_taxes = lane.call("Estimated Taxes", :expense, side_gig, "#78909C")
-log.call(estimated_taxes.items.create!(name: "Federal Estimate"), 1_600, today - 3, "Q3 estimated tax payment")
+estimated_taxes = lane.call("Estimated Taxes", :expense, checking, "#78909C")
+log.call(
+  estimated_taxes.items.create!(name: "Federal Estimate"),
+  1_600,
+  today - 3,
+  "Q3 estimated tax payment",
+  pool: side_gig
+)
 
 # Left unfunded, so it still asks: a negative Available with no row under it would state the
 # overdraft without showing what it costs.
@@ -566,10 +597,13 @@ Budget.create!(pool: quarterly_taxes, amount: 200, basis: :per_period)
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the fourth account, the calm one..."
 
-hsa_contributions = lane.call("Health Savings Contributions", :income, health_savings, "#4DD0E1")
+# NAMES CHECKING, NOT HEALTH SAVINGS, for the same reason as the two lanes above — a category may
+# only point at the main account or an envelope. Both entries still override `pool:` to Health
+# Savings, so the period-straddling contrast the comment above describes is unchanged.
+hsa_contributions = lane.call("Health Savings Contributions", :income, checking, "#4DD0E1")
 hsa_payroll = hsa_contributions.items.create!(name: "Payroll Contribution")
-log.call(hsa_payroll, 200, today - 10, "Pre-tax HSA contribution")
-log.call(hsa_payroll, 200, today, "Pre-tax HSA contribution")
+log.call(hsa_payroll, 200, today - 10, "Pre-tax HSA contribution", pool: health_savings)
+log.call(hsa_payroll, 200, today, "Pre-tax HSA contribution", pool: health_savings)
 
 # Two rather than one, so the collapsed summary reads "2 envelopes funded in full" and pluralize
 # is exercised on a real screen. Distinct priorities because these two share an ACCOUNT: a tie

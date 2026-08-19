@@ -54,6 +54,7 @@ class Category < ApplicationRecord
        }
 
   validate :pool_must_belong_to_user
+  validate :pool_must_be_reachable
   validate :income_must_land_in_an_account
 
   # Basic scopes
@@ -212,6 +213,22 @@ class Category < ApplicationRecord
     return if pool.blank? || user.blank?
 
     errors.add(:pool, "must belong to the same user") unless pool.user == user
+  end
+
+  # MAIN-ACCOUNT SPEC §6: non-main accounts hold money via movements only — no categories, so
+  # no entries can ever land in them and their balance mirrors the real bank statement. And a
+  # category on an envelope needs the user to HAVE a main account, because the start-date
+  # rule's ELSE arm sends the envelope's pre-start history to users.default_account_id — a
+  # NULL there silently drops those entries from Σ.
+  def pool_must_be_reachable
+    return if pool.blank? || user.blank?
+
+    if pool.pool_type_account?
+      return if pool == user.default_account
+      errors.add(:pool, "must be your main account or an envelope inside one")
+    elsif user.default_account.blank?
+      errors.add(:pool, "needs a main account first — history before the envelope starts has nowhere to go")
+    end
   end
 
   # Income lands in an account, never directly in an envelope: the allocation rules
