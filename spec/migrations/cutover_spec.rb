@@ -516,10 +516,48 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   describe "step 5b — budget envelopes open at zero" do
     before { migrate! }
 
-    it "leaves every budget envelope holding nothing at all" do
-      expect(wild[:user].pools.budget_pools.map { |pool| pool.calculator.balance }).to all(eq(0))
+    # WHAT THE APP'S READERS SEE AFTERWARDS IS NOT WHAT STEP 5b COMPUTED, AND BOTH ARE RIGHT.
+    # The header above is step 5b's own arithmetic, in the pre-rule COALESCE its verifier speaks:
+    # each envelope holds its category's whole history, and one movement clears it. Since the
+    # START-DATE RULE (main-account spec §3) the app's readers no longer agree that the history is
+    # in there. An envelope this migration CREATES is dated the day of the run — `#insert_pool`
+    # writes `start_date: Date.current` on every pool it mints — so every entry that predates the
+    # run already reads against the user's main account, and step 5b's transfer, computed as though
+    # it did not, lands on top as a second correction. The envelope opens at PLUS its history.
+    #
+    # THE THIRD ENVELOPE IS THE CONTROL, and it is the only reason this reads as composition rather
+    # than as breakage. Utilities is not the migration's — the fixture planted it as a real pool,
+    # so it carries the factory's year-old `start_date` and its July entries are POST-start. Its
+    # $90 was never relocated, its $90 transfer still clears it, and it lands where it always
+    # landed: $0. One envelope stands still while the two dated today move by exactly their own
+    # history, which is what a date gate looks like and what a broken predicate does not.
+    #
+    # `Σ pools` IS UNMOVED THROUGH ALL OF IT — the $1,500 the two envelopes gained is the $1,500
+    # the buffer lost, and "the invariant it exists to create" above still reads `app_total` at
+    # `wild_bank_truth` on this same fixture, green and untouched. This is RELOCATION, never
+    # leakage, and that describe block is the assertion that says so rather than this comment.
+    #
+    # IT IS ALSO TRANSIENT BY DESIGN, WHICH IS WHY IT IS PINNED RATHER THAN REPAIRED. No user lives
+    # here: the sanctioned pipeline is cutover → FRESH-START RESET (the envelope spec's "What Plan
+    # 3 leaves open" §3, answered 2026-08-18), and the reset deletes every pool movement — these
+    # zeroing transfers included — along with every non-account pool, leaving one buffer per user.
+    # The state below exists only between those two steps. Left unpinned, the next reader would
+    # meet +$300 in a file that says "open at zero" and take it for a bug.
+    it "leaves the migration's own envelopes holding their relocated history, and the older one at zero" do
+      balances = wild[:user].pools.budget_pools.to_h { |pool| [pool.name, pool.calculator.balance] }
+
+      expect(balances).to eq(
+        "Groceries" => BigDecimal("300.00"),
+        "Rent 2" => BigDecimal("1200.00"),
+        "Utilities" => BigDecimal("0")
+      )
     end
 
+    # THE MOVEMENTS THEMSELVES ARE UNCHANGED, and that is the half of this example that matters
+    # most: step 5b still measures each deficit in its own pre-rule terms and still pays it once
+    # and in full. Only the BUFFER's resulting figure moved, and it moved by exactly the $1,500 the
+    # two migration-created envelopes gained — $1,490.25 − $1,500.00 = −$9.75. Utilities' $90 is
+    # not in that difference, because its history never left it (see the control above).
     it "pays each deficit out of the buffer, exactly once and exactly in full", :aggregate_failures do
       zeroing = PoolMovement.where(from_pool: wild[:checking], date: Time.zone.today.all_day)
 
@@ -531,7 +569,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
         ]
       )
       expect(zeroing.map(&:kind).uniq).to eq(["transfer"])
-      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("1490.25"))
+      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("-9.75"))
     end
 
     # THE FAR SIDE OF THE BOUNDARY: Medical Fund is a GOAL sitting at −$60.00, which is exactly the
@@ -594,14 +632,29 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(records.reject(&:valid?)).to eq([])
     end
 
+    # THE BUFFER HOLDS THE UNCLAIMED MONEY *AND* THE HISTORY THE START-DATE RULE SENT BACK TO IT,
+    # which is the whole of why this figure is negative. Step 5b's arithmetic reaches $1,490.25
+    # (3500 income, less 19.75 of buffer-funded coffee, less 400 transferred to the goal, less the
+    # 1590 that its own reading opens the three envelopes at zero with); the app's readers then
+    # take a further $1,500 off it, because Groceries' $300 and Rent 2's $1,200 predate the
+    # envelopes the migration minted for them today and read against main instead. $1,490.25 −
+    # $1,500.00 = −$9.75. Utilities' $90 is absent from that subtraction, and its absence is the
+    # control: that envelope existed before its own history, so nothing of it moved.
+    #
+    # THE GOALS ARE UNTOUCHED BY EITHER RULE and their figures are unchanged from the day this
+    # example was written — a goal reached by a pre-existing category is not something the
+    # migration dates today. The Health spending is still NOT in the buffer's list; it comes out of
+    # the goal it points at, which is why Medical Fund sits at −60.
+    #
+    # TRANSIENT, exactly as step 5b's own examples say above: the fresh-start reset (the envelope
+    # spec's "What Plan 3 leaves open" §3) deletes every pool movement and every non-account pool,
+    # so no user is ever shown this buffer. It is pinned so the next reader knows −$9.75 is two
+    # rules composing on a state nobody ships, not a lost $1,500.
     it "leaves the buffer holding everything no envelope or goal claimed", :aggregate_failures do
-      # 3500 income, less 19.75 of buffer-funded coffee, less 400 transferred to the goal, less the
-      # 1590 that opens the three envelopes at zero. The Health spending is NOT in that list — it
-      # comes out of the goal it points at, which is why Medical Fund sits at −60 below.
-      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("1490.25"))
+      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("-9.75"))
       expect(wild[:holiday].reload.calculator.balance).to eq(BigDecimal("400.00"))
       expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
-      expect(wild[:user].pools.budget_pools.map { |pool| pool.calculator.balance }).to all(eq(0))
+      expect(wild[:user].pools.budget_pools.sum(0.to_d) { |pool| pool.calculator.balance }).to eq(BigDecimal("1500.00"))
       expect(wild[:rent_goal].reload.calculator.balance).to eq(0)
     end
   end
