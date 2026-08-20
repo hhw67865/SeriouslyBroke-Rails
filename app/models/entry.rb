@@ -106,6 +106,45 @@ class Entry < ApplicationRecord
     pool || resolved_category&.effective_pool(on: date || Date.current)
   end
 
+  # INCOME ROUTING (main-account spec §4), THE MIRROR AND NOT THE LANDING.
+  #
+  # The income entry itself ALWAYS lands in main — that is `Category#pool_must_be_reachable`'s job
+  # and nothing here moves it. What a user picking "Ally" on the entry form is really recording is
+  # that the money did not STAY in main, and this writes exactly that: ONE `transfer` movement
+  # main → Ally for the full amount, carrying this entry as `source_entry` so an edit finds it
+  # again (`dependent: :destroy` on the association already covers the delete).
+  #
+  # SCOPED TO `kind_transfer`, WHICH IS LOAD-BEARING: allocation and sweep movements ALSO carry a
+  # `source_entry` — that link is what makes a distribution replaceable — so a routing sync that
+  # went by the link alone would delete the period's envelope split every time somebody corrected a
+  # paycheck's amount. The kind is the only thing on the table that tells the two apart.
+  #
+  # IDEMPOTENT BY CONSTRUCTION rather than by branching: every path clears first, so re-routing
+  # replaces, routing to main removes, and calling it twice with the same account leaves one row.
+  # A user with no main account routes nothing — there is nothing for the money to be mirrored OUT
+  # of, and inventing a source pool here would move money the user never had.
+  def route_income_to!(account)
+    routing = pool_movements.kind_transfer
+    main = user.default_account
+    routing.destroy_all
+    return if account.blank? || main.blank? || account == main
+
+    pool_movements.create!(
+      from_pool: main,
+      to_pool: account,
+      amount: amount,
+      date: date,
+      kind: :transfer
+    )
+  end
+
+  # WHERE THE FORM'S "Lands in" SELECT OPENS ON AN EDIT — the account this entry was routed to, or
+  # nil for one that stayed in main. The absence of a routing movement IS "main", so nil is the
+  # honest answer rather than a missing one, and the form falls back to the user's main itself.
+  def routed_account
+    pool_movements.kind_transfer.first&.to_pool
+  end
+
   private
 
   # `category` and `user` are delegations through `item`, so on a half-built entry they

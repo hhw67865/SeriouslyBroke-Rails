@@ -5,10 +5,11 @@ class EntriesController < ApplicationController
 
   before_action :set_entry, only: [:edit, :update, :destroy]
   before_action :set_item, only: [:new, :create]
+  before_action :set_destination_account, only: [:create, :update]
   before_action :load_options, only: [:new, :edit, :create, :update]
   before_action :set_previous_url, only: [:new, :create, :edit, :update]
 
-  helper_method :entry_impact
+  helper_method :entry_impact, :entry_destination_account
 
   # GET /entries
   def index
@@ -35,6 +36,7 @@ class EntriesController < ApplicationController
     @entry.item = @item if @item
 
     if @entry.save
+      sync_income_routing
       redirect_to previous_path, notice: "Entry was successfully created."
     else
       @entry.build_item
@@ -45,6 +47,7 @@ class EntriesController < ApplicationController
   # PATCH/PUT /entries/1
   def update
     if @entry.update(entry_params)
+      sync_income_routing
       redirect_to previous_path, notice: "Entry was successfully updated."
     else
       render :edit, status: :unprocessable_content
@@ -162,23 +165,93 @@ class EntriesController < ApplicationController
     @entry = current_user.entries.find(params[:id])
   end
 
+  # INCOME ROUTING (main-account spec §4) — THE VIRTUAL PARAM, RESOLVED BEFORE THE SAVE.
+  #
+  # `destination_account_id` is never a column on `entries`, so it is deliberately absent from
+  # `entry_params`: it is a question the form asks and #sync_income_routing answers by writing a
+  # movement. Resolving it HERE rather than after the save is what keeps a hand-posted stranger's
+  # id from leaving a saved entry behind next to its 404.
+  #
+  # `current_user.pools.pool_type_account.find` — the same scoping law as `categories_controller`,
+  # and the type narrowing is half of it: an envelope id is as illegal a destination as another
+  # user's account, and `find` says so the same way for both.
+  #
+  # THE KEY'S PRESENCE IS THE SIGNAL, NOT ITS VALUE (binding resolution). An update posted without
+  # the select at all must leave existing routing standing — only somebody who ASKED the question
+  # gets to change the answer — while an explicitly blank value means "main", which un-routes.
+  def set_destination_account
+    @routing_asked = params[:entry].respond_to?(:key?) && params[:entry].key?(:destination_account_id)
+    return unless @routing_asked
+
+    id = params[:entry][:destination_account_id]
+    @destination_account = current_user.pools.pool_type_account.find(id) if id.present?
+  end
+
+  # THE ONE CALLER OF `Entry#route_income_to!`, run after a successful save of either action.
+  #
+  # An entry that is NOT income clears unconditionally rather than returning early: changing a
+  # paycheck's category to Groceries has to take its mirror movement with it, or main would go on
+  # paying an envelope for money the app no longer thinks arrived there.
+  #
+  # `@entry.routed_account` IS THE "NOBODY ASKED" ANSWER, AND IT IS A RE-SYNC RATHER THAN A SKIP:
+  # routing to where the entry already routes leaves the destination exactly where it was while
+  # re-writing the movement's amount and date from the entry's own, so an edit that only corrects a
+  # paycheck from $500 to $750 carries its mirror along. Skipping outright would leave main paying
+  # out yesterday's figure forever.
+  def sync_income_routing
+    return @entry.route_income_to!(nil) unless @entry.category.income?
+
+    @entry.route_income_to!(@routing_asked ? @destination_account : @entry.routed_account)
+  end
+
   def set_item
     @item = current_user.items.find(params[:item_id]) if params[:item_id]
   end
 
   def load_options
     @categories = current_user.categories.order(:category_type, :name)
+    # §4's "Lands in" list. Accounts only — an envelope is not somewhere a paycheck arrives, and
+    # #set_destination_account refuses one with the same scope, so the list and the write agree.
+    @accounts = current_user.pools.pool_type_account.order(:name)
+  end
+
+  # WHERE THE "Lands in" SELECT OPENS. Three sources, in the order that keeps a form honest about
+  # what the user last said: the destination THIS request carried (so a rejected create comes back
+  # showing the account they picked, not main), then where the entry is actually routed, then the
+  # user's main account — which is what "no routing movement" means.
+  def entry_destination_account(entry)
+    return @destination_account || current_user.default_account if @routing_asked
+
+    (entry.persisted? ? entry.routed_account : nil) || current_user.default_account
   end
 
   def entry_params
-    params.expect(entry: [:amount, :date, :description, :item_id]).tap do |permitted_params|
-      permitted_params[:amount] = evaluate_formula(permitted_params[:amount])
+    params.expect(entry: [:amount, :date, :description, :item_id, :destination_account_id]).tap do |permitted_params|
+      # PERMITTED, THEN POPPED. `destination_account_id` is not a column on `entries` — it names the
+      # account the money ended up in and #sync_income_routing answers it with a MOVEMENT — so mass
+      # assignment must never see it. It is permitted all the same because `params.expect` raises
+      # ParameterMissing when NONE of its scalars are present, and "change only where this paycheck
+      # landed" is a legitimate edit that submits nothing else.
+      permitted_params.delete(:destination_account_id)
 
-      # If item_id is not a valid UUID (e.g. name of new item from TomSelect), treat it as blank
-      permitted_params[:item_id] = nil if permitted_params[:item_id].present? && !permitted_params[:item_id].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+      # `if key?` AND NOT AN UNCONDITIONAL ASSIGNMENT: `params[:amount] = evaluate_formula(nil)`
+      # WRITES the key back as nil, so an update that submits no amount at all — the routing-only
+      # edit above is the first one this app can make — mass-assigned `amount: nil` over a saved
+      # figure and was rejected by the presence validator. A key the request never sent must stay
+      # unsent.
+      permitted_params[:amount] = evaluate_formula(permitted_params[:amount]) if permitted_params.key?(:amount)
 
-      permitted_params[:item_attributes] = item_attributes if permitted_params[:item_id].blank? && params.dig(:entry, :item_attributes, :name).present?
+      normalize_item(permitted_params)
     end
+  end
+
+  # TomSelect submits the TYPED NAME of a brand-new item in the same field that otherwise carries an
+  # id, so "not a UUID" is this form's way of saying "the user is naming something that doesn't
+  # exist yet" — the id is dropped and the name becomes nested attributes instead.
+  def normalize_item(permitted_params)
+    permitted_params[:item_id] = nil if permitted_params[:item_id].present? && !permitted_params[:item_id].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\z/i)
+
+    permitted_params[:item_attributes] = item_attributes if permitted_params[:item_id].blank? && params.dig(:entry, :item_attributes, :name).present?
   end
 
   def evaluate_formula(raw)

@@ -7,10 +7,16 @@
       button's words are down in the form actions. `entry-id` is what lets the card exclude THIS
       entry's own amount on edit — the ledger has already counted it, and the card must show the
       world as if the entry were being decided now. Blank on a new entry. %>
-  <div data-controller="app--entry--impact"
-       data-action="entry:categoryChanged->app--entry--impact#categoryChanged"
+  <%# THE SECOND CONTROLLER ON THIS SPAN IS THE §4 ROUTING SELECT'S, and it shares the span for the
+      same reason: "the user picked a category" is announced ONCE, by `app--entry--form`, and both
+      of the things that follow the category — the impact card and the "Lands in" select's very
+      existence — listen to that one announcement rather than to the select itself. %>
+  <div data-controller="app--entry--impact app--entry--routing"
+       data-action="entry:categoryChanged->app--entry--impact#categoryChanged
+                    entry:categoryChanged->app--entry--routing#categoryChanged"
        data-app--entry--impact-url-value="<%= impact_entries_path %>"
-       data-app--entry--impact-entry-id-value="<%= entry.id %>">
+       data-app--entry--impact-entry-id-value="<%= entry.id %>"
+       data-app--entry--routing-income-ids-value="<%= @categories.select(&:income?).map(&:id).to_json %>">
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
@@ -90,6 +96,32 @@
                 type: "date",
                 value: entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d")
               } %>
+        </div>
+
+        <%# INCOME ROUTING (main-account spec §4): "Recording income asks which account it lands in."
+            THE ENTRY ITSELF ALWAYS LANDS IN MAIN — this select does not move it. What it records is
+            that the money did not STAY there, and the server answers it with one mirroring
+            movement main → the chosen account (`Entry#route_income_to!`).
+
+            INCOME ONLY, AND HIDDEN RATHER THAN ABSENT. An expense has no account to arrive in, so
+            the question is meaningless on one; but the field is rendered on every form and merely
+            hidden, because the category can change to income without a page load and no new form
+            is fetched when it does. It IS submitted while hidden — harmlessly:
+            `EntriesController#sync_income_routing` refuses to route anything that is not income, so
+            the ignoring happens where the write does rather than in the markup.
+
+            THE SERVER OPENS IT ON THE RIGHT STATE — visible on an income edit and on a rejected
+            income create, hidden on everything else — so a user with JavaScript off is asked the
+            question exactly when it applies. %>
+        <div class="form-group mt-5"
+             data-app--entry--routing-target="field"
+             <%= "hidden" unless entry.item&.category&.income? %>>
+          <label for="entry_destination_account_id" class="form-label">Lands in</label>
+          <%= select_tag "entry[destination_account_id]",
+              options_from_collection_for_select(@accounts, :id, :name, entry_destination_account(entry)&.id),
+              id: "entry_destination_account_id",
+              class: "form-select" %>
+          <p class="form-hint">Which account did this money arrive in?</p>
         </div>
 
         <%# THE ONLY THING BUDGETING ADDS TO THIS FORM (§6): the envelope impact, under the amount
