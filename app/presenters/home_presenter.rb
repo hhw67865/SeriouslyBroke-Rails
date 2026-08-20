@@ -208,6 +208,21 @@ class HomePresenter
   # that are emptiest. Kept because this is the public money reader the views divide by.
   def current_buffer_for(account) = calculator_for(account).balance.to_d
 
+  # WHICH PERIOD THE STANDING BAND IS TALKING ABOUT, or nil for a user who has declared none.
+  #
+  # `User#period_containing`, the one method that owns this arithmetic — the same window
+  # `DistributionPresenter#period` and `EntryImpactPresenter#period_ends_on` both read off,
+  # never re-derived here. GATED ON THE DECLARATION, the same two-column check
+  # `#structurally_underwater?` and `EntryImpactPresenter#period_ends_on` both make, rather than
+  # taken on trust: `period_containing` falls back to the calendar month for an undeclared user,
+  # which is the right fallback for a normaliser and a lie on this band, since "Aug 1 – Aug 31"
+  # would state a boundary the user never set.
+  def period_range
+    return nil if user.period_cadence.blank? || user.period_anchor_date.blank?
+
+    user.period_containing(today)
+  end
+
   # Unclaimed cash across every account once the next distribution has swept — an honest answer
   # to "what do I have", asked about the moment the button on this screen would create.
   #

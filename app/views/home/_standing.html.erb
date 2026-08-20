@@ -64,6 +64,19 @@
     <% end %>
   <% end %>
 
+  <%# WHICH PERIOD THE BAND ABOVE IS TALKING ABOUT (main-account plan, task 6). Read off
+      HomePresenter#period_range, itself User#period_containing — the one window every other
+      screen trusts, never re-derived here. Silent for an undeclared user (`period_range` is nil):
+      the band already renders without a period in that state, and inventing a calendar-month
+      boundary nobody set would be a lie beside a sentence that is otherwise still true. Same
+      format as the distribution screen's own subtitle (`%b %-d` on both ends, no year — see
+      `distributions/new.html.erb`). %>
+  <% if presenter.period_range %>
+    <p class="mt-1 text-sm text-gray-500" data-period-range>
+      <%= presenter.period_range.first.strftime("%b %-d") %> – <%= presenter.period_range.last.strftime("%b %-d") %>
+    </p>
+  <% end %>
+
   <%# An overdraft is money already spent, so it is neither part of #available nor part of
       #shortfall. It has to be said here or the figures above read as the whole truth. %>
   <% presenter.overdrawn_accounts.each do |account| %>

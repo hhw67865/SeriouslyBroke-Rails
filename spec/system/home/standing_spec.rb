@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe "Home Standing", type: :system do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
@@ -164,6 +166,35 @@ RSpec.describe "Home Standing", type: :system do
 
     expect(page).to have_css("h2", text: "You're covered")
     expect(page).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
+  end
+
+  # TASK 6 (main-account plan): which period the whole band is talking about. `travel_to` wraps
+  # only the visit — the same discipline `spec/system/pools/show/connected_categories_spec.rb`
+  # documents — because HomeController reads `Date.current` at request time and the range has to
+  # be asked about a date genuinely inside the declared period, not whatever day the suite happens
+  # to run on. `Date.new(2026, 8, 20)` is a planted literal, never a lazy `Date.current` resolved
+  # inside the travelled block.
+  it "names the period beside the standing sentence", :aggregate_failures do
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
+
+    expect(page).to have_css("[data-period-range]", text: "Aug 14 – Aug 27")
+  end
+
+  # THE OTHER DIRECTION: no declared period, no invented range. Same gate
+  # `structurally_underwater?` already trusts (`period_cadence`/`period_anchor_date` both blank),
+  # asked here about a different band on the same screen.
+  it "shows no period range before a period is declared" do
+    user.update!(period_cadence: nil, period_anchor_date: nil)
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_no_css("[data-period-range]")
   end
 
   # An undeclared user has made no comparison, so there is no verdict to render — and the button
