@@ -20,7 +20,12 @@ RSpec.describe "BankAccounts", type: :request do
       expect(response).to redirect_to(root_path)
     end
 
-    it "drops every crafted attribute a param could carry", :aggregate_failures do
+    # ONE CRAFTED POST, ASKED TWICE. Every attribute a Pool carries that a caller could want is on
+    # it at once, because a permit list is only proven by the params it drops TOGETHER — a request
+    # that smuggled one of these would smuggle the rest. The two examples below split what the
+    # dropping protects, not the request: the first is about what the pool IS and where it sits,
+    # the second about the two figures the budget reads off it.
+    def post_crafted
       post bank_accounts_path,
            params: {
              bank_account: {
@@ -32,9 +37,19 @@ RSpec.describe "BankAccounts", type: :request do
              }
            }
 
-      sneaky = user.pools.find_by(name: "Sneaky")
+      user.pools.find_by(name: "Sneaky")
+    end
+
+    it "keeps the pool's type and its containment the server's own", :aggregate_failures do
+      sneaky = post_crafted
+
       expect(sneaky).to be_pool_type_account
       expect(sneaky.account_id).to be_nil
+    end
+
+    it "drops the ordering and the target a param could carry", :aggregate_failures do
+      sneaky = post_crafted
+
       expect(sneaky.priority).to eq(0)
       expect(sneaky.target_amount).to be_nil
     end

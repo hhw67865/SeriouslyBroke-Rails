@@ -141,8 +141,19 @@ class Entry < ApplicationRecord
   # WHERE THE FORM'S "Lands in" SELECT OPENS ON AN EDIT — the account this entry was routed to, or
   # nil for one that stayed in main. The absence of a routing movement IS "main", so nil is the
   # honest answer rather than a missing one, and the form falls back to the user's main itself.
+  #
+  # `sole` AND NOT `first`, WHICH MAKES THE ONE-ROW INVARIANT LOAD-BEARING RATHER THAN ASSUMED.
+  # #route_income_to! clears before it writes, so an entry has AT MOST one routing movement by
+  # construction — and `first` would quietly pick one of two if that ever stopped being true, on an
+  # unordered query, handing the form a destination that half the app disagreed with. `sole` raises
+  # instead. The empty case is checked FIRST because it is not a violation of anything: `sole`
+  # raises on zero rows as loudly as on two, and "this income stayed in main" is the ordinary
+  # answer, not an error. `to_a` so the two questions cost one query between them.
   def routed_account
-    pool_movements.kind_transfer.first&.to_pool
+    routing = pool_movements.kind_transfer.to_a
+    return if routing.empty?
+
+    routing.sole.to_pool
   end
 
   private

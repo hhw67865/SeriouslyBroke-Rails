@@ -215,10 +215,13 @@ class EntriesController < ApplicationController
     @accounts = current_user.pools.pool_type_account.order(:name)
   end
 
-  # WHERE THE "Lands in" SELECT OPENS. Three sources, in the order that keeps a form honest about
-  # what the user last said: the destination THIS request carried (so a rejected create comes back
-  # showing the account they picked, not main), then where the entry is actually routed, then the
-  # user's main account — which is what "no routing movement" means.
+  # WHICH ACCOUNT THE "Lands in" SELECT IS SET TO. Three sources, in the order that keeps a form
+  # honest about what the user last said: the destination THIS request carried (so a re-rendered
+  # form still holds the account they picked rather than resetting to main), then where the entry
+  # is actually routed, then the user's main account — which is what "no routing movement" means.
+  #
+  # This is the VALUE only. Whether the field is visible is `_form`'s own question and a rejected
+  # create gets that one wrong — see the note there on `build_item`.
   def entry_destination_account(entry)
     return @destination_account || current_user.default_account if @routing_asked
 

@@ -110,9 +110,19 @@
             `EntriesController#sync_income_routing` refuses to route anything that is not income, so
             the ignoring happens where the write does rather than in the markup.
 
-            THE SERVER OPENS IT ON THE RIGHT STATE — visible on an income edit and on a rejected
-            income create, hidden on everything else — so a user with JavaScript off is asked the
-            question exactly when it applies. %>
+            THE SERVER OPENS IT VISIBLE ON AN INCOME EDIT and hidden everywhere else, so a user with
+            JavaScript off is asked the question wherever a saved category can answer it.
+
+            A REJECTED CREATE IS THE ONE CASE THE SERVER CANNOT OPEN CORRECTLY, and it is worth
+            naming rather than hiding: `EntriesController#create`'s failure branch calls
+            `@entry.build_item`, which REPLACES the item the submission named with a blank one, so
+            `entry.item&.category` is nil by the time this line asks and the field re-renders hidden
+            even though the user had picked an income category. The category picker comes back empty
+            on that render too — the two are the same fact — so what the user meets is a form asking
+            for a category again, not a form that has silently forgotten where their paycheck
+            landed. Rebuilding the item is what makes the category select render at all on a failed
+            create, so it stays; the honest fix is for that branch to stop discarding the submitted
+            item, which is a change to `create` and not to this partial. %>
         <div class="form-group mt-5"
              data-app--entry--routing-target="field"
              <%= "hidden" unless entry.item&.category&.income? %>>

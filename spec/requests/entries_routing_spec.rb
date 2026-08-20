@@ -100,6 +100,19 @@ RSpec.describe "Entries income routing", type: :request do
       expect(routing_for(entry).sole.amount).to eq(750)
     end
 
+    # THE DATE ARM OF THE SAME RE-SYNC. `#route_income_to!` copies BOTH figures off the entry, so
+    # both have to be pinned: a mirror stamped with the day the paycheck was first recorded rather
+    # than the day it actually arrived would put main's outflow in one period and Ally's inflow in
+    # another, and every period-bounded reader would disagree with the next by that amount.
+    it "keeps the movement in step with a date edit when the param is not submitted" do
+      entry = post_income(destination: ally.id)
+      corrected = 3.days.ago.to_date
+
+      patch entry_path(entry), params: { entry: { date: corrected.iso8601 } }
+
+      expect(routing_for(entry).sole.date.to_date).to eq(corrected)
+    end
+
     it "drops the routing when the entry stops being income" do
       entry = post_income(destination: ally.id)
 
@@ -147,5 +160,37 @@ RSpec.describe "Entries income routing", type: :request do
     it "saves nothing when the destination is refused" do
       expect { post_income(destination: groceries_pool.id) }.not_to change(Entry, :count)
     end
+  end
+
+  # THE APP'S ONE INVARIANT, ASKED OF THE FEATURE THAT MOVES MONEY WITHOUT EARNING IT.
+  #
+  # `Σ pools == your bank balance`. A routing movement is a transfer BETWEEN two of the user's own
+  # pools, so it must net to exactly zero across them — the $500 leaves main and arrives in Ally,
+  # and the bank never sees it. The two ways this feature could break that are the two ways it is
+  # written: counting the paycheck in main AND in Ally (a missing outflow) or in neither (an
+  # outflow with no inflow), and NEITHER shows up in any per-pool assertion above, because each of
+  # those reads one pool at a time.
+  #
+  # BOTH SIDES COMPUTED INDEPENDENTLY, house precedent `spec/services/start_date_rule_spec.rb`: the
+  # pool side by PoolCalculator, the bank side by raw SQL over `entries → items → categories` and
+  # keyed on CATEGORY OWNERSHIP, so no app reader referees itself. The expense is here so the sum
+  # is not trivially the one income figure on both sides: $500 in, $40 out, $460 either way.
+  it "keeps Σ pools == bank truth with the income routed away from main" do
+    post_income(destination: ally.id)
+    create(:entry, item: food_item, amount: 40, date: Date.current)
+
+    pool_side = user.pools.sum { |pool| PoolCalculator.new(pool).balance }
+
+    expect(pool_side).to eq(bank_truth_for(user))
+  end
+
+  def bank_truth_for(user)
+    ActiveRecord::Base.connection.select_value(<<~SQL.squish)
+      SELECT SUM(CASE WHEN c.category_type = 1 THEN e.amount::numeric ELSE -e.amount::numeric END)
+      FROM entries e
+      JOIN items i ON i.id = e.item_id
+      JOIN categories c ON c.id = i.category_id
+      WHERE c.user_id = '#{user.id}'
+    SQL
   end
 end
