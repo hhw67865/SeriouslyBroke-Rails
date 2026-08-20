@@ -143,7 +143,17 @@ add-account card.
 - **§5's one-time correction measures main's FAMILY total, not its buffer.** The difference is
   computed against `Pool#total` for main — buffer plus every envelope housed in main — because
   that is the number a bank statement shows for the physical account. Identical to the buffer for
-  a user with no envelopes; right instead of wrong for an envelope-first user.
+  a user with no envelopes; right instead of wrong for an envelope-first user. **§5's step-2
+  funding gate reads the same figure, for the same reason** (`HomePresenter#awaiting_funding?` →
+  `Pool#total`): a waterfall routinely leaves a funded account's buffer at exactly $0 with its
+  envelopes holding everything, and a buffer-only gate offered that account the "match your bank
+  statement" card a second time. An account holding only an EMPTY envelope still totals zero, so
+  it is still offered the card.
+- **§4's routing is synced from the CATEGORY as well as from the entry.** `Category` carries an
+  `after_update` that clears its entries' `kind_transfer` movements when `category_type` flips
+  income → expense, because the category edit form permits that column and
+  `EntriesController#sync_income_routing` only ever runs entry-side — the flip used to strand every
+  mirror, leaving main debited and the destination holding a phantom.
 - **§6's displaced categories always land on main.** Destroying an envelope, or disconnecting a
   category from one, re-points the category at the user's MAIN account — never at the account the
   envelope happened to live inside, which the new validator refuses. Categories pile onto main,
@@ -153,14 +163,36 @@ add-account card.
 
 - **§5's steps have an unenforced order.** Correcting main (step 3) BEFORE funding the other
   accounts (step 2) drains main by the funding amounts afterwards, and there is no second door:
-  the correction latches once. Nothing in the app enforces or explains the sequencing today. The
-  cards render in the right order and the latch is reopened by deleting the correction entry, so
-  the state is recoverable — but only by a user who knows that.
-- **§6's `default_account` requirement is still deferred.** `users.default_account_id` is set
-  when the first account is created, but deleting the main account is legal and nullifies the
-  column, leaving a user with accounts and no main. Home guards this state (the funding gate
-  requires a main present) rather than preventing it. The tightening — refuse the destroy, or
-  promote another account — is unbuilt.
+  the correction latches once. Nothing in the app enforces or explains the sequencing today, and
+  nothing puts the cards in the safe order either: `HomePresenter#accounts` is `order(:name)`, so
+  a main account named late in the alphabet renders BELOW the siblings it is meant to be corrected
+  before. The state is recoverable — deleting the correction entry reopens the latch — but only by
+  a user who knows that.
+- **§6's `default_account` requirement is still deferred, and deleting main costs more than the
+  column.** `users.default_account_id` is set when the first account is created; deleting that
+  account is legal and nullifies the column, leaving a user with accounts and no main. Two things
+  follow, and neither is only about the nullified column:
+
+  - **Σ breaks.** The start-date rule's ELSE arm sends every PRE-START entry to
+    `users.default_account_id`, so a NULL there resolves the whole `COALESCE` to nothing and those
+    entries fall out of EVERY pool — `Σ pools` drifts from bank truth by exactly their amount.
+    That is the shape `spec/services/start_date_rule_spec.rb`'s no-main-account example pins,
+    planted past the model because `Category#pool_must_be_reachable` refuses to create it.
+  - **The other accounts collapse to zero.** `Pool` declares `movements_in` and `movements_out`
+    with `dependent: :destroy`, and every non-main account was funded by ONE movement FROM main
+    (§5, step 2). Destroying main destroys all of them, so each sibling's balance drops by
+    whatever it was funded with — a user's savings account reads $0 against a bank that still
+    holds the money.
+
+  **What makes this narrow is `has_many :categories, dependent: :restrict_with_error`**, not any
+  rule about main: an account with a category pointing at it refuses to be destroyed at all. Every
+  income category must live on an account (`Category#income_must_land_in_an_account`) and that
+  account must be main (`#pool_must_be_reachable`), and onboarding's own correction writes an
+  "Opening Balance" category there — so anyone who has recorded income or finished onboarding
+  cannot reach the destroy. The gap is a user who has done neither. Home guards the state it
+  leaves (the funding gate and the opening-balance gate both require a main present) rather than
+  preventing it. The tightening — refuse the destroy on main outright, or promote another account
+  — is unbuilt.
 - **Latch behavior, recorded as choices rather than defects:** renaming or deleting the
   "Opening Balance" category reopens the correction door (deleting the record of a correction
   deliberately reopens it), and a zero-difference correction records nothing and so leaves the
