@@ -108,6 +108,11 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
 
     def chain
       checking = create(:pool, :account, user: user, name: "Checking")
+      # `user.update!` (main-account spec §6, fix round 2): the file's own `let!(:pool)` already
+      # minted its own account via the base `:pool` factory's nested association before this
+      # method ever runs, and the auto-main trait claimed that one — forced back to `checking`
+      # here, since the "Salary" category below has to be able to name it.
+      user.update!(default_account: checking)
       envelope_b = create(:pool, :budget_pool, user: user, account: checking, name: "B")
       envelope_c = create(:pool, :budget_pool, user: user, account: checking, name: "C")
       category = create(:category, :income, user: user, pool: checking, name: "Salary")
@@ -134,6 +139,9 @@ RSpec.describe "Savings Pools Show - Header Actions", type: :system do
 
     def envelope_with_spending
       checking = create(:pool, :account, user: user, name: "Checking")
+      # `user.update!` — same reason as `#chain` above: the file's own `let!(:pool)` already
+      # claimed main through its own nested account by the time this method runs.
+      user.update!(default_account: checking)
       supplies = create(:pool, :budget_pool, user: user, account: checking, name: "Supplies")
       salary = create(:category, :income, user: user, pool: checking, name: "Salary")
       create(:entry, item: create(:item, category: salary), amount: 500, date: Date.current)

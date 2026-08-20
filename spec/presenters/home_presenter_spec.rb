@@ -12,6 +12,15 @@ RSpec.describe HomePresenter do
   let(:today) { Date.new(2026, 2, 6) }
   let(:presenter) { described_class.new(user: user, today: today) }
 
+  # MAIN-ACCOUNT SPEC §6, FIX ROUND 2: `checking` is the account this whole file treats as
+  # primary — `#deposit` and `#overdraw` below both name it explicitly — but several examples
+  # mint a SECOND account (`ally`) before ever touching `checking` (as an argument evaluated
+  # ahead of a helper's own body, or simply written first), and the auto-main factory trait
+  # claims whichever account it sees first for a user with none named. Forcing it here, rather
+  # than disciplining every example's creation order, is what `#accounts`'s own `checking` line
+  # already did by hand for one test; this makes it true for all of them.
+  before { user.update!(default_account: checking) }
+
   def envelope(name, priority:) = envelope_in(checking, name, priority: priority)
 
   def envelope_in(account, name, priority:)
@@ -36,14 +45,30 @@ RSpec.describe HomePresenter do
 
   # Category names are unique per user, so both of these name themselves after the
   # account — an example may fund two accounts.
+  #
+  # MAIN-ACCOUNT SPEC §6, FIX ROUND 2: an income or expense category may only point at the
+  # user's main account (`checking`, here) or an envelope — never directly at a second account,
+  # which is what both of these used to do. The category now always names Checking; when
+  # `account` is a DIFFERENT one, a `transfer` PoolMovement carries the same amount the rest of
+  # the way, so `account`'s own balance moves by exactly what it always moved by and Checking's
+  # nets to unchanged. `account == checking` needs no movement — that was always the one case
+  # where the category's destination and the target account were the same pool.
   def deposit(account, amount)
-    category = create(:category, :income, user: user, pool: account, name: "#{account.name} pay")
-    create(:entry, item: create(:item, category: category), amount: amount, date: today)
+    category = create(:category, :income, user: user, pool: checking, name: "#{account.name} pay")
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: today)
+    return entry if account == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: account, amount: amount, date: today, source_entry: entry)
+    entry
   end
 
   def overdraw(account, amount)
-    category = create(:category, :expense, user: user, pool: account, name: "#{account.name} fees")
-    create(:entry, item: create(:item, category: category), amount: amount, date: today)
+    category = create(:category, :expense, user: user, pool: checking, name: "#{account.name} fees")
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: today)
+    return entry if account == checking
+
+    create(:pool_movement, from_pool: account, to_pool: checking, amount: amount, date: today, source_entry: entry)
+    entry
   end
 
   describe "#accounts" do

@@ -70,6 +70,19 @@ RSpec.describe "Categories", type: :request do
 
       expect(response).to have_http_status(:unprocessable_content)
     end
+
+    # M10 (main-account spec §6, fix round 2): THE WIRE REFUSAL — a non-main account is the
+    # user's OWN, same as `groceries` above, so the controller lets it through and
+    # `Category#pool_must_be_reachable` is what answers 422. §6 refuses this shape for every
+    # category, not only income ones, so this pins the expense arm the income example above does
+    # not reach.
+    it "answers the user's own non-main account with a 422, not a 404", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+
+      expect { create_category(pool_id: ally.id) }.not_to change(Category, :count)
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
   end
 
   describe "PATCH /categories/:id" do

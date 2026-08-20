@@ -32,16 +32,29 @@ RSpec.describe AllocationCommitter, type: :model do
     create(:pool_movement, from_pool: from, to_pool: pool, amount: amount, date: on, kind: kind)
   end
 
+  # MAIN-ACCOUNT SPEC §6, FIX ROUND 2: an income or expense category may only point at the
+  # user's main account (`checking`), never at `into`/`from` directly. The money still ends up
+  # in that account — a `transfer` PoolMovement carries the same amount the rest of the way when
+  # it differs from `checking` — so every account's balance below is unchanged from before this
+  # rule existed.
   def deposit(amount, into: checking, on: today)
-    category = create(:category, :income, user: user, pool: into)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    category = create(:category, :income, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    return entry if into == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: on, source_entry: entry)
+    entry
   end
 
   # Money leaving the user's life, which is an Entry and never a movement — the one way the
   # world can change between two commits in a direction no replacement puts back.
   def spend(amount, from: checking, on: today)
-    category = create(:category, :expense, user: user, pool: from)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    category = create(:category, :expense, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    return entry if from == checking
+
+    create(:pool_movement, from_pool: from, to_pool: checking, amount: amount, date: on, source_entry: entry)
+    entry
   end
 
   # Memoised per account: every reference inside one example is the SAME proposal, which is

@@ -54,6 +54,15 @@ RSpec.describe Category, type: :model do
         user.update!(default_account: nil)
         expect(build(:category, user: user, pool: envelope)).not_to be_valid
       end
+
+      # M9 (fix round 2): THE OTHER DIRECTION of the example above — an envelope is fine the
+      # moment the user HAS a main account, whichever account actually houses the envelope
+      # (`other`, not `main`). Without this the pair only proves the refusal fires; this proves
+      # it stops firing for exactly the reason it should.
+      it "accepts an envelope once the user has a main account, wherever the envelope itself lives" do
+        envelope = create(:pool, :budget_pool, user: user, account: other)
+        expect(build(:category, user: user, pool: envelope)).to be_valid
+      end
     end
   end
 

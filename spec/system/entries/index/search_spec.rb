@@ -6,8 +6,13 @@ RSpec.describe "Entries Index - Search", type: :system do
   let(:user) { create(:user) }
   let(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let(:vacation_pool) { create(:pool, user: user, name: "Vacation Fund") }
-  let(:emergency_pool) { create(:pool, user: user, name: "Emergency Fund") }
+  # `start_date:` EXPLICIT, BEFORE EVERY PLANTED ENTRY (main-account spec §3, fix round 2): the
+  # factory default is `1.year.ago`, which on any run day is AFTER these entries' 2023/2024
+  # literals — the start-date rule would read every one of them as pre-start and resolve it to
+  # the user's main account instead of to the goal, so a search for "Vacation Fund" or
+  # "Emergency" found nothing at all.
+  let(:vacation_pool) { create(:pool, user: user, name: "Vacation Fund", start_date: Date.parse("2023-01-01")) }
+  let(:emergency_pool) { create(:pool, user: user, name: "Emergency Fund", start_date: Date.parse("2023-01-01")) }
   let(:expense_item) { create(:item, category: expense_category, name: "Groceries") }
   let(:income_item) { create(:item, category: income_category, name: "Freelance Work") }
 

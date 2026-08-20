@@ -20,11 +20,17 @@ RSpec.describe "Budget page reorder", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 500)
   end
+  let!(:gifts) { envelope("Holiday Gifts", rate: 50, priority: 7, account: savings) }
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let(:savings) { create(:pool, :account, user: user, name: "Savings") }
-  let!(:gifts) { envelope("Holiday Gifts", rate: 50, priority: 7, account: savings) }
 
   before do
+    # MAIN-ACCOUNT SPEC §6, FIX ROUND 2: `#deposit` below names Checking unconditionally, so it
+    # has to be the user's main account — forced unconditionally rather than relying on creation
+    # order, because `gifts` above (a `let!`) mints `savings` first and the auto-main factory
+    # trait would otherwise claim it instead. `update!` overrides whatever the trait already
+    # decided, so it works regardless of which hook actually runs first.
+    user.update!(default_account: checking)
     sign_in user, scope: :user
     envelope("Groceries", rate: 400, priority: 1)
     envelope("Fun Money", rate: 300, priority: 2)

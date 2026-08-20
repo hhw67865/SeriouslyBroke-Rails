@@ -4,7 +4,11 @@ require "rails_helper"
 
 RSpec.describe "Calendar Week - Summary", type: :system do
   let!(:user) { create(:user) }
-  let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
+  # `pool: checking` EXPLICIT (main-account spec §6, fix round 2): without it this category's
+  # implicit-pool factory default mints its OWN anonymous account before `checking` is ever
+  # referenced, and the auto-main trait claims that one instead — leaving `checking` non-main for
+  # `income_category` below, which names it explicitly and needs it to be.
+  let!(:expense_category) { create(:category, :expense, user: user, name: "Food", pool: checking) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let!(:goal) { create(:pool, :savings_pool, user: user, name: "Emergency", account: checking) }
   let!(:income_category) { create(:category, :income, user: user, name: "Salary", pool: checking) }

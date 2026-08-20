@@ -35,9 +35,17 @@ RSpec.describe AllocationCalculator, type: :model do
     create(:pool_movement, from_pool: from, to_pool: pool, amount: amount, date: on)
   end
 
+  # MAIN-ACCOUNT SPEC §6, FIX ROUND 2: an income category may only point at the user's main
+  # account (`checking`), never at `into` directly. The money still ends up in `into` — a
+  # `transfer` PoolMovement carries the same amount the rest of the way when `into` differs from
+  # `checking`, so every account's balance below is unchanged from before this rule existed.
   def deposit(amount, into: checking, on: today)
-    category = create(:category, :income, user: user, pool: into)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    category = create(:category, :income, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: on)
+    return entry if into == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: on, source_entry: entry)
+    entry
   end
 
   # Memoised per account, so every reference inside one example is the SAME proposal — which

@@ -36,6 +36,16 @@ RSpec.describe SuggestionEngine do
 
   def envelope(name) = create(:pool, :budget_pool, user: user, account: checking, name: name)
 
+  # Two items in one category, each paid twice a month apart — the shape "gives two bills in one
+  # category the same envelope" needs, pulled out only to keep that example under the line cap.
+  def two_dated_bills(category, amount:)
+    ["Phone", "Internet"].each_with_index do |name, index|
+      bill = item(name, in_category: category)
+      spend(bill, amount + index, on: Date.new(2025, 11, 20))
+      spend(bill, amount + index, on: Date.new(2025, 12, 20))
+    end
+  end
+
   # One spend in each of P3, P4 and P5 — the three most recent complete periods. `amounts` may be
   # one figure for all three or one per period.
   def in_last_three_periods(on_item, amounts)
@@ -240,11 +250,10 @@ RSpec.describe SuggestionEngine do
     # accepting one item-named proposal would make its siblings unacceptable.
     it "gives two bills in one category the same envelope, so both proposals can be accepted", :aggregate_failures do
       utilities = category("Utilities")
-      ["Phone", "Internet"].each_with_index do |name, index|
-        bill = item(name, in_category: utilities)
-        spend(bill, 60 + index, on: Date.new(2025, 11, 20))
-        spend(bill, 60 + index, on: Date.new(2025, 12, 20))
-      end
+      two_dated_bills(utilities, amount: 60)
+      # I5: restores the NO-default-account state this contrasts with :225 — the auto-main
+      # trait would otherwise hand this user a main account the moment `category` mints Checking.
+      user.update!(default_account: nil)
 
       halves = of_kind(:dated_bill).map { |suggestion| suggestion.prefill.except(:budget) }
 
@@ -273,6 +282,9 @@ RSpec.describe SuggestionEngine do
       taxes = category("Estimated Taxes", pool: checking)
       bill = item("Federal Estimate", in_category: taxes)
       spend(bill, 1_600, on: Date.new(2025, 11, 20))
+      # I5 (main-account spec §6, fix round 2): same restoration as the "two bills" example
+      # above — this assertion is about the prefill with no main account named, not with one.
+      user.update!(default_account: nil)
 
       prefill = of_kind(:dated_bill).sole.prefill
 

@@ -69,7 +69,10 @@ RSpec.describe "The start-date rule", type: :model do
     expect(balance(envelope)).to eq(0)
 
     pool_side = user.pools.sum { |pool| PoolCalculator.new(pool).balance }
-    expect(pool_side).not_to eq(bank_truth_for(user))
+    # M8 (fix round 2): THE EXACT GAP, not just a mismatch — pool_side is HIGHER than bank truth
+    # by precisely this entry's $15, the amount that fell out of every pool while the bank
+    # ledger still counts it. An inequality alone would pass on any wrong number at all.
+    expect(bank_truth_for(user) - pool_side).to eq(-15)
   end
 
   # THE BOUNDARY DAY IS THE USER'S DAY, NOT UTC'S. `entries.date` is a DATETIME column and
