@@ -112,4 +112,36 @@ RSpec.describe "OpeningBalances", type: :request do
 
     expect(user.categories.find_by(name: "Opening Balance")).not_to be_tracked
   end
+
+  # THE FAMILY TOTAL, NOT MAIN'S BARE BUFFER (fix round 1 — MED-4). Money an envelope inside main
+  # is holding has not left the bank account — a bank statement counts it. Planting $150 in a
+  # Groceries envelope living inside Main and $850 unallocated in Main itself, the bank actually
+  # shows $1,000; entering that figure must leave the two summing to it, to the cent, not "correct"
+  # main down to account for money that was never missing.
+  it "corrects against main's family total, including money already living in an envelope inside it",
+     :aggregate_failures do
+       income = create(:category, :income, user: user, pool: main, name: "Pay")
+       create(:entry, item: create(:item, category: income), amount: 1000, date: Date.current)
+       groceries = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
+       create(:pool_movement, from_pool: main, to_pool: groceries, amount: 150, date: Date.current)
+
+       post opening_balance_path, params: { opening_balance: { actual: 1200 } }
+
+       expect(app_balance + PoolCalculator.new(groceries.reload).balance).to eq(1200)
+       expect(user.categories.exists?(name: "Opening Balance")).to be true
+     end
+
+  # SUB-CENT INPUT ROUNDS AWAY BEFORE THE COMPARISON (fix round 1 — LOW-1). Without rounding,
+  # "0.001" against a zero balance is a non-zero difference that reaches `Entry#amount`'s decimal
+  # column, which itself rounds the write down to zero and fails `greater_than: 0` — an unhandled
+  # `RecordInvalid` (422) from a figure that, in any currency this app understands, IS zero.
+  # `.round(2)` on the parsed input makes the comparison agree with what the column would do
+  # anyway, so this takes the ordinary zero-difference path instead.
+  it "rounds a sub-cent figure to zero rather than crashing on it", :aggregate_failures do
+    post opening_balance_path, params: { opening_balance: { actual: "0.001" } }
+
+    expect(response).to redirect_to(root_path)
+    expect(flash[:notice]).to be_present
+    expect(user.categories.exists?(name: "Opening Balance")).to be false
+  end
 end

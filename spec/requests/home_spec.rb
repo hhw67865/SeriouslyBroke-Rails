@@ -26,4 +26,43 @@ RSpec.describe "Home", type: :request do
     expect(response.body).not_to include("Real balance today")
     expect(response.body).to include("Add a bank account")
   end
+
+  # ONBOARDING STEP 3'S RENDER GATE (main-account spec §5, fix round 1 — MED-1): three request
+  # examples for `HomePresenter#awaiting_opening_balance?`, mirroring this file's own precedent —
+  # a status/body assertion rather than a system spec, because the gate is a server decision the
+  # response body can pin directly. `checking` is main here (the `:account` trait's own
+  # after(:create) makes the first account a fixture mints for a user their default_account).
+  #
+  # "real balance today", LOWERCASE r: the opening-balance card's own label is "Main's real
+  # balance today", while `_fund_account`'s label is the capitalised "Real balance today" — the
+  # ally card renders in these examples too (an empty, non-main account is always awaiting
+  # funding), and `String#include?` is case-sensitive, so the lowercase substring names this
+  # card alone without colliding with its sibling.
+  it "renders the opening-balance card only under main's own section", :aggregate_failures do
+    get root_path
+
+    expect(response.body).to include("real balance today")
+    expect(response.body).to include("Set #{checking.name}")
+    expect(response.body).not_to include("Set #{ally.name}")
+  end
+
+  it "no longer renders the opening-balance card once the latch closes", :aggregate_failures do
+    income = create(:category, :income, user: user, pool: checking, name: "Pay")
+    create(:entry, item: create(:item, category: income), amount: 300, date: Date.current)
+    post opening_balance_path, params: { opening_balance: { actual: 1000 } }
+
+    get root_path
+
+    expect(response.body).not_to include("real balance today")
+    expect(response.body).not_to include("Set #{checking.name}")
+  end
+
+  it "renders no opening-balance card when there is no main account", :aggregate_failures do
+    user.update!(default_account: nil)
+
+    get root_path
+
+    expect(response.body).not_to include("real balance today")
+    expect(response.body).not_to include("Set #{checking.name}")
+  end
 end

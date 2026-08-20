@@ -8,6 +8,14 @@ class Category < ApplicationRecord
   # and `HomePresenter` both read #opening_balance below rather than each carrying their own copy
   # of this string, so a typo in one cannot leave the controller's latch and the card's render gate
   # disagreeing about which category means "already done".
+  #
+  # THE LATCH IS DELIBERATELY REOPENABLE (fix round 1 — MED-2/LOW-2/MED-3 doc ruling). Renaming
+  # or deleting the row this scope matches reopens onboarding's card on the next Home load —
+  # there is no separate "onboarding complete" flag guarding against it. That is ACCEPTED, not a
+  # gap: it is the only escape hatch a user has for a mistyped opening figure, since
+  # `OpeningBalancesController` offers no `destroy` of its own. A user who wants to correct the
+  # correction renames or deletes the category through the ordinary categories screen and the
+  # card comes back, honestly, exactly as if onboarding had never finished.
   OPENING_BALANCE_NAME = "Opening Balance"
 
   belongs_to :user, touch: true

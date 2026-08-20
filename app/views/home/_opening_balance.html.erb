@@ -22,7 +22,8 @@
           label: "Main's real balance today",
           placeholder: "0.00",
           input_html: { step: 0.01 },
-          hint: "Recorded once, as an ordinary entry you can see in your history." %>
+          hint: "What your bank shows for this account today, envelopes and all — " \
+                "recorded once, as an ordinary entry you can see in your history." %>
     </div>
     <div class="sm:pt-7">
       <%= f.button :submit, "Set #{account.name}'s balance", class: "btn btn-primary" %>
