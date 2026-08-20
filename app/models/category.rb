@@ -3,6 +3,13 @@
 class Category < ApplicationRecord
   include ModelSearchable
 
+  # ONBOARDING STEP 3'S LATCH (main-account spec §5): the name of the auto-created category that
+  # records the one-time main correction, and the ONE spelling of it — `OpeningBalancesController`
+  # and `HomePresenter` both read #opening_balance below rather than each carrying their own copy
+  # of this string, so a typo in one cannot leave the controller's latch and the card's render gate
+  # disagreeing about which category means "already done".
+  OPENING_BALANCE_NAME = "Opening Balance"
+
   belongs_to :user, touch: true
 
   # EVERY CATEGORY NAMES ITS LANE (plan 3 decision 3). `optional: true` is gone, and the required
@@ -62,6 +69,14 @@ class Category < ApplicationRecord
   scope :incomes, -> { where(category_type: :income) }
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
+
+  # THE LATCH ITSELF, CASE-INSENSITIVE — matching, not merely resembling, the `uniqueness:
+  # { case_sensitive: false }` validation above. An exact-case `where(name: OPENING_BALANCE_NAME)`
+  # would miss a category a user already named "opening balance" through the ordinary categories
+  # screen: the latch would read "not yet recorded" while `create!` below collided with it on the
+  # very uniqueness rule this scope has to agree with, turning an onboarding click into a crash.
+  # Same spelling `Item#move_to_category` already uses for the same reason.
+  scope :opening_balance, -> { where("LOWER(name) = ?", OPENING_BALANCE_NAME.downcase) }
 
   # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed: the Categories index used to print
   # `category.budget&.amount` and now prints the pool the spending comes out of, so preloading the

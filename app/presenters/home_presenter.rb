@@ -134,6 +134,26 @@ class HomePresenter
     user.default_account.present? && account != user.default_account && current_buffer_for(account).zero?
   end
 
+  # ONBOARDING STEP 3'S OWN GATE (main-account spec §5): the account under review must BE the
+  # user's main account — not merely funded, this correction only ever applies to the one account
+  # that isn't funded by a movement — and the one-time latch, the "Opening Balance" category's own
+  # existence, must still be open. Asked here (which account gets the card —
+  # home/_account.html.erb) and LITERALLY BY `OpeningBalancesController#create`, which builds its
+  # own presenter and calls this same method rather than re-spelling either half of it — the same
+  # one-predicate discipline `AccountFundingsController#fund` already carries for
+  # #awaiting_funding? (see its own comment), so the card's render gate and the write's legality
+  # gate cannot drift into two different answers about whether the correction has already run.
+  #
+  # `user.default_account.present?` FIRST, for the same HIGH-1 reason #awaiting_funding? checks it
+  # first: a user with no main account has no card to show, full stop, not merely no card on the
+  # account that isn't there. It also makes `awaiting_opening_balance?(nil)` — reachable if a
+  # crafted POST names no account — false rather than a NoMethodError one line into the balance
+  # math, because `nil.present?` short-circuits the `&&` before `account == user.default_account`
+  # is ever asked.
+  def awaiting_opening_balance?(account)
+    user.default_account.present? && account == user.default_account && !opening_balance_recorded?
+  end
+
   # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is
   # the account it was refused for — so its typed amount and its errors survive the re-render,
   # the same courtesy BankAccountsController's own 422 branch pays the add-account card — and a
@@ -550,6 +570,25 @@ class HomePresenter
   end
 
   private
+
+  # THE LATCH ITSELF, memoised: #awaiting_opening_balance? is asked once per account this screen
+  # renders, and every account but main gets a `false` from the first half of that predicate
+  # before this one is ever reached — but on the account that IS main, re-querying it per call
+  # would be a second wasted SELECT with no other reader on Home already having proven the answer.
+  #
+  # `Category.opening_balance`, NOT a hand-rolled `exists?(name: …)`: that scope is
+  # CASE-INSENSITIVE, matching `Category`'s own uniqueness validation, so a user who already has a
+  # category spelled "opening balance" reads as latched here exactly as it would refuse a second
+  # `create!` — one rule, asked the one place it lives, rather than a presenter-side copy that
+  # could disagree with the model's own idea of a duplicate name.
+  #
+  # `defined?` rather than `||=`: the open latch (no such category yet) is `false`, the common
+  # case for as long as onboarding is unfinished, and `||=` would re-run the EXISTS on every hit.
+  def opening_balance_recorded?
+    return @opening_balance_recorded if defined?(@opening_balance_recorded)
+
+    @opening_balance_recorded = user.categories.opening_balance.exists?
+  end
 
   # ONE CLOCK FOR THE SCREEN, built off the accounts this presenter has already loaded so the
   # service asks the database for no ids of its own.

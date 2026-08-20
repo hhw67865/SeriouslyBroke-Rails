@@ -22,6 +22,12 @@ Rails.application.routes.draw do
   # reason — there is one door and it is on Home, where the card lives.
   resources :account_fundings, only: [:create]
 
+  # ONBOARDING STEP 3 (main-account spec §5): the one-time correction that sets MAIN to its real
+  # bank number. Singular — there is at most one of these a user ever writes, the same reason
+  # `resource :account` above is singular — and create-only for the same reason as the two routes
+  # above it: one door, on Home, where the card lives.
+  resource :opening_balance, only: [:create]
+
   resources :pools do
     member do
       get :categories, to: "pools/categories#index"

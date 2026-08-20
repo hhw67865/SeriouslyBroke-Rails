@@ -52,4 +52,12 @@
   <% elsif pools.empty? %>
     <p class="px-6 py-3 text-sm text-gray-500">No pools in this account yet.</p>
   <% end %>
+
+  <%# ONBOARDING STEP 3 (main-account spec §5): renders under MAIN alone, and only while the
+      one-time latch is open — `HomePresenter#awaiting_opening_balance?` is the one gate,
+      independent of whether main already holds envelopes, exactly as `awaiting_funding?` above
+      does not wait for an account's pools to be empty either. %>
+  <% if presenter.awaiting_opening_balance?(account) %>
+    <%= render "opening_balance", account: account %>
+  <% end %>
 </section>
