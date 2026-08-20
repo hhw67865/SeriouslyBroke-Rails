@@ -63,15 +63,13 @@ RSpec.describe "Home NewAccount", type: :system do
       end
     end
 
-    it "keeps the typed amount beside its error when the amount is refused" do
+    # LOW-2 (fix round 2): the card is per-account, not per-screen — main never gets one (it has
+    # no real balance of its own to enter; it IS the source) while a fresh sibling does.
+    it "shows the card only on a non-main account's section" do
       add_account("Ally Savings")
-      section = "[data-pool-group='Ally Savings']"
 
-      fund_account(section, "0")
-
-      expect(page).to have_content("must be greater than 0")
-      within(section) { expect(page).to have_field("Real balance today", with: "0") }
-      expect(PoolMovement.count).to eq(0)
+      within("[data-pool-group='Checking']") { expect(page).not_to have_field("Real balance today") }
+      within("[data-pool-group='Ally Savings']") { expect(page).to have_field("Real balance today") }
     end
   end
 end

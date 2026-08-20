@@ -114,6 +114,26 @@ class HomePresenter
     @accounts ||= user.pools.accounts.order(:name).to_a
   end
 
+  # ONBOARDING STEP 2'S ONE GATE (main-account spec §5, fix round 2 — MED-1/2/3 in one ruling):
+  # not main, and holding no money yet. ONE predicate, asked by the view (which account gets the
+  # card — home/_account.html.erb) and by AccountFundingsController (which write is legal), so
+  # the two cannot drift into two different answers about the same account the way they had —
+  # the controller used to spell "already funded" as `child_pools.exists? || balance != 0`,
+  # disagreeing with the view's own `pools.empty?`, and an account with an envelope created
+  # before it was ever funded could never reach the card (pools.empty? was false) while a crafted
+  # POST against it 422'd on a balance that was, in fact, zero. Money is the only signal an
+  # envelope's mere existence says nothing about whether this account has been given its real
+  # balance.
+  #
+  # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): `users.default_account_id`
+  # nullifies when main is deleted, and the card used to read `main_account.name`
+  # unconditionally — a user with no main account 500'd on Home with no door back in. No main
+  # account means no card anywhere, full stop, not merely "no card on the pool that used to be
+  # main" — every account is equally un-fundable with nothing to fund it FROM.
+  def awaiting_funding?(account)
+    user.default_account.present? && account != user.default_account && current_buffer_for(account).zero?
+  end
+
   # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is
   # the account it was refused for — so its typed amount and its errors survive the re-render,
   # the same courtesy BankAccountsController's own 422 branch pays the add-account card — and a

@@ -3,8 +3,9 @@
     that really happened over the years. Mirrors `_new_account`'s section chrome: same card
     shape, sitting where the "No pools in this account yet" line otherwise stands.
 
-    Locals: `account` (an account-type Pool, unfunded and empty — the render gate lives in
-    `_account.html.erb`), `movement` (HomePresenter#funding_movement_for's answer: the rejected
+    Locals: `account` (an account-type Pool still awaiting its real balance — the render gate,
+    `HomePresenter#awaiting_funding?`, lives in `_account.html.erb`), `movement`
+    (HomePresenter#funding_movement_for's answer: the rejected
     PoolMovement if THIS is the card AccountFundingsController's 422 was for, a fresh unsaved
     one otherwise — the object `simple_form_for` is built on, so a refused amount and its error
     survive the re-render exactly as the add-account card's name does), `main_account` (the
@@ -18,7 +19,7 @@
           as: :decimal,
           label: "Real balance today",
           placeholder: "0.00",
-          input_html: { step: 0.01, min: 0 },
+          input_html: { step: 0.01, min: 0.01 },
           hint: "One transfer from #{main_account.name} — match your bank statement." %>
     </div>
     <div class="sm:pt-7">

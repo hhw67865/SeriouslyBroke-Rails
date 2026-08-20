@@ -31,25 +31,32 @@ class AccountFundingsController < HomeController
   # Pool.apply_fill_order and AllocationCommitter#call already use for the same reason: a row
   # lock serialises the second writer behind the first rather than letting both act on a balance
   # that was only true for an instant.
+  #
+  # THE SAME PREDICATE THE CARD'S OWN RENDER GATE ASKS (fix round 2 — MED-1/2/3 in one ruling):
+  # `HomePresenter#awaiting_funding?`, not a second spelling of "already funded" invented here —
+  # the controller used to ask `child_pools.exists? || balance != 0`, which disagreed with the
+  # view's own `pools.empty?` and left an envelope-first account 422ing on a balance that was, in
+  # fact, zero. Asked again inside the lock rather than trusted from whatever the view answered
+  # before this request, because that answer is a snapshot and this one has to be current.
+  #
+  # THE ONE CARVE-OUT: funding main FROM itself is refused by `PoolMovement#pools_must_differ`,
+  # not by this guard — `awaiting_funding?(main)` is false for the unrelated reason that `main`
+  # IS the user's default account, and reporting "already holds money" there would say something
+  # false about an account that may hold none. Only a target that genuinely differs from main
+  # gets the money-based refusal; main itself is left to the model's own truthful validation.
   def fund(account)
     PoolMovement.transaction do
       account.lock!
       movement = build_movement(account)
-      if account_already_funded?(account)
-        movement.errors.add(:to_pool, "already has a balance — an account can only be funded once")
+      presenter = HomePresenter.new(user: current_user, today: Date.current)
+
+      if !presenter.awaiting_funding?(account) && account != current_user.default_account
+        movement.errors.add(:to_pool, "already holds money")
       else
         movement.save
       end
       movement
     end
-  end
-
-  # THE SAME QUESTION THE CARD'S OWN RENDER GATE ASKS (home/_account.html.erb): an account with
-  # a pool inside it or a nonzero buffer has already moved past the onboarding state this door is
-  # for. Asked again here, inside the lock, because the view's answer is a snapshot from before
-  # this request and cannot be trusted to still be true.
-  def account_already_funded?(account)
-    account.child_pools.exists? || !account.calculator(today: Date.current).balance.zero?
   end
 
   def build_movement(account)
