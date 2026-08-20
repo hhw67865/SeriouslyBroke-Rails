@@ -1,6 +1,8 @@
 # The Main Account: Source, Mirrors, and the Start-Date Rule
 
-**Status:** DRAFT — awaiting Henry's review
+**Status:** DELIVERED 2026-08-20 (plan `docs/superpowers/plans/2026-08-18-main-account.md`, tasks
+1–7; ledger `.superpowers/sdd/2026-08-18-main-account/progress.md`). §9 below records where the
+build differs from this text and what it left open.
 **Date:** 2026-08-18
 **Builds on:** `2026-08-14-envelope-budgeting-design.md` (DELIVERED) and the fresh-start ruling
 recorded in its "What Plan 3 leaves open" §3.
@@ -116,3 +118,50 @@ means an unrecorded transaction, and the remedy is recording it, not adjusting i
 - **Tightenings**: category pointed at a non-main account refused in both the model and the
   wire; the existing suite (cutover spec included) re-run — the verifier's COALESCE copy moves
   in step with the ledger's.
+
+## 9. As built (2026-08-20): drift from this text, and what stays open
+
+Verified live on the restored production copy against `mingguan0809@gmail.com` — the data that
+demanded the spec. Her Food & Grocery envelope reads **$0.00 left**, not overdrawn: the
+$46,739.63 of pre-start grocery history now reads against Checking under §3's rule, with **zero
+data changed**. Σ holds to the cent (pools via `PoolCalculator` = $113,627.95 = income − expenses
+by raw SQL over her entries); `default_account_id` points at Checking; Home renders the period
+range, the funding card under `savings` only, the opening-balance card under Checking, and the
+add-account card.
+
+**Drift — the build is narrower or wider than the text above:**
+
+- **§3 gained a timezone-aware comparison.** `entries.date` is a datetime in UTC and users carry
+  their own zone, so `date >= start_date` is made in the USER'S LOCAL DAY (`AT TIME ZONE`, inside
+  `PoolBalanceLedger::ENTRY_POOL_ID`). Without it a Tokyo evening entry read against main because
+  UTC had not turned over yet.
+- **§3's ordered rule gained a NULL arm.** A category whose `pool_id` is NULL (a shape the
+  database still permits — see the envelope spec's leaves-open §2) resolves to main rather than
+  being dropped from the query, and the joins are LEFT on the pool for exactly that reason. The
+  arm exists so a user without a main account cannot silently lose entries from Σ; the Category
+  validator added here prevents the state it answers for.
+- **§5's one-time correction measures main's FAMILY total, not its buffer.** The difference is
+  computed against `Pool#total` for main — buffer plus every envelope housed in main — because
+  that is the number a bank statement shows for the physical account. Identical to the buffer for
+  a user with no envelopes; right instead of wrong for an envelope-first user.
+- **§6's displaced categories always land on main.** Destroying an envelope, or disconnecting a
+  category from one, re-points the category at the user's MAIN account — never at the account the
+  envelope happened to live inside, which the new validator refuses. Categories pile onto main,
+  which is what §3 and §6 together say should happen.
+
+**Open questions this build leaves:**
+
+- **§5's steps have an unenforced order.** Correcting main (step 3) BEFORE funding the other
+  accounts (step 2) drains main by the funding amounts afterwards, and there is no second door:
+  the correction latches once. Nothing in the app enforces or explains the sequencing today. The
+  cards render in the right order and the latch is reopened by deleting the correction entry, so
+  the state is recoverable — but only by a user who knows that.
+- **§6's `default_account` requirement is still deferred.** `users.default_account_id` is set
+  when the first account is created, but deleting the main account is legal and nullifies the
+  column, leaving a user with accounts and no main. Home guards this state (the funding gate
+  requires a main present) rather than preventing it. The tightening — refuse the destroy, or
+  promote another account — is unbuilt.
+- **Latch behavior, recorded as choices rather than defects:** renaming or deleting the
+  "Opening Balance" category reopens the correction door (deleting the record of a correction
+  deliberately reopens it), and a zero-difference correction records nothing and so leaves the
+  latch open.

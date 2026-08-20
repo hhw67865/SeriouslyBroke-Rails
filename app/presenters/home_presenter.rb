@@ -213,7 +213,8 @@ class HomePresenter
   # `User#period_containing`, the one method that owns this arithmetic — the same window
   # `DistributionPresenter#period` and `EntryImpactPresenter#period_ends_on` both read off,
   # never re-derived here. GATED ON THE DECLARATION, the same two-column check
-  # `#structurally_underwater?` and `EntryImpactPresenter#period_ends_on` both make, rather than
+  # `EntryImpactPresenter#period_ends_on` makes (`#structurally_underwater?` reads the cadence
+  # only — it needs a cadence to size a period's need, not a boundary), rather than
   # taken on trust: `period_containing` falls back to the calendar month for an undeclared user,
   # which is the right fallback for a normaliser and a lie on this band, since "Aug 1 – Aug 31"
   # would state a boundary the user never set.

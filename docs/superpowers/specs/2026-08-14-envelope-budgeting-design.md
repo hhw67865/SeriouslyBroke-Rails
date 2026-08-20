@@ -678,6 +678,12 @@ able to tell "not done" from "never raised".
    nil source_entry) — good but not unique, which is why `#report_the_undo_list` prints the
    inserted movement ids under each user's email in the migration's run log. That log is the only
    place those ids exist; capture it.
+   **Postscript 2026-08-20:** the fresh-start narrative above stands unchanged, and the "pin an
+   envelope's history where it was" idea that was never named here has been answered anyway —
+   `2026-08-18-main-account-design.md` §3's start-date rule now governs envelope READS, so an
+   envelope counts only spending dated on or after its own `start_date` and everything earlier
+   reads against the main account. Connecting an old category to a new envelope no longer drags
+   its history in, which is the outcome pinning would have bought, without pinning anything.
 4. **The perf/design inheritance from 2d** stands unchanged at the bottom of
    `docs/superpowers/plans/2026-08-17-logging-and-tracking.md`.
 
