@@ -162,46 +162,55 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
   # refused up front now, with its own sentence, and NOTHING is written on either — not even the
   # connect half, because a screen that added categories while silently declining to remove others
   # leaves the checkboxes and the data disagreeing.
-  # THE FIXTURE IS AN ACCOUNT NOW, NOT AN ACCOUNT-LESS GOAL (plan 3, task 6). The refusal fires
-  # when `@pool.account || current_user.default_account` is nil, and a goal can no longer supply
-  # the first half of that — `Pool#account_matches_pool_type` and
-  # `CHECK ((pool_type = 0) = (account_id IS NULL))` require every goal and envelope to name an
-  # account. An ACCOUNT is the pool that has none by its own rule, so it is the one that can still
-  # reach this arm, and with `default_account` un-nominated it does. The refusal is unchanged and
-  # so are both assertions; only the pool that gets there is different.
+  #
+  # THE FIXTURE IS THE OUTER SAVINGS ENVELOPE NOW, NOT A STRANDED ACCOUNT (main-account spec §6,
+  # fix round 2 — B3). `disconnect_destination` dropped `@pool.account ||` entirely — it is always
+  # `current_user.default_account` — so the ONE way left to reach this refusal is a user with no
+  # main account named, whatever pool holds the category. An account-typed `@pool` is not a
+  # distinct case any more (that was the old first arm's own account being nil), so the fixture is
+  # simplified to reuse `pool`, the ordinary envelope every other describe block in this file uses.
   describe "disconnecting with nowhere to hand the category back to" do
-    let!(:stranded) { create(:pool, :account, name: "Stranded Account", user: user) }
     let!(:connected) do
-      create(:category, name: "Connected Spending", category_type: "expense", user: user, pool: stranded)
+      create(:category, name: "Connected Spending", category_type: "expense", user: user, pool: pool)
     end
     let!(:other_spending) { create(:category, name: "Other Spending", category_type: "expense", user: user) }
 
-    before do
-      user.update!(default_account: nil)
-      visit categories_pool_path(stranded)
-    end
-
+    # NO SHARED `before` NILLING `default_account` (main-account spec §6, fix round 2 — B3). Both
+    # examples used to visit the page under one nilled-out setup, which happened to work when a
+    # non-main ACCOUNT was the fixture — connecting to it needed no main account at all. `pool` is
+    # an ENVELOPE, and `Category#pool_must_be_reachable` refuses pointing ANY category at ANY
+    # envelope while the user has no main account, whether or not something is being disconnected
+    # in the same submission — so "connects even with nowhere to send a disconnect" cannot share
+    # that state with "refuses because there is nowhere to send a disconnect". Each example nils
+    # (or doesn't) and visits for itself.
     it "refuses and says why, writing neither half", :aggregate_failures do
+      user.update!(default_account: nil)
+      visit categories_pool_path(pool)
+
       uncheck_category("Connected Spending")
       check_category("Other Spending")
       click_button "Update Connected Categories"
 
-      expect(page).to have_content("Disconnecting a category needs an account to hand its spending back to")
+      expect(page).to have_content("Disconnecting a category needs a main account to hand its spending back to")
       expect(page).to have_no_content("Categories updated successfully!")
-      expect(connected.reload.pool).to eq(stranded)
-      expect(other_spending.reload.pool).not_to eq(stranded)
+      expect(connected.reload.pool).to eq(pool)
+      expect(other_spending.reload.pool).not_to eq(pool)
     end
 
     # THE OTHER DIRECTION on the same screen: with nothing being disconnected there is nothing to
     # refuse, so a pure connect still goes through. Without this the refusal could be unconditional
-    # and the example above would still pass.
+    # and the example above would still pass. Runs with the user's main account intact, deliberately
+    # — connecting a category to an envelope needs one to exist at all, independent of whether
+    # anything is being disconnected in the same request.
     it "still connects when nothing is being disconnected", :aggregate_failures do
+      visit categories_pool_path(pool)
+
       check_category("Other Spending")
       click_button "Update Connected Categories"
 
       expect(page).to have_content("Categories updated successfully!")
-      expect(other_spending.reload.pool).to eq(stranded)
-      expect(connected.reload.pool).to eq(stranded)
+      expect(other_spending.reload.pool).to eq(pool)
+      expect(connected.reload.pool).to eq(pool)
     end
   end
 
@@ -226,6 +235,32 @@ RSpec.describe "Savings Pools Categories - Manage", type: :system do
       expect(page).to have_content("Checking is where disconnected spending goes")
       expect(page).to have_no_content("Categories updated successfully!")
       expect(on_the_buffer.reload.pool).to eq(checking)
+    end
+  end
+
+  # B3 (main-account spec §6, fix round 2) — THE SECOND DOOR THE SAME BUG OPENED. The old
+  # destination, `@pool.account || current_user.default_account`, handed a disconnected category
+  # back to the ENVELOPE'S OWN account — legal only by accident, when that account happened to be
+  # main. For an envelope living anywhere else it tried to write a pool
+  # `Category#pool_must_be_reachable` refuses, `update` returned false, and the screen reported
+  # "Could not update Side Gig Spending" with no route to a successful disconnect at all. The
+  # destination is now always `current_user.default_account`, main, regardless of which account
+  # houses the envelope.
+  describe "disconnecting from an envelope in a non-main account" do
+    let!(:ally) { create(:pool, :account, user: user, name: "Ally") }
+    let!(:side_gig) { create(:pool, :budget_pool, user: user, account: ally, name: "Side Gig") }
+    let!(:spending) do
+      create(:category, name: "Side Gig Spending", category_type: "expense", user: user, pool: side_gig)
+    end
+
+    before { visit categories_pool_path(side_gig) }
+
+    it "hands the category back to main, not to the envelope's own account", :aggregate_failures do
+      uncheck_category("Side Gig Spending")
+      click_button "Update Connected Categories"
+
+      expect(page).to have_content("Categories updated successfully!")
+      expect(spending.reload.pool).to eq(checking)
     end
   end
 

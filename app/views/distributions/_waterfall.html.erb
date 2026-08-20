@@ -104,8 +104,8 @@
       boxes until Task 6's confirm submits the same fields to `create`. The field names are
       `overrides[<pool id>]` because that is exactly what AllocationCommitter consumes. %>
   <%= form_with url: new_distribution_path, method: :get do %>
-    <%# Without this the reload falls back to "the account the pay landed in" and an override
-        typed on a second account would come back describing the first one. %>
+    <%# Without this the reload falls back to the user's main account (main-account spec §6) and
+        an override typed on a second account would come back describing the first one. %>
     <%= hidden_field_tag :account_id, presenter.account.id %>
     <%# Carried forward only when the user asked for the table. Without it, clearing the last
         edit on a comfortable period collapses the table out from under the boxes mid-edit. %>

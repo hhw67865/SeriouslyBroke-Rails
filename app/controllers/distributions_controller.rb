@@ -139,21 +139,35 @@ class DistributionsController < ApplicationController
     default_account
   end
 
-  # THE ACCOUNT THE PAY LANDED IN — the plan's ruling, and it is a real choice as soon as a user
-  # has two accounts. `[priority, name]` alone opened the demo user's screen on Ally Savings, an
-  # account holding one envelope, while the paycheck sat in Checking; you distribute the account
-  # your income arrived in.
+  # THE USER'S MAIN ACCOUNT — main-account spec §6, fix round 2 (I6). §4 makes main the only
+  # account income legally lands in via a category, so "the account the pay landed in" and "the
+  # account the user has nominated as main" are the SAME question now, for anyone who has
+  # nominated one; ranking every account by how much income reached it inside this period cannot
+  # disagree with that answer, because none of them can legally hold income main didn't also
+  # carry a movement out of. Consulting `current_user.default_account` is therefore no longer "a
+  # second rule in front of" the income-ranking one — it IS the rule, and the ranking below
+  # survives only as `#fallback_account_by_income`.
+  def default_account
+    current_user.default_account || fallback_account_by_income
+  end
+
+  # THE FALLBACK, FOR THE ONE USER THIS RULE CANNOT ANSWER FOR: someone with no main account
+  # named at all. `users.default_account_id` is nullable and nothing in this app currently
+  # creates one outside `BankAccountsController#create`'s first-account rule, so a user who
+  # predates that guard (or reaches this screen some other way) can still be in that state, and
+  # this screen has to open on SOMETHING rather than 500.
+  #
+  # `[priority, name]` alone opened the demo user's screen on Ally Savings, an account holding
+  # one envelope, while the paycheck sat in Checking; ranking by income within the period is what
+  # used to be this whole method before main became mandatory reading, and it is kept verbatim as
+  # the fallback rather than simplified, because a user with no main account is exactly the user
+  # for whom "which account did the pay land in" is still the only question this app can ask.
   #
   # `by_priority` is the tie-break, not the rule, and `-index` keeps it: `max_by` gives no
   # guarantee about which of several maxima it returns, so two accounts with no income at all —
   # a brand-new user, and every user before their first paycheck of the period — would otherwise
   # open on whichever one Ruby happened to compare last.
-  #
-  # `current_user.default_account` is deliberately NOT consulted. It is one question, and the
-  # plan answers it; a second rule in front of this one is a second answer, and the two disagree
-  # exactly when the user's pay lands somewhere other than their nominated account — which is
-  # the case this rule exists for.
-  def default_account
+  def fallback_account_by_income
     period = current_user.period_datetimes_containing(Date.current)
     ranked = current_user.pools.accounts.by_priority.to_a
 

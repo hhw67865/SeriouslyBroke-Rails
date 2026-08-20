@@ -18,10 +18,13 @@ class Pool < ApplicationRecord
   #
   #   * an ENVELOPE or GOAL never reaches this callback with a category still pointing at it.
   #     `#return_holdings_to_the_account` is `prepend: true`, so it runs FIRST, and it either
-  #     re-points every category to the pool's own account (`#hand_categories_to_the_account`) or
-  #     refuses the destroy outright. By the time this dependency is consulted the scope is empty —
-  #     which the old comment on `#hand_categories_to_the_account` already recorded, measured:
-  #     dropping its `reset` failed nothing, because nullify never had a row to find.
+  #     re-points every category to the user's MAIN account (`#hand_categories_to_the_account` —
+  #     main-account spec §6 rewrote this from "the pool's own account" after a category on a
+  #     non-main envelope's account raised `ActiveRecord::RecordInvalid` straight through
+  #     `PoolsController#destroy`, a production 500) or refuses the destroy outright. By the time
+  #     this dependency is consulted the scope is empty — which the old comment on
+  #     `#hand_categories_to_the_account` already recorded, measured: dropping its `reset` failed
+  #     nothing, because nullify never had a row to find.
   #   * an ACCOUNT returns from that callback on its first line (`return if pool_type_account?`).
   #     It has no account of its own to absorb anything, so there was nowhere to re-point to and
   #     the nullify fired for real. That is the one case the option ever ran in, and it ran
@@ -175,9 +178,15 @@ class Pool < ApplicationRecord
   # exclusion in `#fill_waterfall` that keeps orphans out of the waterfall; the `home/_orphans`
   # partial and the `orphan_pools_owed` term in `home/_attention`; `BudgetPagePresenter`'s
   # `#orphan_rules` and `#orphan_reason`; and `ReallocationPresenter`'s "No account" group.
+  # `:categories` COVERS TWO SHAPES NOW (main-account spec §6): the orphan one this refusal was
+  # written for (the pool itself sits in no account) and one that arrived with the re-point
+  # destination change — the user has no MAIN account named for a category to land in instead.
+  # One sentence covers both rather than two, because both are the same user-facing fact: there
+  # is nowhere for this pool's categories to go, and the fix is naming an account either way.
   REFUSALS = {
-    categories: "can't be deleted while categories point at it and it sits in no account — its " \
-                "spending would stop counting toward any pool. Assign it to an account first.",
+    categories: "can't be deleted while categories point at it and there's nowhere for their " \
+                "spending to land — either it sits in no account itself, or you have no main " \
+                "account named. Assign it to an account, or nominate a main account, first.",
     movements: "can't be deleted while it holds transfers and sits in no account — there is no " \
                "buffer for its money to return to. Move it, or the pool on the other end of " \
                "those transfers, into an account first."
@@ -562,7 +571,7 @@ class Pool < ApplicationRecord
     return if pool_type_account?
 
     targets = adjoining_movements.index_with { |movement| absorbing_account_for(movement) }
-    refuse_for_want_of_an_account(:categories) if account.blank? && categories.exists?
+    refuse_for_want_of_an_account(:categories) if categories_have_nowhere_to_land?
     refuse_for_want_of_an_account(:movements) if targets.value?(nil)
 
     # `absorber`, not `account`: the block would otherwise shadow the `account` association for the
@@ -575,10 +584,29 @@ class Pool < ApplicationRecord
     movements_out.reset
   end
 
-  # THE HALF THAT KEEPS Σ POOLS EXACT. A category re-pointed to the account keeps every entry it
-  # carries inside the tree — the same COALESCE now resolves them to the buffer instead of to
-  # nothing — so the buffer ends up holding the destroyed pool's balance to the penny rather than
-  # only its movement half.
+  # THE HALF THAT KEEPS Σ POOLS EXACT. A category re-pointed to the user's MAIN account keeps
+  # every entry it carries inside the tree — the same COALESCE now resolves them to main instead
+  # of to nothing — so Σ is unmoved even though the destroyed pool's balance no longer lands in
+  # one place.
+  #
+  # THE DESTINATION IS `user.default_account`, NOT `account` (main-account spec §6, fix round 2 —
+  # B2). It read `account` — this pool's OWN containing account — until a category on an envelope
+  # living in a NON-main account made that re-point illegal the instant `Category
+  # #pool_must_be_reachable` shipped: `update!` raised `ActiveRecord::RecordInvalid`,
+  # `PoolsController#destroy` has no rescue for it, and deleting an ordinary envelope 500'd. §6 is
+  # explicit that a category may point only at main or an envelope, so main is the only legal
+  # destination left, and it is also the right one on its own terms: §3's start-date rule already
+  # sends an envelope's PRE-START history to main, so a destroyed envelope's post-start history
+  # joining it there is the same rule extended past the pool's own death rather than a new one.
+  #
+  # A SPLIT RESULT ON A NON-MAIN ENVELOPE, and it is not a defect: the movements above this method
+  # (absorbed by `#absorb`) still land in THIS pool's own account, because a movement is a
+  # transfer between two of the user's pools and has nothing to do with where a category's
+  # SPENDING is allowed to be counted. Destroying an envelope that lived in "Ally" and carried
+  # both a funding movement and a category therefore leaves Ally holding the movement and main
+  # holding the category's history — two accounts, not one — and Σ across both is still exactly
+  # the pool's balance. Only a main-account envelope keeps both halves in the same place, because
+  # there `account` and `user.default_account` are the same pool.
   #
   # `update!` per record and not `update_all`, for the reason `.apply_fill_order` gives and one
   # specific to this table: `income_must_land_in_an_account` polices where income may land and the
@@ -587,9 +615,9 @@ class Pool < ApplicationRecord
   # destroy the category's cap; the cap is deleted in plan 3, task 3.) It costs one UPDATE per
   # category, and a pool has a handful.
   #
-  # Guarded on `account`, which cannot be nil here — the refusal above has already returned for the
-  # account-less pool that has any category at all. Stated so the guard reads as the invariant it
-  # is rather than as a nil-check somebody could delete.
+  # Guarded on `user.default_account`, which cannot be nil here — the refusal above has already
+  # returned for a categories-holding pool whose user has no main account. Stated so the guard
+  # reads as the invariant it is rather than as a nil-check somebody could delete.
   #
   # `reset` afterwards, AND IT IS NOW LOAD-BEARING — the previous note here said, correctly at the
   # time, that it "does not fire": `dependent: :nullify` reached `update_all` over a re-queried
@@ -606,9 +634,9 @@ class Pool < ApplicationRecord
   # envelope-with-history block). The comment it replaces was true when written; the line it
   # describes was kept "for symmetry", and symmetry is what caught this.
   def hand_categories_to_the_account
-    return if account.blank?
+    return if user.default_account.blank?
 
-    categories.each { |category| category.update!(pool: account) }
+    categories.each { |category| category.update!(pool: user.default_account) }
     categories.reset
   end
 
@@ -668,6 +696,18 @@ class Pool < ApplicationRecord
   # THE END THAT IS NOT THIS POOL. The two ends always differ (#pools_must_differ and a check
   # constraint), so exactly one of them is this pool and the other is always found.
   def other_end_of(movement) = movement.from_pool_id == id ? movement.to_pool : movement.from_pool
+
+  # BOTH WAYS A CATEGORY CAN HAVE NOWHERE TO LAND, decided here rather than inside
+  # `#hand_categories_to_the_account` for the reason `#return_holdings_to_the_account`'s header
+  # gives — every refusal before the first write. `account.blank?` is the orphan case `REFUSALS`
+  # already explains (retained pending the follow-up that note names); `user.default_account.
+  # blank?` is new with main-account spec §6, which made the re-point destination the user's
+  # MAIN account rather than this pool's own — a user who somehow has none named would otherwise
+  # hit `update!` raising `ActiveRecord::RecordInvalid` mid-destroy, the same production 500 the
+  # destination change exists to close.
+  def categories_have_nowhere_to_land?
+    (account.blank? || user.default_account.blank?) && categories.exists?
+  end
 
   def refuse_for_want_of_an_account(reason)
     errors.add(:base, REFUSALS.fetch(reason))

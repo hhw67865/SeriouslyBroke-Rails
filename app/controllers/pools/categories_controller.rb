@@ -33,8 +33,16 @@ module Pools
     # that is still connected. Found in the browser suite, not reasoned about.
     #
     # The destination is the SAME ONE `Pool#hand_categories_to_the_account` uses when a pool is
-    # destroyed: the pool's own account, which is what keeps `Σ pools` conserved — the category's
-    # whole history moves into the buffer rather than out of the pool tree.
+    # destroyed: the user's MAIN account, which is what keeps `Σ pools` conserved — the category's
+    # whole history moves into main rather than out of the pool tree.
+    #
+    # ALWAYS `current_user.default_account`, NOT `@pool.account || current_user.default_account`
+    # (main-account spec §6, fix round 2 — B3, the second door the same bug opened). `@pool.account`
+    # was the pool's own containing account, and a category may point only at main or an envelope —
+    # disconnecting from a non-main envelope used to hand the category to that non-main account,
+    # which `Category#pool_must_be_reachable` refuses outright, leaving no legal route through this
+    # controller at all. Dropping the first arm removes the choice rather than fixing which side of
+    # it fires.
     #
     # REFUSED UP FRONT WHERE THERE IS NOWHERE TO HAND THEM, rather than attempted and reported as a
     # success. The first fix took `@pool.account || current_user.default_account` and stopped there,
@@ -102,15 +110,20 @@ module Pools
         "#{@pool.name} is where disconnected spending goes, so there is nowhere to move these " \
           "categories to. Point them at another pool from its own page instead."
       else
-        "Disconnecting a category needs an account to hand its spending back to, and " \
-          "#{@pool.name} has none behind it. Nominate a default account first."
+        "Disconnecting a category needs a main account to hand its spending back to, and " \
+          "you haven't nominated one yet. Set a main account first."
       end
     end
 
+    # ALWAYS THE USER'S MAIN ACCOUNT (main-account spec §6, fix round 2 — B3). `@pool.account`
+    # dropped entirely: it is this pool's own containing account, which a category may not point
+    # at unless it happens to BE main, and offering it as a fallback destination was the second
+    # door the same bug opened (`Pool#hand_categories_to_the_account` was the first — see that
+    # method's comment). One destination, one legal answer, matching the destroy path exactly.
     def disconnect_destination
       return @disconnect_destination if defined?(@disconnect_destination)
 
-      @disconnect_destination = @pool.account || current_user.default_account
+      @disconnect_destination = current_user.default_account
     end
 
     def set_pool

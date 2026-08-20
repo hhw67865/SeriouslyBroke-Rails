@@ -28,10 +28,14 @@ RSpec.describe "Distributions", type: :request do
       expect(response.body).not_to include("This split wasn't written")
     end
 
-    # The plan's ruling: with no account named, open on the one this period's pay landed in. Both
-    # directions of the same fixture — the income moves and the screen follows it — because an
-    # assertion on one account alone passes on any rule that happens to pick that account.
-    it "opens on the account this period's income landed in", :aggregate_failures do
+    # THE PLAN'S RULING, TIGHTENED BY §6 (main-account spec, fix round 2 — I6): main-account spec
+    # §6 makes main the only account income can legally land in via a category, so "the account
+    # the pay landed in" and "the account named main" are the same account for anyone who HAS
+    # nominated one — ranking by income only still answers for a user who has not (see the
+    # fallback example below). Both examples plant income on BOTH accounts and vary which one
+    # gets more, because a rule that always answers "main" regardless of the split is the only
+    # way to tell it apart from one that is still, quietly, ranking by amount.
+    it "opens on main when more of this period's income landed there", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       deposit(2_400, into: checking)
       deposit(50, into: ally)
@@ -42,28 +46,50 @@ RSpec.describe "Distributions", type: :request do
       expect(response.body).not_to include("Ally")
     end
 
-    it "follows the income to the other account", :aggregate_failures do
+    # I6: this used to plant MORE income into Ally and assert the screen followed it there — the
+    # shape §6 abolished, since a category can no longer land income anywhere but main. `deposit`
+    # now writes the entry in main and carries the same amount on to `into` by a `transfer`
+    # PoolMovement (see the helper below), so Ally really does end up holding more money this
+    # period — and the screen still opens on Checking, because main no longer asks how much
+    # arrived where.
+    it "opens on main even when a transfer carried more money to another account", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       deposit(50, into: checking)
       deposit(2_400, into: ally)
 
       get new_distribution_path
 
-      expect(response.body).to include("Ally")
-      expect(response.body).not_to include("Checking")
-    end
-
-    # No income anywhere is the ordinary shape of a brand-new user and of every user before their
-    # first paycheck of the period. `max_by` promises nothing about which of several equal maxima
-    # it returns, so without the index tie-break this is the example that flaps.
-    it "falls back to priority order when no income has arrived", :aggregate_failures do
-      create(:pool, :account, user: user, name: "Ally", priority: 5)
-
-      get new_distribution_path
-
       expect(response.body).to include("Checking")
       expect(response.body).not_to include("Ally")
     end
+
+    # THE FALLBACK ITSELF, reachable only for a user with no main account named — the state a
+    # user who predates `BankAccountsController#create`'s first-account rule (or reaches this
+    # screen some other way) can still be in. Explicitly unset: every other example in this file
+    # has a main account by way of the auto-main factory trait, and this is the one example that
+    # means to have none, so it exercises `#fallback_account_by_income` rather than the
+    # short-circuit ahead of it.
+    #
+    # `Ally` MINTED FIRST, THEN THE NIL — not the other way round. The auto-main factory trait
+    # claims the first account it sees for a user with no main, so nilling BEFORE creating Ally
+    # would have handed Ally the role right back the instant it was minted, defeating the whole
+    # point of this fixture. Checking is already main by the time this example starts (the
+    # outer `let!`), so Ally cannot claim it; nilling AFTER leaves neither account main, which is
+    # the state this example means to test.
+    #
+    # No income anywhere is the ordinary shape of a brand-new user and of every user before their
+    # first paycheck of the period. `max_by` promises nothing about which of several equal maxima
+    # it returns, so without the index tie-break this is the example that flaps.
+    it "falls back to priority order when the user has no main account and no income has arrived",
+       :aggregate_failures do
+         create(:pool, :account, user: user, name: "Ally", priority: 5)
+         user.update!(default_account: nil)
+
+         get new_distribution_path
+
+         expect(response.body).to include("Checking")
+         expect(response.body).not_to include("Ally")
+       end
 
     # The whole point. A bare `Pool.find(params[:account_id])` renders this page — another
     # person's buffer, envelope names and balances — with a 200.
@@ -94,8 +120,20 @@ RSpec.describe "Distributions", type: :request do
 
     # A user with no account at all has nothing to distribute FROM, and the calculator would
     # raise on the nil rather than say so.
+    #
+    # `user.reload` (main-account spec §6, fix round 2 — I4+B1 sweep): `#default_account` now
+    # reads `current_user.default_account` FIRST, and `sign_in` in a request spec hands Warden
+    # the exact `user` object rather than a fresh lookup per request — so without this, the
+    # in-memory association cache the `:account` factory trait warmed (`user.default_account ==
+    # checking`, from BEFORE the destroy) is what `current_user.default_account` still answers
+    # with, even though the DB column the destroy nullified reads NULL. A real request never hits
+    # this: every one deserializes the session into a fresh User. Only the test's own object
+    # reuse does, and only `checking.destroy!` (a DB-level nullify) leaves it stale — the
+    # ordinary `user.update!(default_account: ...)` calls elsewhere in this file go through the
+    # association WRITER, which keeps the cache honest on its own.
     it "sends a user with no account back home with a reason", :aggregate_failures do
       checking.destroy!
+      user.reload
 
       get new_distribution_path
 
@@ -235,6 +273,9 @@ RSpec.describe "Distributions", type: :request do
       user.categories.destroy_all
       groceries.destroy!
       checking.destroy!
+      # `user.reload` — same Warden object-reuse gotcha as the GET version's own comment: without
+      # it `current_user.default_account` still answers with the pre-destroy cache.
+      user.reload
 
       post distributions_path
 
@@ -295,8 +336,18 @@ RSpec.describe "Distributions", type: :request do
     response.body[/<input[^>]*id="override-#{pool.id}"[^>]*>/]
   end
 
+  # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so the
+  # category here is always Checking's, never `into`'s. The money still ends up in `into` — the
+  # entry lands in Checking and a `transfer` PoolMovement carries the same amount on to `into`,
+  # exactly the write Task 3's routing feature automates for a real "deposit into another
+  # account" choice. Checking's own balance nets to unchanged; `into` gains exactly what it
+  # always gained.
   def deposit(amount, into:)
-    category = create(:category, :income, user: user, pool: into)
-    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    category = create(:category, :income, user: user, pool: checking)
+    entry = create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+    return entry if into == checking
+
+    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: Date.current, source_entry: entry)
+    entry
   end
 end

@@ -182,6 +182,11 @@ RSpec.describe Pool, "#destroy", type: :model do
 
     # The row, not its effect. A balance assertion is satisfied by a ledger that destroyed the
     # category and re-invented the $45 somewhere else.
+    #
+    # THE MAIN-ACCOUNT DIRECTION of B2's pair (main-account spec §6, fix round 2): `checking` is
+    # both `supplies.account` and `user.default_account` here, so this example does not
+    # discriminate between the two possible destinations — "an envelope in a non-main account"
+    # below is the fixture that does, and is the one the production 500 needed.
     it "re-points the category to the account instead of nullifying it", :aggregate_failures do
       expect { supplies.destroy }.not_to change(Category, :count)
 
@@ -201,6 +206,44 @@ RSpec.describe Pool, "#destroy", type: :model do
     # is the fixture where the two halves have to agree about the same $75.
     it "still collapses the allocation that funded it" do
       expect { supplies.destroy }.to change { PoolMovement.exists?(allocation.id) }.from(true).to(false)
+    end
+  end
+
+  # B2 (main-account spec §6, fix round 2) — THE PRODUCTION 500 THE REVIEWER REPRODUCED.
+  # `#hand_categories_to_the_account` used to re-point a category to THIS pool's own account,
+  # which is illegal the instant that account is not the user's main one:
+  # `Category#pool_must_be_reachable` refuses it, `update!` raises `ActiveRecord::RecordInvalid`,
+  # and `PoolsController#destroy` has no rescue for it — deleting an ordinary envelope 500'd for
+  # any user whose envelope lived in a second account. The destination is now always
+  # `user.default_account`, and this is the direction the block above cannot exercise (there,
+  # the envelope's own account and main happen to be the same pool).
+  describe "an envelope in a non-main account" do
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+    let(:side_gig) { create(:pool, :budget_pool, user: user, account: ally, name: "Side Gig") }
+    let!(:spending) { create(:category, :expense, user: user, pool: side_gig, name: "Side Gig Spending") }
+    let!(:spend) { create(:entry, item: create(:item, category: spending), amount: 80, date: Date.current) }
+
+    before { user.update!(default_account: checking) }
+
+    it "re-points the category to the user's main account rather than raising", :aggregate_failures do
+      expect { side_gig.destroy }.not_to raise_error
+
+      expect(spending.reload.pool).to eq(checking)
+      expect(spend.reload.effective_pool).to eq(checking)
+    end
+
+    # THE SPLIT `Pool#hand_categories_to_the_account`'s own comment names, pinned rather than
+    # left to prose: Ally never held this category's spending (it lived in the envelope alone,
+    # and no movement ever touched Ally directly in this fixture), so Ally's own balance is
+    # untouched by the destroy — the $80 moves onto Checking, main, and nowhere else.
+    it "moves the category's balance onto main, not onto the envelope's own account", :aggregate_failures do
+      expect(balance(ally)).to eq(0)
+      expect(balance(side_gig)).to eq(-80)
+
+      side_gig.destroy
+
+      expect(balance(ally)).to eq(0)
+      expect(balance(checking)).to eq(-80)
     end
   end
 
@@ -312,6 +355,11 @@ RSpec.describe Pool, "#destroy", type: :model do
     # ends in a `reset` — a line whose comment used to say it fired against nothing.
     it "is destroyed once its categories point somewhere else, the other direction of the rule" do
       second = create(:pool, :account, user: user, name: "Ally")
+      # I4+B1 sweep (main-account spec §6): a category may only point at the user's MAIN account
+      # or an envelope, so "somewhere else" for an account-pointed category has to be the new
+      # main — `second` takes over the role before the re-point, the same as a real user naming
+      # a different account primary.
+      user.update!(default_account: second)
       user.categories.each { |category| category.update!(pool: second) }
 
       expect { checking.destroy }.to change { described_class.exists?(checking.id) }.from(true).to(false)

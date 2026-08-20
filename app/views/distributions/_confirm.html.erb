@@ -29,8 +29,9 @@
     working with JavaScript off rather than a duplicate of the header Turbo already sends. %>
 <% if standalone %>
   <%= form_with url: distributions_path, method: :post do %>
-    <%# Without this the write falls back to "the account the pay landed in", which is a
-        different account the moment a second paycheck arrives mid-period. %>
+    <%# Without this the write falls back to the user's main account (main-account spec §6),
+        which is a different account than the one on screen the moment a second account is
+        being confirmed. %>
     <%= hidden_field_tag :account_id, presenter.account.id %>
     <button type="submit" class="btn btn-primary" id="confirm-distribution">Confirm distribution</button>
   <% end %>
