@@ -72,6 +72,33 @@ class Category < ApplicationRecord
   validate :pool_must_be_reachable
   validate :income_must_land_in_an_account
 
+  # A CATEGORY THAT STOPS BEING INCOME TAKES ITS ENTRIES' MIRROR MOVEMENTS WITH IT (main-account
+  # spec §4, final whole-branch review — I-3).
+  #
+  # An income entry always LANDS in main; a user who says it ended up in Ally gets one mirroring
+  # `transfer` movement main → Ally (`Entry#route_income_to!`). `EntriesController#sync_income_
+  # routing` is the only other caller of that method, and it syncs entry-side only — so flipping
+  # the CATEGORY from income to expense through the ordinary edit form (`category_type` is
+  # permitted) left every one of its entries' movements standing with nothing behind them: main
+  # still debited for money the app no longer thinks arrived, the destination still holding a
+  # phantom, and Σ pools split across two accounts on the strength of a routing question an
+  # expense is never even asked. The controller already knows the rule for one entry — "not
+  # income, so route nowhere" — and this is that same rule asked at the place a whole category's
+  # answer can change.
+  #
+  # `route_income_to!(nil)` RATHER THAN A DELETE OF MY OWN, for the reason its own comment gives:
+  # allocation and sweep movements also carry a `source_entry`, and only `kind_transfer` tells a
+  # routing mirror apart from a distribution's envelope split. A hand-rolled
+  # `where(source_entry: entries)` here would wipe the period's allocation every time somebody
+  # re-typed a category.
+  #
+  # INSIDE THE UPDATE'S OWN TRANSACTION (`after_update`, not `after_update_commit`), so a destroy
+  # that will not run takes the type flip down with it rather than leaving the two disagreeing.
+  # The guard is the exact pair, income → expense: an expense → income flip has no movements to
+  # clear (they are written by the entry path afterwards) and a rename or a colour change is not a
+  # type change at all, so neither reaches the query.
+  after_update :unroute_entries_that_are_no_longer_income
+
   # Basic scopes
   scope :expenses, -> { where(category_type: :expense) }
   scope :incomes, -> { where(category_type: :income) }
@@ -192,6 +219,21 @@ class Category < ApplicationRecord
   end
 
   private
+
+  # `saved_change_to_category_type` IS `[before, after]`, compared as the whole pair rather than
+  # asked two questions: with only two types today `expense?` after a type change implies the flip,
+  # but a third type added later would make that inference silently wrong, and this callback
+  # DELETES money rows.
+  #
+  # `includes(item: { category: :user })` because `#route_income_to!` reads `user.default_account`
+  # through the entry's own chain: the preloader hands every entry of one category the SAME
+  # Category and User objects, so the whole loop costs three preloads and one `default_account`
+  # lookup instead of three queries per entry.
+  def unroute_entries_that_are_no_longer_income
+    return unless saved_change_to_category_type == ["income", "expense"]
+
+    entries.includes(item: { category: :user }).find_each { |entry| entry.route_income_to!(nil) }
+  end
 
   # THE CALENDAR DAY AN INSTANT FELL ON, IN THE OWNER'S ZONE — the Ruby half of ENTRY_POOL_ID's
   # `AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(category_users.timezone, 'UTC')`. `entries.date` is a

@@ -72,6 +72,25 @@ RSpec.describe "AccountFundings", type: :request do
     expect(ally.calculator.balance).to eq(400)
   end
 
+  # I-1 (final whole-branch review): the SAME predicate guards the write, so the double-funding the
+  # card used to invite is refused here too. An account funded once and then allocated to the penny
+  # has a buffer of exactly $0 — the shape a distribution produces on any short period — and the
+  # old buffer-only gate read that as "never funded" and let a second movement through. Planted
+  # literals: $500 in, $500 into the envelope, then a $500 second attempt that must not land.
+  it "refuses to fund an account whose envelopes hold all of its money", :aggregate_failures do
+    vacation = create(:pool, :budget_pool, user: user, account: ally, name: "Vacation")
+    post account_fundings_path, params: { account_funding: { account_id: ally.id, amount: 500 } }
+    PoolMovement.create!(from_pool: ally, to_pool: vacation, amount: 500, date: Date.current, kind: :allocation)
+
+    post account_fundings_path, params: { account_funding: { account_id: ally.id, amount: 500 } }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.body).to include("already holds money")
+    expect(PoolMovement.where(to_pool: ally, kind: :transfer).count).to eq(1)
+    expect(ally.calculator.balance).to eq(0)
+    expect(ally.total).to eq(500)
+  end
+
   # LOW-3 (fix round 2): the amount input now carries `min="0.01"`, so a zero amount is blocked
   # client-side and can only be exercised — and its retained value proven — through a direct POST.
   it "refuses a zero amount and keeps it on the card", :aggregate_failures do

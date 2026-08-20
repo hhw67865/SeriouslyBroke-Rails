@@ -125,13 +125,35 @@ class HomePresenter
   # envelope's mere existence says nothing about whether this account has been given its real
   # balance.
   #
+  # THE FAMILY TOTAL, NOT THE BARE BUFFER (final whole-branch review — I-1), and it is the same
+  # ruling §5's own correction already made about the same question one screen away (see
+  # `OpeningBalancesController#record_correction`): what a bank statement says about a physical
+  # account is its unallocated cash PLUS every envelope housed inside it, because money an envelope
+  # holds has not left the bank. The buffer alone said "never funded" of an account whose envelopes
+  # hold every dollar it has — and that is not an exotic state but "the ordinary shape of a short
+  # period", `AllocationCommitter`'s own words for a waterfall that drains an account's buffer to
+  # exactly $0. The card came back under a fully funded account asking the user to "match your bank
+  # statement" a second time, and a user who obliged put BOTH accounts wrong against their banks by
+  # the amount they typed twice.
+  #
+  # MED-1'S PROTECTION SURVIVES UNCHANGED, which is the reason this is a total and not a
+  # `pools.empty?` in disguise: a fresh account holding an EMPTY envelope still totals zero, so it
+  # still gets the card — the case that whole ruling was about.
+  #
+  # `Pool#total` IS THE READER, rather than a family sum assembled here out of #current_buffer_for,
+  # so this gate and the correction's cannot drift into two answers about what one account holds —
+  # which is precisely the defect this finding was. It costs five aggregates for the account plus
+  # five per envelope inside it, outside this screen's ledger batching, and that is paid
+  # deliberately: one reader of "what the bank says" is worth more on a money screen than the
+  # queries, and the accounts it runs over are the handful a user banks with.
+  #
   # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): `users.default_account_id`
   # nullifies when main is deleted, and the card used to read `main_account.name`
   # unconditionally — a user with no main account 500'd on Home with no door back in. No main
   # account means no card anywhere, full stop, not merely "no card on the pool that used to be
   # main" — every account is equally un-fundable with nothing to fund it FROM.
   def awaiting_funding?(account)
-    user.default_account.present? && account != user.default_account && current_buffer_for(account).zero?
+    user.default_account.present? && account != user.default_account && account.total.zero?
   end
 
   # ONBOARDING STEP 3'S OWN GATE (main-account spec §5): the account under review must BE the
