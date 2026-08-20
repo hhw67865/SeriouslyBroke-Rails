@@ -39,7 +39,16 @@
 
   <%# Said plainly rather than left as an empty card: an account with no envelopes is a
       setup state, and a blank panel reads as something that failed to load. %>
-  <% if pools.empty? %>
+  <%# ONBOARDING STEP 2 (main-account spec §5): an untouched, non-main, empty account is the
+      fresh state the fund-account card exists for — main never shows it (it has no real
+      balance of its own to enter; it IS the source), and an account that already holds a
+      pool or a buffer has moved past onboarding. %>
+  <% if account != presenter.user.default_account && pools.empty? && buffer.zero? %>
+    <%= render "fund_account",
+        account: account,
+        movement: presenter.funding_movement_for(account),
+        main_account: presenter.user.default_account %>
+  <% elsif pools.empty? %>
     <p class="px-6 py-3 text-sm text-gray-500">No pools in this account yet.</p>
   <% end %>
 </section>

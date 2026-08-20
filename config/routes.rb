@@ -17,6 +17,11 @@ Rails.application.routes.draw do
   # delete stay on the pool's own edit screen, which already handles every pool type.
   resources :bank_accounts, only: [:create]
 
+  # ONBOARDING STEP 2 (main-account spec §5): giving a fresh account its real balance, as one
+  # movement from main. Create-only, same shape as `bank_accounts` above and for the same
+  # reason — there is one door and it is on Home, where the card lives.
+  resources :account_fundings, only: [:create]
+
   resources :pools do
     member do
       get :categories, to: "pools/categories#index"

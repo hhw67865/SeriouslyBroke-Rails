@@ -34,7 +34,7 @@ class BankAccountsController < HomeController
       # screen: re-render the page at 422 — nothing was written — with the rejected record as
       # the form object, so the field keeps its input and the error prints beside it. The
       # presenter re-queries every figure, so the unsaved pool leaks into none of them.
-      @presenter = HomePresenter.new(user: current_user, today: Date.current)
+      assign_home_state
       @new_bank_account = pool
       render "home/index", status: :unprocessable_content
     end

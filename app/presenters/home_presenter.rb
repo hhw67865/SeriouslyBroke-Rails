@@ -98,13 +98,31 @@ class HomePresenter
 
   attr_reader :user, :today
 
-  def initialize(user:, today: Date.current)
+  # `rejected_movement:` IS ONBOARDING STEP 2'S OWN 422 (main-account spec §5), threaded through
+  # rather than read off an ivar the view would have to know about. AccountFundingsController's
+  # failure branch hands back the unsaved, invalid PoolMovement it tried to save, and #funding_
+  # movement_for below is how the ONE account it was for gets it back — every other account's
+  # card renders a fresh, blank one. Optional and nil everywhere else Home is built, which is
+  # every other caller of this presenter.
+  def initialize(user:, today: Date.current, rejected_movement: nil)
     @user = user
     @today = today
+    @rejected_movement = rejected_movement
   end
 
   def accounts
     @accounts ||= user.pools.accounts.order(:name).to_a
+  end
+
+  # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is
+  # the account it was refused for — so its typed amount and its errors survive the re-render,
+  # the same courtesy BankAccountsController's own 422 branch pays the add-account card — and a
+  # fresh unsaved one otherwise, so every other card's `simple_form_for` still has a record to
+  # ask for a (blank) value rather than a bare symbol with nothing behind it.
+  def funding_movement_for(account)
+    return @rejected_movement if @rejected_movement&.to_pool_id == account.id
+
+    PoolMovement.new(to_pool: account)
   end
 
   def pools_for(account)
