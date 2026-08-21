@@ -805,27 +805,37 @@ RSpec.describe SuggestionEngine do
       end
     end
 
+    # A FRESH `User` FOR THE SECOND MEASUREMENT, and it is not tidiness. `#dismissals` reads
+    # `user.suggestion_dismissals`, which the association caches on the record it was asked of — so
+    # a second engine built over the SAME in-memory user answers that one for free, and the two
+    # counts would differ by exactly that (6 against 5) while nothing about the engine had changed.
+    # A request always holds a freshly-loaded `current_user`, so this is the comparable pair.
     it "costs the same whether it proposes three bills or fifteen", :aggregate_failures do
       three_items
       small = query_count { suggestions }
 
       twelve_more
-      large = query_count { engine.suggestions }
+      fresh = User.find(user.id)
+      large = query_count { engine(for_user: fresh).suggestions }
 
       expect(small).to eq(large)
-      # categories, their pools, items, entries, rules — no drift query, because no rule exists to
-      # drift. The pool preload was FREE before plan 3 (`includes(:pool)` skips its query when every
-      # `pool_id` is nil, and a category could name no pool); every category names one now, so the
-      # figure is five. O(1) in bills either way, which is what the first expectation pins.
-      expect(large).to eq(5)
+      # categories, their pools, items, entries, rules, dismissals — no drift query, because no
+      # rule exists to drift. The pool preload was FREE before plan 3 (`includes(:pool)` skips its
+      # query when every `pool_id` is nil, and a category could name no pool); every category names
+      # one now. DISMISSALS is the sixth (Henry's ruling of 2026-08-20): one query for the whole
+      # panel, whatever it holds, which is why the figure moved by one and not by one per row.
+      # O(1) in bills either way, which is what the first expectation pins.
+      expect(large).to eq(6)
     end
 
     # The exact number, on a fixture that exercises every read the engine makes. `eq`, not `<=`: a
     # bound pins nothing, and the point of the figure is that the Budget page can be costed.
-    it "costs exactly eight queries when every detector has something to say", :aggregate_failures do
+    # NINE SINCE THE DISMISSAL LOOKUP (Henry's ruling of 2026-08-20) — the eighth plus one, asked
+    # once for the panel rather than once per suggestion, which is the property worth costing.
+    it "costs exactly nine queries when every detector has something to say", :aggregate_failures do
       one_of_each
 
-      expect(query_count { suggestions }).to eq(8)
+      expect(query_count { suggestions }).to eq(9)
       expect(suggestions.size).to eq(4)
     end
   end
