@@ -1,6 +1,17 @@
 <% content_for :title, "Budget" %>
 
-<%= page_header(title: "Budget", subtitle: "The rules that fill your envelopes") %>
+<%# THE ONE DOOR TO A HAND-MADE RULE (Henry's ruling of 2026-08-20). `/budgets/new` existed and
+    nothing linked to it: every other way into that form carries an owner already (the Edit links
+    below, the suggestion panel's accept links), so a user who wanted a rule for something their
+    entries have not shown yet had no door at all. It belongs HERE and only here, because this is
+    the screen that lists rules — the same reason the form's Cancel and both of its saves come back
+    to this path.
+
+    `standard_action_button` rather than markup of its own, which is what puts it in the same
+    treatment as the New Category button on the categories index. %>
+<%= page_header(title: "Budget",
+                subtitle: "The rules that fill your envelopes",
+                actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
 
 <div class="space-y-6">
   <% if @presenter.no_rules? %>

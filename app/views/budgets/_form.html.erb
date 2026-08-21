@@ -13,13 +13,34 @@
     two things it is about to do — JOIN an envelope the user already has, or MAKE one — because
     those are different acts and the panel sentence one click earlier already named one of them.
 
-    A BARE `/budgets/new` NOW RENDERS NO OWNER CONTROL AT ALL, and that is the honest state: every
-    link into this form carries an owner (the Budget page's Edit links carry a rule, the panel's
-    accept links carry a pool id or an envelope half), and a rule typed into existence with no
-    owner is what `Budget#must_belong_to_a_pool` refuses. The form says so in its error
-    notification rather than offering a picker for a mode that no longer exists. %>
+    THE THIRD SHAPE IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it is what this comment
+    used to say could not exist. It read: "A BARE `/budgets/new` NOW RENDERS NO OWNER CONTROL AT
+    ALL, and that is the honest state: every link into this form carries an owner… the form says so
+    in its error notification rather than offering a picker for a mode that no longer exists." The
+    premise was true and the conclusion did not follow — nothing linked to the bare URL because
+    there was no button, so "every link carries an owner" was a fact about the links that existed
+    rather than about what a user might want. A rule for a bill your entries have not shown yet has
+    no other door.
+
+    SO THE OWNER PICKER IS BACK, ON THAT PATH ONLY. It offers `Pool.rule_owners` — this user's
+    envelopes and goals, never an account, which is `Budget#pool_must_not_be_an_account` stated as
+    a choice instead of a refusal — and `BudgetsController#owner_picker?` is the one decision about
+    when it renders. Every path that ALREADY names an owner is untouched: the Edit link's rule, the
+    panel's envelope half, the panel's reused `pool_id`.
+
+    A HAND-MADE RULE IS A PER-PERIOD RATE, and `basis` rides hidden saying so. That is the only
+    shape this form can build without asking a second question ("$X a period" needs no schedule,
+    while §3.1's other three rows all need an interval, an anchor or both), and it is the shape a
+    user typing a rule from scratch means: money set aside every period. A DATED bill still arrives
+    the way it always has — measured, from the suggestion panel, with its date and interval on
+    screen and correctable. %>
 <% pool_mode = @budget.pool_mode? %>
 <% proposal = @envelope.present? %>
+<%# WHETHER THIS FORM IS ASKING WHO OWNS THE RULE. The controller's answer, not a re-derivation:
+    "an owner is already in context" is a fact about how the request arrived (a prefill, an envelope
+    half, a persisted rule) and cannot be read off the record once the picker's own choice has been
+    assigned to it. %>
+<% owner_picker = @owner_picker.present? %>
 <%# THE ENVELOPE THIS WOULD JOIN, or nil where it would create one. Resolved by
     BudgetsController#set_envelope through BudgetProposal::Envelope#existing — the same reader the
     save uses, so this heading cannot promise something the write will not do. %>
@@ -27,9 +48,10 @@
 <%# THE SCHEDULE IS ONLY EDITABLE ON THE WAY IN. A rule's shape (basis, interval, anchor, item) is
     measured by the engine and submitted back; changing it later is the edit form's business, and
     an existing rule's shape is not this partial's to re-offer. %>
-<% new_pool_rule = @budget.new_record? && (pool_mode || proposal) %>
+<% new_pool_rule = @budget.new_record? && (pool_mode || proposal || owner_picker) %>
 <% subtitle = "How an envelope gets filled each period" %>
-<% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode %>
+<% subtitle = "Pick what this rule fills, and how much it asks for each period" if owner_picker %>
+<% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode && !owner_picker %>
 <% subtitle = "A new #{@envelope.name} envelope, and the rule that fills it" if proposal %>
 <% subtitle = "Joining your #{joining.name} envelope, and the rule that adds to it" if joining %>
 <% cancel_path = budget_page_path %>
@@ -107,6 +129,31 @@
           </div>
 
           <%= hidden_field_tag "envelope[category_id]", @envelope.category.id %>
+        <% elsif owner_picker %>
+          <%# THE OWNER, ASKED (Henry's ruling of 2026-08-20) — the one branch of this form where
+              the pool is a question rather than something the request arrived carrying.
+
+              `Pool.rule_owners` THROUGH `current_user.pools`, which is both halves of the scoping:
+              the model scope answers WHAT KIND of pool may own a rule (an envelope or a goal, never
+              an account) and the association answers WHOSE. A foreign id typed into a submit is
+              refused a second time on the way in — `BudgetsController#scoped_owner` looks `pool_id`
+              up through `current_user.pools` and 404s — so this select is the affordance, not the
+              boundary.
+
+              THE BLANK IS OFFERED because "I have not chosen yet" is a real state on a form that
+              opens with nothing chosen, not because a rule may have no owner:
+              `Budget#must_belong_to_a_pool` refuses the blank on `:base`, which is where this form
+              renders base errors. %>
+          <div>
+            <%= f.input :pool_id,
+                as: :select,
+                collection: current_user.pools.rule_owners.order(:name),
+                label_method: :name,
+                value_method: :id,
+                include_blank: "Select an envelope or goal",
+                label: "Pool",
+                hint: "The envelope or goal this rule fills each period." %>
+          </div>
         <% elsif pool_mode %>
           <%# THE FORM DOES NOT OFFER THE POOL, which is not the same as the pool being
               unwritable: `budget_params` permits `pool_id`, so a tampered submission DOES

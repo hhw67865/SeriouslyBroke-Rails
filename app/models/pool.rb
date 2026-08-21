@@ -199,6 +199,17 @@ class Pool < ApplicationRecord
   scope :savings_pools, -> { where(pool_type: :savings) }
   scope :by_priority, -> { order(:priority, :name) }
 
+  # THE POOLS A FUNDING RULE MAY BE OWNED BY — an envelope or a savings goal, never an account.
+  # `Budget#pool_must_not_be_an_account` is the same fact stated as a refusal, and this is the
+  # positive form the hand-made rule form's picker offers (Henry's ruling of 2026-08-20). The two
+  # are deliberately not the same code: the validation is the law, and a picker that merely agreed
+  # with it by hand would be free to drift the day a fourth pool type lands.
+  #
+  # Not `budget_pools.or(savings_pools)`, which is the same set spelled as the complement of the
+  # one type that matters — this says what it means, and it will keep meaning it if a type is
+  # added that a rule CAN own.
+  scope :rule_owners, -> { where.not(pool_type: :account) }
+
   # THE POOLS AN ACCOUNT ACTUALLY FILLS, and therefore the ones a fill order is over: an envelope
   # with no funding rule asks for nothing, AllocationCalculator#fill drops its zero-ask row before
   # the waterfall reaches it, and the Budget page — which groups rules under the pool they fill —

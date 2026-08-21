@@ -75,26 +75,77 @@ RSpec.describe "Budgets Forms", type: :system do
     end
   end
 
-  # A BARE `/budgets/new` HAS NO OWNER, and the form no longer invents one. Every link into this
-  # form carries a pool id or an envelope half; typing the URL reaches a page that can only be
-  # refused, and `Budget#must_belong_to_a_pool` refuses it on `:base` — which is the one place the
-  # form renders base errors.
+  # A HAND-MADE RULE (Henry's ruling of 2026-08-20). `/budgets/new` existed and rendered no owner
+  # control at all — deliberately, because at the time every link into the form carried an owner
+  # and nothing linked to the bare URL. Real use found the gap that leaves: a user who wants a rule
+  # for something their entries have not yet shown has no door at all, and the only screen that
+  # lists rules had no "new" button on it.
+  #
+  # THE EXAMPLE THAT USED TO STAND HERE — "offers no owner control at all" — is inverted rather
+  # than deleted, for the same reason the suggestions panel's dismissal example was: the fact worth
+  # pinning is whether this form can name an owner, and the answer changed.
   describe "New Budget Form with no owner", :aggregate_failures do
-    before { visit new_budget_path }
+    let!(:vacation) { create(:pool, :savings_pool, user: user, account: checking, name: "Vacation to Europe") }
+    let(:stranger) { create(:user) }
 
-    it "offers no owner control at all" do
-      expect(page).to have_content("New Budget")
-      expect(page).to have_field("Amount")
-      expect(page).to have_no_select("Category")
-      expect(page).to have_no_field("Prorate daily")
+    before do
+      create(:pool, :budget_pool, user: stranger, account: create(:pool, :account, user: stranger), name: "Their Rent")
+      visit budget_page_path
     end
 
-    it "refuses the save and says why" do
-      fill_in "Amount", with: "500.00"
-      click_button "Create Budget"
+    it "is reachable from the Budget page's own header" do
+      click_link "New rule"
 
       expect(page).to have_current_path(new_budget_path)
+      expect(page).to have_content("New Budget")
+      expect(page).to have_select("Pool")
+    end
+
+    # A RULE'S OWNER IS AN ENVELOPE OR A GOAL, never an account — `Budget#pool_must_not_be_an_account`
+    # is the same fact stated as a refusal, and a picker that offered Checking would be inviting a
+    # 422. `options:` is the WHOLE list, so the account's absence and the stranger's are asserted by
+    # the same expectation that asserts the two real choices are there.
+    it "offers this user's envelopes and goals, and nothing else" do
+      click_link "New rule"
+
+      expect(page).to have_select(
+        "Pool",
+        options: ["Select an envelope or goal", "Groceries", "Vacation to Europe"]
+      )
+    end
+
+    it "lands the rule on the chosen envelope" do
+      click_link "New rule"
+      select "Groceries", from: "Pool"
+      fill_in "Rule Amount", with: "125.00"
+      click_button "Create Budget"
+
+      expect(page).to have_current_path(budget_page_path)
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole.amount).to eq(125)
+      expect(groceries.budgets.sole.cadence).to eq(:per_period)
+    end
+
+    it "lands one on a goal too" do
+      click_link "New rule"
+      select "Vacation to Europe", from: "Pool"
+      fill_in "Rule Amount", with: "60.00"
+      click_button "Create Budget"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(vacation.budgets.sole.amount).to eq(60)
+    end
+
+    # THE OWNER-LESS SAVE IS STILL REFUSED, and on `:base` where the form renders base errors —
+    # the picker offers a blank because "I have not chosen yet" is a real state, not because a rule
+    # may have no owner.
+    it "refuses the save when no pool is chosen, and says why" do
+      click_link "New rule"
+      fill_in "Rule Amount", with: "500.00"
+      click_button "Create Budget"
+
       expect(page).to have_css(".bg-status-danger-light", text: "must belong to a pool")
+      expect(page).to have_select("Pool")
       expect(Budget.count).to eq(0)
     end
   end

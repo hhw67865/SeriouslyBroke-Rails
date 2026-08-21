@@ -280,6 +280,16 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_content("Pays").and have_content("Phone")
     end
 
+    # THE OWNER IS ALREADY IN CONTEXT HERE, so the hand-made form's pool picker (Henry's ruling of
+    # 2026-08-20) must not appear on this path: the envelope half names the pool this rule will
+    # fill, and a select beside it would offer to send the rule somewhere the panel's own sentence
+    # one click earlier did not promise.
+    it "offers no pool picker, because the envelope half already names the owner" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_no_select("Pool")
+    end
+
     # The CREATE half of the pair the join case pins from the other side: nothing by this name
     # exists, so the heading says a new envelope and the account picker is a real question the
     # save will answer with.

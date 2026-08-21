@@ -23,9 +23,18 @@ class BudgetsController < ApplicationController
   # PREFILLED FROM THE QUERY STRING when the suggestion panel sent the user here, and the prefill
   # goes through the same ownership scoping the POST does — a stranger's `item_id` in a GET would
   # render THEIR item's name on this user's form, which is the read-shaped half of the same leak.
+  # A BARE `/budgets/new` IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it opens as a
+  # PER-PERIOD RATE. `basis` defaults to `monthly` on the column, which with no interval and no
+  # anchor is the one combination `Budget#shape_must_be_valid` refuses outright — so a form that
+  # asked only for the pool and the amount could never save. `per_period` is §3.1's row 1: no
+  # interval, no anchor, valid on its own, and the shape a user typing a rule from scratch means.
+  #
+  # ASSIGNED BEFORE THE PREFILL, never after: a proposal states its own `basis` and must overwrite
+  # this rather than be overwritten by it.
   def new
-    @budget = Budget.new
+    @budget = Budget.new(basis: :per_period)
     @budget.assign_attributes(prefill_attributes)
+    @owner_picker = owner_picker?
   end
 
   # GET /budgets/1/edit
@@ -51,6 +60,15 @@ class BudgetsController < ApplicationController
     if BudgetProposal.new(budget: @budget, envelope: @envelope).save
       redirect_to budget_page_path, notice: "Budget was successfully created."
     else
+      # THE PICKER SURVIVES A REFUSAL. `@budget.pool_id` is now whatever the user chose (or blank),
+      # so it cannot answer "was this form asking for an owner" the way it can on the GET — what
+      # settles it here is the absence of an envelope half, which is the only owner a POST can
+      # arrive with that the form is not asking about. The reused-`pool_id` accept path is the one
+      # case this widens: a proposal that reuses an existing envelope and then fails validation
+      # comes back with a picker preselected to that envelope rather than its name in a grey box.
+      # That is a form that still says the right owner and now lets it be changed, on a screen the
+      # user has just been refused by.
+      @owner_picker = @envelope.blank?
       render :new, status: :unprocessable_content
     end
   end
@@ -172,6 +190,12 @@ class BudgetsController < ApplicationController
       category: current_user.categories.find(permitted[:category_id])
     )
   end
+
+  # WHETHER THIS FORM HAS TO ASK WHO OWNS THE RULE — the one decision behind the picker, made here
+  # rather than in the view because it is a fact about how the REQUEST arrived. Nothing named an
+  # owner: no envelope half from the panel, no `pool_id` in the prefill. A persisted rule never
+  # reaches this (only #new asks), so the edit form is untouched.
+  def owner_picker? = @envelope.blank? && prefill_attributes[:pool_id].blank?
 
   # `find`, so a stranger's id raises RecordNotFound and arrives as the same 404 #set_budget
   # gives. Skipped when blank, because a blank owner is an owner-less create re-rendering, which
