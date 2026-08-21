@@ -147,14 +147,19 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(find("#suggestions-dead_rule")).to have_content("Rules that look dead · 1")
     end
 
-    # SPEC §8: suggestions cannot be dismissed, so there is deliberately no control that would.
-    # Asserted as an absence of the affordance rather than of a word, because the risk is a button
-    # arriving later that hides a real drift.
-    it "offers no way to dismiss one" do
-      within("[data-suggestions]") do
-        expect(page).to have_no_css("button", text: /dismiss|hide|ignore/i)
-        expect(page).to have_no_css("a", text: /dismiss|hide|ignore/i)
-      end
+    # HENRY'S RULING OF 2026-08-20 REVERSES §8 HERE, and this example is the inversion of the one
+    # that stood in its place — "offers no way to dismiss one", which asserted the absence of
+    # exactly this affordance. It is inverted rather than deleted because the fact worth pinning is
+    # the same one: whether the panel can hide a row. It can now, on every row, and on purpose.
+    it "offers a way to hide every one of them" do
+      expect(page.all("[data-suggestion]").size).to eq(6)
+      expect(page.all("[data-suggestion] button", text: "Hide").size).to eq(6)
+    end
+
+    # NOTHING IS HIDDEN UNTIL THE USER HIDES IT. The foot section is state, so its absence on a
+    # panel nobody has touched is what says the list above is complete.
+    it "shows no hidden section until something is hidden" do
+      expect(page).to have_no_css("[data-hidden-suggestions]")
     end
 
     # THE RE-POINT, SAID BEFORE THE CLICK: accepting a Phone proposal moves every Utilities entry.
@@ -175,6 +180,74 @@ RSpec.describe "Budget page suggestions", type: :system do
         expect(page).to have_no_css("[data-suggestion-cap]")
         expect(page).to have_no_content("cap here is a spending limit")
       end
+    end
+  end
+
+  # HIDING ONE, AND GETTING IT BACK (Henry's ruling of 2026-08-20). Two bills are planted rather
+  # than one, so "it left the panel" is distinguishable from "the panel stopped rendering".
+  describe "hiding a suggestion", :aggregate_failures do
+    before do
+      plant_bill(phone, 85)
+      plant_bill(internet, 65)
+      visit budget_page_path
+      page.assert_selector("[data-suggestion='dated_bill:#{phone.id}']")
+    end
+
+    def hide(kind, subject)
+      within(suggestion(kind, subject)) { click_button "Hide" }
+      page.assert_selector("[data-hidden-suggestions]")
+    end
+
+    # THE SECTION IS A `<details>`, so its rows are in the DOM and NOT VISIBLE until it is opened —
+    # which is what "collapsed" means and what these examples have to go through rather than
+    # around. `have_content` is visibility-aware, so an assertion that skipped this click would
+    # pass on `visible: :all` against a section nobody could read.
+    def open_hidden = find("[data-hidden-suggestions] summary").click
+
+    it "takes the row off the panel and leaves the others standing" do
+      hide(:dated_bill, phone)
+
+      expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
+      expect(page).to have_css("[data-suggestion='dated_bill:#{internet.id}']")
+    end
+
+    # A DISMISSAL IS STATE, WHICH IS THE WHOLE OBJECTION §8 MADE TO IT — so the pin is that it
+    # SURVIVES, rather than that the row disappeared from a page that had not been reloaded.
+    it "stays hidden across a reload" do
+      hide(:dated_bill, phone)
+      visit budget_page_path
+
+      expect(page).to have_css("[data-suggestions]")
+      expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
+    end
+
+    # THE FOOT SECTION IS THE ANSWER TO "WHERE DID IT GO". A hidden suggestion that could not be
+    # found again would be a deletion wearing a gentler word, which is what §8 feared; it is
+    # collapsed rather than absent, and it still says the bill's own sentence.
+    it "lists it at the foot of the panel, with its count and its sentence" do
+      hide(:dated_bill, phone)
+
+      # THE COUNT IS VISIBLE WHILE THE LIST IS NOT, which is the whole point of collapsing it: the
+      # user is told how much is put away without the panel growing back by the height of it.
+      within("[data-hidden-suggestions]") do
+        expect(page).to have_content("1 hidden suggestion")
+        expect(page).to have_no_content("Phone — $85.00 every month")
+      end
+
+      open_hidden
+
+      within("[data-hidden-suggestions]") do
+        expect(page).to have_content("Phone — $85.00 every month")
+      end
+    end
+
+    it "puts it back on the panel when shown again" do
+      hide(:dated_bill, phone)
+      open_hidden
+      within("[data-hidden-suggestion='dated_bill:#{phone.id}']") { click_button "Show" }
+
+      expect(page).to have_css("[data-suggestion='dated_bill:#{phone.id}']")
+      expect(page).to have_no_css("[data-hidden-suggestions]")
     end
   end
 

@@ -14,6 +14,16 @@ class User < ApplicationRecord
   has_many :items, through: :categories
   has_many :entries, through: :items
 
+  # THE SUGGESTIONS THIS USER HAS PUT DOWN (Henry's ruling of 2026-08-20). Owned by the user
+  # directly rather than reached through the subject, because a dismissal is a fact about who is
+  # reading the panel and not about the item, category or rule it names — the same subject can be
+  # hidden by one user and showing for another, which is what `SuggestionEngine`'s lookup pins.
+  #
+  # `dependent: :destroy` for the ordinary reason, and note the SUBJECT side needs no counterpart:
+  # a dismissal whose subject is deleted stops matching any suggestion the engine can derive, so it
+  # is inert rather than dangling.
+  has_many :suggestion_dismissals, dependent: :destroy
+
   belongs_to :default_account, class_name: "Pool", optional: true
 
   enum :theme, { light: 0, dark: 1 }

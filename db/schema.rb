@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_20_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -97,6 +97,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_020000) do
     t.check_constraint "(pool_type = 0) = (account_id IS NULL)", name: "pools_account_matches_pool_type"
   end
 
+  create_table "suggestion_dismissals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "kind", null: false
+    t.uuid "subject_id", null: false
+    t.string "subject_type", null: false
+    t.datetime "updated_at", null: false
+    t.uuid "user_id", null: false
+    t.index ["subject_type", "subject_id"], name: "index_suggestion_dismissals_on_subject"
+    t.index ["user_id", "kind", "subject_type", "subject_id"], name: "index_suggestion_dismissals_on_user_and_subject", unique: true
+    t.index ["user_id"], name: "index_suggestion_dismissals_on_user_id"
+  end
+
   create_table "users", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.datetime "current_sign_in_at"
@@ -135,5 +147,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_020000) do
   add_foreign_key "pool_movements", "pools", column: "to_pool_id"
   add_foreign_key "pools", "pools", column: "account_id"
   add_foreign_key "pools", "users"
+  add_foreign_key "suggestion_dismissals", "users"
   add_foreign_key "users", "pools", column: "default_account_id", on_delete: :nullify
 end

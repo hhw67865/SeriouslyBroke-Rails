@@ -1,10 +1,18 @@
 # frozen_string_literal: true
 
 # THE BOTTOM HALF OF THE BUDGET PAGE (spec §8): four detectors over entry history, run on every
-# read. There is no table, no dismissed state and no job — a suggestion is a DERIVATION, so a rule
+# read. A SUGGESTION IS STILL A DERIVATION — there is no suggestions table and no job, so a rule
 # created or a bill that stops paying changes the list on the next page load and nothing has to be
-# invalidated. That is also why suggestions cannot be dismissed: a dismissal is state, and the
-# state it would hide is drift.
+# invalidated.
+#
+# WHAT CHANGED IS WHETHER ONE CAN BE PUT DOWN (Henry's ruling of 2026-08-20). This header used to
+# end "that is also why suggestions cannot be dismissed: a dismissal is state, and the state it
+# would hide is drift", and real use answered it: a panel with no way to set a row aside is one
+# that gets ignored WHOLE, which hides every kind at once rather than the one the user has already
+# decided about. So there IS one table now — `suggestion_dismissals` — and it stores the (kind,
+# subject) PAIR a derivation would produce rather than a copy of the suggestion, which is what
+# keeps the derivation the only source of the sentence. #hidden is the answer to "where did it go",
+# and nothing is dropped silently. The panel's own file carries the full ruling.
 #
 # The engine WRITES NOTHING. `Σ pools == the bank balance` is untouched here; the risk this class
 # carries is different in kind — a wrong threshold nags a user into ignoring the whole panel, and a
@@ -82,16 +90,57 @@ class SuggestionEngine
     @today = today
   end
 
+  # ONE HIDDEN SUGGESTION AND THE ROW THAT HIDES IT. The `dismissal` rides along because the panel
+  # needs its id for the "Show" button, and looking it up a second time in the view would be a
+  # second reader of the pairing this class has already made.
+  Hidden = Data.define(:suggestion, :dismissal)
+
+  # WHAT THE PANEL SHOWS: everything the detectors found, minus what this user has put down.
   def suggestions
-    @suggestions ||= build_suggestions
+    @suggestions ||= detected.reject { |suggestion| dismissal_for(suggestion) }
+  end
+
+  # WHAT THE PANEL'S FOOT SHOWS, in the same order the rows would have been in. Only suggestions
+  # the detectors STILL produce are here: a dismissal whose bill has since been given a rule stops
+  # matching anything and is simply not listed — the row is inert rather than dangling, which is
+  # why nothing ever has to clean this table up.
+  def hidden
+    @hidden ||= detected.filter_map do |suggestion|
+      dismissal = dismissal_for(suggestion)
+      dismissal && Hidden.new(suggestion: suggestion, dismissal: dismissal)
+    end
   end
 
   private
+
+  # EVERY SUGGESTION THE FOUR DETECTORS FOUND, before anything is set aside — the list #suggestions
+  # and #hidden are the two halves of. Memoised here rather than in each, so the detectors run once
+  # however many of the two the caller asks for.
+  def detected
+    @detected ||= build_suggestions
+  end
 
   def build_suggestions
     return [] if periods.empty?
 
     ordered(dated_bills + rates + drifts + dead_rules)
+  end
+
+  # THE ROW THAT HIDES THIS SUGGESTION, or nil. `subject.class.name` against `subject_type`: none
+  # of the three subject classes is STI, so the two are the same string, and `SuggestionDismissal
+  # #key` is the one spelling of the triple on the other side.
+  def dismissal_for(suggestion)
+    dismissals[[suggestion.kind.to_s, suggestion.subject.class.name, suggestion.subject.id]]
+  end
+
+  # THIS USER'S DISMISSALS, keyed by the triple, in ONE query for the whole panel.
+  #
+  # `user.suggestion_dismissals` AND NOT `SuggestionDismissal.where(kind:, subject:)` per row: a
+  # lookup that forgot the owner would let one user's decision hide another user's identical
+  # suggestion, which is the thing spec/requests/suggestion_dismissals_spec.rb plants an
+  # otherwise-impossible row to pin.
+  def dismissals
+    @dismissals ||= user.suggestion_dismissals.index_by(&:key)
   end
 
   # THE SIZE KEY IS PER-PERIOD COST, NOT `amount`. Three of the four kinds already lead with a

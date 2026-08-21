@@ -80,6 +80,26 @@
                   class: "btn btn-primary whitespace-nowrap",
                   data: { suggestion_accept: true } %>
 
+      <%# PUTTING THIS ONE DOWN (Henry's ruling of 2026-08-20). On EVERY kind, deliberately: the
+          two kinds about an existing rule are the ones a user is most likely to have already
+          decided about — a dead rule they mean to keep, a drift they are riding out — and a Hide
+          offered only on the proposing kinds would leave exactly those two nagging.
+
+          THE PAIR THE ENGINE KEYS ON goes on the wire — kind, subject type, subject id — and not
+          a rendered id of the suggestion, because a suggestion has no row and therefore no id.
+          `subject_type` is checked against `SuggestionDismissal::SUBJECT_TYPES` before the
+          controller looks anything up; see SuggestionDismissalsController for why a class name off
+          the wire is not constantized. %>
+      <%= button_to "Hide",
+                    suggestion_dismissals_path,
+                    params: {
+                      kind: suggestion.kind,
+                      subject_type: suggestion.subject.class.name,
+                      subject_id: suggestion.subject.id
+                    },
+                    class: "btn btn-secondary whitespace-nowrap",
+                    form: { data: { suggestion_hide: suggestion_key(suggestion) } } %>
+
       <% if suggestion.kind == :dead_rule %>
         <%# THE PAGE DOES NOT DELETE — the user does. Both doors are open on the row because the
             decision is genuinely theirs: a bill that stopped because the subscription was

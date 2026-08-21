@@ -67,6 +67,14 @@ Rails.application.routes.draw do
   # route of `resources :budgets` above, and Rails refuses a duplicate route name outright.
   get "budget" => "budget_page#show", as: :budget_page
 
+  # PUTTING ONE SUGGESTION DOWN, AND PICKING IT BACK UP (Henry's ruling of 2026-08-20, which
+  # reverses §8's no-dismissal design — see app/views/budget_page/_suggestions.html.erb).
+  #
+  # A RESOURCE OF ITS OWN rather than two more non-RESTful verbs on `budget_page`: a dismissal is
+  # a ROW, `create` writes one and `destroy` deletes one, and that is the whole of the resource.
+  # Both actions redirect back to /budget, which is the only screen either is reachable from.
+  resources :suggestion_dismissals, only: [:create, :destroy]
+
   # WHERE THE USER DECLARES THEIR PERIOD AND THEIR INCOME (spec §3, §8). The first and only
   # writer for `typical_income`, `period_cadence` and `period_anchor_date` anywhere in the app —
   # until this route the whole periods system ran on seed data, and §9's structural check was

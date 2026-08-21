@@ -186,9 +186,19 @@ class BudgetPagePresenter
   # outrank a $1,500 monthly one), and a second ordering on this side would be a screen deciding
   # to disagree with the reader it renders.
   #
-  # THERE IS NO DISMISS AND NO CAP ON THE LIST (spec §8). Dismissal is state, and the state it
-  # would hide is drift.
-  def suggestions = @suggestions ||= SuggestionEngine.new(user: user, today: today).suggestions
+  # THERE IS NO CAP ON THE LIST AND NOTHING IS TRUNCATED. There IS a dismiss now (Henry's ruling of
+  # 2026-08-20, which reverses §8 on that one point) — but it is the USER's act, one row at a time,
+  # and every hidden row is still listed at the panel's foot. Nothing this screen decides removes a
+  # suggestion from the list.
+  def suggestions = @suggestions ||= engine.suggestions
+
+  # THE SUGGESTIONS THIS USER HAS PUT DOWN, each paired with the row that hides it — the panel's
+  # foot section, and the answer to "where did it go" that keeps hiding from being deletion.
+  #
+  # Through the SAME engine instance as #suggestions, which is why that reader stopped building one
+  # inline: the two lists are the two halves of one run of the detectors, and a second instance
+  # would run them twice and could disagree with the first about what was found.
+  def hidden_suggestions = @hidden_suggestions ||= engine.hidden
 
   # THE PANEL'S INDEX AND ITS HEADINGS, from one grouping so the counts cannot disagree with the
   # runs they point at.
@@ -238,6 +248,10 @@ class BudgetPagePresenter
   end
 
   private
+
+  # ONE ENGINE FOR THE PAGE. #suggestions and #hidden_suggestions are its two answers about one
+  # run of the four detectors, and it holds the dismissal lookup they are split by.
+  def engine = @engine ||= SuggestionEngine.new(user: user, today: today)
 
   def reused_pools
     @reused_pools ||=
