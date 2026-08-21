@@ -124,7 +124,39 @@ class OpeningBalancesController < HomeController
       tracked: false
     )
     item = category.items.create!(name: "Initial balance")
-    item.entries.create!(amount: difference.abs, date: Date.current)
+    item.entries.create!(amount: difference.abs, date: correction_date)
+  end
+
+  # THE DAY BEFORE THE USER'S EARLIEST ENTRY (Henry's ruling of 2026-08-20, from real use), and
+  # `Date.current` only for the user who has no entries at all.
+  #
+  # `tracked: false` WAS NOT ENOUGH, AND THE REASON IS THAT IT ANSWERS A DIFFERENT SCREEN. The flag
+  # keeps the correction out of the DASHBOARD's tracked-income and tracked-expense totals, which is
+  # what #write_correction's own note is about and is still true. The DISTRIBUTE screen reads
+  # something else entirely: `DistributionPresenter#income_this_period_from` is
+  # `PoolCalculator#income_within`, which sums income entries in the account BY DATE and does not
+  # look at `categories.tracked` at all. So a correction stamped today — years of untracked history
+  # — arrived on the one screen whose job is "what came in this period, split it" as money to
+  # split. Real pollution, not cosmetics: it changes the figure the user distributes from.
+  #
+  # BEFORE ALL HISTORY, so it is inside no period anyone will ever distribute. Not merely "before
+  # this period": a user who reads their Distribute screen for an earlier period would find it
+  # there instead, which is the same defect one screen back.
+  #
+  # Σ IS UNTOUCHED BY THE MOVE. The correction lands in MAIN, an account, and an account has no
+  # `start_date` gate on the categories pointing at it (that rule is the ENVELOPE's — see
+  # `BudgetProposal`), so the entry counts against main from whatever date it carries. The balance
+  # examples in spec/requests/opening_balances_spec.rb read the same corrected figure before and
+  # after this change, which is what says the date moved and the money did not.
+  #
+  # `minimum(:date)` OVER `user.entries`, which is `has_many through: :items` through the
+  # categories — every entry the user owns, whichever pool it reaches. Asked BEFORE the correction
+  # entry is written (the category and item created above carry none yet), so it cannot find its
+  # own answer.
+  def correction_date
+    earliest = current_user.entries.minimum(:date)
+
+    earliest ? earliest.to_date - 1 : Date.current
   end
 
   def opening_balance_params

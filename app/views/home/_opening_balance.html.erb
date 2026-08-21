@@ -17,13 +17,21 @@
 <%= simple_form_for :opening_balance, url: opening_balance_path do |f| %>
   <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
     <div class="flex-1">
+      <%# THE HINT SAYS WHEN THE ENTRY IS DATED, and it has to, because the answer changed (Henry's
+          ruling of 2026-08-20) and it is visible: the correction is one ordinary entry the user can
+          find in their own history, and "recorded once, as an ordinary entry" beside a label
+          reading "today" said it was dated today. It is backdated to the day before their earliest
+          entry — see OpeningBalancesController#correction_date — which is also what keeps it off
+          this period's Distribute screen. THE FIGURE IS STILL TODAY'S; only the entry's date is
+          not, so the label above is unchanged. %>
       <%= f.input :actual,
           as: :decimal,
           label: "Main's real balance today",
           placeholder: "0.00",
           input_html: { step: 0.01 },
-          hint: "What your bank shows for this account today, envelopes and all — " \
-                "recorded once, as an ordinary entry you can see in your history." %>
+          hint: "What your bank shows for this account today, envelopes and all — recorded once, " \
+                "as an ordinary entry dated before your earliest history so it doesn't count as " \
+                "this period's income." %>
     </div>
     <div class="sm:pt-7">
       <%= f.button :submit, "Set #{account.name}'s balance", class: "btn btn-primary" %>
