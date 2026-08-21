@@ -93,12 +93,20 @@ RSpec.describe "Budgets Forms", type: :system do
       visit budget_page_path
     end
 
-    it "is reachable from the Budget page's own header" do
+    # THE TWO NEGATIVES ARE THE OLD EXAMPLE'S SURVIVING HALF, and they are not redundant with the
+    # picker assertion beside them: they guard against the CAP-ERA controls coming back — a Category
+    # select naming the owner of a monthly spending limit, and the `prorated` checkbox that spread
+    # one across the days of a month. Neither column can be written any more (`category_id` and
+    # `prorated` are not permitted params), and this is the screen where a regression restoring
+    # either would show up first, precisely because it is the one that asks for an owner again.
+    it "is reachable from the Budget page's own header, and offers no cap-era control" do
       click_link "New rule"
 
       expect(page).to have_current_path(new_budget_path)
       expect(page).to have_content("New Budget")
       expect(page).to have_select("Pool")
+      expect(page).to have_no_select("Category")
+      expect(page).to have_no_field("Prorate daily")
     end
 
     # A RULE'S OWNER IS AN ENVELOPE OR A GOAL, never an account — `Budget#pool_must_not_be_an_account`

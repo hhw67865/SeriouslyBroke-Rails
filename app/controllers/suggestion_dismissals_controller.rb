@@ -29,22 +29,26 @@ class SuggestionDismissalsController < ApplicationController
     "Budget" => ->(user) { Budget.for_user(user) }
   }.freeze
 
+  # A DUPLICATE IS NOT AN ERROR THE USER MADE, and this sentence is said from TWO places — the
+  # validation's refusal and the index's — so it is spelled once. Both mean the same thing to the
+  # person who pressed the button: the suggestion is hidden, which is what they asked for.
+  ALREADY_HIDDEN = "That one is already hidden."
+
   # POST /suggestion_dismissals
+  #
+  # THE `RecordNotUnique` RESCUE IS THE OTHER HALF OF THE LATCH. The migration calls the unique
+  # index the real guard and the validation the thing in front of it — but a validation cannot stop
+  # two requests that both read "not there" in the same instant, and without this the loser of that
+  # race reaches the user as a 500 on a button that did exactly what it promised. The redirect is
+  # the same one the validation produces, because the OUTCOME is the same: the row is there now.
   def create
-    scope = SUBJECT_SCOPES[params[:subject_type]]
-    return head :unprocessable_content if scope.nil?
+    subject = scoped_subject
+    return head :unprocessable_content if subject.nil?
 
-    subject = scope.call(current_user).find(params[:subject_id])
     dismissal = current_user.suggestion_dismissals.new(subject: subject, kind: params[:kind])
-
-    return redirect_to(budget_page_path, notice: "Hidden — it's under “hidden suggestions” at the foot of the panel.") if dismissal.save
-
-    # A DUPLICATE IS NOT AN ERROR THE USER MADE. Two clicks on one button reach the uniqueness
-    # validation, and the honest thing to say is that the suggestion is hidden — which it is —
-    # rather than "Subject has already been taken" over a button that did what it promised.
-    return redirect_to(budget_page_path, notice: "That one is already hidden.") if already_hidden?(dismissal)
-
-    redirect_to budget_page_path, alert: "That suggestion couldn't be hidden — reload and try again."
+    redirect_to budget_page_path, **outcome_of(dismissal)
+  rescue ActiveRecord::RecordNotUnique
+    redirect_to budget_page_path, notice: ALREADY_HIDDEN
   end
 
   # DELETE /suggestion_dismissals/:id
@@ -58,6 +62,30 @@ class SuggestionDismissalsController < ApplicationController
   end
 
   private
+
+  # THE RECORD THIS DISMISSAL IS ABOUT, looked up through `current_user`, or nil where the wire
+  # named a class no suggestion carries.
+  #
+  # THE TWO REFUSALS ARE DIFFERENT AND STAY DIFFERENT. An unanswerable `subject_type` is nil here
+  # and becomes a 422 — the request is malformed, and there is no record to have or not have. A
+  # `subject_id` that is not this user's raises `RecordNotFound` from `find` and becomes the same
+  # 404 every other owner id in this app gives, which is what keeps a stranger's record from being
+  # distinguishable from one that does not exist.
+  def scoped_subject
+    scope = SUBJECT_SCOPES[params[:subject_type]]
+
+    scope&.call(current_user)&.find(params[:subject_id])
+  end
+
+  # WHAT TO SAY, as the flash pair `redirect_to` takes. Split out of #create so that action reads
+  # as its three steps (find the subject, build the row, answer) rather than carrying the branch
+  # as well — which is what put it over `Metrics/AbcSize`.
+  def outcome_of(dismissal)
+    return { notice: "Hidden — it's under “hidden suggestions” at the foot of the panel." } if dismissal.save
+    return { notice: ALREADY_HIDDEN } if already_hidden?(dismissal)
+
+    { alert: "That suggestion couldn't be hidden — reload and try again." }
+  end
 
   # Whether the save failed ONLY because the row is already there. Asked of the errors rather than
   # by a second query: the uniqueness validation has just run, and re-asking the database would be
