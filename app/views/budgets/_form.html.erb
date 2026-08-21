@@ -154,24 +154,40 @@
 
         <% if new_pool_rule %>
           <%# THE SHAPE OF THE RULE, measured by the suggestion engine and submitted back. `basis`
-              and `anchor_date` ride hidden because neither is a decision the user is being asked
-              to make here — the anchor is the bill's own next due date and the basis is which of
-              the two rule shapes was detected — while the INTERVAL is offered, because a
-              single-occurrence bill is proposed with a GUESSED interval and the panel says so.
-              Correcting the guess in the form it came from is cheaper than writing a wrong rule
-              and editing it afterwards, and it cannot produce an invalid shape: this branch only
-              renders the field where an anchor exists, which is exactly the row of §3.1 that
-              accepts any interval ≥ 1. %>
+              rides hidden because it is not a decision the user is being asked to make here — it
+              is which of the two rule shapes was detected — while the INTERVAL and the ANCHOR are
+              both offered, because both are INFERENCES and the panel says so about one of them
+              already. Correcting a guess in the form it came from is cheaper than writing a wrong
+              rule and editing it afterwards.
+
+              THE ANCHOR USED TO RIDE HIDDEN BESIDE THE BASIS, and Henry's real-use testing
+              (ruling of 2026-08-20) is why it no longer does: `SuggestionEngine#next_due_on` walks
+              the LAST PAYMENT forward by the interval, so a bill paid late once proposes a rule
+              whose every future due date is late with it — and the amount on the same form was
+              editable while the date that decides when the money is needed was not.
+
+              THE PAIR IS STILL RENDERED TOGETHER, and that is the shape rule rather than a
+              layout choice: §3.1's row 3 is `monthly + interval + anchor`, and a form offering
+              the interval without the anchor (or the reverse) could submit row 2 with an N > 1,
+              which `shape_must_be_valid` refuses. A rule with NO anchor — every rate — renders
+              neither, and its interval rides hidden. %>
           <%= f.hidden_field :basis %>
 
           <% if @budget.anchor_date.present? %>
-            <%= f.hidden_field :anchor_date %>
+            <div>
+              <%= f.input :anchor_date,
+                  as: :date,
+                  html5: true,
+                  label: "First due",
+                  hint: "When this bill next comes round. Read from your entries — change it if the last payment was early or late." %>
+            </div>
+
             <div>
               <%= f.input :interval_months,
                   as: :integer,
                   label: "Comes round every (months)",
                   input_html: { min: 1, step: 1 },
-                  hint: "First due #{@budget.anchor_date.strftime("%b %-d, %Y")}. Change this if the bill runs on a different cycle." %>
+                  hint: "Change this if the bill runs on a different cycle." %>
             </div>
           <% else %>
             <%= f.hidden_field :interval_months %>

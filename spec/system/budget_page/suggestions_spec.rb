@@ -236,6 +236,55 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(utilities.pool.pool_type).to eq("budget")
       expect(utilities.pool.account).to eq(checking)
     end
+
+    # THE DATE IS CORRECTABLE BEFORE ACCEPTING (Henry's ruling, 2026-08-20). The anchor is an
+    # INFERENCE — `SuggestionEngine#next_due_on` walks the last payment forward by the interval —
+    # and it rode hidden while the amount beside it was editable, so a bill whose last payment was
+    # late wrote a rule whose whole schedule was late with it. The prefill is still the engine's
+    # answer; what changed is that the user can see it and say otherwise.
+    it "prefills the date the engine inferred" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_field("First due", with: expected_due_on.strftime("%Y-%m-%d"))
+    end
+
+    # THE CORRECTION HAS TO REACH THE COLUMN, not merely the input: `anchor_date` was already a
+    # permitted param, but it was submitted by a hidden field nothing could change. Corrected to a
+    # date the engine would never infer (the inference is a whole-month step off the last payment,
+    # so nine days past it is nobody's arithmetic here) and read back off the rule.
+    #
+    # A `Date`, NOT a formatted string: Capybara's `SettableValue#dateable?` is explicitly false
+    # for a String, which sends the characters as KEYSTROKES into a date input that already holds
+    # the prefill — the first attempt read back as the year 60830. A Date takes the
+    # `update_value_js` path and REPLACES the value, which is what a user picking a date does.
+    it "writes the corrected date rather than the inferred one" do
+      accept(:dated_bill, phone)
+      fill_in "First due", with: corrected_due_on
+      click_button "Create Budget"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(Budget.find_by(item_id: phone.id).anchor_date).to eq(corrected_due_on)
+    end
+
+    def corrected_due_on = expected_due_on + 9.days
+  end
+
+  # A RATE HAS NO DATE CONCEPT AT ALL — `rate_suggestion` carries no `anchor_date`, its rule is
+  # per-period, and `shape_must_be_valid` refuses a per-period rule that has one. So the field must
+  # be absent rather than blank: a blank date input on this form is an invitation to write a shape
+  # the model will refuse.
+  describe "accepting a proposed rate", :aggregate_failures do
+    before do
+      groceries
+      visit budget_page_path
+    end
+
+    it "offers no date field" do
+      accept(:rate, groceries)
+
+      expect(page).to have_field("Rule Amount", with: "300.0")
+      expect(page).to have_no_field("First due")
+    end
   end
 
   # THE MOST LOAD-BEARING CASE ON THIS PAGE. Two bills in ONE category share ONE envelope: the
