@@ -158,10 +158,18 @@ RSpec.describe "db/seeds.rb" do
   # migration finds nothing; this proves the FIRST run finds nothing to convert, because the seeds
   # already wrote what the migration exists to produce.
   describe "the cutover migration run against fresh seeds" do
-    # The migration reads and writes `budgets.category_id`, which a later migration drops. Only
-    # that one is rewound — the seeds already satisfy `TightenPoolShape` and this file asserts as
-    # much two examples up ("gives every category a lane and every pool a home").
-    include_context "with the schema its subject was written for", DropCapEraBudgetColumns
+    # The migration reads and writes `budgets.category_id`, which a later migration drops and a
+    # later one still puts back. BOTH have to be rewound, and in order: `CategoriesHoldTheMoney`
+    # re-adds that very column for the purpose ledger's rules, so rolling `DropCapEraBudgetColumns`
+    # back on its own would try to add a column that is already there — which it did, once, and
+    # the `after(:all)` that followed then dropped the two-ledger column on its way past. Newest
+    # first on the way down; the shared context reverses the list itself.
+    #
+    # `TightenPoolShape` is still NOT rewound — the seeds already satisfy it and this file asserts
+    # as much two examples up ("gives every category a lane and every pool a home").
+    include_context "with the schema its subject was written for",
+                    DropCapEraBudgetColumns,
+                    CategoriesHoldTheMoney
 
     before { replant }
 

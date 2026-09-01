@@ -25,11 +25,17 @@ require Rails.root.join("db/migrate/20260817000000_cutover_to_envelope_budgeting
 RSpec.describe CutoverToEnvelopeBudgeting do
   # THE SCHEMA THIS MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF THE FILE — plan 3 task 6
   # adds two tightenings after this migration by timestamp, and both refuse shapes this file has to
-  # plant. The shared context carries the whole reasoning and runs both migrations' `down` and `up`,
-  # which is also what proves them reversible.
+  # plant. The shared context carries the whole reasoning and runs every named migration's `down`
+  # and `up`, which is also what proves them reversible.
+  #
+  # `CategoriesHoldTheMoney` is the third name and it is here for a different reason than the other
+  # two: it refuses nothing this file plants, but it re-adds `budgets.category_id` on top of
+  # `DropCapEraBudgetColumns`, so leaving it out would have the rewind try to add a column that is
+  # already there. Newest last in this list, first on the way down.
   include_context "with the schema its subject was written for",
                   TightenPoolShape,
-                  DropCapEraBudgetColumns
+                  DropCapEraBudgetColumns,
+                  CategoriesHoldTheMoney
 
   # Four worlds, planted in creation order — the migration walks users by `created_at`, and the
   # sabotage examples below name which user is expected to raise first.

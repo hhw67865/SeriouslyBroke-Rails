@@ -2,6 +2,7 @@
 
 require Rails.root.join("db/migrate/20260817010000_tighten_pool_shape")
 require Rails.root.join("db/migrate/20260817020000_drop_cap_era_budget_columns")
+require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -33,8 +34,20 @@ require Rails.root.join("db/migrate/20260817020000_drop_cap_era_budget_columns")
 # `let`: the schema is not per-example state, the example transactions roll back over it either
 # way, and rebuilding it per example would be dozens of DDL round trips to make no difference.
 #
+# A THIRD MIGRATION JOINED THE LIST WITH THE TWO-LEDGER PLAN, and it is the reason the list is
+# ordered rather than a set. `CategoriesHoldTheMoney` runs AFTER both tightenings by timestamp and
+# it re-adds `budgets.category_id` — the very column `DropCapEraBudgetColumns` removed — so the two
+# `down`s must meet in the right order or the second one adds a column the first has not yet
+# dropped and Postgres refuses it. Newest first on the way down, oldest first on the way back up,
+# which is exactly `db:rollback` followed by `db:migrate` and exactly what `#step_the_schema` does
+# with `tightenings.reverse`.
+#
+# It also carries the second reason this file exists at all: `two_ledger_spec` is a spec whose
+# subject is the NEWEST migration, so the current schema is the world AFTER it and `add_column`
+# would meet its own columns. That spec includes this context with one name.
+#
 #   include_context "with the schema its subject was written for",
-#                   TightenPoolShape, DropCapEraBudgetColumns
+#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney
 #
 # Named in the order they run FORWARD; the rewind reverses them itself.
 RSpec.shared_context "with the schema its subject was written for" do |*tightenings|
@@ -44,14 +57,15 @@ RSpec.shared_context "with the schema its subject was written for" do |*tighteni
   after(:all) { step_the_schema(:up, tightenings) }
   # rubocop:enable RSpec/BeforeAfterAll
 
-  # `reset_column_information` on both models the DDL can touch, and it is not optional: the
+  # `reset_column_information` on every model the DDL can touch, and it is not optional: the
   # columns come and go inside one process, and a `Budget` whose attribute set was cached before
-  # the rewind has no `category_id=` for a fixture to call.
+  # the rewind has no `category_id=` for a fixture to call. `Category` joined the list with
+  # `CategoriesHoldTheMoney`, which gives and takes away three of its columns.
   def step_the_schema(direction, migrations)
     migrations.each do |migration|
       instance = migration.new
       instance.suppress_messages { instance.migrate(direction) }
     end
-    [Budget, Pool].each(&:reset_column_information)
+    [Budget, Category, Entry, Pool].each(&:reset_column_information)
   end
 end

@@ -10,20 +10,39 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_20_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "allocations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.money "amount", scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.datetime "date", null: false
+    t.uuid "from_category_id"
+    t.integer "kind", default: 0, null: false
+    t.uuid "source_entry_id"
+    t.uuid "to_category_id"
+    t.datetime "updated_at", null: false
+    t.index ["date"], name: "index_allocations_on_date"
+    t.index ["from_category_id"], name: "index_allocations_on_from_category_id"
+    t.index ["source_entry_id"], name: "index_allocations_on_source_entry_id"
+    t.index ["to_category_id"], name: "index_allocations_on_to_category_id"
+    t.check_constraint "amount > 0::money", name: "allocations_positive_amount"
+    t.check_constraint "from_category_id IS DISTINCT FROM to_category_id", name: "allocations_distinct_sides"
+  end
 
   create_table "budgets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.money "amount", scale: 2, null: false
     t.date "anchor_date"
     t.integer "basis", default: 0, null: false
+    t.uuid "category_id"
     t.datetime "created_at", null: false
     t.integer "interval_months"
     t.uuid "item_id"
     t.uuid "pool_id"
     t.datetime "updated_at", null: false
+    t.index ["category_id"], name: "index_budgets_on_category_id"
     t.index ["item_id"], name: "index_budgets_on_item_id"
     t.index ["item_id"], name: "index_budgets_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
     t.index ["pool_id"], name: "index_budgets_on_pool_id"
@@ -33,8 +52,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_000000) do
     t.integer "category_type", null: false
     t.string "color"
     t.datetime "created_at", null: false
+    t.date "funded_since"
     t.string "name", null: false
     t.uuid "pool_id"
+    t.integer "priority", default: 0, null: false
+    t.money "target_amount", scale: 2
     t.boolean "tracked", default: true, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
@@ -135,6 +157,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_20_000000) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "allocations", "categories", column: "from_category_id"
+  add_foreign_key "allocations", "categories", column: "to_category_id"
+  add_foreign_key "allocations", "entries", column: "source_entry_id"
+  add_foreign_key "budgets", "categories"
   add_foreign_key "budgets", "items"
   add_foreign_key "budgets", "pools"
   add_foreign_key "categories", "pools"
