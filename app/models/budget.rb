@@ -1,10 +1,16 @@
 # frozen_string_literal: true
 
 class Budget < ApplicationRecord
-  # NO `belongs_to :category`. A RULE IS POOL-MODE, FULL STOP (plan 3, task 3): the cutover
-  # migration leaves `budgets.category_id` nil on every row and no code path can write one again,
-  # so the Ruby support for the category-mode cap dies here. The COLUMN drops in Task 6 with the
-  # rest of the schema work — one migration for the lot rather than one per deletion.
+  # A RULE BELONGS TO THE THING THAT HOLDS THE MONEY (two-ledger spec §3): `budgets.category_id`
+  # replaces `budgets.pool_id`, one category to one budget line, and Task 1's migration has already
+  # written a `category_id` onto every rule in the database.
+  #
+  # `optional: true` ON BOTH SIDES FOR THE LENGTH OF THIS BRANCH, and `#must_have_an_owner` below is
+  # what makes "a rule has an owner" true. It is NOT the cap this column used to carry (plan 3
+  # deleted that, and it was a per-category CEILING on a pool-funded envelope — two owners with two
+  # different meanings). A category-owned rule here IS the funding rule; the pool arm is the same
+  # rule pointing at the layer that is being deleted, and Task 8 removes it along with the column.
+  belongs_to :category, optional: true, touch: true
   belongs_to :pool, optional: true, touch: true
   belongs_to :item, optional: true
 
@@ -15,36 +21,66 @@ class Budget < ApplicationRecord
   # reaches NOTHING at all, and every rule the Budget page manages is invisible to it.
   # `current_user.budgets.find` therefore answered RecordNotFound for rules the user plainly owns.
   #
-  # THE CATEGORY ARM IS GONE, AND ITS TWO ARMED TRAPS ARE RETIRED DELIBERATELY. This scope used to
-  # be `where(category_id: user.categories).or(where(pool_id: user.pools))`, and Plan 2's task
-  # reports pinned both halves on purpose — a cap-owning rule had to stay findable by
-  # `BudgetsController#set_budget` and by `BudgetPagePresenter#rules`, and an example asserted it.
-  # A cap is not a shape this app can hold any more, so the pin is not "left failing": it is
-  # withdrawn, here, with the examples that carried it (see the task report). What survives is the
-  # half that was always the point — a rule is owned by a pool, and a pool is owned by a user.
+  # THE CAP'S CATEGORY ARM WENT IN PLAN 3, AND THE ARM BELOW IS NOT IT COMING BACK. This scope used
+  # to be `where(category_id: user.categories).or(where(pool_id: user.pools))` because a rule could
+  # be a per-category CEILING on a pool-funded envelope; that shape is gone and its pins were
+  # withdrawn with it. The category arm that reappears below means the opposite thing — the category
+  # is the OWNER now, the thing that holds the money — and it is reached by the same SQL only
+  # because the same column happens to say who owns what.
   #
   # Scoped by the OWNER's user, not by a `user_id` on this table — a budget carries no user
   # column, and inventing one would give the invariant two places to be wrong.
-  scope :for_user, ->(user) { where(pool_id: user.pools.select(:id)) }
+  #
+  # BOTH LANES, FOR THE LENGTH OF THE BRANCH AND NO LONGER. Task 1's migration wrote a
+  # `category_id` onto every rule it found and LEFT `pool_id` standing, so on real data the two
+  # arms answer with the same rows and the OR is redundant. It is not redundant on the way there:
+  # a rule written today through the pool form has no category yet, and a rule Task 7 writes on a
+  # category has no pool — and a screen that lost either would show a user a Budget page missing
+  # their own rules. Task 8 drops `budgets.pool_id` and this narrows to the category arm alone.
+  #
+  # An OR over one table, so a rule carrying BOTH columns (which is every migrated rule) is
+  # returned once, not twice.
+  scope :for_user,
+        lambda { |user|
+          where(pool_id: user.pools.select(:id)).or(where(category_id: user.categories.select(:id)))
+        }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :interval_months, numericality: { greater_than: 0 }, allow_nil: true
 
-  validate :must_belong_to_a_pool
+  validate :must_have_an_owner
   validate :pool_must_not_be_an_account, if: :pool_mode?
-  validate :shape_must_be_valid, if: :pool_mode?
   validate :item_must_belong_to_pool, if: :pool_mode?
-  validate :item_must_not_be_claimed, if: :pool_mode?
+  validate :item_must_belong_to_category, if: :category_mode?
+  # UNGATED, BOTH OF THEM, and they were gated on `pool_mode?` only because a pool was the only
+  # owner a rule could have. Neither reads a pool: `#shape_must_be_valid` is about the three
+  # columns that spell a cadence, and `#item_must_not_be_claimed` is about one item having one
+  # rule. A category-owned rule that skipped them would be the second definition of a rule's shape.
+  validate :shape_must_be_valid
+  validate :item_must_not_be_claimed
 
   # An assigned-but-unsaved association has no foreign key yet, so consult the
   # target too — otherwise `Budget.new(pool: unsaved_pool)` reads as owner-less.
   def pool_mode? = pool_id.present? || pool.present?
 
+  # `#category_column?` FIRST, AND IT IS NOT DEFENSIVE. `budgets.category_id` is younger than two
+  # specs that plant rules through this model: `spec/migrations/two_ledger_spec.rb` rewinds the
+  # schema past `CategoriesHoldTheMoney` — whose whole subject is ADDING this column — and
+  # `DropCapEraBudgetColumns` took it away before that. Reading an attribute the database does not
+  # currently have raises NameError, and a predicate that raises is not an answer. Asked once here
+  # and once in #user, which are the only two readers of the column outside a validator gated on
+  # this method.
+  def category_mode? = category_column? && (category_id.present? || category.present?)
+
   # nil-safe: an owner-less budget is exactly the state the form re-renders in
   # after a failed submission.
-  def user = pool&.user
+  #
+  # THE CATEGORY ANSWERS FIRST, because it is the owner that survives: every migrated rule carries
+  # both columns and they name the same user, so the order cannot change an answer today — and when
+  # Task 8 drops `pool_id`, the arm that is left is already the one being read.
+  def user = (category_mode? && category&.user) || pool&.user
 
   def calculator(today: Date.current)
     BudgetCalculator.new(self, today: today)
@@ -207,8 +243,12 @@ class Budget < ApplicationRecord
   # ON `:base` RATHER THAN `:pool`, deliberately: `budgets/_form` renders `errors[:base]` in its own
   # notification, and an owner-less rule is a fact about the whole record rather than about a
   # control the form offers — the form does not offer a pool picker at all (see its header).
-  def must_belong_to_a_pool
-    errors.add(:base, "must belong to a pool") unless pool_mode?
+  # AN OWNER, AND IT IS A POOL OR A CATEGORY. The message still names the pool while the pool form
+  # is the only form that can produce this state — `budgets/_form` renders `errors[:base]` in its
+  # own notification and offers no owner picker at all, so the sentence a user reads has to describe
+  # the screen they are on rather than the schema underneath it.
+  def must_have_an_owner
+    errors.add(:base, "must belong to a pool") unless pool_mode? || category_mode?
   end
 
   def pool_must_not_be_an_account
@@ -241,6 +281,20 @@ class Budget < ApplicationRecord
     # an id comparison equates every pool-less category with this pool and rejects
     # the items that genuinely belong to it.
     errors.add(:item, "must belong to a category in this pool") unless item.category&.pool == pool
+  end
+
+  def category_column? = has_attribute?(:category_id)
+
+  # THE CATEGORY-MODE TWIN OF #item_must_belong_to_pool, and the same rule one layer in: a dated
+  # bill anchors on an item, and that item has to be an item OF the category the rule funds — an
+  # item from somewhere else would date a bill against money it never drains.
+  #
+  # Objects, not ids, for #item_must_belong_to_pool's own reason: under `build` nothing is
+  # persisted and `nil == nil` would wave every item-less category through.
+  def item_must_belong_to_category
+    return if item.blank?
+
+    errors.add(:item, "must belong to this category") unless item.category == category
   end
 
   # `where.not(id: nil)` renders as `id IS NOT NULL`, so an unsaved budget still

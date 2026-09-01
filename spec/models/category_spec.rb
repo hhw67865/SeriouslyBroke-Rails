@@ -5,7 +5,10 @@ require "rails_helper"
 RSpec.describe Category, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to belong_to(:pool) }
+    it { is_expected.to belong_to(:pool).optional }
+    it { is_expected.to have_many(:budgets).dependent(:destroy) }
+    it { is_expected.to have_many(:allocations_in).class_name("Allocation").dependent(:destroy) }
+    it { is_expected.to have_many(:allocations_out).class_name("Allocation").dependent(:destroy) }
     it { is_expected.to have_many(:items).dependent(:destroy) }
     it { is_expected.to have_many(:entries).through(:items) }
     # `have_one(:budget)` IS DELETED WITH THE ASSOCIATION (plan 3, task 4). A Budget belongs to a
@@ -16,18 +19,22 @@ RSpec.describe Category, type: :model do
     it { is_expected.to validate_presence_of(:name) }
     it { is_expected.to validate_presence_of(:category_type) }
 
-    # EVERY CATEGORY NAMES ITS LANE (plan 3 decision 3). Both directions, because the whole point of
-    # the line is that the nil is no longer expressible: a nil `pool_id` used to be documented as
-    # "the user's default account" and `PoolBalanceLedger::ENTRY_POOL_ID` resolved it to nowhere, so
+    # THIS PIN IS WITHDRAWN, NOT LEFT FAILING (two-ledger spec §5, Task 2). It read "when the
+    # category names no pool → is refused", on plan 3 decision 3: a nil `pool_id` was documented as
+    # "the user's default account", `PoolBalanceLedger::ENTRY_POOL_ID` resolved it to nowhere, and
     # such a category's spending left the pool tree while `Σ pools == bank truth` claimed otherwise.
+    #
+    # That hazard is a fact about a model where the POOL holds the money. The category holds it now,
+    # spending that reaches no pool drains AVAILABLE by name (`CategoryLedger`), and the two shapes
+    # this pin refused are shapes the app writes on purpose today — the savings categories Task 1's
+    # migration minted and the categories Task 7's screens create. What survives is the half that is
+    # still true: a pool NAMED here is still governed, and the reachability examples below are
+    # unchanged.
     context "when the category names no pool" do
       let(:user) { create(:user) }
 
-      it "is refused", :aggregate_failures do
-        category = build(:category, :expense, user: user, pool: nil)
-
-        expect(category).not_to be_valid
-        expect(category.errors[:pool]).to include("must exist")
+      it "is accepted, and holds its own money instead" do
+        expect(build(:category, :expense, user: user, pool: nil)).to be_valid
       end
 
       it "is accepted the moment a pool is named" do

@@ -10,11 +10,12 @@ RSpec.describe Budget, type: :model do
     it { is_expected.to belong_to(:pool).optional }
     it { is_expected.to belong_to(:item).optional }
 
-    # A RULE IS NOT OWNED BY A CATEGORY (plan 3, task 3). The column survives until Task 6 drops it,
-    # so this asserts the RUBY support is gone rather than the schema.
-    it "has no category association at all" do
-      expect(described_class.reflect_on_association(:category)).to be_nil
-    end
+    # THE CATEGORY LANE IS BACK, AND IT IS NOT THE CAP COMING BACK (two-ledger spec §3, Task 2).
+    # This example read "has no category association at all", on plan 3's deletion of the per-
+    # category CEILING; what `category_id` names now is the OWNER — the thing that holds the money —
+    # and Task 8 makes it the only owner there is. Optional on both sides for the length of the
+    # branch, with #must_have_an_owner the one line that says a rule has one.
+    it { is_expected.to belong_to(:category).optional }
   end
 
   describe "validations" do
@@ -396,6 +397,48 @@ RSpec.describe Budget, type: :model do
       budget = create(:budget, :recurring, pool: pool, item: item)
 
       expect(budget).to be_valid
+    end
+
+    # THE CATEGORY-OWNED TWIN (two-ledger spec §3, Task 2). A dated bill anchors on an item, and
+    # after Task 8 the rule's owner is the category — so the item has to be an item OF that
+    # category rather than of anything in an envelope's orbit. Both directions.
+    context "when the rule is owned by a category" do
+      let(:holder) { create(:category, :expense, :funded, user: user, name: "Insurance") }
+
+      it "accepts an item of its own category" do
+        budget = build(:budget, :category_rule, :recurring, category: holder, item: create(:item, category: holder))
+
+        expect(budget).to be_valid
+      end
+
+      it "rejects an item belonging to another category", :aggregate_failures do
+        budget = build(:budget, :category_rule, :recurring, category: holder, item: item)
+
+        expect(budget).not_to be_valid
+        expect(budget.errors[:item]).to include("must belong to this category")
+      end
+
+      # `#must_have_an_owner` is the one line that makes "a rule has an owner" true while both
+      # associations are optional — and the message still names the pool because the pool form is
+      # the only form that can submit this state.
+      it "still refuses a rule owned by neither", :aggregate_failures do
+        budget = build(:budget, :rate, pool: nil, category: nil)
+
+        expect(budget).not_to be_valid
+        expect(budget.errors[:base]).to include("must belong to a pool")
+      end
+
+      # UNGATED NOW, both of them: neither rule reads a pool, and a category-owned rule that
+      # skipped them would be a second definition of what a rule's shape is.
+      it "holds a category rule to the same shape rules and the same one-item-one-rule rule",
+         :aggregate_failures do
+           create(:budget, :category_rule, :recurring, category: holder, item: create(:item, category: holder))
+           claimed = build(:budget, :category_rule, :recurring, category: holder, item: described_class.last.item)
+           shapeless = build(:budget, :category_rule, category: holder, interval_months: 6, anchor_date: nil)
+
+           expect(claimed.tap(&:valid?).errors[:item]).to include("is already used by another rule")
+           expect(shapeless.tap(&:valid?).errors[:interval_months]).to include("must be 1 for a monthly rule with no due date")
+         end
     end
   end
 end

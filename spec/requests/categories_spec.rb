@@ -63,12 +63,17 @@ RSpec.describe "Categories", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    # The required `belongs_to :pool` answers a blank, and it must not be mistaken for a stranger's
-    # id: a 404 on an empty picker would tell the user their own form had vanished.
-    it "answers a blank pool with a 422, not a 404", :aggregate_failures do
-      expect { create_category(pool_id: "") }.not_to change(Category, :count)
+    # THIS PIN IS WITHDRAWN AND REVERSED (two-ledger spec §5, Task 2). It read "a blank pool is a
+    # 422", on the required `belongs_to :pool`; a category holds its own money now and names an
+    # account only while the pool layer stands, so a blank picker is a category with no account
+    # question answered rather than an invalid record. What the example still guards is the half
+    # that mattered: a blank must not be mistaken for a stranger's id and answered with a 404,
+    # which would tell the user their own form had vanished.
+    it "accepts a blank pool rather than mistaking it for a stranger's id", :aggregate_failures do
+      expect { create_category(pool_id: "") }.to change(Category, :count).by(1)
 
-      expect(response).to have_http_status(:unprocessable_content)
+      expect(response).not_to have_http_status(:not_found)
+      expect(user.categories.reload.last.pool).to be_nil
     end
 
     # M10 (main-account spec §6, fix round 2): THE WIRE REFUSAL — a non-main account is the

@@ -20,19 +20,48 @@ class Category < ApplicationRecord
 
   belongs_to :user, touch: true
 
-  # EVERY CATEGORY NAMES ITS LANE (plan 3 decision 3). `optional: true` is gone, and the required
-  # `belongs_to` IS the presence validation — one spelling, the Rails one, rather than a
-  # `validates :pool, presence: true` sitting beside an association that says the opposite.
+  # A DYING LANE, OPTIONAL AGAIN FOR THE LENGTH OF THIS BRANCH (two-ledger spec §5, Task 2).
   #
-  # The nil `pool_id` used to mean "the user's default account", and it was a promise nothing kept:
-  # `PoolBalanceLedger::ENTRY_POOL_ID` resolves `COALESCE(entries.pool_id, categories.pool_id)` to
-  # NOTHING for such a category, so its spending reached no pool at all while `Σ pools == bank
-  # truth` claimed otherwise. The cutover migration points every nil at the user's default account
-  # and verifies it in raw SQL; this is the line that stops one coming back.
-  belongs_to :pool, touch: true
+  # Plan 3 made this required, and the reason was real: a nil `pool_id` used to mean "the user's
+  # default account" and nothing kept the promise — `PoolBalanceLedger::ENTRY_POOL_ID` resolves
+  # `COALESCE(entries.pool_id, categories.pool_id)` to NOTHING for such a category, so its spending
+  # reached no pool at all while `Σ pools == bank truth` claimed otherwise.
+  #
+  # That hazard belongs to a model where the POOL holds the money. Under the two-ledger model the
+  # category holds it (§2), spending that reaches no pool is spending that drains AVAILABLE, and
+  # the only pool a category will ever name again is an account — an association Task 8 deletes
+  # outright. Two shapes already exist that the required version refuses: the savings categories
+  # Task 1's migration minted, and the categories Task 7's screens create with no account question
+  # asked at all. Nothing about the meaning of a PRESENT `pool_id` changes — `#pool_must_be_
+  # reachable` and `#income_must_land_in_an_account` still govern it, and both were already silent
+  # on a blank pool.
+  belongs_to :pool, optional: true, touch: true
 
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
+
+  # THE RULES THIS CATEGORY IS FUNDED BY (two-ledger spec §3): `budgets.category_id` replaces
+  # `budgets.pool_id`, one category to one budget line. `dependent: :destroy` because a rule with
+  # no category to fund is a demand on the waterfall for money nothing can hold.
+  has_many :budgets, dependent: :destroy
+
+  # BOTH SIDES OF THE PURPOSE LEDGER, and both are `dependent: :destroy` because `allocations` has
+  # real foreign keys to `categories` with no ON DELETE: without these, destroying a category that
+  # ever held money raises rather than deletes, and `user.destroy` with it.
+  #
+  # DESTROYING A CATEGORY GIVES ITS MONEY BACK TO AVAILABLE, which is the honest outcome and not a
+  # loss: every allocation deleted here was a claim on money the pot still holds, so `pot + Σ
+  # accounts == available + Σ holdings` is true again the instant the rows are gone.
+  has_many :allocations_in,
+           class_name: "Allocation",
+           foreign_key: :to_category_id,
+           dependent: :destroy,
+           inverse_of: :to_category
+  has_many :allocations_out,
+           class_name: "Allocation",
+           foreign_key: :from_category_id,
+           dependent: :destroy,
+           inverse_of: :from_category
 
   # `has_one :budget` IS GONE (plan 3, task 4). Task 3 kept it alive for one commit because
   # `CategoryCalculator#monthly_budget_rate` still read `category.budget&.amount` and the
@@ -68,6 +97,9 @@ class Category < ApplicationRecord
          income: 1
        }
 
+  # THE THREE PURPOSE-LEDGER COLUMNS, VALIDATED TOGETHER AND BEHIND ONE GUARD — see
+  # #holding_columns_are_sane for both halves of why.
+  validate :holding_columns_are_sane
   validate :pool_must_belong_to_user
   validate :pool_must_be_reachable
   validate :income_must_land_in_an_account
@@ -150,8 +182,42 @@ class Category < ApplicationRecord
   # The family of readers this predicate used to diverge from — `budgetable?`, `Category.budgetable`
   # and `Entry.budgetable_expenses`, all of which meant "no pool at all" — is gone: with no pool-less
   # category expressible there is nothing left for them to be a different answer TO.
+  # `pool&.` AGAIN, NOW THAT A CATEGORY MAY NAME NO POOL — and the nil arm answers FALSE, which is
+  # the opposite of what the pre-cutover version of this predicate answered. Then, a pool-less
+  # category was the ordinary way to spend straight out of the buffer; now it is a category that
+  # holds its own money (§2), and money a category holds is the one thing this predicate exists to
+  # say is NOT coming out of the buffer.
   def buffer_funded?
+    return false if pool.blank?
+
     expense? && pool.pool_type_account?
+  end
+
+  # DOES THIS CATEGORY HOLD MONEY? (two-ledger spec §3.) Two facts and no third: only an EXPENSE
+  # category can hold — income lands in available and is allocated out of it — and it holds from
+  # `funded_since` onward, the date it first got a rule or an allocation. A category with no
+  # `funded_since` has never been given money to hold, so its spending drains available.
+  #
+  # This is the predicate every screen asks where it used to ask `pool.pool_type_budget?`.
+  def holder? = expense? && funded_since.present?
+
+  # A GOAL IS A HOLDER WITH A TARGET AND NO RULE (spec §3: "a savings category is just a category
+  # with a target and typically no refill rule"). The rule half is what tells a goal apart from an
+  # envelope somebody also set a ceiling on: a category the waterfall refills every period is being
+  # SPENT toward a rate, not SAVED toward a figure, and `HoldingCalculator` asks a different
+  # question of each.
+  #
+  # It is also exactly the shape Task 1's migration mints out of a savings pool — target, priority,
+  # `funded_since`, `tracked: false`, and no rule was ever attached to a goal.
+  def savings? = holder? && target_amount.present? && budgets.none?
+
+  # THE RUBY MIRROR OF `CategoryLedger::ENTRY_CATEGORY_ID`, and the ONLY one (Task 2's global
+  # constraint): every other reader in this app asks the SQL. Spending counts against this category
+  # from `funded_since` onward, compared in the OWNER's calendar day — `#local_day` is the same
+  # re-zoning the SQL does with its two `AT TIME ZONE`s, so a Tokyo user's Aug 1 entry, stored
+  # `2026-07-31 15:00` UTC, counts on Aug 1 wherever this runs.
+  def counts_spending_on?(date)
+    holder? && local_day(date) >= funded_since
   end
 
   def calculator(date = Date.current, period: :monthly)
@@ -249,6 +315,53 @@ class Category < ApplicationRecord
     return moment if moment.is_a?(Date) && !moment.is_a?(DateTime)
 
     moment.in_time_zone(user&.timezone.presence || "UTC").to_date
+  end
+
+  # THE THREE COLUMNS THAT MAKE A CATEGORY A HOLDER (two-ledger spec §3), in one validator:
+  #
+  #   * `priority` orders the distribute waterfall. It is NOT NULL with a database default of 0, so
+  #     the blank arm only ever fires on a form that submitted an empty string — and a NEGATIVE
+  #     priority outranks every category the user meant to fund first. `Pool#priority` carried
+  #     exactly this pair of rules for exactly this reason.
+  #   * `target_amount` is a goal, and a goal of zero is already met while a negative one is money
+  #     owed. Optional: a nil target is "no goal", not a missing value.
+  #   * ONLY EXPENSE CATEGORIES HOLD MONEY, so neither `funded_since` nor a target may sit on an
+  #     income category. `Allocation` refuses an income category on either side for the same rule;
+  #     this is the half that covers the columns rather than the rows. `priority` is deliberately
+  #     NOT in that list — every income category in the database already carries the default 0, and
+  #     it orders a waterfall an income category is never in.
+  #
+  # ONE VALIDATOR RATHER THAN THREE `validates` LINES, AND THE FIRST LINE IS WHY. These columns are
+  # YOUNGER THAN TWO SPECS THAT PLANT CATEGORIES THROUGH THIS MODEL: `spec/migrations/cutover_spec.rb`
+  # and `spec/seeds_spec.rb` rewind the schema past `CategoriesHoldTheMoney` for the length of a
+  # file — the only way to hand `DropCapEraBudgetColumns#down` a `budgets.category_id` to restore —
+  # and a validator that reads a column the database does not currently have raises NoMethodError
+  # out of `valid?`, which is not a rejection of anything. The guard is asked ONCE here instead of
+  # three times as an `if:` on three declarations.
+  def holding_columns_are_sane
+    return unless has_attribute?(:priority)
+
+    priority_is_a_fill_order
+    target_is_a_goal
+    only_expenses_hold_money
+  end
+
+  def priority_is_a_fill_order
+    return errors.add(:priority, "can't be blank") if priority.blank?
+
+    errors.add(:priority, "must be greater than or equal to 0") if priority.to_i.negative?
+  end
+
+  def target_is_a_goal
+    return if target_amount.blank?
+
+    errors.add(:target_amount, "must be greater than 0") unless target_amount.to_d.positive?
+  end
+
+  def only_expenses_hold_money
+    return if expense?
+
+    errors.add(:base, "only expense categories hold money") if funded_since.present? || target_amount.present?
   end
 
   # A CATEGORY'S LANE IS ONE OF ITS OWN USER'S POOLS — the third instance of a rule its two siblings
