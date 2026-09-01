@@ -280,13 +280,18 @@ class BudgetPagePresenter
   # it ranks — without it every group header is one SELECT per pool, on the widest per-rule screen
   # in the app.
   #
-  # `pool: :user` because `Budget#user` walks the pool and BudgetCalculator#periods_until_due asks
+  # `pool: :user` because `Budget#user` walks an owner and BudgetCalculator#periods_until_due asks
   # it for every dated rule on the page. Measured on the demo seeds: eleven
   # `SELECT users WHERE id = ?` for one user, and the page's whole cost fell from 37 queries to 26
-  # when they were preloaded. (`category: :user` rode alongside while a rule could be category-owned
-  # and is dropped with that mode — it now preloads a link that is nil on every row.)
+  # when they were preloaded.
+  #
+  # `category: :user` IS BACK, AND IT PRELOADS A LINK THAT IS NOW SET ON EVERY ROW (two-ledger spec
+  # §3, fix round 2). It rode alongside once for the cap and was dropped with that mode on the
+  # grounds that the column was nil everywhere; Task 1's migration filled it on every rule, and
+  # `Budget#user` asks the CATEGORY before the pool — so without this the widest per-rule screen in
+  # the app pays two queries per dated rule for the owner it used to get free.
   def rules
-    @rules ||= user.all_budgets.includes(:item, pool: [:user, :budgets, :account]).to_a
+    @rules ||= user.all_budgets.includes(:item, pool: [:user, :budgets, :account], category: :user).to_a
   end
 
   def rules_by_pool

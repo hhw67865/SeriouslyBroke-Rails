@@ -287,4 +287,56 @@ RSpec.describe Budget, type: :model do
       expect(described_class.steady_need(user, today: today)).to be_a(BigDecimal)
     end
   end
+
+  # THE PRELOAD IS A CLAIM ABOUT COST, AND NOTHING ELSE IN THIS FILE CAN SEE IT. Every example above
+  # asserts a FIGURE, and `#steady_need` answers the same figure whether it preloads the owner or
+  # loads it one rule at a time — so a preload that stops covering a lane is invisible here without
+  # counting statements. This block is that count.
+  #
+  # THE SHAPE IS THE MIGRATED ONE: both `pool_id` AND `category_id`, which is what Task 1's
+  # migration wrote onto every rule in the database. It matters because `Budget#user` asks the
+  # CATEGORY first — a relation preloading only `pool: :user` pays two queries per dated rule (the
+  # category, then its user) on rows that look, from the pool column, fully preloaded. That was
+  # live for one commit; this is what would have caught it.
+  #
+  # DATED rules specifically: the rate branches divide by the `user` handed in as an argument and
+  # never ask the rule who owns it. Only the one-off branch builds a BudgetCalculator, and that is
+  # the reader that walks `budget.user`.
+  describe ".steady_need query cost" do
+    def sql_for(&block)
+      statements = []
+      recorder = lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record", &block)
+      statements
+    end
+
+    # A rule in the shape the migration left behind, with a category of its OWN — sharing one
+    # category between rules would hide a per-rule load behind a repeated id.
+    def migrated_one_off(amount)
+      create(
+        :pool_budget,
+        pool: pool,
+        amount: amount,
+        interval_months: nil,
+        anchor_date: today + 60,
+        category: create(:category, :expense, :funded, user: user)
+      )
+    end
+
+    it "costs the same number of queries for five migrated dated rules as for one", :aggregate_failures do
+      migrated_one_off(120)
+      one = sql_for { described_class.steady_need(user, today: today) }
+      4.times { migrated_one_off(120) }
+      five = sql_for { described_class.steady_need(user, today: today) }
+
+      expect(five.size).to eq(one.size)
+      # FOUR, NAMED: the rules themselves, then the three preloads that answer for every row at
+      # once — `pools`, `categories`, and the one `users` both owner lanes resolve to. `:item` is
+      # in the `includes` and costs nothing here, because every rule in this fixture is item-less
+      # and the preloader skips a branch whose foreign keys are all nil.
+      expect(five.size).to eq(4)
+    end
+  end
 end

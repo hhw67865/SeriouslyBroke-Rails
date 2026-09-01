@@ -177,7 +177,14 @@ class SacrificePresenter
   # reads nothing off the pool, while the one-off branch builds a BudgetCalculator that asks
   # `budget.user` for its period boundaries and `budget.item` for what has been paid. `:account`
   # is not preloaded: no reader here touches it.
+  #
+  # `category: :user` BESIDE IT, and the `where.not(pool_id: nil)` above is not a reason to skip it
+  # (two-ledger spec §3, fix round 2): these rows have a pool, but `Budget#user` asks the CATEGORY
+  # first, and Task 1's migration wrote a `category_id` onto every one of them. Filtering on one
+  # column says nothing about which column the owner is read through — `Budget.steady_need` loads
+  # this same population with the same pair, and this page exists to add up to that figure.
   def pool_rules
-    @pool_rules ||= Budget.for_user(user).where.not(pool_id: nil).includes(:item, pool: :user).to_a
+    @pool_rules ||= Budget.for_user(user).where.not(pool_id: nil)
+      .includes(:item, pool: :user, category: :user).to_a
   end
 end

@@ -207,21 +207,23 @@ class Budget < ApplicationRecord
   # 42 rules cost 45 statements un-preloaded and still 5 with the preload. O(1) against O(n) in
   # dated rules, on a reader three screens call.
   #
-  # `pool: :user` rather than a bare `:user`, because a budget has no user column — `Budget#user`
-  # walks whichever owner the rule has.
+  # BOTH OWNER LANES ARE PRELOADED, because a budget has no user column and `#user` walks whichever
+  # owner the rule has — THE CATEGORY FIRST (see #user), then the pool.
   #
-  # AND "WHICHEVER" IS NO LONGER ALWAYS THE POOL (two-ledger spec §3, Task 2). `for_user` reads both
-  # lanes now, so this relation can contain a CATEGORY-owned rule, whose `#user` walks
-  # `category.user` — through a preload this call does not ask for. Nothing is wrong today: every
-  # rule in the database carries both columns (Task 1's migration), so the pool arm answers first
-  # and the preload covers it. TASK 7 IS WHERE THAT STOPS BEING TRUE — the first rule created on a
-  # category alone has `pool_id` NULL, and `#steady_ask` will then load a category and a user per
-  # rule, which is exactly the O(n) this preload was measured to remove. The fix when it comes is
-  # `includes(:item, pool: :user, category: :user)`, and it belongs in the commit that creates the
-  # first such rule rather than here, where it would only change a query count no fixture produces.
+  # `category: :user` IS NOT SPECULATIVE AND IT IS NOT TASK 7'S (fix round 2). Task 1's migration
+  # wrote a `category_id` onto EVERY rule in the database, so every migrated dated rule takes the
+  # category arm of `#user` — and without this preload that is two un-preloaded queries per rule,
+  # the category and then its user, measured live under query logging. The first draft of this
+  # comment claimed the pool arm answered first and deferred the fix; both halves were wrong, and
+  # `#user`'s own comment two screens up said so in capitals at the time.
+  #
+  # PINNED, not asserted: `budget_steady_ask_spec`'s "costs the same number of queries for five
+  # migrated dated rules as for one" plants the migrated shape (both columns set) and counts the
+  # statements, because a preload that quietly stops covering a lane is invisible to every other
+  # example in that file.
   def self.steady_need(user, today: Date.current)
     for_user(user)
-      .includes(:item, pool: :user)
+      .includes(:item, pool: :user, category: :user)
       .sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
   end
 
