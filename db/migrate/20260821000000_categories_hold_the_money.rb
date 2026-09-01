@@ -178,21 +178,34 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
   # back. Under the spec, DatabaseCleaner's example transaction is `joinable: false`, so this DOES
   # take a savepoint there and the sabotage arms can watch one user roll back. Same code, two
   # boundaries, both correct.
+  # THE ORDER OF THE FOUR STEPS IS LOAD-BEARING, and it is not the order the brief listed them in.
+  #
+  # The overrides are cleared FIRST and the per-pool snapshot taken immediately after, because
+  # clearing them is the one step that MOVES money on the purpose side: an entry whose `pool_id`
+  # named a pool its category does not is counted by the old pool and not by the new category, so a
+  # snapshot taken before the clearing would report that difference as drift in #holdings_failures
+  # and refuse a database this migration had converted correctly. Between the snapshot and the
+  # verification the only writes are the fold and the movement conversion — which is exactly the
+  # pair the snapshot exists to hold to account, and it holds them to the cent.
+  #
+  # `bank` is taken before all of it: nothing here may move the physical total, the override
+  # clearing included (it rewrites `entries.pool_id`, which no term of `income − expenses` reads),
+  # and #verify! says so rather than assuming it.
   def convert(user)
     ActiveRecord::Base.transaction do
-      # TAKEN BEFORE ANY WRITE. Nothing here is supposed to move it, and #verify! says so rather
-      # than assuming it: the override-clearing step touches `entries`, which is the one table both
-      # ledgers are read from.
       bank = bank_total(user.id)
+      nulled = clear_paid_from_overrides(user)
+      held = pool_holdings_before(user.id)
 
       pools = MigrationPool.where(user_id: user.id).where.not(pool_type: ACCOUNT).order(:created_at, :id).to_a
       category_of = pools.to_h { |pool| [pool.id, fold(pool, user)] }
       moved = convert_movements(user, category_of)
-      nulled = clear_paid_from_overrides(user)
 
-      verify!(user, pools: pools, category_of: category_of, bank: bank)
+      physical, purpose = verify!(user, pools: pools, category_of: category_of, bank: bank, held: held)
       say "#{user.email}: #{pools.length} pools folded; #{moved} movements -> allocations; " \
-          "#{nulled} entry overrides cleared; purpose == physical == bank truth #{format('%.2f', bank)}"
+          "#{nulled} entry overrides cleared; every envelope's holdings unmoved to the cent; " \
+          "purpose #{format('%.2f', purpose)} == physical #{format('%.2f', physical)} " \
+          "== bank truth #{format('%.2f', bank)}"
     end
   end
 
@@ -214,9 +227,17 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
   #
   # `pool_id` IS THE USER'S MAIN ACCOUNT, which is the seat every pool-less category got at the
   # cutover and the only one `Category#pool_must_be_reachable` accepts. The column is deleted in
-  # Task 8; the fallback to the goal's own account exists so that a user with no flagged default
-  # still gets a NOT-NULL value rather than a row the current model cannot save — `TightenPoolShape`
-  # guarantees a non-account pool has an `account_id`, so the fallback cannot itself be NULL.
+  # Task 8.
+  #
+  # THE FALLBACK BUYS NOTHING MODEL-SIDE, AND AN EARLIER COMMENT HERE CLAIMED IT DID. If the user
+  # has no `default_account_id`, `#pool_must_be_reachable` refuses EVERY value this line could
+  # write — the goal's own account included, since a category may name only the MAIN account or an
+  # envelope — so the fallback does not rescue the row from the model. What it buys is at the
+  # database: a non-NULL value for a column carrying a foreign key, so the minted row is not the
+  # one row a later NOT NULL tightening would have to be written around. And it is not a shape this
+  # migration invents: a user with no main account already holds categories the model would refuse
+  # for the same reason, so the minted one is no worse off than its neighbours.
+  # `TightenPoolShape` guarantees a non-account pool has an `account_id`, so it cannot itself be NULL.
   def mint_category(pool, user)
     MigrationCategory.create!(
       user_id: user.id, name: unique_category_name(user.id, pool.name), category_type: EXPENSE,
@@ -300,26 +321,61 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
       .update_all(pool_id: nil, updated_at: now)
   end
 
-  # SIX ARMS, COLLECTED RATHER THAN SHORT-CIRCUITED so a bad user is reported whole, then raised as
-  # one failure inside the user's transaction.
+  # EIGHT ARMS, COLLECTED RATHER THAN SHORT-CIRCUITED so a bad user is reported whole, then raised
+  # as one failure inside the user's transaction.
   #
-  # THE TWO LEDGERS ARE ASKED SEPARATELY AND KEYED DIFFERENTLY, which is the whole point. The
-  # physical side is `income − expenses` over the user's own entries with no pool and no category
-  # holding named anywhere; the purpose side is `available + Σ holdings`, every term of which is
-  # read from `allocations` and `categories.funded_since`. They share the entries table and nothing
-  # else, so they can only agree if every allocation this migration wrote lands on a category of
-  # THIS user — money allocated out to a stranger's category leaves one side short and the other
-  # untouched. That is the one arithmetic breakage `Σ` is not blind to; the structural arms below
-  # cover what it is.
-  def verify!(user, pools:, category_of:, bank:)
+  # WHAT THE TWO TOTALS CAN AND CANNOT SEE, MEASURED RATHER THAN ASSUMED. Both partitions of spec
+  # §2 are asked here, and BOTH of them are algebraic identities over a well-formed database: every
+  # allocation with both ends inside this user contributes `+amount` to one term and `−amount` to
+  # another, so it cancels — and so a LOST allocation, a MISWRITTEN amount, a REVERSED direction and
+  # a right-amount-wrong-category all leave `purpose == physical == bank truth` perfectly serene.
+  # The same is true of the physical side for a movement between two of the user's own accounts.
+  # A verifier made only of those two sums would be a verifier that checks the conversion happened
+  # at all and nothing about whether it happened correctly.
+  #
+  # SO THE TOTALS ARE THE OUTER FENCE AND #holdings_failures IS THE INNER ONE. What the totals DO
+  # catch is money leaving the user's own set — an allocation onto a stranger's category, a
+  # surviving movement into a pool that is not one of this user's accounts — because those break
+  # the cancellation. What #holdings_failures catches is every one of the four errors above, pool by
+  # pool, against a figure measured from the OLD tables before the conversion started.
+  def verify!(user, pools:, category_of:, bank:, held:)
     failures = fold_failures(pools, category_of)
+    failures.concat(holdings_failures(user.id, pools, category_of, held))
     failures.concat(structural_failures(user.id))
-    physical = bank_total(user.id)
+    physical = physical_total(user.id)
     purpose = purpose_total(user.id)
-    failures << "bank truth moved #{physical.to_f} != #{bank.to_f}" unless physical == bank
-    failures << "purpose ledger #{purpose.to_f} != bank truth #{physical.to_f}" unless purpose == physical
+    failures << "bank truth moved #{bank_total(user.id).to_f} != #{bank.to_f}" unless bank_total(user.id) == bank
+    failures << "physical ledger #{physical.to_f} != bank truth #{bank.to_f}" unless physical == bank
+    failures << "purpose ledger #{purpose.to_f} != bank truth #{bank.to_f}" unless purpose == bank
 
     raise VerificationFailed, "#{user.email} (#{user.id}): #{failures.join('; ')}" if failures.any?
+
+    [physical, purpose]
+  end
+
+  # THE ARM THE ARITHMETIC IS BLIND TO — every envelope's and every goal's money, pool by pool,
+  # across the conversion. `held` is what the pool held before a single allocation was written,
+  # computed over the OLD tables in #pool_holdings_before; the right-hand side is what its category
+  # holds now, computed over `allocations` and `categories.funded_since`. Neither figure is read
+  # through an app calculator, and they share no join: one is keyed by pool membership through
+  # `COALESCE(entries.pool_id, categories.pool_id)` plus both movement directions, the other by
+  # category ownership plus both allocation directions.
+  #
+  # A CENT OF DRIFT IS A REFUSAL. There is no tolerance and there is no rounding step to need one:
+  # every money column is cast to `numeric` on both sides, and a conversion that moved an envelope
+  # by a cent moved it by a cent.
+  def holdings_failures(user_id, pools, category_of, held)
+    now_held = category_holdings(user_id)
+
+    pools.filter_map do |pool|
+      category_id = category_of[pool.id]
+      was = held.fetch(pool.id, 0.to_d)
+      is = category_id ? now_held.fetch(category_id, 0.to_d) : nil
+      next if was == is
+
+      "pool #{pool.name.inspect} (#{pool.id}) held #{was.to_f}; " \
+        "category #{category_id.inspect} holds #{is&.to_f.inspect}"
+    end
   end
 
   # THE FOLD, RE-READ FROM THE DATABASE rather than trusted from the loop that wrote it — a `fold`
@@ -366,6 +422,93 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
       .where(pool_id: MigrationPool.where(user_id: user_id).where.not(pool_type: ACCOUNT).select(:id))
       .where(category_id: nil)
       .count
+  end
+
+  # THE DAY BOUNDARY, ONCE, FOR BOTH SIDES OF #holdings_failures. `entries.date` is a timestamp and
+  # both start columns are DATEs, and `ApplicationController` wraps every request in the user's own
+  # zone — so an entry a Tokyo user files ON Aug 1 is stored `2026-07-31 15:00`, nine hours before
+  # the UTC day begins. This is `PoolBalanceLedger::ENTRY_POOL_ID`'s own comparison, lifted rather
+  # than paraphrased: read the naive timestamp as the UTC instant Rails wrote, render it in the
+  # OWNER's zone, take the calendar day they were living in. Written once because the pool's
+  # `start_date` and the category's `funded_since` MUST be gated identically or the comparison
+  # reports the boundary as drift.
+  def funded_gate(start_column)
+    "(e.date AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(u.timezone, 'UTC'))::date >= #{start_column}"
+  end
+
+  # WHAT EVERY NON-ACCOUNT POOL HELD, over the OLD tables, at the moment before the conversion —
+  # `PoolBalanceLedger`'s terms in SQL rather than through it, for the reason the cutover gives at
+  # length: asking the readers being migrated to referee their own migration means a wrong term
+  # answers wrong on both sides of the comparison. Income minus expense over the entries whose lane
+  # resolves to this pool, gated by the pool's own `start_date`, plus both movement directions.
+  #
+  # `COALESCE(e.pool_id, c.pool_id)` IS INERT BY THE TIME THIS RUNS — #convert clears the overrides
+  # first, on purpose (see there) — and it is kept anyway because it is the lane expression the old
+  # app actually used, and a leftover override belonging to a stranger's category would otherwise
+  # be silently missing from the figure this arm holds the conversion to.
+  def pool_holdings_before(user_id)
+    decimal_rows(<<~SQL.squish, user_id)
+      SELECT p.id,
+             COALESCE((SELECT SUM(CASE WHEN c.category_type = #{INCOME}
+                                       THEN e.amount::numeric ELSE -e.amount::numeric END)
+                         FROM entries e
+                         JOIN items i ON i.id = e.item_id
+                         JOIN categories c ON c.id = i.category_id
+                         JOIN users u ON u.id = c.user_id
+                        WHERE COALESCE(e.pool_id, c.pool_id) = p.id
+                          AND (p.start_date IS NULL OR #{funded_gate('p.start_date')})), 0)
+           + COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m WHERE m.to_pool_id = p.id), 0)
+           - COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m WHERE m.from_pool_id = p.id), 0)
+        FROM pools p
+       WHERE p.user_id = :uid AND p.pool_type <> #{ACCOUNT}
+    SQL
+  end
+
+  # WHAT EVERY CATEGORY HOLDS NOW, over the NEW tables — allocations in, minus allocations out,
+  # minus its own spending from `funded_since` onward. The right-hand side of #holdings_failures,
+  # and the same three terms `purpose_total`'s holdings half sums in one go.
+  def category_holdings(user_id)
+    decimal_rows(<<~SQL.squish, user_id)
+      SELECT c.id,
+             COALESCE((SELECT SUM(a.amount::numeric) FROM allocations a WHERE a.to_category_id = c.id), 0)
+           - COALESCE((SELECT SUM(a.amount::numeric) FROM allocations a WHERE a.from_category_id = c.id), 0)
+           - COALESCE((SELECT SUM(e.amount::numeric)
+                         FROM entries e
+                         JOIN items i ON i.id = e.item_id
+                        WHERE i.category_id = c.id
+                          AND c.category_type <> #{INCOME}
+                          AND c.funded_since IS NOT NULL
+                          AND #{funded_gate('c.funded_since')}), 0)
+        FROM categories c
+        JOIN users u ON u.id = c.user_id
+       WHERE c.user_id = :uid
+    SQL
+  end
+
+  # THE PHYSICAL LEDGER'S OTHER PARTITION — `pot + Σ accounts`, spec §2's left-hand side, so the
+  # receipt's "purpose == physical" is two partitions of one total rather than the same sum spelled
+  # twice.
+  #
+  # The pot is main checking and it absorbs every entry there is; each account is movement-fed only.
+  # Summed over the user's WHOLE set of account pools, the movement terms cancel and the answer is
+  # `income − expenses` — which is the point: they cancel only while both ends of every movement are
+  # accounts of THIS user. A movement out to a stranger's account, or into a pool that is no longer
+  # an account at all, leaves this figure short of bank truth by exactly its amount.
+  def physical_total(user_id)
+    decimal(<<~SQL.squish, user_id)
+      SELECT COALESCE((SELECT SUM(CASE WHEN c.category_type = #{INCOME}
+                                       THEN e.amount::numeric ELSE -e.amount::numeric END)
+                         FROM entries e
+                         JOIN items i ON i.id = e.item_id
+                         JOIN categories c ON c.id = i.category_id
+                        WHERE c.user_id = :uid), 0)
+           + COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m
+                        WHERE m.to_pool_id IN (SELECT id FROM pools
+                                                WHERE user_id = :uid AND pool_type = #{ACCOUNT})), 0)
+           - COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m
+                        WHERE m.from_pool_id IN (SELECT id FROM pools
+                                                  WHERE user_id = :uid AND pool_type = #{ACCOUNT})), 0)
+    SQL
   end
 
   # THE PHYSICAL LEDGER'S TOTAL — money in from the world minus money out to it, over the entries of
@@ -438,6 +581,15 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
     BigDecimal(ActiveRecord::Base.connection.select_value(
       ActiveRecord::Base.sanitize_sql_array([sql, { uid: user_id }])
     ).to_s)
+  end
+
+  # `{ id => BigDecimal }` for the two-column queries above, on #decimal's reasoning about the
+  # adapter's cast.
+  def decimal_rows(sql, user_id)
+    rows = ActiveRecord::Base.connection.select_rows(
+      ActiveRecord::Base.sanitize_sql_array([sql, { uid: user_id }])
+    )
+    rows.to_h { |id, amount| [id, BigDecimal(amount.to_s)] }
   end
 
   def now = Time.current
