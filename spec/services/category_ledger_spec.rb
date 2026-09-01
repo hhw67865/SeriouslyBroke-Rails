@@ -48,7 +48,18 @@ RSpec.describe CategoryLedger, type: :model do
     # INCOME NEVER LANDS IN A CATEGORY — it lands in available (§2). The key is present and zero
     # rather than absent, so the hash stays the shape `PoolBalanceLedger#terms_for` hands out and a
     # calculator reading it gets an answer rather than a KeyError.
-    it "answers zero income for a category, even one an income entry names" do
+    #
+    # A FUNDED INCOME CATEGORY, PLANTED PAST THE MODEL (`#holding_columns_are_sane` refuses the
+    # shape) AND HOLDING A REAL $1,000 INCOME ENTRY — because the claim is about a category an
+    # income entry NAMES, and a fixture without one asserts a zero that no arrangement of rows could
+    # have made non-zero. Both terms: the income key is zero, and the entry drains nothing either.
+    it "answers zero income for a category, even one an income entry names", :aggregate_failures do
+      pay.update_columns(funded_since: Date.new(2026, 8, 1)) # rubocop:disable Rails/SkipsModelValidations
+      earn(1000, on: Date.new(2026, 8, 5))
+      over_income = described_class.new([pay, food])
+
+      expect(over_income.terms_for(pay)[:income]).to eq(0)
+      expect(over_income.terms_for(pay)[:expense]).to eq(0)
       expect(ledger.terms_for(food)[:income]).to eq(0)
     end
 

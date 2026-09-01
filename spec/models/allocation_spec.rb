@@ -53,9 +53,9 @@ RSpec.describe Allocation, type: :model do
     end
 
     # ONLY EXPENSE CATEGORIES HOLD MONEY (spec §3). Income lands in available and is allocated OUT
-    # of it; an allocation naming an income category would be money given a purpose it can never
-    # be spent against — `CategoryLedger::ENTRY_CATEGORY_ID`'s first arm sends every income entry
-    # to available whatever the category holds.
+    # of it; an allocation naming an income category would be money given a purpose it can never be
+    # spent against — `CategoryLedger` reads a category's spending out of `Entry.expenses`, so an
+    # income category's own entries could never drain the holding this row would create.
     it "refuses an income category on either side", :aggregate_failures do
       pay = create(:category, :income, user: user, name: "Pay")
 

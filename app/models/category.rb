@@ -167,26 +167,29 @@ class Category < ApplicationRecord
   searchable :name, label: "Name"
 
   # SPENDING THAT COMES OUT OF THE BUFFER — the rate detector's population, the Categories page's
-  # account-pointed arm, and the one predicate all of them read.
+  # account-pointed arm, and the one predicate all of them read
+  # (`SuggestionEngine#buffer_funded_categories`, `CategoryBudgetPresenter#proposable?`,
+  # `DashboardPresenter`'s two halves at :165 and :169, and the three views that say the sentence).
   #
-  # THE NIL ARM DIED WITH THE SHAPE (plan 3 decision 3). This used to be
-  # `pool.nil? || pool.pool_type_account?`, because a category with no pool at all was the ordinary
-  # pre-cutover way to spend from the buffer. `belongs_to :pool` is required now, so the first half
-  # can no longer be true of a saved record and the second half is the whole question: an account
-  # IS the buffer (§7.1), so an expense category pointing at one is spending that nothing reserves.
+  # THE NIL POOL IS EXPRESSIBLE AGAIN, AND IT ANSWERS FALSE. Three eras, and this comment has to
+  # name all of them because the answer to a nil has now been each of the three in turn:
   #
-  # The sentence three screens say about this set is unchanged and stays literally true — *"No
-  # envelope — this spending isn't budgeted. It comes out of your buffer"* on the Categories page,
-  # the entry form's impact card and `budget_page/_suggestion_rate`. Only the spelling narrowed.
+  #   * BEFORE THE CUTOVER, `pool.nil? || pool.pool_type_account?` — a pool-less category was the
+  #     ordinary way to spend straight out of the buffer, so nil meant TRUE.
+  #   * PLAN 3 made `belongs_to :pool` required, the nil became inexpressible, and the first half
+  #     was deleted as unreachable.
+  #   * THE TWO-LEDGER TRANSITION (spec §5, Task 2) makes the association optional again — and the
+  #     nil means the OPPOSITE of what it meant in the first era. A category with no pool is now a
+  #     category that holds its own money (§2), and money a category holds is precisely what this
+  #     predicate exists to say is NOT coming out of the buffer. So nil answers FALSE, and the guard
+  #     is a deliberate answer rather than nil-safety around a shape nobody can build.
   #
-  # The family of readers this predicate used to diverge from — `budgetable?`, `Category.budgetable`
-  # and `Entry.budgetable_expenses`, all of which meant "no pool at all" — is gone: with no pool-less
-  # category expressible there is nothing left for them to be a different answer TO.
-  # `pool&.` AGAIN, NOW THAT A CATEGORY MAY NAME NO POOL — and the nil arm answers FALSE, which is
-  # the opposite of what the pre-cutover version of this predicate answered. Then, a pool-less
-  # category was the ordinary way to spend straight out of the buffer; now it is a category that
-  # holds its own money (§2), and money a category holds is the one thing this predicate exists to
-  # say is NOT coming out of the buffer.
+  # The sentence three screens say about this set stays literally true — *"No envelope — this
+  # spending isn't budgeted. It comes out of your buffer"* on the Categories page, the entry form's
+  # impact card and `budget_page/_suggestion_rate`: a holder is not in this set and never sees it.
+  #
+  # Pinned in `spec/models/category_holdings_spec.rb`, both directions, on a pool-less category
+  # planted VALIDLY — which is itself the fact this era turns on.
   def buffer_funded?
     return false if pool.blank?
 

@@ -208,7 +208,17 @@ class Budget < ApplicationRecord
   # dated rules, on a reader three screens call.
   #
   # `pool: :user` rather than a bare `:user`, because a budget has no user column — `Budget#user`
-  # walks whichever owner the rule has, and in this relation that is always the pool.
+  # walks whichever owner the rule has.
+  #
+  # AND "WHICHEVER" IS NO LONGER ALWAYS THE POOL (two-ledger spec §3, Task 2). `for_user` reads both
+  # lanes now, so this relation can contain a CATEGORY-owned rule, whose `#user` walks
+  # `category.user` — through a preload this call does not ask for. Nothing is wrong today: every
+  # rule in the database carries both columns (Task 1's migration), so the pool arm answers first
+  # and the preload covers it. TASK 7 IS WHERE THAT STOPS BEING TRUE — the first rule created on a
+  # category alone has `pool_id` NULL, and `#steady_ask` will then load a category and a user per
+  # rule, which is exactly the O(n) this preload was measured to remove. The fix when it comes is
+  # `includes(:item, pool: :user, category: :user)`, and it belongs in the commit that creates the
+  # first such rule rather than here, where it would only change a query count no fixture produces.
   def self.steady_need(user, today: Date.current)
     for_user(user)
       .includes(:item, pool: :user)
@@ -236,17 +246,24 @@ class Budget < ApplicationRecord
     (amount.to_d / calc.periods_until_due).round(2)
   end
 
-  # ONE OWNER, AND IT IS A POOL. The predecessor was `#exactly_one_owner`, which had to refuse both
-  # "neither" and "both" because a rule could be owned by a category instead; with the category mode
-  # deleted there is one owner to have or lack.
+  # AN OWNER, AND IT IS A POOL OR A CATEGORY — the one line that makes "a rule has an owner" true
+  # while both associations are `optional: true`.
   #
-  # ON `:base` RATHER THAN `:pool`, deliberately: `budgets/_form` renders `errors[:base]` in its own
-  # notification, and an owner-less rule is a fact about the whole record rather than about a
-  # control the form offers — the form does not offer a pool picker at all (see its header).
-  # AN OWNER, AND IT IS A POOL OR A CATEGORY. The message still names the pool while the pool form
-  # is the only form that can produce this state — `budgets/_form` renders `errors[:base]` in its
-  # own notification and offers no owner picker at all, so the sentence a user reads has to describe
-  # the screen they are on rather than the schema underneath it.
+  # IT DOES NOT REFUSE "BOTH", and its ancestor `#exactly_one_owner` did. That version was policing
+  # two owners with two different MEANINGS (a pool that funds the rule, or a category the rule
+  # capped), so a record naming both was incoherent. These two name the same thing — the owner of
+  # the rule — one layer apart, and Task 1's migration deliberately wrote both columns onto every
+  # rule in the database. Refusing the pair would refuse every migrated rule. Task 8 drops
+  # `budgets.pool_id` and this becomes "a rule belongs to a category", full stop.
+  #
+  # THE MESSAGE STILL NAMES THE POOL, and that is about the screen rather than the schema:
+  # `budgets/_form` is the only form that can submit an owner-less rule, it renders `errors[:base]`
+  # in its own notification, and it offers no owner picker at all (see its header) — so the sentence
+  # the user reads has to describe the form they are looking at. Task 7's category rule form gets
+  # its own wording when there is a second screen to be wrong about.
+  #
+  # ON `:base` RATHER THAN `:pool` for that reason: an owner-less rule is a fact about the whole
+  # record, not about a control the form offers.
   def must_have_an_owner
     errors.add(:base, "must belong to a pool") unless pool_mode? || category_mode?
   end

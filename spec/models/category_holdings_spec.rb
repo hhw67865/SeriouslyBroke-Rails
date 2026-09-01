@@ -85,6 +85,21 @@ RSpec.describe "Category, as a holder of money", type: :model do
     end
   end
 
+  # THE NIL POOL, EXPRESSIBLE AGAIN AND ANSWERING THE OPPOSITE OF WHAT IT ONCE DID. Before the
+  # cutover a pool-less category WAS the buffer-funded shape; a category holds its own money now, so
+  # it is the one shape this predicate must say is not coming out of the buffer. Both directions,
+  # and the pool-less half is planted through `create` rather than past the model — that it saves at
+  # all is half the fact under test.
+  describe "#buffer_funded?" do
+    it "is false for a category that names no pool" do
+      expect(create(:category, :expense, user: user, name: "Holder", pool: nil)).not_to be_buffer_funded
+    end
+
+    it "is still true for an expense category pointing at an account" do
+      expect(create(:category, :expense, user: user, name: "Misc")).to be_buffer_funded
+    end
+  end
+
   describe "the columns" do
     it "refuses a negative priority" do
       expect(build(:category, :expense, user: user, priority: -1)).not_to be_valid

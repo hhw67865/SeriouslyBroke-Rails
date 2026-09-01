@@ -64,7 +64,30 @@ RSpec.describe AccountLedger, type: :model do
       expect(ledger.pot).to eq(300)
     end
 
+    # THE OTHER END OF THE SAME RULE, and it needs its own example because the two conditions on
+    # `#account_movements` are separately deletable: a legacy sweep out of an envelope back to
+    # checking is money that never left the pot to begin with, so counting it would credit the pot
+    # twice for one dollar.
+    it "ignores a movement out of a pool that is not an account" do
+      earn(300)
+      envelope = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
+      move(from: envelope, to: main, amount: 75)
+
+      expect(ledger.pot).to eq(300)
+    end
+
     it "is a decimal zero for a user with nothing at all", :aggregate_failures do
+      expect(ledger.pot).to eq(0)
+      expect(ledger.pot).to be_a(BigDecimal)
+    end
+
+    # NO MAIN ACCOUNT IS NOT AN ERROR, IT IS A STATE ONBOARDING'S FIRST CARD EXISTS TO END — and the
+    # zero is honest rather than defensive: `Category#pool_must_be_reachable` refuses an envelope
+    # category to a user who has named no main account, so there is no entry for this to be the
+    # balance of. A decimal zero, because every figure derived from the pot subtracts from it.
+    it "is a decimal zero for a user who has not named a main account yet", :aggregate_failures do
+      user.update!(default_account: nil)
+
       expect(ledger.pot).to eq(0)
       expect(ledger.pot).to be_a(BigDecimal)
     end

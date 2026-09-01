@@ -45,7 +45,22 @@ class CategoryLedger
   # WHICH CATEGORY AN EXPENSE DRAINS — the start-date rule re-anchored (spec §4). An expense
   # drains its category from the category's funded_since onward (the user's local day, exactly
   # as PoolBalanceLedger did it), and drains AVAILABLE (NULL) before that or when the category
-  # was never funded. Income never drains a category: it lands in available.
+  # was never funded.
+  #
+  # ARM 1 IS THE BELT AND `Entry.expenses` IS THE BRACES, and this comment used to credit the arm
+  # with a law the scope actually carries. Both consumers of this expression — `#grouped_entries`
+  # and `#unfunded_spending` — start from `Entry.expenses`, so today an income entry never reaches
+  # this CASE at all and deleting arm 1 moves no figure in the suite. Measured three ways:
+  #
+  #   * arm 1 deleted, scope untouched            → every example green (the arm is unreachable)
+  #   * scope widened to every entry, arm 1 kept  → every example green (the arm holds the law)
+  #   * both                                      → exactly one example fails, the one below
+  #
+  # So the arm is not decoration: it is what keeps the law true the moment a caller hands this
+  # expression a wider scope, which is a live risk on a constant whose whole job is to be the app's
+  # ONE statement of which category an entry drains. The LAW itself — income lands in available,
+  # never in a category — is pinned independently of which belt carries it, by
+  # `category_ledger_spec`'s "answers zero income for a category, even one an income entry names".
   #
   # THE BOUNDARY IS THE USER'S DAY, AND THE TWO `AT TIME ZONE`s ARE WHY. `entries.date` is a
   # DATETIME and `categories.funded_since` is a DATE, and `ApplicationController` wraps every
@@ -213,9 +228,10 @@ class CategoryLedger
 
   def compute(term)
     case term
-    # NO QUERY, AND NO ROWS TO RUN ONE OVER: income never lands in a category (ENTRY_CATEGORY_ID's
-    # first arm sends every income entry to available), so the term is an empty hash and every
-    # category reads its `fetch` default of `0.to_d` out of it.
+    # NO QUERY, AND NO ROWS TO RUN ONE OVER: income never lands in a category — it lands in
+    # available, and the reason no query could find any is `#grouped_entries`' own `Entry.expenses`
+    # (ENTRY_CATEGORY_ID's income arm is the belt over that scope, not the thing that carries it).
+    # So the term is an empty hash and every category reads its `fetch` default of `0.to_d` out.
     when :income then {}
     when :expense then grouped_entries.sum(:amount)
     when :movements_in then grouped_allocations(:to_category_id).sum(:amount)

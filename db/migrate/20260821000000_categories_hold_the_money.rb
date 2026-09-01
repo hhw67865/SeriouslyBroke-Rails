@@ -537,6 +537,16 @@ class CategoriesHoldTheMoney < ActiveRecord::Migration[8.1]
   # funded drains AVAILABLE, not the category. The two arms partition the user's expenses exactly,
   # so a wrong `funded_since` moves money between the two terms and cannot change their sum — which
   # is why #fold_failures exists and this does not stand in for it.
+  #
+  # AND THAT IS ALSO WHY THIS COMPARISON HAS NO `AT TIME ZONE`, unlike #funded_gate above and
+  # unlike `CategoryLedger::ENTRY_CATEGORY_ID`, which is the app's read-side spelling of the same
+  # rule. A THIRD SPELLING OF A GATE IS NORMALLY A TRAP, so it is written down here as a choice
+  # rather than left to be discovered: the two arms of this CASE are `funded` and `unfunded` over
+  # the SAME set of expenses, and this method adds them both into one total. An entry the day
+  # boundary would move lands in the other arm and the sum is unchanged to the byte — the gate is
+  # INERT here in a way it is nowhere else. #holdings_failures, which compares per-pool figures that
+  # do NOT cancel, uses #funded_gate and must; if this method is ever split so the two arms are
+  # reported separately, it must switch to #funded_gate in the same commit.
   def purpose_total(user_id)
     decimal(<<~SQL.squish, user_id)
       WITH mine AS (SELECT id, funded_since FROM categories WHERE user_id = :uid),
