@@ -94,9 +94,18 @@ class AllocationCommitter
   # rides on the button's own name/value), so Turbo disabling the submitter is not the defence: with
   # JS off a double-click submits twice, and two tabs reach it either way.
   #
-  # It also serialises the distribution SCREEN against the write, for the same reason the account
-  # lock did: the presenter's delete-compute-rollback takes this lock first, so a commit arriving
-  # mid-render waits for it instead of reading around it.
+  # IT DOES NOT SERIALISE THE DISTRIBUTION SCREEN, and an earlier version of this comment claimed it
+  # did — inherited from the account-lock era and false of both. `DistributionPresenter#build_snapshot`
+  # calls #replace_previous_distribution DIRECTLY and never #call, so this line does not run during a
+  # render and no lock here is taken by one. What a render does hold is whatever the deletion's own
+  # `touch` cascade locks on its way past — the categories of the rows it destroyed, and the user row
+  # through them — which is precisely nothing on a period that has never been distributed, the state
+  # every first render is in.
+  #
+  # THE PROPERTY THIS LOCK ACTUALLY HAS is the one it was added for and the one the racing example
+  # below measures: two concurrent POSTs to #create, where the second blocks here before it reads
+  # anything. A render arriving mid-commit is not covered and does not need to be — it writes nothing
+  # and rolls back what it deleted.
   #
   # `lock!` rather than `with_lock`, because the transaction is already open and the rollback
   # semantics above depend on its being THIS one.

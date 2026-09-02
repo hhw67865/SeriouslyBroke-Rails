@@ -196,6 +196,27 @@ RSpec.describe AllocationCommitter, type: :model do
     expect(purpose_total).to eq(600)
   end
 
+  # TWO PAYCHECKS IN ONE PERIOD, and the split names the LATEST. Nothing reads this column to decide
+  # anything — replacement finds its rows by kind, period and owner — so both answers are equally
+  # true and the newest is the one a person would name; but `.first` would name the older one forever
+  # and an unordered read would swap between runs.
+  #
+  # ITS OWN FIXTURE, and that is the point of it being here rather than inside a group: every describe
+  # above plants a paycheck dated `today`, which would be the latest whatever this example added. The
+  # two entries differ in AMOUNT as well as in date, so the assertion cannot pass by picking either
+  # one of a matched pair.
+  it "names the latest of several income entries in the period", :aggregate_failures do
+    earlier = deposit(200, on: Date.new(2026, 8, 10))
+    latest = deposit(300, on: Date.new(2026, 8, 18))
+    rate_category("Groceries", 400)
+
+    commit
+
+    expect(Allocation.distributed.map(&:source_entry).uniq).to eq([latest])
+    expect([earlier.amount, latest.amount]).to eq([200, 300])
+    expect(Allocation.kind_allocation.sole.amount).to eq(400) # the rule's ask, out of $500 available
+  end
+
   # THE SPLIT WITH NO PAYCHECK BEHIND IT — a period funded entirely out of carried-over available.
   # `source_entry` is nil rather than a guess, and the split still replaces itself correctly, which is
   # what says the provenance column is not the replacement key.

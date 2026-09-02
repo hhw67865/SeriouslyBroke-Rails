@@ -195,6 +195,14 @@ class ReallocationPresenter
   # categories and then redistributes still has their $50 move.
   #
   # The ROOT becomes a NULL side, which is what NULL MEANS on this table (§2).
+  #
+  # IT COLLAPSES `nil` AND `ROOT` ONTO THAT SAME NULL, AND IT MUST NOT BE CALLED WITH A `nil` SIDE.
+  # This class draws a distinction the ROW cannot carry — `nil` is "the user has not chosen yet",
+  # `ROOT` is available — so a half-chosen move built here is a well-formed withdrawal the user never
+  # asked for. MEASURED: a POST with a source and no destination saved `Cushion → available` for $300
+  # and called it a success. `AllocationsController#missing_side_errors` refuses that shape before it
+  # reaches here, and it is above the model deliberately: a NULL side really IS available, so a
+  # validation refusing one would refuse every sweep the committer writes.
   def allocation
     Allocation.new(
       from_category: record_of(from_category), to_category: record_of(to_category), amount: amount, date: today

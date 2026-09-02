@@ -78,6 +78,18 @@ RSpec.shared_context "with categories to reallocate between" do
     click_on "Move the money"
   end
 
+  # The same hand-edit for the DESTINATION select, which carries no option for a stranger's category
+  # any more than the radios carry one: the option is appended and selected before the form is
+  # submitted, so `create` is reached the only way it can be.
+  def submit_with_destination(target)
+    page.execute_script(
+      "const s = document.getElementById('move-to-category');" \
+      "s.insertAdjacentHTML('beforeend', \"<option value='#{target.id}'>x</option>\");" \
+      "s.value = '#{target.id}';"
+    )
+    click_on "Move the money"
+  end
+
   # The distribution's write path, called directly: these files are about what a hand move does to a
   # distribution, not about the distribution screen, which has its own specs.
   def distribute

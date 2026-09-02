@@ -39,14 +39,41 @@ class AllocationsController < ApplicationController
   # this row invisible to `Allocation.distributed` when a period is redistributed.
   def create
     @presenter = presenter
+    return refuse(missing_side_errors) if missing_side_errors.any?
+
     allocation = @presenter.allocation
     return redirect_to(root_path, notice: confirmation_for(allocation)) if allocation.save(context: :reallocation)
 
-    @errors = allocation.errors.full_messages
-    render :new, status: :unprocessable_content
+    refuse(allocation.errors.full_messages)
   end
 
   private
+
+  # A MISSING SIDE IS NOT THE ROOT, AND THIS IS THE ONLY PLACE THAT DIFFERENCE CAN BE ENFORCED.
+  # `ReallocationPresenter` carries `nil` for "the user has not chosen yet" and `ROOT` for AVAILABLE;
+  # `Allocation` cannot tell them apart, because both are the same NULL column (two-ledger spec §2).
+  # So a POST carrying a source and no destination wrote a real `category → available` withdrawal —
+  # MEASURED: `from_category_id=<Cushion>&amount=300` with no `to_category_id` saved the row and
+  # reported "Moved $300.00 from Cushion to Available", money the user never asked to move, out of
+  # the envelope they had just selected. The other direction is the same shape with the ends swapped.
+  #
+  # THE `"available"` STRING IS THE ONLY WAY TO NAME THE ROOT, which is what makes the refusal safe
+  # rather than a restriction: it is a value the select and the radio both submit, so every move a
+  # user can actually make on the screen names both of its ends explicitly.
+  #
+  # ABOVE THE MODEL RATHER THAN IN IT, because the model is right: a NULL side IS available, and a
+  # validation refusing one would refuse every sweep the committer writes.
+  def missing_side_errors
+    @missing_side_errors ||= [
+      [@presenter.to_category, "Envelope can't be blank"],
+      [@presenter.from_category, "Source can't be blank"]
+    ].filter_map { |side, message| message if side.nil? }
+  end
+
+  def refuse(errors)
+    @errors = errors
+    render :new, status: :unprocessable_content
+  end
 
   def presenter
     ReallocationPresenter.new(

@@ -174,6 +174,33 @@ RSpec.describe "Allocations Move", type: :system do
       expect(Allocation.where(to_category: dentist)).not_to exist
     end
 
+    # A MISSING SIDE IS NOT THE ROOT, and both ends are asserted because the leak is symmetrical.
+    # `nil` and `ROOT` are the same NULL column, so a POST naming one end and leaving the other blank
+    # wrote a well-formed move the user never asked for — MEASURED: a source and no destination saved
+    # `Cushion → available` for $300 and reported it as a success. AVAILABLE is nameable, by the
+    # explicit `"available"` string the select and the radios both submit, and the example above
+    # ("moving money back to available") is the paired positive that keeps this from reading as a
+    # refusal of the root itself.
+    it "refuses a move with no destination and writes nothing" do
+      visit new_allocation_path(from_category_id: car.id, amount: 300)
+      click_on "Move the money"
+
+      expect(page).to have_css("#reallocation-errors", text: "Nothing moved")
+      expect(page).to have_content("Envelope can't be blank")
+      expect(Allocation.where(from_category: car)).not_to exist
+      expect(holding_of("Car")).to eq(1_000)
+    end
+
+    it "refuses a move with no source and writes nothing" do
+      visit new_allocation_path(to_category_id: dentist.id, amount: 300)
+      click_on "Move the money"
+
+      expect(page).to have_css("#reallocation-errors", text: "Nothing moved")
+      expect(page).to have_content("Source can't be blank")
+      expect(Allocation.where(to_category: dentist)).not_to exist
+      expect(available).to eq(810)
+    end
+
     # THE AFFORDABILITY FLOOR AT THE WRITE, which without `Allocation#source_must_hold_it` would live
     # only in the view. A disabled radio is a rendering: a tab opened while Gas held more, or a
     # hand-edited `from_category_id`, would have written the move and left Gas overspent by $260.
@@ -203,6 +230,18 @@ RSpec.describe "Allocations Move", type: :system do
       expect(page).to have_no_content("Where it comes from")
       visit new_allocation_path(to_category_id: dentist.id)
       expect(page).to have_content("Where it comes from")
+    end
+
+    # THE FOURTH CORNER of a 2x2 the other three examples cover between them: a stranger's category
+    # as the DESTINATION of a POST. `require_own_categories` guards both keys on both verbs through
+    # ONE lookup, and an unasserted corner is how a guard comes to be written for one key only.
+    it "does not move money into one" do
+      visit new_allocation_path(to_category_id: dentist.id, from_category_id: car.id, amount: 300)
+      submit_with_destination(stranger_category)
+
+      expect(page).to have_content("We couldn't find that envelope")
+      expect(Allocation.where(to_category: stranger_category)).not_to exist
+      expect(holding_of("Car")).to eq(1_000)
     end
 
     # Page first, ledger second — see the refusals block for why every one of these is ordered that

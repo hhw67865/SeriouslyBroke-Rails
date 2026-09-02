@@ -4,6 +4,13 @@ require "rails_helper"
 
 # THE TWO-LEDGER INVARIANT (spec §2): pot + Σ accounts == income − expenses == available +
 # Σ category holdings. Both partitions computed by the app's own readers; bank truth by raw SQL.
+#
+# THE CONVENTION, STATED ONCE AND DELIBERATE: the two PARTITIONS are read through `AccountLedger` and
+# `CategoryLedger` — the app's own readers — while only the ANCHOR they are compared against is raw
+# SQL. Respelling either ledger in SQL here would be a second spelling of a reader this file exists
+# to check, agreeing with the first by whoever last edited both; the raw-SQL anchor answers a
+# question neither reader can be wrong about in the same direction, which is whether money was
+# created or destroyed at all.
 RSpec.describe "The two-ledger invariant", type: :model do
   let(:user) { create(:user) }
   let(:main) { create(:pool, :account, user: user, name: "Checking") }

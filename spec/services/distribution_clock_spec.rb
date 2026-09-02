@@ -16,10 +16,12 @@ require "rails_helper"
 # still ask about pools until Tasks 5 and 6. Its examples are kept rather than deleted precisely
 # because those three screens are live, and they go when the keyword does.
 #
-# WHAT COULD NOT COME ACROSS: "is false for a pool no account can reach". Its whole mechanism was the
-# missing key in a per-ACCOUNT map, and there is no per-category map to be missing from — one root,
-# one moment. Its replacement is better isolated rather than weaker: "does not read another user's
-# split", which is what the owner filter now carries alone.
+# WHAT HAS NO CATEGORY-ARM TWIN: "is false for a pool no account can reach". The POOL example is
+# alive and unchanged at the bottom of this file — what could not be ported is its counterpart,
+# because its whole mechanism was the missing key in a per-ACCOUNT map and there is no per-category
+# map to be missing from: one root, one moment. The category arm's equivalent is better isolated
+# rather than weaker — "does not read another user's split as this user's distribution", which is
+# what the owner filter now carries alone.
 RSpec.describe DistributionClock do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -231,6 +233,57 @@ RSpec.describe DistributionClock do
       raise_rule(rule, to: 470, at: distributed_on - 1.hour)
       distribute(470)
 
+      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
+    end
+
+    it "is false when nothing has been distributed this period" do
+      travel_to(distributed_on) { rate(rent_envelope, 400) }
+
+      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
+    end
+
+    # A REALLOCATION IS NOT A DISTRIBUTION. `PoolMovement.distributed` is allocations and sweeps; a
+    # `transfer` is the reallocation screen moving money by hand, and it hands nothing out. Written
+    # with the same shape and the same clock as the positive example, so only the `kind` differs.
+    it "is false when the only movement this period is a transfer" do
+      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
+      distribute(400, kind: :transfer)
+      raise_rule(rule, to: 470, at: distributed_on + 2.hours)
+
+      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
+    end
+
+    # LAST PERIOD'S DISTRIBUTION IS NOT THIS ONE'S. The clause explains a flip that happened since
+    # the money was handed out; a split from a fortnight ago says nothing about it, and reading it
+    # would mark every rule edited since as "raised after distributing" forever.
+    #
+    # `on:` puts the split in the PREVIOUS biweekly period (the user is anchored to Feb 6, so this
+    # period opens that day and the one before it ran Jan 23 – Feb 5). Both the `date` and the
+    # `created_at` fall outside; it is the `date` bound that excludes it.
+    it "is false when the only distribution belongs to an earlier period" do
+      rule = travel_to(distributed_on - 20.days) { rate(rent_envelope, 400) }
+      distribute(400, at: distributed_on - 18.days, on: today - 14.days)
+      raise_rule(rule, to: 470, at: distributed_on - 17.days)
+
+      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
+    end
+
+    # THE TOUCH CASCADE, MEASURED RATHER THAN REASONED ABOUT. `touch: true` is everywhere on this
+    # schema — `PoolMovement belongs_to :from_pool/:to_pool, touch: true`, and a pool touches its
+    # user — and if any of it reached `budgets` this clause would fire on every user who distributed
+    # and changed nothing. It does not: `Budget belongs_to :pool, touch: true` points the other way,
+    # and no association anywhere declares `belongs_to :budget, touch: true`.
+    #
+    # Asserted on the COLUMN and then on the reader, because the second alone would pass if the
+    # comparison were broken in the same direction as the cascade.
+    it "is not moved by the distribution's own touch cascade", :aggregate_failures do
+      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
+      before_at = rule.reload.updated_at
+
+      distribute(400)
+
+      expect(rule.reload.updated_at).to eq(before_at)
+      expect(rent_envelope.reload.updated_at).to be > before_at
       expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
     end
 
