@@ -120,7 +120,7 @@ class DistributionPresenter
   #
   # IT IS FIXED ANYWAY, because that argument is a proof about ANOTHER class's fill semantics
   # holding a property of THIS one's vocabulary. It is exactly the shape of reasoning that made
-  # `shared/_pool_status` necessary: two screens that agree by argument rather than by
+  # `shared/_holding_status` necessary: two screens that agree by argument rather than by
   # construction, with nothing to fail when the argument stops being true. Reject zero-ask rows a
   # different way, or admit a red state that does not ask for money, and the band starts printing a
   # shorter sentence about the same category than Home does — silently, because a missing suffix

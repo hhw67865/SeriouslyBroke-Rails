@@ -148,44 +148,30 @@ RSpec.describe HomeHelper, type: :helper do
     end
   end
 
-  # A pool belonging to no account is in trouble for a reason PoolStatus does not model, so
-  # this is the only wording that does not come from #state. Every branch is on screen today:
-  # the seeds' savings pools are account-less, and an account-less pool can also be overdrawn.
+  # ── THE ORPHAN ARM IS DELETED (Task 6), and with it four examples: "says an unassigned pool
+  # cannot be funded at all", "keeps the status when an unassigned pool is also in trouble", "keeps
+  # a due date when an unassigned pool is also overdue", and "says nothing new about a pool that has
+  # an account" (which passed `orphan: false` to say so). A category belongs to no account and needs
+  # none — allocating money moves nothing physical (two-ledger spec §2) — so "no account — nothing
+  # can fund it" describes no state the app can be in.
+  #
+  # WHAT THE METHOD IS FOR SURVIVES WHOLE and is what the rest of this describe pins: it FORCES
+  # `period_closed:` off the status rather than accepting it as a keyword, so no caller of Home's
+  # attention band can omit the suffix the categories band prints inches below.
   describe "#pool_problem_label" do
-    it "says nothing new about a pool that has an account" do
-      expect(helper.pool_problem_label(status(:behind, amount: 385), orphan: false))
-        .to eq("behind $385.00")
-    end
-
     it "defaults to the plain status label" do
       expect(helper.pool_problem_label(status(:wont_make_it, due_on: Date.new(2026, 2, 14))))
         .to eq("won't make it · Feb 14")
     end
 
-    it "says an unassigned pool cannot be funded at all" do
-      expect(helper.pool_problem_label(status(:left_to_spend, amount: 240), orphan: true))
-        .to eq("no account — nothing can fund it")
-    end
-
-    # Both facts, not the louder one: unassigned is the fix, overdrawn is the damage.
-    it "keeps the status when an unassigned pool is also in trouble" do
-      expect(helper.pool_problem_label(status(:overdrawn, amount: 869), orphan: true))
-        .to eq("no account · overdrawn $869.00")
-    end
-
-    it "keeps a due date when an unassigned pool is also overdue" do
-      expect(helper.pool_problem_label(status(:overdue, amount: 600, due_on: Date.new(2026, 3, 1)), orphan: true))
-        .to eq("no account · overdue · was Mar 1")
-    end
-
     # THE DEFECT THIS METHOD SHIPPED WITH, in the exact figures it shipped in. It passed
     # `changed_after_distributing:` and NOT `period_closed:`, so ONE Home render printed
-    # `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00` in the attention
-    # band a few inches above — two bands disagreeing about one pool on one screen.
+    # `overdrawn $80.00 · last period` in the categories band and `overdrawn $80.00` in the attention
+    # band a few inches above — two bands disagreeing about one category on one screen.
     #
     # Asserted as full equality against the same literal `#pool_status_label`'s own closed-period
     # example uses, so the two methods are pinned to one string rather than to each other.
-    it "carries the closed-period suffix the pools band prints" do
+    it "carries the closed-period suffix the categories band prints" do
       label = helper.pool_problem_label(status(:overdrawn, amount: 80, period_closed: true))
 
       expect(label).to eq("overdrawn $80.00 · last period")
@@ -198,17 +184,15 @@ RSpec.describe HomeHelper, type: :helper do
       expect(helper.pool_problem_label(status(:overdrawn, amount: 80))).to eq("overdrawn $80.00")
     end
 
-    # BOTH SUFFIXES AT ONCE, in the order `#pool_status_label` fixes: how the pool is doing, which
-    # period its money belongs to, then why. An orphan carries them too — "no account" is a fourth
-    # fact about the same row, not a replacement for the other three.
-    it "carries both suffixes together, and behind the orphan prefix" do
+    # BOTH SUFFIXES AT ONCE, in the order `#pool_status_label` fixes: how the category is doing,
+    # which period its money belongs to, then why.
+    it "carries both suffixes together" do
       label = helper.pool_problem_label(
         status(:behind, amount: 50, period_closed: true),
-        orphan: true,
         changed_after_distributing: true
       )
 
-      expect(label).to eq("no account · behind $50.00 · last period — you changed a rule here after distributing")
+      expect(label).to eq("behind $50.00 · last period — you changed a rule here after distributing")
     end
   end
 end

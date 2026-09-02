@@ -2,14 +2,17 @@
 
 <%= page_header(title: "Home", subtitle: "Where your money stands") %>
 
+<%# TWO LEDGERS, IN THE ORDER THE HEADLINE IS ABOUT (two-ledger spec §2). The standing band and the
+    attention band both talk about the PURPOSE ledger — what the money is for and what is short —
+    so the categories band follows them, and the accounts band (where the money physically sits)
+    comes after. The orphans band is deleted: nothing belongs to no account any more, because a
+    category belongs to no account by design. %>
 <div class="space-y-6">
   <%= render "standing", presenter: @presenter %>
   <%= render "attention", presenter: @presenter %>
+  <%= render "categories", presenter: @presenter %>
   <% @presenter.accounts.each do |account| %>
     <%= render "account", presenter: @presenter, account: account %>
   <% end %>
   <%= render "new_account", bank_account: @new_bank_account %>
-  <%# Last, after the accounts: the attention band has already named these at the top of
-      the screen, so down here they are the appendix — everything that has nowhere to live. %>
-  <%= render "orphans", presenter: @presenter %>
 </div>

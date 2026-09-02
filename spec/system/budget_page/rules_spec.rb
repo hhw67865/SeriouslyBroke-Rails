@@ -158,10 +158,11 @@ RSpec.describe "Budget page rules", type: :system do
   # boundary the money arrived on. A lone closed-period group would pass against a suffix
   # printed unconditionally.
   #
-  # THE HOME-SIDE TWIN IS WITHDRAWN UNTIL TASK 6. It read the same two envelopes off Home and
-  # compared the rendered strings to the same literals, and it cannot be written today: Home still
-  # renders POOLS, and these two categories have no envelope for it to name. Task 6 restores it in
-  # the other direction — the same two categories, the same afternoon, read off both screens.
+  # ** THE HOME-SIDE TWIN IS RESTORED (Task 6), and in the other direction. ** It was withdrawn in
+  # Task 5 because Home still rendered POOLS and these two categories had no envelope for it to
+  # name. Home's rows are categories now, so the pair can be read off BOTH screens on one afternoon
+  # — which is the whole point of `shared/_holding_status` and the reason the suffix is threaded off
+  # one object rather than passed as a keyword each caller can forget.
   describe "a category whose period has ended", :aggregate_failures do
     before do
       swept = holder("Swept", priority: 1)
@@ -182,6 +183,19 @@ RSpec.describe "Budget page rules", type: :system do
         expect(page).to have_no_content("last period")
       end
     end
+
+    # THE CROSS-SCREEN PIN. The same two categories, the same afternoon, read off Home's categories
+    # band — and compared to the SAME LITERALS rather than to the Budget page's own rendering, so a
+    # label that lost its amount fails here instead of agreeing with itself about nothing.
+    it "reads exactly as Home reads for the same categories" do
+      visit root_path
+
+      within("[data-holding-name='Swept']") { expect(page).to have_content("$400.00 left · last period") }
+      within("[data-holding-name='Live']") do
+        expect(page).to have_content("$400.00 left")
+        expect(page).to have_no_content("last period")
+      end
+    end
   end
 
   # WHY THE CATEGORY IS BEHIND — spec §8's rough edge, on the page it belongs to most.
@@ -196,11 +210,11 @@ RSpec.describe "Budget page rules", type: :system do
   # `created_at`, never `date` (a period marker compared to a timestamp is a unit mismatch, see
   # `DistributionClock`).
   #
-  # THE CLOCK IS THE SHARED CONTEXT'S, and this file is the first caller of its CATEGORY arm:
-  # `#allocate` writes an `Allocation`, which is what `DistributionClock`'s category arm reads.
-  # `#distribute` — the pool arm — stays for the three screens Task 6 has yet to move.
+  # THE CLOCK IS THE SHARED CONTEXT'S, and its `#allocate` writes an `Allocation`, which is what
+  # `DistributionClock` reads. Its pool-era `#distribute` twin is DELETED (Task 6) with the
+  # `account_ids:` surface that made it necessary.
   #
-  # THE HOME-SIDE TWIN IS WITHDRAWN HERE TOO, for the reason the pair above gives.
+  # ** THE HOME-SIDE TWIN IS RESTORED HERE TOO (Task 6), for the reason the pair above gives. **
   describe "a category whose rule moved after the money did" do
     include_context "with a rule changed after the money went out"
 
@@ -229,6 +243,22 @@ RSpec.describe "Budget page rules", type: :system do
         expect(page).to have_content("you changed a rule here after distributing")
       end
       within(group("Property Tax")) do
+        expect(page).to have_content("behind")
+        expect(page).to have_no_content("you changed a rule here after distributing")
+      end
+    end
+
+    # THE CROSS-SCREEN PIN, on the clause most at risk of being threaded on one screen and forgotten
+    # on the other — it has shipped that way twice, once between Home and /budget and once between
+    # Home's own two bands.
+    it "reads exactly as Home reads for the same categories", :aggregate_failures do
+      visit root_path
+
+      within("[data-holding-name='Car Insurance']") do
+        expect(page).to have_content("behind")
+        expect(page).to have_content("you changed a rule here after distributing")
+      end
+      within("[data-holding-name='Property Tax']") do
         expect(page).to have_content("behind")
         expect(page).to have_no_content("you changed a rule here after distributing")
       end

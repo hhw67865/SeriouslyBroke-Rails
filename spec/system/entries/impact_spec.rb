@@ -13,31 +13,38 @@ require "rails_helper"
 # the card. Unscoped, "$240.00" would match the balance from an assertion about the balance-after
 # and a swapped pair would pass.
 #
-# EVERY FIXTURE IS BIWEEKLY and every envelope is funded by a movement whose amount is spelled out
-# here. A monthly rule's amount and its per-period claim are never the same number — the mixed-unit
-# slip has struck five times on this branch.
+# EVERY FIXTURE IS BIWEEKLY and every category is funded by an ALLOCATION whose amount is spelled
+# out here (two-ledger spec §2 — a category holds its own money and an allocation is what puts it
+# there). A monthly rule's amount and its per-period claim are never the same number — the
+# mixed-unit slip has struck five times on this branch.
 RSpec.describe "Entry impact card", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # `let!` AND FIRST, so this is the account the `:account` trait nominates as main — a category
+  # minted before it would pull the factory's own account into being and claim the nomination,
+  # leaving the income category below pointing at an account that is not main.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
-  # $240 in the envelope against a $300-a-period claim — the spec's own mockup, to the dollar.
-  let(:groceries_pool) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
+  # THE DAY EVERY CATEGORY HERE STARTED HOLDING MONEY, a year back, so an entry dated today or
+  # yesterday counts against it.
+  let(:funded_since) { Date.current - 1.year }
+
+  # $240 in the category against a $300-a-period claim — the spec's own mockup, to the dollar.
   let!(:groceries) do
-    create(:category, user: user, name: "Groceries", category_type: :expense, pool: groceries_pool).tap do |category|
-      create(:pool_movement, from_pool: checking, to_pool: groceries_pool, amount: 240, date: Time.zone.now)
-      create(:pool_budget, :per_period_rate, pool: groceries_pool, amount: 300)
+    create(:category, :expense, user: user, name: "Groceries", funded_since: funded_since).tap do |category|
+      create(:allocation, kind: :allocation, to_category: category, amount: 240, date: Time.zone.now)
+      create(:budget, :per_period_rate, pool: nil, category: category, amount: 300)
       create(:item, category: category, name: "Weekly shop")
     end
   end
 
   # THE TWO CATEGORIES EVERY OTHER STATE NEEDS, reached by name through the select rather than by
-  # reference: an expense funded by the BUFFER — pointing at the account, which is what "no
-  # envelope" means since plan 3 required a pool on every category — and an income (which must land
-  # in an account, `Category#income_must_land_in_an_account`).
+  # reference: an expense that is NOT HOLDING MONEY — no `funded_since`, so its spending drains
+  # available (§4's start-date rule), which is what "unbudgeted" means now — and an income one
+  # (which must land in an account, `Category#income_must_land_in_an_account`).
   before do
-    create(:category, user: user, name: "Shopping", category_type: :expense, pool: checking)
+    create(:category, :expense, user: user, name: "Shopping")
     create(:category, user: user, name: "Paycheck", category_type: :income, pool: checking)
     sign_in user, scope: :user
   end
@@ -222,13 +229,11 @@ RSpec.describe "Entry impact card", type: :system do
   # A $1,500 balance reaches the browser as `data-balance`, and `parseFloat("1,500.00")` is 1.5 —
   # an envelope offering a dollar fifty. The delimiter is the defect and this is the example that
   # would catch it.
-  describe "an envelope with four figures in it" do
-    let(:rent_pool) { create(:pool, :budget_pool, user: user, account: checking, name: "Rent") }
-
+  describe "a category with four figures in it" do
     before do
-      create(:category, user: user, name: "Rent", category_type: :expense, pool: rent_pool)
-      create(:pool_movement, from_pool: checking, to_pool: rent_pool, amount: 1_500, date: Time.zone.now)
-      create(:pool_budget, :per_period_rate, pool: rent_pool, amount: 1_500)
+      rent = create(:category, :expense, user: user, name: "Rent", funded_since: funded_since)
+      create(:allocation, kind: :allocation, to_category: rent, amount: 1_500, date: Time.zone.now)
+      create(:budget, :per_period_rate, pool: nil, category: rent, amount: 1_500)
 
       visit new_entry_path
       select_category("Rent")
@@ -245,7 +250,7 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  describe "a category with no envelope" do
+  describe "a category that is not holding money" do
     before do
       visit new_entry_path
       select_category("Shopping")
@@ -255,9 +260,9 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).to have_css("[data-impact-card='unbudgeted']")
 
       within(card) do
-        expect(figure("headline")).to have_text("No envelope — this spending isn't budgeted.")
-        expect(page).to have_text("It comes out of your buffer.")
-        expect(page).to have_link("Give it an envelope on the Budget page", href: budget_page_path)
+        expect(figure("headline")).to have_text("Not holding money yet — this spending isn't budgeted.")
+        expect(page).to have_text("It comes out of what's available.")
+        expect(page).to have_link("Give it a rule on the Budget page", href: budget_page_path)
       end
     end
 
@@ -289,9 +294,20 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).not_to have_button("Save anyway")
     end
 
-    # The example that stood here planted a SECOND category pointing at the account, to say that
-    # the arm above (a category with no pool at all) said the same of it. There is one shape now —
-    # `Shopping` above IS the account-pointed one — so the pair collapsed into it.
+    # THE DATED ARM, and it is new with the re-anchored start-date rule (§4): a category that DOES
+    # hold money still sends a receipt dated before its `funded_since` to available, so the same
+    # honest card renders for it. Both directions on one category, so the example is about the date
+    # and nothing else.
+    it "is the same card for a receipt dated before the category started holding", :aggregate_failures do
+      early = create(:entry, item: groceries.items.first, amount: 45, date: funded_since - 1.day)
+
+      visit edit_entry_path(early)
+
+      expect(page).to have_css("[data-impact-card='unbudgeted']")
+      within(card) do
+        expect(figure("headline")).to have_text("Not holding money yet — this spending isn't budgeted.")
+      end
+    end
   end
 
   # THE "a savings category with no goal behind it" DESCRIBE IS DELETED WITH THE ARM (plan 3, task
@@ -302,12 +318,10 @@ RSpec.describe "Entry impact card", type: :system do
 
   # An empty grey track beside "$240.00 left" would say "nothing left" an inch under a figure saying
   # otherwise, so an envelope with nothing to claim gets no bar at all.
-  describe "an envelope with no rules on it" do
-    let(:gifts_pool) { create(:pool, :budget_pool, user: user, account: checking, name: "Gifts") }
-
+  describe "a category with no rules on it" do
     before do
-      create(:category, user: user, name: "Gifts", category_type: :expense, pool: gifts_pool)
-      create(:pool_movement, from_pool: checking, to_pool: gifts_pool, amount: 240, date: Time.zone.now)
+      gifts = create(:category, :expense, user: user, name: "Gifts", funded_since: funded_since)
+      create(:allocation, kind: :allocation, to_category: gifts, amount: 240, date: Time.zone.now)
 
       visit new_entry_path
     end
@@ -319,7 +333,7 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).not_to have_css("[data-figure='bar']", visible: :all)
     end
 
-    it "draws one on an envelope that does claim something", :aggregate_failures do
+    it "draws one on a category that does claim something", :aggregate_failures do
       select_category("Groceries")
 
       within(card) { expect(figure("balance")).to have_text("$240.00") }
@@ -383,20 +397,21 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE GOAL ARM SURVIVES, KEYED ON THE POOL (plan 3, task 5). The category selected here was a
-  # SAVINGS one and is an EXPENSE one now — which is the demo's own shape (Vacation Spending →
-  # Vacation to Europe) — so the card still takes the goal shape and still measures against the
-  # target. What changed is the SIGN: spending from a goal subtracts, which is what
-  # `EntryImpactPresenter#direction` used to invert for a contribution and what the browser used to
-  # read off `data-direction`.
+  # THE GOAL ARM, KEYED ON THE CATEGORY (Task 6). `Category#savings?` is the app's DISPLAY question
+  # — a holder, with a target, carrying NO refill rule (spec §3) — where the pool era asked
+  # `pool_type_savings?`. Spending from a goal is still spending against a goal, so the card still
+  # takes the goal shape and still measures against the target.
   describe "a savings goal" do
-    let(:vacation_pool) do
-      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
-    end
-
     before do
-      create(:category, user: user, name: "Vacation", category_type: :expense, pool: vacation_pool)
-      create(:pool_movement, from_pool: checking, to_pool: vacation_pool, amount: 600, date: Time.zone.now)
+      vacation = create(
+        :category,
+        :expense,
+        user: user,
+        name: "Vacation",
+        funded_since: funded_since,
+        target_amount: 2_400
+      )
+      create(:allocation, kind: :allocation, to_category: vacation, amount: 600, date: Time.zone.now)
 
       visit new_entry_path
       select_category("Vacation")
@@ -453,7 +468,7 @@ RSpec.describe "Entry impact card", type: :system do
     it "opens on the world without this entry, then puts it back", :aggregate_failures do
       expect(page).to have_css("[data-impact-card='envelope']")
 
-      expect(groceries_pool.calculator.balance).to eq(BigDecimal("195"))
+      expect(groceries.holding_calculator.balance).to eq(BigDecimal("195"))
       within(card) do
         expect(figure("balance")).to have_text("$240.00")
         expect(figure("balance-after")).to have_text("$195.00")
@@ -481,10 +496,9 @@ RSpec.describe "Entry impact card", type: :system do
       end
     end
 
-    it "credits a different envelope with nothing when the category is changed", :aggregate_failures do
-      dining_pool = create(:pool, :budget_pool, user: user, account: checking, name: "Dining Out")
-      create(:category, user: user, name: "Dining Out", category_type: :expense, pool: dining_pool)
-      create(:pool_movement, from_pool: checking, to_pool: dining_pool, amount: 100, date: Time.zone.now)
+    it "credits a different category with nothing when the category is changed", :aggregate_failures do
+      dining = create(:category, :expense, user: user, name: "Dining Out", funded_since: funded_since)
+      create(:allocation, kind: :allocation, to_category: dining, amount: 100, date: Time.zone.now)
       visit edit_entry_path(existing)
 
       select_category("Dining Out")
@@ -497,39 +511,15 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE EDIT CASE ON A GOAL, and the fragment endpoint has to carry the entry id for it to be
-  # readable at all: an entry the ledger has already counted must be given back before the typed
-  # amount is subtracted, or the card shows it spent twice.
-  #
-  # IT WAS A CROSS-SIGN EXAMPLE (plan 3, task 5): the saved category was a SAVINGS one, so the
-  # exclusion was `+150` and the subtraction `-150`, read off two different records. One sign is
-  # left, and the same figures fall out of it — which is what says the give-back is real rather
-  # than an artefact of the two signs cancelling.
-  describe "re-categorising spending inside one goal" do
-    let(:vacation_pool) do
-      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation", target_amount: 2_400)
-    end
-    let!(:already_spent) do
-      vacation = create(:category, user: user, name: "Vacation", category_type: :expense, pool: vacation_pool)
-      create(:category, user: user, name: "Education", category_type: :expense, pool: vacation_pool)
-      create(:pool_movement, from_pool: checking, to_pool: vacation_pool, amount: 600, date: Time.zone.now)
-      create(:entry, item: create(:item, category: vacation), amount: 150, date: Date.current)
-    end
+  # ── DELETED (Task 6): "re-categorising spending inside one goal". It planted TWO categories —
+  # Vacation and Education — pointing at ONE savings pool, so an entry re-categorised between them
+  # stayed inside the same holding and the give-back still applied. Multi-category envelopes are
+  # gone (two-ledger spec §5: one category, one budget line), so two categories cannot share a
+  # holding and the shape has no successor. The give-back itself is pinned by "credits a different
+  # category with nothing when the category is changed" directly above, which is the other half of
+  # the same reader.
 
-    it "gives the counted entry back before subtracting it again", :aggregate_failures do
-      visit edit_entry_path(already_spent)
-      select_category("Education")
-
-      # Ledger: 600 moved in − 150 spent. Without this entry: 600. Spending 150: 450.
-      expect(vacation_pool.calculator.balance).to eq(BigDecimal("450"))
-      within(card) do
-        expect(figure("balance")).to have_text("$600.00")
-        expect(figure("balance-after")).to have_text("$450.00")
-      end
-    end
-  end
-
-  describe "editing an entry that already overdraws its envelope" do
+  describe "editing an entry that already overdraws its category" do
     let!(:existing) do
       create(:entry, item: groceries.items.first, amount: 300, date: Date.current)
     end

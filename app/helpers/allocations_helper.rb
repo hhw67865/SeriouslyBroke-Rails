@@ -3,13 +3,14 @@
 # The reallocation screen's copy: what a move would cost, why a source cannot make it, and what
 # happened once it did. See the UI design spec §4.2, §5 and the two-ledger spec §2.
 #
-# EVERY METHOD IS PREFIXED `allocation_` RATHER THAN `reallocation_`, and the prefix is doing real
-# work rather than following a convention: `PoolMovementsHelper` is still mixed into the same view
-# context for Home's fix buttons until Task 6, its methods take the pool-era `Candidate`, and Rails
-# includes every helper module into every view. Two modules defining `reallocation_damage_sentence`
-# would leave the include order deciding which Candidate shape the app can render — silently, since
-# both objects answer `#damage`. Task 6 deletes `PoolMovementsHelper`; renaming these back afterwards
-# is optional and cosmetic.
+# EVERY METHOD IS PREFIXED `allocation_` RATHER THAN `reallocation_`, and the prefix was doing real
+# work rather than following a convention: `PoolMovementsHelper` was mixed into the same view context
+# for Home's fix buttons, its methods took the pool-era `Candidate`, and Rails includes every helper
+# module into every view. Two modules defining `reallocation_damage_sentence` would have left the
+# include order deciding which Candidate shape the app could render — silently, since both objects
+# answer `#damage`. Task 6 deleted that module and Home now calls THESE methods with a
+# `ReallocationPresenter::Candidate`, so the collision is gone; renaming them back is optional and
+# cosmetic, and would touch three views for no behaviour.
 module AllocationsHelper
   # THE DAMAGE STATEMENT — the sentence this screen exists to be able to say before the money moves.
   # Spec §5's shape:

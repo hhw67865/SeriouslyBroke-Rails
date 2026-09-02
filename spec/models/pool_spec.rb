@@ -194,9 +194,14 @@ RSpec.describe Pool, type: :model do
   # `account_matches_pool_type` only ever looked upward, at the parent, and
   # `dependent: :restrict_with_error` guards destroy alone. Nothing looked down: an account
   # holding envelopes could be turned into an envelope itself, at which point HomePresenter
-  # drops it from `accounts`, its children belong to no group `pools_for` can find, and
-  # `orphan_pools` skips them because their `account_id` is not nil. The envelopes render
-  # nowhere on Home while still counting toward the money the period has to cover.
+  # dropped it from `accounts`, its children belonged to no group `pools_for` could find, and
+  # `orphan_pools` skipped them because their `account_id` was not nil — the envelopes rendered
+  # nowhere on Home while still counting toward the money the period had to cover.
+  #
+  # HOME NO LONGER RENDERS EITHER OF THOSE READERS (two-ledger Task 6): a category holds the money
+  # and lives in no account, so `#pools_for` and `#orphan_pools` are deleted. The validation is
+  # kept, because the shape it refuses is still a shape the TABLE can hold until Task 8 drops the
+  # non-account rows outright.
   describe "changing what a pool is while pools live inside it" do
     let(:user) { create(:user) }
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }

@@ -13,22 +13,20 @@
     comment, not a design. The list is now exhaustive against that grep, and re-running it is the
     whole maintenance instruction.
 
-    TWO EXCEPTIONS, and both COMPOSE the label into a longer sentence, which is the one thing a
-    span cannot do:
+    ONE EXCEPTION, and it COMPOSES the label into a longer sentence, which is the one thing a span
+    cannot do:
 
-      - `HomeHelper#pool_problem_label` (Home's attention band) prefixes `no account · ` for an
-        orphan and replaces the whole thing with "no account — nothing can fund it" when the orphan
-        is otherwise quiet — and it forces `period_closed:` internally rather than accepting it,
-        deliberately, so that no caller of the band can omit it. It is threading both suffixes for
-        its own reasons; forcing it through here would mean giving this partial a composition seam
-        so that one caller can wrap the output, which buys nothing and costs the property the file
-        exists for.
-      - `home/_standing.html.erb`'s overdraft line ("Ally Savings is overdrawn $412.00 — already
-        spent, and none of the figures above count it"). It passes NEITHER suffix and owes neither:
-        it labels an ACCOUNT, and `PoolCalculator#compute_period_closed` returns false unless
-        `pool_type_budget?`, while `changed_after_distributing?` is a marker about rules on an
-        envelope. Benign, and named because "benign" is a conclusion someone has to be able to
-        check rather than rediscover.
+      - `HomeHelper#pool_problem_label` (Home's attention band) forces `period_closed:` internally
+        rather than accepting it, deliberately, so that no caller of the band can omit it. Forcing
+        it through here would mean giving this partial a composition seam so that one caller can
+        wrap the output, which buys nothing and costs the property the file exists for. (Its
+        `orphan:` keyword and the two clauses it wrapped the label in are DELETED with the concept
+        — Task 6.)
+
+      - `home/_standing.html.erb`'s overdraft line was a second and it is GONE: it labelled an
+        ACCOUNT through `pool_status_label`, and Task 6 replaced it with the figure said plainly.
+        An account holds no rules, so there was never a state for a status to read — only a
+        balance, which the sentence now prints itself.
 
       - `categories/_partials/show/_budget_card` was a third and it is GONE: it hand-threaded both
         suffixes four inches above the pool card, on one page, about one envelope. Two callers of
@@ -39,7 +37,7 @@
     THE DISTRIBUTION AND REALLOCATION SCREENS ARE NOT EXCEPTIONS, and there are two families of
     them rather than the one this header used to claim:
 
-      - THE ROWS — `DistributionsHelper#distribution_line_detail`, `pool_movements/new`'s candidate
+      - THE ROWS — `DistributionsHelper#distribution_line_detail`, `allocations/new`'s candidate
         list, and `distributions/_waterfall`'s alerts band — pass `period_closed:` and deliberately
         NOT the other suffix (see `HomeHelper#pool_status_label`), because their rows describe a
         move that has not happened yet. The alerts band passed neither until
@@ -50,7 +48,7 @@
         and never reaches that band. Fixed anyway: an agreement that rests on another class's fill
         semantics is the kind this file exists to replace with one that rests on construction.)
       - THE PROJECTED STANDINGS — `DistributionsHelper#distribution_unrecoverable_sentence` and
-        `PoolMovementsHelper`'s damage and gain sentences ("… becomes overdue · was Mar 1") — label
+        `AllocationsHelper`'s damage and gain sentences ("… becomes overdue · was Mar 1") — label
         a state that DOES NOT EXIST YET, inside a sentence, about a balance with the proposed
         movement already in it. Neither suffix, and neither is owed: "last period" would date a
         world nobody has written, and a rule edited since the last split is not what the sentence
@@ -72,7 +70,7 @@
     consistent" and "structurally hard to drift".
 
     THE INDENTATION BELOW IS LOAD-BEARING and deliberately does not read as nested markup. This
-    partial replaced the identical span that stood in `home/_pool_row` and
+    partial replaced the identical span that stood in `home/_holding_row` (then `home/_pool_row`) and
     `budget_page/_pool_group`, and the refactor's contract was byte-identical rendering on both
     screens — so the literal whitespace those two files emitted lives here now, at the column each
     caller's own render line puts it. THOSE TWO render this from four spaces in; that is why the

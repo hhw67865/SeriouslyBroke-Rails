@@ -119,21 +119,31 @@ RSpec.describe "OpeningBalances", type: :request do
     expect(user.categories.find_by(name: "Opening Balance")).not_to be_tracked
   end
 
-  # THE FAMILY TOTAL, NOT MAIN'S BARE BUFFER (fix round 1 — MED-4). Money an envelope inside main
-  # is holding has not left the bank account — a bank statement counts it. Planting $150 in a
-  # Groceries envelope living inside Main and $850 unallocated in Main itself, the bank actually
-  # shows $1,000; entering that figure must leave the two summing to it, to the cent, not "correct"
-  # main down to account for money that was never missing.
-  it "corrects against main's family total, including money already living in an envelope inside it",
+  # THE POT, AND ALLOCATING MONEY DOES NOT MOVE IT (two-ledger spec §2, Task 6).
+  #
+  # THIS EXAMPLE USED TO PIN THE FAMILY TOTAL — `Pool#total`, unallocated cash PLUS every envelope
+  # housed inside main — because money an envelope inside main was holding had not left the bank
+  # account, and a bare buffer would have "corrected" main down by exactly what the envelope held.
+  # The gate is `AccountLedger#pot` now, and the hazard it was written for cannot recur: a category
+  # is not inside an account, and an allocation is an act of intention rather than of location, so
+  # the physical ledger never sees it at all.
+  #
+  # SAME FIXTURE IN THE NEW SHAPE, and the same arithmetic has to come out: $1,000 of income with
+  # $150 already claimed by Groceries, a bank statement reading $1,200. The correction is $200, main
+  # ends at $1,200, and the PURPOSE side still partitions the same total — $1,050 available plus
+  # $150 held.
+  it "corrects against the pot, which money already claimed by a category does not lower",
      :aggregate_failures do
        income = create(:category, :income, user: user, pool: main, name: "Pay")
        create(:entry, item: create(:item, category: income), amount: 1000, date: Date.current)
-       groceries = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
-       create(:pool_movement, from_pool: main, to_pool: groceries, amount: 150, date: Date.current)
+       groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
+       create(:allocation, kind: :allocation, to_category: groceries, amount: 150, date: Date.current)
 
        post opening_balance_path, params: { opening_balance: { actual: 1200 } }
 
-       expect(app_balance + PoolCalculator.new(groceries.reload).balance).to eq(1200)
+       ledger = CategoryLedger.new([groceries], user: user)
+       expect(AccountLedger.new(user).pot).to eq(1200)
+       expect(ledger.available + ledger.holding_of(groceries)).to eq(1200)
        expect(user.categories.exists?(name: "Opening Balance")).to be true
      end
 

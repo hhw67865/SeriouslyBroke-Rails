@@ -205,17 +205,32 @@ RSpec.describe "Categories Show - Pool card", type: :system do
 
     # `changed_after_distributing:` is the second suffix and it needs a `behind` envelope — a rate
     # rule is `left to spend` however little is in it, so this one accumulates toward a date.
+    #
+    # THE RULE CARRIES BOTH OWNERS (Task 6), and that pair is what this screen is mid-transition
+    # between: the card still reads the POOL's status, while `CategoryBudgetPresenter
+    # #changed_after_distributing?` asks `DistributionClock`'s CATEGORY arm — the pool-era arm went
+    # with its `account_ids:` surface, because there is one root and one distribution per period now
+    # (two-ledger spec §2). `Budget#must_have_an_owner` accepts either owner and Task 1's migration
+    # wrote both onto every migrated rule, so this is the shape real data is in. Task 7 moves the
+    # rest of the card and the pool half goes with it.
     def accumulating(name, amount:)
       pool = create(:pool, :budget_pool, user: user, account: checking, name: name)
-      rule = create(:pool_budget, pool: pool, amount: amount, interval_months: 6, anchor_date: today + 3.months)
-      [pool, rule]
+      category = pointed_at(pool)
+      rule = create(
+        :pool_budget,
+        pool: pool,
+        category: category,
+        amount: amount,
+        interval_months: 6,
+        anchor_date: today + 3.months
+      )
+      [pool, category, rule]
     end
 
     it "says a rule changed after the money went out" do
-      pool = rule = nil
-      before_distributing { pool, rule = accumulating("Car Insurance", amount: 1_200) }
-      pointed_at(pool)
-      distribute(pool, 10)
+      category = rule = nil
+      before_distributing { _, category, rule = accumulating("Car Insurance", amount: 1_200) }
+      allocate(category, 10)
       after_distributing { rule.update!(amount: 1_800) }
 
       visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
@@ -226,10 +241,9 @@ RSpec.describe "Categories Show - Pool card", type: :system do
     # The same envelope, the same distribution, the rule never touched afterwards. Without this the
     # positive above would pass against a card that printed the clause unconditionally.
     it "stays silent when the rule was not touched afterwards", :aggregate_failures do
-      pool = nil
-      before_distributing { pool, = accumulating("Car Insurance", amount: 1_200) }
-      pointed_at(pool)
-      distribute(pool, 10)
+      category = nil
+      before_distributing { _, category, = accumulating("Car Insurance", amount: 1_200) }
+      allocate(category, 10)
 
       visit category_path(user.categories.find_by!(name: "Car Insurance Spending"))
 

@@ -170,17 +170,38 @@ class ReallocationPresenter
   # zero, so a submitted blank reads "Amount can't be blank" instead of the arithmetic's "must be
   # greater than 0" — the box is empty, not set to nothing.
   #
-  # THERE IS NO `ledger:` KEYWORD, and its absence is Task 4's, not an oversight. The pool-era twin
-  # took one because HomePresenter built one of these per problem row over the same 22 pools; Home is
-  # still pool-shaped and still holds `PoolReallocationPresenter`, so nothing in the app hands this
-  # class a ledger yet. Task 6 adds the keyword back if converted Home still needs it — the rule it
-  # would have to state is `CategoryLedger#for_as_of!`'s, unchanged.
-  def initialize(user:, to_category: nil, from_category: nil, amount: nil, today: Date.current)
+  # `ledger:` IS BACK (Task 6), for the reason the pool-era twin took one: HomePresenter builds ONE
+  # of these per problem row — see HomePresenter#damage_reader — and each would otherwise open a
+  # `CategoryLedger` of its own over the same holder categories, at the same moment, with no `as_of`
+  # on either. Four grouped queries per red row on the root route.
+  #
+  # THE RULE IS `CategoryLedger#for_as_of!`'s, unchanged and asked rather than assumed: a bounded
+  # ledger describes a different world, and there is no figure this screen could produce from it that
+  # would be right. `nil` is what this class's own ledger carries, so `nil` is what a shared one must.
+  #
+  # SHARING IS SAFE HERE BECAUSE THIS PRESENTER WRITES NOTHING — a ledger is a snapshot memoised at
+  # its first read, so handing one across a write would hand out figures from before it, and both
+  # callers of this class render a GET. `AllocationsController#confirmation_for` builds a FRESH
+  # ledger after its save for exactly that reason.
+  # `rubocop:disable Metrics/ParameterLists` for the sixth KEYWORD, and the cop is counting the wrong
+  # thing here: five of these six are the move itself (who, from where, to where, how much, on what
+  # day) and the sixth is a COST hint that changes no figure — a ledger reproduces each term line for
+  # line, which is the whole of why sharing one is safe. Splitting the move across two objects to
+  # satisfy an arity limit would put the amount and the parties in different places, which is exactly
+  # how they come to disagree (see Candidate's own note on `requested`).
+  # rubocop:disable Metrics/ParameterLists
+  def initialize(user:, to_category: nil, from_category: nil, amount: nil, today: Date.current, ledger: nil)
+    # rubocop:enable Metrics/ParameterLists
     @user = user
     @to_category = to_category
     @from_category = from_category
     @amount = amount.presence&.to_d
     @today = today
+    # CHECKED AT CONSTRUCTION rather than at first read, so a screen holding a ledger from another
+    # moment fails before it can render a single figure out of it. `for_as_of!` returns the ledger
+    # itself on a match, so this reads as a checked handover rather than as a predicate somebody can
+    # forget to branch on.
+    @given_ledger = ledger&.for_as_of!(nil)
   end
 
   # The arithmetic's view of the box: zero when nothing has been typed. Kept apart from #amount so
@@ -467,5 +488,7 @@ class ReallocationPresenter
   # Over the SAME set the offer list is built from, plus `user:` so `#available` is answerable for a
   # user with no holders at all — which is every user before their first rule, and exactly the user
   # who would otherwise see this screen raise instead of saying there is nothing to move.
-  def ledger = @ledger ||= CategoryLedger.new(categories, user: user)
+  #
+  # A CALLER'S LEDGER WINS, and it was checked at construction — see #initialize.
+  def ledger = @ledger ||= @given_ledger || CategoryLedger.new(categories, user: user)
 end

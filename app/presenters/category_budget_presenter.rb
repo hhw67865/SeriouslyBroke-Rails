@@ -68,7 +68,7 @@ class CategoryBudgetPresenter
   def status = @status ||= pool.status(today: today)
 
   # THE ROW VOCABULARY'S FOUR QUESTIONS, so this presenter can be handed straight to
-  # `shared/_pool_status` exactly as `HomePresenter::Row` and `BudgetPagePresenter::Group` are.
+  # `shared/_holding_status` exactly as `HomePresenter::Row` and `BudgetPagePresenter::Group` are.
   #
   # THIS IS THE POINT OF THAT PARTIAL, DEMONSTRATED. The pool card below the block is a NEW caller
   # of `pool_status_label` — the exact method 2c's whole-plan review caught two callers dropping a
@@ -97,17 +97,24 @@ class CategoryBudgetPresenter
   # two screens describing the same envelope differently. `period_closed?` rides on the status's own
   # calculator; this one is a question about the SCREEN's period, which a status cannot answer.
   #
-  # One account — the envelope's — so the clock's one movement query is the whole cost. A pool with
-  # no account answers false through the clock's own missing key rather than through a guard here.
-  # `defined?` rather than `||=`, because the answer is false for most envelopes most of the time
+  # THE CATEGORY ARM (Task 6). This asked the clock about the POOL through its `account_ids:`
+  # surface; that surface is deleted, because there is ONE distribution per period per user now —
+  # one root, one moment (two-ledger spec §2) — so the clock takes a user and answers about the
+  # thing that carries the rules. That is the CATEGORY: `budgets.category_id` is a rule's owner
+  # since Task 5, and this block is about the category the page is showing.
+  #
+  # The rest of this class is still pool-shaped and Task 7 owns it; only the clock moved, because
+  # only the clock's own surface went away underneath it.
+  #
+  # `defined?` rather than `||=`, because the answer is false for most categories most of the time
   # and `||=` re-runs the clock's query on every call for exactly those — the memo would work only
   # where it was not needed.
   def changed_after_distributing?
     return @changed_after_distributing if defined?(@changed_after_distributing)
 
     @changed_after_distributing = DistributionClock
-      .new(user: category.user, account_ids: [pool.account_id], today: today)
-      .changed_after_distributing?(pool)
+      .new(user: category.user, today: today)
+      .changed_after_distributing?(category)
   end
 
   # ---- The buffer arm --------------------------------------------------------------------------
@@ -121,7 +128,7 @@ class CategoryBudgetPresenter
   # disagreed with the panel would send the user to an empty list — or, worse, stay silent over a
   # real one.
   #
-  # `prefill[:category_id]` IS THE ENGINE'S OWN ANSWER to "which category would accepting this
+  # `prefill.dig(:budget, :category_id)` IS THE ENGINE'S OWN ANSWER to "which category would accepting this
   # move", and on this arm it is complete: `SuggestionEngine#envelope_half` sends an account-pointed
   # category down its CREATION branch ("an ACCOUNT is not reusable"), and that is the branch
   # carrying `category_id`. So every dated-bill and rate suggestion about this shape is keyed here.
@@ -134,7 +141,15 @@ class CategoryBudgetPresenter
   def suggestions
     return [] unless proposable?
 
-    @suggestions ||= engine_suggestions.select { |suggestion| suggestion.prefill[:category_id] == category.id }
+    # `dig(:budget, :category_id)` AND NOT `prefill[:category_id]`, WHICH IS A FIX RATHER THAN A
+    # RESPELLING (Task 6, found by this task's canary sweep). Task 5 collapsed the engine's prefill
+    # into ONE hash — `{ budget: { amount:, basis:, category_id: } }` — so that
+    # `new_budget_path(budget: prefill[:budget])` needed no renaming; the flat read left here
+    # answered nil for every suggestion, and this pointer went silent on every category in the app.
+    # Two system examples in `spec/system/categories/show/budget_spec.rb` were red on it.
+    @suggestions ||= engine_suggestions.select do |suggestion|
+      suggestion.prefill.dig(:budget, :category_id) == category.id
+    end
   end
 
   def suggested? = suggestions.any?

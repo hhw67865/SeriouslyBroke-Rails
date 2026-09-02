@@ -10,36 +10,46 @@ RSpec.describe "Home Standing", type: :system do
   end
   let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
-  before { sign_in user, scope: :user }
+  # `checking` FIRST, so it is the account the `:account` trait makes default — every category the
+  # helpers below mint would otherwise pull the factory's own account into being and claim the
+  # nomination, leaving `checking` a second account nothing points at.
+  before do
+    checking
+    sign_in user, scope: :user
+  end
 
+  # A CATEGORY THAT HOLDS MONEY, filled at a rate every period (two-ledger spec §3).
   def envelope(name, amount, priority: 1)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
-    pool
+    category = create(
+      :category,
+      :expense,
+      user: user,
+      name: name,
+      priority: priority,
+      funded_since: Date.current - 1.year
+    )
+    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    category
   end
 
-  # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so the
-  # category here is always Checking's, never `into`'s. The money still ends up in `into` — the
-  # entry lands in Checking and a `transfer` PoolMovement carries the same amount on to `into`,
-  # exactly the write Task 3's routing feature automates for a real "deposit into another
-  # account" choice. Checking's own balance nets to unchanged (income in, movement out); `into`
-  # gains exactly what it always gained.
-  def deposit(amount, into: checking)
+  # INCOME RAISES BOTH LEDGERS AT ONCE (§2): the pot, and available. It lands in main, which is the
+  # only account income may land in.
+  #
+  # `into:` IS DELETED (Task 6) with the question it answered. Money used to be fundable only from
+  # the account it was sitting in, so "deposit into Ally" was a fixture that changed what the
+  # waterfall could reach; an allocation crosses nothing (§2), so where the cash physically sits has
+  # no bearing on available at all.
+  def deposit(amount)
     category = create(:category, :income, user: user, pool: checking)
-    entry = create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
-    return entry if into == checking
-
-    create(:pool_movement, from_pool: checking, to_pool: into, amount: amount, date: Date.current, source_entry: entry)
-    entry
+    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  # A pool attached to no account. Savings pools stay this way until Plan 3's backfill.
-  # `#orphan` IS DELETED WITH THE SHAPE IT BUILT (plan 3, task 6): a pool attached to no account,
-  # which `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` now
-  # refuse — the second past the model. FIVE examples went with it, named where they stood. The
-  # standing band's "of what you need belongs to N pools with no account" clause is KEPT and now
-  # fires for nobody; deleting the orphan apparatus is the follow-up this tightening creates, named
-  # in `Pool::REFUSALS` and in the task 6 report.
+  # SPENDING THAT DRAINS AVAILABLE: an expense category that has never been funded holds nothing, so
+  # its receipts come out of the root (§4's start-date rule).
+  def spend_unbudgeted(amount)
+    category = create(:category, :expense, user: user, name: "Unbudgeted")
+    create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
+  end
 
   it "says you're covered when the money is there", :aggregate_failures do
     envelope("Groceries", 400)
@@ -48,18 +58,10 @@ RSpec.describe "Home Standing", type: :system do
     visit root_path
 
     expect(page).to have_css("h2", text: "You're covered")
-    expect(page).to have_content("$600.00")
+    expect(page).to have_content("$600.00 is still unclaimed after this period")
     expect(page).to have_no_content("short this period")
     expect(page).to have_no_content("overdrawn")
-    # Every pool here has an account, so the covered branch's own orphan clause must not fire.
-    expect(page).to have_no_content("of what you need belongs to")
   end
-
-  # DELETED (plan 3, task 6): "names the unfundable part even when you're covered" and "counts
-  # only the pools the unfundable figure came from when short". Both planted `#orphan` and both
-  # pinned the same care — the clause names a sum and a SIZE side by side, so the two must describe
-  # the same set or a reader dividing one by the other gets a figure about a pool asking for
-  # nothing. See the note on `#orphan`'s deletion above.
 
   it "states the gap when you're short", :aggregate_failures do
     envelope("Groceries", 400)
@@ -71,46 +73,44 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("You need $400.00")
     expect(page).to have_content("You have $150.00")
     expect(page).to have_no_content("You're covered")
-    # Single account, every pool assigned: shortfall IS total_required - available, and
-    # neither explanation may fire on a screen whose figures already reconcile.
-    expect(page).to have_no_content("can't close the gap")
-    expect(page).to have_no_content("with no account")
+    # ONE ROOT, so the two figures above subtract to the headline and there is nothing to explain.
+    # The only clause that can fire here is the negative-available one, and available is $150.
+    expect(page).to have_no_css("[data-available-in-the-red]")
   end
 
-  # DELETED (plan 3, task 6), three more on the same fixture:
+  # ── DELETED (Task 6): four examples on the orphan and stranded-cash clauses.
   #
-  #   * "reconciles the figures when a pool no account can fund is part of what you owe" — the
-  #     headline arithmetic explained when $600 − $100 implies a $500 gap under a $300 headline.
-  #   * "stays silent about a pool with no account that needs nothing this period" — why the clause
-  #     is gated on the FIGURE rather than on `orphan_pools.any?`, which printed "$0.00 of what you
-  #     need belongs to 1 pool". This one had already gone GREEN-BUT-WRONG when the `:pool` factory
-  #     started housing its pools: it asserts an absence, so a housed goal satisfied it too.
-  #   * "keeps the buffer honest when a pool belongs to no account" — `available - total_required`
-  #     would print "-$400.00 stays in your buffer" at a user whose accounts are in order. (It sat
-  #     further down the file, beside the stranded-in-another-account example.)
+  #   * "reconciles the figures when a pool no account can fund is part of what you owe"
+  #   * "stays silent about a pool with no account that needs nothing this period"
+  #   * "keeps the buffer honest when a pool belongs to no account"
+  #   * "explains the arithmetic when money is stranded in another account" — the last live one. It
+  #     planted $1,000 in Ally against a $400 rule in Checking and pinned "$1,000.00 of that sits in
+  #     accounts with nothing left to fund, so it can't close the gap". An allocation crosses no
+  #     account (§2), so that money funds Rent in full and there is no gap to explain.
   #
-  # The other reconciliation clause — money stranded in ANOTHER ACCOUNT — is reachable and is
-  # asserted below; it is the same sentence shape with a live cause.
-
-  # With more than one account the two headline figures cannot be subtracted to reach the
-  # shortfall — the difference is cash sitting where this period's pools cannot reach it.
-  it "explains the arithmetic when money is stranded in another account", :aggregate_failures do
+  # THE STANDING BAND HAS ONE RECONCILIATION CLAUSE LEFT and it is new: available below zero. The
+  # headline stops at what the categories miss, so a root that has been given out past what came in
+  # is the one remaining reason `total_required - available` is not the shortfall.
+  it "explains the arithmetic when available itself is in the red", :aggregate_failures do
     envelope("Rent", 400)
-    deposit(1_000, into: create(:pool, :account, user: user, name: "Ally"))
+    deposit(100)
+    spend_unbudgeted(500)
 
     visit root_path
 
     expect(page).to have_css("h2", text: "$400.00 short")
     expect(page).to have_content("You need $400.00")
-    expect(page).to have_content("You have $1,000.00")
-    expect(page).to have_content("$1,000.00 of that sits in accounts with nothing left to fund")
+    expect(page).to have_content("You have -$400.00")
+    expect(page).to have_css("[data-available-in-the-red]", text: "more has been spent or claimed than came in")
   end
 
   # An overdraft is excluded from both headline figures by design, so the band has to name
   # it or a user $400 down reads "You're covered" and nothing else.
+  # IT TAKES SPENDING TO REACH IT NOW, not an allocation: money a category has claimed has not left
+  # the bank, so the pot only moves when an entry does.
   it "names an overdrawn account beside the figures that exclude it", :aggregate_failures do
     groceries = envelope("Groceries", 400)
-    create(:pool_movement, from_pool: checking, to_pool: groceries, amount: 400)
+    create(:entry, item: create(:item, category: groceries), amount: 400, date: Date.current)
 
     visit root_path
 

@@ -1,48 +1,29 @@
-<%# The attention band: what needs you, then where the money actually went.
+<%# The attention band: what needs you, then where the money actually goes.
     Local: `presenter` (HomePresenter). See the UI design spec §4.2.
 
-    Three kinds of problem, in descending loudness: an overdrawn account (no other band can
-    report it — see HomePresenter#overdrawn_accounts), a pool with no account that is
-    actually asking for money this period (nothing can fund it, and it is deliberately
-    absent from the waterfall below), then the envelopes whose own status needs attention,
-    in the priority order the user ranked them in. `uniq` because a pool can be both
-    unassigned and overdrawn.
+    ONE KIND OF PROBLEM NOW, WHERE THERE WERE THREE (Task 6). The pool era listed an overdrawn
+    ACCOUNT and a pool with no account beside the envelopes whose own status needed attention:
 
-    `orphan_pools_owed`, NOT `orphan_pools` — the middle term is the one that changed and
-    this is why. Every orphan used to count here regardless of status, so a healthy user
-    with five account-less savings goals opened the root route on "You're covered this
-    period" above "5 things need you", with five rows saying nothing can fund goals that
-    were asking for nothing. An account-less savings pool was the ORDINARY shape then, so
-    that was not an edge; it was the common screen.
-
-    IT IS NO SCREEN AT ALL NOW, and the sentence above used to say "is the ORDINARY shape
-    until Plan 3's backfill". The backfill has run: every pool names an account, the model
-    refuses a new orphan and so does a CHECK constraint, so both `orphan_pools_owed` and
-    `orphan_pools` are empty for every user and neither term below contributes a row. The
-    narrowing is still the right narrowing and is recorded because the follow-up that
-    deletes the apparatus has to delete a middle term that is CORRECT rather than one that
-    was a bug. Pool::REFUSALS carries that follow-up's list, and this file is on it.
-
-    `orphan_pools_owed` is exactly the set whose ask #orphan_required is made of, so this
-    heading now counts the same pools the standing band's clause above already names — one
-    set, said twice, rather than two sets a reader has to reconcile. And it loses nothing:
-    an orphan that is ALSO in trouble on its own terms (overdrawn, overdue, behind) is
-    already in `attention_pools` and still counted, still labelled "no account · …" by
-    `pool_problem_label`. What drops out is only the quiet orphan asking for nothing — and
-    the orphans band below still lists every one of them under a heading that says these
-    have no account, which is where "these have no account" belongs. %>
-<% orphans = presenter.orphan_pools %>
-<% problems = (presenter.overdrawn_accounts + presenter.orphan_pools_owed + presenter.attention_pools).uniq %>
+      * The ORPHAN term is gone with the shape. A category belongs to no account and needs none —
+        allocating money moves nothing physical (two-ledger spec §2) — so "nothing can fund this"
+        has no cause left to describe.
+      * The OVERDRAWN ACCOUNT term is gone because the fix beside a row is an ALLOCATION, and an
+        allocation cannot touch the physical ledger. Offering one against a real bank overdraft
+        would be a mistake proposed to fix a problem it cannot reach — the same ruling that keeps a
+        fix off an overdue bill whose category already holds the money. The standing band names the
+        account and the figure in red and the accounts band prints the negative balance; only the
+        button went away. %>
+<% problems = presenter.attention_categories %>
 <% rows = presenter.waterfall %>
 
-<%# The cutoff marks where the cash ran out, which is AFTER the last pool that received any
-    of it: a pool funded $355 of $400 did get money, and the spec's §4.2 waterfall draws the
-    line beneath it.
+<%# The cutoff marks where the cash ran out, which is AFTER the last category that received any of
+    it: one funded $355 of $400 did get money, and the spec's §4.2 waterfall draws the line beneath
+    it.
 
-    ASKED, NOT DECIDED HERE. That rule and its `|| rows.length` fallback used to be written out
-    in this line and again in distributions/_waterfall.html.erb — one money-shaped decision with
-    two readers, both in ERB. HomePresenter#cutoff carries the gate this band needs (one account,
-    and something actually short); Waterfall.cutoff carries the rule, for both screens. %>
+    ASKED, NOT DECIDED HERE. That rule and its `|| rows.length` fallback used to be written out in
+    this line and again in distributions/_waterfall.html.erb — one money-shaped decision with two
+    readers, both in ERB. HomePresenter#cutoff carries the gate this band needs (something actually
+    short); Waterfall.cutoff carries the rule, for both screens. %>
 <% cutoff = presenter.cutoff %>
 
 <section class="bg-white border border-gray-200 rounded" aria-labelledby="attention-heading">
@@ -53,88 +34,82 @@
       <% elsif presenter.covered? %>
         Nothing needs you
       <% else %>
-        <%# Real state, not a corner: every rate envelope reads `left_to_spend`, so a period
-            can be short with no pool flagged. "Nothing needs you" above a gap is the exact
-            failure this band exists to prevent. %>
+        <%# Real state, not a corner: every rate category reads `left_to_spend`, so a period can be
+            short with nothing flagged. "Nothing needs you" above a gap is the exact failure this
+            band exists to prevent. %>
         Nothing is flagged, but you're still short
       <% end %>
     </h3>
   </div>
 
-  <% problems.each do |pool| %>
-    <% status = presenter.status_for(pool) %>
-    <% fix = presenter.fix_for(pool) %>
+  <% problems.each do |category| %>
+    <% status = presenter.status_for(category) %>
+    <% fix = presenter.fix_for(category) %>
     <div class="px-6 py-3 border-b border-gray-100 <%= "bg-status-danger-light" if status.state == :overdrawn %>"
-         data-problem-pool="<%= pool.name %>">
+         data-problem-category="<%= category.name %>">
       <div class="flex justify-between items-baseline">
-        <span class="font-medium text-gray-900"><%= pool.name %></span>
+        <span class="font-medium text-gray-900"><%= category.name %></span>
         <span class="text-sm text-status-danger">
           <%# `changed_after_distributing:` through the presenter, never a query of the partial's
               own — same reason as `status` above: the period this compares against is
               `presenter.today`'s, and a band reaching for `Date.current` here would date the
-              distribution differently from every other figure on the screen. Silent on every
-              state but `:behind` (HomeHelper#pool_status_label owns that gate). %>
+              distribution differently from every other figure on the screen. Silent on every state
+              but `:behind` (HomeHelper#pool_status_label owns that gate). %>
           <%= pool_problem_label(status,
-                                 orphan: orphans.include?(pool),
-                                 changed_after_distributing: presenter.changed_after_distributing?(pool)) %>
+                                 changed_after_distributing: presenter.changed_after_distributing?(category)) %>
         </span>
       </div>
 
-      <%# THE FIX (spec §4.2). Every problem gains a specific, clickable answer naming a source
-          that can genuinely cover it — or, when nothing can, says so in words rather than
-          offering a dead button.
+      <%# THE FIX (spec §4.2). Every problem gains a specific, clickable answer naming a source that
+          can genuinely cover it — or, when nothing can, says so in words rather than offering a
+          dead button.
 
-          FIVE BRANCHES, AND EACH IS A DIFFERENT ANSWER RATHER THAN THE SAME ONE SAID FIVE WAYS.
-          Four of them decline to offer a button, and they decline for reasons that send the
-          reader to four different places, so collapsing them would be the same defect as a
-          silent row:
+          FOUR BRANCHES, AND EACH IS A DIFFERENT ANSWER RATHER THAN THE SAME ONE SAID FOUR WAYS.
+          Three of them decline to offer a button, and they decline for reasons that send the reader
+          to three different places, so collapsing them would be the same defect as a silent row:
 
-          1. NO ACCOUNT. No account's money can reach this pool whatever anyone moves, and it has
-             no gap to name either — PoolStatus#amount is that pool's own BALANCE in the quiet
-             states an owed orphan reaches, which read "Retirement Supplement … $545.00" on the
-             demo seeds. HomePresenter#fix_for returns nil for it.
-          2. THE MONEY IS ALREADY THERE. An overdue bill fires on a DATE and a missing payment,
-             not on the balance, so an envelope holding every penny of its premium is still red.
-             PoolStatus#funding_gap is zero, and the honest answer is that the bill needs paying
+          1. THE MONEY IS ALREADY THERE. An overdue bill fires on a DATE and a missing payment, not
+             on the balance, so a category holding every penny of its premium is still red.
+             HoldingStatus#funding_gap is zero, and the honest answer is that the bill needs paying
              rather than funding — the same sentence the distribution screen's alerts band prints
-             about the same pool, in the same voice. Offering to move money in here would have
-             the user make a real mistake to fix an imaginary problem.
-          3. THE MONEY IS COMING. Same principle one step out: the waterfall below this row funds
-             this pool's whole ask, so a move today would rob one envelope to solve something the
-             next distribution solves by itself. Read off that same waterfall rather than
-             recomputed, so the two bands cannot contradict each other — see
-             HomePresenter#covered_by_waterfall?.
-          4. NOTHING CAN COVER IT. Every sibling was asked; see HomeHelper#fix_gap_sentence.
-          5. A SOURCE — the button, and its consequence.
+             about the same category, in the same voice.
+          2. THE MONEY IS COMING. Same principle one step out: the waterfall below this row funds
+             this category's whole ask, so a move today would rob another to solve something the next
+             distribution solves by itself. Read off that same waterfall rather than recomputed, so
+             the two bands cannot contradict each other — see HomePresenter#covered_by_waterfall?.
+          3. NOTHING CAN COVER IT. Every other party was asked, AVAILABLE included; see
+             HomeHelper#fix_gap_sentence.
+          4. A SOURCE — the button, and its consequence.
 
-          The consequence line is PoolMovementsHelper's, off PoolReallocationPresenter::Candidate —
-          the same sentence, from the same Data object, that the screen this button opens will
-          print half a second later. There is one answer to "what would this move cost", and
-          PoolReallocationPresenter::source_order is likewise the one answer to "from where". %>
-      <% if fix.nil? %>
-        <p class="text-sm text-gray-600 mt-2">Assign it to an account before any money can reach it.</p>
-      <% elsif !fix.needs_money? %>
+          THE FIFTH BRANCH IS DELETED: "no account — assign it to one before any money can reach
+          it". `HomePresenter#fix_for` used to answer nil for an orphan pool, and there is no orphan.
+
+          The consequence line is AllocationsHelper's, off ReallocationPresenter::Candidate — the
+          same sentence, from the same Data object, that the screen this button opens will print
+          half a second later. There is one answer to "what would this move cost", and
+          ReallocationPresenter.source_order is likewise the one answer to "from where". %>
+      <% if !fix.needs_money? %>
         <p class="text-sm text-gray-600 mt-2">Its money is already there — this needs paying, not funding.</p>
       <% elsif fix.covered? %>
         <p class="text-sm text-gray-600 mt-2">Its money is coming — the next distribution funds this in full.</p>
       <% else %>
-        <% fix_path = { to_pool_id: pool.id, amount: fix.amount_param } %>
+        <% fix_path = { to_category_id: category.id, amount: fix.amount_param } %>
         <div class="mt-2">
           <% if fix.source %>
             <p class="text-sm text-gray-600 mb-2">This has to come from money you already have.</p>
             <div class="flex flex-wrap gap-2">
               <%= link_to fix_button_label(fix),
-                          new_pool_movement_path(**fix_path, from_pool_id: fix.source.id),
+                          new_allocation_path(**fix_path, from_category_id: fix.source.id),
                           class: "btn btn-primary" %>
-              <%# No `from_pool_id`: the reallocation screen takes any subset of the three, so this
-                  arrives with the destination and the amount filled in and every source still to
-                  choose from — including the ones this band declined to propose. %>
-              <%= link_to "Take from another pool…",
-                          new_pool_movement_path(**fix_path),
+              <%# No `from_category_id`: the reallocation screen takes any subset of the three, so
+                  this arrives with the destination and the amount filled in and every source still
+                  to choose from — including the ones this band declined to propose. %>
+              <%= link_to "Take from somewhere else…",
+                          new_allocation_path(**fix_path),
                           class: "btn btn-secondary" %>
             </div>
-            <p class="text-sm mt-2 <%= reallocation_damage_class(fix.candidate) %>">
-              <%= reallocation_pool_name(fix.source) %> <%= reallocation_damage_sentence(fix.candidate) %>
+            <p class="text-sm mt-2 <%= allocation_damage_class(fix.candidate) %>">
+              <%= fix.source.name %> <%= allocation_damage_sentence(fix.candidate) %>
             </p>
           <% else %>
             <p class="text-sm text-gray-600"><%= fix_gap_sentence(fix) %></p>
@@ -146,38 +121,29 @@
 
   <%# Whenever there is a gap OR something needs you.
 
-      It used to be the gap alone, and that suppressed the plan on exactly the screen that
-      needed it: `won't make it · Aug 18` rendered under "You're covered this period" with no
-      way to see that this period's distribution funds the bill in full. PoolStatus describes
-      the pool NOW, the waterfall describes the plan, and showing the warning while hiding its
-      own resolution is the worst combination of the two.
+      It used to be the gap alone, and that suppressed the plan on exactly the screen that needed
+      it: `won't make it · Aug 18` rendered under "You're covered this period" with no way to see
+      that this period's distribution funds the bill in full. HoldingStatus describes the category
+      NOW, the waterfall describes the plan, and showing the warning while hiding its own resolution
+      is the worst combination of the two.
 
-      Still silent when nothing is short and nothing is flagged, which is principle 3 intact:
-      there is no consequence to report on a screen with no problems on it.
+      Still silent when nothing is short and nothing is flagged, which is principle 3 intact.
 
-      And `rows.any?` first, because "something needs you" is NOT the same question as "is
-      there a plan to show". Two of the three kinds of problem — an overdrawn account and an
-      account-less pool — have no waterfall row at all, and the zero-need reject can empty the
-      list outright, so this heading could render over nothing. On a money screen an empty
-      headed band reads as data that failed to load. %>
+      And `rows.any?` first, because "something needs you" is NOT the same question as "is there a
+      plan to show": the zero-ask reject can empty the list outright, so this heading could render
+      over nothing, and on a money screen an empty headed band reads as data that failed to load. %>
   <% if rows.any? && (!presenter.covered? || problems.any?) %>
     <div class="px-6 py-4 border-t border-gray-200" aria-labelledby="waterfall-heading">
-      <%# Sentence case, not the `uppercase` treatment this codebase gives short labels like
-          "Current Balance": that renders as WHERE YOUR MONEY WENT, which shouts a whole
-          sentence — and it is the literal copy the design spec asks for. %>
-      <%# Present tense, not "went": this band has never described a completed distribution —
-          it describes what the NEXT one would do. Past tense was tolerable while it only
-          appeared on a short screen, where a shortfall reads like something that already
-          happened to you; it now renders on covered screens too, above a plan that plainly
-          has not run. The design spec is being corrected to match. %>
+      <%# Sentence case, not the `uppercase` treatment this codebase gives short labels: that renders
+          as WHERE YOUR MONEY GOES, which shouts a whole sentence — and it is the literal copy the
+          design spec asks for. Present tense, because this band has never described a completed
+          distribution: it describes what the NEXT one would do. %>
       <%# THE TWO BANDS ANSWER DIFFERENT QUESTIONS AND MUST SAY SO. The rows above offer
-          `Take $553.85` — PoolStatus#funding_gap, the whole cumulative hole, read from the live
-          balance. The rows below print `$35.00 of $171.43` — #required, THIS period's share of
-          it, post-sweep. Both figures are right and both are wanted (see
-          HomePresenter#fix_amount_for), and on the demo they sit inches apart on one screen with
-          nothing telling the reader they are measured over different spans. That is the bridge,
-          and it belongs in the band's own framing rather than as a seventh clause on every row:
-          "the whole hole" above, "what this period puts in it" below. %>
+          `Take $553.85` — HoldingStatus#funding_gap, the whole cumulative hole, read from the live
+          holding. The rows below print `$35.00 of $171.43` — #required, THIS period's share of it,
+          post-sweep. Both figures are right and both are wanted (see HomePresenter#fix_amount_for),
+          and on the demo they sit inches apart on one screen. That is the bridge, and it belongs in
+          the band's own framing rather than as a seventh clause on every row. %>
       <div class="flex items-baseline justify-between gap-4 mb-2">
         <div>
           <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500">Where your money goes</p>
@@ -186,12 +152,8 @@
           </p>
         </div>
         <%# THE ACTION THIS BAND IS DESCRIBING, one click away. Home tells a user "the next
-            distribution funds this in full" and, until this link existed, gave them no way to
-            reach it: `new_distribution_path` appeared nowhere in `app/` outside the distributions
-            controller and its own views, so the only way to split a paycheck was to type the URL.
-            The sidebar carries the same link for the screens where this band does not render.
-
-            `turbo_prefetch: false` because this GET takes write locks — see
+            distribution funds this in full" and, until this link existed, gave them no way to reach
+            it. `turbo_prefetch: false` because this GET takes write locks — see
             shared/_nav_section.html.erb, where the same link says why at length. %>
         <%= link_to "Distribute this period",
                     new_distribution_path,
@@ -199,10 +161,10 @@
                     data: { turbo_prefetch: false } %>
       </div>
 
-      <%# Two groups rather than a flag inside one loop: the cutoff is then written once and
-          renders correctly at either edge — before every row when the first pool got nothing,
-          and after the last row when the money ran out inside it. A nil cutoff (several
-          accounts) leaves one group, and no line. %>
+      <%# Two groups rather than a flag inside one loop: the cutoff is then written once and renders
+          correctly at either edge — before every row when the first category got nothing, and after
+          the last row when the money ran out inside it. A nil cutoff (nothing short) leaves one
+          group, and no line. %>
       <% groups = cutoff ? [rows.first(cutoff), rows.drop(cutoff)] : [rows] %>
       <% groups.each_with_index do |group, index| %>
         <% if index == 1 %>
@@ -212,7 +174,7 @@
         <% end %>
         <% group.each do |row| %>
           <div class="flex justify-between text-sm py-1">
-            <span class="text-gray-900"><%= row[:pool].name %></span>
+            <span class="text-gray-900"><%= row[:category].name %></span>
             <span class="text-gray-600">
               <%= number_to_currency(row[:funded]) %> of <%= number_to_currency(row[:needed]) %>
             </span>

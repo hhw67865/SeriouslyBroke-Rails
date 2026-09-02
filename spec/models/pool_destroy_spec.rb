@@ -307,10 +307,11 @@ RSpec.describe Pool, "#destroy", type: :model do
   # That is written down rather than dressed up: re-planting the fixture by clearing `account` in
   # memory before `destroy` (which skips validations) would make every example pass again while
   # testing a shape no caller produces, and a fake test is worse than an acknowledged gap. The
-  # deletion of the orphan apparatus — these guards, `HomePresenter#orphan_pools` and its
-  # attention band, `BudgetPagePresenter#orphan_rules`, `PoolReallocationPresenter`'s "No account"
-  # group — is the follow-up this tightening creates, and it is larger than the task that created
-  # it.
+  # deletion of the orphan apparatus was the follow-up this tightening created, and it HAS RUN:
+  # `BudgetPagePresenter#orphan_rules` and the Budget page's band went in two-ledger Task 5,
+  # `PoolReallocationPresenter` and its "No account" group are deleted whole, and Task 6 took
+  # `HomePresenter#orphan_pools`, its attention band and `home/_orphans`. What is left is these
+  # guards and `Pool::REFUSALS`, which die with the pool layer in Task 8.
   #
   # What replaces them is the destroy this task DID make reachable: an account whose categories
   # still point at it.

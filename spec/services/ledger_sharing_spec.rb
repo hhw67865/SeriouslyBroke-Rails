@@ -6,12 +6,13 @@ require "rails_helper"
 #
 # Four classes take part: PoolBalanceLedger owns the rule (#for_as_of!) and CategoryLedger states
 # it verbatim on the purpose side, AllocationCalculator shares one with another fill of itself
-# through a `protected` writer, and PoolPoolReallocationPresenter accepts one from HomePresenter
-# through a documented keyword.
+# through a `protected` writer, and ReallocationPresenter accepts one from HomePresenter through a
+# documented keyword.
 #
-# THE `AllocationCalculator` HALF IS OVER CATEGORIES SINCE TASK 4 and its ledger is a
-# `CategoryLedger`; the presenter half is still the pool-era twin, and moves to
-# `PoolReallocationPresenter` with Home in Task 6. What is pinned here is the SEAM —
+# BOTH HALVES ARE OVER CATEGORIES SINCE TASK 6, and the ledger both of them share is a
+# `CategoryLedger`. `PoolBalanceLedger#for_as_of!` is still the rule's home and is still asserted
+# here, because it is the class the purpose-side one was written from. What is pinned here is the
+# SEAM —
 # who may hand a ledger to whom, and what happens when the two are about different moments. What
 # each class MEANS is measured where it always was: pool_balance_ledger_spec for the terms,
 # allocation_calculator_spec for the fill, allocation_committer_spec for the write. Restating any
@@ -133,34 +134,41 @@ RSpec.describe "ledger sharing", type: :model do
     end
   end
 
-  describe "PoolReallocationPresenter's ledger keyword" do
-    before { groceries }
+  # ── `PoolReallocationPresenter` IS DELETED (Task 6) and this describe moved onto its successor,
+  # example for example. The ledger is a `CategoryLedger` now, and the caller is still HomePresenter
+  # — which builds ONE of these per problem row and would otherwise open a ledger per red row on the
+  # root route.
+  describe "ReallocationPresenter's ledger keyword" do
+    let!(:food) { create(:category, :expense, :funded, user: user, name: "Food", priority: 1) }
+
+    def unbounded_categories = CategoryLedger.new([food], user: user)
+    def bounded_categories = CategoryLedger.new([food], user: user, as_of: bound)
 
     it "uses the ledger it was given rather than building one" do
-      ledger = unbounded
-      presenter = PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: ledger)
+      ledger = unbounded_categories
+      presenter = ReallocationPresenter.new(user: user, to_category: food, today: today, ledger: ledger)
 
       expect(presenter.send(:ledger)).to equal(ledger)
     end
 
     it "builds its own when it is given none" do
-      presenter = PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today)
+      presenter = ReallocationPresenter.new(user: user, to_category: food, today: today)
 
-      expect(presenter.send(:ledger)).to be_a(PoolBalanceLedger)
+      expect(presenter.send(:ledger)).to be_a(CategoryLedger)
     end
 
     # The guard fires at CONSTRUCTION rather than at first read, so a screen holding a ledger from
     # another moment fails before it can render a figure from it.
     it "refuses a ledger bounded at another moment, at construction" do
-      expect { PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: bounded) }
-        .to raise_error(PoolBalanceLedger::AsOfMismatch, /one ledger per `as_of`/)
+      expect { ReallocationPresenter.new(user: user, to_category: food, today: today, ledger: bounded_categories) }
+        .to raise_error(CategoryLedger::AsOfMismatch, /one ledger per `as_of`/)
     end
 
     # HomePresenter's own ledger is unbounded, which is the pair this guard has to let through.
     it "accepts the unbounded ledger Home actually hands it" do
       home = HomePresenter.new(user: user, today: today)
 
-      expect { PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: home.send(:ledger)) }
+      expect { ReallocationPresenter.new(user: user, to_category: food, today: today, ledger: home.send(:ledger)) }
         .not_to raise_error
     end
   end

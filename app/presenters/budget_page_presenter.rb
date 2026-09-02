@@ -24,7 +24,7 @@ class BudgetPagePresenter
   # own, and its #balance is the category's holdings — the same object, so the header's state and
   # its figure cannot disagree, and the page does not build a second calculator to ask.
   #
-  # THE MEMBER NAMES THE VOCABULARY READS ARE UNCHANGED, and deliberately so: `shared/_pool_status`
+  # THE MEMBER NAMES THE VOCABULARY READS ARE UNCHANGED, and deliberately so: `shared/_holding_status`
   # renders `HomePresenter::Row`, this and `CategoryBudgetPresenter` off ONE set of questions
   # (#status, #needs_attention?, #period_closed?, #changed_after_distributing?, #due_marker?,
   # #balance_clause?), and Home does not move onto categories until Task 6. Renaming the shared
@@ -42,7 +42,7 @@ class BudgetPagePresenter
     delegate :priority, to: :category
 
     # THE ROW VOCABULARY'S FOUR QUESTIONS, so this Data and `HomePresenter::Row` answer the same
-    # set and `shared/_pool_status` can render either without asking which screen it is on. These
+    # set and `shared/_holding_status` can render either without asking which screen it is on. These
     # two rode straight off `status` in the partial before; through the group they are the group's,
     # which is what stops a caller threading one suffix and forgetting the other (see
     # HomePresenter::Row's header for the two times that happened).

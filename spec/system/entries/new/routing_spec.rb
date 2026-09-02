@@ -57,12 +57,15 @@ RSpec.describe "Entries New Routing", type: :system do
     expect(page).to have_content("Entry was successfully created")
   end
 
-  # $1,000 is the only money in this fixture, so every buffer on Home is either all of it or none.
+  # $1,000 is the only money in this fixture, so every account balance on Home is either all of it or
+  # none. `data-account-group` and `balance now` since Task 6: nothing is housed inside an account
+  # any more, so the header carries the whole of what the bank says rather than the cash net of the
+  # envelopes inside it, and the word "buffer" moved to AVAILABLE on the purpose side.
   def expect_home_buffers(checking:, ally:)
     visit root_path
 
-    within("[data-pool-group='Checking']") { expect(page).to have_content("buffer now #{checking}") }
-    within("[data-pool-group='Ally']") { expect(page).to have_content("buffer now #{ally}") }
+    within("[data-account-group='Checking']") { expect(page).to have_content("balance now #{checking}") }
+    within("[data-account-group='Ally']") { expect(page).to have_content("balance now #{ally}") }
   end
 
   describe "the question" do

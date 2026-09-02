@@ -1,62 +1,49 @@
-<%# One account and the pools that live inside it. See the UI design spec §4.3.
+<%# ONE ACCOUNT, AND NOTHING INSIDE IT (two-ledger spec §2). See the UI design spec §4.3.
     Locals: `presenter` (HomePresenter), `account` (a Pool of type account).
 
-    The header carries the account's buffer — `current_buffer_for`, the cash sitting there
-    right now, NOT the presenter's #projected_buffer, which is a period-wide figure the
-    standing band already states. A target on an account is the buffer marker (a health
-    line, never a cap), so it is only shown when the user set one. %>
-<% buffer = presenter.current_buffer_for(account) %>
-<section class="bg-white border border-gray-200 rounded" data-pool-group="<%= account.name %>">
+    THE POOLS NESTED HERE ARE GONE (Task 6). An account used to hold its envelopes, so this section
+    rendered `presenter.pools_for(account)` beneath the header; a category lives nowhere and holds
+    its own money, so an account has exactly one thing to say — what the bank says — and the
+    categories band above says the rest.
+
+    The header carries `balance_of`, which for MAIN is the pot. It was `current_buffer_for`, and the
+    word moved with the model: a "buffer" was an account's cash NET of the envelopes housed in it,
+    and there is no such remainder now. The distribute screen calls AVAILABLE the buffer, so keeping
+    the word here would have put one noun over two quantities on one screen. A target on an account
+    is the buffer marker (a health line, never a cap), so it is only shown when the user set one. %>
+<% balance = presenter.balance_of(account) %>
+<section class="bg-white border border-gray-200 rounded" data-account-group="<%= account.name %>">
   <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
-    <%# Not the `uppercase` eyebrow the brief drafted and this codebase gives short labels
-        like "Current Balance": an account name is a proper noun the user typed, and
-        rendering "Ally Savings" as ALLY SAVINGS shouts a name back at them. Same weight as
-        the attention band's heading, since both are the title of a band. %>
+    <%# Not the `uppercase` eyebrow this codebase gives short labels like "Current Balance": an
+        account name is a proper noun the user typed, and rendering "Ally Savings" as ALLY SAVINGS
+        shouts a name back at them. %>
     <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
-    <%# An overdraft is the loudest thing in the app and this is the row that owns the
-        number, so it says so here too rather than leaving the standing band's sentence as
-        the only place a negative buffer is visible. %>
-    <%# "now", and "target" rather than "of". The standing band prints a buffer too — the
-        period-wide figure left AFTER this period's funding — so without the two time words
-        one screen said "buffer" of two different quantities and left the reader to guess.
-        And "of $2,000.00" reads as a denominator without saying what it measures: a target
-        on an account is the buffer marker the user set, a health line and never a cap, so
-        the label has to say the word. %>
-    <span class="text-sm <%= buffer.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
-      buffer now <strong><%= number_to_currency(buffer) %></strong>
+    <%# An overdraft is the loudest thing in the app and this is the row that owns the number, so
+        it says so here too rather than leaving the standing band's sentence as the only place a
+        negative balance is visible. %>
+    <span class="text-sm <%= balance.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
+      balance now <strong><%= number_to_currency(balance) %></strong>
       <% if account.target_amount.present? %>
-        <span class="<%= buffer.negative? ? "text-status-danger" : "text-gray-400" %>">
+        <span class="<%= balance.negative? ? "text-status-danger" : "text-gray-400" %>">
           · target <%= number_to_currency(account.target_amount) %>
         </span>
       <% end %>
     </span>
   </div>
 
-  <% pools = presenter.pools_for(account) %>
-  <% pools.each do |pool| %>
-    <%= render "pool_row", pool: pool, presenter: presenter %>
-  <% end %>
-
-  <%# Said plainly rather than left as an empty card: an account with no envelopes is a
-      setup state, and a blank panel reads as something that failed to load. %>
-  <%# ONBOARDING STEP 2 (main-account spec §5): `HomePresenter#awaiting_funding?` is the ONE
-      gate (fix round 2 — MED-1/2/3), asked here and by AccountFundingsController. Deliberately
-      NOT `pools.empty?` any more: an envelope created before its account is ever funded is
-      still a fresh, unfunded account, and gating on "no pools" left it permanently stuck —
-      the card never rendered for it at all. %>
+  <%# ONBOARDING STEP 2 (main-account spec §5): `HomePresenter#awaiting_funding?` is the ONE gate,
+      asked here and by AccountFundingsController. It reads `AccountLedger#balance_of` now — money
+      is the only signal, and there is no envelope inside an account whose existence could ever
+      have stood in for one. %>
   <% if presenter.awaiting_funding?(account) %>
     <%= render "fund_account",
         account: account,
         movement: presenter.funding_movement_for(account),
         main_account: presenter.user.default_account %>
-  <% elsif pools.empty? %>
-    <p class="px-6 py-3 text-sm text-gray-500">No pools in this account yet.</p>
   <% end %>
 
   <%# ONBOARDING STEP 3 (main-account spec §5): renders under MAIN alone, and only while the
-      one-time latch is open — `HomePresenter#awaiting_opening_balance?` is the one gate,
-      independent of whether main already holds envelopes, exactly as `awaiting_funding?` above
-      does not wait for an account's pools to be empty either. %>
+      one-time latch is open — `HomePresenter#awaiting_opening_balance?` is the one gate. %>
   <% if presenter.awaiting_opening_balance?(account) %>
     <%= render "opening_balance", account: account %>
   <% end %>

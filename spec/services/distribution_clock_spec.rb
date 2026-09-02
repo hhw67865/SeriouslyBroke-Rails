@@ -202,129 +202,22 @@ RSpec.describe DistributionClock do
     end
   end
 
-  # ── THE POOL-ERA ARM, kept alive for the three screens that have not converted yet. DELETED BY
-  # TASKS 5 AND 6, in the commit that takes `account_ids:` off the last caller. Nothing below changed
-  # with the cutover.
-  describe "over the pool ledger, until Tasks 5 and 6 move its callers" do
-    def clock = described_class.new(user: user, account_ids: user.pools.accounts.ids, today: today)
-
-    def rent_envelope
-      @rent_envelope ||= create(:pool, :budget_pool, user: user, account: checking, name: "Rent", priority: 1)
-    end
-
-    def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
-
-    def distribute(amount, at: distributed_on, kind: :allocation, on: today)
-      travel_to(at) do
-        create(:pool_movement, kind: kind, from_pool: checking, to_pool: rent_envelope, amount: amount, date: on)
-      end
-    end
-
-    it "is true when a rule was raised after this period's distribution" do
-      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
-      distribute(400)
-      raise_rule(rule, to: 470, at: distributed_on + 2.hours)
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(true)
-    end
-
-    it "is false when the rule was last touched before the distribution" do
-      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
-      raise_rule(rule, to: 470, at: distributed_on - 1.hour)
-      distribute(470)
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
-    end
-
-    it "is false when nothing has been distributed this period" do
-      travel_to(distributed_on) { rate(rent_envelope, 400) }
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
-    end
-
-    # A REALLOCATION IS NOT A DISTRIBUTION. `PoolMovement.distributed` is allocations and sweeps; a
-    # `transfer` is the reallocation screen moving money by hand, and it hands nothing out. Written
-    # with the same shape and the same clock as the positive example, so only the `kind` differs.
-    it "is false when the only movement this period is a transfer" do
-      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
-      distribute(400, kind: :transfer)
-      raise_rule(rule, to: 470, at: distributed_on + 2.hours)
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
-    end
-
-    # LAST PERIOD'S DISTRIBUTION IS NOT THIS ONE'S. The clause explains a flip that happened since
-    # the money was handed out; a split from a fortnight ago says nothing about it, and reading it
-    # would mark every rule edited since as "raised after distributing" forever.
-    #
-    # `on:` puts the split in the PREVIOUS biweekly period (the user is anchored to Feb 6, so this
-    # period opens that day and the one before it ran Jan 23 – Feb 5). Both the `date` and the
-    # `created_at` fall outside; it is the `date` bound that excludes it.
-    it "is false when the only distribution belongs to an earlier period" do
-      rule = travel_to(distributed_on - 20.days) { rate(rent_envelope, 400) }
-      distribute(400, at: distributed_on - 18.days, on: today - 14.days)
-      raise_rule(rule, to: 470, at: distributed_on - 17.days)
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
-    end
-
-    # THE TOUCH CASCADE, MEASURED RATHER THAN REASONED ABOUT. `touch: true` is everywhere on this
-    # schema — `PoolMovement belongs_to :from_pool/:to_pool, touch: true`, and a pool touches its
-    # user — and if any of it reached `budgets` this clause would fire on every user who distributed
-    # and changed nothing. It does not: `Budget belongs_to :pool, touch: true` points the other way,
-    # and no association anywhere declares `belongs_to :budget, touch: true`.
-    #
-    # Asserted on the COLUMN and then on the reader, because the second alone would pass if the
-    # comparison were broken in the same direction as the cascade.
-    it "is not moved by the distribution's own touch cascade", :aggregate_failures do
-      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
-      before_at = rule.reload.updated_at
-
-      distribute(400)
-
-      expect(rule.reload.updated_at).to eq(before_at)
-      expect(rent_envelope.reload.updated_at).to be > before_at
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(false)
-    end
-
-    # A SWEEP DATES A DISTRIBUTION TOO — the branch that reads the movement's OTHER end.
-    it "counts a sweep as this period's distribution" do
-      rule = travel_to(distributed_on - 1.day) { rate(rent_envelope, 400) }
-      travel_to(distributed_on) do
-        create(:pool_movement, kind: :sweep, from_pool: rent_envelope, to_pool: checking, amount: 50, date: today)
-      end
-      raise_rule(rule, to: 470, at: distributed_on + 2.hours)
-
-      expect(clock.changed_after_distributing?(rent_envelope)).to be(true)
-    end
-
-    # A pool with no account has no distribution to be after — nothing can fund it at all — and a
-    # missing key must read as "no distribution" rather than raise.
-    it "is false for a pool no account can reach" do
-      orphan = create(:pool, user: user, name: "Retirement Supplement", target_amount: 5_000, priority: 1)
-      travel_to(distributed_on) { create(:pool_budget, :per_period_rate, pool: orphan, amount: 150) }
-      distribute(400)
-
-      expect(clock.changed_after_distributing?(orphan)).to be(false)
-    end
-
-    # THE EMPTY SET COSTS NO QUERY, and it is also what tells the two arms apart: `account_ids: []` is
-    # a real pool-era question about a user with no accounts, while omitting the keyword is a caller
-    # that has stopped asking about accounts at all. Asserted by counting statements, because the
-    # RESULT is the same either way.
-    it "asks the database nothing when there are no accounts", :aggregate_failures do
-      rate(rent_envelope, 400)
-      statements = 0
-      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
-        statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/)
-      end
-
-      empty = described_class.new(user: user, account_ids: [], today: today)
-
-      expect(empty.changed_after_distributing?(rent_envelope)).to be(false)
-      expect(statements).to eq(0)
-    ensure
-      ActiveSupport::Notifications.unsubscribe(subscriber)
-    end
-  end
+  # ── THE POOL-ERA ARM IS DELETED (Task 6), and its whole describe with it: nine examples over
+  # `account_ids:`, `PoolMovement.distributed` and the per-account map.
+  #
+  #   * "is true when a rule was raised after this period's distribution"
+  #   * "is false when the rule was last touched before the distribution"
+  #   * "is false when nothing has been distributed this period"
+  #   * "is false when the only movement this period is a transfer"
+  #   * "is false when the only distribution belongs to an earlier period"
+  #   * "is not moved by the distribution's own touch cascade"
+  #   * "counts a sweep as this period's distribution"
+  #   * "is false for a pool no account can reach"
+  #   * "asks the database nothing when there are no accounts"
+  #
+  # EVERY CLAIM OF THE NINE IS ALREADY ASKED OF THE CATEGORY ARM ABOVE except the last two, and both
+  # of those are about the arm rather than about the clause: the missing key that made an orphan
+  # answer false, and the zero-query short-circuit that told `account_ids: []` apart from an omitted
+  # keyword. There is one root and one distribution per period now (two-ledger spec §2), so there is
+  # no map to miss a key in and no empty set to short-circuit.
 end

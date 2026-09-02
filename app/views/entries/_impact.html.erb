@@ -9,7 +9,7 @@
         ▓▓▓▓▓▓░░░░░░
 
     NO STATUS VOCABULARY ANYWHERE ON IT (plan decision 1) — no "behind", no "on track", no band of
-    colour standing in for one. `PoolStatus` is not consulted here or in the browser. What is
+    colour standing in for one. `HoldingStatus` is not consulted here or in the browser. What is
     printed is a name, two figures, a date and a bar.
 
     EVERY FIGURE IS SERVER-RENDERED AND CORRECT ON ARRIVAL. The Stimulus controller re-reads the two
@@ -18,28 +18,29 @@
     with, which on edit is the entry's own. %>
 <% if impact&.render? %>
   <% if impact.unbudgeted? %>
-    <%# THE HONEST CARD (plan decision 2). Two shapes land here — no pool at all, and a pool that IS
-        an account — and the second is the same sentence as the first because an account is the
-        buffer (§7.1), not an envelope. Unpooled spending leaving the pool tree is this branch's
-        known residual; pretending otherwise on the one screen where the user is about to create
-        some would be the worst place to do it.
+    <%# THE HONEST CARD (plan decision 2). ONE shape lands here now: a category that is not holding
+        money on the day of this entry, so the spending drains AVAILABLE — money with no job yet
+        (two-ledger spec §2). It covers both a category that has never been funded and a funded one
+        asked about a day BEFORE its `funded_since`, which is `Category#counts_spending_on?`, the
+        app's one Ruby mirror of the ledger's own rule.
 
-        THE REGISTER IS THE SUGGESTION ENGINE'S OWN — `_suggestion_rate.html.erb` says "currently
-        comes out of your buffer" of exactly this population (`Category#buffer_funded?`), so a user
-        who meets the sentence here and the offer there is reading one app. And it points at the
-        Budget page, which is where the offer to fix it lives. %>
-    <%# ONE ARM (plan 3, task 5). It had two: a SAVINGS category with nowhere to land got its own
-        sentence and pointed at `/pools/new`, because a contribution does not come out of the
-        buffer, it stays in it. There is no savings category any more, and every card that reaches
-        here describes spending. %>
+        IT USED TO BE TWO SHAPES said as one sentence — no pool at all, and a pool that IS an
+        account — because an account was the buffer (§7.1) and nothing reserved money sitting in
+        one. The pool has gone and the date has arrived: a category can hold money and still send
+        THIS receipt to available.
+
+        THE REGISTER IS THE BUDGET PAGE'S OWN — its rate suggestion says a category's spending
+        "currently comes out of what's available" of exactly this population, so a user who meets
+        the sentence here and the offer there is reading one app. And it points at the Budget page,
+        which is where the rule that starts a category holding money is written. %>
     <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
          data-impact-card="unbudgeted">
       <p class="text-sm font-medium text-gray-900" data-figure="headline">
-        No envelope — this spending isn't budgeted.
+        Not holding money yet — this spending isn't budgeted.
       </p>
       <p class="mt-1 text-sm text-gray-600">
-        It comes out of your buffer.
-        <%= link_to "Give it an envelope on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+        It comes out of what's available.
+        <%= link_to "Give it a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
       </p>
     </div>
   <% else %>
@@ -60,7 +61,7 @@
          data-denominator="<%= impact.denominator_param %>">
       <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p class="text-sm font-medium text-gray-900" data-figure="envelope">
-          <%= impact.pool.name %> <%= impact.noun %>
+          <%= impact.holding.name %> <%= impact.noun %>
         </p>
         <%# Omitted outright for a user who has declared no period — see #period_ends_on. A date
             invented from the calendar month would state a boundary they never set. %>

@@ -27,35 +27,33 @@ RSpec.describe "Home", type: :request do
     expect(response.body).to include("Add a bank account")
   end
 
-  # I-1 (final whole-branch review, main-account spec §5): the card's gate is the account's FAMILY
-  # total, not its buffer. `AllocationCommitter` calls a waterfall that leaves an account's buffer
-  # at exactly $0 "the ordinary shape of a short period", so a funded account whose envelopes hold
-  # every dollar it has used to get the card back — asking a user who had already funded it to
-  # "match your bank statement" a second time, which puts BOTH accounts wrong against their banks
-  # by whatever they typed. Planted literals: $500 funded in, $500 allocated out, buffer $0,
-  # total $500. The two balance assertions are what make the third one about the right shape.
-  it "offers no funding card on an account whose envelopes hold all of its money", :aggregate_failures do
-    vacation = create(:pool, :budget_pool, user: user, account: ally, name: "Vacation")
-    PoolMovement.create!(from_pool: checking, to_pool: ally, amount: 500, date: Date.current, kind: :transfer)
-    PoolMovement.create!(from_pool: ally, to_pool: vacation, amount: 500, date: Date.current, kind: :allocation)
-
+  # ── DELETED (Task 6): "offers no funding card on an account whose envelopes hold all of its
+  # money". It pinned the I-1 ruling — the card's gate was the account's FAMILY total (`Pool#total`,
+  # unallocated cash plus every envelope inside it) rather than its bare buffer, because a
+  # distribution that drained an account's buffer to exactly $0 brought the card back under a fully
+  # funded account. Nothing is housed inside an account under the two-ledger model: a category holds
+  # its own money and lives nowhere (spec §2), so the buffer and the family total are one figure,
+  # `AccountLedger#balance_of`, and there is no shape in which they can disagree. The fixture the
+  # example planted — an envelope inside Ally holding every dollar Ally has — cannot exist.
+  #
+  # MED-1'S OWN DIRECTION IS WHAT SURVIVES, re-asked below on the two shapes that are left: an
+  # account nothing has moved into gets the card, and one a movement has funded does not. Money is
+  # still the only signal.
+  it "offers the funding card on an account nothing has moved money into", :aggregate_failures do
     get root_path
 
-    expect(ally.calculator.balance).to eq(0)
-    expect(ally.total).to eq(500)
-    expect(response.body).not_to include("Real balance today")
+    expect(user.reload.default_account).to eq(checking)
+    expect(AccountLedger.new(user).balance_of(ally)).to eq(0)
+    expect(response.body).to include("Real balance today")
   end
 
-  # THE OTHER DIRECTION OF THE SAME GATE (MED-1, unmoved by I-1): an EMPTY envelope is not money,
-  # so an account holding one and nothing else still totals zero and still gets the card. Pinned
-  # here beside its opposite so a future tightening cannot close one without noticing the other.
-  it "still offers the card on an account holding only an empty envelope", :aggregate_failures do
-    create(:pool, :budget_pool, user: user, account: ally, name: "Vacation")
+  it "offers no funding card once a movement has funded the account", :aggregate_failures do
+    PoolMovement.create!(from_pool: checking, to_pool: ally, amount: 500, date: Date.current, kind: :transfer)
 
     get root_path
 
-    expect(ally.total).to eq(0)
-    expect(response.body).to include("Real balance today")
+    expect(AccountLedger.new(user).balance_of(ally)).to eq(500)
+    expect(response.body).not_to include("Real balance today")
   end
 
   # ONBOARDING STEP 3'S RENDER GATE (main-account spec §5, fix round 1 — MED-1): three request

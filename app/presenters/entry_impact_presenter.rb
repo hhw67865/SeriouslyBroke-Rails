@@ -20,7 +20,7 @@
 #   * the date is the edge `User#period_boundaries` puts after today, taken through
 #     `User#period_containing` so the window arithmetic is not spelled twice.
 #
-# AND IT SPEAKS NO STATUS. `PoolStatus` is the app's most-guarded reader and it is not consulted,
+# AND IT SPEAKS NO STATUS. `HoldingStatus` is the app's most-guarded reader and it is not consulted,
 # not here and not in the browser: the card renders figures, a bar and a date. There is no "behind",
 # no "on track", no colour band standing in for one. The one colour it does use is the ordinary
 # negative-money red the account header already uses for a negative buffer — a fact about a sign,
@@ -72,81 +72,84 @@ class EntryImpactPresenter
   # an omission.
   def render? = category.present? && !category.income?
 
-  # THE ENVELOPE, DERIVED AND NEVER PICKED (§6): the user chooses a category, the pool follows.
+  # WHAT HOLDS THIS SPENDING, DERIVED AND NEVER PICKED (§6): the user chooses a category, and under
+  # the two-ledger model the category IS the thing that holds the money (spec §3) — so there is
+  # nothing left to derive except WHETHER it holds it.
   #
-  # `Category#effective_pool` — the model's own reader for "which pool does this category's spending
-  # reach", corrected on this branch to agree with `PoolBalanceLedger::ENTRY_POOL_ID`. The ENTRY's
-  # own `pool_id` override is not consulted: it has no UI, `EntriesController#entry_params` cannot
-  # set it, and the card must describe the pool the chosen CATEGORY reaches or it would answer a
-  # question about a different envelope than the one the save will touch.
+  # `Category#counts_spending_on?` — the app's ONE Ruby mirror of `CategoryLedger::ENTRY_CATEGORY_ID`
+  # (§4's re-anchored start-date rule, compared in the OWNER's calendar day). It answers `holder? &&
+  # local_day(date) >= funded_since`, so a category that has never been funded, and a funded one
+  # asked about a day before it started holding, both answer nil here: their spending drains
+  # AVAILABLE, not the category, and the honest card below says so.
   #
-  # ON THE DAY THE ENTRY IS ABOUT, which is what the start-date rule (main-account spec §3) made
-  # this card have to say. An envelope only counts its categories' spending from its `start_date`
-  # on, so a category answers with the envelope for today and with the user's MAIN account for a
-  # date before it. On EDIT that day is the entry's own; on NEW there is no entry and the day is
-  # `today`, the same clock every other figure on this card is read at. Get it wrong and the card
-  # names an envelope, prints its balance and offers a "left" figure for money that is never going
-  # to come out of it — the one failure this card cannot have, because the whole of it is a promise
-  # about where the money the user is typing will land.
-  def pool = category&.effective_pool(on: entry&.date || today)
+  # ON THE DAY THE ENTRY IS ABOUT, which is what the start-date rule made this card have to say. On
+  # EDIT that day is the entry's own; on NEW there is no entry and the day is `today`, the same clock
+  # every other figure on this card is read at. Get it wrong and the card names a category, prints
+  # its holding and offers a "left" figure for money that is never going to come out of it — the one
+  # failure this card cannot have, because the whole of it is a promise about where the money the
+  # user is typing will land.
+  #
+  # IT WAS `#pool`, AND `Category#effective_pool` WAS THE READER. That method resolved which POOL a
+  # category's spending reached, with the same date gate on the envelope's `start_date`; the pool
+  # layer is being deleted (§5) and the date now lives on the category itself, so the whole
+  # resolution collapses to this predicate.
+  # `defined?` rather than `||=`: nil is a real answer — the honest card's whole population — and a
+  # truthiness memo would re-ask the predicate on every one of the six readers below that consult it.
+  def holding
+    return @holding if defined?(@holding)
 
-  # THE HONEST CARD (decision 2). Two shapes reach it and both are the same sentence:
-  #
-  #   * no pool at all — nothing reserves this money, and
-  #   * a pool that IS an account — an account is the buffer, so nothing reserves it either.
-  #
-  # That pair is `Category#buffer_funded?`, the model's own reader and the suggestion engine's
-  # population, and its sentence ("currently comes out of your buffer") is the register this card
-  # borrows so the two screens say one thing. It is not CALLED here only because it re-asks
-  # `expense?`, which `#render?` has already settled: every category that reaches this method is an
-  # expense one, so the model's predicate and this pair are the same question with the same answer.
-  #
-  # THE SECOND ARM IS GONE (plan 3, task 5). `#contribution?` split this card in two — a savings
-  # category with nowhere to land got "No goal — this contribution has nowhere to land", pointing
-  # at `/pools/new` rather than at the Budget page, because a contribution does not come OUT of the
-  # buffer. There is no savings category any more, so there is one honest card and it is the
-  # spending one.
-  def unbudgeted? = pool.nil? || pool.pool_type_account?
+    @holding = category.present? && category.counts_spending_on?(entry&.date || today) ? category : nil
+  end
 
-  # A SAVINGS POOL IS A GOAL, so the card takes the goal shape (`$X → $Y of $Z goal`) rather than
-  # the envelope's. `target_amount` is the existing goal reader — `PoolCalculator#progress_percentage`
-  # and `#remaining_amount` measure against exactly this — and a savings pool with no target set has
-  # no goal to show, so it falls back to the envelope shape.
+  # THE HONEST CARD (decision 2). ONE shape reaches it now: a category that is not holding money on
+  # this day, so the spending drains AVAILABLE — money with no job yet (§2).
   #
-  # KEYED ON THE POOL AND NOT ON THE CATEGORY TYPE, because the two come apart: the demo's Education
-  # EXPENSE category points at the Retirement Supplement savings pool, and spending from a goal is
-  # still spending against a goal.
-  def goal? = pool.present? && pool.pool_type_savings? && pool.target_amount.to_d.positive?
+  # THE TWO SHAPES IT USED TO BE were "no pool at all" and "a pool that IS an account", and they
+  # were one sentence because an account is the buffer and nothing reserved money sitting in one.
+  # That pair was `Category#buffer_funded?`; its successor is `Category#holder?`, asked with a date
+  # because a holder still drains available for spending that predates its funding.
+  #
+  # The register is the Budget page's own — its rate suggestion says a category's spending
+  # "currently comes out of what's available" of exactly this population — so a user who meets the
+  # sentence here and the offer there is reading one app.
+  def unbudgeted? = holding.nil?
 
-  def goal_target = goal? ? pool.target_amount.to_d : nil
+  # A SAVINGS CATEGORY IS A GOAL, so the card takes the goal shape (`$X → $Y of $Z goal`) rather
+  # than the envelope's. `Category#savings?` is the app's DISPLAY question — holder, with a target,
+  # carrying no refill rule (§3: "a savings category is just a category with a target and typically
+  # no refill rule") — and it is deliberately NOT `HoldingCalculator#dateless_goal?`, which is the
+  # FUNDING question and answers true for a goal that also carries a rate rule. The card is a
+  # rendering, so it asks the rendering question.
+  #
+  # Spending from a goal is still spending against a goal, which is why this arm exists at all: the
+  # figures are the same two figures, and only the trailing phrase differs.
+  def goal? = category.present? && category.savings?
 
-  # "envelope" or "goal" — the noun the header uses, from the pool's own type.
-  #
-  # `Pool#noun` NOW, AND THIS CARD IS WHERE THAT MAPPING CAME FROM (2d whole-plan review, fix 2).
-  # The words are unchanged: this was the one screen already saying "goal" for a savings pool and
-  # "buffer" for an account, and the category page's two blocks were moved onto it rather than the
-  # other way round. What changes is that the case expression that produced them is no longer a
-  # third copy of the classification.
-  #
-  # THE `nil` ARM STAYS AND CANNOT FIRE FROM THE VIEW. Both call sites sit inside the branch
-  # `#figures?` guards, so a card printing this noun has a pool that is neither nil nor an account.
-  # The fallback is for the reader that calls it anyway — "envelope" is the right word for spending
-  # that reaches no pool, and it is what the honest card's own headline says.
-  def noun = pool&.noun || "envelope"
+  def goal_target = goal? ? category.target_amount.to_d : nil
 
-  # WHAT IS IN THE ENVELOPE, AS IF THIS ENTRY WERE BEING DECIDED NOW.
+  # "envelope" or "goal" — the noun the header uses.
   #
-  # `PoolCalculator#balance` and then ONE correction, which is the whole of the edit case: on edit
-  # the ledger has ALREADY counted this entry, so a card built straight off the balance would answer
+  # `Pool#noun` IS GONE with the type it read: a pool had three types and a word for each, and a
+  # category has one type and a question. "envelope" is the right word for a category that holds its
+  # own spending money, and it is also the fallback the honest card's own headline is written in.
+  def noun = goal? ? "goal" : "envelope"
+
+  # WHAT THE CATEGORY HOLDS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
+  #
+  # `HoldingCalculator#balance` and then ONE correction, which is the whole of the edit case: on edit
+  # the ledger has ALREADY counted this entry, so a card built straight off the holding would answer
   # "what is left after the spending you already logged" while the user is looking at a form that
   # asks "how much is this". Typing the same figure again would appear to spend it twice. The
   # entry's own contribution is removed so the two figures the card prints are the world without
   # this entry and the world with it — which is the question the screen is asking.
   #
-  # Only when the entry actually reaches THIS pool (`Entry#effective_pool`, the same COALESCE the
-  # ledger runs on): re-categorising an entry into a different envelope must not credit the new
-  # envelope with money it never held.
-  def balance = @balance ||= (pool.calculator(today: today).balance - own_contribution).to_d
+  # Only when the entry actually drains THIS category (see #own_contribution): re-categorising an
+  # entry must not credit its new category with money it never held.
+  #
+  # `Category#holding_calculator`, the ONE door onto what a category holds — never
+  # `HoldingCalculator.new`, and never `Category#calculator`, which is the unrelated per-period
+  # spending reader the categories and dashboard screens ask.
+  def balance = @balance ||= (holding.holding_calculator(today: today).balance - own_contribution).to_d
 
   # The figure the amount box currently holds, as money. See TYPED_AMOUNT for what "currently holds"
   # is allowed to mean.
@@ -167,8 +170,8 @@ class EntryImpactPresenter
   def balance_after = @balance_after ||= (balance - amount).to_d
 
   # WHETHER THERE ARE FIGURES TO PRINT AT ALL — the envelope and goal cards have them, the honest
-  # no-envelope card has none. Every money reader below is gated on it, because there is no balance
-  # to read off a pool that is not there.
+  # not-holding card has none. Every money reader below is gated on it, because there is no holding
+  # to read off a category that is not holding anything.
   def figures? = render? && !unbudgeted?
 
   # NEGATIVE IS THE ONLY TEST, and it is a fact about a sign rather than a status. Exactly zero is
@@ -178,9 +181,9 @@ class EntryImpactPresenter
   # spending that nothing reserves cannot overdraw anything.
   def overdrawn? = figures? && balance_after.negative?
 
-  # THE BAR'S DENOMINATOR — what this envelope is FOR, per period.
+  # THE BAR'S DENOMINATOR — what this category is FOR, per period.
   #
-  # `Σ Budget#steady_ask` over the pool's own rules: steady_ask is the one per-period normaliser on
+  # `Σ Budget#steady_ask` over the category's own rules: steady_ask is the one per-period normaliser on
   # this branch (a $1,500-a-month rule claims $692.31 of a biweekly period, and a bar denominated in
   # sticker prices would draw a full envelope as a fifth of one).
   #
@@ -243,19 +246,25 @@ class EntryImpactPresenter
 
   private
 
-  # `Σ steady_ask` over the pool's rules. `0.to_d` seeded, because an unseeded `sum` over an empty
-  # set returns the Integer literal 0 and #bar_fraction divides by this — the money-type guarantee
-  # `PoolCalculator` keeps for the same reason, one layer up.
-  def steady_claim = pool.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
+  # `Σ steady_ask` over the category's rules. `0.to_d` seeded, because an unseeded `sum` over an
+  # empty set returns the Integer literal 0 and #bar_fraction divides by this — the money-type
+  # guarantee `HoldingCalculator` keeps for the same reason, one layer up.
+  def steady_claim = holding.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
 
   # WHAT THE LEDGER ALREADY COUNTS FOR THIS ENTRY, in the ledger's own sign. Zero for a new entry,
-  # and zero for one whose money is in a DIFFERENT pool than the card is describing.
+  # and zero for one that drains something other than the category the card is describing.
   #
-  # NEGATIVE, UNCONDITIONALLY (plan 3, task 5). This was `counted.category.savings? ? 1 : -1` — the
-  # ledger's own two signs — and the ledger has one sign for entries reaching a pool now: an
-  # expense subtracts. `#render?` keeps income off this path, so there is no third case.
+  # NEGATIVE, UNCONDITIONALLY: the purpose ledger has one sign for an entry that reaches a category
+  # — an expense subtracts (`CategoryLedger#holding_of`). `#render?` keeps income off this path, so
+  # there is no second case.
   #
-  # THE RECORD ON DISK, NOT THE ONE IN THE FORM. Both the sign and the amount are facts about what
+  # THE TEST IS THE LEDGER'S OWN RULE, ASKED TWICE. `ENTRY_CATEGORY_ID` counts an entry against its
+  # own category and only from that category's `funded_since` onward, so BOTH halves have to hold:
+  # the entry's category must be the one on screen, and its DATE must be one the category counts.
+  # A back-dated receipt on a recently funded category drains available in the ledger, so removing
+  # it here would credit the card with money the category never held.
+  #
+  # THE RECORD ON DISK, NOT THE ONE IN THE FORM. Both the date and the amount are facts about what
   # the ledger already counted, and the object handed in is not always that: a failed `update`
   # re-renders an `@entry` carrying the REJECTED amount and possibly a different item, so reading
   # `entry.amount` there would remove a figure the ledger never held. `#changed?` is false on every
@@ -263,9 +272,13 @@ class EntryImpactPresenter
   # one path where the in-memory record is provably not the ledger's.
   def own_contribution
     counted = counted_entry
-    return 0.to_d unless counted && counted.effective_pool == pool
+    return 0.to_d unless counted && counted_by_holding?(counted)
 
     -counted.amount.to_d
+  end
+
+  def counted_by_holding?(counted)
+    counted.item.category_id == holding.id && holding.counts_spending_on?(counted.date)
   end
 
   # The entry AS THE LEDGER HOLDS IT, or nil when the ledger holds none: nothing at all for a new

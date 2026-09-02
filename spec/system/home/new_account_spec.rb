@@ -32,7 +32,7 @@ RSpec.describe "Home NewAccount", type: :system do
       add_account("Ally Savings")
 
       expect(page).to have_content("Ally Savings added.")
-      expect(page).to have_css("[data-pool-group='Ally Savings']")
+      expect(page).to have_css("[data-account-group='Ally Savings']")
       expect(user.pools.find_by(name: "Ally Savings")).to be_pool_type_account
     end
 
@@ -51,14 +51,14 @@ RSpec.describe "Home NewAccount", type: :system do
   describe "funding a fresh account", :aggregate_failures do
     it "moves the entered balance from main, then the card is gone" do
       add_account("Ally Savings")
-      section = "[data-pool-group='Ally Savings']"
+      section = "[data-account-group='Ally Savings']"
       expect(page).to have_css(section)
 
       fund_account(section, "1200.50")
 
       expect(page).to have_content("Ally Savings funded with $1,200.50.")
       within(section) do
-        expect(page).to have_content("buffer now $1,200.50")
+        expect(page).to have_content("balance now $1,200.50")
         expect(page).not_to have_field("Real balance today")
       end
     end
@@ -68,8 +68,8 @@ RSpec.describe "Home NewAccount", type: :system do
     it "shows the card only on a non-main account's section" do
       add_account("Ally Savings")
 
-      within("[data-pool-group='Checking']") { expect(page).not_to have_field("Real balance today") }
-      within("[data-pool-group='Ally Savings']") { expect(page).to have_field("Real balance today") }
+      within("[data-account-group='Checking']") { expect(page).not_to have_field("Real balance today") }
+      within("[data-account-group='Ally Savings']") { expect(page).to have_field("Real balance today") }
     end
   end
 end

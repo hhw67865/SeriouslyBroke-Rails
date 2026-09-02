@@ -127,11 +127,13 @@ Rails.application.routes.draw do
   # side, and it is not a uuid, so it cannot collide with a category id.
   resources :allocations, only: [:new, :create]
 
-  # ── THE POOL-ERA TWIN, AND TASK 6 DELETES IT with Home's fix buttons, which are the only links
-  # left pointing here (Home's rows are pools until then). It was meant to be REPLACED by the route
-  # above in this task; removing it now takes `home/_attention.html.erb` down with it, and
-  # `home_presenter_spec` and the Home system specs with that. Same screen, pool-shaped.
-  resources :pool_movements, only: [:new, :create]
+  # ── THE POOL-ERA TWIN IS GONE (Task 6). `resources :pool_movements` stood here for one task
+  # longer than the route above, because Home's fix buttons were its only remaining links and
+  # Home's rows were pools. Home's rows are CATEGORIES now and its buttons point at
+  # `/allocations/new`, so the twin — the route, `PoolMovementsController`, `PoolReallocation
+  # Presenter`, `PoolMovementsHelper` and `app/views/pool_movements/` — was deleted whole.
+  # `pool_movements` the TABLE survives as the physical lane (income routing, account funding)
+  # until Task 8 renames it; nothing about that lane was ever reachable through this route.
 
   resource :account, only: [:show] do
     patch :toggle_theme

@@ -173,11 +173,15 @@ class Pool < ApplicationRecord
   # SO THEY STAY FOR THE HONEST REASON: they are retained pending the follow-up that deletes the
   # whole orphan apparatus, not as a guard against anything. That follow-up is larger than this
   # constant and its blast radius is written down so it can be scoped rather than rediscovered:
-  # these two refusals and `#absorbing_account_for`'s counterparty fallback here;
-  # `HomePresenter#orphan_pools`, `#orphan_required`, `#orphan_pools_owed`, `Row#orphan` and the
-  # exclusion in `#fill_waterfall` that keeps orphans out of the waterfall; the `home/_orphans`
-  # partial and the `orphan_pools_owed` term in `home/_attention`; `BudgetPagePresenter`'s
-  # `#orphan_rules` and `#orphan_reason`; and `ReallocationPresenter`'s "No account" group.
+  # these two refusals and `#absorbing_account_for`'s counterparty fallback here.
+  #
+  # EVERY OTHER ITEM ON THAT LIST IS NOW DELETED, and it is worth recording which task took which:
+  # `BudgetPagePresenter#orphan_rules`/`#orphan_reason` and the Budget page's own orphan band went
+  # in Task 5; `ReallocationPresenter` was written in Task 4 with no "No account" group to inherit;
+  # and Task 6 took Home's whole half — `#orphan_pools`, `#orphan_required`, `#orphan_pools_owed`,
+  # `Row#orphan`, the waterfall exclusion, the `home/_orphans` partial, the `orphan_pools_owed`
+  # term in `home/_attention` and `HomeHelper#pool_problem_label`'s `orphan:` keyword. What is left
+  # is this constant and the fallback beside it, and they die with the pool layer in Task 8.
   # `:categories` COVERS TWO SHAPES NOW (main-account spec §6): the orphan one this refusal was
   # written for (the pool itself sits in no account) and one that arrived with the re-point
   # destination change — the user has no MAIN account named for a category to land in instead.

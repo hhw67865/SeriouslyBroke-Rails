@@ -2,7 +2,7 @@
 
 # THE "YOU CHANGED A RULE HERE AFTER DISTRIBUTING" FIXTURE, IN ONE PLACE.
 #
-# Spec §8's rough edge is asserted on FOUR screens — the Budget page's rule list, Home's pool
+# Spec §8's rough edge is asserted on FOUR screens — the Budget page's rule list, Home's category
 # rows, the category page's budget block and its pool card — because each renders the clause
 # through a different reader. The fixture behind all four is one recipe, and it was hand-rolled
 # four times: two of the copies drifted, and BOTH drifts were the same wall-clock flake.
@@ -45,17 +45,10 @@ RSpec.shared_context "with a rule changed after the money went out" do
   # unambiguously older than the distribution's `created_at`.
   def before_distributing(&) = travel_to(3.hours.ago, &)
 
-  # `from:` defaults to the account every one of these files calls `checking`; it is a
-  # keyword rather than a hard reference so a screen with two accounts can say which.
-  #
-  # THE POOL ARM, and it has a deleter named: Task 6, with the last screen that reads
-  # `DistributionClock`'s `account_ids:` surface. Home's pool rows and the category page's two
-  # blocks still ask the pool-era question, so the fixture that answers it stays until they move.
-  def distribute(pool, amount, from: checking)
-    travel_to(2.hours.ago) do
-      create(:pool_movement, kind: :allocation, from_pool: from, to_pool: pool, amount: amount, date: today)
-    end
-  end
+  # ── `#distribute` IS DELETED (Task 6) with `DistributionClock`'s `account_ids:` surface. It wrote
+  # a `PoolMovement` with `kind: :allocation` from an account into an envelope, which was what the
+  # pool-era arm read; there is one root and one distribution per period now (two-ledger spec §2), so
+  # every screen that prints this clause reads `Allocation.distributed` through `#allocate` below.
 
   # THE PURPOSE-LEDGER TWIN (two-ledger spec §2), for the screens that have moved. An allocation
   # names no account — it moves money between the user's one root and a category — so there is no

@@ -14,7 +14,7 @@
     of the block above went wrong before it was corrected; the pool's own enum cannot.
 
     ONE VOCABULARY, NOT A NEW ONE. The envelope arm says how the envelope is doing through
-    `shared/_pool_status` — the same span, the same words and the same red as Home's pools band
+    `shared/_holding_status` — the same span, the same words and the same red as Home's pools band
     and the Budget page's group headers — so a user reading this page and /budget on one afternoon
     is told one thing. It passes the presenter as the row, so both label suffixes are threaded by
     construction and this new caller cannot repeat the omission the whole-plan review caught twice.
@@ -63,7 +63,7 @@
   </div>
 
   <%# THE ENVELOPE'S STANDING, in the app's one row vocabulary. Rendered from four spaces in
-      because that is the column `shared/_pool_status` is written to emit at — see its header. %>
+      because that is the column `shared/_holding_status` is written to emit at — see its header. %>
   <%# ITS OWN HOOK, NOT `data-envelope-status`. The budget block above this card carries that one,
       and both render on one page for a pool-covered expense category — a page-wide
       `find("[data-envelope-status]")` raises Capybara::Ambiguous the moment two elements answer to
@@ -71,7 +71,7 @@
       nothing to do with what it asserts. %>
   <% if pool.pool_type_budget? %>
   <p class="mb-4" data-pool-card-status>
-    <%= render "shared/pool_status", row: presenter %>
+    <%= render "shared/holding_status", row: presenter %>
   </p>
   <% end %>
 

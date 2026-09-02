@@ -3,9 +3,10 @@
 # MOVING MONEY BY HAND ON THE PURPOSE LEDGER — spec §5's reallocation, re-anchored: a move is
 # `category → category` or `available ↔ category` (two-ledger spec §2, §3).
 #
-# THE RENAME OF `PoolMovementsController`. That controller is still standing for the one screen Home
-# still links to — Home's rows are pools until Task 6 — and it goes with `PoolReallocationPresenter`
-# in the same commit.
+# THE RENAME OF `PoolMovementsController`, which is DELETED (Task 6) along with
+# `PoolReallocationPresenter`, `PoolMovementsHelper` and `app/views/pool_movements/`. It outlived
+# this controller by one task only because Home's fix buttons were its last links, and Home's rows
+# were pools.
 class AllocationsController < ApplicationController
   # OWNERSHIP, ONCE, FOR BOTH ACTIONS. #new only renders another user's figures; #create would WRITE
   # a row out of their category — so the two are scoped through the same lookup rather than through

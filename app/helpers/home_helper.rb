@@ -108,35 +108,32 @@ module HomeHelper
     "#{number_to_currency(status.amount)} of #{number_to_currency(status.target)}"
   end
 
-  # A row on Home's attention list can be in trouble for a reason PoolStatus does not model:
-  # the pool belongs to no account, so no account's money can reach it. That is a setup
-  # problem, not a funding one (HomePresenter#fill_waterfall says why it is not a shortfall),
-  # and a pool can be both unassigned and overdrawn — so the status is still said when it
-  # has one.
   # THE FIX BUTTON'S OWN LABEL — spec §4.2's `[ Take $300 from Rent ]`.
   #
-  # Named through `reallocation_pool_name`, which is this app's one answer to what a pool is
-  # CALLED when it is one end of a movement: an account stands in for its buffer, so the button
-  # reads "Take $300.00 from Checking buffer" and the screen it opens says the same. "Checking"
-  # alone would name the whole account, envelopes included, which is not the money being taken.
+  # `fix.source.name` IS THE CANDIDATE'S OWN NAME, and that is the whole of the naming problem now.
+  # It went through `PoolMovementsHelper#reallocation_pool_name` because a pool needed a noun for
+  # the money inside it — an account stood in for its buffer, so the button had to read "Checking
+  # buffer" rather than "Checking", which would have named the envelopes too. Nothing contains
+  # anything on the purpose ledger: a source is a category or it is AVAILABLE, and
+  # `ReallocationPresenter::Root#name` answers "Available" for exactly the reason that class is a
+  # null object rather than a `nil`.
   def fix_button_label(fix)
-    "Take #{number_to_currency(fix.amount)} from #{reallocation_pool_name(fix.source)}"
+    "Take #{number_to_currency(fix.amount)} from #{fix.source.name}"
   end
 
   # WHY THIS PROBLEM HAS NO BUTTON, and never merely that it has none (amendment C). A row that
   # falls silent here reads as a rendering that failed rather than as an answer.
   #
-  # Every sibling in the account was asked and none of them has this much spare, which is worth
-  # saying with both the account's name and the figure, so the reader can see what would have had
-  # to be there. The other no-button case — a pool with no account — never reaches this method:
-  # HomePresenter#fix_for returns nil for it and the band prints the setup step instead.
+  # Every other party was asked — AVAILABLE and every holder category — and none of them has this
+  # much spare, which is worth saying with the figure so the reader can see what would have had to
+  # be there.
   #
-  # `pool.account || pool` for the container, matching PoolMovement#containing_account: an account
-  # sits inside no other account and stands in as its own, so an overdrawn Checking asks its own
-  # envelopes and its sentence names itself.
+  # NO CONTAINER TO NAME (Task 6). This read "Nothing in Checking has $300.00 spare", because a move
+  # could not leave the account the envelope sat in. An allocation crosses nothing (two-ledger spec
+  # §2), so the set that was asked is the whole of what the user has, and naming an account would
+  # narrow a sentence that is no longer narrow.
   def fix_gap_sentence(fix)
-    container = fix.pool.account || fix.pool
-    "Nothing in #{container.name} has #{number_to_currency(fix.amount)} spare to move."
+    "Nothing has #{number_to_currency(fix.amount)} spare to move."
   end
 
   # BOTH SUFFIXES TRAVEL THROUGH rather than stopping here, and they travel for one reason: the
@@ -176,16 +173,18 @@ module HomeHelper
   #     `becomes …` clause and DistributionsHelper's consequence line).
   #
   # It is safe HERE because the only caller is Home's attention band, whose statuses come from
-  # HomePresenter#status_for: plain, unprojected, and about money that is actually in the envelope.
-  def pool_problem_label(status, orphan: false, changed_after_distributing: false)
-    label = pool_status_label(
+  # HomePresenter#status_for: plain, unprojected, and about money that is actually in the category.
+  #
+  # THE `orphan:` KEYWORD AND ITS TWO CLAUSES ARE DELETED (Task 6). They prefixed `no account · ` to
+  # the label, and replaced it outright with "no account — nothing can fund it" when the orphan was
+  # otherwise quiet. A category belongs to no account and needs none — allocating money moves
+  # nothing physical (two-ledger spec §2) — so there is no such state to name. What remains is the
+  # forced `period_closed:`, which is the reason this method exists at all.
+  def pool_problem_label(status, changed_after_distributing: false)
+    pool_status_label(
       status,
       period_closed: status.period_closed?,
       changed_after_distributing: changed_after_distributing
     )
-    return label unless orphan
-    return "no account · #{label}" if status.needs_attention?
-
-    "no account — nothing can fund it"
   end
 end

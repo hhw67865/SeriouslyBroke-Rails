@@ -72,23 +72,18 @@ class OpeningBalancesController < HomeController
       presenter = HomePresenter.new(user: current_user, today: Date.current)
       next { alert: "Opening balance was already recorded." } unless presenter.awaiting_opening_balance?(main)
 
-      # THE FAMILY TOTAL, NOT MAIN'S BARE BUFFER (main-account spec §5, fix round 1 — MED-4). A
-      # bank statement for a physical account counts every dollar sitting in it, and money an
-      # envelope inside main is holding has not LEFT the bank account — it is still main's money,
-      # earmarked. `PoolCalculator.new(main).balance` answers only the unallocated remainder,
-      # which undercounts main whenever an envelope inside it holds anything: a user who read
-      # $1,200 off their bank statement while $150 of it sat in a Groceries envelope inside that
-      # same account would have typed the true figure and watched the app "correct" main to
-      # $1,050, silently losing the $150 from Σ pools. `Pool#total` is the existing reader for
-      # exactly this question — "what the bank actually says: unallocated cash plus every pool
-      # inside it" — already used by the distributions screen for the same account-level figure,
-      # so this reuses it rather than re-deriving a second reader of the same rule.
+      # THE POT (two-ledger spec §2, Task 6) — `AccountLedger#pot`, which is main's balance and is
+      # therefore what the bank says about it.
       #
-      # IDENTICAL TO THE BARE BALANCE WHEN MAIN HOLDS NO POOLS (`Pool#total`'s own spec pins this),
-      # which is why every example that predates this ruling still holds: none of them plants an
-      # envelope inside main, so `main.total == main.calculator.current_balance` on every one of
-      # them and nothing about their assertions moves.
-      difference = actual - main.total
+      # IT WAS `Pool#total`, "unallocated cash plus every pool inside it", and that reader existed
+      # for a hazard this model does not have: money an envelope inside main was holding had not
+      # LEFT the bank account, so a bare buffer undercounted main whenever an envelope held
+      # anything — a user who read $1,200 off their statement while $150 of it sat in a Groceries
+      # envelope would have typed the true figure and watched the app "correct" main to $1,050.
+      # Nothing is housed inside an account now (a category holds its own money and lives nowhere),
+      # so the family total and the balance are the same figure, and `AccountLedger` is the one
+      # reader of it. `Pool#total` is envelope-era and dies in Task 8.
+      difference = actual - AccountLedger.new(current_user).pot
       # A ZERO DIFFERENCE LEAVES THE LATCH OPEN, BY CHOICE (main-account spec §5, fix round 1 —
       # MED-2/LOW-2/MED-3 doc ruling). Nothing is written here — no category, no item, no entry —
       # so `Category.opening_balance` still answers false afterward and the card renders again on

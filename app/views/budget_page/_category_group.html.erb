@@ -28,7 +28,7 @@
       <span class="text-xs text-gray-400">priority <%= group.priority %></span>
     </div>
     <%# BOTH SUFFIXES, and neither is optional here — which is a property of the SHAPE rather
-        than of this file remembering to pass them (see `shared/_pool_status`).
+        than of this file remembering to pass them (see `shared/_holding_status`).
 
         `period_closed:` says WHICH PERIOD the figure belongs to, and a swept rate-rule envelope
         reading `$400.00 left · last period` on one screen while another reads `$400.00 left` for
@@ -44,7 +44,7 @@
 
         Passing an OBJECT rather than two keywords is what makes an omission unwritable rather
         than merely absent. `· holds $X` rides on `Group#balance_clause?`. %>
-    <%= render "shared/pool_status", row: group %>
+    <%= render "shared/holding_status", row: group %>
   </div>
 
   <% group.rules.each do |rule| %>

@@ -41,10 +41,24 @@ RSpec.describe "Categories Show - Budget block", type: :system do
   # The same, filled by a DATED rule instead of a rate. The clause below only ever prints on
   # `:behind`, and `behind` is a state of an accumulating rule — a rate envelope is `left to spend`
   # however little is in it, so the rate helper above cannot reach the state under test.
+  # THE RULE CARRIES BOTH OWNERS (Task 6), and that pair is what this screen is mid-transition
+  # between: the block still reads the POOL's status, while `CategoryBudgetPresenter
+  # #changed_after_distributing?` asks `DistributionClock`'s CATEGORY arm — the pool-era arm went
+  # with its `account_ids:` surface, because there is one root and one distribution per period now
+  # (two-ledger spec §2). `Budget#must_have_an_owner` accepts either owner and Task 1's migration
+  # wrote both onto every migrated rule, so this is the shape real data is in. The category has to
+  # be created FIRST, because the rule now names it.
   def covered_dated(name, anchor:, amount: 1_200)
     envelope(name).tap do |pool|
-      create(:pool_budget, pool: pool, amount: amount, interval_months: 6, anchor_date: anchor)
-      create(:category, :expense, user: user, name: "#{name} Spending", pool: pool)
+      spending = create(:category, :expense, user: user, name: "#{name} Spending", pool: pool)
+      create(
+        :pool_budget,
+        pool: pool,
+        category: spending,
+        amount: amount,
+        interval_months: 6,
+        anchor_date: anchor
+      )
     end
   end
 
@@ -277,7 +291,7 @@ RSpec.describe "Categories Show - Budget block", type: :system do
 
       # Ten dollars against a $1,200 bill three months out leaves both behind, which is the state
       # the clause explains.
-      [raised, steady].each { |pool| distribute(pool, 10) }
+      [raised, steady].each { |pool| allocate(category("#{pool.name} Spending"), 10) }
       after_distributing { raised.budgets.sole.update!(amount: 1_800) }
     end
 

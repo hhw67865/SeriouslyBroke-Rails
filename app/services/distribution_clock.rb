@@ -40,8 +40,8 @@
 #
 # ONE TIMESTAMP PER USER PER PERIOD, WHERE THE POOL ERA KEYED BY ACCOUNT (two-ledger spec §2). An
 # allocation has no account — it moves money between the user's root and their categories, and the
-# root is one — so there is one distribution per period and one moment it happened at. The per-
-# account map below is the TRANSITIONAL arm and nothing more; see #initialize.
+# root is one — so there is one distribution per period and one moment it happened at. The
+# per-account map is DELETED (Task 6) along with the `account_ids:` keyword that reached it.
 #
 # THE SIGNAL IS CLEAN, AND THAT WAS MEASURED RATHER THAN ASSUMED, because `touch: true` is
 # everywhere on this schema and a cascade reaching `budgets` would make this fire on users who
@@ -50,46 +50,33 @@
 # other way — and NO association anywhere declares `belongs_to :budget, touch: true`. So
 # `budgets.updated_at` moves when, and only when, the user changed the rule.
 class DistributionClock
-  attr_reader :user, :today, :account_ids
+  attr_reader :user, :today
 
-  # `account_ids:` IS A TRANSITIONAL SURFACE AND HAS A DELETER NAMED: Task 6, which moves
-  # HomePresenter and CategoryBudgetPresenter off pools. `BudgetPagePresenter` was the third and it
-  # took the category arm in Task 5 — it is the first caller of it anywhere. The two that remain
-  # still hand this class a list of accounts and ask it about a POOL, and until they stop, the
-  # pool-era question has to keep its pool-era answer: a clock that read `allocations` for them
-  # would be silently `false` on every one of those screens, because no pool movement is a
-  # distribution any more. When the last of the two moves, everything below the `── THE POOL-ERA
-  # ARM` line goes with it.
-  #
-  # OMITTING IT IS THE NEW SHAPE, and the two arms are told apart by presence rather than by
-  # emptiness: `account_ids: []` is a real pool-era question about a user with no accounts (it is the
-  # zero-query short-circuit below), and `nil` is a caller that has stopped asking about accounts at
-  # all. Both arms answer `#changed_after_distributing?` for the record they were built for — a Pool
-  # in the first, a Category in the second — and neither reads the other's table.
-  def initialize(user:, account_ids: nil, today: Date.current)
+  # `account_ids:` IS GONE (Task 6), and with it every line below the old `── THE POOL-ERA ARM`
+  # marker: `#latest_by_account`, `#rows`, `#fold` and the `per_account?` switch. The keyword was a
+  # transitional surface for the two screens that still handed this class a list of accounts and
+  # asked it about a POOL — HomePresenter and CategoryBudgetPresenter — and both moved in this task.
+  # There is ONE distribution per period per user now, because there is one root (two-ledger spec
+  # §2), so there is one timestamp and no map to key it by.
+  def initialize(user:, today: Date.current)
     @user = user
     @today = today
-    @account_ids = account_ids&.uniq&.compact
   end
 
   # `holder.budgets` is eager-loaded by every caller, so this asks the database nothing per row; the
-  # timestamp is one query for the whole screen (see #latest_for_user / #latest_by_account).
+  # timestamp is one query for the whole screen (see #latest_for_user).
   #
-  # A pool with no account answers false through the missing key rather than through a guard: no
-  # distribution has ever reached it, so nothing was handed out for a rule change to come after. The
-  # category arm has no such key and needs none — there is one root, and every holder is funded out
-  # of it.
+  # `holder` is a Category. Nothing here reads an account: there is one root, and every holder is
+  # funded out of it.
   def changed_after_distributing?(holder)
-    distributed_at = per_account? ? latest_by_account[holder.account_id] : latest_for_user
+    distributed_at = latest_for_user
 
     distributed_at.present? && holder.budgets.any? { |budget| budget.updated_at > distributed_at }
   end
 
   private
 
-  def per_account? = !@account_ids.nil?
-
-  # THE ONE QUERY THE NEW SHAPE NEEDS: the newest moment this user's distribution wrote anything
+  # THE ONE QUERY: the newest moment this user's distribution wrote anything
   # inside this period.
   #
   # BOTH SIDES TESTED FOR THE OWNER, because either may be NULL: an allocation names only a
@@ -118,40 +105,5 @@ class DistributionClock
 
     @latest_for_user =
       in_period.where(from_category_id: mine).or(in_period.where(to_category_id: mine)).maximum(:created_at)
-  end
-
-  # ── THE POOL-ERA ARM. Task 6 deletes everything below with the last caller that passes
-  # `account_ids:`. Nothing here changed with the two-ledger cutover; it is kept verbatim so the
-  # two screens that have not moved yet keep the answer they had.
-  #
-  # ONE QUERY FOR THE WHOLE SCREEN rather than one per `behind` row, keyed by account id. `{}` on a
-  # user with no accounts rather than a query with an empty IN list: an empty set makes the whole
-  # question moot, and #changed_after_distributing? reads a missing key as "no distribution", which
-  # is the safe direction and the true one.
-  def latest_by_account
-    @latest_by_account ||= account_ids.empty? ? {} : fold(rows)
-  end
-
-  def rows
-    within_period = PoolMovement.distributed.where(date: user.period_datetimes_containing(today))
-
-    within_period.where(from_pool_id: account_ids)
-      .or(within_period.where(to_pool_id: account_ids))
-      .pluck(:from_pool_id, :to_pool_id, :created_at)
-  end
-
-  # Folded in Ruby rather than grouped in SQL because each row names TWO pools and only one of them
-  # is the account — a `GROUP BY` would need the same two-branch decision written as a CASE over both
-  # columns, and a period's distribution is a handful of rows.
-  def fold(rows)
-    ids = account_ids.to_set
-
-    rows.each_with_object({}) do |(from_id, to_id, created_at), latest|
-      [from_id, to_id].each do |id|
-        next unless ids.include?(id)
-
-        latest[id] = created_at if latest[id].nil? || latest[id] < created_at
-      end
-    end
   end
 end
