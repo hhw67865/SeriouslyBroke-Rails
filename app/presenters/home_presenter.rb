@@ -8,7 +8,7 @@ class HomePresenter
   # WHAT ONE PROBLEM ROW OFFERS TO DO ABOUT ITSELF (spec §4.2): the amount to move, the source
   # that can genuinely cover it, and what the move would cost the source.
   #
-  # `candidate` is a ReallocationPresenter::Candidate, not a shape of our own, and that is
+  # `candidate` is a PoolReallocationPresenter::Candidate, not a shape of our own, and that is
   # amendment A honoured rather than decorated: "what would this move cost" already has one
   # answer on this branch (`Candidate#damage`, two real recomputations of PoolCalculator#required),
   # and Home renders it through the same PoolMovementsHelper sentence the reallocation screen
@@ -29,7 +29,7 @@ class HomePresenter
     # view says so instead of offering a button that would double-fund it.
     def needs_money? = amount.positive?
 
-    # PLAIN DIGITS FOR THE QUERY STRING, for ReallocationPresenter#amount_value's reason one screen
+    # PLAIN DIGITS FOR THE QUERY STRING, for PoolReallocationPresenter#amount_value's reason one screen
     # later: `BigDecimal("300").to_s` is "0.3e3", which reaches the link as `amount=0.3e3`. It is
     # read back correctly (`to_d` parses it) but it is the URL the user sees and copies.
     #
@@ -547,7 +547,7 @@ class HomePresenter
   #
   # `.round(2)` so the THREE places this figure lands cannot disagree: the button's label (rounded
   # by number_to_currency), the link's `amount=` (rounded by Fix#amount_param) and the damage
-  # preview (which is computed from whatever is passed to ReallocationPresenter). Measured on the
+  # preview (which is computed from whatever is passed to PoolReallocationPresenter). Measured on the
   # demo's Car Insurance, whose :behind amount is $553.84615384615… — the preview was computed
   # against the repeating figure while the button next to it moved $553.85. Display-identical
   # either way; the point is that the link and its own preview describe one move.
@@ -581,7 +581,7 @@ class HomePresenter
   # second implementation gets wrong, and it is the same reader the write path is refused by. It
   # also means an ACCOUNT is a candidate for the envelopes inside it.
   #
-  # THE ORDER IS ASKED OF ReallocationPresenter, NOT DECIDED HERE. It used to be richest-first with
+  # THE ORDER IS ASKED OF PoolReallocationPresenter, NOT DECIDED HERE. It used to be richest-first with
   # a `[priority, name]` tie-break of its own, and on the demo that proposed a $950 house down
   # payment four times over while $330 of Checking buffer sat unoffered — the screen the button
   # opens ranks the buffer first, so the button and its own destination named different sources.
@@ -639,7 +639,7 @@ class HomePresenter
     return [] unless amount.positive?
 
     fundable_by(pool).select { |source| free_amount_for(source) >= amount }
-      .sort_by { |source| ReallocationPresenter.source_order(source) }
+      .sort_by { |source| PoolReallocationPresenter.source_order(source) }
   end
 
   def fundable_by(pool)
@@ -653,7 +653,7 @@ class HomePresenter
 
   def free_amount_for(pool) = (@free_amounts ||= {})[pool.id] ||= calculator_for(pool).free_amount
 
-  # ONE ReallocationPresenter FOR ONE ROW, and #source_for rather than #sources: the list reader
+  # ONE PoolReallocationPresenter FOR ONE ROW, and #source_for rather than #sources: the list reader
   # would build a Candidate — with its damage, four calculators deep — for every sibling envelope
   # in the account, on a screen that renders one button. Home's per-row cost is already a live
   # concern on this plan (amendment E).
@@ -681,7 +681,7 @@ class HomePresenter
   #   The waterfall band sits a few inches below this row on the same screen. A second reader here
   #   could say "the next distribution funds this in full" above a row reading `$0.00 of $300.00`
   #   — a screen contradicting itself in two adjacent bands, which is the exact defect class
-  #   `ReallocationPresenter.source_order` was extracted to close one ruling ago.
+  #   `PoolReallocationPresenter.source_order` was extracted to close one ruling ago.
   #
   #   And "the same proposal the distribution screen would render" is now a property this task
   #   PROVED rather than assumed: #waterfall computes `required` with `net_of_sweep: true` and
@@ -718,11 +718,11 @@ class HomePresenter
   # the snapshot to fall the wrong side of.
   #
   # #reachable_pools is `accounts + all_pools`, i.e. every pool the user has, and
-  # ReallocationPresenter#all_pools is `user.pools` — the same set, so no source or destination
+  # PoolReallocationPresenter#all_pools is `user.pools` — the same set, so no source or destination
   # falls outside it. It would not cost accuracy if one did: #terms_for hands back nil for an
   # unknown pool and the calculator runs its own five aggregates.
   def damage_reader(pool, source, amount)
-    ReallocationPresenter.new(
+    PoolReallocationPresenter.new(
       user: user, to_pool: pool, from_pool: source, amount: amount, today: today, ledger: ledger
     )
   end

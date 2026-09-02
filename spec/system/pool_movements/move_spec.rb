@@ -79,43 +79,12 @@ RSpec.describe "Pool Movements Move", type: :system do
     end
   end
 
-  # AMENDMENT A, IN BOTH DIRECTIONS. A redistribution replaces the period's own rows and must leave
-  # a hand-made move alone: a user who moves $50 between envelopes and then redistributes still has
-  # their $50 move.
-  #
-  # THE MOVE HAS TO TOUCH THE ACCOUNT or this example proves nothing, and that was measured rather
-  # than reasoned: AllocationCommitter#previous_distribution matches on `from_pool: account OR
-  # to_pool: account`, so an envelope-to-envelope row is spared by the ACCOUNT filter whatever kind
-  # it carries. Written Car → Dentist, this passed with `kind: :allocation` forced on — the row was
-  # never a candidate for deletion in the first place. Rent → the Checking buffer sits squarely
-  # inside the date window AND on the account, so `distributed` is the only thing sparing it, which
-  # is the fact amendment A is about.
-  describe "surviving a redistribution", :aggregate_failures do
-    let(:distributed_before) { PoolMovement.distributed.pluck(:id) }
-    let(:transfer) { PoolMovement.where(from_pool: pool("Rent"), to_pool: checking).sole }
-
-    before do
-      distribute
-      distributed_before
-      visit new_pool_movement_path(to_pool_id: checking.id, from_pool_id: pool("Rent").id, amount: 300)
-      click_on "Move the money"
-      await("Moved $300.00")
-      transfer
-      distribute
-    end
-
-    it "replaces the distribution's own rows" do
-      expect(distributed_before).not_to be_empty
-      expect(PoolMovement.distributed.pluck(:id)).not_to include(*distributed_before)
-      expect(PoolMovement.distributed).to be_any
-    end
-
-    it "leaves the reallocation untouched" do
-      expect(PoolMovement.where(id: transfer.id)).to exist
-      expect(transfer.reload).to be_kind_transfer
-      expect(bank_balance).to eq(3_000)
-    end
-  end
+  # ── "SURVIVING A REDISTRIBUTION" MOVED TO `spec/system/allocations/move_spec.rb` (two-ledger
+  # Task 4). Amendment A is about a hand move outliving the replacement of a period's split, and a
+  # distribution writes `allocations` now — so the two examples that lived here compared a
+  # `pool_movements` transfer against a replacement that cannot see its table at all, which is a
+  # true statement about nothing. The claim is asserted at full strength on the purpose ledger,
+  # where both rows are the same kind of row again.
 
   # NOTHING IS WRITTEN AND THE SCREEN SAYS WHY. Four refusals, each reaching the server by a
   # different route, and each paired against the move that does succeed above.

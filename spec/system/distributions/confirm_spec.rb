@@ -2,24 +2,36 @@
 
 require "rails_helper"
 
-# Task 6: the button that actually splits the paycheck, and the loop it closes — distribute,
-# land on Home, find the envelopes funded and the buffer down by exactly what left it.
+# The button that actually splits the paycheck, and the loop it closes — distribute, land on Home,
+# and find the ledger holding what the sentence said.
 #
-# THE INVARIANT IS `Σ pools == your bank balance`, and every example below reads it out of the
-# database AFTER the write, never off the proposal — a proposal agreeing with itself was true
-# before this task existed. `Pool#total` is *defined* as the account's balance plus its
-# envelopes', so summing those parts against it is `x == x` and passes after any write
-# whatsoever: the totals here are pinned against the LITERAL deposits the fixture planted, and
-# every part is pinned against its own literal beside them.
+# THE INVARIANT IS `available + Σ holdings == income − expenses` (two-ledger spec §2), and every
+# example below reads it out of the database AFTER the write, never off the proposal — a proposal
+# agreeing with itself was true before this task existed. The totals here are pinned against the
+# LITERAL deposits the fixture planted, and every part is pinned against its own literal beside them.
+#
+# THREE EXAMPLES WERE WITHDRAWN AND ONE GROUP DELETED (two-ledger Task 4), each named where it stood:
+#   * the three that read the funded envelopes back off HOME's own rows. Home renders the POOL ledger
+#     until Task 6, and a distribution no longer writes it — so those rows are correct and unchanged
+#     and say nothing about the split. Their claim survives as the ledger assertion beside each of
+#     them, which is where it was always sharper; Task 6 restores the screen half on categories.
+#   * "confirming a second account from its own screen", whole. There is one root per user (§2), so
+#     there is no second screen, no hidden `account_id`, and no default to confirm the wrong one from.
 #
 # `Capybara.exact` is unset, so `have_content("$400.00")` also matches "$1,400.00" and matches
-# whatever the sidebar prints. Every figure below is scoped to the row, the account header or
-# the sentence that owns it.
+# whatever the sidebar prints. Every figure below is scoped to the row or the sentence that owns it.
 RSpec.describe "Distribution Confirm", type: :system do
-  # Biweekly, anchored today: this period is today..+13, and money paid a fortnight ago belongs
+  # Biweekly, anchored today: this period is today..+13, and money allocated a fortnight ago belongs
   # to a period that has closed — which is what makes Groceries' leftover sweepable.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # The pot, for income to land in: `Category#income_must_land_in_an_account` says an income category
+  # may only point at the user's main account. No figure below is read off it.
+  # rubocop:disable RSpec/LetSetup -- THE POT HAS TO EXIST, and nothing here reads it: income
+  # lands in a category and `Category#income_must_land_in_an_account` says that category may
+  # only point at the user's MAIN account, so a user with no account cannot be paid at all. It
+  # is setup for the physical side of a fixture whose every assertion is on the purpose side.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
   before { sign_in user, scope: :user }
 
@@ -40,9 +52,9 @@ RSpec.describe "Distribution Confirm", type: :system do
     it "moves nothing until the button is pressed" do
       expect(page).to have_css("h2", text: "Distribute $2,400.00")
       expect(page).to have_button("Confirm distribution")
-      expect(PoolMovement.count).to eq(0)
-      expect(balance_of("Groceries")).to eq(0)
-      expect(balance_of("Car")).to eq(0)
+      expect(Allocation.count).to eq(0)
+      expect(holding_of("Groceries")).to eq(0)
+      expect(holding_of("Car")).to eq(0)
       expect(buffer).to eq(2_400)
     end
 
@@ -57,36 +69,29 @@ RSpec.describe "Distribution Confirm", type: :system do
         expect(page).to have_css("h1", text: "Home")
       end
 
-      # The envelopes hold what the proposal promised them, in Home's own row vocabulary, and
-      # the account header carries the same buffer the sentence above just quoted.
-      it "shows the envelopes funded" do
-        within("[data-pool-group='Checking']") do
-          expect(page).to have_content("buffer now $500.00")
-          within("[data-pool-name='Groceries']") { expect(page).to have_content("$400.00 left") }
-          within("[data-pool-name='Car']") { expect(page).to have_content("$1,500.00 left") }
-        end
+      # WITHDRAWN: "shows the envelopes funded" read `$400.00 left` and `buffer now $500.00` off
+      # Home's own rows. Home renders POOLS until Task 6 and a distribution writes CATEGORIES, so
+      # those rows would be correct, unchanged, and about a different ledger. The ledger half below
+      # is what that example was really asserting.
+      it "writes one allocation per funded category" do
+        expect(Allocation.distributed.count).to eq(2)
+        expect(Allocation.kind_allocation.sum(:amount)).to eq(1_900)
+        expect(holding_of("Groceries")).to eq(400)
+        expect(holding_of("Car")).to eq(1_500)
       end
 
-      # The ledger's half of the same two figures, read fresh from the database.
-      it "writes one allocation per funded envelope" do
-        expect(PoolMovement.distributed.count).to eq(2)
-        expect(PoolMovement.kind_allocation.sum(:amount)).to eq(1_900)
-        expect(balance_of("Groceries")).to eq(400)
-        expect(balance_of("Car")).to eq(1_500)
-      end
-
-      # $2,400 went in, $1,900 was handed out, $500 is left. The left-hand figure is the
-      # fixture's deposit; the right-hand one is the account read back after the write.
+      # $2,400 went in, $1,900 was handed out, $500 is left. The left-hand figure is the fixture's
+      # deposit; the right-hand one is available read back after the write.
       it "drops the buffer by exactly the allocated total" do
         expect(buffer).to eq(500)
-        expect(2_400 - buffer).to eq(PoolMovement.kind_allocation.sum(:amount))
+        expect(2_400 - buffer).to eq(Allocation.kind_allocation.sum(:amount))
       end
 
-      # THE INVARIANT. $2,400 is the paycheck the fixture planted and nothing else has entered
-      # this user's life, so that is what the bank holds before and after. The movements moved
-      # it between pools; none of them made any.
+      # THE INVARIANT. $2,400 is the paycheck the fixture planted and nothing else has entered this
+      # user's life, so that is what both partitions hold before and after. The allocations moved it
+      # between the root and the categories; none of them made any.
       it "creates no money" do
-        expect(bank_balance).to eq(2_400)
+        expect(purpose_total).to eq(2_400)
       end
     end
   end
@@ -109,11 +114,11 @@ RSpec.describe "Distribution Confirm", type: :system do
     # and Vacation gets nothing. Every context below is about what happens to THAT split, so it
     # is asserted once here rather than assumed five times.
     it "proposes the split before anything is pressed" do
-      within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
-      within("[data-pool-name='Vacation']") { expect(page).to have_content("$0.00 of $150.00") }
-      # `distributed`, not every movement: the fixture's own funding of Groceries a fortnight ago
-      # is a `transfer`, and it is what makes this envelope sweepable in the first place.
-      expect(PoolMovement.distributed.count).to eq(0)
+      within("[data-category-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
+      within("[data-category-name='Vacation']") { expect(page).to have_content("$0.00 of $150.00") }
+      # `distributed`, not every allocation: the fixture's own funding of Groceries a fortnight ago
+      # is a `transfer`, and it is what makes this category sweepable in the first place.
+      expect(Allocation.distributed.count).to eq(0)
     end
 
     context "when confirmed as proposed" do
@@ -128,40 +133,33 @@ RSpec.describe "Distribution Confirm", type: :system do
         )
       end
 
-      # $85 left Groceries and $400 came back, so the envelope holds its full rate rather than
-      # $485 — and the envelope below the cutoff got nothing, which Home says rather than
-      # staying silent about.
-      it "shows the swept envelope topped up and the starved one empty" do
-        within("[data-pool-group='Checking']") do
-          expect(page).to have_content("buffer now $0.00")
-          within("[data-pool-name='Groceries']") { expect(page).to have_content("$400.00 left") }
-          within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 left") }
-          within("[data-pool-name='Vacation']") { expect(page).to have_content("$0.00 left") }
-        end
+      # WITHDRAWN with its Home rows: "shows the swept envelope topped up and the starved one empty"
+      # read `$400.00 left` / `$0.00 left` off Home, which is still the pool ledger. Its three
+      # figures are the three below, read out of the ledger the confirm actually wrote.
+      #
+      # Three rows: the sweep out of Groceries and two allocations. $85 left Groceries and $400 came
+      # back, so the category holds its full rate rather than $485. Vacation's $0.00 row is not a
+      # row at all — `Allocation` refuses a zero amount, and one starved category must not roll the
+      # whole split back.
+      it "writes the sweep as an allocation of its own" do
+        expect(Allocation.kind_sweep.pluck(:amount)).to eq([85])
+        expect(Allocation.kind_allocation.pluck(:amount)).to contain_exactly(400, 2_500)
+        expect(holding_of("Groceries")).to eq(400)
+        expect(holding_of("Vacation")).to eq(0)
       end
 
-      # Three movements: the sweep out of Groceries and two allocations. Vacation's $0.00 row is
-      # not a movement — PoolMovement refuses a zero amount, and one starved envelope must not
-      # roll the whole split back.
-      it "writes the sweep as a movement of its own" do
-        expect(PoolMovement.kind_sweep.pluck(:amount)).to eq([85])
-        expect(PoolMovement.kind_allocation.pluck(:amount)).to contain_exactly(400, 2_500)
-        expect(balance_of("Vacation")).to eq(0)
-      end
-
-      # WITH A SWEEP THE BRIEF'S SUBTRACTION NEEDS ITS SECOND TERM: the buffer fell $2,815, not
-      # $2,900, because $85 came back INTO the account on its way out to the envelopes. The left
-      # side is the account's own balance, the right side the two ledgers the confirm wrote.
+      # WITH A SWEEP THE SUBTRACTION NEEDS ITS SECOND TERM: available fell $2,815, not $2,900,
+      # because $85 came back to the root on its way out to the categories.
       it "drops the buffer by the allocations less the sweep" do
         expect(buffer).to eq(0)
         expect(2_815 - buffer).to eq(
-          PoolMovement.kind_allocation.sum(:amount) - PoolMovement.kind_sweep.sum(:amount)
+          Allocation.kind_allocation.sum(:amount) - Allocation.kind_sweep.sum(:amount)
         )
       end
 
-      # $500 + $2,400 of pay, and not a cent of it created or destroyed by three movements.
+      # $500 + $2,400 of pay, and not a cent of it created or destroyed by three allocations.
       it "creates no money" do
-        expect(bank_balance).to eq(2_900)
+        expect(purpose_total).to eq(2_900)
       end
     end
 
@@ -180,8 +178,8 @@ RSpec.describe "Distribution Confirm", type: :system do
       find_field("Amount for Car").send_keys(:enter)
 
       expect(page).to have_current_path(/overrides/)
-      within("[data-pool-name='Vacation']") { expect(page).to have_content("$150.00") }
-      expect(PoolMovement.distributed.count).to eq(0)
+      within("[data-category-name='Vacation']") { expect(page).to have_content("$150.00") }
+      expect(Allocation.distributed.count).to eq(0)
       expect(page).to have_css("#confirm-distribution")
     end
 
@@ -197,20 +195,16 @@ RSpec.describe "Distribution Confirm", type: :system do
         await("stays in your buffer")
       end
 
+      # WITHDRAWN with its Home rows: "shows the envelope the edit paid for" read `$1,000.00 left`
+      # and `$150.00 left` off Home. The two holdings and the buffer below are the same three
+      # figures, read out of the ledger.
       it "writes the figure in the box, and the cascade it caused" do
         expect(page).to have_content(
           "Distributed $1,550.00 into 3 envelopes, $85.00 swept back first. $1,350.00 stays in your buffer."
         )
-        expect(PoolMovement.kind_allocation.pluck(:amount)).to contain_exactly(400, 1_000, 150)
-        expect(bank_balance).to eq(2_900)
-      end
-
-      it "shows the envelope the edit paid for" do
-        within("[data-pool-group='Checking']") do
-          within("[data-pool-name='Car']") { expect(page).to have_content("$1,000.00 left") }
-          within("[data-pool-name='Vacation']") { expect(page).to have_content("$150.00 left") }
-          expect(page).to have_content("buffer now $1,350.00")
-        end
+        expect(Allocation.kind_allocation.pluck(:amount)).to contain_exactly(400, 1_000, 150)
+        expect([holding_of("Car"), holding_of("Vacation"), buffer]).to eq([1_000, 150, 1_350])
+        expect(purpose_total).to eq(2_900)
       end
     end
 
@@ -219,11 +213,10 @@ RSpec.describe "Distribution Confirm", type: :system do
     # it costs money. The historical shape is exact: while overrides were substituted after the
     # fill, an override of $350 against $185 of cash wrote $350 and left the account at -$165.
     #
-    # $5,000 into the FIRST envelope is more than the account holds, so it takes everything and
-    # the two below it get nothing — a split visibly different from the un-edited one, which is
-    # what proves the figure was read at all, above a buffer that lands on zero rather than
-    # -$2,100.
-    context "with an override larger than the account holds" do
+    # $5,000 into the FIRST category is more than there is, so it takes everything and the two below
+    # it get nothing — a split visibly different from the un-edited one, which is what proves the
+    # figure was read at all, above a buffer that lands on zero rather than -$2,100.
+    context "with an override larger than the buffer holds" do
       before do
         fill_in "Amount for Groceries", with: "5000"
         click_on "Confirm distribution"
@@ -234,26 +227,25 @@ RSpec.describe "Distribution Confirm", type: :system do
         expect(page).to have_content(
           "Distributed $2,900.00 into 1 envelope, $85.00 swept back first. $0.00 stays in your buffer."
         )
-        expect(balance_of("Groceries")).to eq(2_900)
-        expect(balance_of("Car")).to eq(0)
+        expect(holding_of("Groceries")).to eq(2_900)
+        expect(holding_of("Car")).to eq(0)
       end
 
-      # What actually left the account is the allocations less the sweep that came back into it,
-      # and it cannot exceed the $2,815 the account held.
-      it "cannot drive the account below zero" do
+      # What actually left the root is the allocations less the sweep that came back into it, and it
+      # cannot exceed the $2,815 that was there.
+      it "cannot drive the buffer below zero" do
         expect(buffer).to eq(0)
         expect(buffer).not_to be_negative
         expect(
-          PoolMovement.kind_allocation.sum(:amount) - PoolMovement.kind_sweep.sum(:amount)
+          Allocation.kind_allocation.sum(:amount) - Allocation.kind_sweep.sum(:amount)
         ).to eq(2_815)
-        expect(bank_balance).to eq(2_900)
+        expect(purpose_total).to eq(2_900)
       end
     end
 
-    # CONFIRMING TWICE REPLACES, and this is the shape the `Σ pools` invariant is most at risk
-    # from: a second confirm that ADDED to the first would hand out $2,900 again from an account
-    # that no longer holds it, and every envelope would end up holding money the bank does not
-    # have.
+    # CONFIRMING TWICE REPLACES, and this is the shape the §2 invariant is most at risk from: a
+    # second confirm that ADDED to the first would hand out $2,900 again from a root that no longer
+    # holds it, and every category would end up holding money that never came in.
     context "when confirmed a second time" do
       before do
         click_on "Confirm distribution"
@@ -274,77 +266,19 @@ RSpec.describe "Distribution Confirm", type: :system do
       end
 
       it "leaves one split in the ledger, not two" do
-        expect(PoolMovement.distributed.count).to eq(3)
-        expect(PoolMovement.kind_allocation.sum(:amount)).to eq(2_900)
-        expect(balance_of("Groceries")).to eq(400)
+        expect(Allocation.distributed.count).to eq(3)
+        expect(Allocation.kind_allocation.sum(:amount)).to eq(2_900)
+        expect(holding_of("Groceries")).to eq(400)
         expect(buffer).to eq(0)
-        expect(bank_balance).to eq(2_900)
+        expect(purpose_total).to eq(2_900)
       end
     end
   end
 
-  # THE COLLAPSED SCREEN'S HIDDEN `account_id`, which every other example on this page would pass
-  # without: with one account the controller's fallback finds the right one whether the field is
-  # there or not. Here the pay landed in Checking, so the fallback picks CHECKING — and the user
-  # is looking at Ally. Delete the field and the button writes Checking's split from Ally's
-  # screen, which is the shape "the moment a second paycheck arrives mid-period" names.
-  describe "confirming a second account from its own screen", :aggregate_failures do
-    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
-
-    before do
-      envelope("Groceries", 400, priority: 1)
-      deposit(2_400, on: Date.current)
-      create(
-        :pool_budget,
-        :per_period_rate,
-        amount: 100,
-        pool: create(:pool, :budget_pool, user: user, account: ally, name: "Holiday")
-      )
-      # MAIN-ACCOUNT SPEC §6: an income category may only point at the user's main account, so
-      # this paycheck's category is Checking's, same as every other income category on this
-      # page. The money still lands in Ally — a `transfer` PoolMovement main -> Ally carries it,
-      # exactly the write Task 3's routing feature automates for a real second-account choice.
-      # Checking's own balance nets to unchanged; Ally gains exactly the $300 it always gained.
-      ally_paycheck = create(
-        :entry,
-        amount: 300,
-        date: Date.current,
-        item: create(:item, category: create(:category, :income, user: user, pool: checking))
-      )
-      create(
-        :pool_movement,
-        from_pool: checking,
-        to_pool: ally,
-        amount: 300,
-        date: Date.current,
-        source_entry: ally_paycheck
-      )
-      visit new_distribution_path(account_id: ally.id)
-    end
-
-    # The pairing: with no account named this screen opens on Checking, so the example below is
-    # about the field and not about the only account there is.
-    it "opens on the account the pay landed in when none is named" do
-      visit new_distribution_path
-      expect(page).to have_css("h1", text: "Checking")
-      expect(page).to have_no_css("h1", text: "Ally")
-    end
-
-    it "writes the split for the account on screen, not the default one" do
-      expect(page).to have_css("h1", text: "Ally")
-      click_on "Confirm distribution"
-
-      expect(page).to have_content("Distributed $100.00 into 1 envelope. $200.00 stays in your buffer.")
-      expect(balance_of("Holiday")).to eq(100)
-      expect(balance_of("Groceries")).to eq(0)
-      expect(Pool.find(checking.id).calculator.balance).to eq(2_400)
-    end
-  end
-
-  # An account that cannot fund anything still has a button, and pressing it must say so rather
-  # than claim a split. $100 in against $400 out leaves the account $300 down, so every row
-  # clamps to zero and no movement is written at all.
-  describe "an account with nothing to give", :aggregate_failures do
+  # A root that cannot fund anything still has a button, and pressing it must say so rather than
+  # claim a split. $100 in against $400 out leaves the buffer $300 down, so every row clamps to zero
+  # and no allocation is written at all.
+  describe "a buffer with nothing to give", :aggregate_failures do
     before do
       envelope("Quarterly Taxes", 200, priority: 1)
       deposit(100, on: Date.current)
@@ -354,7 +288,7 @@ RSpec.describe "Distribution Confirm", type: :system do
 
     # The pairing: the button is offered on a screen that has nothing to hand out, which is what
     # makes the sentence below a refusal rather than a missing control.
-    it "offers the button over an account with nothing in it" do
+    it "offers the button over a buffer with nothing in it" do
       expect(page).to have_css("h2", text: "Nothing to distribute")
       expect(page).to have_button("Confirm distribution")
     end
@@ -363,10 +297,10 @@ RSpec.describe "Distribution Confirm", type: :system do
       click_on "Confirm distribution"
       expect(page).to have_content("Nothing could be funded. -$300.00 stays in your buffer.")
       expect(page).to have_no_content("Distributed $")
-      expect(PoolMovement.count).to eq(0)
-      expect(balance_of("Quarterly Taxes")).to eq(0)
+      expect(Allocation.count).to eq(0)
+      expect(holding_of("Quarterly Taxes")).to eq(0)
       expect(buffer).to eq(-300)
-      expect(bank_balance).to eq(-300)
+      expect(purpose_total).to eq(-300)
     end
   end
 
@@ -383,32 +317,39 @@ RSpec.describe "Distribution Confirm", type: :system do
     raise "expected the page to show #{content.inspect} before the next step"
   end
 
-  # The account's unallocated cash, read through the app's own definition of a balance and
-  # through a FRESHLY BUILT calculator: PoolCalculator memoises, so one held across the confirm
-  # answers from before the write.
-  def buffer = Pool.find(checking.id).calculator.balance
+  # A FRESH ledger every time: `CategoryLedger` is a snapshot memoised at first read, so one held
+  # across the confirm answers from before the write.
+  def ledger = CategoryLedger.new(user.categories.expenses.to_a, user: user)
 
-  # WHAT THE BANK WOULD SAY: the account's own cash plus every envelope inside it. Compared
-  # against the literal deposits the fixture planted, never against a sum of its own parts —
-  # `Pool#total` IS that sum, so the two agree after any write whatsoever.
-  def bank_balance = Pool.find(checking.id).total
+  # MONEY WITH NO JOB YET — the purpose ledger's root, which is what "buffer" names on this screen.
+  def buffer = ledger.available
 
-  def balance_of(name) = user.pools.find_by!(name: name).calculator.balance
+  # THE §2 PARTITION: available plus every holding. Compared against the literal deposits the fixture
+  # planted, never against a sum of its own parts.
+  def purpose_total
+    categories = user.categories.expenses.to_a
+    snapshot = CategoryLedger.new(categories, user: user)
+
+    snapshot.available + categories.sum(0.to_d) { |category| snapshot.holding_of(category) }
+  end
+
+  def holding_of(name) = user.categories.find_by!(name: name).holding_calculator.balance
 
   def envelope(name, rate, funded: nil, priority: 0)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
-    pool
+    category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
+    create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+    create(:allocation, to_category: category, amount: funded, date: Date.current - 14) if funded
+    category
   end
 
   def deposit(amount, on:)
-    category = create(:category, :income, user: user, pool: checking)
+    category = create(:category, :income, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
+  # Spending by a category that holds none of its own money, so it drains AVAILABLE (§4).
   def spend(amount, on:)
-    category = create(:category, :expense, user: user, pool: checking)
+    category = create(:category, :expense, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 end

@@ -137,6 +137,22 @@ class Category < ApplicationRecord
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
 
+  # THE ORDER THE DISTRIBUTE WATERFALL FILLS IN, and the ONE place it lives (two-ledger spec §2).
+  # It answers both halves of "which categories does a distribution fill, and in what order",
+  # because a caller that could ask them separately is a caller that can fill a set it did not
+  # order — `AllocationCalculator` reads this once for the sweep and the fill alike so the two
+  # cannot disagree about who is in the waterfall.
+  #
+  # HOLDERS ONLY, which is `expense? && funded_since.present?` — `Category#holder?` in SQL. An
+  # income category holds nothing (income lands in available, §2) and an expense category that has
+  # never been funded drains available rather than itself, so filling either would put money
+  # somewhere no reader would ever take it out of.
+  #
+  # `[priority, name]`, ON `Pool.by_priority`'S OWN REASON: priority alone is not a total order, and
+  # a tie falling through to database order means random UUID bytes deciding which envelope gets
+  # funded when the money runs out. `name` is unique per user, so the pair is total.
+  scope :in_fill_order, -> { expenses.where.not(funded_since: nil).order(:priority, :name) }
+
   # THE LATCH ITSELF, CASE-INSENSITIVE — matching, not merely resembling, the `uniqueness:
   # { case_sensitive: false }` validation above. An exact-case `where(name: OPENING_BALANCE_NAME)`
   # would miss a category a user already named "opening balance" through the ordinary categories

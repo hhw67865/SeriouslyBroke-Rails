@@ -2,8 +2,12 @@
 
 require "rails_helper"
 
-# The distribution screen's proposal. Overrides (Task 5) and confirming (Task 6) are not here
-# yet, so every example below is about what the screen SAYS.
+# The distribution screen's proposal: every example below is about what the screen SAYS.
+#
+# CONVERTED TO THE PURPOSE LEDGER (two-ledger Task 4). Every figure keeps its number — categories
+# hold the money now and "buffer" on this screen is `CategoryLedger#available` — and one example
+# lost its account: the overdrawn one said "Checking is $200.00 in the red" and now says "Your
+# buffer is", because there is no account for that sentence to name.
 #
 # `Capybara.exact` is unset, so a bare `have_content("$400.00")` also matches "$1,400.00" and
 # matches anything the sidebar happens to print. Every figure below is therefore scoped — to the
@@ -13,7 +17,10 @@ RSpec.describe "Distributions Proposal", type: :system do
   # yesterday. Money paid in a fortnight ago therefore belongs to a period that has closed —
   # which is what makes Groceries' $85 sweepable.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # The pot, for income to land in (`Category#income_must_land_in_an_account`). No figure below is
+  # read off it, and the buffer target on the all-clear example is the one exception — see
+  # DistributionPresenter#buffer_target, which still reads `pools.target_amount`.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
   before { sign_in user, scope: :user }
 
@@ -38,8 +45,8 @@ RSpec.describe "Distributions Proposal", type: :system do
         expect(page).to have_content("Income this period $2,400.00", normalize_ws: true)
         expect(page).to have_content("Swept back from Groceries $85.00", normalize_ws: true)
         expect(page).to have_content("Available $2,900.00", normalize_ws: true)
-        # Nothing left this account inside the period, so the residual line has no cause and does
-        # not render. Paired with the overdrawn example below, where it does.
+        # Nothing left the root inside the period by any other route, so the residual line has no
+        # cause and does not render. Paired with the overdrawn example below, where it does.
         expect(page).to have_no_content("Spent and moved this period")
       end
     end
@@ -53,12 +60,12 @@ RSpec.describe "Distributions Proposal", type: :system do
       # A FULLY funded row prints the bare amount — `$400.00`, never `$400.00 of $400.00`, which
       # is the noise the helper drops. `Capybara.exact` is unset, so the positive assertion alone
       # passes on either string; the pairing is what pins which one was rendered.
-      within("[data-pool-name='Groceries']") do
+      within("[data-category-name='Groceries']") do
         expect(page).to have_content("$400.00")
         expect(page).to have_no_content(" of ")
       end
-      within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
-      within("[data-pool-name='Vacation']") { expect(page).to have_content("$0.00 of $150.00") }
+      within("[data-category-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
+      within("[data-category-name='Vacation']") { expect(page).to have_content("$0.00 of $150.00") }
       expect(page).to have_content("ran out here · $250.00 unfunded")
     end
 
@@ -73,11 +80,11 @@ RSpec.describe "Distributions Proposal", type: :system do
     # Where the swept money physically was, said on the row it came out of as well as in the
     # breakdown — and `· last period` is the marker that explains why it is being taken back.
     it "marks the envelope whose period has closed" do
-      within("[data-pool-name='Groceries']") do
+      within("[data-category-name='Groceries']") do
         expect(page).to have_content("last period")
         expect(page).to have_content("$85.00 swept back")
       end
-      within("[data-pool-name='Car']") { expect(page).to have_no_content("swept back") }
+      within("[data-category-name='Car']") { expect(page).to have_no_content("swept back") }
     end
 
     # Two moments, not one level: the buffer had $415 before this period's income and ends the
@@ -91,10 +98,15 @@ RSpec.describe "Distributions Proposal", type: :system do
   # that rendered the table unconditionally would pass every example above.
   describe "an all-clear distribution", :aggregate_failures do
     before do
+      # THE TARGET IS SET FIRST, and the order is load-bearing rather than tidy. `buffer_target` reads
+      # `user.default_account.target_amount`, and the FIRST thing to ask `user.default_account` is the
+      # category factory a line below — which caches the association on the user object Warden hands
+      # the first request. Updated afterwards, the column moves in the database and the cached Pool
+      # keeps the `nil` it was loaded with, and the clause silently stays off.
+      checking.update!(target_amount: 4_000)
       envelope("Groceries", 400, funded: 85, priority: 1)
       envelope("Car", 100, priority: 2)
       envelope("Vacation", 150, priority: 3)
-      checking.update!(target_amount: 4_000)
       deposit(500, on: Date.current - 14)
       deposit(2_400, on: Date.current)
       visit new_distribution_path
@@ -111,7 +123,7 @@ RSpec.describe "Distributions Proposal", type: :system do
       expect(page).to have_no_css("#distribution-waterfall")
       # The rows are what the table would have shown, so their absence is the switch actually
       # having fired rather than a heading that moved.
-      expect(page).to have_no_css("[data-pool-name='Car']")
+      expect(page).to have_no_css("[data-category-name='Car']")
     end
 
     # The breakdown answers "where did this number come from" on both densities — it is the
@@ -138,7 +150,7 @@ RSpec.describe "Distributions Proposal", type: :system do
       expect(page).to have_no_css("#distribution-summary")
       expect(page).to have_content("Every envelope gets what it asked for, but something below still needs you")
 
-      within("[data-alert-pool='Utilities']") do
+      within("[data-alert-category='Utilities']") do
         expect(page).to have_content("overdue · was #{(Date.current - 10).strftime("%b %-d")}")
         expect(page).to have_content("Its money is already there")
       end
@@ -148,7 +160,7 @@ RSpec.describe "Distributions Proposal", type: :system do
     # finds nothing here and falls back to the end of the list — the line would read
     # "ran out here · $0.00 unfunded" on a screen where every envelope was funded in full.
     it "draws no cutoff on a period that never ran out" do
-      expect(page).to have_css("[data-pool-name='Groceries']")
+      expect(page).to have_css("[data-category-name='Groceries']")
       expect(page).to have_no_content("ran out here")
     end
   end
@@ -165,7 +177,7 @@ RSpec.describe "Distributions Proposal", type: :system do
     end
 
     it "prints one date on the row and no schedule clause" do
-      within("[data-pool-name='Utilities']") do
+      within("[data-category-name='Utilities']") do
         expect(page).to have_content("overdue · was #{(Date.current - 10).strftime("%b %-d")}")
         expect(page).to have_no_content("periods left")
         expect(page).to have_no_content("due #{(Date.current - 10).strftime("%b %-d")}")
@@ -173,9 +185,9 @@ RSpec.describe "Distributions Proposal", type: :system do
     end
   end
 
-  # Amendment B. One account has no sibling overdraft to cancel against, so the negative is real
-  # and the screen says so rather than flooring it at zero.
-  describe "an overdrawn account", :aggregate_failures do
+  # There is no sibling root to cancel a negative against, so it is real and the screen says so
+  # rather than flooring it at zero.
+  describe "an over-allocated buffer", :aggregate_failures do
     before do
       envelope("Groceries", 400, priority: 1)
       deposit(100, on: Date.current)
@@ -185,17 +197,17 @@ RSpec.describe "Distributions Proposal", type: :system do
 
     it "prints the negative rather than a zero" do
       expect(page).to have_css("h2", text: "Nothing to distribute")
-      expect(page).to have_content("Checking is $200.00 in the red")
+      expect(page).to have_content("Your buffer is $200.00 in the red")
 
       within("#distribution-sources") do
-        # The overdraft is the SPENDING line's, not the carried-over line's: this account opened
+        # The overdraft is the SPENDING line's, not the carried-over line's: the root opened
         # the period holding nothing, took $100 in and paid $300 out.
         expect(page).to have_content("Buffer carried over $0.00", normalize_ws: true)
         expect(page).to have_content("Spent and moved this period -$300.00", normalize_ws: true)
         expect(page).to have_content("Available -$200.00", normalize_ws: true)
       end
       within("#distribution-buffer") { expect(page).to have_content("$0.00 → -$200.00", normalize_ws: true) }
-      within("[data-pool-name='Groceries']") { expect(page).to have_content("$0.00 of $400.00") }
+      within("[data-category-name='Groceries']") { expect(page).to have_content("$0.00 of $400.00") }
     end
   end
 
@@ -207,14 +219,14 @@ RSpec.describe "Distributions Proposal", type: :system do
     let(:due_on) { Date.current + 43 }
 
     before do
-      pool = create(:pool, :budget_pool, user: user, account: checking, name: "Rent", priority: 1)
-      create(:pool_budget, pool: pool, amount: 1_200, interval_months: 12, anchor_date: due_on)
+      rent = create(:category, :expense, :funded, user: user, name: "Rent", priority: 1)
+      create(:budget, pool: nil, category: rent, amount: 1_200, interval_months: 12, anchor_date: due_on)
       deposit(100, on: Date.current)
       visit new_distribution_path
     end
 
     it "says when the bill lands and how many periods are left to fund it" do
-      within("[data-pool-name='Rent']") do
+      within("[data-category-name='Rent']") do
         expect(page).to have_content("due #{due_on.strftime("%b %-d")} · 4 periods left", normalize_ws: true)
         expect(page).to have_content("$100.00 of $300.00")
       end
@@ -230,9 +242,7 @@ RSpec.describe "Distributions Proposal", type: :system do
       envelope("Car", 2_600, priority: 2)
       deposit(500, on: Date.current - 14)
       deposit(2_400, on: Date.current)
-      AllocationCommitter.new(
-        AllocationCalculator.new(user: user, account: checking, today: Date.current)
-      ).call
+      AllocationCommitter.new(AllocationCalculator.new(user: user, today: Date.current)).call
       visit new_distribution_path
     end
 
@@ -242,11 +252,11 @@ RSpec.describe "Distributions Proposal", type: :system do
 
       expect(page).to have_css("h2", text: "Distribute $2,900.00")
       within("#distribution-sources") { expect(page).to have_content("Swept back from Groceries $85.00", normalize_ws: true) }
-      within("[data-pool-name='Groceries']") do
+      within("[data-category-name='Groceries']") do
         expect(page).to have_content("$400.00")
         expect(page).to have_no_content(" of ")
       end
-      within("[data-pool-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
+      within("[data-category-name='Car']") { expect(page).to have_content("$2,500.00 of $2,600.00") }
     end
 
     # Rendering must not move money. The banner above is a claim about a split that has to still
@@ -258,8 +268,8 @@ RSpec.describe "Distributions Proposal", type: :system do
       # one, reproducibly killing the browser mid-navigation in teardown).
       expect(page).to have_css("#distribution-waterfall")
 
-      expect(PoolMovement.distributed.count).to eq(3)
-      expect(PoolMovement.distributed.sum(:amount)).to eq(2_985)
+      expect(Allocation.distributed.count).to eq(3)
+      expect(Allocation.distributed.sum(:amount)).to eq(2_985)
     end
   end
 
@@ -278,36 +288,37 @@ RSpec.describe "Distributions Proposal", type: :system do
   private
 
   def envelope(name, rate, funded: nil, priority: 0)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
-    pool
+    category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
+    create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+    create(:allocation, to_category: category, amount: funded, date: Date.current - 14) if funded
+    category
   end
 
   # A bill whose date has passed with no payment recorded against its item. The ITEM is what makes
   # a rule payable and therefore what makes it late.
   def overdue_envelope(name, amount, funded: nil, priority: 0)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    category = create(:category, :expense, user: user, pool: pool)
+    category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
     create(
-      :pool_budget,
-      pool: pool,
+      :budget,
+      pool: nil,
+      category: category,
       item: create(:item, category: category),
       amount: amount,
       interval_months: nil,
       anchor_date: Date.current - 10
     )
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current) if funded
-    pool
+    create(:allocation, to_category: category, amount: funded, date: Date.current) if funded
+    category
   end
 
   def deposit(amount, on:)
-    category = create(:category, :income, user: user, pool: checking)
+    category = create(:category, :income, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
+  # Spending by a category that holds none of its own money, so it drains AVAILABLE (§4).
   def spend(amount, on:)
-    category = create(:category, :expense, user: user, pool: checking)
+    category = create(:category, :expense, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 end

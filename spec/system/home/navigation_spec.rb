@@ -50,9 +50,17 @@ RSpec.describe "Home Navigation", type: :system do
   describe "reaching the distribution screen" do
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
+    # TWO LEDGERS, TWO FIXTURES, until Task 6 makes Home's rows categories (two-ledger spec §2).
+    # The POOL envelope is what Home's own waterfall band renders — the band carrying the second
+    # link asserted below — and the holder CATEGORY is what `/distributions/new` fills, since the
+    # distribution screen reads `Category.in_fill_order` now. Planted with the same $400 rule so the
+    # two screens describe the same shortfall; without the category the screen this file navigates
+    # TO renders no waterfall at all and "Where your money goes" is simply absent.
     before do
       rent = create(:pool, :budget_pool, user: user, account: checking, name: "Rent", priority: 1)
       create(:pool_budget, :per_period_rate, pool: rent, amount: 400)
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries", priority: 1)
+      create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 400)
       category = create(:category, :income, user: user, pool: checking)
       create(:entry, item: create(:item, category: category), amount: 100, date: Date.current)
       visit root_path
@@ -72,7 +80,7 @@ RSpec.describe "Home Navigation", type: :system do
       nav_link.click
 
       expect(page).to have_current_path(new_distribution_path)
-      expect(page).to have_css("h1", text: "Checking")
+      expect(page).to have_css("h1", text: "Distribution")
       expect(page).to have_content("Where your money goes")
     end
 
@@ -83,7 +91,7 @@ RSpec.describe "Home Navigation", type: :system do
       within(waterfall_section) { click_link "Distribute this period" }
 
       expect(page).to have_current_path(new_distribution_path)
-      expect(page).to have_css("h1", text: "Checking")
+      expect(page).to have_css("h1", text: "Distribution")
     end
 
     # `/distributions/new` is a GET that takes WRITE LOCKS: DistributionPresenter's snapshot

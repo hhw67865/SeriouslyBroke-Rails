@@ -46,5 +46,41 @@ RSpec.describe "The two-ledger invariant", type: :model do
     expect(CategoryLedger.new([food]).holding_of(food)).to eq(210) # 300 − 40 − 50; the $10 predates funding
     expect(CategoryLedger.new([food, misc]).available).to eq(715) # 1000 − 25 − 10 − 300 + 50
   end
+
+  # THE KEYSTONE FOR TASK 4: a distribution is the biggest single write on the purpose ledger — a
+  # sweep out of every closed category and an allocation into every one that asks — and it must move
+  # money without creating or destroying any.
+  #
+  # Both sides are read the same way BEFORE and AFTER, and the equality is against the raw-SQL bank
+  # truth rather than against the app's own other reader: $1,000 came in and nothing went out, so
+  # both partitions are $1,000 whatever the split did. A committer that wrote an allocation with no
+  # sweep behind it, or doubled a row, moves one of these two figures and nothing else would say so.
+  #
+  # THE FIGURES ARE PLANTED, not derived: Food has a $400 rate rule and holds $120 of a period that
+  # closed, so the split sweeps $120 back and hands $400 out — leaving Food at $400 and available at
+  # $600, which is $1,000 between them, twice over.
+  it "holds after a committed distribution: income 1000 in, 1000 across both ledgers after" do
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6))
+    # `misc` is referenced so the lazy `let` exists BEFORE `#purpose` builds its ledger — that reader
+    # sums `[food, misc]` and `CategoryLedger#holding_of` raises rather than answering zero for a
+    # category it was not built over, which is the guard doing its job on a fixture ordering mistake.
+    misc
+    food.update!(priority: 1)
+    create(:budget, :per_period_rate, pool: nil, category: food, amount: 400)
+    create(:entry, item: create(:item, category: pay), amount: 1000, date: Date.new(2026, 8, 5))
+    create(:allocation, to_category: food, amount: 120, date: Time.zone.parse("2026-07-12 12:00"))
+
+    result = AllocationCommitter.new(AllocationCalculator.new(user: user, today: Date.new(2026, 8, 20))).call
+
+    aggregate_failures do
+      expect(result.success?).to be(true)
+      expect([result.swept, result.allocated]).to eq([120, 400])
+      expect(bank_truth).to eq(1_000)
+      expect(physical).to eq(1_000)
+      expect(purpose).to eq(1_000)
+      expect(CategoryLedger.new([food]).holding_of(food)).to eq(400)
+      expect(CategoryLedger.new(user.categories.expenses).available).to eq(600)
+    end
+  end
   # rubocop:enable RSpec/ExampleLength
 end

@@ -4,10 +4,10 @@
     the data's decision, not a setting's.
 
     The cutoff marks where the cash ran out, which is AFTER the last envelope that received any
-    of it: a pool funded $355 of $400 did get money. So the line goes before the first envelope
+    of it: a category funded $355 of $400 did get money. So the line goes before the first one
     that got nothing, or at the end when the money ran out inside the last row. Same rule and
     the same reasoning as Home's waterfall; there is no multi-account caveat here, because a
-    distribution is scoped to one account by definition. %>
+    distribution covers ONE root by definition (two-ledger spec §2). %>
 <% rows = presenter.lines %>
 <%# ASKED, NOT DECIDED HERE. "Which envelope was denied money" is a money-shaped rule, and it used
     to be spelled out in this line and again in home/_attention.html.erb — two readers of one
@@ -68,7 +68,7 @@
     <% end %>
   </div>
 
-  <%# Red pools with no row of their own: an overdue bill whose envelope already holds the money
+  <%# Red categories with no row of their own: an overdue bill whose category already holds the money
       asks for nothing and is rejected from the waterfall, so this band is the only place on the
       screen it can appear. It is also the thing the density switch fired on, and a table that
       opened without saying why reads as a bug.
@@ -76,16 +76,16 @@
       `period_closed:` LIKE EVERY OTHER ROW ON THIS SCREEN (2d whole-plan review, fix 3). This band
       passed no suffix at all until `DistributionPresenter::Standing` could answer for one. It is
       the one status on this screen that was labelled with less than the vocabulary offers, and it
-      is a band of pools with NO ROW — which is also why the gap never showed: a closed envelope
+      is a band of categories with NO ROW — which is also why the gap never showed: a closed envelope
       always asks for its rate again once its leftover is swept, so it always HAS a row and never
       reaches here. See Standing's header for why "unreachable today" was not a reason to leave it.
 
       Not the OTHER suffix, exactly as the waterfall rows below: `changed_after_distributing` is
       about a rule edited since the last split, and this screen is the split being made. %>
-  <% presenter.alerts.each do |pool, standing| %>
-    <div class="px-6 py-3 border-b border-gray-100 bg-status-danger-light" data-alert-pool="<%= pool.name %>">
+  <% presenter.alerts.each do |category, standing| %>
+    <div class="px-6 py-3 border-b border-gray-100 bg-status-danger-light" data-alert-category="<%= category.name %>">
       <div class="flex items-baseline justify-between gap-4">
-        <span class="font-medium text-gray-900"><%= pool.name %></span>
+        <span class="font-medium text-gray-900"><%= category.name %></span>
         <span class="text-sm text-status-danger"><%= pool_status_label(standing, period_closed: standing.period_closed?) %></span>
       </div>
       <p class="mt-0.5 text-xs text-gray-600">
@@ -96,17 +96,18 @@
 
   <%# ONE FORM ROUND THE WHOLE TABLE, and it is a GET back to this same screen. The consequence
       of an override is a real recomputation over the ledger — periods_until_due, the sweep the
-      confirm will take, the pool's own PoolStatus — so it is answered by the server that owns
+      confirm will take, the category's own HoldingStatus — so it is answered by the server that owns
       those readers rather than re-derived in JavaScript, where it would be a second, silently
       divergent copy of the schedule maths.
 
       NOTHING HERE WRITES (amendment E): the override lives in the query string and in these
       boxes until Task 6's confirm submits the same fields to `create`. The field names are
-      `overrides[<pool id>]` because that is exactly what AllocationCommitter consumes. %>
+      `overrides[<category id>]` because that is exactly what AllocationCalculator consumes.
+
+      NO `account_id` HIDDEN FIELD ANY MORE, and its absence is the two-ledger cutover on this
+      screen: there is one root per user (spec §2), so there is no second distribution for an
+      override to come back describing. %>
   <%= form_with url: new_distribution_path, method: :get do %>
-    <%# Without this the reload falls back to the user's main account (main-account spec §6) and
-        an override typed on a second account would come back describing the first one. %>
-    <%= hidden_field_tag :account_id, presenter.account.id %>
     <%# Carried forward only when the user asked for the table. Without it, clearing the last
         edit on a comfortable period collapses the table out from under the boxes mid-edit. %>
     <%= hidden_field_tag :expand, 1 if presenter.expand_requested? %>
@@ -114,20 +115,20 @@
     <ol>
       <% rows.each_with_index do |line, index| %>
         <%= render "cutoff", presenter: presenter if index == cutoff %>
-        <li class="px-6 py-3 border-b border-gray-100" data-pool-name="<%= line.pool.name %>">
+        <li class="px-6 py-3 border-b border-gray-100" data-category-name="<%= line.category.name %>">
           <div class="flex items-baseline justify-between gap-4">
             <span class="text-gray-900">
               <span class="text-xs text-gray-400"><%= index + 1 %></span>
-              <span class="font-medium"><%= line.pool.name %></span>
+              <span class="font-medium"><%= line.category.name %></span>
             </span>
             <span class="flex items-center gap-3">
               <%# The readout keeps its place and its colour: the box holds one number, and
                   `$200.00 of $500.00` is the half of the sentence a bare box cannot carry. %>
-              <span data-row-amount="<%= line.pool.name %>"
+              <span data-row-amount="<%= line.category.name %>"
                     class="tabular-nums text-sm <%= line.short? ? "text-status-danger" : "text-gray-900" %>">
                 <%= distribution_line_amount(line) %>
               </span>
-              <label class="sr-only" for="override-<%= line.pool.id %>">Amount for <%= line.pool.name %></label>
+              <label class="sr-only" for="override-<%= line.category.id %>">Amount for <%= line.category.name %></label>
               <%# EMPTY UNLESS THE USER TYPED HERE, with the proposal as the placeholder, and that
                   is not a styling choice. A box pre-filled with the proposal submits a figure for
                   every row, and since the fill now treats a submitted figure as that row's ask,
@@ -138,11 +139,11 @@
 
                   `min: 0` refuses a negative before it is submitted. A negative is bad input
                   rather than a shape with a meaning — AllocationCalculator#row_for deliberately
-                  carries it through to fail PoolMovement's validation loudly, which is the right
+                  carries it through to fail Allocation's validation loudly, which is the right
                   behaviour for a commit and the wrong one for a box you are still typing in. %>
-              <%= number_field_tag "overrides[#{line.pool.id}]",
+              <%= number_field_tag "overrides[#{line.category.id}]",
                                    distribution_override_value(line),
-                                   id: "override-#{line.pool.id}",
+                                   id: "override-#{line.category.id}",
                                    step: "0.01",
                                    min: "0",
                                    placeholder: distribution_override_placeholder(line),
@@ -155,12 +156,12 @@
             <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
           </p>
           <%# WHERE THE MONEY WENT, said on the row that moved it and nowhere else. The cascade
-              re-fills every envelope below an edit, so rows nobody touched change their figures;
+              re-fills every category below an edit, so rows nobody touched change their figures;
               this is the sentence that keeps that from being money moving for reasons the screen
               does not state. NOW first, then the consequence's LATER — that is the order the two
               questions arrive in. Grey, because it is a statement of fact rather than a caution. %>
           <% if line.redirect %>
-            <p class="mt-1 text-xs text-gray-500" data-redirect="<%= line.pool.name %>">
+            <p class="mt-1 text-xs text-gray-500" data-redirect="<%= line.category.name %>">
               ↳ <%= distribution_redirect_sentence(line.redirect) %>
             </p>
           <% end %>
@@ -170,7 +171,7 @@
               say. See DistributionPresenter::Consequence#worth_saying?. %>
           <% if line.consequence %>
             <p class="mt-1 text-xs <%= line.consequence.unrecoverable? ? "text-status-danger" : "text-status-warning" %>"
-               data-consequence="<%= line.pool.name %>">
+               data-consequence="<%= line.category.name %>">
               ↳ <%= distribution_consequence_sentence(line.consequence) %>
             </p>
           <% end %>
@@ -184,12 +185,12 @@
     <%# The buffer line, the waterfall's last row: what is left once every envelope above has
         taken what it could. Two moments, arrow between them, because the LEVEL matters less than
         the direction (spec §7.1) — a buffer falling every period is the slow bleed this line
-        exists to catch. Negative is a true statement about an account in trouble and is printed
+        exists to catch. Negative is a true statement about a root in trouble and is printed
         as one rather than floored at zero.
 
         INSIDE the form, and it moves with the boxes above it: money an override leaves out of an
-        envelope does not evaporate, it stays here, and money an override adds comes from here.
-        That is `Σ pools == your bank balance` shown before it is written. %>
+        category does not evaporate, it stays here, and money an override adds comes from here.
+        That is `available + Σ holdings` shown before it is written. %>
     <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
       <span class="text-sm font-medium text-gray-900">
         Stays in buffer<span class="text-gray-500"><%= buffer_target_clause(presenter) %></span>

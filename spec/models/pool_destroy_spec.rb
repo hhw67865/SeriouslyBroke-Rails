@@ -308,7 +308,7 @@ RSpec.describe Pool, "#destroy", type: :model do
   # memory before `destroy` (which skips validations) would make every example pass again while
   # testing a shape no caller produces, and a fake test is worse than an acknowledged gap. The
   # deletion of the orphan apparatus — these guards, `HomePresenter#orphan_pools` and its
-  # attention band, `BudgetPagePresenter#orphan_rules`, `ReallocationPresenter`'s "No account"
+  # attention band, `BudgetPagePresenter#orphan_rules`, `PoolReallocationPresenter`'s "No account"
   # group — is the follow-up this tightening creates, and it is larger than the task that created
   # it.
   #
@@ -405,11 +405,14 @@ RSpec.describe Pool, "#destroy", type: :model do
   end
 
   # ── THE CROSS-CHECK AGAINST DISTRIBUTION REPLACEMENT ──────────────────────────────────────
-  # `AllocationCommitter#previous_distribution` filters on `distributed` AND the period AND the
-  # ACCOUNT as an endpoint. A re-pointed row now has the account on one end, so the question is
-  # whether replacing this period's split can reach it: it cannot, because the only rows that
-  # SURVIVE re-pointing are transfers (an allocation and a sweep both collapse), and `distributed`
-  # selects neither. Measured rather than argued.
+  # ITS ANSWER GOT STRONGER WITH THE TWO-LEDGER CUTOVER, and the example is kept for exactly that.
+  # `AllocationCommitter#previous_distribution` used to filter `pool_movements` on `distributed` AND
+  # the period AND the ACCOUNT as an endpoint, so "can replacing this period's split reach a
+  # re-pointed row" was a question about three filters. It now reads `allocations` — a different
+  # table entirely — so a `pool_movements` row cannot be reached by a replacement at all, whatever
+  # its kind or its ends. What is pinned below is that the destroy and the redistribution coexist:
+  # the destroy collapses what it collapses, the split writes what it writes, and neither touches
+  # the other's rows. Measured rather than argued.
   describe "replacing this period's distribution after an envelope was destroyed" do
     let(:user) { create(:user, :biweekly) }
     let(:today) { Date.new(2026, 8, 20) }
@@ -444,9 +447,7 @@ RSpec.describe Pool, "#destroy", type: :model do
     end
 
     def redistribute
-      AllocationCommitter.new(
-        AllocationCalculator.new(user: user, account: checking, today: today)
-      ).call
+      AllocationCommitter.new(AllocationCalculator.new(user: user, today: today)).call
     end
 
     it "neither raises nor takes the re-pointed transfer with it", :aggregate_failures do

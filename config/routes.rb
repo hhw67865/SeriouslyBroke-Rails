@@ -114,10 +114,18 @@ Rails.application.routes.draw do
   # locks the account, replaces any previous split for the period, and writes the movements.
   resources :distributions, only: [:new, :create]
 
-  # Moving money between two envelopes in one account (spec §5). `new` states the damage, `create`
-  # writes the single `transfer` movement. Both take `to_pool_id`, `from_pool_id` and `amount` as
-  # flat params rather than a nested `pool_movement[…]` hash, because ONE form serves both: the GET
-  # recomputes the damage against the ledger and a submitter inside it POSTs the same fields.
+  # Moving money by hand on the PURPOSE LEDGER (spec §5, two-ledger spec §2): `category → category`
+  # or `available ↔ category`. `new` states the damage, `create` writes the single `transfer`
+  # allocation. Both take `to_category_id`, `from_category_id` and `amount` as flat params rather
+  # than a nested hash, because ONE form serves both: the GET recomputes the damage against the
+  # ledger and a submitter inside it POSTs the same fields. `"available"` names the root on either
+  # side, and it is not a uuid, so it cannot collide with a category id.
+  resources :allocations, only: [:new, :create]
+
+  # ── THE POOL-ERA TWIN, AND TASK 6 DELETES IT with Home's fix buttons, which are the only links
+  # left pointing here (Home's rows are pools until then). It was meant to be REPLACED by the route
+  # above in this task; removing it now takes `home/_attention.html.erb` down with it, and
+  # `home_presenter_spec` and the Home system specs with that. Same screen, pool-shaped.
   resources :pool_movements, only: [:new, :create]
 
   resource :account, only: [:show] do

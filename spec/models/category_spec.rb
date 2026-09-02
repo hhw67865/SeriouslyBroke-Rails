@@ -104,6 +104,32 @@ RSpec.describe Category, type: :model do
     it "does not answer .savings at all" do
       expect(described_class).not_to respond_to(:savings)
     end
+
+    # THE DISTRIBUTE WATERFALL'S ONE READ (two-ledger §2, Task 4). Two halves in one example
+    # because a scope that got either wrong would pass a spec asserting the other:
+    #
+    #   WHO IS IN — holders only, which is `expense? && funded_since.present?`. The income category
+    #   above and an unfunded expense one are both out, and they are out for different reasons.
+    #
+    #   IN WHAT ORDER — `[priority, name]`, and the tie-break is the half that goes wrong quietly.
+    #   Zebra and Apple both sit at priority 1 and Zebra is created FIRST, so insertion order says
+    #   [Zebra, Apple] while the rule says [Apple, Zebra]; Early at priority 0 comes ahead of both,
+    #   so sorting by name alone fails as loudly as sorting by priority alone.
+    it "orders the holders by priority then name and leaves everything else out" do
+      early = create(:category, :expense, :funded, user: user, name: "Early", priority: 0)
+      zebra = create(:category, :expense, :funded, user: user, name: "Zebra", priority: 1)
+      apple = create(:category, :expense, :funded, user: user, name: "Apple", priority: 1)
+      create(:category, :expense, user: user, name: "Never Funded", priority: 0)
+      # PAST THE MODEL, deliberately, and the raise it steps around is half the fact: a funded
+      # INCOME category is a shape `#holding_columns_are_sane` refuses, so the scope's `expenses`
+      # arm is a belt over a validation rather than the only thing holding the law. It is planted
+      # anyway, because a scope filtering on `funded_since` alone would pass every example that
+      # only ever met the shapes the validation admits.
+      create(:category, :income, user: user, name: "Pay", priority: 0)
+        .update_columns(funded_since: 1.year.ago.to_date) # rubocop:disable Rails/SkipsModelValidations
+
+      expect(described_class.where(user: user).in_fill_order).to eq([early, apple, zebra])
+    end
   end
 
   # THE RATE DETECTOR'S POPULATION, and after plan 3 it is exactly the account-pointed set: an

@@ -81,13 +81,6 @@ RSpec.shared_context "with a Checking account to reallocate in" do
     click_on "Move the money"
   end
 
-  # Task 6's write path, called directly: these files are about what a reallocation does to a
-  # distribution, not about the distribution screen, which has its own spec.
-  def distribute
-    proposal = AllocationCalculator.new(user: user, account: checking, today: Date.current)
-    AllocationCommitter.new(proposal).call
-  end
-
   def pool(name) = user.pools.find_by!(name: name)
 
   # A FRESHLY BUILT calculator every time: PoolCalculator memoises and is stale-after-write by

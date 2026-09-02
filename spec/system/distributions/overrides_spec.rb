@@ -16,7 +16,14 @@ RSpec.describe "Distribution Overrides", type: :system do
   # Biweekly, anchored today: this period is today..+13 and the next one opens on +14. That
   # boundary is what every consequence sentence names, and what makes "periods left" countable.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # The pot, for income to land in (`Category#income_must_land_in_an_account`). No figure below is
+  # read off it: this screen is entirely the purpose ledger's since Task 4.
+  # rubocop:disable RSpec/LetSetup -- THE POT HAS TO EXIST, and nothing here reads it: income
+  # lands in a category and `Category#income_must_land_in_an_account` says that category may
+  # only point at the user's MAIN account, so a user with no account cannot be paid at all. It
+  # is setup for the physical side of a fixture whose every assertion is on the purpose side.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
   let(:next_period) { (Date.current + 14).strftime("%b %-d") }
 
   before { sign_in user, scope: :user }
@@ -47,7 +54,7 @@ RSpec.describe "Distribution Overrides", type: :system do
     # impossible — asserted here as the absence of a value, with the placeholder as the paired
     # positive so "no value" cannot pass on a box that failed to render at all.
     it "leaves the box empty, showing what the row gets if it is left alone" do
-      within("[data-pool-name='Rent']") do
+      within("[data-category-name='Rent']") do
         expect(page).to have_field("Amount for Rent", with: "", placeholder: "500.00")
         expect(page).to have_content("$500.00")
       end
@@ -246,7 +253,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       expect(page).to have_content("To change the rule itself, edit the envelope's budget")
     end
 
-    # THE NEVER-FUNDED RATE ENVELOPE, which is the shape PoolCalculator::Pending#funded_on
+    # THE NEVER-FUNDED RATE ENVELOPE, which is the shape HoldingProjection::Pending#funded_on
     # exists for. Groceries has no movements at all, so #last_funded_on is nil and its rate
     # period reads as open — the projection would then sweep nothing, hold the $100 into the
     # next period and report it asking $300 instead of $400. It is funded by THIS distribution,
@@ -257,7 +264,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-pool-name='Groceries']") do
+      within("[data-category-name='Groceries']") do
         expect(page).to have_field("Amount for Groceries", with: "100.00")
       end
       expect(page).to have_no_css("[data-consequence='Groceries']")
@@ -268,7 +275,7 @@ RSpec.describe "Distribution Overrides", type: :system do
     # boxes; the ledger is untouched until Task 6's confirm.
     it "writes nothing" do
       expect { fill_in("Amount for Rent", with: "200") && click_on("Update figures") }
-        .not_to(change { [PoolMovement.count, Entry.count] })
+        .not_to(change { [Allocation.count, Entry.count] })
 
       expect(page).to have_css("[data-consequence='Rent']")
     end
@@ -329,7 +336,7 @@ RSpec.describe "Distribution Overrides", type: :system do
     # because nothing has been funded yet — so the presence of the consequence line, and only
     # that, is what the override adds.
     it "says nothing about a row nobody has touched" do
-      within("[data-pool-name='Rent']") do
+      within("[data-category-name='Rent']") do
         expect(page).to have_content("won't make it · #{due_on.strftime("%b %-d")}")
       end
       expect(page).to have_no_css("[data-consequence]")
@@ -435,7 +442,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-pool-name='Groceries']") { expect(page).to have_field("Amount for Groceries", with: "100.00") }
+      within("[data-category-name='Groceries']") { expect(page).to have_field("Amount for Groceries", with: "100.00") }
       expect(page).to have_no_css("[data-consequence='Groceries']")
       # The paired positive: the same render DOES print one, on the row whose ask really moves.
       expect(page).to have_css("[data-consequence='Rent']")
@@ -480,7 +487,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      within("[data-pool-name='Vacation']") { expect(page).to have_field("Amount for Vacation", with: "50.00") }
+      within("[data-category-name='Vacation']") { expect(page).to have_field("Amount for Vacation", with: "50.00") }
       expect(page).to have_no_css("[data-consequence='Vacation']")
       expect(page).to have_css("[data-consequence='Rent']")
     end
@@ -575,7 +582,7 @@ RSpec.describe "Distribution Overrides", type: :system do
     end
 
     it "does speak, because its ask really moves" do
-      within("[data-pool-name='Vacation']") do
+      within("[data-category-name='Vacation']") do
         expect(page).to have_field("Amount for Vacation", with: "", placeholder: "100.00")
       end
 
@@ -780,42 +787,43 @@ RSpec.describe "Distribution Overrides", type: :system do
     within("#distribution-redirect") { expect(page).to have_content(sentence, normalize_ws: true) }
   end
 
-  # A bill: an anchored rule with a due date. `rule` goes straight to the budget factory, so an
+  # A holder category — an expense category that has started holding money (§4). Every fixture on
+  # this screen is one of these; the three helpers below differ only in the rules they hang on it.
+  def holder(name, priority:, funded: nil, **attrs)
+    category = create(:category, :expense, :funded, user: user, name: name, priority: priority, **attrs)
+    create(:allocation, to_category: category, amount: funded, date: Date.current - 14) if funded
+    category
+  end
+
+  # `pool: nil` on every rule, because the budget factory's default owner is still a pool for the
+  # length of this branch and `Budget#must_have_an_owner` accepts either.
+  def rule(category, *traits, **attrs)
+    create(:budget, *traits, pool: nil, category: category, **attrs)
+  end
+
+  # A bill: an anchored rule with a due date. `spec` goes straight to the budget factory, so an
   # example that needs a due date which never rolls says `interval_months: nil` in its own words
   # rather than through a flag this helper would have to interpret.
-  def dated_envelope(name, amount, funded: nil, priority: 0, **rule)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, pool: pool, amount: amount, interval_months: 12, **rule)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
-    pool
+  def dated_envelope(name, amount, funded: nil, priority: 0, **spec)
+    holder(name, priority: priority, funded: funded)
+      .tap { |category| rule(category, amount: amount, interval_months: 12, **spec) }
   end
 
-  # A rate envelope: no anchor, so it asks for its amount every period and its leftover sweeps.
+  # A rate category: no anchor, so it asks for its amount every period and its leftover sweeps.
   def rate_envelope(name, rate, funded: nil, priority: 0)
-    pool = create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
-    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
-    pool
+    holder(name, priority: priority, funded: funded)
+      .tap { |category| rule(category, :per_period_rate, amount: rate) }
   end
 
-  # A savings pool with a target and a rate rule and no anchor — PoolCalculator#dateless_goal?.
+  # A savings goal: a TARGET and a rate rule and no anchor — HoldingCalculator#dateless_goal?. There
+  # is no savings TYPE any more (spec §3), so the target is the whole of what makes it one.
   def goal(name, target:, rate:, funded: nil, priority: 0)
-    pool = create(
-      :pool,
-      :savings_pool,
-      user: user,
-      account: checking,
-      name: name,
-      target_amount: target,
-      priority: priority
-    )
-    create(:pool_budget, :per_period_rate, pool: pool, amount: rate)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: funded, date: Date.current - 14) if funded
-    pool
+    holder(name, priority: priority, funded: funded, target_amount: target)
+      .tap { |category| rule(category, :per_period_rate, amount: rate) }
   end
 
   def deposit(amount, on:)
-    category = create(:category, :income, user: user, pool: checking)
+    category = create(:category, :income, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 end

@@ -42,7 +42,7 @@ class PoolMovementsController < ApplicationController
   private
 
   def presenter
-    ReallocationPresenter.new(
+    PoolReallocationPresenter.new(
       user: current_user,
       to_pool: pool_from(:to_pool_id),
       from_pool: pool_from(:from_pool_id),

@@ -3,31 +3,35 @@
 
     The breakdown is not decoration: "where did this number come from" is the first question a
     screen proposing to move $2,867 has to answer, and the three lines are the only place the
-    swept money is visible as having come out of an envelope rather than out of thin air. %>
+    swept money is visible as having come out of a category rather than out of thin air.
+
+    "BUFFER" IS AVAILABLE HERE AND EVERYWHERE ON THIS SCREEN (two-ledger spec §2). Spec §7.1's
+    buffer is "the money no envelope has claimed", which is exactly the purpose ledger's root; the
+    pool era kept it in an account, and this one keeps it nowhere at all. See
+    DistributionPresenter#buffer_carried. %>
 <div class="bg-white border border-gray-200 rounded p-6">
   <% if presenter.available.positive? %>
     <h2 class="text-2xl font-semibold text-gray-900">
       Distribute <%= number_to_currency(presenter.available) %>
     </h2>
   <% else %>
-    <%# #available is deliberately NOT clamped at zero (Task 2): one account has no sibling
-        overdraft to cancel against, so a floor would hide a real negative. "Distribute
-        -$200.00" is not an instruction anyone can follow, so the headline says the true thing
-        instead and the breakdown below still prints the figure. %>
+    <%# #available is deliberately NOT clamped at zero: there is no sibling to cancel a negative
+        against, so a floor would hide a real one. "Distribute -$200.00" is not an instruction
+        anyone can follow, so the headline says the true thing instead and the breakdown below
+        still prints the figure. %>
     <h2 class="text-2xl font-semibold text-status-danger">Nothing to distribute</h2>
     <%# The red sentence is about an OVERDRAFT, so it fires on `negative?` and not on the
-        headline's `!positive?`. An account sitting at exactly zero was reading "Checking is
+        headline's `!positive?`. A buffer sitting at exactly zero was reading "your buffer is
         $0.00 in the red" — a debt of nothing, stated in the loudest colour the app has. An empty
-        account is empty; it is not in trouble. %>
+        buffer is empty; it is not in trouble. %>
     <% if presenter.available.negative? %>
       <p class="mt-1 text-sm text-status-danger">
-        <%= presenter.account.name %> is <%= number_to_currency(-presenter.available) %> in the red,
+        Your buffer is <%= number_to_currency(-presenter.available) %> in the red,
         sweeps included — nothing can be funded until money arrives.
       </p>
     <% else %>
       <p class="mt-1 text-sm text-gray-600">
-        <%= presenter.account.name %> has no unallocated cash — nothing can be funded until money
-        arrives.
+        Your buffer has no unallocated money — nothing can be funded until money arrives.
       </p>
     <% end %>
   <% end %>
@@ -47,7 +51,7 @@
       <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.income_this_period) %></dd>
     </div>
     <%# Money that left (or came back to) the buffer inside this period by some route other than
-        a distribution: spending, and reallocations made by hand. Dropped when it is zero, which
+        a distribution: spending that no category holds money for, and hand moves. Dropped when it is zero, which
         is the ordinary shape — a line reading "$0.00" invites the reader to look for a cause
         that is not there. %>
     <% unless presenter.moved_this_period.zero? %>
@@ -58,12 +62,12 @@
         </dd>
       </div>
     <% end %>
-    <%# Named pools, not a bare "swept back": the money left an envelope the user recognises,
+    <%# Named categories, not a bare "swept back": the money left a category the user recognises,
         and with no sweep this line would read "Swept back from" followed by nothing. %>
     <% if presenter.sweeps.any? %>
       <div class="flex justify-between gap-4">
         <dt class="text-gray-600">
-          Swept back from <%= presenter.swept_pools.map(&:name).to_sentence %>
+          Swept back from <%= presenter.swept_categories.map(&:name).to_sentence %>
         </dt>
         <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.total_swept) %></dd>
       </div>
@@ -101,7 +105,7 @@
     <% if presenter.lines.any? %>
       <p class="mt-3">
         <%= link_to "Show every envelope",
-                    new_distribution_path(account_id: presenter.account.id, expand: 1),
+                    new_distribution_path(expand: 1),
                     class: "text-sm font-medium text-brand hover:text-brand-dark underline",
                     id: "distribution-expand" %>
       </p>

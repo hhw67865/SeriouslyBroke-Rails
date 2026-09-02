@@ -275,14 +275,18 @@ RSpec.describe PoolBalanceLedger, type: :model do
 
     before { entry(:income, 1_000, category_pool: checking, on: funded_on) }
 
-    it "reads the ledger at first use rather than at construction", :aggregate_failures do
+    # THE SECOND HALF WAS WITHDRAWN WITH ITS SUBJECT (two-ledger Task 4): it built an
+    # `AllocationCalculator` over this account and asserted `available == 600`, and that class now
+    # reads a `CategoryLedger` over the user's categories and takes no account at all. The property
+    # is the same one and it is stated where it belongs — `CategoryLedger` carries
+    # `PoolBalanceLedger`'s laziness verbatim and says so in its header. What survives here is this
+    # class's own half, which is what this file is about.
+    it "reads the ledger at first use rather than at construction" do
       ledger = described_class.new([checking, groceries])
-      proposal = AllocationCalculator.new(user: user, account: checking, today: today)
 
       move(from: checking, to: groceries, amount: 400, on: today)
 
       expect(ledger.terms_for(checking)[:movements_out]).to eq(400)
-      expect(proposal.available).to eq(600)
     end
   end
 

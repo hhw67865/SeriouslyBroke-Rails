@@ -121,21 +121,29 @@ RSpec.describe "db/seeds.rb" do
       expect(bank).to eq(7_841.00)
     end
 
-    # THE FOUR SCREENS THE DEMO EXISTS FOR. Each of these states is carried by exactly ONE account,
-    # so a change to an account's balance or rules can retire a screen with nothing failing — which
-    # is what this example is for. The figures are the state table's.
-    it "puts each account in the distribution state its screen was built for" do
-      states = user.pools.accounts.order(:name).to_h do |pool|
-        presenter = DistributionPresenter.new(user: user, account: pool, today: today)
-        [pool.name, [presenter.available, presenter.short?, presenter.expanded?, presenter.alerts.length]]
-      end
+    # ── THE DEMO NO LONGER FEEDS THE DISTRIBUTION SCREEN, AND THAT IS THE POINT OF THIS EXAMPLE.
+    #
+    # It used to carry four states — one per account, `Ally Savings` short-and-alerting, `Checking`
+    # short, `Health Savings` all-clear, `Side Gig Checking` overdrawn — because each of the four
+    # screens the demo exists for was carried by exactly ONE account. There is one screen now
+    # (two-ledger spec §2), and `db/seeds.rb` still writes POOLS: not one category it plants carries
+    # a `funded_since`, so `Category.in_fill_order` is EMPTY and the converted waterfall has no rows
+    # to render at all.
+    #
+    # KEPT AND INVERTED RATHER THAN DELETED, because "the demo stopped exercising the app's headline
+    # screen" is exactly the kind of thing that goes unnoticed: this is the row that fails the moment
+    # the seeds start planting holder categories, which is where the four states have to be rebuilt.
+    # THE SEEDS ARE TASK 7/8'S TO CONVERT and this example is the marker.
+    #
+    # `available` IS THE WHOLE $7,841 for the same reason, and it ties to the conservation example
+    # above: every dollar the household has is money no category has claimed.
+    it "leaves the distribution screen empty, because the seeds still plant pools", :aggregate_failures do
+      presenter = DistributionPresenter.new(user: user, today: today)
 
-      expect(states).to eq(
-        "Ally Savings" => [1_620.00, false, true, 1],
-        "Checking" => [560.00, true, true, 0],
-        "Health Savings" => [400.00, false, false, 0],
-        "Side Gig Checking" => [-300.00, true, true, 0]
-      )
+      expect(
+        [presenter.available, presenter.short?, presenter.expanded?, presenter.alerts.length, presenter.lines.length]
+      ).to eq([7_841.00, false, false, 0, 0])
+      expect(user.categories.in_fill_order).to be_empty
     end
 
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do

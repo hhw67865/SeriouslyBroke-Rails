@@ -4,9 +4,14 @@ require "rails_helper"
 
 # THE LEDGER-SHARING SEAM, which is not any one class's subject and so is not any one class's spec.
 #
-# Three classes take part: PoolBalanceLedger owns the rule (#for_as_of!), AllocationCalculator
-# shares one with another fill of itself through a `protected` writer, and ReallocationPresenter
-# accepts one from HomePresenter through a documented keyword. What is pinned here is the SEAM —
+# Four classes take part: PoolBalanceLedger owns the rule (#for_as_of!) and CategoryLedger states
+# it verbatim on the purpose side, AllocationCalculator shares one with another fill of itself
+# through a `protected` writer, and PoolPoolReallocationPresenter accepts one from HomePresenter
+# through a documented keyword.
+#
+# THE `AllocationCalculator` HALF IS OVER CATEGORIES SINCE TASK 4 and its ledger is a
+# `CategoryLedger`; the presenter half is still the pool-era twin, and moves to
+# `PoolReallocationPresenter` with Home in Task 6. What is pinned here is the SEAM —
 # who may hand a ledger to whom, and what happens when the two are about different moments. What
 # each class MEANS is measured where it always was: pool_balance_ledger_spec for the terms,
 # allocation_calculator_spec for the fill, allocation_committer_spec for the write. Restating any
@@ -69,9 +74,13 @@ RSpec.describe "ledger sharing", type: :model do
   end
 
   describe "AllocationCalculator#with_overrides" do
-    let(:proposal) { AllocationCalculator.new(user: user, account: checking, today: today) }
+    let(:proposal) { AllocationCalculator.new(user: user, today: today) }
+    let!(:food) { create(:category, :expense, :funded, user: user, name: "Food", priority: 1) }
 
-    before { groceries }
+    before do
+      create(:budget, :per_period_rate, pool: nil, category: food, amount: 400)
+      create(:allocation, to_category: food, amount: 85, date: Date.new(2026, 7, 12))
+    end
 
     it "carries the same ledger object rather than building a second one" do
       twin = proposal.with_overrides({})
@@ -81,7 +90,7 @@ RSpec.describe "ledger sharing", type: :model do
 
     # The cost half, measured rather than inferred: the twin runs the fill without any grouped
     # aggregate of its own, because the ones it needs have already been memoised on the shared
-    # ledger. `sum_amount` is the alias every grouped term in PoolBalanceLedger#compute carries.
+    # ledger. `sum_amount` is the alias every grouped term in CategoryLedger#compute carries.
     it "runs no grouped term of its own once the sharer has read them" do
       proposal.rows
       twin = proposal.with_overrides({})
@@ -91,11 +100,11 @@ RSpec.describe "ledger sharing", type: :model do
       expect(grouped).to be_empty
     end
 
-    it "keeps the user, the account and the day of the proposal it came from", :aggregate_failures do
-      twin = proposal.with_overrides({ groceries.id.to_s => "40" })
+    it "keeps the user and the day of the proposal it came from", :aggregate_failures do
+      twin = proposal.with_overrides({ food.id.to_s => "40" })
 
-      expect([twin.user, twin.account, twin.today]).to eq([user, checking, today])
-      expect(twin.overrides).to eq({ groceries.id.to_s => 40.to_d })
+      expect([twin.user, twin.today]).to eq([user, today])
+      expect(twin.overrides).to eq({ food.id.to_s => 40.to_d })
     end
 
     # THE SURFACE THAT IS CLOSED. A `ledger:` keyword here would have offered every caller in the
@@ -103,7 +112,7 @@ RSpec.describe "ledger sharing", type: :model do
     # so there is no keyword, and `#share_ledger` is protected. Both halves are asserted, because
     # "protected" is a claim about a method table that a later edit can quietly withdraw.
     it "cannot be supplied a ledger through the constructor" do
-      expect { AllocationCalculator.new(user: user, account: checking, today: today, ledger: unbounded) }
+      expect { AllocationCalculator.new(user: user, today: today, ledger: unbounded) }
         .to raise_error(ArgumentError, /unknown keyword: :ledger/)
     end
 
@@ -116,7 +125,7 @@ RSpec.describe "ledger sharing", type: :model do
     # the class, which is what #with_overrides does one line down from the refusal above. Two
     # proposals built independently hold different ledgers until one is shared.
     it "may be handed one by another AllocationCalculator", :aggregate_failures do
-      other = AllocationCalculator.new(user: user, account: checking, today: today)
+      other = AllocationCalculator.new(user: user, today: today)
 
       expect(other.send(:ledger)).not_to equal(proposal.send(:ledger))
       expect { other.send(:share_ledger, proposal.send(:ledger)) }.not_to raise_error
@@ -124,18 +133,18 @@ RSpec.describe "ledger sharing", type: :model do
     end
   end
 
-  describe "ReallocationPresenter's ledger keyword" do
+  describe "PoolReallocationPresenter's ledger keyword" do
     before { groceries }
 
     it "uses the ledger it was given rather than building one" do
       ledger = unbounded
-      presenter = ReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: ledger)
+      presenter = PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: ledger)
 
       expect(presenter.send(:ledger)).to equal(ledger)
     end
 
     it "builds its own when it is given none" do
-      presenter = ReallocationPresenter.new(user: user, to_pool: groceries, today: today)
+      presenter = PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today)
 
       expect(presenter.send(:ledger)).to be_a(PoolBalanceLedger)
     end
@@ -143,7 +152,7 @@ RSpec.describe "ledger sharing", type: :model do
     # The guard fires at CONSTRUCTION rather than at first read, so a screen holding a ledger from
     # another moment fails before it can render a figure from it.
     it "refuses a ledger bounded at another moment, at construction" do
-      expect { ReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: bounded) }
+      expect { PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: bounded) }
         .to raise_error(PoolBalanceLedger::AsOfMismatch, /one ledger per `as_of`/)
     end
 
@@ -151,7 +160,7 @@ RSpec.describe "ledger sharing", type: :model do
     it "accepts the unbounded ledger Home actually hands it" do
       home = HomePresenter.new(user: user, today: today)
 
-      expect { ReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: home.send(:ledger)) }
+      expect { PoolReallocationPresenter.new(user: user, to_pool: groceries, today: today, ledger: home.send(:ledger)) }
         .not_to raise_error
     end
   end

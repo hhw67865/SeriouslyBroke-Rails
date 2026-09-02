@@ -1,11 +1,12 @@
 <% content_for :title, "Distribute" %>
 
-<%# The page header names the ACCOUNT and the period; the headline below it names the amount.
-    It used to say "Distribute" directly above `Distribute $600.00`, which spent the largest type
-    on the screen saying the same word twice and left the account — the thing a user with more
-    than one of them needs to see — in a subtitle. %>
-<%= page_header(title: @presenter.account.name,
-                subtitle: "Distribution · #{@presenter.period.first.strftime("%b %-d")} – " \
+<%# The page header names the PERIOD; the headline below it names the amount. It used to name the
+    ACCOUNT, which was the thing a user with more than one of them needed to see — and there is no
+    account here any more (two-ledger spec §2: one root, one distribution per period). The period is
+    what identifies this screen now, and it is still not the word "Distribute" in the largest type
+    on the screen directly above `Distribute $600.00`. %>
+<%= page_header(title: "Distribution",
+                subtitle: "#{@presenter.period.first.strftime("%b %-d")} – " \
                           "#{@presenter.period.last.strftime("%b %-d")}") %>
 
 <div class="space-y-6">

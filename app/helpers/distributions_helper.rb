@@ -2,8 +2,8 @@
 
 # The distribution screen's row copy. See the UI design spec §5.
 module DistributionsHelper
-  # The states whose label already prints a date of its own — PoolStatus picks the rule that PUT
-  # the pool in that state, which is not necessarily the earliest-due one this row's schedule
+  # The states whose label already prints a date of its own — HoldingStatus picks the rule that PUT
+  # the category in that state, which is not necessarily the earliest-due one this row's schedule
   # clause describes. Named here rather than string-testing the label for a date, which would be
   # an assertion about a string this module does not own.
   #
@@ -82,7 +82,7 @@ module DistributionsHelper
   # and it is the only thing that lets money freed above it cascade down — a box carrying the
   # proposal would submit that figure back and pin the row where it was.
   #
-  # `line.needed`, not `line.funded`: it is what the user typed, before the account clamped it.
+  # `line.needed`, not `line.funded`: it is what the user typed, before available clamped it.
   # Rendering the clamped figure would silently rewrite a $350 edit as $185 the moment the page
   # came back, and the user would never see that their number had been changed for them.
   def distribution_override_value(line)
@@ -143,9 +143,9 @@ module DistributionsHelper
       "to #{distribution_party(redirect.recipients.first.first)}"
   end
 
-  # A `nil` pool is the buffer. It is a party to a shift like any other — money can land there or
+  # A `nil` category is the buffer. It is a party to a shift like any other — money can land there or
   # come out of it — rather than the residual it is in the other two modes.
-  def distribution_party(pool) = pool ? pool.name : "your buffer"
+  def distribution_party(category) = category ? category.name : "your buffer"
 
   # "That" for one row's own edit, "Your edits" for the aggregate above the table. The subject is
   # the only thing that changes: the arithmetic underneath is the same subtraction, taken against
@@ -178,7 +178,7 @@ module DistributionsHelper
     named, rest = distribution_redirect_split(redirect.recipients)
     preposition = redirect.freed? ? "to" : "from"
 
-    parts = named.map { |pool, amount| "#{number_to_currency(amount)} #{preposition} #{pool.name}" }
+    parts = named.map { |category, amount| "#{number_to_currency(amount)} #{preposition} #{category.name}" }
     parts << "#{number_to_currency(rest.sum(0.to_d, &:last))} across #{pluralize(rest.size, "other")}" if rest.any?
     parts << "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.buffer?
     parts

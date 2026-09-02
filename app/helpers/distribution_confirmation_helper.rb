@@ -5,22 +5,26 @@
 # A module of its own rather than another few methods on DistributionsHelper, and the split is
 # where the copy is READ rather than where it is about: everything in that module is rendered
 # on /distributions/new, while this sentence is rendered in the flash band on Home, after the
-# only request in this app that moves money. It is also the only copy here built from what was
-# WRITTEN — an AllocationCommitter::Result and a balance read back out of the ledger — rather
-# than from a proposal.
+# only request in this app that moves money on the purpose ledger. It is also the only copy here
+# built from what was WRITTEN — an AllocationCommitter::Result and an available read back out of
+# the ledger — rather than from a proposal.
 module DistributionConfirmationHelper
   # WHAT THE SPLIT ACTUALLY DID, said on the screen the user lands on afterwards. Built from
-  # AllocationCommitter::Result — what was WRITTEN — plus the account's balance read back out
+  # AllocationCommitter::Result — what was WRITTEN — plus `CategoryLedger#available` read back out
   # of the ledger after the write, so nothing in this sentence is a restatement of the proposal
   # the user just left.
+  #
+  # `buffer:` IS AVAILABLE (two-ledger spec §2), and the word is kept for the reason
+  # DistributionPresenter#buffer_carried gives: §7.1's buffer is the money no envelope has claimed,
+  # which is exactly the purpose ledger's root.
   #
   # `replaced` leads, because amendment D forbids this sentence contradicting the banner the
   # user consented to: the screen said confirming REPLACES the previous split rather than adding
   # to it, and "Distributed $2,500.00" afterwards reads as a second $2,500.00 having moved.
   #
-  # The buffer clause is the invariant said in words. Money only moved between the user's own
-  # pools, so what did not reach an envelope is still in the account — and this is the same
-  # figure Home's `buffer now` prints one redirect later, read from the same ledger.
+  # The buffer clause is the invariant said in words. Money only moved between the user's own root
+  # and their own categories, so what did not reach an envelope is still available — and this is the
+  # same figure Home prints one redirect later, read from the same ledger.
   def distribution_confirmation(result, replaced:, buffer:)
     lead = replaced ? "Replaced this period's split — " : ""
     said = "#{lead}#{distribution_split_clause(result)}#{distribution_swept_clause(result)}."
@@ -37,15 +41,18 @@ module DistributionConfirmationHelper
   # render, because it carries no verb, no buffer and no subject.
   private
 
-  # NOT keyed on `movements.empty?`. An account whose overdraft outlives its own sweeps writes
-  # sweep rows and funds nothing, so movements are present while no envelope got anything —
-  # "distributed $0.00 into 0 envelopes" over a real movement is the wrong half of that story.
-  # The count comes from the allocations alone; the sweep says itself in the next clause.
+  # NOT keyed on `allocations.empty?`. A root whose overdraft outlives its own sweeps writes sweep
+  # rows and funds nothing, so rows are present while no envelope got anything — "distributed $0.00
+  # into 0 envelopes" over a real row is the wrong half of that story. The count comes from the
+  # allocation rows alone; the sweep says itself in the next clause.
+  #
+  # THE COUNT IS OF CATEGORIES AND THE WORD ON SCREEN IS "envelope", deliberately: a category with a
+  # rule IS the envelope now (two-ledger spec §3), and re-wording every screen is Task 7's.
   def distribution_split_clause(result)
-    return "nothing could be funded" if result.envelopes_funded.zero?
+    return "nothing could be funded" if result.categories_funded.zero?
 
     "distributed #{number_to_currency(result.allocated)} into " \
-      "#{pluralize(result.envelopes_funded, "envelope")}"
+      "#{pluralize(result.categories_funded, "envelope")}"
   end
 
   # "first", because the order is the point: the sweep is what made some of the money available

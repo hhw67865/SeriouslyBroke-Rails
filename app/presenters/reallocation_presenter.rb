@@ -1,254 +1,244 @@
 # frozen_string_literal: true
 
-# ONE MOVEMENT BETWEEN TWO POOLS INSIDE ONE ACCOUNT — spec §5's reallocation, and the
-# single-row twin of the distribution screen. READ-ONLY: this presenter writes nothing, and it
-# opens no transaction, so unlike DistributionPresenter it may hand live PoolStatus objects to
-# the view (HomePresenter#status_for does the same). There is no rollback here for a lazily
-# re-executed reader to fall out of.
+# ONE MOVE ON THE PURPOSE LEDGER — spec §5's reallocation re-anchored on the two-ledger model, and
+# the single-row twin of the distribution screen. READ-ONLY: this presenter writes nothing, and it
+# opens no transaction, so unlike DistributionPresenter it may hand live HoldingStatus objects to the
+# view. There is no rollback here for a lazily re-executed reader to fall out of.
 #
-# The invariant is `Σ pools == your bank balance`. A reallocation moves money between two pools
-# in ONE account, so the bank balance cannot move — which is why every figure below is a
-# before/after pair on one pool and never a total.
+# WHAT THE POOL-ERA TWIN HAD AND THIS DOES NOT (`PoolReallocationPresenter`, deleted by Task 6):
 #
-# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §4.2, §5
+#   THE SAME-ACCOUNT RULE. `PoolMovement#crosses_accounts?` and its `must_not_cross_accounts`
+#   validation are gone with the concept: an allocation moves nothing physical (§2), so there is no
+#   account for a move to cross and no bank for it to move money between. Every one of the user's
+#   holder categories is offered, always.
+#
+#   THE "No account" DESTINATION GROUP, and the grouping itself. Destinations were grouped by the
+#   account they sat in, with orphans in a group of their own; there is one root now, so the list is
+#   flat and AVAILABLE is simply its first member.
+#
+# AVAILABLE IS A PARTY, NOT A CONTAINER. It is where a sweep sends a closed category's leftover and
+# where a savings withdrawal goes (§3), so it appears on BOTH ends of the screen — as the first
+# source and as the first destination. It is not a record, so it is `ROOT` below.
+#
+# THE INVARIANT is `available + Σ holdings == income − expenses`. A move is `available ↔ category` or
+# `category → category`, and neither side of that changes what came in or what went out — which is
+# why every figure below is a before/after pair on one party and never a total.
+#
+# See docs/superpowers/specs/2026-08-21-two-ledger-design.md §2, §3 and
+# docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §4.2, §5
 class ReallocationPresenter
-  # WHY A POOL'S MONEY IS NOT FREE, named rather than left as a bare subtraction (amendment D).
-  # "only $40.00 free" and "its own bill is due first" are different sentences and send the user
-  # to different places, so the rule that is holding the money travels with the figure.
+  # AVAILABLE, AS ONE END OF A MOVE. A null object rather than a bare `nil`, because `nil` already
+  # means "the user has not chosen yet" on this screen and the two must not be the same value: a form
+  # with no destination picked and a form asking to withdraw INTO available are different states with
+  # different screens.
   #
-  # Carries the Budget rather than a string: `HomeHelper#pool_rule_label` is this app's one
-  # answer to what a rule is called, and a second one here would drift from the pool page.
+  # `id` is the string the form round-trips, so a radio and a select option can name the root the way
+  # they name a category. It is not a uuid and cannot collide with one.
+  Root = Data.define do
+    def id = "available"
+
+    def name = "Available"
+
+    def root? = true
+  end
+
+  ROOT = Root.new
+
+  # WHY A CATEGORY'S MONEY IS NOT FREE, named rather than left as a bare subtraction. "only $40.00
+  # free" and "its own bill is due first" are different sentences and send the user to different
+  # places, so the rule that is holding the money travels with the figure.
+  #
+  # Carries the Budget rather than a string: `HomeHelper#pool_rule_label` is this app's one answer to
+  # what a rule is called, and a second one here would drift from every other screen.
   Holder = Data.define(:budget, :allocated, :due_on)
 
-  # A rule whose allocation FELL because of this move — "Maintenance slips to $494 of $800".
-  # Read off PoolCalculator#allocated_balances, the same earliest-due-first fill every other
-  # reader in the app uses, so an under-funded rule slips by what it actually loses.
+  # A rule whose allocation FELL because of this move — "Maintenance slips to $494 of $800". Read off
+  # HoldingCalculator#allocated_balances, the same earliest-due-first fill every other reader in the
+  # app uses, so an under-funded rule slips by what it actually loses.
   Slip = Data.define(:budget, :allocated)
 
   # WHAT THE MOVE COSTS THE SOURCE, before it is committed.
   #
-  # `ask_before` and `ask_after` are two REAL RECOMPUTATIONS of PoolCalculator#required, not a
-  # figure derived by dividing the amount moved by something — amendment C, and on this plan
-  # that mistake printed `$206.43` where the truth was `$194.17`.
+  # `ask_before` and `ask_after` are two REAL RECOMPUTATIONS of HoldingCalculator#required, not a
+  # figure derived by dividing the amount moved by something — on the pool-era twin that mistake
+  # printed `$206.43` where the truth was `$194.17`.
   #
-  # Both are taken with `net_of_sweep: true`, which is Task 5's shape (DistributionPresenter
-  # #projected_ask) and is load-bearing on exactly one shape: an envelope whose rate period has
-  # closed is going to hand its leftover back and be topped up to its full rate either way, so
-  # taking money out of it changes its ask by NOTHING. Read plainly, the screen would print a
-  # per-period cost that the next distribution erases. The two readers agree everywhere else —
-  # #sweepable_amount is zero unless the period is closed — so the flag only ever removes a lie.
+  # Both are taken with `net_of_sweep: true`, which is the distribution screen's shape
+  # (DistributionPresenter#projected_ask) and is load-bearing on exactly one shape: a category whose
+  # rate period has closed is going to hand its leftover back and be topped up to its full rate
+  # either way, so taking money out of it changes its ask by NOTHING. Read plainly, the screen would
+  # print a per-period cost that the next distribution erases. The two readers agree everywhere else
+  # — #sweepable_amount is zero unless the period is closed — so the flag only ever removes a lie.
+  #
+  # `status_after` is nil for the ROOT, which has no status: available is not a category and has no
+  # rules to be on track with.
   Damage = Data.define(:balance_before, :balance_after, :ask_before, :ask_after, :slip, :status_after) do
-    # Say it only when it is real (spec §5, amendment C). A rate envelope's ask and a dateless
-    # goal's rate do not move when money leaves, and a screen that prints "+$0.00 a period" on
-    # them is the warning-on-a-normal-state that principle 3 forbids.
+    # Say it only when it is real (spec §5). A rate category's ask and a dateless goal's rate do not
+    # move when money leaves, and a screen that prints "+$0.00 a period" on them is the
+    # warning-on-a-normal-state that principle 3 forbids.
     def ask_changed? = ask_after != ask_before
 
     def slipped? = slip.present?
   end
 
-  # One row of the sources list. `requested` is on the row rather than read off the presenter
-  # because affordability is a comparison between this pool's money and the amount asked for, and
-  # splitting the two halves across two objects is how they come to disagree.
+  # One row of the sources list. `requested` is on the row rather than read off the presenter because
+  # affordability is a comparison between this party's money and the amount asked for, and splitting
+  # the two halves across two objects is how they come to disagree.
   #
-  # TWO THRESHOLDS, NOT ONE, AND THIS IS A CORRECTION TO THE BRIEF — mine, not the plan's, so it
-  # is stated in full rather than folded in quietly.
+  # TWO THRESHOLDS, NOT ONE, and the reasoning is the pool era's, unchanged:
   #
-  # The brief (amendment D) makes `free_amount` the affordability gate: a source with less free
-  # money than the move asks for is disabled. Built that way and then measured, that gate makes
-  # amendment C's own damage statement UNREACHABLE, and the proof is short:
+  #   free   = max(holding − reserve, 0), and #allocated_balances fills greedily, so
+  #   reserve = min(holding, Σ rule amounts) and free = max(holding − Σ amounts, 0).
+  #   A move of `amount ≤ free` leaves the holding ≥ Σ amounts, so EVERY rule still takes its full
+  #   amount: no allocation moves, so no rule can slip and #required cannot change. Gating on `free`
+  #   would therefore make the damage statement UNREACHABLE.
   #
-  #   free   = max(balance − reserve, 0), and #allocated_balances fills greedily, so
-  #   reserve = min(balance, Σ rule amounts) and free = max(balance − Σ amounts, 0).
-  #   A move of `amount ≤ free` leaves balance_after ≥ Σ amounts, so EVERY rule still takes its
-  #   full amount: no allocation moves, so no rule can slip and #required cannot change.
-  #
-  # So under the brief's gate the damage line can only ever print its balance arrow. Amendment C's
-  # worked example is exactly the shape the gate forbids — rebuilt verbatim in the console, Car
-  # holding $1,340 against a $628 rule due first and a $800 Maintenance rule reserves the whole
-  # $1,340, reports `free_amount` of $0.00, and drops Maintenance to $494 of $800 on a $218 move.
-  # Spec §4.2's own fix ("Take $300 from Rent … you'd put in $800 next period instead of $500") is
-  # the same shape: Rent's rule holds all of Rent, so Task 8 could never offer that button.
-  #
-  # The correction keeps every purpose amendment D names and moves only the threshold at which a
-  # row goes dead:
-  #
-  #   requested > balance  → DISABLED, with the reason. "Cannot afford it" now means the envelope
-  #                          does not physically hold it, which is also the floor that keeps a
-  #                          reallocation from overdrawing the source.
+  #   requested > holding  → DISABLED, with the reason. "Cannot afford it" means the category does
+  #                          not hold it, which is also the floor that keeps a move from overdrawing
+  #                          the source.
   #   requested > free     → allowed, and the damage statement fires — this is where money that a
   #                          rule was holding gets taken, and stating that cost is what this whole
-  #                          screen is for (principle 5). `free_amount` is still the reader that
-  #                          decides it, and still the figure every row prints.
+  #                          screen is for (principle 5).
   #   requested <= free    → allowed, and there is nothing to say beyond the balance arrow.
   #
-  # `sweepable_amount` is nowhere near any of this, which is the confusion amendment D was
-  # written to prevent and which the correction does not reopen.
+  # THE ROOT IS ALWAYS IN THE THIRD CASE by construction: available is by definition the money no
+  # rule is holding, so `free == holding` and #promised? can never fire on it.
   Candidate = Data.define(
-    :pool, :pool_balance, :free, :status, :period_closed, :requested, :holder, :damage, :selected
+    :category, :root, :holding, :free, :status, :period_closed, :requested, :holder, :damage, :selected
   ) do
-    # `pool_balance.positive?` FIRST, so an empty or overdrawn envelope is dead even before an
-    # amount is typed — with no amount on screen `requested` is zero and would wave it through.
-    def affordable? = pool_balance.positive? && requested <= pool_balance
+    def root? = root
 
-    # The move reaches past what is unpromised and into money a rule is holding. Not "has damage":
-    # a dateless savings goal's ask moves on a move well inside its free money, because
-    # PoolCalculator#goal_required reads the balance directly rather than through an allocation.
+    def id = root? ? ROOT.id : category.id
+
+    def name = root? ? ROOT.name : category.name
+
+    # `holding.positive?` FIRST, so an empty or overspent category is dead even before an amount is
+    # typed — with no amount on screen `requested` is zero and would wave it through.
+    def affordable? = holding.positive? && requested <= holding
+
+    # The move reaches past what is unpromised and into money a rule is holding. Not "has damage": a
+    # dateless savings goal's ask moves on a move well inside its free money, because
+    # HoldingCalculator#goal_required reads the balance directly rather than through an allocation.
     def promised? = requested.positive? && requested > free
 
     def selected? = selected
 
-    # The move pushes this envelope into a different state — the "Rent still makes Mar 1" half
-    # of spec §4.2's fix, said in the app's own row vocabulary rather than in a sentence of its
-    # own.
-    def state_changed? = damage.present? && damage.status_after.state != status.state
+    # The move pushes this category into a different state — the "Rent still makes Mar 1" half of
+    # spec §4.2's fix, said in the app's own row vocabulary rather than in a sentence of its own.
+    # False for the ROOT on both sides, which have no state to change.
+    def state_changed?
+      damage.present? && damage.status_after.present? && status.present? &&
+        damage.status_after.state != status.state
+    end
   end
 
   # THE OTHER END. The damage statement is about the source, but a screen that only states costs
-  # never says what the move is for, and the destination's status flipping out of `overdue` is
-  # the whole reason someone is here.
-  Gain = Data.define(:pool, :balance_before, :balance_after, :status_before, :status_after) do
-    def state_changed? = status_after.state != status_before.state
+  # never says what the move is for, and the destination's status flipping out of `overdue` is the
+  # whole reason someone is here. Statuses are nil when the destination is AVAILABLE.
+  Gain = Data.define(:category, :root, :balance_before, :balance_after, :status_before, :status_after) do
+    def root? = root
+
+    def name = root? ? ROOT.name : category.name
+
+    def state_changed?
+      status_before.present? && status_after.present? && status_after.state != status_before.state
+    end
   end
 
-  # THE ORDER MONEY IS OFFERED IN, and the ONE place it lives. Home's fix button ranks the same set
-  # by calling this rather than sorting its own way (it used to sort richest-first), because a
-  # button reading "take it from House Down Payment" that opens a screen ranking the buffer first
-  # is a screen disagreeing with the button that opened it — the defect class this plan has hit in
-  # every task where two readers answered one question.
+  # THE ORDER MONEY IS OFFERED IN, and the ONE place it lives. `[priority, name]` — the order the user
+  # ranked their categories in, and the same key `Category.in_fill_order` sorts the waterfall by, so
+  # the screen that spends the money and the screen that moves it by hand agree about which category
+  # comes first.
   #
-  # THE ACCOUNT COMES FIRST. It is the buffer, the money no envelope has claimed (spec §7.1), and
-  # the source spec §4.2's "this has to come from money you already have" most often means. Idle
-  # cash costs nothing to move; a savings goal is money the user decided to protect, and richest-
-  # first proposed exactly that — a $950 down payment while $330 of buffer sat unoffered.
+  # NO ACCOUNT ARM. The pool-era twin put the account first because it was the buffer; AVAILABLE is
+  # the buffer now and it is not a category, so it is placed ahead of this list rather than sorted
+  # into it (see #sources).
   #
-  # Then `[priority, name]`, the order the user ranked their envelopes in. It is a TOTAL order —
-  # `Pool` validates name uniqueness per user — so it is also the tie-break: priority alone would
-  # fall through to database order, which is the defect Plan 1 shipped in its allocation waterfall.
+  # It is a TOTAL order — `Category` validates name uniqueness per user — so it is also the tie-break:
+  # priority alone would fall through to database order, which is random UUID bytes deciding which
+  # category is offered first.
   #
-  # A class method rather than an instance one because it is a property of the pool, not of any one
-  # proposed movement, and Home holds no ReallocationPresenter when it ranks its candidates.
-  def self.source_order(pool) = [pool.pool_type_account? ? 0 : 1, pool.priority, pool.name]
+  # A class method rather than an instance one because it is a property of the category, not of any
+  # one proposed move.
+  def self.source_order(category) = [category.priority, category.name]
 
-  attr_reader :user, :to_pool, :from_pool, :amount, :today
+  attr_reader :user, :to_category, :from_category, :amount, :today
 
-  # `amount` arrives as the form's String and is coerced ONCE, here. nil for a blank box rather
-  # than zero, so a submitted blank reads "Amount can't be blank" instead of the arithmetic's
-  # "must be greater than 0" — the box is empty, not set to nothing.
+  # `to_category` and `from_category` are each a Category, `ROOT`, or nil for "not chosen".
   #
-  # `ledger:` IS A COST KEYWORD AND NOT A QUESTION, exactly as `PoolCalculator#terms:` is one
-  # level down: it changes who ran the five aggregates and nothing about what is being asked. It
-  # defaults to nothing, so the reallocation screen and every spec build their own as before, and
-  # #ledger below is the one place either shape is read.
+  # `amount` arrives as the form's String and is coerced ONCE, here. nil for a blank box rather than
+  # zero, so a submitted blank reads "Amount can't be blank" instead of the arithmetic's "must be
+  # greater than 0" — the box is empty, not set to nothing.
   #
-  # IT IS FOR A CALLER THAT ALREADY HOLDS A LEDGER OVER THESE POOLS AT THIS MOMENT — today that
-  # is HomePresenter, which renders a fix button per problem row and built ONE OF THESE PER ROW,
-  # each with a ledger of its own over the same 22 pools. Measured on Home: three ledgers, nine
-  # grouped maxima, where one ledger and three would do.
-  #
-  # THE RULE THE CALLER MUST KEEP, and it is PoolBalanceLedger's own: a ledger is a SNAPSHOT,
-  # memoised at its first read, so a ledger handed across a write is a set of figures from before
-  # it. Home writes nothing during a render, which is why it may share. Nothing that writes may
-  # pass one here.
-  #
-  # THE `as_of` HALF OF THAT RULE IS ENFORCED RATHER THAN ASKED FOR: `for_as_of!` below raises
-  # unless the ledger's bound matches the one #ledger would have built with, which is `nil` — this
-  # screen reads the ledger as it stands. A ledger from another moment would answer with real,
-  # well-formed figures about a world that is not the one on screen, and that is the failure this
-  # seam can produce that would not look like one.
-  #
-  # AllocationCalculator HAD THE SAME KEYWORD AND IT WAS DELIBERATELY CLOSED (it now shares through
-  # a `protected` writer, reachable only from another instance of that class). This one stays open,
-  # and the difference is not taste: there, the only object that can honestly promise "I was
-  # CONSTRUCTED after the last write" is another fill of the same account, so `protected` is
-  # exactly the condition; here, the sharer is a DIFFERENT class — HomePresenter, which holds a
-  # ledger this class has no way to build for itself — so there is no receiver test that would say
-  # anything, and the surface has to be a documented keyword with a checked handover instead.
-  #
-  # `rubocop:disable Metrics/ParameterLists` — six keywords, and the disable is stated rather than
-  # the limit raised for the whole app, which is the choice PoolCalculator's own signature made
-  # before Plan 2d decision 4 took two axes off it. Five of these are the movement being proposed
-  # and the day it happens; the sixth is not an axis of the question at all, and folding it into a
-  # `**context` splat to get under the limit would hide `today:`'s default and buy nothing.
-  def initialize(user:, to_pool: nil, from_pool: nil, amount: nil, today: Date.current, ledger: nil) # rubocop:disable Metrics/ParameterLists
+  # THERE IS NO `ledger:` KEYWORD, and its absence is Task 4's, not an oversight. The pool-era twin
+  # took one because HomePresenter built one of these per problem row over the same 22 pools; Home is
+  # still pool-shaped and still holds `PoolReallocationPresenter`, so nothing in the app hands this
+  # class a ledger yet. Task 6 adds the keyword back if converted Home still needs it — the rule it
+  # would have to state is `CategoryLedger#for_as_of!`'s, unchanged.
+  def initialize(user:, to_category: nil, from_category: nil, amount: nil, today: Date.current)
     @user = user
-    @to_pool = to_pool
-    @from_pool = from_pool
+    @to_category = to_category
+    @from_category = from_category
     @amount = amount.presence&.to_d
     @today = today
-    @ledger = ledger&.for_as_of!(nil)
   end
 
-  # The arithmetic's view of the box: zero when nothing has been typed. Kept apart from #amount
-  # so the movement below can still tell "blank" from "zero".
+  # The arithmetic's view of the box: zero when nothing has been typed. Kept apart from #amount so
+  # the allocation below can still tell "blank" from "zero".
   def requested = amount || 0.to_d
 
   def requested? = requested.positive?
 
-  # THE MOVEMENT ITSELF, unsaved. `kind` is not set: `transfer` is the column default, and that
-  # is exactly what keeps a reallocation invisible to `PoolMovement.distributed` — the scope
-  # AllocationCommitter deletes when a period is redistributed (amendment A). A user who moves
-  # $50 between envelopes and then redistributes still has their $50 move.
-  def movement
-    PoolMovement.new(from_pool: from_pool, to_pool: to_pool, amount: amount, date: today)
+  # THE ALLOCATION ITSELF, unsaved. `kind` is not set: `transfer` is the column default, and that is
+  # exactly what keeps a reallocation invisible to `Allocation.distributed` — the scope
+  # AllocationCommitter deletes when a period is redistributed. A user who moves $50 between
+  # categories and then redistributes still has their $50 move.
+  #
+  # The ROOT becomes a NULL side, which is what NULL MEANS on this table (§2).
+  def allocation
+    Allocation.new(
+      from_category: record_of(from_category), to_category: record_of(to_category), amount: amount, date: today
+    )
   end
 
-  # Every pool the money could come from: the ones PoolMovement itself says are in the same
-  # account (amendment B). Asked of the model rather than re-derived from `account_id` here —
-  # an account stands in as its own container, which is the part a second implementation gets
-  # wrong, and it is the same reader the write path is refused by.
+  # Every party the money could come from: AVAILABLE first, then the user's holder categories in the
+  # order they ranked them. There is no same-account test — nothing crosses anything (§2).
   #
-  # Ranked by ::source_order — the account first, then the envelopes in the order the user ranked
-  # them. Home's fix button calls that same method rather than sorting its own way, so the button
-  # and the screen it opens cannot name different sources.
+  # AVAILABLE FIRST for the reason the account came first on the pool-era screen: it is the money no
+  # category has claimed (spec §7.1), and it is the source spec §4.2's "this has to come from money
+  # you already have" most often means. Idle money costs nothing to move; a savings goal is money the
+  # user decided to protect, and richest-first proposed exactly that — a $950 down payment while $330
+  # of unallocated money sat unoffered.
   def sources
-    return [] if to_pool.nil?
+    return [] if to_category.nil?
 
-    @sources ||= same_account_pools.map { |pool| source_for(pool) }
+    @sources ||= parties.reject { |party| same_party?(party, to_category) }.map { |party| source_for(party) }
   end
 
-  # ONE ROW, for a caller that already knows which source it means — Home's fix button, which
-  # renders exactly one candidate and must not pay for the other twelve. #sources builds a Candidate
-  # for every pool in the account, and an affordable one costs four calculators over that pool.
+  # ONE ROW, for a caller that already knows which source it means. #sources builds a Candidate for
+  # every category the user has, and an affordable one costs four calculators over that category.
   #
-  # The SAME #candidate_for the list is built from, so this is not a second answer to "what would
-  # this move cost" (amendment A): Home prints the damage through the same PoolMovementsHelper
-  # sentence this screen does, off the same Data object.
-  #
-  # No same-account check here, deliberately. That question belongs to #sources, which is the list
-  # of what may be OFFERED; this is a lookup by a caller that has already chosen. A caller passing a
-  # pool from another account gets an honest reading of a move the write path would then refuse.
-  def source_for(pool) = (@source_for ||= {})[pool.id] ||= candidate_for(pool)
+  # The SAME #candidate_for the list is built from, so this is not a second answer to "what would this
+  # move cost".
+  def source_for(party) = (@source_for ||= {})[key_for(party)] ||= candidate_for(party)
 
   def gain
-    return nil if to_pool.nil? || !requested?
+    return nil if to_category.nil? || !requested?
 
-    @gain ||= build_gain(incoming)
+    @gain ||= build_gain
   end
 
-  # The destination select's pools, grouped by the account each one sits in. An account appears
-  # inside its own group, because moving an envelope's money back to the unallocated cash is a
-  # real reallocation — it is what a sweep does (spec §7.2) — and it is the same one movement.
-  #
-  # Pools rather than option pairs: what an account is CALLED when it is one end of a movement is
-  # copy, and `PoolMovementsHelper#reallocation_pool_name` is the one place it is decided, for the
-  # dropdown and the source rows alike.
-  def destination_groups
-    groups = accounts.map { |account| [account.name, members_of(account)] }
-    groups << ["No account", orphans] if orphans.any?
-    groups
-  end
+  # The destination select's parties: AVAILABLE, then the holder categories in fill order. FLAT,
+  # where the pool era grouped by account — there is one root, so there is nothing to group by, and
+  # the "No account" group that named orphans dies with the concept of an orphan.
+  def destinations = parties
 
-  # What goes in the amount box: the user's own figure and nothing else. Plain digits, no
-  # currency symbol and no delimiter, for `distribution_override_placeholder`'s reason — a
-  # `number_field` holding "$1,340.00" reports itself empty to the browser.
+  # What goes in the amount box: the user's own figure and nothing else. Plain digits, no currency
+  # symbol and no delimiter — a `number_field` holding "$1,340.00" reports itself empty to the
+  # browser.
   #
-  # Two decimals, not BigDecimal#to_s("F"), which rendered a link carrying `amount=300` back into
-  # the box as "300.0" — measured on screen. A money box showing one decimal place invites the
-  # reader to wonder which figure the screen is actually working with.
-  #
-  # `DigitsHelper.digits` since 2d Task 4 — this was the fourth byte-identical spelling of it. The
-  # nil guard stays HERE and does not move into the helper: nil is meaningful on this screen only
-  # (an untouched amount box is empty, not "0.00"), and pushing it down would hand every other
+  # The nil guard stays HERE and does not move into `DigitsHelper`: nil is meaningful on this screen
+  # only (an untouched amount box is empty, not "0.00"), and pushing it down would hand every other
   # consumer a silent nil where a figure belongs.
   def amount_value
     return nil if amount.nil?
@@ -258,104 +248,171 @@ class ReallocationPresenter
 
   private
 
-  # `terms` is read ONCE into a local and handed to all four readers. The destination's five
-  # aggregates do not depend on which question is being asked of them — before or after, balance
-  # or status — so asking the ledger four times would be four identical hashes and four more
-  # chances for one of the four to be built without them.
-  def build_gain(pending)
-    terms = ledger.terms_for(to_pool)
+  # AVAILABLE, THEN THE HOLDERS. `Category.in_fill_order` rather than a sort of this class's own: it
+  # is `[priority, name]` over holders, which is exactly ::source_order over exactly the categories
+  # that can hold money, so the offer list and the waterfall cannot fall into different orders or
+  # over different sets.
+  def parties = @parties ||= [ROOT, *categories]
+
+  def categories = @categories ||= user.categories.in_fill_order.includes(:budgets).to_a
+
+  def root?(party) = party.is_a?(Root)
+
+  def record_of(party) = root?(party) ? nil : party
+
+  def key_for(party) = root?(party) ? ROOT.id : party.id
+
+  def same_party?(one, other) = key_for(one) == key_for(other)
+
+  # `terms` is read ONCE into a local and handed to all four readers. The destination's aggregates do
+  # not depend on which question is being asked of them — before or after, balance or status — so
+  # asking the ledger four times would be four identical hashes and four more chances for one of the
+  # four to be built without them.
+  def build_gain
+    return root_gain if root?(to_category)
+
+    category_gain(to_category, ledger.terms_for(to_category))
+  end
+
+  def category_gain(category, terms)
     Gain.new(
-      pool: to_pool,
-      balance_before: calculator_for(to_pool).balance,
-      balance_after: to_pool.calculator(today: today, pending: pending, terms: terms).balance,
-      status_before: to_pool.status(today: today, terms: terms),
-      status_after: to_pool.status(today: today, pending: pending, terms: terms)
+      category: category,
+      root: false,
+      balance_before: calculator_for(category).balance,
+      balance_after: category.holding_calculator(today: today, pending: incoming, terms: terms).balance,
+      status_before: category.status(today: today, terms: terms),
+      status_after: category.status(today: today, pending: incoming, terms: terms)
     )
   end
 
-  def incoming = PoolProjection::Pending.new(funded: requested, swept: 0.to_d, on: today)
+  # MONEY COMING BACK TO THE ROOT — a savings withdrawal (§3), and the one arrival with no status to
+  # report: available has no rules, so there is no state for it to flip into.
+  def root_gain
+    Gain.new(
+      category: nil,
+      root: true,
+      balance_before: available,
+      balance_after: available + requested,
+      status_before: nil,
+      status_after: nil
+    )
+  end
 
-  # THE TWO PENDINGS ARE THE LEDGER THIS MOVE WOULD WRITE, not a signed number, and each side
-  # gets the member that matches what actually happens to it.
+  def incoming = HoldingProjection::Pending.new(funded: requested, swept: 0.to_d, on: today)
+
+  # THE TWO PENDINGS ARE THE LEDGER THIS MOVE WOULD WRITE, not a signed number, and each side gets the
+  # member that matches what actually happens to it.
   #
   # Money OUT is `swept:`, so `Pending#funded_on` stays nil and the source's rate period is not
   # reopened by money leaving it — which is also what the ledger says afterwards, since
-  # PoolCalculator#last_funded_on reads `movements_in` alone. Money IN is `funded:` with today's
-  # date, which is what the destination's own `movements_in` will report the moment this saves.
-  # Measured against that: the spec asserts the previewed figures equal the ones read back from
-  # the database after the write.
-  def outgoing = PoolProjection::Pending.new(funded: 0.to_d, swept: requested, on: today)
+  # HoldingCalculator#last_funded_on reads allocations IN alone. Money IN is `funded:` with today's
+  # date, which is what the destination's own term will report the moment this saves.
+  def outgoing = HoldingProjection::Pending.new(funded: 0.to_d, swept: requested, on: today)
 
-  # BUILT BARE, THEN ASKED. The row is constructed with no holder and no damage, and the two
-  # branches below are chosen by asking the ROW ITSELF whether it can make the move — so
-  # `Candidate#affordable?` is the ONE spelling of the affordability gate in this file.
+  # BUILT BARE, THEN ASKED. The row is constructed with no holder and no damage, and the two branches
+  # below are chosen by asking the ROW ITSELF whether it can make the move — so `Candidate#affordable?`
+  # is the ONE spelling of the affordability gate in this file.
   #
-  # It used to be two: this method computed the damage behind an independently written
-  # `requested? && balance.positive? && requested <= balance`, beside the row's own predicate.
-  # They agreed, and that is the problem — diverge them and the screen either states damage on a
-  # disabled row or refuses one silently, with nothing to say which is right. Same argument as
-  # reaching for PoolMovement#crosses_accounts? rather than re-deriving "same account" here: one
-  # method, not two that agree today.
-  #
-  # `Data#with` rather than a second constructor call, so the ten members are written once and a
-  # new member cannot be added to one branch and forgotten in the other. It also stops the two
-  # readers being computed where nothing renders them: a holder only ever explains a DISABLED row,
-  # and damage only ever describes an affordable one.
-  def candidate_for(pool)
-    calculator = calculator_for(pool)
-    candidate = Candidate.new(
-      pool: pool,
-      pool_balance: calculator.balance,
+  # `Data#with` rather than a second constructor call, so the ten members are written once and a new
+  # member cannot be added to one branch and forgotten in the other. It also stops the two readers
+  # being computed where nothing renders them: a holder only ever explains a DISABLED row, and damage
+  # only ever describes an affordable one.
+  def candidate_for(party)
+    candidate = root?(party) ? bare_root_candidate : bare_candidate_for(party)
+
+    return candidate.with(holder: holder_for(party)) unless candidate.affordable?
+    return candidate unless requested?
+
+    candidate.with(damage: damage_for(party))
+  end
+
+  def bare_candidate_for(category)
+    calculator = calculator_for(category)
+
+    Candidate.new(
+      category: category,
+      root: false,
+      holding: calculator.balance,
       free: calculator.free_amount,
-      status: pool.status(today: today, terms: ledger.terms_for(pool)),
-      # The ` · last period` marker (spec §7.2), and it earns its place on this screen more than
-      # on any other: an envelope whose rate period has closed is about to hand its leftover back
-      # to the buffer anyway, so a user reaching for it should know they are taking money that was
+      status: category.status(today: today, terms: ledger.terms_for(category)),
+      # The ` · last period` marker (spec §7.2), and it earns its place on this screen more than on
+      # any other: a category whose rate period has closed is about to hand its leftover back to
+      # available anyway, so a user reaching for it should know they are taking money that was
       # already on its way out. Plain calculator, which is the only kind that may be asked.
       period_closed: calculator.period_closed?,
       requested: requested,
       holder: nil,
       damage: nil,
-      selected: pool == from_pool
+      selected: from_category.present? && same_party?(category, from_category)
     )
-
-    return candidate.with(holder: holder_for(pool)) unless candidate.affordable?
-    return candidate unless requested?
-
-    candidate.with(damage: damage_for(pool))
   end
 
-  # What the move costs this source. Only ever called for a row that can make it and an amount
-  # that exists — see #candidate_for, which owns both gates.
-  def damage_for(pool)
-    after = pool.calculator(today: today, pending: outgoing, terms: ledger.terms_for(pool))
+  # AVAILABLE AS A SOURCE. `free == holding` is not a shortcut: available IS the money no rule is
+  # holding, so there is nothing for a reserve to subtract and #promised? can never fire on this row.
+  # No status and no closed-period marker, for the same reason — it has no rules to be measured
+  # against.
+  def bare_root_candidate
+    Candidate.new(
+      category: nil,
+      root: true,
+      holding: available,
+      free: available,
+      status: nil,
+      period_closed: false,
+      requested: requested,
+      holder: nil,
+      damage: nil,
+      selected: from_category.present? && root?(from_category)
+    )
+  end
+
+  # What the move costs this source. Only ever called for a row that can make it and an amount that
+  # exists — see #candidate_for, which owns both gates.
+  def damage_for(party)
+    return root_damage if root?(party)
+
+    terms = ledger.terms_for(party)
+    after = party.holding_calculator(today: today, pending: outgoing, terms: terms)
     Damage.new(
-      balance_before: calculator_for(pool).balance,
+      balance_before: calculator_for(party).balance,
       balance_after: after.balance,
-      ask_before: ask_of(pool, PoolProjection::Pending.none),
-      ask_after: ask_of(pool, outgoing),
-      slip: slip_for(pool, after),
-      status_after: pool.status(today: today, pending: outgoing, terms: ledger.terms_for(pool))
+      ask_before: ask_of(party, HoldingProjection::Pending.none),
+      ask_after: ask_of(party, outgoing),
+      slip: slip_for(party, after),
+      status_after: party.status(today: today, pending: outgoing, terms: terms)
     )
   end
 
-  # PoolCalculator#required, asked about the same day with the balance this move would leave.
+  # THE BALANCE ARROW AND NOTHING ELSE. Available has no rules, so no ask can move and no rule can
+  # slip — the three clauses beyond the arrow are all statements about rules, and printing any of
+  # them here would be inventing a cost the move does not have.
+  def root_damage
+    Damage.new(
+      balance_before: available,
+      balance_after: available - requested,
+      ask_before: 0.to_d,
+      ask_after: 0.to_d,
+      slip: nil,
+      status_after: nil
+    )
+  end
+
+  # HoldingCalculator#required, asked about the same day with the balance this move would leave.
   # `net_of_sweep: true` for the reason on Damage.
-  def ask_of(pool, pending)
-    pool.calculator(
-      today: today, net_of_sweep: true, pending: pending, terms: ledger.terms_for(pool)
+  def ask_of(category, pending)
+    category.holding_calculator(
+      today: today, net_of_sweep: true, pending: pending, terms: ledger.terms_for(category)
     ).required
   end
 
   # The rule that visibly took the damage: the one whose allocation fell furthest.
   #
-  # `allocated_balances` fills earliest-due first, so money leaving starves the rules at the BACK
-  # of that order — several can move at once and naming them all is a paragraph. The largest drop
-  # is the one a person would point at, and `budget.id` breaks a tie so two equal drops cannot
-  # swap between page loads. Budgets compare by id across the two calculators, so `fetch` lines
-  # the same rule up on both sides.
-  def slip_for(pool, after)
-    fallen = calculator_for(pool).allocated_balances.filter_map do |budget, allocated|
+  # `allocated_balances` fills earliest-due first, so money leaving starves the rules at the BACK of
+  # that order — several can move at once and naming them all is a paragraph. The largest drop is the
+  # one a person would point at, and `budget.id` breaks a tie so two equal drops cannot swap between
+  # page loads.
+  def slip_for(category, after)
+    fallen = calculator_for(category).allocated_balances.filter_map do |budget, allocated|
       remaining = after.allocated_balances.fetch(budget, 0.to_d)
       [budget, remaining, allocated - remaining] if remaining < allocated
     end
@@ -363,18 +420,17 @@ class ReallocationPresenter
     budget && Slip.new(budget: budget, allocated: remaining)
   end
 
-  # The dated rule holding this pool's money, earliest due first — "its own bill is due first".
+  # The dated rule holding this category's money, earliest due first — "its own bill is due first".
+  # nil for the ROOT, which holds money for nothing.
   #
-  # Read off `allocated_balances`, which already gives a settled rule nothing, so a paid bill
-  # never explains a shortage it is not causing. Rate rules are deliberately absent: they hold
-  # money too, and #free_amount already subtracts them, but "only $40.00 free" is the whole of
-  # what there is to say about a grocery budget — a date is the part that changes the answer.
-  #
-  # "Earliest due first" is BudgetCalculator#due_order, the same key `allocated_balances` filled
-  # in: this names the rule at the FRONT of that order, and the rule that slips is at the back.
-  # Two spellings of one key would let the sentence name a rule the fill never favoured.
-  def holder_for(pool)
-    dated = calculator_for(pool).allocated_balances.select do |budget, allocated|
+  # Read off `allocated_balances`, which already gives a settled rule nothing, so a paid bill never
+  # explains a shortage it is not causing. Rate rules are deliberately absent: they hold money too,
+  # and #free_amount already subtracts them, but "only $40.00 free" is the whole of what there is to
+  # say about a grocery budget — a date is the part that changes the answer.
+  def holder_for(party)
+    return nil if root?(party)
+
+    dated = calculator_for(party).allocated_balances.select do |budget, allocated|
       budget.anchor_date.present? && allocated.positive?
     end
     budget, allocated = dated.min_by { |b, _| b.calculator(today: today).due_order }
@@ -383,58 +439,25 @@ class ReallocationPresenter
     Holder.new(budget: budget, allocated: allocated, due_on: budget.calculator(today: today).due_date)
   end
 
-  # SAME ACCOUNT, ANSWERED BY THE MODEL. `PoolMovement#crosses_accounts?` is the constraint spec
-  # §5 expresses and it already knows that an account sits inside no other account and stands in
-  # as its own — the exact case a `where(account_id:)` of my own would get wrong. The write path
-  # is refused by the same reader (PoolMovement's `:reallocation` context), so the list and the
-  # refusal cannot disagree.
-  def same_account_pools
-    user.pools.includes(:budgets, :account).reject { |pool| pool == to_pool }
-      .reject { |pool| PoolMovement.new(from_pool: pool, to_pool: to_pool).crosses_accounts? }
-      .sort_by { |pool| self.class.source_order(pool) }
+  # MONEY WITH NO JOB YET — the root, read off the same ledger every holding on this screen comes
+  # from, so the arrow on the AVAILABLE row and the arrows on the category rows describe one moment.
+  def available = @available ||= ledger.available
+
+  # One calculator per category, for the reason HomePresenter#calculator_for gives: #free_amount,
+  # #allocated_balances and #balance are all asked of the same category on one render, and each fresh
+  # calculator is a set of aggregate queries that memoises nothing for the next one.
+  def calculator_for(category)
+    (@calculators ||= {})[category.id] ||=
+      category.holding_calculator(today: today, terms: ledger.terms_for(category))
   end
 
-  def accounts = @accounts ||= all_pools.select(&:pool_type_account?).sort_by(&:name)
-
-  def orphans
-    @orphans ||= by_priority(all_pools.reject { |pool| pool.pool_type_account? || pool.account_id })
-  end
-
-  def members_of(account)
-    [account] + by_priority(all_pools.select { |pool| pool.account_id == account.id })
-  end
-
-  def by_priority(pools) = pools.sort_by { |pool| [pool.priority, pool.name] }
-
-  def all_pools = @all_pools ||= user.pools.includes(:account).to_a
-
-  # One calculator per pool, for HomePresenter#calculator_for's reason: #free_amount,
-  # #allocated_balances and #balance are all asked of the same pool on one render, and each
-  # fresh calculator is five aggregate queries that memoise nothing for the next one.
-  def calculator_for(pool)
-    (@calculators ||= {})[pool.id] ||= pool.calculator(today: today, terms: ledger.terms_for(pool))
-  end
-
-  # ONE LEDGER FOR THE SOURCES LIST. #sources builds a Candidate for every pool in the account
-  # and an affordable one costs four calculators over that pool — the plain one, the one holding
-  # the move's `pending`, and the two `net_of_sweep` asks the damage compares, each of which
-  # builds a plain twin of its own inside its balance. That is the widest per-pool fan-out in the
-  # app, and it is why this screen was 269 queries at the end of Plan 2b.
+  # ONE LEDGER FOR THE SOURCES LIST. #sources builds a Candidate for every holder and an affordable
+  # one costs four calculators over that category — the plain one, the one holding the move's
+  # `pending`, and the two `net_of_sweep` asks the damage compares, each of which builds a plain twin
+  # of its own inside its balance. That is the widest per-category fan-out in the app.
   #
-  # Over #all_pools rather than over the sources: `to_pool` is deliberately NOT a source (it is
-  # the other end of the move) and #build_gain reads its balance twice, so a ledger scoped to the
-  # offer list would raise on the destination — which is the right failure and the wrong set.
-  #
-  # `||=` RATHER THAN `defined?`, and this is the injected keyword's memo as much as it is this
-  # one's: a ledger object is never falsy, so the two forms cost the same and `defined?` would
-  # imply an answer this method cannot give. See #initialize for what an injected ledger is.
-  #
-  # A CALLER'S LEDGER MAY COVER MORE POOLS THAN THIS ONE WOULD, never fewer, and neither direction
-  # can move a figure: PoolBalanceLedger#terms_for returns nil for a pool it was not built over
-  # and PoolCalculator then runs its own five aggregates, so a ledger that misses a pool costs
-  # queries and cannot cost accuracy. What it may NOT differ in is `as_of` — and that one is no
-  # longer left to the caller's care: #initialize hands an injected ledger through
-  # PoolBalanceLedger#for_as_of!, which raises unless its bound matches the `nil` this line builds
-  # with.
-  def ledger = @ledger ||= PoolBalanceLedger.new(all_pools)
+  # Over the SAME set the offer list is built from, plus `user:` so `#available` is answerable for a
+  # user with no holders at all — which is every user before their first rule, and exactly the user
+  # who would otherwise see this screen raise instead of saying there is nothing to move.
+  def ledger = @ledger ||= CategoryLedger.new(categories, user: user)
 end

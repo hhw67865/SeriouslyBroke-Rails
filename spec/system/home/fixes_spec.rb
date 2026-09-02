@@ -42,7 +42,7 @@ RSpec.describe "Home Fixes", type: :system do
         expect(page).to have_content("This has to come from money you already have.")
         expect(page).to have_link("Take $300.00 from Checking buffer")
         expect(page).to have_link("Take from another pool…")
-        # The consequence, off ReallocationPresenter::Candidate — the same sentence the screen
+        # The consequence, off PoolReallocationPresenter::Candidate — the same sentence the screen
         # this button opens will print. Checking has no rules, so the balance arrow is the whole
         # of what this move costs, and the row says so rather than inventing a per-period figure.
         expect(page).to have_content("Checking buffer $810.00 → $510.00")
@@ -122,7 +122,7 @@ RSpec.describe "Home Fixes", type: :system do
         # It had the money and the rank: $1,300 free, and ahead of Cushion in the shared ordering.
         # Nothing but the status exclusion kept it out.
         expect(Pool.find(vet.id).calculator.free_amount).to eq(1_300)
-        expect(ReallocationPresenter.source_order(vet) <=> ReallocationPresenter.source_order(pool("Cushion")))
+        expect(PoolReallocationPresenter.source_order(vet) <=> PoolReallocationPresenter.source_order(pool("Cushion")))
           .to eq(-1)
         expect(balance_of("Checking")).to eq(210)
       end
@@ -132,7 +132,7 @@ RSpec.describe "Home Fixes", type: :system do
     # richest-first rule and Task 7's ranking give different answers: House Fund is a savings goal
     # holding $2,000 with no rules against it, so `free_amount` reports the lot and it beats the
     # $810 buffer on money alone. It is also money the user decided to protect, while the buffer is
-    # idle cash — and, decisively, `ReallocationPresenter#sources` ranks the buffer first, so a
+    # idle cash — and, decisively, `PoolReallocationPresenter#sources` ranks the buffer first, so a
     # button naming House Fund would open a screen that disagrees with it.
     describe "a savings goal richer than the buffer" do
       before do
@@ -166,12 +166,12 @@ RSpec.describe "Home Fixes", type: :system do
       # screen does — it drops pools in attention and pools without enough free money — so the two
       # lists are not equal. What must hold is that Home's surviving candidates appear in the
       # SCREEN'S OWN ORDER, head included. Both sides are computed independently here: `ranked`
-      # from ReallocationPresenter's sort over its own list, `candidates` from HomePresenter's
+      # from PoolReallocationPresenter's sort over its own list, `candidates` from HomePresenter's
       # filter. Diverge the two sort keys and this fails.
       it "ranks its candidates exactly as the reallocation screen ranks them", :aggregate_failures do
         expect(page).to have_css("[data-problem-pool='Dentist']")
         candidates = HomePresenter.new(user: user).fix_candidates_for(dentist)
-        ranked = ReallocationPresenter.new(user: user, to_pool: dentist).sources.map(&:pool)
+        ranked = PoolReallocationPresenter.new(user: user, to_pool: dentist).sources.map(&:pool)
 
         expect(candidates).to eq(ranked & candidates)
         expect(candidates.first).to eq(ranked.first)
@@ -179,7 +179,7 @@ RSpec.describe "Home Fixes", type: :system do
       end
     end
 
-    # AMENDMENT D, now carried by ReallocationPresenter::source_order's `[priority, name]` tail.
+    # AMENDMENT D, now carried by PoolReallocationPresenter::source_order's `[priority, name]` tail.
     # Two envelopes at the same priority must not reorder between renders.
     #
     # The names are assigned AFTER the ids exist and deliberately against them: the pool with the
@@ -384,16 +384,21 @@ RSpec.describe "Home Fixes", type: :system do
         expect(page).to have_content("You need $510.00 to stay on schedule. You have $285.00.")
       end
 
-      # THE FIGURE THE BUTTON WOULD ACT ON. Two independent fills — HomePresenter#fill_waterfall
-      # spans accounts, AllocationCalculator#fill spends one account's pot — and they now answer
-      # the same question. Before this task they did not.
-      it "agrees with the distribution screen it is offering" do
+      # WITHDRAWN BY TWO-LEDGER TASK 4, AND TASK 6 RESTORES IT. "agrees with the distribution screen
+      # it is offering" compared `HomePresenter#shortfall` and `#available` against
+      # `AllocationCalculator`, which was two independent fills answering ONE question. They now
+      # answer two: Home fills POOLS out of an account's pot, and the distribution screen fills
+      # CATEGORIES out of available (two-ledger spec §2). The comparison is not weaker, it is about
+      # two different ledgers — and it becomes true again, at the same figures, the moment Home's
+      # rows are categories. Three of these cross-checks were withdrawn in this file; each says so
+      # where it stood.
+      #
+      # What survives is the Home half, which is what the three examples above already pin.
+      it "reports its own shortfall in BigDecimal", :aggregate_failures do
         expect(page).to have_content("Where your money goes")
-        proposal = AllocationCalculator.new(user: user, account: Pool.find(checking.id))
-        home = HomePresenter.new(user: user)
-        expect(home.shortfall).to eq(proposal.rows.sum(0.to_d, &:short))
-        expect(home.shortfall).to be_a(BigDecimal)
-        expect(home.available).to eq(proposal.available)
+
+        expect(HomePresenter.new(user: user).shortfall).to eq(225)
+        expect(HomePresenter.new(user: user).shortfall).to be_a(BigDecimal)
       end
     end
 
@@ -435,12 +440,14 @@ RSpec.describe "Home Fixes", type: :system do
         expect(waterfall_section).to have_content("$0.00 of $100.00")
       end
 
-      it "still agrees with the distribution screen" do
+      # WITHDRAWN with its twin above (two-ledger Task 4): "still agrees with the distribution
+      # screen" compared Home's fill against `AllocationCalculator`, which reads the other ledger
+      # now. The two figures it turned on are the two the examples above assert on screen.
+      it "reports its own shortfall and available", :aggregate_failures do
         expect(page).to have_content("Where your money goes")
-        proposal = AllocationCalculator.new(user: user, account: Pool.find(checking.id))
-        home = HomePresenter.new(user: user)
-        expect(home.shortfall).to eq(proposal.rows.sum(0.to_d, &:short))
-        expect(home.available).to eq(proposal.available)
+
+        expect(HomePresenter.new(user: user).shortfall).to eq(250)
+        expect(HomePresenter.new(user: user).available).to eq(150)
       end
     end
 
@@ -469,32 +476,23 @@ RSpec.describe "Home Fixes", type: :system do
         expect(home.available).to be_a(BigDecimal)
       end
 
-      # THE ONE ACCOUNT STATE WHERE THE TWO SCREENS DELIBERATELY DISAGREE, pinned rather than left
-      # latent. `HomePresenter#account_pots` clamps at zero because Home AGGREGATES across
-      # accounts, where an unclamped negative would let one overdrawn account cancel another's
-      # surplus; `AllocationCalculator#available` is deliberately unclamped because the
-      # distribution screen is per-account and has no sibling to cancel against. Both are argued
-      # and neither is going to change — and an unpinned deliberate difference is indistinguishable
-      # from a bug the next time someone reads it.
+      # THE CLAMP, pinned rather than left latent. `HomePresenter#account_pots` clamps at zero
+      # because Home AGGREGATES across accounts, where an unclamped negative would let one overdrawn
+      # account cancel another's surplus. It is argued and is not going to change, and an unpinned
+      # deliberate choice is indistinguishable from a bug the next time someone reads it.
       #
-      # Checking is $350 down and Coffee's closed $150 comes back to it: -$200 on the distribution
-      # screen, $0 here. Measured on the demo seeds too, where Side Gig Checking reads $0.00 on
-      # Home and -$300.00 on `/distributions/new`, while the other three accounts agree exactly.
-      #
-      # THE SHORTFALL STILL AGREES, which is the property that holds in every shape and the one
-      # worth having: both sides compute it independently — Home fills across accounts,
-      # AllocationCalculator spends one account's pot — and nothing about this divergence moves it.
-      it "clamps its own available while the distribution screen states the overdraft",
-         :aggregate_failures do
-           expect(page).to have_content("Checking is overdrawn $350.00")
-           proposal = AllocationCalculator.new(user: user, account: Pool.find(checking.id))
-           home = HomePresenter.new(user: user)
+      # THE COMPARISON AGAINST `AllocationCalculator` IS WITHDRAWN (two-ledger Task 4), and it was the
+      # third of three in this file: that class is deliberately unclamped because the distribution
+      # screen has no sibling to cancel against — and it now fills a different ledger entirely, so
+      # "-$200 there, $0 here" is no longer one disagreement, it is two questions. Task 6 restores
+      # the comparison with Home's own rows.
+      it "clamps its own available on an overdrawn account", :aggregate_failures do
+        expect(page).to have_content("Checking is overdrawn $350.00")
+        home = HomePresenter.new(user: user)
 
-           expect(proposal.available).to eq(-200)
-           expect(home.available).to eq(0)
-           expect(home.shortfall).to eq(proposal.rows.sum(0.to_d, &:short))
-           expect(home.shortfall).to eq(400)
-         end
+        expect(home.available).to eq(0)
+        expect(home.shortfall).to eq(400)
+      end
     end
   end
 
@@ -589,18 +587,20 @@ RSpec.describe "Home Fixes", type: :system do
       expect(waterfall_section).to have_content("$100.00 of $500.00")
     end
 
-    # THE BRANCH READS THE PROPOSAL THE DISTRIBUTION SCREEN WOULD RENDER, not a second answer to
-    # "will this be funded". Asserted against AllocationCalculator directly — the object that
-    # screen is built on — so the two figures the branch turns on are pinned to it rather than to
-    # Home's own copy of the fill. `short` is zero on exactly the pool that lost its button and
-    # positive on exactly the pool that kept one.
-    it "turns on the same figures the distribution screen would show", :aggregate_failures do
+    # THE BRANCH READS HOME'S OWN WATERFALL, and it used to be asserted against
+    # `AllocationCalculator` — "the object the distribution screen is built on" — because the two
+    # answered one question. Two-ledger Task 4 made them two: Home fills POOLS, that class fills
+    # CATEGORIES. The comparison is withdrawn rather than re-pointed, because the two figures it
+    # turned on are already pinned ON SCREEN by the two examples above ($300.00 of $300.00 and
+    # $100.00 of $500.00) and re-deriving them here from Home's own reader would be `x == x`.
+    # Task 6 restores the cross-check once both fills are over categories.
+    it "turns on a shortfall that is zero on one row and positive on the other", :aggregate_failures do
       expect(page).to have_css("[data-problem-pool='Roof']")
-      rows = AllocationCalculator.new(user: user, account: Pool.find(checking.id)).rows.index_by { |r| r.pool.name }
+      home = HomePresenter.new(user: user)
 
-      expect(rows.fetch("Dentist").short).to eq(0)
-      expect(rows.fetch("Roof").short).to eq(400)
-      expect(rows.fetch("Roof").short).to be_a(BigDecimal)
+      expect(home.fix_for(user.pools.find_by!(name: "Dentist"))).to be_covered
+      expect(home.fix_for(user.pools.find_by!(name: "Roof"))).not_to be_covered
+      expect(home.shortfall).to be_a(BigDecimal)
     end
 
     # The two branches must not be one branch wearing two labels. Roof needs $500 and holds nothing,

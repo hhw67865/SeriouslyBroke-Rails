@@ -3,11 +3,16 @@
 require "rails_helper"
 
 # THE BUDGET PAGE IS WHERE FUNDING PRIORITY IS SET (spec §8), and this is the file that says what
-# that means: not that a list re-renders in a new order, but that a DIFFERENT ENVELOPE GETS THE
-# MONEY. Every example here is measured against `AllocationCalculator#rows` — the same waterfall
-# `/distributions/new` renders and `AllocationCommitter` writes — over an account that CANNOT fund
-# everything, because on an account with enough money for every rule the order decides nothing and
-# a passing example would prove nothing.
+# that means.
+#
+# ── THE MONEY HALF IS WITHDRAWN, AND TASK 5 (or 6) RESTORES IT. Three examples measured this
+# screen's ▲▼ buttons against `AllocationCalculator#rows` — "a DIFFERENT ENVELOPE GETS THE MONEY",
+# not merely a list in a new order — and that claim is not true of this endpoint today: Task 4 moved
+# the waterfall onto `Category.in_fill_order`, so reordering POOL priority changes nothing about who
+# is funded. The screen still reorders pools and still says so, which is what the assertions below
+# now cover; the claim comes back the moment the Budget page reorders CATEGORIES, measured the same
+# way against the same reader. Three `expect(fill)` lines and the `#fill` helper were removed, and
+# nothing else in this file changed.
 #
 # THROUGH THE ▲▼ BUTTONS, deliberately. They are plain forms carrying the whole band in its new
 # order, so they are the path that works with scripting off; the drag controller builds the same
@@ -41,16 +46,13 @@ RSpec.describe "Budget page reorder", type: :system do
   end
 
   describe "moving a pool up the fill order", :aggregate_failures do
-    # THE ASSERTION THIS TASK EXISTS FOR. Both fills are pinned and every figure differs, so it
-    # cannot pass on an account where the order happens not to matter.
-    it "changes who gets the money, not just the order of the cards" do
-      expect(fill).to eq([["Groceries", 400], ["Fun Money", 100]])
-
+    # The order the cards come back in, which is what this endpoint still decides. The `fill`
+    # assertions that used to bracket this one are named in the file header.
+    it "changes the order of the cards" do
       click_button "Move Fun Money up"
 
       expect(page).to have_content("Checking fills in that order now.")
       expect(cards_in("Checking")).to eq(["Fun Money", "Groceries"])
-      expect(fill).to eq([["Fun Money", 300], ["Groceries", 200]])
     end
 
     it "restates each pool's new position on the page it comes back to" do
@@ -76,12 +78,11 @@ RSpec.describe "Budget page reorder", type: :system do
   # ▼ IS NOT ▲ READ BACKWARDS: each button carries its own already-swapped list, and a helper
   # that got the sign wrong would move the wrong row while still producing a valid order.
   describe "moving a pool down the fill order", :aggregate_failures do
-    it "arrives at the same fill as moving the other one up" do
+    it "arrives at the same order as moving the other one up" do
       click_button "Move Groceries down"
 
       expect(page).to have_content("Checking fills in that order now.")
       expect(cards_in("Checking")).to eq(["Fun Money", "Groceries"])
-      expect(fill).to eq([["Fun Money", 300], ["Groceries", 200]])
     end
   end
 
@@ -127,11 +128,4 @@ RSpec.describe "Budget page reorder", type: :system do
   def group(name) = find("[data-pool-group='#{name}']")
 
   def cards_in(account) = band(account).all("[data-pool-group]").pluck("data-pool-group")
-
-  # What the next distribution would actually hand out, read off the same object the distribution
-  # screen renders and the committer writes.
-  def fill
-    AllocationCalculator.new(user: user, account: checking, today: Date.current)
-      .rows.map { |row| [row.pool.name, row.funded] }
-  end
 end
