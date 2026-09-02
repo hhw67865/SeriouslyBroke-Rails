@@ -174,7 +174,7 @@ RSpec.describe "Categories Show - Pool card", type: :system do
 
   # THE CARD IS A NEW CALLER OF THE ROW VOCABULARY, which is the exact method 2c's whole-plan review
   # caught two callers dropping a suffix from. It cannot repeat that here because it passes an
-  # OBJECT to `shared/_pool_status` rather than two optional keywords — but "cannot" is a claim, so
+  # OBJECT to `shared/_holding_status` rather than two optional keywords — but "cannot" is a claim, so
   # both suffixes are asserted in both directions.
   describe "the label's two suffixes" do
     # The changed-after-distributing half of this block runs on the shared clock (plan 3, task 6);

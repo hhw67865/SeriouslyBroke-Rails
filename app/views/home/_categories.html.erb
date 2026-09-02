@@ -18,8 +18,22 @@
     <h3 class="text-sm font-semibold text-gray-900">Categories</h3>
     <%# "available now", for the reason the account header says "balance now": two money figures
         from two different moments sharing a bare noun is a defect this screen has already shipped
-        once. This is what is unclaimed at this instant plus what the next distribution sweeps
-        back; the standing band above states what is left AFTER that distribution. %>
+        once. The standing band above states what is left AFTER this period's distribution; this is
+        the figure that distribution starts from.
+
+        ** IT IS POST-SWEEP, AND THAT IS ONE FIGURE ON THIS SCREEN AND NOT TWO. ** It is
+        `HomePresenter#available` — `CategoryLedger#available` PLUS what the next distribution
+        sweeps back out of closed categories — which is `AllocationCalculator#available` to the
+        character, so the number here and the number the Distribute button hands out are the same
+        one. That is the whole reason the sweep is in it.
+
+        THE FIX BUTTONS IN THE ATTENTION BAND ARE CEILINGED ON A DIFFERENT QUANTITY, deliberately:
+        `#free_amount_for(ROOT)` reads the PLAIN `CategoryLedger#available`, because a hand move
+        happens NOW, out of money that is genuinely unclaimed today, and `Allocation
+        #source_must_hold_it` would refuse a move funded out of a sweep nobody has written. So a
+        closed category's leftover is inside this header and outside that ceiling, and the two are
+        about different acts rather than about different opinions of one act. Neither figure is
+        labelled the other's word: this one says "now", the button says what it would move. %>
     <span class="text-sm <%= presenter.available.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
       available now <strong><%= number_to_currency(presenter.available) %></strong>
     </span>

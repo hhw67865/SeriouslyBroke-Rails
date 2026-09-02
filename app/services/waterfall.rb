@@ -8,10 +8,18 @@
 # two readers of one money-shaped rule, free to drift the moment either is edited. It is not a
 # rendering detail — it decides which envelopes the screen says were denied money.
 #
-# The GATE stays with each caller, because it is genuinely different: a distribution is scoped to
-# one account, so "is anything short" is the whole question there, while Home fills each account's
-# own pot and can only draw one line when there is a single account to draw it about. Each
-# presenter answers that for itself and asks this for the index.
+# THE GATE STAYS WITH EACH CALLER, and it is now the SAME question asked twice rather than two
+# different ones — which is worth stating, because it used to be the paragraph's whole point. This
+# read: "a distribution is scoped to one account, so 'is anything short' is the whole question
+# there, while Home fills each account's own pot and can only draw one line when there is a single
+# account to draw it about." Both halves died with the accounts (two-ledger spec §2, Task 6): there
+# is ONE root, both screens fill it in one pass, and `HomePresenter#cutoff`'s `accounts.one?` leg is
+# deleted. Each presenter still answers "is anything short" for itself — `#covered?` on Home,
+# `#short?` on the distribution — because each reads its own rows, and neither may derive that from
+# the other's.
+#
+# WHAT THIS MODULE IS FOR IS UNCHANGED BY THAT: the RULE below is the shared half, and it was the
+# half that could drift.
 module Waterfall
   module_function
 

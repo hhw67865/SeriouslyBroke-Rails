@@ -91,6 +91,38 @@ RSpec.describe "Home Standing", type: :system do
   # THE STANDING BAND HAS ONE RECONCILIATION CLAUSE LEFT and it is new: available below zero. The
   # headline stops at what the categories miss, so a root that has been given out past what came in
   # is the one remaining reason `total_required - available` is not the shortfall.
+  # ** THE COVERED BRANCH REACHES IT TOO (fix round 1 — MED-1), and this is the state the reviewer
+  # measured: no holder categories at all, so nothing asks and nothing is short, while $100 of
+  # unbudgeted spending has drained the root. The band said "You're covered this period" over
+  # "-$100.00 is still unclaimed after this period" — a deficit called unclaimed money.
+  #
+  # ALL THREE ASSERTIONS ARE THE POINT: the headline is still true (nothing IS short), the unclaimed
+  # line is GONE rather than negative, and the clause that replaces it says what the figure is. The
+  # gap sentence stays off, because a covered period prints no gap for it to be about.
+  it "does not call a deficit unclaimed money on a covered period", :aggregate_failures do
+    spend_unbudgeted(100)
+
+    visit root_path
+
+    expect(page).to have_css("h2", text: "You're covered")
+    expect(page).to have_no_content("is still unclaimed after this period")
+    expect(page).to have_css("[data-available-in-the-red]", text: "Available is -$100.00")
+    expect(page).to have_no_content("The gap above is what your categories miss")
+  end
+
+  # The other direction on the same branch, so the gate cannot be satisfied by a band that simply
+  # stopped printing the line: a covered period with money left says so, and says nothing about a
+  # root in the red.
+  it "still states what is left over on a covered period in the black", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_content("$600.00 is still unclaimed after this period")
+    expect(page).to have_no_css("[data-available-in-the-red]")
+  end
+
   it "explains the arithmetic when available itself is in the red", :aggregate_failures do
     envelope("Rent", 400)
     deposit(100)
@@ -102,6 +134,8 @@ RSpec.describe "Home Standing", type: :system do
     expect(page).to have_content("You need $400.00")
     expect(page).to have_content("You have -$400.00")
     expect(page).to have_css("[data-available-in-the-red]", text: "more has been spent or claimed than came in")
+    # The short branch's own second sentence, which the covered branch above must not print.
+    expect(page).to have_content("The gap above is what your categories miss")
   end
 
   # An overdraft is excluded from both headline figures by design, so the band has to name

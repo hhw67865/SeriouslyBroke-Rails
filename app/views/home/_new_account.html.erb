@@ -1,9 +1,10 @@
 <%# THE ADD-ACCOUNT CARD (onboarding step 1). Sits after the last account section: the screen
     that lists accounts is the screen that grows them. One field — a bank account needs only a
     name at birth; its balance is the NEXT onboarding step, so the card invites no number here
-    (the new section's own "buffer now $0.00" line says where it starts).
+    (the new section's own "balance now $0.00" line says where it starts — the word was "buffer"
+    until Task 6, when nothing was left housed inside an account for the header to be net of).
 
-    The hint carries the correctness rule of the whole setup: a buffer derived later is only
+    The hint carries the correctness rule of the whole setup: a balance derived later is only
     true if every account income reaches is in this list. Locals: `bank_account` (an
     account-type Pool from HomeController — unsaved, or rejected with its errors when
     BankAccountsController re-renders this screen at 422). %>

@@ -39,8 +39,8 @@ module HomeHelper
   # between Home's own two bands.
   #
   # The distribution and reallocation screens pass `period_closed:` and NOT this, deliberately.
-  # Their rows describe a move that has not happened — `pool_movements_helper`'s sentences are
-  # literally "becomes …" — and why the envelope got into its current state is a different subject
+  # Their rows describe a move that has not happened — `AllocationsHelper`'s sentences are
+  # literally "becomes …" — and why the category got into its current state is a different subject
   # from what a proposed transfer would do to it. Which period the money belongs to bears on the
   # move; who last edited the rule does not.
   #
@@ -169,8 +169,9 @@ module HomeHelper
   #   - The statuses on those screens that COULD be asked are PROJECTED ones (`pending:`), and there
   #     the answer would be about money that has not moved: a pending funding dated today makes the
   #     rate period look live, so ` · last period` would appear or vanish on the strength of an
-  #     unwritten distribution. Both screens omit the marker on those (see PoolMovementsHelper's
-  #     `becomes …` clause and DistributionsHelper's consequence line).
+  #     unwritten distribution. Both screens omit the marker on those (see `AllocationsHelper
+  #     #allocation_damage_sentence`'s `becomes …` clause and DistributionsHelper's consequence
+  #     line). `PoolMovementsHelper` was the pool-era name and is deleted with its screen (Task 6).
   #
   # It is safe HERE because the only caller is Home's attention band, whose statuses come from
   # HomePresenter#status_for: plain, unprojected, and about money that is actually in the category.

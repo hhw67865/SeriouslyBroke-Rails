@@ -6,10 +6,20 @@
     <%# "after this period" is not padding. The categories band below prints an `available now`
         figure too — what is unclaimed at this instant — and one screen carrying the same word over
         two different moments leaves the reader to guess which is which, or worse, to read one as a
-        breakdown of the other. %>
-    <p class="mt-2 text-sm text-gray-600">
-      <%= number_to_currency(presenter.projected_buffer) %> is still unclaimed after this period.
-    </p>
+        breakdown of the other.
+
+        GATED ON `available.negative?`, WHICH IS EXACTLY WHEN THIS FIGURE IS A DEFICIT (fix round 1
+        — MED-1). `#projected_buffer` is `available − Σ funded`, and `funded` is clamped at zero, so
+        it is negative if and only if the root is: a covered period is one where nothing is SHORT,
+        which a user with no holder categories at all satisfies trivially. $100 of unbudgeted
+        spending and no rules therefore rendered "You're covered this period" over "-$100.00 is
+        still unclaimed after this period" — a deficit called unclaimed money, measured on exactly
+        that fixture. The clause below carries that state instead, on both branches. %>
+    <% unless presenter.available.negative? %>
+      <p class="mt-2 text-sm text-gray-600">
+        <%= number_to_currency(presenter.projected_buffer) %> is still unclaimed after this period.
+      </p>
+    <% end %>
 
     <%# THE ORPHAN CLAUSE IS GONE (Task 6). It said "$X of what you need belongs to N pools with no
         account, listed below — being covered can't fix that". A category belongs to no account by
@@ -22,22 +32,29 @@
       You need <strong><%= number_to_currency(presenter.total_required) %></strong> to stay on schedule.
       You have <strong><%= number_to_currency(presenter.available) %></strong>.
     </p>
+  <% end %>
 
-    <%# THE ONE REASON THE TWO FIGURES ABOVE NO LONGER SUBTRACT TO THE HEADLINE. There used to be
-        two — cash stranded in an account whose own pools were funded, and money owed by a pool no
-        account could reach — and both died with the accounts: one root, so a short period drains it
-        to zero and `total_required - available` IS the shortfall.
+  <%# A ROOT THAT HAS BEEN GIVEN OUT PAST WHAT CAME IN, and it is OUTSIDE the branch above rather
+      than inside the short one (fix round 1 — MED-1).
 
-        What survives is available going BELOW zero, which is money already promised out of the
-        root. A distribution cannot be short by more than everything it was asked for, so the
-        headline stops at `total_required` and this clause carries the rest. Silent otherwise, since
-        a consequence is only worth stating when there is one (principle 3). %>
-    <% if presenter.available.negative? %>
-      <p class="mt-1 text-sm text-gray-600" data-available-in-the-red>
-        Available is <%= number_to_currency(presenter.available) %> — more has been spent or claimed
-        than came in, so the gap above is what your categories miss, not what you owe.
-      </p>
-    <% end %>
+      THE TWO REASONS THE STANDING BAND'S FIGURES ONCE FAILED TO SUBTRACT ARE GONE — cash stranded
+      in an account whose own pools were funded, and money owed by a pool no account could reach —
+      because there is one root and no orphans. What survives is available going below zero, and it
+      is reachable on EITHER branch: short, where the headline stops at `total_required` because a
+      distribution cannot be short by more than everything it was asked for; and COVERED, where a
+      user with no holder categories is short of nothing while their spending has drained the root.
+
+      The second sentence is the short branch's alone, because only that branch prints a gap.
+      Silent when available is in the black, since a consequence is only worth stating when there is
+      one (principle 3). %>
+  <% if presenter.available.negative? %>
+    <p class="mt-2 text-sm text-gray-600" data-available-in-the-red>
+      Available is <%= number_to_currency(presenter.available) %> — more has been spent or claimed
+      than came in, so there is nothing unclaimed to carry forward.
+      <% unless presenter.covered? %>
+        The gap above is what your categories miss, not what you owe.
+      <% end %>
+    </p>
   <% end %>
 
   <%# WHICH PERIOD THE BAND ABOVE IS TALKING ABOUT. Read off HomePresenter#period_range, itself

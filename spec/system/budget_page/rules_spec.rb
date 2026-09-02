@@ -251,18 +251,37 @@ RSpec.describe "Budget page rules", type: :system do
     # THE CROSS-SCREEN PIN, on the clause most at risk of being threaded on one screen and forgotten
     # on the other — it has shipped that way twice, once between Home and /budget and once between
     # Home's own two bands.
+    #
+    # THE AMOUNT TRAVELS WITH THE CLAUSE, and it is READ off the page that already rendered it
+    # rather than pinned to a second literal: the lag is a function of how many boundaries fall
+    # inside a six-month cycle on the calendar the suite happens to run on, which is arithmetic this
+    # example does not own. Asserting the bare word "behind" on Home would have been the weaker
+    # half of the pair above (`$400.00 left · last period` carries its figure), and a label that
+    # lost its amount would have passed.
+    #
+    # THE TWO SCREENS' CLAUSES AFTER THE STATE DIFFER BY DESIGN — the Budget card adds `· holds $X`
+    # and a Home row adds a date (`Group#balance_clause?` against `Row#due_marker?`) — so what is
+    # compared is the STATE and its two suffixes, which is exactly what `shared/_holding_status`
+    # threads off one object.
+    # The two figures are asserted DIFFERENT first: same rule shape and same allocation, but one rule
+    # was raised to $1,800 and the other left at $1,200, so a pair of rows both matching one figure
+    # would be matching by coincidence.
     it "reads exactly as Home reads for the same categories", :aggregate_failures do
+      raised, steady = ["Car Insurance", "Property Tax"].map { |name| behind_figure(group(name)) }
+      expect([raised, steady]).to all(match(/\A\$[\d,]+\.\d\d\z/))
+      expect(raised).not_to eq(steady)
       visit root_path
 
-      within("[data-holding-name='Car Insurance']") do
-        expect(page).to have_content("behind")
-        expect(page).to have_content("you changed a rule here after distributing")
-      end
-      within("[data-holding-name='Property Tax']") do
-        expect(page).to have_content("behind")
-        expect(page).to have_no_content("you changed a rule here after distributing")
-      end
+      expect(home_row("Car Insurance")).to have_content("behind #{raised} — you changed a rule here after distributing")
+      expect(home_row("Property Tax")).to have_content("behind #{steady}")
+      expect(home_row("Property Tax")).to have_no_content("you changed a rule here after distributing")
     end
+
+    # The rendered figure, off the group's own status line. `nil` rather than a raise when the
+    # label has no amount at all, so the `all(match(...))` above is what reports it.
+    def behind_figure(node) = node.text[/behind (\$[\d,]+\.\d\d)/, 1]
+
+    def home_row(name) = find("[data-holding-name='#{name}']")
   end
 
   # The link is in the sidebar, which every signed-in page renders — so it is asserted from two

@@ -284,10 +284,23 @@ class HomePresenter
 
   # Money that has no job even after this period's funding — `available` less every row's funding.
   #
-  # WITH ONE ROOT THIS IS POSITIVE ONLY ON A COVERED PERIOD, which is a real simplification rather
-  # than an accident: it used to double as "cash in an account whose own pools are already funded,
-  # which cannot close a gap somewhere else", and that reading died with the accounts. A short period
+  # WITH ONE ROOT IT IS POSITIVE ONLY ON A COVERED PERIOD, which is a real simplification rather than
+  # an accident: it used to double as "cash in an account whose own pools are already funded, which
+  # cannot close a gap somewhere else", and that reading died with the accounts. A short period
   # drains the root to zero, so the standing band's short branch has no buffer clause left to print.
+  #
+  # ** THE CONVERSE IS FALSE, AND SAYING IT WAS THE DEFECT (fix round 1 — MED-1). ** A covered period
+  # does NOT imply this is positive. `#covered?` is `shortfall.zero?`, which a user with no holder
+  # categories satisfies trivially — nothing asks, so nothing is short — while their unbudgeted
+  # spending has drained the root below zero. Measured: $100 of spending with no rules rendered
+  # "You're covered this period" over "-$100.00 is still unclaimed after this period", a deficit
+  # called unclaimed money on the root route.
+  #
+  # THE EXACT LAW IS `projected_buffer.negative? ⟺ available.negative?`, and it falls out of the
+  # fill: `funded` is `remaining.clamp(0.to_d, needed)`, so with a non-negative root every row funds
+  # at most what is left and `Σ funded ≤ available`, while with a negative root every row funds
+  # exactly zero and this IS `available`. `home/_standing.html.erb` gates on that one condition
+  # rather than on this figure's own sign, so the band has one question to ask on either branch.
   def projected_buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
 
   # Sorted for the same reason #waterfall is, and by the same key: this is a rendered list, and the

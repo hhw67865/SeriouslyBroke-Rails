@@ -534,6 +534,34 @@ RSpec.describe HomePresenter do
       expect(presenter.projected_buffer).to eq(0)
     end
 
+    # ** A COVERED PERIOD DOES NOT IMPLY A POSITIVE BUFFER (fix round 1 — MED-1), and this is the
+    # exact fixture the reviewer measured. ** `#covered?` is `shortfall.zero?`, which a user with NO
+    # holder categories satisfies trivially — nothing asks, so nothing is short — while their
+    # unbudgeted spending has drained the root. The band rendered "You're covered this period" over
+    # "-$100.00 is still unclaimed after this period", a deficit called unclaimed money.
+    #
+    # The law asserted here is the one `home/_standing` gates on: this figure is negative EXACTLY
+    # when the root is, so the band has one condition to ask rather than two that can drift.
+    it "is negative exactly when the root is, which a covered period reaches", :aggregate_failures do
+      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 100)
+
+      expect(presenter).to be_covered
+      expect(presenter.available).to eq(-100)
+      expect(presenter.projected_buffer).to eq(-100)
+    end
+
+    # The other direction on the same law, so the pair is about the SIGN rather than about one
+    # fixture: with a non-negative root every row funds at most what is left, so what remains cannot
+    # go below zero however short the period is.
+    it "cannot go below zero while the root is in the black", :aggregate_failures do
+      income(150)
+      rate(holder("Groceries", priority: 1), 400)
+
+      expect(presenter).not_to be_covered
+      expect(presenter.available).to eq(150)
+      expect(presenter.projected_buffer).to eq(0)
+    end
+
     # ── DELETED (Task 6): "is the cash this period's pools cannot reach" and "counts only the surplus
     # of an account that funds pools of its own". Both planted money in an account whose own
     # envelopes were already funded and pinned that it could not close a gap somewhere else. Money is
