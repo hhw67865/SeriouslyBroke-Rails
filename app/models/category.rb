@@ -207,8 +207,15 @@ class Category < ApplicationRecord
   # A GOAL IS A HOLDER WITH A TARGET AND NO RULE (spec §3: "a savings category is just a category
   # with a target and typically no refill rule"). The rule half is what tells a goal apart from an
   # envelope somebody also set a ceiling on: a category the waterfall refills every period is being
-  # SPENT toward a rate, not SAVED toward a figure, and `HoldingCalculator` asks a different
-  # question of each.
+  # SPENT toward a rate, not SAVED toward a figure.
+  #
+  # THE CALCULATOR DOES NOT ASK THIS, and an earlier draft of this comment said it did. §3's own
+  # "typically" is why: a goal MAY carry a refill rule (the demo's Retirement Supplement does), and
+  # such a category is not `savings?` — so `HoldingCalculator` asking this would call it an envelope
+  # and sweep the user's savings back to available at the end of every rate period. The funding
+  # question is asked of the TARGET instead, in `HoldingCalculator#dateless_goal?`, whose comment
+  # carries the whole argument and the measurement. This predicate is the DISPLAY question — is this
+  # row a goal to render as one — and the two are deliberately different conditions.
   #
   # It is also exactly the shape Task 1's migration mints out of a savings pool — target, priority,
   # `funded_since`, `tracked: false`, and no rule was ever attached to a goal.
@@ -225,6 +232,43 @@ class Category < ApplicationRecord
 
   def calculator(date = Date.current, period: :monthly)
     CategoryCalculator.new(self, date, period: period)
+  end
+
+  # THE ONE DOOR ONTO WHAT THIS CATEGORY HOLDS (two-ledger spec §2), and the port of
+  # `Pool#calculator`: `terms:` threads straight through to the calculator underneath and DEFAULTS
+  # TO NOTHING, which keeps this the unbatched single-category door — one category is a handful of
+  # queries whether they are grouped or not. Only the callers that ITERATE categories build a
+  # `CategoryLedger` and pass its terms down here.
+  #
+  # A keyword here rather than those callers reaching for `HoldingCalculator.new` themselves, so
+  # this stays the one place a calculator is built from a category. A second construction path is
+  # how a keyword ends up honoured on one screen and forgotten on the next.
+  #
+  # `net_of_sweep:` and `pending:` are PROJECTIONS — questions about a ledger nobody has written —
+  # and they belong to `HoldingProjection`, which wraps a plain calculator and owns the arithmetic,
+  # the twin and the refusal. `HoldingProjection.for` hands back a plain HoldingCalculator when
+  # neither is asked for, so the callers that ask none are on exactly the object they expect.
+  #
+  # IT IS NOT CALLED `#calculator`, AND THAT IS THE COLLISION RATHER THAN A PREFERENCE. That name
+  # is `CategoryCalculator`'s — what a category SPENT in a period, which the categories and
+  # dashboard screens still ask on every render — and the two answer different questions about the
+  # same record. Renaming that one is a change to screens this task does not touch; this reader
+  # takes the name the whole stack is called by instead.
+  def holding_calculator(as_of: nil, today: Date.current, net_of_sweep: false,
+                         pending: HoldingProjection::Pending.none, terms: nil)
+    HoldingProjection.for(
+      self, net_of_sweep: net_of_sweep, pending: pending, as_of: as_of, today: today, terms: terms
+    )
+  end
+
+  # `pending:` threads straight through to the calculator underneath, exactly as it does above: a
+  # status is a reading of a balance, so a status of a category that has not yet received this
+  # distribution's money is a status of the wrong balance. It is what lets the distribution screen
+  # ask "does this envelope still make it if I fund $200 instead of $500" in the app's own
+  # vocabulary rather than inventing a second one. `terms:` threads down the same way and for the
+  # same reason, and defaults to nothing here too.
+  def status(today: Date.current, pending: HoldingProjection::Pending.none, terms: nil)
+    HoldingStatus.new(self, today: today, pending: pending, terms: terms)
   end
 
   # WHICH POOL THIS CATEGORY'S SPENDING REACHES *ON A GIVEN DAY*, and it is the same rule the

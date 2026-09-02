@@ -60,6 +60,42 @@ RSpec.describe Entry, type: :model do
     end
   end
 
+  # THE PURPOSE LEDGER'S NARROWING, IN ONE SCOPE (two-ledger spec §4) — `CategoryLedger::
+  # ENTRY_CATEGORY_ID` bounded to a single category, and the port of `.reaching_pool`, which is the
+  # same sentence about a pool. `HoldingCalculator` asks it for the expense term of every balance,
+  # so it is the one place "which entries drain THIS category" is spelled: a second spelling would
+  # be free to disagree with the batched ledger that computes the same figure for a whole screen.
+  #
+  # BOTH DIRECTIONS, because the funded gate is the whole of what the scope adds over walking
+  # `item → category`: an entry dated on or after `funded_since` drains the category, and one dated
+  # before it drains AVAILABLE and must be absent here. The boundary day itself is included, which
+  # is the arm `Category#counts_spending_on?` mirrors in Ruby.
+  describe ".draining" do
+    let(:user) { create(:user) }
+    let(:food) { create(:category, :expense, user: user, name: "Food", funded_since: Date.new(2026, 8, 1)) }
+
+    it "returns the entries dated from funded_since on, and no others", :aggregate_failures do
+      item = create(:item, category: food)
+      on_the_day = create(:entry, item: item, amount: 20, date: Date.new(2026, 8, 1))
+      after_it = create(:entry, item: item, amount: 30, date: Date.new(2026, 8, 5))
+      before_it = create(:entry, item: item, amount: 40, date: Date.new(2026, 7, 31))
+      elsewhere = create(:entry, item: create(:item, category: create(:category, :expense, :funded, user: user)))
+
+      expect(described_class.draining(food)).to contain_exactly(on_the_day, after_it)
+      expect(described_class.draining(food)).not_to include(before_it, elsewhere)
+    end
+
+    # A category that was never funded holds nothing, so nothing drains it — its whole history is
+    # available's. Without this, a scope that dropped the `funded_since IS NULL` arm would look
+    # right on every funded fixture in the suite.
+    it "returns nothing for a category that has never been funded" do
+      unfunded = create(:category, :expense, user: user, name: "Unfunded")
+      create(:entry, item: create(:item, category: unfunded), amount: 20)
+
+      expect(described_class.draining(unfunded)).to be_empty
+    end
+  end
+
   describe "#effective_pool" do
     let(:user) { create(:user) }
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }

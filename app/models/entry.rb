@@ -78,6 +78,31 @@ class Entry < ApplicationRecord
             .where("#{PoolBalanceLedger::ENTRY_POOL_ID} = :id", id: pool.id)
         }
 
+  # EVERY ENTRY THAT DRAINS ONE CATEGORY — `CategoryLedger::ENTRY_CATEGORY_ID` narrowed to a single
+  # id, and THE ONE PLACE THAT NARROWING IS SPELLED (two-ledger spec §4). The port of
+  # `.reaching_pool` above, and it lives on the model for that scope's own reason: two readers ask
+  # it — `HoldingCalculator` for the expense term of one category's holdings, and `CategoryLedger`
+  # for the same figure GROUPED across a whole screen — so the rule has to be one expression rather
+  # than two that happen to agree today. The constant lives on the ledger because that is the class
+  # that has to GROUP BY it.
+  #
+  # WHAT IT ADDS OVER WALKING `item → category` is the funded-since gate: spending dated before the
+  # category started holding money drained AVAILABLE and reads there, so it must be absent here.
+  # That is the whole difference, and it is why this cannot be `has_many :entries, through: :items`
+  # with a comment.
+  #
+  # The joins are the constant's contract. `item: :category` comes first because the expression
+  # reads `categories.funded_since` and `categories.category_type`, and it is the same inner join
+  # `.expenses` and `.incomes` carry, so a caller composing this with one of those joins nothing
+  # twice; `ENTRY_CATEGORY_JOINS` brings the aliased owner whose timezone the day-boundary
+  # comparison re-zones through.
+  scope :draining,
+        lambda { |category|
+          joins(item: :category)
+            .joins(*CategoryLedger::ENTRY_CATEGORY_JOINS)
+            .where("#{CategoryLedger::ENTRY_CATEGORY_ID} = :id", id: category.id)
+        }
+
   # Define searchable fields using the DSL
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"

@@ -35,8 +35,9 @@ class BudgetCalculator
   # shape `ReallocationPresenter.source_order` was extracted out of one ruling ago.
   #
   # A TRIPLE, NOT A BARE DUE DATE, and every term earns its place: `sort_by`/`min_by` are not
-  # stable and `pool.budgets` carries no ORDER BY, so two rules sharing a due date could swap
-  # between page loads — the same pool reporting different #required figures with no data change.
+  # stable and neither owner's `has_many :budgets` carries an ORDER BY, so two rules sharing a due
+  # date could swap between page loads — the same holder reporting different #required figures with
+  # no data change.
   # `-target` breaks that tie toward the larger obligation, because the bigger bill is the one you
   # can least afford to be short on; `budget.id` makes even identical amounts deterministic.
   #
