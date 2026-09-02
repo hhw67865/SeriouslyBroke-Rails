@@ -268,7 +268,7 @@ class BudgetPagePresenter
   # THE OWNER'S NAME, category first and the pool behind it — `Budget#user`'s own order, and
   # `BudgetPageHelper#budget_rule_name`'s. `to_s` because a rule with neither owner is
   # `#must_have_an_owner`'s refusal rather than something to crash a sort over.
-  def owner_name(budget) = (budget.category&.name || budget.pool&.name).to_s
+  def owner_name(budget) = budget.category&.name.to_s
 
   def build_group(category)
     Group.new(

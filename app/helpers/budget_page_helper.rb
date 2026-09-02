@@ -46,7 +46,7 @@ module BudgetPageHelper
   # already printed beside the amount by #budget_rule_amount, so the name is free to be the one
   # thing the row was otherwise missing.
   def budget_rule_name(budget)
-    budget.item&.name || budget.category&.name || budget.pool&.name
+    budget.item&.name || budget.category&.name
   end
 
   # "$400.00 / period", "$600.00 every 6 months" — the amount and what it is an amount PER.

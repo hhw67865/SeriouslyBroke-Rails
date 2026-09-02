@@ -20,22 +20,11 @@ class Category < ApplicationRecord
 
   belongs_to :user, touch: true
 
-  # A DYING LANE, OPTIONAL AGAIN FOR THE LENGTH OF THIS BRANCH (two-ledger spec §5, Task 2).
-  #
-  # Plan 3 made this required, and the reason was real: a nil `pool_id` used to mean "the user's
-  # default account" and nothing kept the promise — `PoolBalanceLedger::ENTRY_POOL_ID` resolves
-  # `COALESCE(entries.pool_id, categories.pool_id)` to NOTHING for such a category, so its spending
-  # reached no pool at all while `Σ pools == bank truth` claimed otherwise.
-  #
-  # That hazard belongs to a model where the POOL holds the money. Under the two-ledger model the
-  # category holds it (§2), spending that reaches no pool is spending that drains AVAILABLE, and
-  # the only pool a category will ever name again is an account — an association Task 8 deletes
-  # outright. Two shapes already exist that the required version refuses: the savings categories
-  # Task 1's migration minted, and the categories Task 7's screens create with no account question
-  # asked at all. Nothing about the meaning of a PRESENT `pool_id` changes — `#pool_must_be_
-  # reachable` and `#income_must_land_in_an_account` still govern it, and both were already silent
-  # on a blank pool.
-  belongs_to :pool, optional: true, touch: true
+  # `belongs_to :pool` IS GONE WITH `categories.pool_id` (two-ledger spec §5, Task 8). Where a
+  # category's spending LANDED was the pool era's question; under the two-ledger model the category
+  # holds its own money (§2) and spending drains the category from `funded_since` on and AVAILABLE
+  # before it. `#pool_must_be_reachable`, `#income_must_land_in_an_account`, `#effective_pool` and
+  # `#buffer_funded?` are gone with it — every one of them was an answer about a lane.
 
   has_many :items, dependent: :destroy
   has_many :entries, through: :items
@@ -100,9 +89,6 @@ class Category < ApplicationRecord
   # THE THREE PURPOSE-LEDGER COLUMNS, VALIDATED TOGETHER AND BEHIND ONE GUARD — see
   # #holding_columns_are_sane for both halves of why.
   validate :holding_columns_are_sane
-  validate :pool_must_belong_to_user
-  validate :pool_must_be_reachable
-  validate :income_must_land_in_an_account
 
   # A CATEGORY THAT STOPS BEING INCOME TAKES ITS ENTRIES' MIRROR MOVEMENTS WITH IT (main-account
   # spec §4, final whole-branch review — I-3).
@@ -175,9 +161,9 @@ class Category < ApplicationRecord
   # Same spelling `Item#move_to_category` already uses for the same reason.
   scope :opening_balance, -> { where("LOWER(name) = ?", OPENING_BALANCE_NAME.downcase) }
 
-  # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed: the Categories index used to print
-  # `category.budget&.amount` and now prints the pool the spending comes out of, so preloading the
-  # association would be one query for a link that is nil on every row.
+  # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed, and `:pool` left it with the column
+  # (Task 8): the Categories index prints what a category HOLDS now, which is read off the category
+  # itself and its allocations.
   #
   # EXPENSE IS THE `else`, NOT A THIRD `when`. This was a three-armed case returning NIL for
   # anything it did not recognise, and `?type=savings` is now exactly that — a bookmark, a browser
@@ -189,42 +175,12 @@ class Category < ApplicationRecord
         lambda { |type|
           case (type || :expense).to_sym
           when :income then incomes.includes(:items)
-          else expenses.includes(:pool, :items)
+          else expenses.includes(:items)
           end
         }
 
   # Configure searchable fields
   searchable :name, label: "Name"
-
-  # SPENDING THAT COMES OUT OF THE BUFFER — the rate detector's population, the Categories page's
-  # account-pointed arm, and the one predicate all of them read
-  # (`SuggestionEngine#buffer_funded_categories`, `CategoryBudgetPresenter#proposable?`,
-  # `DashboardPresenter`'s two halves at :165 and :169, and the three views that say the sentence).
-  #
-  # THE NIL POOL IS EXPRESSIBLE AGAIN, AND IT ANSWERS FALSE. Three eras, and this comment has to
-  # name all of them because the answer to a nil has now been each of the three in turn:
-  #
-  #   * BEFORE THE CUTOVER, `pool.nil? || pool.pool_type_account?` — a pool-less category was the
-  #     ordinary way to spend straight out of the buffer, so nil meant TRUE.
-  #   * PLAN 3 made `belongs_to :pool` required, the nil became inexpressible, and the first half
-  #     was deleted as unreachable.
-  #   * THE TWO-LEDGER TRANSITION (spec §5, Task 2) makes the association optional again — and the
-  #     nil means the OPPOSITE of what it meant in the first era. A category with no pool is now a
-  #     category that holds its own money (§2), and money a category holds is precisely what this
-  #     predicate exists to say is NOT coming out of the buffer. So nil answers FALSE, and the guard
-  #     is a deliberate answer rather than nil-safety around a shape nobody can build.
-  #
-  # The sentence three screens say about this set stays literally true — *"No envelope — this
-  # spending isn't budgeted. It comes out of your buffer"* on the Categories page, the entry form's
-  # impact card and `budget_page/_suggestion_rate`: a holder is not in this set and never sees it.
-  #
-  # Pinned in `spec/models/category_holdings_spec.rb`, both directions, on a pool-less category
-  # planted VALIDLY — which is itself the fact this era turns on.
-  def buffer_funded?
-    return false if pool.blank?
-
-    expense? && pool.pool_type_account?
-  end
 
   # THE FILL ORDER, WRITTEN (two-ledger spec §2) — the port of `Pool.apply_fill_order`, and the only
   # writer for `categories.priority` outside the category form. `category_ids` is the user's
@@ -377,66 +333,6 @@ class Category < ApplicationRecord
     HoldingStatus.new(self, today: today, pending: pending, terms: terms)
   end
 
-  # WHICH POOL THIS CATEGORY'S SPENDING REACHES *ON A GIVEN DAY*, and it is the same rule the
-  # ledger runs on — THE START-DATE RULE INCLUDED (main-account spec §3).
-  #
-  # `on:` IS THE WHOLE OF WHAT §3 ADDED, and the reason this reader could not stay date-free. An
-  # envelope only counts its categories' spending from its `start_date` onward; earlier spending
-  # reads against the user's MAIN account. So "which pool does this category's spending reach" has
-  # no answer without a day attached — the same category answers `Groceries` for June and
-  # `Checking` for May. It defaults to `Date.current` because the question asked without a date is
-  # the question asked about spending happening now, which is what every caller that omits it means.
-  #
-  # THE DAY IS THE USER'S DAY, taken through `#local_day`, because ENTRY_POOL_ID renders
-  # `entries.date` in the owner's zone before comparing. One rule in two languages only holds if
-  # both languages agree about when midnight was.
-  #
-  # It used to read `pool || user&.default_account`, and that fallback was a promise nothing kept.
-  # `PoolCalculator` and `PoolBalanceLedger` both resolve an entry through
-  # `COALESCE(entries.pool_id, categories.pool_id)` (PoolBalanceLedger::ENTRY_POOL_ID) — no default
-  # account anywhere — so a pool-less category's spending reached the default account HERE and
-  # reached nothing THERE. Two readers of one question, which is the defect this branch has found
-  # in every task, and Task 8 made it matter: destroying a pool used to nullify its categories, and
-  # the difference between the two answers was the difference between `Σ pools` being conserved and
-  # rising by the pool's lifetime spending.
-  #
-  # The SQL wins, because the SQL is what every balance, every envelope status and the invariant
-  # itself are computed from. This reader is corrected to agree with it rather than the ledger being
-  # widened to agree with this one — widening would put a user's whole unpooled expense history into
-  # their nominated account's buffer, silently changing every balance on Home.
-  #
-  # Kept as a named reader rather than folded into `pool`: `Entry#effective_pool` is the other half
-  # of the same chain (the entry's own override first, this second), and the pair is where the rule
-  # is written down in Ruby — so that method's comment has to move with this one, and did.
-  #
-  # WHO CALLS IT NOW, AND THE GREP CLAIM THAT USED TO STAND HERE IS WITHDRAWN. This header said
-  # "`Entry#effective_pool` calls this and is the ONLY caller of it anywhere in `app/`; nothing in
-  # `app/`, `lib/`, `db/` or the views calls THAT one" — true when the fallback was removed, and
-  # BOTH HALVES FALSE since Task 4:
-  #
-  #   * `EntryImpactPresenter#pool` calls THIS one, on every render of the entry form, and
-  #   * `EntryImpactPresenter#own_contribution` calls `Entry#effective_pool` — to decide whether
-  #     the entry being edited is already counted in the pool the card is describing, which is the
-  #     difference between the card printing "$240 → $185 left" and printing it twice-spent.
-  #
-  # So a rendered balance now depends on this reader's CURRENT behaviour. What the withdrawn
-  # sentence was really recording is a fact about a moment: the fallback was removed at a time when
-  # nothing depended on it, so correcting it could not move a screen. Readers have since arrived,
-  # and they are readers of what it does today — changing it now moves figures on the entry form.
-  # (The claim before that one — "PoolCalculator calls it" — had been untrue since Plan 2b moved
-  # the calculator onto ENTRY_POOL_ID. A grep pasted into a comment is a fact with an expiry date;
-  # what stays true is WHY this agrees with the SQL, which is the paragraph above.)
-  #
-  # THE THREE ARMS ARE ENTRY_POOL_ID'S OWN, minus the entry override that belongs to
-  # `Entry#effective_pool`: a pool-less category reaches NOTHING (nil, never the main account — the
-  # fallback is reserved for history displaced by a start date), an ACCOUNT has no date gate, and
-  # an envelope or goal answers for itself only from its start date on.
-  def effective_pool(on: Date.current)
-    return pool if pool.nil? || pool.pool_type_account?
-
-    local_day(on) >= pool.start_date ? pool : user&.default_account
-  end
-
   private
 
   # `saved_change_to_category_type` IS `[before, after]`, compared as the whole pair rather than
@@ -485,12 +381,15 @@ class Category < ApplicationRecord
   #     it orders a waterfall an income category is never in.
   #
   # ONE VALIDATOR RATHER THAN THREE `validates` LINES, AND THE FIRST LINE IS WHY. These columns are
-  # YOUNGER THAN TWO SPECS THAT PLANT CATEGORIES THROUGH THIS MODEL: `spec/migrations/cutover_spec.rb`
-  # and `spec/seeds_spec.rb` rewind the schema past `CategoriesHoldTheMoney` for the length of a
-  # file — the only way to hand `DropCapEraBudgetColumns#down` a `budgets.category_id` to restore —
-  # and a validator that reads a column the database does not currently have raises NoMethodError
-  # out of `valid?`, which is not a rejection of anything. The guard is asked ONCE here instead of
-  # three times as an `if:` on three declarations.
+  # YOUNGER THAN THE MIGRATION SPECS THAT PLANT CATEGORIES THROUGH THIS MODEL:
+  # `spec/migrations/cutover_spec.rb` and `spec/migrations/two_ledger_spec.rb` rewind the schema past
+  # `CategoriesHoldTheMoney` for the length of a file, and a validator that reads a column the
+  # database does not currently have raises NoMethodError out of `valid?`, which is not a rejection
+  # of anything. The guard is asked ONCE here instead of three times as an `if:` on three
+  # declarations.
+  #
+  # `spec/seeds_spec.rb` WAS ON THAT LIST UNTIL TASK 8 and is not any more: the seeds are
+  # category-native, so there is no schema they can be replanted against but the current one.
   def holding_columns_are_sane
     return unless has_attribute?(:priority)
 
@@ -544,63 +443,5 @@ class Category < ApplicationRecord
     return if expense?
 
     errors.add(:base, "only expense categories hold money") if funded_since.present? || target_amount.present?
-  end
-
-  # A CATEGORY'S LANE IS ONE OF ITS OWN USER'S POOLS — the third instance of a rule its two siblings
-  # already carry (`Entry#pool_must_belong_to_user`, `Pool#account_is_this_users_account`), and it
-  # is written the same way for the same reasons.
-  #
-  # WHY IT IS HERE WHEN THE CONTROLLERS ALREADY GUARD IT. Both writers of this column scope their
-  # lookup to `current_user` — `CategoriesController` builds through `current_user.categories` and
-  # picks the pool out of `current_user.pools`, and `PoolsController` never sets it — so no request
-  # can reach this validator today. That is a fact about two controllers, not about the column: a
-  # console, a rake task, an import, a future API or a `pool_id` that arrives through a nested form
-  # writes it with nothing in the way, and a category pointing at a stranger's pool is a leak the
-  # app cannot render honestly. Its entries would reach a pool the owner does not own, which makes
-  # BOTH users' `Σ pools` disagree with their bank truth — the cutover migration's #preflight!
-  # refuses exactly this shape by name for exactly that reason. The controllers are the first layer;
-  # this is the durable one.
-  #
-  # RECORDS, NOT IDS, and both precedents say so in their own comments: under `build` an unsaved
-  # association leaves `user_id` nil on both sides, and `nil == nil` would wave a foreign pool
-  # through. `pool.user == user` compares two records, so an unsaved pair is compared on identity
-  # rather than on two nils that happen to match.
-  #
-  # SILENT ON NILS, because a missing pool or a missing user is another validator's sentence to say:
-  # `belongs_to :pool` and `belongs_to :user` are both required, and adding "must belong to the same
-  # user" to a record that names no user at all is a second error about a first error.
-  def pool_must_belong_to_user
-    return if pool.blank? || user.blank?
-
-    errors.add(:pool, "must belong to the same user") unless pool.user == user
-  end
-
-  # MAIN-ACCOUNT SPEC §6: non-main accounts hold money via movements only — no categories, so
-  # no entries can ever land in them and their balance mirrors the real bank statement. And a
-  # category on an envelope needs the user to HAVE a main account, because the start-date
-  # rule's ELSE arm sends the envelope's pre-start history to users.default_account_id — a
-  # NULL there silently drops those entries from Σ.
-  def pool_must_be_reachable
-    return if pool.blank? || user.blank?
-
-    if pool.pool_type_account?
-      return if pool == user.default_account
-      errors.add(:pool, "must be your main account or an envelope inside one")
-    elsif user.default_account.blank?
-      errors.add(:pool, "needs a main account first — history before the envelope starts has nowhere to go")
-    end
-  end
-
-  # Income lands in an account, never directly in an envelope: the allocation rules
-  # move it out of the account afterwards.
-  #
-  # ITS TWIN ON `Entry` STAYS, AND IS NOT A DUPLICATE (§7a's "merge the duplicate income
-  # validators", resolved in plan 3, task 6). This one guards `categories.pool_id`; that one
-  # guards `entries.pool_id`, the per-entry override that WINS the `COALESCE` this one's value
-  # loses. `Entry#income_must_land_in_an_account` carries the full reasoning.
-  def income_must_land_in_an_account
-    return if pool.blank? || !income?
-
-    errors.add(:pool, "must be an account for income categories") unless pool.pool_type_account?
   end
 end

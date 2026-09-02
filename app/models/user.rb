@@ -48,10 +48,6 @@ class User < ApplicationRecord
 
   validate :default_account_is_own_account
 
-  # `prepend: true` is load-bearing: without it the `has_many :pools, dependent: :destroy`
-  # callback runs first, hits the account pool while it still has children, and aborts.
-  before_destroy :destroy_child_pools_first, prepend: true
-
   STRIDE_DAYS = { "weekly" => 7, "biweekly" => 14 }.freeze
 
   # How far #period_containing looks either side of a date to find the boundaries around it.
@@ -170,13 +166,6 @@ class User < ApplicationRecord
   def semimonthly_days
     first = period_anchor_date.day
     [first, first <= 15 ? first + 15 : first - 15].sort
-  end
-
-  # Account pools use restrict_with_error so a user cannot delete an account that
-  # still holds envelopes. That protection must not block deleting the whole user,
-  # so child pools go first and no account is left holding anything.
-  def destroy_child_pools_first
-    pools.where.not(account_id: nil).destroy_all
   end
 
   # Records, not ids: on an unsaved user holding an unsaved pool both ids are nil, and

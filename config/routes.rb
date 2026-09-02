@@ -143,8 +143,9 @@ Rails.application.routes.draw do
   # Home's rows were pools. Home's rows are CATEGORIES now and its buttons point at
   # `/allocations/new`, so the twin — the route, `PoolMovementsController`, `PoolReallocation
   # Presenter`, `PoolMovementsHelper` and `app/views/pool_movements/` — was deleted whole.
-  # `pool_movements` the TABLE survives as the physical lane (income routing, account funding)
-  # until Task 8 renames it; nothing about that lane was ever reachable through this route.
+  # The TABLE survives as the physical lane (income routing, account funding) under the name it
+  # always meant — `account_movements`, since Task 8 — and nothing about that lane was ever
+  # reachable through this route.
 
   resource :account, only: [:show] do
     patch :toggle_theme

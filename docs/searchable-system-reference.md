@@ -21,7 +21,7 @@ searchable :description, label: "Description"                    # Direct column
 searchable :date, type: :date, label: "Date"                    # Date field with special parsing
 searchable :item, through: :item, column: :name, label: "Item"  # Single association
 searchable :category, through: [:item, :category], column: :name, label: "Category" # Nested association
-searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"          # Model scope
+searchable :owner, type: :scope, scope: :owned_by_named, label: "Owner"      # Model scope
 ```
 
 **Generated Methods**:
@@ -109,9 +109,6 @@ class Entry < ApplicationRecord
   searchable :date, type: :date, label: "Date"
   searchable :item, through: :item, column: :name, label: "Item"
   searchable :category, through: [:item, :category], column: :name, label: "Category"
-  # Not `through: [:item, :category, :pool]` — an entry may override its category's pool, and the
-  # lane every balance reads is `COALESCE(entries.pool_id, categories.pool_id)`. See Scope Search.
-  searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
 end
 ```
 
@@ -231,8 +228,8 @@ searchable :date, type: :date
 
 ### Scope Search — a lane `through:` cannot spell
 ```ruby
-searchable :pool, type: :scope, scope: :in_pool_named, label: "Pool"
-# Delegates to Entry.in_pool_named(query), which returns a relation
+searchable :owner, type: :scope, scope: :owned_by_named, label: "Owner"
+# Delegates to Model.owned_by_named(query), which returns a relation
 ```
 
 `through:` builds a chain of `joins`, so it can only ever follow associations declared on the
@@ -243,11 +240,16 @@ two columns, a computed column, a union — has no `through:` that describes it.
 expression then lives beside the model's other readers of the same rule, where the next person
 changing that rule will see it, and this concern stays ignorant of what any one model's lanes mean.
 
-`Entry`'s `:pool` field is the reason it exists. Every balance in the app resolves an entry through
-`PoolBalanceLedger::ENTRY_POOL_ID` — `COALESCE(entries.pool_id, categories.pool_id)`, the entry's
-own pool first — while the search walked `item → category → pool`, which is the same rule with its
-first half dropped. An entry carrying an override was found under the lane it had overridden away
-from. `Entry.in_pool_named` reuses that constant rather than restating it.
+**THE FIELD THIS TYPE WAS BUILT FOR IS GONE, AND THE TYPE IS NOT.** `Entry`'s `:pool` field was the
+reason it exists: every balance resolved an entry through `COALESCE(entries.pool_id,
+categories.pool_id)`, while a `through: [:item, :category, :pool]` search walked the second half of
+that `COALESCE` with the first half dropped — so an entry carrying an override was found under the
+lane it had overridden away from. The scope reused the ledger's own constant rather than restating
+it. The two-ledger drop (Task 8) deleted `entries.pool_id`, the constant and the scope together, so
+there is no live `type: :scope` field in the app today; the example above is written generically for
+that reason. The type stays because the SHAPE recurs the moment a lane is an expression rather than
+a foreign key, and the alternative — a search that agrees with a balance only by hand — is the
+defect it was added to close.
 
 Contract:
 - the scope takes exactly one argument, the query string, and returns a relation;

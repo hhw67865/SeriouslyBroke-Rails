@@ -10,10 +10,28 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_21_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
+
+  create_table "account_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.money "amount", scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.datetime "date", null: false
+    t.uuid "from_pool_id", null: false
+    t.integer "kind", default: 0, null: false
+    t.uuid "source_entry_id"
+    t.uuid "to_pool_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["date"], name: "index_account_movements_on_date"
+    t.index ["from_pool_id"], name: "index_account_movements_on_from_pool_id"
+    t.index ["source_entry_id"], name: "index_account_movements_on_source_entry_id"
+    t.index ["to_pool_id"], name: "index_account_movements_on_to_pool_id"
+    t.check_constraint "amount > 0::money", name: "account_movements_positive_amount"
+    t.check_constraint "from_pool_id <> to_pool_id", name: "account_movements_distinct_accounts"
+    t.check_constraint "kind = 0", name: "account_movements_are_transfers"
+  end
 
   create_table "allocations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.money "amount", scale: 2, null: false
@@ -36,16 +54,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.money "amount", scale: 2, null: false
     t.date "anchor_date"
     t.integer "basis", default: 0, null: false
-    t.uuid "category_id"
+    t.uuid "category_id", null: false
     t.datetime "created_at", null: false
     t.integer "interval_months"
     t.uuid "item_id"
-    t.uuid "pool_id"
     t.datetime "updated_at", null: false
     t.index ["category_id"], name: "index_budgets_on_category_id"
     t.index ["item_id"], name: "index_budgets_on_item_id"
     t.index ["item_id"], name: "index_budgets_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
-    t.index ["pool_id"], name: "index_budgets_on_pool_id"
   end
 
   create_table "categories", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -54,13 +70,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.datetime "created_at", null: false
     t.date "funded_since"
     t.string "name", null: false
-    t.uuid "pool_id"
     t.integer "priority", default: 0, null: false
     t.money "target_amount", scale: 2
     t.boolean "tracked", default: true, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
-    t.index ["pool_id"], name: "index_categories_on_pool_id"
     t.index ["user_id"], name: "index_categories_on_user_id"
   end
 
@@ -70,10 +84,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.datetime "date", null: false
     t.text "description"
     t.uuid "item_id", null: false
-    t.uuid "pool_id"
     t.datetime "updated_at", null: false
     t.index ["item_id"], name: "index_entries_on_item_id"
-    t.index ["pool_id"], name: "index_entries_on_pool_id"
   end
 
   create_table "items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -85,38 +97,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.index ["category_id"], name: "index_items_on_category_id"
   end
 
-  create_table "pool_movements", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.money "amount", scale: 2, null: false
-    t.datetime "created_at", null: false
-    t.datetime "date", null: false
-    t.uuid "from_pool_id", null: false
-    t.integer "kind", default: 0, null: false
-    t.uuid "source_entry_id"
-    t.uuid "to_pool_id", null: false
-    t.datetime "updated_at", null: false
-    t.index ["date"], name: "index_pool_movements_on_date"
-    t.index ["from_pool_id"], name: "index_pool_movements_on_from_pool_id"
-    t.index ["source_entry_id"], name: "index_pool_movements_on_source_entry_id"
-    t.index ["to_pool_id"], name: "index_pool_movements_on_to_pool_id"
-    t.check_constraint "amount > 0::money", name: "pool_movements_positive_amount"
-    t.check_constraint "from_pool_id <> to_pool_id", name: "pool_movements_distinct_pools"
-  end
-
   create_table "pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.uuid "account_id"
     t.datetime "created_at", null: false
     t.string "name", null: false
-    t.integer "pool_type", default: 1, null: false
-    t.integer "priority", default: 0, null: false
-    t.date "start_date"
-    t.money "target_amount", scale: 2
+    t.integer "pool_type", default: 0, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index "user_id, lower((name)::text)", name: "index_pools_on_user_id_and_lower_name", unique: true
-    t.index ["account_id"], name: "index_pools_on_account_id"
-    t.index ["user_id", "priority"], name: "index_pools_on_user_id_and_priority"
     t.index ["user_id"], name: "index_pools_on_user_id"
-    t.check_constraint "(pool_type = 0) = (account_id IS NULL)", name: "pools_account_matches_pool_type"
+    t.check_constraint "pool_type = 0", name: "pools_are_accounts"
   end
 
   create_table "suggestion_dismissals", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -157,21 +146,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_000000) do
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 
+  add_foreign_key "account_movements", "entries", column: "source_entry_id"
+  add_foreign_key "account_movements", "pools", column: "from_pool_id"
+  add_foreign_key "account_movements", "pools", column: "to_pool_id"
   add_foreign_key "allocations", "categories", column: "from_category_id"
   add_foreign_key "allocations", "categories", column: "to_category_id"
   add_foreign_key "allocations", "entries", column: "source_entry_id"
   add_foreign_key "budgets", "categories"
   add_foreign_key "budgets", "items"
-  add_foreign_key "budgets", "pools"
-  add_foreign_key "categories", "pools"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
-  add_foreign_key "entries", "pools"
   add_foreign_key "items", "categories"
-  add_foreign_key "pool_movements", "entries", column: "source_entry_id"
-  add_foreign_key "pool_movements", "pools", column: "from_pool_id"
-  add_foreign_key "pool_movements", "pools", column: "to_pool_id"
-  add_foreign_key "pools", "pools", column: "account_id"
   add_foreign_key "pools", "users"
   add_foreign_key "suggestion_dismissals", "users"
   add_foreign_key "users", "pools", column: "default_account_id", on_delete: :nullify

@@ -82,7 +82,7 @@ class OpeningBalancesController < HomeController
       # envelope would have typed the true figure and watched the app "correct" main to $1,050.
       # Nothing is housed inside an account now (a category holds its own money and lives nowhere),
       # so the family total and the balance are the same figure, and `AccountLedger` is the one
-      # reader of it. `Pool#total` is envelope-era and dies in Task 8.
+      # reader of it. `Pool#total` died with the pool layer in Task 8.
       difference = actual - AccountLedger.new(current_user).pot
       # A ZERO DIFFERENCE LEAVES THE LATCH OPEN, BY CHOICE (main-account spec §5, fix round 1 —
       # MED-2/LOW-2/MED-3 doc ruling). Nothing is written here — no category, no item, no entry —
@@ -95,7 +95,7 @@ class OpeningBalancesController < HomeController
       # correction that corrected nothing.
       next { notice: "Main already matches your real balance — nothing to record." } if difference.zero?
 
-      write_correction(main, difference)
+      write_correction(difference)
       { notice: "Main set to your real bank balance." }
     end
   end
@@ -111,11 +111,10 @@ class OpeningBalancesController < HomeController
   # its expense twin) — a $1,000 raise recorded today would otherwise inflate THIS period's
   # figures by years of history the app never saw, on the one screen whose whole job is showing
   # what actually happened this period.
-  def write_correction(main, difference)
+  def write_correction(difference)
     category = current_user.categories.create!(
       name: Category::OPENING_BALANCE_NAME,
       category_type: difference.positive? ? :income : :expense,
-      pool: main,
       tracked: false
     )
     item = category.items.create!(name: "Initial balance")
@@ -129,7 +128,7 @@ class OpeningBalancesController < HomeController
   # keeps the correction out of the DASHBOARD's tracked-income and tracked-expense totals, which is
   # what #write_correction's own note is about and is still true. The DISTRIBUTE screen reads
   # something else entirely: `DistributionPresenter#income_this_period_from` is
-  # `PoolCalculator#income_within`, which sums income entries in the account BY DATE and does not
+  # `AccountLedger#income_within`, which sums income entries in the pot BY DATE and does not
   # look at `categories.tracked` at all. So a correction stamped today — years of untracked history
   # — arrived on the one screen whose job is "what came in this period, split it" as money to
   # split. Real pollution, not cosmetics: it changes the figure the user distributes from.
@@ -138,14 +137,14 @@ class OpeningBalancesController < HomeController
   # this period": a user who reads their Distribute screen for an earlier period would find it
   # there instead, which is the same defect one screen back.
   #
-  # Σ IS UNTOUCHED BY THE MOVE. The correction lands in MAIN, an account, and an account has no
-  # `start_date` gate on the categories pointing at it (that rule is the ENVELOPE's — see
-  # `BudgetProposal`), so the entry counts against main from whatever date it carries. The balance
-  # examples in spec/requests/opening_balances_spec.rb read the same corrected figure before and
-  # after this change, which is what says the date moved and the money did not.
+  # Σ IS UNTOUCHED BY THE MOVE. The correction's category carries no `funded_since`, so its entry
+  # drains (or fills) AVAILABLE and lands in the pot from whatever date it carries — there is no
+  # date gate for the move to cross. The balance examples in
+  # spec/requests/opening_balances_spec.rb read the same corrected figure before and after this
+  # change, which is what says the date moved and the money did not.
   #
   # `minimum(:date)` OVER `user.entries`, which is `has_many through: :items` through the
-  # categories — every entry the user owns, whichever pool it reaches. Asked BEFORE the correction
+  # categories — every entry the user owns. Asked BEFORE the correction
   # entry is written (the category and item created above carry none yet), so it cannot find its
   # own answer.
   def correction_date

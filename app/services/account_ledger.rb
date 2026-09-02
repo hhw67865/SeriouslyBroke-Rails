@@ -12,19 +12,25 @@
 # question and no start-date rule: there is nothing to resolve, because a movement names its two
 # ends outright.
 #
-# ONLY ACCOUNTS, ON BOTH ENDS OF EVERY MOVEMENT. The pool layer is still standing until Task 8 and
-# `pool_movements` can still name an envelope, so a movement with a non-account end is skipped
-# rather than counted: it is an act of intention, and this ledger only knows about location. On the
-# migrated database there are none left — Task 1 converted every one of them into an `allocation` —
-# but the physical partition must not depend on that being true.
+# ONLY ACCOUNTS, ON BOTH ENDS OF EVERY MOVEMENT, AND THE JOIN STAYS NOW THAT THE SCHEMA AGREES.
+# `pools_are_accounts` and `account_movements_are_transfers` make a non-account end unwritable
+# (Task 8), so the type conditions below can no longer exclude a row — what they still do is the
+# half that no constraint expresses: BOTH ends belong to THIS user. A movement out to a stranger's
+# account is the one shape that would leave this figure short of bank truth, and it is refused by
+# `AccountMovement#accounts_must_share_a_user` in Ruby alone.
 #
-# A SNAPSHOT, MEMOISED AT FIRST READ, on `PoolBalanceLedger`'s rule: anything that writes entries or
-# movements must build a fresh ledger afterwards.
+# A SNAPSHOT, MEMOISED AT FIRST READ: anything that writes entries or movements must build a fresh
+# ledger afterwards.
 class AccountLedger
   # A BALANCE ASKED OF SOMETHING THAT IS NOT ONE OF THIS USER'S ACCOUNTS. Zero would be a wrong
   # money figure wearing the face of a right one — a brand-new account with nothing in it — and the
-  # two callers this class has both iterate the user's own accounts, so anything else reaching here
-  # is a caller bug rather than an empty account.
+  # callers this class has all iterate the user's own accounts, so anything else reaching here is a
+  # caller bug rather than an empty account.
+  #
+  # THE TYPE ARM IS GONE (two-ledger spec §5, Task 8) and only the OWNER arm is left. It read
+  # `pool_type_account? && user_id == user.id`, and the first half is now `pools_are_accounts` at the
+  # database — a condition that cannot be false is a guard that tests nothing. Whose account it is
+  # remains a real question no constraint can express.
   class NotAnAccount < StandardError; end
 
   attr_reader :user
@@ -34,9 +40,8 @@ class AccountLedger
   end
 
   # WHAT THE USER ACTUALLY HAS TO SPEND WITH, physically. Zero for a user with no main account at
-  # all, and that is honest rather than defensive: `Category#pool_must_be_reachable` refuses a
-  # category to a user who has not named one, so such a user has no categories, hence no entries,
-  # hence nothing for this to be the balance of. Onboarding's first card exists to end that state.
+  # all, and that is honest rather than defensive: a user who has named no account has nothing for
+  # this to be the balance of. Onboarding's first card exists to end that state.
   def pot
     main.present? ? balance_of(main) : 0.to_d
   end
@@ -44,18 +49,17 @@ class AccountLedger
   # THE BALANCE OF ONE ACCOUNT. The movement terms are every account's; the entry term is the pot's
   # alone, because that is where money enters and leaves the user's life.
   def balance_of(account)
-    raise NotAnAccount, not_an_account_message(account) unless account.pool_type_account? && account.user_id == user.id
+    raise NotAnAccount, "#{account.name} belongs to another user" unless account.user_id == user.id
 
     entry_side(account) +
       totals(:movements_in).fetch(account.id, 0.to_d) -
       totals(:movements_out).fetch(account.id, 0.to_d)
   end
 
-  # INCOME THAT LANDED IN THE POT INSIDE `range` — `PoolCalculator#income_within` re-anchored on the
-  # physical side, and the distribute screen's "income this period". It is here rather than in a
-  # presenter for that method's own reason: "which entries are this user's income" is one question
-  # with one answer, and a presenter rebuilding the predicate would be a second one, free to
-  # disagree with the balance the same figure is subtracted from.
+  # INCOME THAT LANDED IN THE POT INSIDE `range` — the distribute screen's "income this period". It
+  # is here rather than in a presenter because "which entries are this user's income" is one
+  # question with one answer, and a presenter rebuilding the predicate would be a second one, free
+  # to disagree with the balance the same figure is subtracted from.
   #
   # `.to_d` because an empty `sum(:amount)` is the Integer literal 0, and this is subtracted from a
   # BigDecimal to produce the buffer line.
@@ -73,9 +77,9 @@ class AccountLedger
     user_entries(Entry.incomes).sum(:amount).to_d - user_entries(Entry.expenses).sum(:amount).to_d
   end
 
-  # `fetch` with a `0.to_d` default, both halves load-bearing for `PoolBalanceLedger#terms_for`'s
-  # reasons: a grouped sum has NO KEY AT ALL for an account nothing has moved into, and an Integer
-  # zero leaks its type into every figure derived from it on exactly the emptiest accounts.
+  # `fetch` with a `0.to_d` default, both halves load-bearing: a grouped sum has NO KEY AT ALL for
+  # an account nothing has moved into, and an Integer zero leaks its type into every figure derived
+  # from it on exactly the emptiest accounts.
   def totals(term)
     @totals ||= {}
     @totals.fetch(term) { @totals[term] = compute(term) }
@@ -97,18 +101,12 @@ class AccountLedger
   # would read as holding nothing rather than as holding what it holds. The join asks the database
   # the same question about whatever rows exist when the query runs.
   def account_movements
-    PoolMovement
-      .joins("INNER JOIN pools AS from_pools ON from_pools.id = pool_movements.from_pool_id")
-      .joins("INNER JOIN pools AS to_pools ON to_pools.id = pool_movements.to_pool_id")
+    AccountMovement
+      .joins("INNER JOIN pools AS from_pools ON from_pools.id = account_movements.from_pool_id")
+      .joins("INNER JOIN pools AS to_pools ON to_pools.id = account_movements.to_pool_id")
       .where(from_pools: { pool_type: Pool.pool_types[:account], user_id: user.id })
       .where(to_pools: { pool_type: Pool.pool_types[:account], user_id: user.id })
   end
 
   def user_entries(scope) = scope.where(categories: { user_id: user.id })
-
-  def not_an_account_message(pool)
-    return "#{pool.name} is not an account — only accounts hold money physically" unless pool.pool_type_account?
-
-    "#{pool.name} belongs to another user"
-  end
 end

@@ -5,12 +5,13 @@ This document defines the architecture, patterns, and coding conventions for the
 ## Core Domain Models
 
 - **User** → has_many Categories, Pools
-- **Category** (expense/income/savings types) → has_many Items, has_one Budget
+- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` also HOLDS money (a target makes it a savings goal)
 - **Item** → has_many Entries
 - **Entry** → the actual transaction record
-- **Pool** → a bank account, a spending envelope, or a savings goal (`pool_type`)
-- **PoolMovement** → a transfer between two of a user's own pools
-- **Budget** → a funding rule, owned by either an expense Category or a Pool
+- **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name)
+- **AccountMovement** → a transfer between two of a user's own accounts
+- **Allocation** → money leaving the purpose ledger's root and taking on a job (a NULL side is "available")
+- **Budget** → a funding rule, owned by the expense Category that holds the money
 
 ## Custom Patterns
 

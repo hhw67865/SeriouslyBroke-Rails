@@ -154,15 +154,14 @@ class SacrificePresenter
       .sort_by { |row| [-row.claim, owner_name(row.budget), row.budget.id] }
   end
 
-  # THE NAME THE TIE-BREAK SORTS ON — the category that holds the money (two-ledger spec §3), with
-  # the pool behind it FOR THE LENGTH OF THE BRANCH ONLY (Task 8 deletes `budgets.pool_id` and the
-  # second arm with it). `Budget.for_user` spans both owner lanes, so a rule written before the
-  # cutover names only a pool and `category.name` would raise on it mid-sort. `to_s` because a rule
-  # with neither is `#must_have_an_owner`'s refusal rather than something to crash a page over.
+  # THE NAME THE TIE-BREAK SORTS ON — the category that holds the money (two-ledger spec §3). The
+  # pool arm behind it went with `budgets.pool_id` (Task 8). `to_s` because an owner-less rule is
+  # `Budget#must_have_a_category`'s refusal rather than something to crash a page over — and
+  # `&.` because that refusal is skipped entirely on a schema rewound past the column.
   #
   # Same order `BudgetPageHelper#budget_rule_name` reads the owner in, for the same reason: the row
   # this key sorts is the row that helper labels.
-  def owner_name(budget) = (budget.category&.name || budget.pool&.name).to_s
+  def owner_name(budget) = budget.category&.name.to_s
 
   # `:dated` and `:fixed` are the spec's own two markings, and they are told apart by SHAPE rather
   # than by a second reading of the three schedule columns: `Budget#cadence` is the one place that
@@ -190,12 +189,10 @@ class SacrificePresenter
   # writes — every category-owned rule — so the cut list would be missing rows the headline above it
   # counted, which is the one defect `#rows_total` exists to catch.
   #
-  # BOTH OWNER LANES ARE PRELOADED, matching `Budget.steady_need`'s pair exactly. `Budget#user` asks
-  # the CATEGORY first and the pool second, and `#steady_ask`'s one-off branch builds a
-  # BudgetCalculator that asks `budget.user` for its period boundaries and `budget.item` for what
-  # has been paid. `pool: :user` is the transitional half (Task 8 deletes it with the column);
-  # `:account` is not preloaded, because no reader here touches it.
+  # THE OWNER IS PRELOADED, matching `Budget.steady_need` exactly. `Budget#user` walks the category,
+  # and `#steady_ask`'s one-off branch builds a BudgetCalculator that asks `budget.user` for its
+  # period boundaries and `budget.item` for what has been paid.
   def rules
-    @rules ||= Budget.for_user(user).includes(:item, pool: :user, category: :user).to_a
+    @rules ||= Budget.for_user(user).includes(:item, category: :user).to_a
   end
 end

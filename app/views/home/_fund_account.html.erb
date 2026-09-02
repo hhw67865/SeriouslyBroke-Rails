@@ -6,7 +6,7 @@
     Locals: `account` (an account-type Pool still awaiting its real balance — the render gate,
     `HomePresenter#awaiting_funding?`, lives in `_account.html.erb`), `movement`
     (HomePresenter#funding_movement_for's answer: the rejected
-    PoolMovement if THIS is the card AccountFundingsController's 422 was for, a fresh unsaved
+    AccountMovement if THIS is the card AccountFundingsController's 422 was for, a fresh unsaved
     one otherwise — the object `simple_form_for` is built on, so a refused amount and its error
     survive the re-render exactly as the add-account card's name does), `main_account` (the
     user's default account, passed rather than walked back to from `account.user` so this card

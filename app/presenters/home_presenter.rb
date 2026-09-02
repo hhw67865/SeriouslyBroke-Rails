@@ -197,7 +197,7 @@ class HomePresenter
   def funding_movement_for(account)
     return @rejected_movement if @rejected_movement&.to_pool_id == account.id
 
-    PoolMovement.new(to_pool: account)
+    AccountMovement.new(to_pool: account)
   end
 
   # ── THE PURPOSE LEDGER ─────────────────────────────────────────────────────────────────────────

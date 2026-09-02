@@ -72,12 +72,19 @@ class BankAccountsController < HomeController
 
   # DELETE /bank_accounts/1
   #
-  # THE RETURN VALUE IS CHECKED, and it has to be: `Pool` refuses a destroy in more than one way —
-  # `has_many :child_pools, dependent: :restrict_with_error`, `has_many :categories, dependent:
-  # :restrict_with_error` and its own `#return_holdings_to_the_account` refusals — all of which
-  # halt the callback chain and put a sentence on `:base` rather than raising. A screen that
-  # redirected with "deleted." over a pool still sitting in the database would be lying about the
-  # one thing the button is for. Same shape `PoolsController#destroy` had, minus the pool kinds.
+  # EVERY REFUSAL THIS BRANCH WAS WRITTEN FOR IS GONE (Task 8). `Pool` used to halt its own destroy
+  # three ways — `restrict_with_error` on `#child_pools` and on `#categories`, and
+  # `#return_holdings_to_the_account`'s two — and all three were about a layer that no longer
+  # exists: nothing nests inside an account and no category points at one.
+  #
+  # WHAT DELETING AN ACCOUNT DOES NOW, said plainly because nothing refuses it: `dependent: :destroy`
+  # on `#movements_in` / `#movements_out` takes its transfers with it, so the money main had moved
+  # into it goes back to the pot and `pot + Σ accounts` is unchanged to the penny. There is nothing
+  # to strand, which is why there is nothing left to refuse.
+  #
+  # THE RETURN VALUE IS STILL CHECKED. `destroy` answers false for a halted chain or a foreign key
+  # the database refuses, and a screen that redirected with "deleted." over a row still sitting in
+  # the table would be lying about the one thing the button is for.
   def destroy
     account = scoped_account
 

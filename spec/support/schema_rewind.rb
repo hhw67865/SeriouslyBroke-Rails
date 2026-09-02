@@ -3,6 +3,7 @@
 require Rails.root.join("db/migrate/20260817010000_tighten_pool_shape")
 require Rails.root.join("db/migrate/20260817020000_drop_cap_era_budget_columns")
 require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
+require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -42,12 +43,20 @@ require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 # which is exactly `db:rollback` followed by `db:migrate` and exactly what `#step_the_schema` does
 # with `tightenings.reverse`.
 #
-# It also carries the second reason this file exists at all: `two_ledger_spec` is a spec whose
-# subject is the NEWEST migration, so the current schema is the world AFTER it and `add_column`
-# would meet its own columns. That spec includes this context with one name.
+# It also carries the second reason this file exists at all: a spec whose subject is the NEWEST
+# migration runs against the world AFTER it, where its own `add_column` would meet its own columns.
+# `two_ledger_spec` and `drop_the_pool_layer_spec` each include this context with `described_class`
+# for exactly that.
+#
+# A FOURTH MIGRATION JOINED WITH THE DROP, and it is the one that makes the ORDER load-bearing for
+# every file rather than for one: `DropThePoolLayer` deletes `budgets.pool_id`, `categories.pool_id`,
+# `entries.pool_id` and the `pool_movements` TABLE NAME, which is the whole world the two older
+# migration specs plant in. Its `down` has to run FIRST on the way down — before
+# `CategoriesHoldTheMoney#down` takes `budgets.category_id` away from under the NOT NULL this one
+# lifts — and LAST on the way back up.
 #
 #   include_context "with the schema its subject was written for",
-#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney
+#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney, DropThePoolLayer
 #
 # Named in the order they run FORWARD; the rewind reverses them itself.
 RSpec.shared_context "with the schema its subject was written for" do |*tightenings|

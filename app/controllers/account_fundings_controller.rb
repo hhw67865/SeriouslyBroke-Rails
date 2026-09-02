@@ -6,10 +6,11 @@
 # where it lives. Inherits HomeController for the same reason BankAccountsController does:
 # failure re-renders home/index.
 #
-# NOT `PoolMovementsController#create`: that action saves on the `:reallocation` context, and
-# `PoolMovement#must_not_cross_accounts` runs on exactly that context — it would refuse the
-# main → account move this door exists to write. This is a separate door because it is a
-# separate legality, not because the two are unrelated.
+# ITS OWN DOOR, AND IT OUTLIVED THE REASON IT WAS ONE. It was not `PoolMovementsController#create`
+# because that action saved on the `:reallocation` context, where `must_not_cross_accounts` refused
+# exactly the main → account move this writes. That controller and that context are gone with the
+# pool layer (Task 8); this stays a separate door because onboarding's step 2 is a separate
+# legality — one movement, from main, for an account that holds nothing yet.
 class AccountFundingsController < HomeController
   # POST /account_fundings
   def create
@@ -39,13 +40,13 @@ class AccountFundingsController < HomeController
   # fact, zero. Asked again inside the lock rather than trusted from whatever the view answered
   # before this request, because that answer is a snapshot and this one has to be current.
   #
-  # THE ONE CARVE-OUT: funding main FROM itself is refused by `PoolMovement#pools_must_differ`,
+  # THE ONE CARVE-OUT: funding main FROM itself is refused by `AccountMovement#accounts_must_differ`,
   # not by this guard — `awaiting_funding?(main)` is false for the unrelated reason that `main`
   # IS the user's default account, and reporting "already holds money" there would say something
   # false about an account that may hold none. Only a target that genuinely differs from main
   # gets the money-based refusal; main itself is left to the model's own truthful validation.
   def fund(account)
-    PoolMovement.transaction do
+    AccountMovement.transaction do
       account.lock!
       movement = build_movement(account)
       presenter = HomePresenter.new(user: current_user, today: Date.current)
@@ -60,7 +61,7 @@ class AccountFundingsController < HomeController
   end
 
   def build_movement(account)
-    PoolMovement.new(
+    AccountMovement.new(
       from_pool: current_user.default_account,
       to_pool: account,
       amount: funding_params[:amount],
