@@ -326,6 +326,32 @@ RSpec.describe DropThePoolLayer do
       .to raise_error(described_class::PreflightFailed, /ming@example\.com: movement .* is not a transfer/)
   end
 
+  # THE ARM THAT REPLACED AN ASSUMPTION. `#drop_the_references` deletes `entries.pool_id`, and the
+  # override is the one reference of the three that carried money: it was the FIRST arm of
+  # `COALESCE(entries.pool_id, categories.pool_id)`, so an entry still holding one has a lane the
+  # drop would discard without a word. Planted past the model, which no longer has the writer.
+  it "refuses an entry still carrying a paid-from override, counting them per user" do
+    groceries = plant_the_migrated_world
+    override = "UPDATE entries SET pool_id = :p WHERE item_id IN (SELECT id FROM items WHERE category_id = :c)"
+    sql(override, p: main.id, c: groceries.id)
+
+    expect { migration.suppress_messages { migration.up } }
+      .to raise_error(described_class::PreflightFailed, /ming@example\.com: 1 entries still name a pool/)
+  end
+
+  # THE OTHER DIRECTION, AND IT IS THE ONE THAT MATTERS FOR A REAL DATABASE: a category pointing at
+  # an ENVELOPE is what `CategoriesHoldTheMoney#fold` leaves behind on every converted row — it
+  # stamps the three holding columns and never touches `pool_id` — so an arm refusing that shape
+  # would refuse every database this migration exists to run on. `#plant_the_migrated_world` plants
+  # it, and "refuses nothing on the world Task 1 leaves behind" below is the assertion that it
+  # passes.
+  it "does not refuse a category still pointing at the envelope it was folded out of", :aggregate_failures do
+    groceries = plant_the_migrated_world
+
+    expect(sql_value("SELECT pool_id FROM categories WHERE id = '#{groceries.id}'")).to be_present
+    expect { migrate! }.not_to raise_error
+  end
+
   it "refuses a rule with no category, naming it" do
     envelope = plant_pool(name: "Groceries pool")
     sql(<<~SQL.squish, p: envelope)

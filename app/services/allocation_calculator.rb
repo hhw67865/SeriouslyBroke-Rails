@@ -148,6 +148,16 @@ class AllocationCalculator
   # what moves it back to the root. `CategoryLedger#available` already excludes it, because funding
   # the category was an allocation out.
   #
+  # ** THIS IS NOT THE FIGURE TO CHECK §2'S INVARIANT WITH, AND THAT IS THE ONE WAY TO MISREAD IT.**
+  # The sweeps in it are money the categories STILL HOLD — nothing has moved until the user confirms
+  # the distribution — so `#available + Σ holdings` double-counts every swept dollar and comes out
+  # OVER bank truth by exactly `#total_swept`. What this method answers is "how much could this
+  # screen hand out", which is a projection and the screen's own question. A conservation check
+  # wants the root as it STANDS: `CategoryLedger#available`, or the arithmetic written out
+  # (`spec/seeds_spec.rb#available_at_the_root` does the latter, deliberately, so the two sides of
+  # the identity share no reader). Measured on the demo: $1,900.00 here against $1,775.00 at the
+  # root, and the $125.00 between them is Household Supplies and Pet Care.
+  #
   # Not clamped at zero. A root that has been allocated past what came in genuinely has less than
   # nothing to hand out, and #fill's per-row clamp already refuses to fund from a negative pot — so
   # the overdraft survives into #leftover, where it is a fact the screen must state, rather than

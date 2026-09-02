@@ -30,48 +30,10 @@
 en:
   hello: "Hello world"
 
-  # THE ONE REFUSAL RAILS WRITES FOR US, SAID IN THIS APP'S VOICE (plan 3, closing review M4).
-  #
-  # `Pool` declares `dependent: :restrict_with_error` twice — on `#child_pools` and on
-  # `#categories` — and both are REACHABLE on an account: `#return_holdings_to_the_account` returns
-  # on its first line for an account, so nothing re-points its categories, and an account is the
-  # only pool type another pool can sit inside. The refusal itself is right; the sentence was
-  # Rails' own, and "Cannot delete record because dependent child pools exist" names a class of
-  # thing this app calls an envelope, tells the user nothing about what to do, and sat on a real
-  # screen (`spec/system/pools/show/header_actions_spec.rb`).
-  #
-  # CUSTOMISED HERE RATHER THAN GUARDED AGAIN IN THE MODEL. `Pool::REFUSALS` — the app's two
-  # hand-written refusals — is the same MECHANISM (an error on `:base`, a halted callback chain,
-  # rendered by `PoolsController#destroy`'s existing alert branch), so all this needed was the
-  # message. Adding a second `before_destroy` beside `restrict_with_error` would have bought the
-  # same words and a second guard to keep in step with the first.
-  #
-  # `%{record}` IS THE ASSOCIATION'S HUMAN NAME, downcased by Rails, which is why the two
-  # attribute names below are set: `child_pools` humanises to "child pools", which is the schema's
-  # word for it and not the product's.
-  #
-  # "ANOTHER POOL", NOT "ANOTHER ACCOUNT", AND THE SECOND ARM IS WHY. One key serves both
-  # associations — the error is on `:base`, so Rails cannot be given a per-association message —
-  # and the destination has to be true of both. An envelope or a goal does move to another ACCOUNT;
-  # a CATEGORY's home is a POOL, and for an expense category it is usually an envelope rather than
-  # an account. "Another account" was right for one arm and wrong for the arm a user is at least as
-  # likely to hit, since an account keeps its own categories (`#return_holdings_to_the_account`
-  # re-points a non-account's before the refusal is asked, and returns on its first line for an
-  # account). "Pool" is the app's noun for the whole family and is true of both.
-  activerecord:
-    attributes:
-      pool:
-        categories: "categories"
-        child_pools: "envelopes and goals"
-    errors:
-      models:
-        pool:
-          attributes:
-            base:
-              restrict_dependent_destroy:
-                # THE TRAILING INSTRUCTION IS DELETED (Task 7, fix round 1). It read "— move them
-                # to another pool first", which named a screen that no longer exists: the category
-                # form's pool picker went with the pool layer, so the app offered no way to act on
-                # its own refusal. The sentence now states the condition and stops, which is what
-                # the delete confirm on Home says will happen.
-                has_many: "This account can't be deleted while %{record} still belong to it."
+  # ── THE POOL RESTRICT BLOCK IS DELETED (two-ledger spec §5, Task 8), and with it the 25-line
+  # comment that explained which two associations it spoke for. It customised Rails'
+  # `restrict_dependent_destroy` sentence for `Pool`, whose `#child_pools` and `#categories` were
+  # both `dependent: :restrict_with_error`. Neither association exists: nothing nests inside an
+  # account and no category points at one, so `Pool` restricts nothing and Rails has no refusal
+  # here left to word. The `pool` attribute names went with it — "envelopes and goals" was the
+  # product's word for `child_pools`, and there are none.

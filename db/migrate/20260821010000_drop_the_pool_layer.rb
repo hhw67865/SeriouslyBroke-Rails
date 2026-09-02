@@ -21,11 +21,20 @@
 #   * `pool_movements.kind`'s allocation and sweep members, by CHECK. A distribution writes
 #     `allocations` now; what is left on this table is the transfer it was always named for.
 #
-# WHAT IT REFUSES BEFORE IT WRITES ANYTHING. Four shapes, each named with the owner's email, because
+# WHAT IT REFUSES BEFORE IT WRITES ANYTHING. Five shapes, each named with the owner's email, because
 # the run is all-or-nothing and a refusal discovered halfway costs the same rollback while naming
 # none of the rows responsible: a movement with a non-account end (the row the delete below would
 # have to break a foreign key to remove), a movement that is not a transfer, a rule with no category
-# to own it (`category_id` becomes NOT NULL), and a user whose main account is not an account.
+# to own it (`category_id` becomes NOT NULL), a user whose main account is not an account, and — the
+# one that is about the COLUMNS rather than the rows — an entry still carrying a paid-from override.
+#
+# THE OVERRIDE ARM CHECKS WHAT THIS FILE USED TO ASSERT. `#drop_the_references` deletes
+# `entries.pool_id`, and the only thing that made that safe was a sentence saying Task 1 had cleared
+# every override — the same species of assumption `#stranded_movements` refuses a few methods down,
+# and the one place a DROP COLUMN here can lose money silently:
+# `COALESCE(entries.pool_id, categories.pool_id)` resolved the override FIRST, so an entry still
+# carrying one is an entry whose lane the drop would discard without a word. It is asked now instead
+# of believed. See `#overridden_entries` for the two shapes that are deliberately NOT arms.
 #
 # HOW IT VERIFIES ITSELF, AND WHAT IT DELIBERATELY DOES NOT DO. Spec §2's two partitions are
 # measured per user in raw SQL BEFORE the first statement and again after the last, and every user
@@ -61,6 +70,18 @@ class DropThePoolLayer < ActiveRecord::Migration[8.1]
   INCOME = 1
   TRANSFER = 0
 
+  # THE DELETE HAPPENS BEFORE THE VERIFY, AND THAT IS ONLY SAFE INSIDE ONE TRANSACTION. Every step
+  # below writes — rows deleted, columns dropped, a table renamed — and #verify! is the last thing
+  # that runs, so a partition that moved is discovered AFTER the damage is done. What makes that a
+  # refusal rather than a half-migrated database is the Migrator: on PostgreSQL it wraps `up` in a
+  # transaction, DDL included, so the raise rolls the whole thing back and nothing is committed.
+  #
+  # ADDING `disable_ddl_transaction!` WOULD DESTROY THAT GUARANTEE AND NOT ONLY SLOW IT DOWN. With
+  # the wrapper gone, a `VerificationFailed` would leave the envelopes deleted, the columns dropped
+  # and the table renamed, with the operator holding a message about a figure and no way back but a
+  # restore — and #verify! would have become a report rather than a refusal. Nothing here needs a
+  # concurrent index or any other statement Postgres refuses inside a transaction, so there is no
+  # reason to reach for it; this note is here so a future one has to argue with it first.
   def up
     before = ledgers
     preflight!
@@ -90,7 +111,8 @@ class DropThePoolLayer < ActiveRecord::Migration[8.1]
   # ---------------------------------------------------------------------------------------------
 
   def preflight!
-    failures = stranded_movements + undistributed_kinds + ownerless_rules + misfiled_mains
+    failures = stranded_movements + undistributed_kinds + ownerless_rules + misfiled_mains +
+               overridden_entries
     return if failures.empty?
 
     raise PreflightFailed, failures.join("; ")
@@ -155,6 +177,44 @@ class DropThePoolLayer < ActiveRecord::Migration[8.1]
     SQL
   end
 
+  # AN ENTRY STILL NAMING THE POOL IT WAS PAID FROM. `CategoriesHoldTheMoney#clear_paid_from_
+  # overrides` nulls every one of them and counts them in its receipt, so on a converted database
+  # there are none — and this is the arm that says so rather than the header assuming it. §2 rules
+  # the lane out of existence ("the pot is where cash leaves"), which is why the column goes; the
+  # rows are what must not go with it unnoticed.
+  #
+  # A COUNT, NOT A LIST OF IDS, and the two shapes above it are ids for a reason this one is not: a
+  # stranded movement is a row an operator repairs one at a time, while a surviving override is a
+  # LANE that was never converted — the fix is re-running the conversion, and the number is what
+  # says how much of it is left.
+  #
+  # TWO SHAPES THE REVIEW ASKED FOR ARE DELIBERATELY NOT ARMS HERE, and both would be wrong:
+  #
+  #   * `budgets.pool_id` non-null with a NULL `category_id` is the same row set `#ownerless_rules`
+  #     already refuses, by id, one method up. Naming it twice in one message gives an operator two
+  #     sentences about one rule and no extra fact.
+  #   * `categories.pool_id` pointing at a NON-account pool is the ORDINARY state of a converted
+  #     database, not a defect. `CategoriesHoldTheMoney#fold` stamps `funded_since`, `target_amount`
+  #     and `priority` onto the category and LEAVES `pool_id` where it was, so every category folded
+  #     out of an envelope still points at that envelope. An arm there would refuse every real
+  #     database this migration exists to convert — including the one it has already run on — and
+  #     `spec/migrations/drop_the_pool_layer_spec.rb`'s "refuses nothing on the world Task 1 leaves
+  #     behind" plants exactly that shape and would fail. The link carries no money and no reader;
+  #     deleting it is the whole point.
+  def overridden_entries
+    rows = select_all(<<~SQL.squish)
+      SELECT u.email, COUNT(*) AS overrides
+        FROM entries e
+        JOIN items i ON i.id = e.item_id
+        JOIN categories c ON c.id = i.category_id
+        JOIN users u ON u.id = c.user_id
+       WHERE e.pool_id IS NOT NULL
+       GROUP BY u.email
+       ORDER BY u.email
+    SQL
+    rows.map { |row| "#{row['email']}: #{row['overrides']} entries still name a pool they were paid from" }
+  end
+
   def named(sql, template)
     select_all(sql).map { |row| "#{row["email"]}: #{format(template, id: row["id"])}" }
   end
@@ -166,6 +226,13 @@ class DropThePoolLayer < ActiveRecord::Migration[8.1]
   # THE THREE REFERENCES GO FIRST, and the order is the whole reason this is a method of its own:
   # every one of them is a foreign key INTO `pools`, so the rows cannot be deleted while they stand.
   # `remove_column` takes the key and the index with it.
+  #
+  # ONE OF THE THREE CARRIED MONEY AND IS CHECKED RATHER THAN ASSUMED. `entries.pool_id` was the
+  # first arm of `COALESCE(entries.pool_id, categories.pool_id)`, so a surviving override is a lane
+  # this DROP COLUMN would discard silently — `#overridden_entries` refuses one before anything here
+  # runs. The other two carry no money and no reader: `budgets.pool_id` names an owner the rule
+  # already has a `category_id` for (`#ownerless_rules` refuses the rule that does not), and
+  # `categories.pool_id` is the envelope link Task 1 deliberately left standing.
   def drop_the_references
     remove_column :budgets, :pool_id
     remove_column :categories, :pool_id
