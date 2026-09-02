@@ -153,11 +153,18 @@ class HoldingStatus
   # through to :left_to_spend and render its retirement balance as money to spend, which is the very
   # defect this state was carved out to fix.
   #
-  # Close to #dateless_goal? and deliberately NOT the same condition: that one adds
-  # `target_amount.positive?` for a reason of its own (it divides toward a target, and a goal of
-  # zero would have it ask for money forever) and gates on `holder?` because it is about funding.
-  # This is a display state. Changing either side does not automatically change the other.
-  def saving? = category.target_amount.to_d.positive? && anchored_budgets.empty?
+  # IT IS THE CALCULATOR'S OWN CONDITION, ASKED RATHER THAN RESTATED (fix round 1, LOW-2). This read
+  # `target_amount.to_d.positive? && anchored_budgets.empty?`, which is #dateless_goal? with the
+  # `holder?` leg missing — a second spelling of one question, and one that answered differently for
+  # a target-bearing category that has never been funded. Its pool-era ancestor was allowed to
+  # differ because it asked a TYPE while the calculator asked a target; with the type gone both ask
+  # the target, so the honest thing is one predicate with one reader of it.
+  #
+  # The two legs still mean what they meant here: a goal with a deadline keeps the anchored
+  # vocabulary (that is #dateless_goal?'s dateless leg), and a category holding nothing is not
+  # saving (its `holder?` leg). Asked off the memoised calculator this class already holds, so it
+  # costs no query of its own.
+  def saving? = calculator.dateless_goal?
 
   def calculator
     @calculator ||= category.holding_calculator(today: today, pending: @pending, terms: @terms)

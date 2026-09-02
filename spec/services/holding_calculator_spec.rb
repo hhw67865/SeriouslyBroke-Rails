@@ -18,6 +18,13 @@ require "rails_helper"
 #   * the pool-TYPE discrimination — a category has no type. Its replacement is better isolated
 #     rather than weaker: the pair at the bottom of "dateless savings goals" varies the TARGET
 #     alone, on two categories identical in every other respect.
+#   * the SECOND HALF of the pre-start balance example — the pool source also pinned the displaced
+#     $40 landing in the account (`checking … -140.00`), and there is no account arm here: on the
+#     purpose side that spending drains AVAILABLE, which is `CategoryLedger#available`'s figure and
+#     not this class's. It is covered, at the same shape, by `spec/services/category_ledger_spec.rb`
+#     "is income, less unfunded spending, less what is allocated out, plus what comes back", whose
+#     `spend(food, 10, on: …)` line is spending dated before Food was funded. The half that IS this
+#     class's — the category not counting it — stays here.
 RSpec.describe HoldingCalculator, type: :model do
   let(:user) { create(:user) }
 
@@ -606,6 +613,44 @@ RSpec.describe HoldingCalculator, type: :model do
       expect(calc(vacation).period_closed?).to be(false)
       expect(calc(vacation).sweepable_amount).to eq(0)
       expect(calc(vacation).sweepable_amount).to be_a(BigDecimal)
+    end
+
+    # THE SAME REFUSAL AT THE ONE SHAPE THAT WALKED PAST IT (fix round 1, MED-1). A goal carrying
+    # BOTH a rate rule and a dated one is not a `dateless_goal?` — the anchored maths owns its
+    # funding — and gating the sweep on that predicate let it fall through to the envelope path:
+    # measured at `period_closed?` true and `sweepable_amount` $300 before the fix, which is the
+    # user's savings going back to available on the next distribution. The pool era refused every
+    # savings sweep by TYPE and no rule mix could argue with a type; the target has to refuse at
+    # the same width.
+    #
+    # $600 allocated last period, the $300 bill holding $300 of it: the figure at risk is exactly
+    # the $300 the bill is NOT holding, so `eq(0)` here is a real refusal rather than an empty
+    # envelope answering zero by having nothing.
+    it "never sweeps a savings goal, whatever mix of rules it carries", :aggregate_failures do
+      vacation = envelope(name: "Vacation", target_amount: 2_400)
+      rule(vacation, :per_period_rate, amount: 150)
+      rule(vacation, amount: 300, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      fund(vacation, 600, on: last_period)
+
+      expect(calc(vacation).balance).to eq(600)
+      expect(calc(vacation).dateless_goal?).to be(false)
+      expect(calc(vacation).period_closed?).to be(false)
+      expect(calc(vacation).sweepable_amount).to eq(0)
+    end
+
+    # The other direction, and the only variable is the TARGET: the identical rule mix on a
+    # category saving toward nothing is an envelope, its rate period is over, and the $300 its
+    # live bill is not holding goes back. Without this the example above passes against a sweep
+    # that has simply stopped working.
+    it "sweeps the same rule mix on a category with no target", :aggregate_failures do
+      groceries = envelope(name: "Groceries")
+      rule(groceries, :per_period_rate, amount: 150)
+      rule(groceries, amount: 300, interval_months: 1, anchor_date: Date.new(2026, 9, 1))
+      fund(groceries, 600, on: last_period)
+
+      expect(calc(groceries).balance).to eq(600)
+      expect(calc(groceries).period_closed?).to be(true)
+      expect(calc(groceries).sweepable_amount).to eq(300)
     end
 
     # An anchored rule is money already spoken for by a bill nobody has paid yet, so the sweep

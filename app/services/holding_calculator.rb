@@ -214,15 +214,13 @@ class HoldingCalculator
   # `PoolCalculator#dateless_goal?` already were: `Category#savings?` is the display question and
   # this is the funding one. Changing either does not automatically change the other.
   #
-  # `holder?`, because only a holder holds money at all: a category with no `funded_since` has its
-  # spending drain available, and a target on it is a goal nothing can progress toward.
-  #
-  # Dateless-only. A goal that names an anchor_date has a deadline, and the anchored maths already
-  # spreads the goal across the periods remaining; that path must keep winning.
+  # THE TARGET TEST ITSELF IS #saving_toward_a_target?, spelled once below for the three readers
+  # that ask it. What THIS reader adds is the dateless leg, and only for the FUNDING question:
+  # a goal that names an anchor_date has a deadline, and the anchored maths already spreads it
+  # across the periods remaining, so that path must keep winning. The SWEEP adds no such leg —
+  # savings never sweep whatever their rule mix (see #compute_period_closed).
   def dateless_goal?
-    category.holder? &&
-      category.target_amount.to_d.positive? &&
-      rules.none? { |budget| budget.anchor_date.present? }
+    saving_toward_a_target? && rules.none? { |budget| budget.anchor_date.present? }
   end
 
   # `min(rate, remaining)`: the final contribution is the remainder, not the rate. Asking for $150
@@ -286,10 +284,10 @@ class HoldingCalculator
   # there until a distribution moves it. We say so rather than rendering $0, because both partitions
   # of the same total (§2) are the invariant everything rests on.
   #
-  # GOALS ARE EXCLUDED BY THEIR TARGET, not by rule shape — see #dateless_goal? for why the target
-  # is the question this class asks. A dateless goal IS a rate rule on a category, so "has a rate
-  # rule whose period ended" would drain every goal the user has, and #free_amount would hand the
-  # sweep a plausible figure to take. Savings accumulate by definition, so they never sweep.
+  # GOALS ARE EXCLUDED BY THEIR TARGET, not by rule shape, and not by SOME rule shapes either — see
+  # #compute_period_closed. A dateless goal IS a rate rule on a category, so "has a rate rule whose
+  # period ended" would drain every goal the user has, and #free_amount would hand the sweep a
+  # plausible figure to take. Savings accumulate by definition, so they never sweep.
   #
   # Measured against the date the money ARRIVED, not against today. BudgetCalculator#period_end
   # answers "when does the period containing `today` end", so `period_end(today) < today` is
@@ -357,9 +355,28 @@ class HoldingCalculator
   #
   # The marker means exactly what it says — this category's RATE period has ended. It carries no
   # opinion about its dated bills; #sweepable_amount subtracts what those hold.
+  #
+  # SAVINGS NEVER SWEEP, FULL STOP, AND THE GUARD IS #saving_toward_a_target? RATHER THAN
+  # #dateless_goal? (fix round 1, MED-1). Those two differ on exactly one shape and it is a shape
+  # the app can hold: a goal carrying a rate rule AND a dated one. #dateless_goal? is false for it —
+  # correctly, because the anchored maths owns its FUNDING — and gating the sweep on that same
+  # predicate let it fall straight through to the envelope path. Measured on Vacation (target
+  # $2,400, a $150 per-period rule beside a $300 dated one, $600 allocated last period):
+  # `period_closed?` true and `sweepable_amount` $300, which is the user's savings going back to
+  # available on the next distribution.
+  #
+  # The pool era could not reach that shape because `pool_type_savings?` refused EVERY savings sweep
+  # by TYPE, and no rule mix could argue with a type. The type is gone and the target replaces it,
+  # so the refusal has to be restated at the same width: what is being saved toward a figure is not
+  # spare money at the end of a period, however many rules the user has hung on it. Task 1's fold
+  # re-parents a savings pool's rules onto the minted category, so the mix is live on real data.
+  #
+  # FUNDING AND SWEEPING ARE THEREFORE ASKED TWO DIFFERENT QUESTIONS OF ONE PREDICATE: #dateless_goal?
+  # adds the dateless leg because a rate is only the right ask where no deadline is spreading the
+  # goal already; this guard adds nothing, because there is no rule mix that makes savings sweepable.
   def compute_period_closed
     return false unless category.holder?
-    return false if dateless_goal?
+    return false if saving_toward_a_target?
 
     rate_budgets = rules.reject { |budget| budget.anchor_date.present? }
     return false if rate_budgets.empty?
@@ -367,6 +384,18 @@ class HoldingCalculator
 
     rate_budgets.all? { |budget| budget.calculator(today: last_funded_on).period_end < today }
   end
+
+  # IS THIS CATEGORY SAVING TOWARD A FIGURE — the goal test, spelled ONCE (fix round 1, LOW-2).
+  # Three readers ask it and they must not be free to drift: #dateless_goal? above (what a goal
+  # ASKS for), #compute_period_closed (savings never sweep) and `HoldingStatus#saving?`, which
+  # reaches it through #dateless_goal? rather than re-deriving a target test of its own. The two
+  # that add a leg add it in the open, beside the reader that needs it.
+  #
+  # `holder?` IS PART OF THE TEST AND NOT A GUARD AROUND IT. A category with no `funded_since`
+  # holds nothing — its spending drains available (§4) — so a target on it is a goal nothing can
+  # progress toward, and it is neither saving nor sweeping. It was the leg the status\'s own copy of
+  # this test was missing, which is what made the two copies a divergence rather than a duplication.
+  def saving_toward_a_target? = category.holder? && category.target_amount.to_d.positive?
 
   # What an unpaid dated bill is already holding. #sweepable_amount is otherwise the whole category,
   # so a mixed one would sweep the rent to top up available on the strength of its gas rule alone.
