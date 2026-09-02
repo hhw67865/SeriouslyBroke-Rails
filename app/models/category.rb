@@ -496,6 +496,7 @@ class Category < ApplicationRecord
 
     priority_is_a_fill_order
     target_is_a_goal
+    funding_start_is_not_in_the_future
     only_expenses_hold_money
   end
 
@@ -509,6 +510,34 @@ class Category < ApplicationRecord
     return if target_amount.blank?
 
     errors.add(:target_amount, "must be greater than 0") unless target_amount.to_d.positive?
+  end
+
+  # A FUNDING START IN THE FUTURE IS SCHEDULING, AND NOTHING IN THIS APP SCHEDULES (fix round 1,
+  # LOW-1). `funded_since` is the day a category begins counting its own spending, and every reader
+  # of it treats "set" as "counting now": `Category#holder?` asks only that the column is present,
+  # so `AllocationCalculator` puts a future-dated category straight into the fill order and a
+  # distribution funds it TODAY — while `CategoryLedger::ENTRY_CATEGORY_ID` goes on reading its
+  # spending against AVAILABLE until the date arrives. Money in the category, spending out of the
+  # root, and no screen saying why. Accepted silently, it is a shape the two-ledger invariant
+  # survives (§2 holds either way) but no user could ever explain.
+  #
+  # REFUSED RATHER THAN COERCED to today: a user who typed next month meant something, and quietly
+  # writing a different date is the class of lie the branch has been removing. The message says what
+  # to do instead.
+  #
+  # THE COMPARISON IS THE OWNER'S DAY, through `#local_day` — the same re-zoning
+  # `#counts_spending_on?` and `ENTRY_CATEGORY_ID` use, so a Tokyo user filling in their own
+  # calendar's today is not told it is tomorrow. TODAY ITSELF IS FINE: a category funded this
+  # morning counts this morning's spending, which is the ordinary shape of setting one.
+  def funding_start_is_not_in_the_future
+    return if funded_since.blank?
+    return if funded_since <= local_day(Time.current)
+
+    errors.add(
+      :funded_since,
+      "can't be in the future — a category starts holding money on the " \
+      "day you give it some, so set today or a past date"
+    )
   end
 
   def only_expenses_hold_money

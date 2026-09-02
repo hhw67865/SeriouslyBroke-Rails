@@ -166,6 +166,37 @@ RSpec.describe "Home Categories", type: :system do
     expect(row("Vacation")["data-expanded"]).to eq("false")
   end
 
+  # ** THE OTHER LEVEL OF THE SAME CLASSIFICATION (fix round 1, MED-2), and the pair is the point. **
+  # The example above is a DATELESS goal, which has no deadline to be measured against, so `saving`
+  # is the only honest thing to say about it. A goal whose rule names a DUE DATE has one, and the
+  # anchored maths already knows whether it will be met — so its row reads its SCHEDULE, never
+  # `saving`. The chrome level does not agree with this and is not supposed to: the holdings card
+  # and the entry form's impact card still call the same category a goal
+  # (`spec/system/categories/show/holdings_spec.rb`, `spec/system/entries/impact_spec.rb`).
+  it "reads an anchor-dated goal by its schedule rather than as saving", :aggregate_failures do
+    anchored_goal("House Deposit")
+
+    visit root_path
+
+    expect(row("House Deposit")).to have_content("on track")
+    expect(row("House Deposit")).to have_no_content("of $2,400.00")
+  end
+
+  def anchored_goal(name)
+    holder(name, target_amount: 2_400).tap do |category|
+      create(
+        :budget,
+        pool: nil,
+        category: category,
+        amount: 300,
+        interval_months: 1,
+        anchor_date: Date.current + 2.months
+      )
+      deposit(1_000)
+      fund(category, 600)
+    end
+  end
+
   it "auto-expands a category that needs attention", :aggregate_failures do
     one_off("Dentist", amount: 300, due: Date.current + 3.days)
 

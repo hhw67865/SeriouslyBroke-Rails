@@ -18,10 +18,17 @@
 #
 # THE GOAL TEST IS THE CALCULATOR'S, NOT `Category#savings?` (Task 7's carried-inconsistency
 # ruling). `savings?` is holder + target + NO RULE, so a goal the user also refills at a rate — the
-# demo's Retirement Supplement — read as an envelope here and on the entry form while Home called
-# it `saving`. `HoldingCalculator#saving_toward_a_target?` is the predicate the sweep already runs
-# on ("savings never sweep, whatever their rule mix"), and asking it makes this card, the impact
-# card and Home classify one category one way.
+# demo's Retirement Supplement — read as an envelope here and on the entry form.
+# `HoldingCalculator#saving_toward_a_target?` is the predicate the sweep already runs on ("savings
+# never sweep, whatever their rule mix"), and it is what this card's HEADING and its target bar ask.
+#
+# TWO LEVELS, DELIBERATELY (fix round 1, MED-2). The CHROME — `Goal` or `Envelope`, bar or no bar —
+# is that predicate, here and on the impact card and the index card alike. The STANDING line below
+# it is `HoldingStatus`, which stays schedule-aware through `HoldingCalculator#dateless_goal?`: a
+# DATELESS goal reads `saving`, and a goal carrying an anchor-dated rule reads `on track` / `behind`
+# / `won't make it`, because it has a deadline the anchored maths can measure. `Goal · on track` is
+# therefore a sensible pairing rather than the two halves of this card disagreeing — see
+# `HoldingCalculator#dateless_goal?` for the whole argument.
 #
 # See docs/superpowers/specs/2026-08-21-two-ledger-design.md §3–§4 and
 # docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8.1.

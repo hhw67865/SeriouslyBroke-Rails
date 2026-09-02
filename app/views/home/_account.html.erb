@@ -43,8 +43,23 @@
                 edit_bank_account_path(account),
                 class: "text-xs font-medium text-brand hover:text-brand-dark",
                 data: { account_edit: account.name } %>
-    <% confirm = "Delete #{account.name}? Its movements and any categories pointing at it move " \
-                 "to your main account. This action cannot be undone." %>
+    <%# ** THE CONFIRM SAYS WHAT DELETING AN ACCOUNT ACTUALLY DOES (fix round 1, MED-1). ** Its
+        first draft carried the ENVELOPE sentence off the deleted `PoolsHelper
+        #pool_delete_confirmation` — "its movements and any categories pointing at it move to your
+        main account" — and every clause of it was false of an account. An envelope's balance and
+        history were absorbed by the account above it (`Pool#return_holdings_to_the_account`); an
+        account has nothing above it, so that method returns early, `dependent: :destroy` on
+        `movements_in`/`movements_out` DESTROYS its movements, and a category still pointing at it
+        REFUSES the delete outright (`dependent: :restrict_with_error`, pinned at the wire in
+        spec/requests/bank_accounts_spec.rb).
+
+        BOTH FACTS, because they are two different fears. "What happens to my transfers" is the
+        first clause; "will this quietly take my spending history with it" is answered by the
+        second, which says the delete simply will not happen. A confirm that promised a move the
+        app then refuses is the more frightening direction of the same lie. %>
+    <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
+                 "and your balances will change. If a category still points at it, the delete is " \
+                 "refused instead. This action cannot be undone." %>
     <%= button_to "Delete",
                   bank_account_path(account),
                   method: :delete,

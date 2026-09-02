@@ -397,10 +397,11 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE GOAL ARM, KEYED ON THE CATEGORY (Task 6). `Category#savings?` is the app's DISPLAY question
-  # — a holder, with a target, carrying NO refill rule (spec §3) — where the pool era asked
-  # `pool_type_savings?`. Spending from a goal is still spending against a goal, so the card still
-  # takes the goal shape and still measures against the target.
+  # THE GOAL ARM, KEYED ON THE CATEGORY (Task 6) AND ON THE CALCULATOR (Task 7). It asked
+  # `Category#savings?` — a holder, with a target, carrying NO refill rule — and now asks
+  # `HoldingCalculator#saving_toward_a_target?`, the CHROME level of the two-level classification:
+  # a goal is a goal whatever refills it. Spending from a goal is still spending against a goal, so
+  # the card takes the goal shape and measures against the target.
   describe "a savings goal" do
     before do
       vacation = create(
@@ -453,6 +454,53 @@ RSpec.describe "Entry impact card", type: :system do
 
       within(card) { expect(figure("balance-after")).to have_text("-$4,400.00") }
       expect(page).to have_button("Save anyway")
+    end
+  end
+
+  # ** THE ANCHOR-DATED GOAL, PINNED AT THE BROWSER (fix round 1, MED-2). ** The two-level
+  # classification's sharpest shape, and the one no screen tested: a goal whose rule names a DUE
+  # DATE is `HoldingCalculator#dateless_goal?` FALSE — so Home's row calls it `on track` rather than
+  # `saving` — while `#saving_toward_a_target?` is still true, so THIS card must keep drawing it as
+  # a goal. The card speaks no status at all (see EntryImpactPresenter's header), so all that is
+  # asked of it here is that the chrome level does not inherit the status level's condition.
+  #
+  # The same category is pinned on the holdings card
+  # (`spec/system/categories/show/holdings_spec.rb`) and on Home's row
+  # (`spec/system/home/categories_spec.rb`), which is what makes this a cross-screen agreement
+  # rather than three files each describing their own fixture.
+  describe "a goal whose rule carries a due date" do
+    before do
+      house = create(
+        :category,
+        :expense,
+        user: user,
+        name: "House Deposit",
+        funded_since: funded_since,
+        target_amount: 2_400
+      )
+      create(:allocation, kind: :allocation, to_category: house, amount: 600, date: Time.zone.now)
+      create(
+        :budget,
+        pool: nil,
+        category: house,
+        amount: 300,
+        interval_months: 1,
+        anchor_date: Date.current + 2.months
+      )
+
+      visit new_entry_path
+      select_category("House Deposit")
+    end
+
+    it "still takes the goal shape and still measures against the target", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='goal']")
+      fill_in "Amount", with: "150"
+
+      within(card) do
+        expect(figure("envelope")).to have_text("House Deposit goal")
+        expect(figure("goal")).to have_text("of $2,400.00 goal")
+        expect(figure("balance-after")).to have_text("$450.00")
+      end
     end
   end
 

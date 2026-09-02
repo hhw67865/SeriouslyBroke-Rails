@@ -110,11 +110,89 @@ RSpec.describe "Category, as a holder of money", type: :model do
       expect(build(:category, :expense, user: user, target_amount: -1)).not_to be_valid
     end
 
+    # ** A FUTURE FUNDING START IS REFUSED (fix round 1, LOW-1). ** Every reader treats "set" as
+    # "counting now" — `Category#holder?` asks only that the column is present, so a future-dated
+    # category joins the fill order and a distribution funds it TODAY, while
+    # `CategoryLedger::ENTRY_CATEGORY_ID` goes on reading its spending against AVAILABLE until the
+    # date arrives. Money in, spending out of the root, and no screen saying why. Nothing in this
+    # app schedules, so the shape is refused rather than coerced.
+    #
+    # BOTH DIRECTIONS, and TODAY is the half that matters most: a category funded this morning
+    # counts this morning's spending, which is the ordinary shape of setting one — a validator that
+    # refused it would break every "give this category a start date" flow in the app.
+    it "accepts today as a funding start" do
+      expect(build(:category, :expense, user: user, funded_since: Date.current)).to be_valid
+    end
+
+    it "refuses a funding start in the future", :aggregate_failures do
+      record = build(:category, :expense, user: user, funded_since: Date.current + 1.day)
+
+      expect(record).not_to be_valid
+      expect(record.errors[:funded_since].to_sentence).to include("can't be in the future")
+    end
+
     it "refuses money-holding columns on an income category", :aggregate_failures do
       record = build(:category, :income, user: user, funded_since: Date.current, target_amount: 100)
 
       expect(record).not_to be_valid
       expect(record.errors[:base]).to include("only expense categories hold money")
+    end
+  end
+
+  # ** MOVING THE FUNDING START EARLIER CHANGES WHAT THE CATEGORY HOLDS (fix round 1, LOW-2). **
+  #
+  # This is the promise the category form's hint makes — *"Spending before it reads against what's
+  # available instead — so changing this date moves history"* — and it is the whole reason the field
+  # is editable at all (spec §4). `CategoryLedger::ENTRY_CATEGORY_ID` compares every entry's date
+  # against this column, so the SAME entry drains the category on one side of the move and AVAILABLE
+  # on the other. Nothing is rewritten; one date is, and the ledger re-reads.
+  #
+  # PLANTED LITERALS ON BOTH SIDES, and both halves of the partition asserted at once: §2's
+  # invariant is `available + Σ holdings == income − expenses`, so the $80 the category takes on has
+  # to be $80 the root gives up. A test that watched only the holding would pass against a reader
+  # that had started counting the entry twice.
+  describe "moving the funding start" do
+    it "hands a pre-existing entry to the category, and takes it off available", :aggregate_failures do
+      groceries = planted_history
+
+      expect(ledger_for(groceries)).to eq(holding: 200, available: 220)
+
+      groceries.update!(funded_since: Date.current - 45.days)
+
+      expect(ledger_for(groceries)).to eq(holding: 120, available: 300)
+    end
+
+    # $500 of income, $200 allocated into Groceries, and an $80 shop dated BEFORE the funding start
+    # — so it drains available while the start stands where it is.
+    def planted_history
+      groceries = create(
+        :category,
+        :expense,
+        user: user,
+        name: "Groceries",
+        funded_since: Date.current - 10.days
+      )
+      income(500, on: Date.current - 40.days)
+      create(:allocation, kind: :allocation, to_category: groceries, amount: 200, date: Date.current)
+      spend(groceries, 80, on: Date.current - 30.days)
+      groceries
+    end
+
+    def income(amount, on:)
+      salary = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: salary), amount: amount, date: on)
+    end
+
+    def spend(category, amount, on:)
+      item = create(:item, category: category, name: "Weekly shop")
+      create(:entry, item: item, amount: amount, date: on)
+    end
+
+    # A FRESH LEDGER EACH TIME, never a memoised one: `CategoryLedger` snapshots its grouped queries
+    # at first read, so reusing one across the write would answer from before it.
+    def ledger_for(category)
+      ledger = CategoryLedger.new([category], user: user)
+      { holding: ledger.holding_of(category), available: ledger.available }
     end
   end
 

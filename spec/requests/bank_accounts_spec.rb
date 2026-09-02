@@ -161,16 +161,46 @@ RSpec.describe "BankAccounts", type: :request do
     # than raising, so a controller that ignored `#destroy`'s return value would redirect with
     # "deleted." over a row still sitting in the database.
     #
-    # THE MAIN ACCOUNT IS THE ONE UNDER TEST, and it has to be: `Category#pool_must_be_reachable`
-    # lets a category point only at the user's default account, so it is the only account a
-    # category can still be blocking.
+    # ** BOTH LIVE REFUSALS, ASKED OF WHAT `Pool` RESTRICTS ON TODAY (fix round 1, LOW-3). ** The
+    # deleted `spec/system/pools/show/header_actions_spec.rb` carried "refuses to delete an account
+    # that still holds pools", and that arm is STILL LIVE — `has_many :child_pools, dependent:
+    # :restrict_with_error` — even though nothing in the app can create a nested pool any more:
+    # seeds, a console and the migration's own fixtures all can, and `dependent:` guards the
+    # database rather than the screens. It dies with T8, which removes nesting entirely; until then
+    # a refusal nothing pins is a 500 waiting for the one user whose data still has one.
+    #
+    # THE `categories` ARM IS THE ONE A USER CAN REACH TODAY, and the MAIN account is the only
+    # account it can fire on: `Category#pool_must_be_reachable` lets a category point only at the
+    # user's default account.
+    #
+    # THE MOVEMENTS ARM IS NOT A REFUSAL and is asserted as such below — `movements_in`/`out` are
+    # `dependent: :destroy`, so an account's transfers go WITH it. That is what Home's delete
+    # confirm now says, and the sentence it replaced ("its movements move to your main account")
+    # described an ENVELOPE.
     it "refuses while a category still points at it, and says so", :aggregate_failures do
       create(:category, :expense, user: user, name: "Groceries", pool: checking)
 
       delete bank_account_path(checking)
 
       expect(user.pools.find_by(name: "Checking")).to be_present
-      expect(flash[:alert]).to be_present
+      expect(flash[:alert]).to include("can't be deleted while categories still belong to it")
+    end
+
+    it "refuses while a pool still sits inside it, and says so", :aggregate_failures do
+      create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
+
+      delete bank_account_path(checking)
+
+      expect(user.pools.find_by(name: "Checking")).to be_present
+      expect(flash[:alert]).to include("can't be deleted while envelopes and goals still belong to it")
+    end
+
+    it "destroys the account's movements rather than moving them anywhere", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      create(:pool_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current)
+
+      expect { delete bank_account_path(ally) }.to change(PoolMovement, :count).by(-1)
+      expect(user.pools.find_by(name: "Ally")).to be_nil
     end
   end
 end

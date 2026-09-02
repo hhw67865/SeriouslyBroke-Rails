@@ -55,17 +55,7 @@ RSpec.describe "BankAccounts Edit", type: :system do
     end
   end
 
-  # DELETE LIVES ON HOME, because Home is the accounts index — `pools/index` and `pools/show` both
-  # carried the button and both are deleted.
-  describe "deleting from Home", :aggregate_failures do
-    it "removes the account's section" do
-      create(:pool, :account, user: user, name: "Ally")
-      visit root_path
-
-      accept_confirm { click_button "Delete", match: :first }
-
-      expect(page).to have_content("deleted.")
-      expect(user.pools.count).to eq(1)
-    end
-  end
+  # ── DELETE LIVES ON HOME, because Home is the accounts index — `pools/index` and `pools/show`
+  # both carried the button and both are deleted. Its examples, and the confirm copy they guard, are
+  # in `spec/system/home/account_actions_spec.rb`.
 end

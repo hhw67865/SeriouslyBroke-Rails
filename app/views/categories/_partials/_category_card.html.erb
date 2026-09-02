@@ -45,7 +45,11 @@
               same predicate the show page's holdings card, Home and the entry form's impact card
               ask — so a rule-bearing goal is a goal on every one of them. %>
           <% if category.holder? %>
-            <% holdings = category.holding_calculator %>
+            <%# `holding_terms` IS THE INDEX'S ONE LEDGER (fix round 1, MED-3) — see
+                `CategoriesController#holding_terms`. A nil for a category the ledger does not know
+                is legal and means "run your own aggregates", so this can never be wrong for want
+                of terms. %>
+            <% holdings = category.holding_calculator(terms: holding_terms[category.id]) %>
             <div class="flex justify-between text-xs mt-2" data-holding-line>
               <span class="text-gray-500">Holding</span>
               <span class="font-medium <%= holdings.balance.negative? ? "text-status-danger" : "text-gray-900" %>">

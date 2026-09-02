@@ -214,11 +214,30 @@ class HoldingCalculator
   # `PoolCalculator#dateless_goal?` already were: `Category#savings?` is the display question and
   # this is the funding one. Changing either does not automatically change the other.
   #
-  # THE TARGET TEST ITSELF IS #saving_toward_a_target?, spelled once below for the three readers
-  # that ask it. What THIS reader adds is the dateless leg, and only for the FUNDING question:
-  # a goal that names an anchor_date has a deadline, and the anchored maths already spreads it
-  # across the periods remaining, so that path must keep winning. The SWEEP adds no such leg —
-  # savings never sweep whatever their rule mix (see #compute_period_closed).
+  # THE TARGET TEST ITSELF IS #saving_toward_a_target?, spelled once below. What THIS reader adds
+  # is the dateless leg, and only for the FUNDING question: a goal that names an anchor_date has a
+  # deadline, and the anchored maths already spreads it across the periods remaining, so that path
+  # must keep winning. The SWEEP adds no such leg — savings never sweep whatever their rule mix
+  # (see #compute_period_closed).
+  #
+  # ** THE STATUS LEVEL OF TASK 7'S TWO-LEVEL CLASSIFICATION (fix round 1, MED-2). ** The goal
+  # question is asked at two levels and they are deliberately different conditions, which is the
+  # statement that replaces an earlier "all three screens agree" overclaim:
+  #
+  #   CHROME — what a card is CALLED and whether it draws a target bar — is #saving_toward_a_target?
+  #     everywhere (the impact card's `#goal?`, the holdings card's heading and bar, the categories
+  #     index card's bar). A goal is a goal whatever refills it.
+  #   STATUS — the row vocabulary's state word — is THIS reader, through `HoldingStatus#saving?`,
+  #     and it stays SCHEDULE-AWARE. A dateless goal has no deadline to be measured against, so
+  #     `saving` (`$424.00 of $2,400.00`) is the only honest thing to say about it; a goal carrying
+  #     an ANCHOR-DATED rule does have one, and the anchored maths already knows whether it will be
+  #     met — so it reads `on track`, `behind` or `won't make it`, which is more information rather
+  #     than less.
+  #
+  # `Goal · on track` IS THE PAIRING THAT FALLS OUT OF THAT, and it is a sensible sentence rather
+  # than a contradiction: the heading says what the category is, the status says how the schedule is
+  # going. The anchored shape is pinned on all three screens (holdings card, impact card, Home row)
+  # so neither level can quietly adopt the other's condition.
   def dateless_goal?
     saving_toward_a_target? && rules.none? { |budget| budget.anchor_date.present? }
   end
@@ -349,25 +368,33 @@ class HoldingCalculator
   def withdrawals = (movements_out_total + expense_entries_total).to_d
 
   # IS THIS CATEGORY SAVING TOWARD A FIGURE — the goal test, spelled ONCE (fix round 1, LOW-2).
-  # Three readers ask it and they must not be free to drift: #dateless_goal? above (what a goal
-  # ASKS for), #compute_period_closed (savings never sweep) and `HoldingStatus#saving?`, which
-  # reaches it through #dateless_goal? rather than re-deriving a target test of its own. The two
-  # that add a leg add it in the open, beside the reader that needs it.
+  # Its readers must not be free to drift: #dateless_goal? above (what a goal ASKS for),
+  # #compute_period_closed (savings never sweep), `HoldingStatus#saving?` — which reaches it through
+  # #dateless_goal? rather than re-deriving a target test of its own — and, since Task 7, every
+  # screen that draws a goal as a goal. The readers that add a leg add it in the open, beside the
+  # reader that needs it.
   #
   # `holder?` IS PART OF THE TEST AND NOT A GUARD AROUND IT. A category with no `funded_since`
   # holds nothing — its spending drains available (§4) — so a target on it is a goal nothing can
   # progress toward, and it is neither saving nor sweeping. It was the leg the status\'s own copy of
   # this test was missing, which is what made the two copies a divergence rather than a duplication.
   #
-  # PUBLIC SINCE TASK 7, AND THE THREE READERS ARE NOW SIX. One classification was being asked by
-  # three SCREENS in three different spellings: the entry form's impact card asked
-  # `Category#savings?` — holder + target + NO RULE — so the demo's Retirement Supplement (a
-  # $100,000 goal carrying a $150 rate rule) drew the ENVELOPE bar there while Home's row
-  # vocabulary called the same category `saving` through #dateless_goal?. Three screens, two
-  # answers, one category. The ruling (Task 7) is that every RENDERING asks this predicate, so a
-  # rule-bearing goal is a goal on the impact card, on Home and on the categories page's holdings
-  # card alike. `Category#savings?` survives for the one question it is actually the right sentence
-  # for — which categories are the user's savings, on an index that lists them.
+  # ** PUBLIC SINCE TASK 7 — THE CHROME LEVEL OF THE TWO-LEVEL CLASSIFICATION (fix round 1,
+  # MED-2). ** The entry form's impact card asked `Category#savings?` — holder + target + NO RULE —
+  # so the demo's Retirement Supplement (a $100,000 goal carrying a $150 rate rule) drew the
+  # ENVELOPE bar there, denominated in Σ steady_ask, an inch under a line reading "of $100,000.00
+  # goal". Every RENDERING asks this predicate now: what a category is CALLED (`Goal` / `Envelope`)
+  # and whether a target bar is drawn — the impact card, the holdings card and the categories index
+  # card.
+  #
+  # IT DOES NOT FOLLOW THAT ALL THREE SCREENS SAY ONE WORD, and an earlier version of this comment
+  # claimed it did. The STATUS level — the row vocabulary's state, on Home, on /budget and on the
+  # holdings card's own `Standing` line — stays #dateless_goal?'s, because a goal WITH a deadline
+  # has something better to say than `saving`. See that reader's header for the whole argument;
+  # what is written here is only which question this one answers.
+  #
+  # `Category#savings?` survives for the one question it is actually the right sentence for — which
+  # categories are the user's savings, on an index that lists them (the dashboard strip).
   def saving_toward_a_target? = category.holder? && category.target_amount.to_d.positive?
 
   private

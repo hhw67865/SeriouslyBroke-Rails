@@ -69,4 +69,9 @@ en:
           attributes:
             base:
               restrict_dependent_destroy:
-                has_many: "This pool can't be deleted while %{record} still belong to it — move them to another pool first."
+                # THE TRAILING INSTRUCTION IS DELETED (Task 7, fix round 1). It read "— move them
+                # to another pool first", which named a screen that no longer exists: the category
+                # form's pool picker went with the pool layer, so the app offered no way to act on
+                # its own refusal. The sentence now states the condition and stops, which is what
+                # the delete confirm on Home says will happen.
+                has_many: "This account can't be deleted while %{record} still belong to it."

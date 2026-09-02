@@ -81,6 +81,64 @@ RSpec.describe "Categories", type: :request do
     end
   end
 
+  # ** THE INDEX'S HOLDING AGGREGATES ARE BATCHED (fix round 1, MED-3). **
+  #
+  # Each card prints what its category holds, and it built a `HoldingCalculator` per card to do it —
+  # N categories, N sets of grouped aggregates, on the one screen that renders every category a user
+  # owns. `CategoriesController#holding_terms` builds ONE `CategoryLedger` over the holders and
+  # threads `#terms_for` into each calculator, which is what Home, the Budget page and
+  # `AllocationCalculator` already do.
+  #
+  # THE ALLOCATION STATEMENTS ARE THE PROBE, not the total. A category's HOLDING is allocations in,
+  # allocations out and the spending it counts; the allocation halves are read by nothing else on
+  # this page, so counting statements against that table isolates exactly the reader under test.
+  # The total keeps growing with the row count for a reason this fix does not touch: every card also
+  # asks `CategoryCalculator` what it SPENT this period and lists its top items, which are per-card
+  # questions about per-card data.
+  #
+  # MEASURED, BOTH WAYS, at the browser-facing layer rather than by reasoning about the source.
+  # Before: 2 allocation statements for one holder and 10 for five (two per card). After: 3 and 3 —
+  # the ledger's own fixed grouped queries. One holder costs ONE statement more than it used to,
+  # which is the honest price of the constant and is why the assertion is an EQUALITY between the
+  # two counts rather than a ceiling on either.
+  #
+  # A request spec because the count is a fact about a rendered PAGE, and the null cache store this
+  # environment configures means every card really renders.
+  describe "GET /categories — holding aggregates" do
+    def allocation_statements
+      statements = []
+      recorder = lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") do
+        get categories_path(type: "expense")
+      end
+      statements.count { |sql| sql.include?(%("allocations")) }
+    end
+
+    def holders(*names)
+      names.each { |name| create(:category, :expense, :funded, user: user, name: name) }
+      # A warm request first: the FIRST render of a template compiles it and loads its own rows, and
+      # a compile counted on one side of the comparison and not the other is noise the assertion
+      # cannot tell from a regression.
+      get categories_path(type: "expense")
+    end
+
+    it "asks the same number of times for one holder as for five", :aggregate_failures do
+      holders("Groceries")
+      one = allocation_statements
+
+      holders("Rent", "Transit", "Utilities", "Vacation")
+      five = allocation_statements
+
+      expect(user.categories.count(&:holder?)).to eq(5)
+      expect(five).to eq(one)
+      # The figure itself, so a future change that batches by accident — or stops reading
+      # allocations at all — is not silently green.
+      expect(five).to eq(3)
+    end
+  end
+
   describe "PATCH /categories/:id" do
     let!(:category) do
       create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 500)

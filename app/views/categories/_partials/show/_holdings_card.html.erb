@@ -14,8 +14,14 @@
 
     THE GOAL BAR IS DRAWN ON `HoldingCalculator#saving_toward_a_target?`, NOT `Category#savings?`
     (Task 7's ruling — see the presenter's header). A goal the user also refills at a rate is still
-    a goal, and it is now classified as one here, on Home and on the entry form's impact card
-    alike. %>
+    a goal, and it is now classified as one here, on the entry form's impact card and on the
+    categories index card alike.
+
+    THE `Standing` ROW IS A DIFFERENT QUESTION AND KEEPS ITS OWN CONDITION (fix round 1, MED-2).
+    `HoldingStatus` is schedule-aware: a DATELESS goal reads `saving`, and a goal carrying an
+    anchor-dated rule reads `on track` / `behind` / `won't make it`. So this card can head itself
+    `Goal` and stand `on track` in the same breath, which is two facts rather than a contradiction —
+    what it IS, and how its schedule is going. %>
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
      data-holdings-card
      data-holdings-state="<%= presenter.state %>">

@@ -155,6 +155,41 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       within(card) { expect(page).to have_content("nothing here is ever swept back at the end of a period") }
     end
 
+    # ** THE ANCHOR-DATED GOAL — THE TWO LEVELS ON ONE CARD (fix round 1, MED-2). ** A goal whose
+    # rule names a DUE DATE is `HoldingCalculator#dateless_goal?` FALSE, so `HoldingStatus` does not
+    # call it `saving`; it is `#saving_toward_a_target?` TRUE, so the heading and the bar are still
+    # the goal's. The card therefore heads itself `Goal` and stands `on track` in the same breath,
+    # which is two facts rather than a contradiction — what the category IS, and how its schedule is
+    # going. The same category is pinned on the impact card (`spec/system/entries/impact_spec.rb`)
+    # and on Home's row (`spec/system/home/categories_spec.rb`).
+    it "keeps the goal chrome while the standing reads its schedule", :aggregate_failures do
+      visit category_path(anchored_goal)
+
+      within(card) do
+        expect(page).to have_content("Goal")
+        expect(page).to have_no_content("Envelope")
+      end
+      expect(card).to have_css("[data-goal-progress]")
+      within("[data-holdings-status]") do
+        expect(page).to have_content("on track")
+        expect(page).to have_no_content("of $2,400.00")
+      end
+    end
+
+    def anchored_goal
+      holder("House Deposit", target_amount: 2_400).tap do |house|
+        create(
+          :budget,
+          pool: nil,
+          category: house,
+          amount: 300,
+          interval_months: 1,
+          anchor_date: Date.current + 2.months
+        )
+        allocate(house, 600)
+      end
+    end
+
     # ** THE CARRIED INCONSISTENCY, RESOLVED HERE (Task 7's ruling). ** A goal the user ALSO
     # refills at a rate — the demo's Retirement Supplement — was `Category#savings?` FALSE, so the
     # entry form's impact card drew it as an envelope while Home's row vocabulary called it

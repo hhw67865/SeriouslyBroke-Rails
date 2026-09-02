@@ -7,6 +7,8 @@ class CategoriesController < ApplicationController
   before_action :set_category, only: [:show, :edit, :update, :destroy, :toggle_tracked]
   before_action :set_categories, only: [:index]
 
+  helper_method :holding_terms
+
   # GET /categories
   def index
     # Categories are filtered in the get_categories before_action
@@ -148,6 +150,35 @@ class CategoriesController < ApplicationController
     # Apply search using the new searchable system
     categories = apply_search(categories, { q: params[:q], field: params[:field] })
 
-    @categories = categories.order(name: :asc)
+    @categories = categories.order(name: :asc).to_a
+  end
+
+  # ONE LEDGER FOR THE WHOLE INDEX, keyed by category id (fix round 1, MED-3).
+  #
+  # THE CARD PRINTS WHAT ITS CATEGORY HOLDS, and it built a `HoldingCalculator` per card to do it —
+  # N categories, N sets of grouped aggregates, on the one screen in this app that renders every
+  # category a user owns. Every other multi-category screen batches: Home, the Budget page and
+  # `AllocationCalculator` all build ONE `CategoryLedger` and thread `#terms_for` into each
+  # calculator, so the aggregates are five grouped queries whatever the row count. This is that
+  # shape, arriving late.
+  #
+  # HOLDERS ONLY, because they are the only cards that read a balance — a category that holds
+  # nothing prints one sentence and asks no calculator at all. `user:` is passed for the shape the
+  # categories cannot answer for (an EMPTY holder set, which is every user on their first day):
+  # read off the categories alone, `CategoryLedger` raises `NoSingleOwner` rather than answering.
+  #
+  # NIL IS A LEGAL ANSWER and the view does not check for one: `#terms_for` returns nil for a
+  # category this ledger was not built over, and `Category#holding_calculator` treats a nil `terms:`
+  # exactly as it treats none — the calculator runs its own aggregates. So a card can never be
+  # WRONG for want of terms, only slower, which is the property that makes threading them safe.
+  #
+  # LAZY BY CONSTRUCTION: the ledger memoises each grouped query at its first read, so an index of
+  # income categories — none of them holders — pays nothing for this.
+  def holding_terms
+    @holding_terms ||= begin
+      holders = @categories.select(&:holder?)
+      ledger = CategoryLedger.new(holders, user: current_user)
+      holders.to_h { |category| [category.id, ledger.terms_for(category)] }
+    end
   end
 end
