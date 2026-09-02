@@ -18,6 +18,18 @@ class Category < ApplicationRecord
   # card comes back, honestly, exactly as if onboarding had never finished.
   OPENING_BALANCE_NAME = "Opening Balance"
 
+  # THE COLOUR A CATEGORY HAS WHEN IT HAS NONE, and the ONE spelling of it. The brand sage was
+  # written out as a literal `"#C9C78B"` in four places — the index card's chip, the show page's
+  # banner, and the form's swatch and its hex readout — each guarding with `category.color ||`.
+  #
+  # `||` WAS THE BUG (design review H3). The form's colour radios ship no default, so a user who
+  # never touched them submitted `color: ""` — and an empty string is not nil, so every one of
+  # those guards passed it straight through to `background-color: ;`. The chip rendered as a
+  # transparent hole and the banner's icon as a white heroicon on white. `#display_color` is the
+  # reader all four now go through, and `presence` is what makes `""` mean "unset" the way the
+  # form has always meant it.
+  DEFAULT_COLOR = "#C9C78B"
+
   belongs_to :user, touch: true
 
   # `belongs_to :pool` IS GONE WITH `categories.pool_id` (two-ledger spec §5, Task 8). Where a
@@ -116,6 +128,10 @@ class Category < ApplicationRecord
   # clear (they are written by the entry path afterwards) and a rename or a colour change is not a
   # type change at all, so neither reaches the query.
   after_update :unroute_entries_that_are_no_longer_income
+
+  # WHAT TO PAINT THE CHIP, THE BANNER AND THE FORM'S SWATCH. See DEFAULT_COLOR for why a blank
+  # is not merely absent here but actually reachable from the form.
+  def display_color = color.presence || DEFAULT_COLOR
 
   # Basic scopes
   scope :expenses, -> { where(category_type: :expense) }
@@ -514,8 +530,16 @@ class Category < ApplicationRecord
   # that decides whether to run them has to read the row too.
   def funded_since_in_database = attribute_in_database(:funded_since)
 
+  # THE PRESENCE ERROR WINS (design review H3). `expense?` is false for a category whose type is
+  # BLANK as well as for an income one, so a user who filled the form in and simply never picked a
+  # type was told "only expense categories hold money" — a sentence about a choice they had not
+  # made, on a form whose only real fault was the unanswered question two cards above. Two errors
+  # were rendered and the wrong one read as the cause.
+  #
+  # The blank case already has its own message from `validates :category_type, presence: true`, and
+  # this validation has nothing to add until there is a type to disagree with.
   def only_expenses_hold_money
-    return if expense?
+    return if category_type.blank? || expense?
 
     errors.add(:base, "only expense categories hold money") if funded_since.present? || target_amount.present?
   end

@@ -84,21 +84,48 @@ RSpec.describe "Categories New - Form", type: :system do
     # `?type=savings` NAMES A TYPE THE ENUM NO LONGER HAS (plan 3, task 5), and this action USED TO
     # ASSIGN THE PARAMETER STRAIGHT THROUGH — `category_type = "savings"` raises ArgumentError, so a
     # stale bookmark took the whole page down with a 500. Measured at the browser before it was
-    # fixed. The controller checks the parameter now and an unknown type selects nothing, which is
-    # what the form does with no `type` at all.
-    it "opens with nothing selected when accessed with the retired type=savings", :aggregate_failures do
+    # fixed. The controller checks the parameter now, and an unknown type falls back to the default
+    # rather than being assigned.
+    #
+    # THE FORM NOW OPENS ON A DEFAULT (design review H2/H3), and these two examples changed with
+    # it rather than merely being re-pinned: "nothing selected" was the old behaviour and it was
+    # the defect. Two unringed tiles read as decoration, so a user filled the rest of the form in
+    # and met "Category type can't be blank" on submit — over a card they had not registered as a
+    # question. Expense is the default because it is what most categories are and it is the tab
+    # the New button is pressed from.
+    #
+    # The retired `?type=savings` still selects no SAVINGS tile — which is the property this
+    # example was written for, and it survives the default: the controller checks the parameter
+    # against the enum and falls back, rather than assigning it and raising.
+    it "falls back to the default when accessed with the retired type=savings", :aggregate_failures do
       visit new_category_path(type: "savings")
 
       expect(page).to have_content("Create New Category")
-      expect(page).not_to have_checked_field("category_category_type_expense")
+      expect(page).to have_checked_field("category_category_type_expense")
+      expect(page).not_to have_checked_field("category_category_type_income")
+      expect(page).to have_no_field("category_category_type_savings", visible: :all)
+    end
+
+    it "opens on Expense when no type parameter is provided", :aggregate_failures do
+      visit new_category_path
+
+      expect(page).to have_checked_field("category_category_type_expense")
       expect(page).not_to have_checked_field("category_category_type_income")
     end
 
-    it "shows no type selected when no type parameter provided" do
+    # THE COLOUR IS DEFAULTED TOO, and for a defect one step further downstream: with no swatch
+    # ringed, a user who never touched the grid submitted `color: ""` — not nil — and every
+    # `category.color || DEFAULT` guard in the app passed the empty string through to
+    # `background-color: ;`. The saved category's chip rendered as a transparent hole on the index
+    # and its banner icon as a white glyph on white. See `Category::DEFAULT_COLOR`.
+    it "opens with the brand colour already chosen", :aggregate_failures do
       visit new_category_path
 
-      expect(page).not_to have_checked_field("category_category_type_expense")
-      expect(page).not_to have_checked_field("category_category_type_income")
+      expect(page).to have_checked_field(
+        "category_color_#{Category::DEFAULT_COLOR.delete("#").downcase}",
+        visible: :all
+      )
+      expect(page).to have_content(Category::DEFAULT_COLOR)
     end
   end
 
@@ -113,12 +140,21 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_current_path(new_category_path)
     end
 
-    it "shows error for missing category type" do
+    # THE BLANK TYPE IS NO LONGER REACHABLE FROM THIS FORM (design review H2/H3): the tiles open
+    # with Expense ringed and a radio cannot be un-picked, so a user who ignores the card entirely
+    # now gets a working category rather than a 422 about a question they did not see. What used
+    # to be "shows error for missing category type" is therefore the same submission asserted
+    # against its new outcome.
+    #
+    # THE VALIDATION IS STILL THERE and still tested — `Category` refuses a blank type, which is
+    # what a scripted or tampered POST meets; `#create` builds from `category_params` and inherits
+    # nothing from `#new`. spec/models/category_spec.rb owns that half.
+    it "creates the category with the default type when the tiles are left alone" do
       fill_in "Name", with: "Test Category"
       click_button "Create Category"
 
-      expect(page).to have_content("can't be blank")
-      expect(page).to have_current_path(new_category_path)
+      expect(page).to have_content("Category was successfully created")
+      expect(user.categories.find_by(name: "Test Category")).to be_expense
     end
 
     it "shows error for duplicate name" do

@@ -53,7 +53,13 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content("-#{currency(100)}")
       expect(page).to have_content("-#{currency(50)}")
 
-      find("div.group.cursor-pointer", text: expense_category.name).click
+      # `click_link`, WHERE THIS USED TO BE `find("div.group.cursor-pointer").click` (design review
+      # B1). The card was a `<div onclick="window.location=…">` — no href, no tab stop, no focus
+      # ring, nothing for a screen reader — and the selector was the assertion agreeing with it: it
+      # could only pass against markup a keyboard user cannot reach. The card is an `<a>` now, so
+      # the spec asks Capybara for a LINK, which is a claim about the affordance and not about the
+      # class attribute it happens to carry.
+      click_link expense_category.name
       expect(page).to have_current_path(category_path(expense_category))
     end
 
@@ -103,7 +109,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content("+#{currency(500)}")
       expect(page).to have_content("+#{currency(250)}")
 
-      find("div.group.cursor-pointer", text: income_category.name).click
+      click_link income_category.name
       expect(page).to have_current_path(category_path(income_category))
     end
 

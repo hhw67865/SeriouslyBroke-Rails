@@ -1,9 +1,24 @@
-<div class="group cursor-pointer" onclick="window.location='<%= category_path(category) %>'">
+<%# THE WHOLE CARD IS A LINK, NOT A DIV THAT NAVIGATES (design review B1).
+
+    It was `<div onclick="window.location=…">`: no `href`, no tab stop, no focus ring, nothing for
+    a screen reader to announce and no middle-click or ⌘-click to open in a new tab. The card was
+    reachable by mouse alone, on the index that is the app's main way into a category.
+
+    A BLOCK `<a>` ROUND THE CARD rather than a stretched-link pseudo-element, because there is
+    nothing else clickable inside it — no nested link to be swallowed — so the simplest structure
+    is also the correct one. The heading keeps its own text; the link's accessible name is the
+    whole card, which reads as the category's name and its figures, and that is what a user
+    arrowing through this grid wants to hear.
+
+    `block` and `h-full` because an anchor is inline by default and the grid stretches its
+    children: without both, the card collapses to the height of its text. The focus ring comes
+    from custom.css's shared `:focus-visible` rule — no per-site treatment. %>
+<a href="<%= category_path(category) %>" class="group block h-full rounded">
   <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
     <div class="p-5 flex-grow">
       <div class="flex justify-between items-start mb-4">
         <div class="flex items-center">
-          <div class="w-10 h-10 rounded-md flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
+          <div class="w-10 h-10 rounded flex items-center justify-center" style="background-color: <%= category.display_color %>;">
             <% case category.category_type %>
             <% when "expense" %>
               <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
@@ -13,11 +28,11 @@
           </div>
           <div class="ml-3">
             <h3 class="text-lg font-medium text-gray-900"><%= category.name %></h3>
-            <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
+            <span class="inline-flex items-center rounded px-2 py-1 text-xs font-medium ring-1 ring-inset ring-gray-200 mt-1">
               <%= category.category_type.capitalize %>
             </span>
             <% unless category.tracked? %>
-              <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium text-gray-400 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
+              <span class="inline-flex items-center rounded px-2 py-1 text-xs font-medium text-gray-400 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
                 Untracked
               </span>
             <% end %>
@@ -60,7 +75,7 @@
               <% progress = holdings.progress_percentage %>
               <div class="mt-2" data-goal-progress>
                 <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand" %>"
+                  <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand-dark" %>"
                        style="width: <%= progress %>%;"></div>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">
@@ -114,11 +129,15 @@
     </div>
   </div>
   
-    <%# Hover indicator %>
-    <div class="bg-gray-50 px-5 py-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <%# THE FOOTER IS ALWAYS THERE NOW (design review B1). It was `opacity-0
+        group-hover:opacity-100` — an affordance that only appeared once you had already found the
+        thing it describes, and never at all on a touch screen or to a keyboard user, while still
+        occupying its strip of the card at every size. Permanently visible, and worded as what it
+        is rather than as an instruction about a mouse. %>
+    <div class="bg-gray-50 px-5 py-3 border-t border-gray-100">
       <div class="text-center">
-        <span class="text-sm text-gray-500">Click to view details</span>
+        <span class="text-sm text-gray-600 group-hover:text-gray-900 transition-colors">View details</span>
       </div>
     </div>
   </div>
-</div> 
+</a>

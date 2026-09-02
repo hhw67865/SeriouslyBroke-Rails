@@ -1,7 +1,7 @@
 <!-- Category Header Banner -->
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6 p-6">
   <div class="flex items-center">
-    <div class="w-14 h-14 rounded flex items-center justify-center" style="background-color: <%= category.color || "#C9C78B" %>;">
+    <div class="w-14 h-14 rounded flex items-center justify-center" style="background-color: <%= category.display_color %>;">
       <% case category.category_type %>
       <% when "expense" %>
         <%= heroicon "arrow-trending-down", options: { class: "h-7 w-7 text-white" } %>
@@ -11,11 +11,11 @@
     </div>
     <div class="ml-4">
       <h1 class="text-2xl sm:text-3xl font-bold text-gray-900"><%= category.name %></h1>
-      <span class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium ring-1 ring-inset ring-gray-200 mt-1">
+      <span class="inline-flex items-center rounded px-2.5 py-1 text-sm font-medium ring-1 ring-inset ring-gray-200 mt-1">
         <%= category.category_type.capitalize %>
       </span>
       <% unless category.tracked? %>
-        <span class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-medium text-gray-500 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
+        <span class="inline-flex items-center rounded px-2.5 py-1 text-sm font-medium text-gray-500 ring-1 ring-inset ring-gray-200 mt-1 ml-1">
           Untracked
         </span>
       <% end %>

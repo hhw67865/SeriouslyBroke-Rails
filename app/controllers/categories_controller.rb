@@ -45,9 +45,26 @@ class CategoriesController < ApplicationController
   # `/categories/new?type=savings` — a bookmark, a browser history entry, a link in an old email —
   # took the whole page down. `#known_type` is the same check `#set_categories` runs; an
   # unrecognised type simply selects nothing, which is what this form does with no `type` at all.
+  #
+  # THE FORM OPENS WITH BOTH RADIO SETS ANSWERED (design review H2/H3). It used to open with
+  # neither: no type tile checked and no colour swatch ringed, which made two questions look
+  # optional and produced two separate failure modes — a 422 saying "Category type can't be blank"
+  # over a card the user had read as decorative, and a `color: ""` that painted the saved
+  # category's chip as a transparent hole.
+  #
+  # EXPENSE, because it is what four in five categories are and it is the tab the New button is
+  # pressed from; the brand sage, because that is what an uncoloured category has always been
+  # painted (`Category::DEFAULT_COLOR`) — so the default is the truth the rest of the app was
+  # already telling, now stated on the form where it can be changed.
+  #
+  # `#create` DOES NOT INHERIT THIS, deliberately: it builds from `category_params`, so a blank
+  # type submitted by a tampered or scripted request still fails its presence validation. The
+  # default is an affordance, not a second writer.
   def new
-    @category = current_user.categories.new
-    @category.category_type = known_type(params[:type]) if known_type(params[:type])
+    @category = current_user.categories.new(
+      category_type: known_type(params[:type]) || :expense,
+      color: Category::DEFAULT_COLOR
+    )
   end
 
   # GET /categories/1/edit
