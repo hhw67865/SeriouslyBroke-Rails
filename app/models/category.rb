@@ -153,6 +153,20 @@ class Category < ApplicationRecord
   # funded when the money runs out. `name` is unique per user, so the pair is total.
   scope :in_fill_order, -> { expenses.where.not(funded_since: nil).order(:priority, :name) }
 
+  # THE CATEGORIES THE BUDGET PAGE DRAWS A CARD FOR — the ones a rule actually fills. `Pool
+  # #in_fill_order` was this set on the pool side (`joins(:budgets).distinct`) and the name is taken
+  # here by the WATERFALL's set, which is wider: a goal fed only by hand holds money and is in the
+  # fill order without any rule naming it.
+  #
+  # A SUBQUERY RATHER THAN `joins(:budgets).distinct`, and that is not a style choice.
+  # `Pool#in_fill_order`'s own comment records the trap: `SELECT DISTINCT` refuses an ORDER BY over
+  # a column the narrowed select list does not carry, so `.in_fill_order.with_a_rule.ids` — which
+  # is exactly what `.apply_fill_order` asks below — would raise `PG::InvalidColumnReference`
+  # against a scope that composes perfectly well everywhere else. An `IN (SELECT category_id …)`
+  # has no such edge, and a NULL inside an `IN` list simply never matches (it is `NOT IN` that
+  # would be the hazard).
+  scope :with_a_rule, -> { where(id: Budget.where.not(category_id: nil).select(:category_id)) }
+
   # THE LATCH ITSELF, CASE-INSENSITIVE — matching, not merely resembling, the `uniqueness:
   # { case_sensitive: false }` validation above. An exact-case `where(name: OPENING_BALANCE_NAME)`
   # would miss a category a user already named "opening balance" through the ordinary categories
@@ -211,6 +225,82 @@ class Category < ApplicationRecord
 
     expense? && pool.pool_type_account?
   end
+
+  # THE FILL ORDER, WRITTEN (two-ledger spec §2) — the port of `Pool.apply_fill_order`, and the only
+  # writer for `categories.priority` outside the category form. `category_ids` is the user's
+  # rule-carrying holders in the order they were just dragged into. Answers the USER on success and
+  # NIL on refusal, which is the whole vocabulary the caller needs: nothing partial exists.
+  #
+  # THE SCOPE IS THE USER, WHERE THE POOL ERA'S WAS ONE ACCOUNT, and that is the model change rather
+  # than a simplification. Priority used to be compared only inside an account because the fill was
+  # per-account (`account.child_pools.by_priority`); `AllocationCalculator` now walks
+  # `Category.in_fill_order` over ONE root, so every holder is ranked against every other and there
+  # is exactly one list on the page to drag.
+  #
+  # DENSE, not "shift the moved row and leave the rest": `in_fill_order` is `[priority, name]`, so a
+  # sparse rewrite leaves ties whose winner is decided by a name — the defect Plan 1 shipped in its
+  # waterfall. The rewrite is dense over the user's WHOLE holder set, not merely over the submitted
+  # ones, and each unsubmitted holder KEEPS ITS PLACE in the sequence: a savings goal with no rule
+  # draws no card and would otherwise be left on an old number colliding with a renumbered one, and
+  # the tie-break the density exists to defeat would decide which of the two gets funded first. Its
+  # number moves, its rank does not.
+  #
+  # EVERY REFUSAL IS THE SAME REFUSAL and writes nothing at all:
+  #   * an id that is not this user's (`user.categories` is the only lookup, so a stranger's id
+  #     simply is not found and the size falls short),
+  #   * a duplicate id (which would make the list shorter than it looks and silently drop one),
+  #   * a list that is not the user's whole `in_fill_order.with_a_rule` set — a page whose rules
+  #     have changed under it, submitting an order for categories that are no longer the ones being
+  #     ordered. Nothing is written and the page comes back saying so.
+  #
+  # TWO REORDERS AT ONCE ARE LAST-WRITE-WINS, AND THAT IS A DECISION RATHER THAN A LEAVING.
+  # `user.lock!` is the first statement inside the transaction, exactly as `account.lock!` was and
+  # for the same reason: without it two tabs issue their UPDATEs in their own submitted orders, take
+  # the same rows in DIFFERENT orders, and Postgres breaks the cycle by killing one with a deadlock
+  # — a 500 on a button click. Serialised behind the user row, the second reorder lands on top of
+  # the first, whole. The staleness check is INSIDE the lock for the same reason: a rule deleted
+  # between the check and the write would otherwise slip past a guard that had already passed.
+  #
+  # Nothing here rescues. `update!` runs the full validation stack on every row, deliberately — this
+  # is the only writer for `priority` and a reorder must not be the request that sneaks an invalid
+  # row past the model — so a row that was ALREADY invalid raises RecordInvalid, the transaction
+  # rolls back, and BudgetPageController#reorder turns it into the same 422 as every other refusal
+  # with the offending row named.
+  def self.apply_fill_order(user:, category_ids:)
+    ids = Array(category_ids).map(&:to_s)
+    categories = fill_order_categories(user, ids)
+    return if categories.nil?
+
+    transaction do
+      user.lock!
+      next unless user.categories.in_fill_order.with_a_rule.ids.map(&:to_s).sort == ids.sort
+
+      write_fill_order(user, ids, categories)
+      user
+    end
+  end
+
+  # The submitted categories dropped into the slots the submitted categories already hold,
+  # everything else left where it stands, and the whole holder set renumbered 0,1,2… off the result.
+  def self.write_fill_order(user, ids, categories)
+    queue = ids.dup
+    user.categories.in_fill_order
+      .map { |category| categories.key?(category.id.to_s) ? categories.fetch(queue.shift) : category }
+      .each_with_index { |category, index| category.update!(priority: index) }
+  end
+  private_class_method :write_fill_order
+
+  # The submitted categories keyed by their id as it arrived on the wire, or NIL if the list itself
+  # is not a list of this user's categories: empty, holding a duplicate (which would make it shorter
+  # than it looks and drop one), or naming an id `user.categories` does not find — someone else's,
+  # or nothing at all, and the two deserve the same answer.
+  def self.fill_order_categories(user, ids)
+    return if ids.empty? || ids.uniq.size != ids.size
+
+    categories = user.categories.where(id: ids).index_by { |category| category.id.to_s }
+    categories if categories.size == ids.size
+  end
+  private_class_method :fill_order_categories
 
   # DOES THIS CATEGORY HOLD MONEY? (two-ledger spec §3.) Two facts and no third: only an EXPENSE
   # category can hold — income lands in available and is allocated out of it — and it holds from

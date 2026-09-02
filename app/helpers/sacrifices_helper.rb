@@ -12,7 +12,8 @@ module SacrificesHelper
   # sometimes be moved, a landlord's rent cannot.
   #
   # The symbol is `SacrificePresenter::Row#reason`, decided there off `Budget#cadence`; only the
-  # words are this module's, exactly as `BudgetPageHelper#budget_rule_reason` splits the same way.
+  # words are this module's. (`BudgetPageHelper#budget_rule_reason` used to split the same way for
+  # the Budget page's orphan rows; it is deleted with them — the split itself is the pattern.)
   def sacrifice_fixed_reason(row)
     row.reason == :dated ? "can't cut — dated" : "fixed — the bill is what it is"
   end

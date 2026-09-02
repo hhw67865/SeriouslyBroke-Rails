@@ -14,14 +14,15 @@ require "rails_helper"
 RSpec.describe "Suggestion dismissals", type: :request do
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400) }
   let(:stranger) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let(:utilities) { create(:category, :expense, user: user, name: "Utilities", pool: checking) }
+  # HOLDING NOTHING YET, which is what a proposing suggestion is about (two-ledger spec §4). The
+  # account this category used to point at is not part of the question any more — a dated bill is
+  # detected off the ITEM's history and the owner it proposes is the category itself.
+  let(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
   let(:phone) { create(:item, category: utilities, name: "Phone") }
 
   # TWO PAYMENTS A WHOLE MONTH APART: the measured dated-bill shape, the same one the system spec
   # plants. The history is planted rather than the engine stubbed, for the reason that file gives.
   before do
-    user.update!(default_account: checking)
     create(:entry, item: phone, amount: 85, date: Date.current - 2.months)
     create(:entry, item: phone, amount: 85, date: Date.current - 1.month)
     sign_in user, scope: :user

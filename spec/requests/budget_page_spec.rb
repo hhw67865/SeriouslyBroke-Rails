@@ -103,58 +103,53 @@ RSpec.describe "Budget page declaration", type: :request do
   end
 
   # THE FILL ORDER'S OWNERSHIP BOUNDARY. `PATCH /budget/reorder` is the app's only writer for
-  # `pools.priority` outside the pool form, and unlike the declaration above it takes IDS off the
-  # wire — so the question here is whose pools they are and whether they are one account's.
+  # `categories.priority` outside the category form, and unlike the declaration above it takes IDS
+  # off the wire — so the question here is whose categories they are.
+  #
+  # ONE LIST, WHERE THERE WERE BANDS (two-ledger spec §2). The wire carried `pool_ids[]` for one
+  # ACCOUNT, because priority was only compared inside an account; `AllocationCalculator` fills
+  # every holder off one root now, so the whole page is one order. TWO EXAMPLES ARE DELETED WITH
+  # THE BANDS — "leaves the same user's other account untouched" and "refuses two accounts in one
+  # order" — because neither names a shape a request can be composed in: there is no second list
+  # for a reorder to leak into and no account to mix.
   #
   # A request spec, because the browser can only ever submit the order the page rendered: a list
-  # mixing two accounts, naming another user's pool or missing one of its own is a fact about the
-  # route, and every one of them must leave `priority` exactly as it was.
+  # naming another user's category or missing one of its own is a fact about the route, and every
+  # one of them must leave `priority` exactly as it was.
   describe "the fill order" do
-    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-    let(:savings) { create(:pool, :account, user: user, name: "Savings") }
-    let!(:rent) { envelope("Rent", priority: 0) }
-    let!(:groceries) { envelope("Groceries", priority: 1) }
-    let!(:gifts) { envelope("Gifts", priority: 3, account: savings) }
+    let!(:rent) { holder("Rent", priority: 0) }
+    let!(:groceries) { holder("Groceries", priority: 1) }
 
-    def envelope(name, priority:, account: checking)
-      pool = create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
-      create(:pool_budget, :per_period_rate, pool: pool, amount: 100)
-      pool
+    # A CATEGORY THAT HOLDS MONEY AND CARRIES A RULE — the two conditions `Category.apply_fill_order`
+    # refuses a list that is not exactly the set of.
+    def holder(name, priority:)
+      category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
+      create(:budget, :per_period_rate, pool: nil, category: category, amount: 100)
+      category
     end
 
-    def reorder(ids) = patch(budget_page_reorder_path, params: { pool_ids: ids })
+    def reorder(ids) = patch(budget_page_reorder_path, params: { category_ids: ids })
 
-    # The whole account, name by name — a count would pass on a set that had been shuffled.
-    def fill_order(account = checking)
-      account.child_pools.by_priority.pluck(:name, :priority)
-    end
+    # The whole holder set, name by name — a count would pass on a set that had been shuffled.
+    def fill_order = user.categories.in_fill_order.pluck(:name, :priority)
 
-    describe "a list of one account's pools in a new order", :aggregate_failures do
+    describe "a list of the user's categories in a new order", :aggregate_failures do
       it "writes a dense 0,1,2… and comes back to the page" do
         reorder([groceries.id, rent.id])
 
         expect(response).to redirect_to(budget_page_path)
         expect(fill_order).to eq([["Groceries", 0], ["Rent", 1]])
       end
-
-      # The reindex is per account and nothing else moves — the same user's other account is
-      # named on the wire nowhere and must read exactly as it did.
-      it "leaves the same user's other account untouched" do
-        reorder([groceries.id, rent.id])
-
-        expect(gifts.reload.priority).to eq(3)
-        expect(fill_order(savings)).to eq([["Gifts", 3]])
-      end
     end
 
     # EVERY REFUSAL, ASSERTED IN BOTH DIRECTIONS: a pinned row that did not move AND the whole
-    # account's order, because a pinned row alone would pass on a rewrite that moved everything
-    # else and a whole-set comparison alone reads as a count.
+    # order, because a pinned row alone would pass on a rewrite that moved everything else and a
+    # whole-set comparison alone reads as a count.
     describe "a list this user cannot have submitted", :aggregate_failures do
       # The bad id sits MID-LIST rather than on the end, so a guard that stopped checking after
       # the first or last element would not pass this.
-      it "refuses another user's pool" do
-        intruder = create(:pool, :budget_pool, name: "Theirs")
+      it "refuses another user's category" do
+        intruder = create(:category, :expense, :funded, name: "Theirs")
 
         reorder([groceries.id, intruder.id, rent.id])
 
@@ -163,18 +158,10 @@ RSpec.describe "Budget page declaration", type: :request do
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
 
-      it "refuses two accounts in one order" do
-        reorder([groceries.id, rent.id, gifts.id])
-
-        expect(response).to have_http_status(:unprocessable_content)
-        expect(gifts.reload.priority).to eq(3)
-        expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
-      end
-
       # A PARTIAL LIST IS A REFUSAL, NOT A PARTIAL WRITE: Rent would keep priority 0 and
       # Groceries would be written to 0 as well, and `[priority, name]` — not the user — would
       # decide which of the two gets funded first.
-      it "refuses an order missing one of the account's own pools" do
+      it "refuses an order missing one of the user's own rule-carrying categories" do
         reorder([groceries.id])
 
         expect(response).to have_http_status(:unprocessable_content)
@@ -182,20 +169,12 @@ RSpec.describe "Budget page declaration", type: :request do
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
 
-      it "refuses a duplicated id, which would silently drop a pool" do
+      it "refuses a duplicated id, which would silently drop a category" do
         reorder([groceries.id, groceries.id])
 
         expect(response).to have_http_status(:unprocessable_content)
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
-
-      # DELETED (plan 3, task 6): "refuses an account-less pool". A pool no account holds is in
-      # no fill order, so an order naming one was meaningless rather than merely wrong — but
-      # `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` now
-      # refuse the pool itself, so the request cannot be composed. `.fill_order_account`'s
-      # account-less arm is kept and now selects nothing; see `Pool::REFUSALS` and the task 6
-      # report. The refusals above — a foreign id, a short list, a duplicate — cover the same
-      # branch through shapes that still exist.
 
       it "says nothing was changed rather than failing silently" do
         reorder([groceries.id])
@@ -203,42 +182,43 @@ RSpec.describe "Budget page declaration", type: :request do
         expect(response.body).to include("nothing was changed")
       end
 
-      # `Pool.apply_fill_order` writes through `update!`, so a row that was ALREADY invalid
-      # before the reorder — a `start_date` a data fix left NULL — raises RecordInvalid from a
-      # reindex that had nothing to do with it. That must be this route's own refusal, naming
+      # `Category.apply_fill_order` writes through `update!`, so a row that was ALREADY invalid
+      # before the reorder — a `target_amount` a data fix left at zero — raises RecordInvalid from
+      # a reindex that had nothing to do with it. That must be this route's own refusal, naming
       # the row the user has to fix, rather than an unrescued 500 on a button they were right
       # to press.
-      it "refuses at 422, naming the row, when a pool in the account is already invalid" do
-        rent.update_column(:start_date, nil) # rubocop:disable Rails/SkipsModelValidations -- the point
+      it "refuses at 422, naming the row, when a category is already invalid" do
+        rent.update_column(:target_amount, 0) # rubocop:disable Rails/SkipsModelValidations -- the point
 
         reorder([groceries.id, rent.id])
 
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include("Rent could not be saved (start date can")
+        expect(response.body).to include("Rent could not be saved (target amount must be greater than 0)")
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
     end
 
-    # THE TWO SEMANTICS THIS TASK INVENTED, and neither was reachable by the fixtures above:
-    # every pool in them carries a rule, so a list omitting a rule-less pool and the
-    # slot-preserving branch that keeps such a pool's rank were both unexercised. The demo seeds
-    # are this shape — `db/seeds.rb` moves four savings pools into Checking with no rule at all —
-    # and under the brief's literal guard every reorder the demo user can make was refused.
+    # THE TWO SEMANTICS THE POOL ERA INVENTED, RE-ANCHORED. Every category in the fixtures above
+    # carries a rule, so a list omitting a rule-less HOLDER and the slot-preserving branch that
+    # keeps such a holder's rank were both unexercised. A savings goal is exactly this shape — it
+    # holds money and is in the waterfall, and no rule fills it — so under a literal
+    # "submit the whole fill order" guard every reorder a user with a goal can make was refused.
     #
-    # Checking reads Rent(0, rule), Emergency(1, none), Groceries(2, rule), Vacation(3, none).
-    describe "an account holding pools no rule fills", :aggregate_failures do
-      let!(:emergency) { unruled("Emergency", priority: 1) }
-      let!(:vacation) { unruled("Vacation", priority: 3) }
+    # The user reads Rent(0, rule), Emergency(1, goal), Groceries(2, rule), Vacation(3, goal).
+    describe "holders no rule fills", :aggregate_failures do
+      let!(:emergency) { goal("Emergency", priority: 1) }
+      let!(:vacation) { goal("Vacation", priority: 3) }
 
       before { groceries.update!(priority: 2) }
 
-      def unruled(name, priority:)
-        create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+      def goal(name, priority:)
+        create(:category, :expense, :savings, user: user, name: name, priority: priority)
       end
 
-      # The pair to "refuses an order missing one of the account's own pools": omitting a pool a
-      # rule FILLS is a refusal, omitting one no rule fills is the ordinary case.
-      it "accepts a list naming only the pools a rule fills" do
+      # The pair to "refuses an order missing one of the user's own rule-carrying categories":
+      # omitting a category a rule FILLS is a refusal, omitting one no rule fills is the ordinary
+      # case.
+      it "accepts a list naming only the categories a rule fills" do
         reorder([groceries.id, rent.id])
 
         expect(response).to redirect_to(budget_page_path)
@@ -247,9 +227,9 @@ RSpec.describe "Budget page declaration", type: :request do
 
       # THE SLOT-PRESERVING BRANCH. Emergency and Vacation are named nowhere on the wire; the two
       # that are swap with each other and everything else holds its place. Renumbering only the
-      # submitted pools would leave Emergency on 1 tied with Rent on 1, and `[priority, name]` —
-      # not the user — would decide which of the two Home fills first.
-      it "keeps an unruled pool's rank while renumbering the account densely" do
+      # submitted categories would leave Emergency on 1 tied with Rent on 1, and `[priority, name]`
+      # — not the user — would decide which of the two the waterfall fills first.
+      it "keeps a rule-less holder's rank while renumbering the fill order densely" do
         reorder([groceries.id, rent.id])
 
         expect(fill_order).to eq([["Groceries", 0], ["Emergency", 1], ["Rent", 2], ["Vacation", 3]])

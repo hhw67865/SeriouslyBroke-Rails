@@ -1,9 +1,9 @@
-<%# ▲▼ — the fill order without JavaScript. Locals: `group`, `band`.
+<%# ▲▼ — the fill order without JavaScript. Locals: `group`, `groups`.
 
     TWO PLAIN FORMS, not two Stimulus actions, and that is the point of them: each button already
-    carries the whole band in its new order as hidden `pool_ids[]` fields, so the reorder works
-    with scripting off and is testable without synthesising drag events. reorder_controller does
-    the same thing from the DOM when a card is dropped; both submit one shape to one endpoint.
+    carries the whole order as hidden `category_ids[]` fields, so the reorder works with scripting
+    off and is testable without synthesising drag events. reorder_controller does the same thing
+    from the DOM when a card is dropped; both submit one shape to one endpoint.
 
     Named, not just glyphed: `Capybara.enable_aria_label` is on, and "Move Groceries up" is also
     what a screen reader has to hear — a button whose only text is ▲ says nothing about what
@@ -11,19 +11,19 @@
 
     THE LIST BAKED IN HERE IS AS OLD AS THE PAGE, and that is the accepted cost of the two
     builders: a button pressed after a rule was added or deleted in another tab submits a set
-    that is no longer the account's `in_fill_order` set, and `Pool.apply_fill_order` refuses it
-    whole. The stale press writes nothing and says to reload, which is the same answer a stale
-    drag gets — no half-order is reachable from either. %>
+    that is no longer the user's `in_fill_order.with_a_rule` set, and `Category.apply_fill_order`
+    refuses it whole. The stale press writes nothing and says to reload, which is the same answer
+    a stale drag gets — no half-order is reachable from either. %>
 <span class="flex items-center gap-1">
   <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
     <%= button_to glyph,
                   budget_page_reorder_path,
                   method: :patch,
-                  params: { pool_ids: reordered_pool_ids(band.groups, group, offset) },
-                  disabled: reorder_edge?(band.groups, group, offset),
+                  params: { category_ids: reordered_category_ids(groups, group, offset) },
+                  disabled: reorder_edge?(groups, group, offset),
                   form_class: "inline-block leading-none",
-                  aria: { label: "Move #{group.pool.name} #{direction}" },
-                  title: "Move #{group.pool.name} #{direction}",
+                  aria: { label: "Move #{group.category.name} #{direction}" },
+                  title: "Move #{group.category.name} #{direction}",
                   class: "px-1 text-xs rounded border border-gray-200 text-gray-500 " \
                          "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \
                          "disabled:text-gray-200 disabled:border-gray-100" %>

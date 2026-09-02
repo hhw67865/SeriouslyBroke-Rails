@@ -4,7 +4,7 @@
 #
 # A singular non-RESTful controller rather than an action on BudgetsController, because the two
 # answer different questions: `budgets#index` would be a list of Budget rows, and this page is a
-# reading of every rule GROUPED by the pool it fills and ordered by when the money arrives. The
+# reading of every rule GROUPED by the category it fills and ordered by when the money arrives. The
 # route is `get "budget"`, named `budget_page` — `budget_path` already belongs to the member
 # routes of `resources :budgets`.
 class BudgetPageController < ApplicationController
@@ -45,12 +45,17 @@ class BudgetPageController < ApplicationController
     end
   end
 
-  # THE FILL ORDER (spec §8: "drag-ordered — this is where funding priority is set"). One
-  # account's envelopes arrive as `pool_ids[]` in their new order and `Pool.apply_fill_order`
-  # writes `priority: index` over exactly that list, or refuses the whole thing.
+  # THE FILL ORDER (spec §8: "drag-ordered — this is where funding priority is set"). The user's
+  # rule-carrying categories arrive as `category_ids[]` in their new order and
+  # `Category.apply_fill_order` writes `priority: index` over exactly that list, or refuses the
+  # whole thing.
+  #
+  # ONE LIST, WHERE THERE WERE BANDS (two-ledger spec §2). The wire used to carry `pool_ids[]` for
+  # ONE ACCOUNT, because priority was only compared inside an account; `AllocationCalculator` fills
+  # every holder off one root now, so the whole page is one order and one reorder.
   #
   # THE SAME SCOPING DISCIPLINE AS #update, one level down: every id goes through
-  # `current_user.pools` inside the model method, so an id that is not this user's is not found
+  # `current_user.categories` inside the model method, so an id that is not this user's is not found
   # rather than found and refused — and the refusal is indistinguishable from the one a stale
   # page gets, which is the right answer for both.
   #
@@ -58,18 +63,18 @@ class BudgetPageController < ApplicationController
   # written and the order on screen is still the order in the database — there is nothing to
   # redirect to that would say more.
   #
-  # A ROW THAT WAS ALREADY INVALID IS A REFUSAL, NOT A 500. `Pool.apply_fill_order` writes through
-  # `update!`, so a pool anywhere in the account carrying a pre-existing validation failure — a
-  # name emptied by a data fix, a `start_date` backfilled to NULL — raises RecordInvalid, rolls
-  # the whole reindex back, and would otherwise reach the user as a crash on a button they were
-  # right to press. It is the same outcome as every other refusal (nothing written, page
-  # re-rendered at 422) and it says WHICH row, because that row is the only thing they can fix.
+  # A ROW THAT WAS ALREADY INVALID IS A REFUSAL, NOT A 500. `Category.apply_fill_order` writes
+  # through `update!`, so a category carrying a pre-existing validation failure — a name emptied by
+  # a data fix, a `priority` backfilled to NULL — raises RecordInvalid, rolls the whole reindex
+  # back, and would otherwise reach the user as a crash on a button they were right to press. It is
+  # the same outcome as every other refusal (nothing written, page re-rendered at 422) and it says
+  # WHICH row, because that row is the only thing they can fix.
   def reorder
-    account = Pool.apply_fill_order(user: current_user, pool_ids: params.permit(pool_ids: [])[:pool_ids])
+    ordered = Category.apply_fill_order(user: current_user, category_ids: params.permit(category_ids: [])[:category_ids])
 
-    return redirect_to(budget_page_path, notice: "#{account.name} fills in that order now.") if account
+    return redirect_to(budget_page_path, notice: "Your money fills them in that order now.") if ordered
 
-    refuse("That order didn't match this account's envelopes — nothing was changed. Reload and try again.")
+    refuse("That order didn't match your categories — nothing was changed. Reload and try again.")
   rescue ActiveRecord::RecordInvalid => e
     refuse(
       "#{e.record.name} could not be saved " \

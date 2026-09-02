@@ -258,16 +258,17 @@ class Budget < ApplicationRecord
   # rule in the database. Refusing the pair would refuse every migrated rule. Task 8 drops
   # `budgets.pool_id` and this becomes "a rule belongs to a category", full stop.
   #
-  # THE MESSAGE STILL NAMES THE POOL, and that is about the screen rather than the schema:
+  # THE MESSAGE NAMES THE CATEGORY, and that is about the screen rather than the schema:
   # `budgets/_form` is the only form that can submit an owner-less rule, it renders `errors[:base]`
-  # in its own notification, and it offers no owner picker at all (see its header) — so the sentence
-  # the user reads has to describe the form they are looking at. Task 7's category rule form gets
-  # its own wording when there is a second screen to be wrong about.
+  # in its own notification, and the control it offers is a CATEGORY picker (two-ledger spec §3,
+  # Task 5) — so the sentence the user reads describes the form they are looking at. It said "must
+  # belong to a pool" while the picker offered pools, and the pool the sentence pointed at is the
+  # layer being deleted.
   #
-  # ON `:base` RATHER THAN `:pool` for that reason: an owner-less rule is a fact about the whole
+  # ON `:base` RATHER THAN `:category` for that reason: an owner-less rule is a fact about the whole
   # record, not about a control the form offers.
   def must_have_an_owner
-    errors.add(:base, "must belong to a pool") unless pool_mode? || category_mode?
+    errors.add(:base, "must belong to a category") unless pool_mode? || category_mode?
   end
 
   def pool_must_not_be_an_account

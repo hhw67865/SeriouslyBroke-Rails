@@ -210,30 +210,15 @@ class Pool < ApplicationRecord
   # added that a rule CAN own.
   scope :rule_owners, -> { where.not(pool_type: :account) }
 
-  # THE POOLS AN ACCOUNT ACTUALLY FILLS, and therefore the ones a fill order is over: an envelope
-  # with no funding rule asks for nothing, AllocationCalculator#fill drops its zero-ask row before
-  # the waterfall reaches it, and the Budget page — which groups rules under the pool they fill —
-  # has no card to drag for it. One reader for that set, because `.apply_fill_order` refuses a
-  # list that is not exactly it and BudgetPagePresenter renders exactly it.
-  #
-  # `distinct` MAKES THIS ORDER BADLY, and the failure is a 500 rather than a wrong order —
-  # `PG::InvalidColumnReference: for SELECT DISTINCT, ORDER BY expressions must appear in select
-  # list`. The review note said this fires on `.in_fill_order.by_priority`; MEASURED ON THE DEMO IT
-  # DOES NOT, and the correction is mine. `distinct` emits `SELECT DISTINCT pools.*`, which already
-  # contains `priority` and `name`, so that pair composes fine and answers 14 pools.
-  #
-  # What actually raises is anything that NARROWS the select list out from under the ORDER BY, or
-  # orders by the joined table. All four measured:
-  #
-  #   Pool.in_fill_order.by_priority.ids          # raises — `ids` selects only pools.id
-  #   Pool.in_fill_order.by_priority.pluck(:id)   # raises — same reason
-  #   Pool.in_fill_order.select(:id).by_priority  # raises — same reason
-  #   Pool.in_fill_order.order("budgets.amount")  # raises — budgets.amount is not selected
-  #
-  # `.apply_fill_order` sits one keystroke from the first of those: it asks
-  # `account.child_pools.in_fill_order.ids`, which is safe only because it does NOT order. Order in
-  # Ruby, as BudgetPagePresenter does with its `[priority, name]` sort.
-  scope :in_fill_order, -> { joins(:budgets).distinct }
+  # `scope :in_fill_order` AND `.apply_fill_order` ARE DELETED (two-ledger spec §2/§5, Task 5). They
+  # were the set an account's fill order was over and the only writer for `pools.priority` outside
+  # the pool form, and both are ported to `Category` — where the waterfall now lives
+  # (`AllocationCalculator` walks `Category.in_fill_order` over ONE root, so priority is no longer
+  # compared inside an account). Nothing in `app/` called either after the Budget page moved, and
+  # `Category.apply_fill_order` carries their whole argument forward: the dense renumber, the
+  # slot-preserving branch for a holder no rule fills, the four refusals and the lock. `pools
+  # .priority` itself survives — `Pool.by_priority` still orders Home's rows — it simply has no
+  # drag behind it any more.
 
   attr_accessor :create_expense_category
 
@@ -302,106 +287,6 @@ class Pool < ApplicationRecord
   # Configure searchable fields
   searchable :name, label: "Name"
   searchable :category, through: :categories, column: :name, label: "Category"
-
-  # THE FILL ORDER, WRITTEN — the only writer for `priority` outside the pool form, and the one
-  # the Budget page's drag and its ▲▼ buttons both go through. `pool_ids` is ONE account's
-  # rule-carrying envelopes in the order the user just put them in. Answers the account on
-  # success and NIL on refusal, which is the whole vocabulary the caller needs: nothing partial
-  # exists.
-  #
-  # DENSE, not "shift the moved row and leave the rest": `by_priority` is `[priority, name]`, so
-  # a sparse rewrite leaves ties whose winner is decided by a name — the defect Plan 1 shipped in
-  # its waterfall. The rewrite is dense over the account's WHOLE set of pools, not merely over
-  # the submitted ones, and each unsubmitted pool KEEPS ITS PLACE in the sequence: a pool with no
-  # rule would otherwise be left on an old number that collides with a renumbered one, and the
-  # tie-break the density exists to defeat would decide which of the two Home draws first.
-  # Its number moves, its rank does not.
-  #
-  # EVERY REFUSAL IS THE SAME REFUSAL and writes nothing at all:
-  #   * an id that is not this user's (`user.pools` is the only lookup — an id belonging to
-  #     someone else simply is not found, so `pools.size` falls short),
-  #   * ids from two accounts, or from none (a pool with no account is funded by no
-  #     distribution, so it has no fill order to be in),
-  #   * a duplicate id (which would make the list shorter than it looks and silently drop a pool),
-  #   * a list that is not the account's whole `in_fill_order` set — a page whose rules have
-  #     changed under it, submitting an order for pools that are no longer the ones being
-  #     ordered. Nothing is written and the page comes back saying so, rather than a partial
-  #     write leaving an order nobody chose.
-  #
-  # TWO REORDERS AT ONCE ARE LAST-WRITE-WINS, AND THAT IS A DECISION RATHER THAN A LEAVING.
-  # `account.lock!` IS THE FIRST STATEMENT INSIDE THE TRANSACTION, exactly as it is in
-  # AllocationCommitter#call and for a related reason: without it two tabs reordering the same
-  # account issue their UPDATEs in their own submitted orders, take the same pool rows in
-  # DIFFERENT orders, and Postgres breaks the cycle by killing one with a deadlock — a 500 on a
-  # button click. Serialised behind the account row, the second reorder simply lands on top of
-  # the first, whole. It cannot land HALF on top: the submitted list must be the account's entire
-  # `in_fill_order` set, so every ordered pool is rewritten by whichever transaction commits last
-  # and no blend of two orders exists. The staleness check moved INSIDE the lock for the same
-  # reason — a rule deleted between the check and the write would otherwise slip past a guard
-  # that had already passed.
-  #
-  # Nothing here rescues. `update!` runs the full validation stack on every row, which is
-  # deliberate — this is the only writer for `priority` and a reorder must not be the request
-  # that sneaks an invalid row past the model — so a row that was ALREADY invalid before the
-  # reorder (a name emptied by a migration, a start_date backfilled to NULL) raises
-  # RecordInvalid, the transaction rolls back, and BudgetPageController#reorder turns it into the
-  # same 422 as every other refusal with the offending row named. A rescue here would have to
-  # invent a second failure vocabulary beside `nil`.
-  def self.apply_fill_order(user:, pool_ids:)
-    ids = Array(pool_ids).map(&:to_s)
-    pools = fill_order_pools(user, ids)
-    return if pools.nil?
-
-    account = fill_order_account(user, pools.values)
-    return if account.nil?
-
-    transaction do
-      account.lock!
-      next unless account.child_pools.in_fill_order.ids.map(&:to_s).sort == ids.sort
-
-      write_fill_order(user, account, ids, pools)
-      account
-    end
-  end
-
-  # The submitted pools dropped into the slots the submitted pools already hold, everything else
-  # left where it stands, and the whole account renumbered 0,1,2… off the result.
-  #
-  # `user.pools.where(account_id:)` rather than `account.child_pools`, so the write set is scoped
-  # by the same ownership the ids were: `child_pools` walks a foreign key, and that the rows
-  # behind it belong to this user is today only true because `account_matches_pool_type` says so
-  # at save time. A validation is an input rule; this is the write, and it does its own scoping.
-  def self.write_fill_order(user, account, ids, pools)
-    queue = ids.dup
-    user.pools.where(account_id: account.id).by_priority
-      .map { |pool| pools.key?(pool.id.to_s) ? pools.fetch(queue.shift) : pool }
-      .each_with_index { |pool, index| pool.update!(priority: index) }
-  end
-  private_class_method :write_fill_order
-
-  # The submitted pools keyed by their id as it arrived on the wire, or NIL if the list itself is
-  # not a list of this user's pools: empty, holding a duplicate (which would make it shorter than
-  # it looks and drop a pool), or naming an id `user.pools` does not find — someone else's, or
-  # nothing at all, and the two deserve the same answer.
-  def self.fill_order_pools(user, ids)
-    return if ids.empty? || ids.uniq.size != ids.size
-
-    pools = user.pools.where(id: ids).index_by { |pool| pool.id.to_s }
-    pools if pools.size == ids.size
-  end
-  private_class_method :fill_order_pools
-
-  # The one account every submitted pool sits inside, or nil if that is not one account. Looked
-  # up through `user.pools.accounts` rather than through `pools.first.account`, so an envelope
-  # whose `account_id` points at a pool that is not an account — or not this user's — is a
-  # refusal rather than a silent write against whatever that row happens to be.
-  def self.fill_order_account(user, pools)
-    account_ids = pools.map(&:account_id).uniq
-    return unless account_ids.one? && account_ids.first.present?
-
-    user.pools.accounts.find_by(id: account_ids.first)
-  end
-  private_class_method :fill_order_account
 
   # ONE ROW OF #timeline, whichever table it came out of. `sign` is +1 for money arriving and -1
   # for money leaving — the same two directions `PoolCalculator#contributions` and `#withdrawals`
@@ -552,7 +437,7 @@ class Pool < ApplicationRecord
   # alternative is a pool half detached from its own history, which no screen could report and no
   # user could undo.
   #
-  # Nothing here rescues, for `.apply_fill_order`'s reason: `update!` runs the full validation
+  # Nothing here rescues, for `Category.apply_fill_order`'s reason: `update!` runs the full validation
   # stack, which is deliberate — a deletion must not be the request that sneaks an invalid row
   # past the model — so a row that was ALREADY invalid before the destroy raises RecordInvalid
   # rather than being quietly re-pointed or quietly dropped.
@@ -619,7 +504,7 @@ class Pool < ApplicationRecord
   # the pool's balance. Only a main-account envelope keeps both halves in the same place, because
   # there `account` and `user.default_account` are the same pool.
   #
-  # `update!` per record and not `update_all`, for the reason `.apply_fill_order` gives and one
+  # `update!` per record and not `update_all`, for the reason `Category.apply_fill_order` gives and one
   # specific to this table: `income_must_land_in_an_account` polices where income may land and the
   # required `belongs_to :pool` polices that it lands somewhere, and a deletion must not be the
   # request that routes around either. (`destroy_budget_if_pool_linked` used to fire here too and

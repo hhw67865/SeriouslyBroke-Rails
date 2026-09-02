@@ -51,11 +51,15 @@ RSpec.describe Budget, type: :model do
       expect(build(:budget, :rate, pool: pool)).to be_valid
     end
 
+    # THE MESSAGE NAMES THE CATEGORY (two-ledger spec §3, Task 5), and the wording is about the
+    # SCREEN rather than the schema: `budgets/_form` is the only form that can submit this state and
+    # the control it offers is a category picker, so the sentence has to describe the form the user
+    # is looking at.
     it "rejects a rule attached to nothing", :aggregate_failures do
       budget = build(:budget, pool: nil)
 
       expect(budget).not_to be_valid
-      expect(budget.errors[:base]).to include("must belong to a pool")
+      expect(budget.errors[:base]).to include("must belong to a category")
     end
 
     it "rejects a budget on an account pool", :aggregate_failures do
@@ -419,13 +423,13 @@ RSpec.describe Budget, type: :model do
       end
 
       # `#must_have_an_owner` is the one line that makes "a rule has an owner" true while both
-      # associations are optional — and the message still names the pool because the pool form is
-      # the only form that can submit this state.
+      # associations are optional — and the message names the CATEGORY, because that is the owner
+      # the one form able to submit this state asks for.
       it "still refuses a rule owned by neither", :aggregate_failures do
         budget = build(:budget, :rate, pool: nil, category: nil)
 
         expect(budget).not_to be_valid
-        expect(budget.errors[:base]).to include("must belong to a pool")
+        expect(budget.errors[:base]).to include("must belong to a category")
       end
 
       # UNGATED NOW, both of them: neither rule reads a pool, and a category-owned rule that

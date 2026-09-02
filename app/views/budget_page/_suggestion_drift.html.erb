@@ -10,10 +10,10 @@
     the ACCEPT link carries is a different figure again: the engine inverts `steady_ask` back into
     the rule's own column unit before putting it on the wire, and the edit form labels it there.
 
-    DRIFT TO ZERO IS THE STARKEST SENTENCE ON THE PANEL and it renders like any other: an envelope
-    a category feeds, four complete periods, and $0.00 observed. %>
+    DRIFT TO ZERO IS THE STARKEST SENTENCE ON THE PANEL and it renders like any other: a category
+    that holds money, four complete periods, and $0.00 observed. %>
 <p>
-  <span class="font-medium text-gray-900"><%= suggestion.detail[:pool_name] %></span> has averaged
+  <span class="font-medium text-gray-900"><%= suggestion.detail[:category_name] %></span> has averaged
   <span class="tabular-nums"><%= number_to_currency(suggestion.detail[:observed]) %></span> a period for
   <%= pluralize(suggestion.detail[:periods], "period") %>, and your rule asks for
   <span class="tabular-nums"><%= number_to_currency(suggestion.detail[:rule_amount]) %></span> a period.
@@ -26,6 +26,6 @@
     is coming out of something else.
   <% else %>
     The rule is reserving <%= number_to_currency(gap) %> a period more than you spend — that money is
-    sitting in the envelope instead of funding anything else.
+    sitting in the category instead of funding anything else.
   <% end %>
 </p>

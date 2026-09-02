@@ -152,13 +152,27 @@ RSpec.describe "db/seeds.rb" do
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
 
-    # EVERY DETECTOR FED. The panel is the Budget page's bottom half, and a demo that starved one
-    # of the four would leave whoever works on it next reading a spec instead of a screen.
-    it "feeds all four suggestion detectors" do
+    # EVERY DETECTOR FED — AND ONE OF THE FOUR IS STARVED, for the same reason the distribution
+    # screen above is empty: the seeds still plant POOLS. Task 5 moved the detectors onto categories,
+    # and drift now measures what drained a rule's own CATEGORY (`CategoryLedger
+    # ::ENTRY_CATEGORY_ID`) — so a seeded rule, which names only a pool, is not attributable to any
+    # lane and is skipped outright. The demo's four drifting envelopes are four zeroes.
+    #
+    # THE RATE COUNT MOVED BY ONE IN THE OPPOSITE DIRECTION, and it is the same cause read from the
+    # other side. The population was `buffer_funded?` — a category pointing at an ACCOUNT — and is
+    # `funded_since IS NULL`; the seeds give no category a `funded_since`, so the one category that
+    # was excluded for pointing at an envelope is now in the population like every other.
+    #
+    # KEPT AND INVERTED RATHER THAN DELETED, on the distribution example's own reasoning: "the demo
+    # stopped exercising the app's headline screen" is exactly the thing that goes unnoticed, and
+    # this is the row that fails the moment the seeds start planting category-owned rules. THE SEEDS
+    # ARE TASK 7/8'S TO CONVERT and this example is the marker; the figure to restore is
+    # `drift: 4`.
+    it "feeds three of the four suggestion detectors, because the seeds still plant pools" do
       kinds = SuggestionEngine.new(user: user, today: today).suggestions.group_by(&:kind)
         .transform_values(&:length)
 
-      expect(kinds).to eq(dated_bill: 6, rate: 4, drift: 4, dead_rule: 1)
+      expect(kinds).to eq(dated_bill: 6, rate: 5, dead_rule: 1)
     end
   end
 

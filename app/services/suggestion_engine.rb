@@ -199,26 +199,22 @@ class SuggestionEngine
   # Shared reads — one query each, for every detector that needs them
   # ---------------------------------------------------------------------------------------------
 
-  # EVERY EXPENSE CATEGORY THIS USER OWNS, with its pool, and it is loaded before the items rather
-  # than preloaded off them because FOUR separate things are questions about categories rather than
-  # about items: the rate detector's population, the pool a dated-bill proposal reuses, the name the
-  # bill sentence carries, and (detector 3) whether any category at all points at a pool.
+  # EVERY EXPENSE CATEGORY THIS USER OWNS, and it is loaded before the items rather than preloaded
+  # off them because THREE separate things are questions about categories rather than about items:
+  # the rate detector's population, the name the bill sentence carries, and whether accepting a
+  # proposal would start this category holding money at all.
   #
-  # `includes(:pool)` because the proposal has to know whether the category's pool is an ACCOUNT —
-  # a rule on an account is refused by `Budget#pool_must_not_be_an_account`, so that pool cannot be
-  # reused and the proposal must offer a new envelope instead.
+  # `includes(:pool)` IS GONE WITH THE ENVELOPE HALF (two-ledger spec §3). It was there so a
+  # proposal could ask whether the category's pool was an account and therefore un-reusable as an
+  # envelope; there are no envelopes to reuse — the category IS the thing that holds the money — so
+  # the preload paid for a link nothing here reads.
   def expense_categories
-    @expense_categories ||= user.categories.expenses.includes(:pool).to_a
+    @expense_categories ||= user.categories.expenses.to_a
   end
 
   def categories_by_id = @categories_by_id ||= expense_categories.index_by(&:id)
 
   def category_for(item) = categories_by_id.fetch(item.category_id)
-
-  # THE POOLS SOME EXPENSE CATEGORY POINTS AT — the "a lane exists" test detector 3 needs to tell
-  # *no category feeds this envelope* apart from *a category feeds it and the spending stopped*.
-  # Free: the categories are already loaded above.
-  def fed_pool_ids = @fed_pool_ids ||= expense_categories.filter_map(&:pool_id).to_set
 
   # Every expense item this user owns. Selected by the category ids already in memory rather than
   # through `Item.expenses`' join, so this adds no second reading of what an expense is and no
@@ -248,24 +244,20 @@ class SuggestionEngine
       .transform_values { |rows| rows.map { |(_id, amount, date)| [amount.to_d, date.to_date] } }
   end
 
-  # Both modes, through the one reader of "a user's rules". Preloaded because every detector below
-  # asks a rule for its item or its pool.
+  # Both owner lanes, through the one reader of "a user's rules". Preloaded because every detector
+  # below asks a rule for its item or its category.
+  #
+  # `:pool` LEFT THE PRELOAD and `:category` took its place: a rule belongs to the category that
+  # holds the money (two-ledger spec §3), and the two detectors that name a rule's owner —
+  # drift's sentence and a dead rule's — read the category now.
   def budgets
-    @budgets ||= Budget.for_user(user).includes(:item, :pool).to_a
+    @budgets ||= Budget.for_user(user).includes(:item, :category).to_a
   end
 
   # The items that already carry a rule of their own. Dated-bill skips them (proposing a rule for
   # an item that has one is proposing a duplicate) and drift subtracts their entries from the
-  # pool's spend (amendment A).
+  # category's spend (amendment A).
   def item_backed_ids = @item_backed_ids ||= budgets.filter_map(&:item_id).to_set
-
-  # WHAT A NEW ENVELOPE WOULD SIT INSIDE. Read once, because both proposing detectors put it in
-  # their prefill and `belongs_to` would otherwise fetch it per suggestion.
-  def default_account_id
-    return @default_account_id if defined?(@default_account_id)
-
-    @default_account_id = user.default_account_id
-  end
 
   # ---------------------------------------------------------------------------------------------
   # Detector 1 — a dated bill nobody has written a rule for
@@ -362,13 +354,32 @@ class SuggestionEngine
       kind: :dated_bill,
       subject: item,
       amount: shape[:amount],
-      detail: shape.except(:amount).merge(
-        due_on: due_on, category_name: category.name, per_period_cost: bill_per_period_cost(shape)
-      ),
-      prefill: envelope_half(category).merge(
-        budget: { amount: shape[:amount], basis: "monthly", interval_months: shape[:interval_months], anchor_date: due_on, item_id: item.id }
-      )
+      detail: bill_detail(shape, due_on, category),
+      prefill: { budget: bill_rule(shape, due_on, item, category) }
     )
+  end
+
+  def bill_detail(shape, due_on, category)
+    shape.except(:amount).merge(
+      due_on: due_on,
+      category_name: category.name,
+      starts_holding: starts_holding?(category),
+      per_period_cost: bill_per_period_cost(shape)
+    )
+  end
+
+  # THE WHOLE RULE, AND THE OWNER IS ONE OF ITS FIELDS. Every key here is a `budgets` column and a
+  # permitted parameter of `BudgetsController::BUDGET_FIELDS`, which is what lets the accept link
+  # be `new_budget_path(budget: …)` with nothing renamed on the way.
+  def bill_rule(shape, due_on, item, category)
+    {
+      amount: shape[:amount],
+      basis: "monthly",
+      interval_months: shape[:interval_months],
+      anchor_date: due_on,
+      item_id: item.id,
+      category_id: category.id
+    }
   end
 
   # WHAT A PROPOSED BILL WOULD COST A PERIOD, through `Budget#steady_ask` on an UNSAVED rule of the
@@ -385,52 +396,39 @@ class SuggestionEngine
       .steady_ask(user, today: today)
   end
 
-  # THE ENVELOPE A PROPOSAL WOULD FILL IS THE CATEGORY'S, NOT THE ITEM'S — the plan's ruling, and it
-  # is forced by a validation rather than chosen for tidiness. `Budget#item_must_belong_to_pool`
-  # requires `item.category.pool == pool`, so an envelope named after the ITEM is refused for every
-  # item-backed bill; and because a category points at exactly ONE pool, item-named envelopes are
-  # also mutually exclusive — accepting the Phone proposal would make the Internet and Streaming
-  # proposals unacceptable, which on the demo seeds is 8 of 10 bills.
+  # WOULD ACCEPTING THIS START THE CATEGORY HOLDING MONEY? — the one thing left of what used to be
+  # `#envelope_half`, and the whole of what the panel's effect clause now has to say.
   #
-  # THE CONSEQUENCE IS SHARING, and it is the honest household shape rather than a workaround: Phone,
-  # Internet and Streaming Services live in one Utilities envelope as three item-backed rules, which
-  # is exactly what `PoolCalculator#sweepable_amount` and the mixed-pool case already model.
+  # THE ENVELOPE HALF IS DELETED (two-ledger spec §3/§5). It carried a proposed `pool` (name, type,
+  # account) or a `pool_id` to reuse, plus the `category_id` to be RE-POINTED at it, because a rule
+  # could only be owned by an envelope and money only reached one through the category's `pool_id`.
+  # There is no envelope: `budgets.category_id` is the owner, the category holds the money, and
+  # accepting writes a rule and stamps `funded_since` (`BudgetProposal`). Nothing is minted and
+  # nothing is re-pointed, so the whole three-branch reuse cascade — and the "shared envelope"
+  # consequence that made two bills in one category a design decision — is simply the ordinary case:
+  # two rules on one category, which is what one category, one budget line always meant.
   #
-  # REUSE BEFORE PROPOSE: a category that already points at an envelope needs no new pool, so the
-  # payload carries `pool_id` and nothing else. An ACCOUNT is not reusable — a rule on one is refused
-  # outright — so a category pointing at an account gets the same new-envelope offer an unpooled one
-  # does, and accepting re-points the category.
-  #
-  # Shared with the rate detector, which reaches it only through the creation branch — its
-  # population is `buffer_funded?`, i.e. pool-less OR account-pointed, and the line above sends both
-  # of those shapes down the creation branch. One definition of "the envelope half of a proposal",
-  # so the two kinds cannot come to disagree about what accepting one does.
-  def envelope_half(category)
-    reusable = category.pool
-    return { pool_id: reusable.id } if reusable && !reusable.pool_type_account?
-
-    { pool: { name: category.name, pool_type: "budget", account_id: default_account_id }, category_id: category.id }
-  end
+  # `funded_since` IS THE QUESTION because it is what `Category#holder?` reads and what the write
+  # stamps. A category already holding money is not started by this acceptance; one that is not is,
+  # and the row says so before the click because it changes which side of the start-date rule every
+  # future entry falls on.
+  def starts_holding?(category) = category.funded_since.nil?
 
   # ---------------------------------------------------------------------------------------------
   # Detector 2 — a category that behaves like a rate and is funded by nothing
   # ---------------------------------------------------------------------------------------------
 
-  # `Category#buffer_funded?` — an expense category pointing at an ACCOUNT, so its spending comes
-  # out of the BUFFER — is the population, and that is the sentence's own reason: nothing holds this
-  # money, so it comes out of the buffer.
+  # A CATEGORY THAT HOLDS NOTHING is the population (two-ledger spec §3/§4), and that is the
+  # sentence's own reason: nothing holds this money, so it comes out of what is available.
   #
-  # THE POPULATION HAS BEEN WIDENED ONCE AND NARROWED ONCE, AND IT IS THE SAME SET EITHER WAY. It
-  # was `budgetable?` ("no pool at all") until Task 8 made destroying an envelope re-point its
-  # categories at the account rather than nullifying them — un-enveloping a category would otherwise
-  # have removed it from this detector forever, the app going silent about spending at the moment it
-  # went back to being buffer spending. Plan 3 then required a pool on every category, so the
-  # "no pool" half is not a shape any more and `buffer_funded?` is exactly the account-pointed set.
-  # The sentence the detector prints has never changed and is still literally true.
-  #
-  # The accept flow needed nothing: #envelope_half already answers an account-pointed category with
-  # the CREATION branch ("an ACCOUNT is not reusable"), which is the branch this detector always
-  # used, and Task 7 built and measured that path on the demo's Estimated Taxes.
+  # THE POPULATION IS `funded_since IS NULL` — `Category#holder?` inverted — WHERE IT USED TO BE
+  # `buffer_funded?`. The two name the same users' same categories through two different models:
+  # under the pool layer, "unbudgeted" meant the category pointed at an ACCOUNT rather than at an
+  # envelope, and every spelling of it (`budgetable?`, then `buffer_funded?`) was really asking
+  # whether anything reserved this money. It asks that directly now. `CategoryLedger
+  # ::ENTRY_CATEGORY_ID` sends an unfunded category's every entry to AVAILABLE, so the detector's
+  # sentence — this spending comes out of what's available — is not a paraphrase of the population
+  # but a literal reading of it.
   #
   # THE MEAN, NOT THE MAXIMUM. Highest-observed is right for a bill, which must be paid in full or
   # not at all; a rate is a flow, and reserving every grocery category's worst fortnight would
@@ -445,7 +443,7 @@ class SuggestionEngine
     window = periods.last(RATE_WINDOW_PERIODS)
     totals, first_seen = category_history(window, exclude: proposed_bill_item_ids)
 
-    buffer_funded_categories.filter_map do |category|
+    unfunded_categories.filter_map do |category|
       # `fetch`, not `[]`: `#category_history` returns a Hash with a default PROC, and `[]` on a
       # missing key would write an empty bucket into it mid-iteration.
       present = totals.fetch(category.id, {}).reject { |_index, total| total.zero? }
@@ -456,11 +454,12 @@ class SuggestionEngine
     end
   end
 
-  # `Category#buffer_funded?` — the model's own reader, applied to the categories already in memory.
-  # Not a second spelling of the predicate: it lives on the model, and #expense_categories already
-  # `includes(:pool)`, so asking each one whether its pool is an account costs no query.
-  def buffer_funded_categories
-    @buffer_funded_categories ||= expense_categories.select(&:buffer_funded?).sort_by(&:id)
+  # The categories that hold nothing, read off the column rather than through a predicate: the
+  # positive spelling is `Category#holder?` (`expense? && funded_since.present?`) and every category
+  # here is already an expense by construction, so the negation of the half that is left is the
+  # whole of the question. Costs no query — the categories are in memory above.
+  def unfunded_categories
+    @unfunded_categories ||= expense_categories.select { |category| category.funded_since.nil? }.sort_by(&:id)
   end
 
   # `[{ category_id => { period_index => total } }, { category_id => earliest entry date }]`, rolled
@@ -543,12 +542,14 @@ class SuggestionEngine
         first_seen_on: first_seen_on,
         observed_total: observed_total,
         per_period_cost: amount,
+        # ALWAYS TRUE HERE, and stated rather than inferred: this detector's population IS the
+        # categories with no `funded_since`, so accepting one always starts it holding. The key is
+        # carried anyway so the panel's effect clause reads one member on both proposing kinds
+        # rather than branching on the kind to decide which question to ask.
+        starts_holding: starts_holding?(category),
         guessed: false
       },
-      # The creation branch every time: this detector's population is `buffer_funded?`, which is
-      # pool-less or account-pointed, and #envelope_half sends both to creation — an account is not
-      # reusable as an envelope. The reuse branch stays unreachable from here.
-      prefill: envelope_half(category).merge(budget: { amount: amount, basis: "per_period" })
+      prefill: { budget: { amount: amount, basis: "per_period", category_id: category.id } }
     )
   end
 
@@ -556,9 +557,9 @@ class SuggestionEngine
   # Detector 3 — an existing rate rule that no longer matches the spending
   # ---------------------------------------------------------------------------------------------
 
-  # DRIFT MEASURES THE RULE'S OWN LANE (amendment A). A pool carrying a rate rule and an
+  # DRIFT MEASURES THE RULE'S OWN LANE (amendment A). A category carrying a rate rule and an
   # item-backed bill would otherwise count the bill's payments as rate spend and report drift on a
-  # rule that is exactly right, so the observed figure is the expense entries reaching the pool
+  # rule that is exactly right, so the observed figure is the expense entries draining the category
   # MINUS the entries on items that carry their own rule.
   #
   # THE BASELINE IS `Budget#steady_ask` — Task 4's reader, not a re-derivation. Re-deriving "what
@@ -576,8 +577,8 @@ class SuggestionEngine
     rules = attributable_rate_rules
     return [] if rules.empty?
 
-    spend = pool_spend(rules.map(&:pool_id), window)
-    rules.filter_map { |rule| drift_suggestion(rule, spend.fetch(rule.pool_id, 0.to_d), window) }
+    spend = category_spend(rules.map(&:category_id), window)
+    rules.filter_map { |rule| drift_suggestion(rule, spend.fetch(rule.category_id, 0.to_d), window) }
   end
 
   # A RATE RULE IS ONE WITH NO DUE DATE: `per_period`, or the anchorless monthly rule that
@@ -585,21 +586,24 @@ class SuggestionEngine
   # through `steady_ask`, and a screen that reported drift on only one of the two spellings would
   # be silent on half the rate rules the app can store.
   #
-  # THE POOL-MODE FILTER IS GONE (plan 3, task 3). It excluded category-mode caps, because the
-  # observed figure is "what reached this pool" and a cap reaches no pool; `#budgets` is
-  # `Budget.for_user`, which is pool-scoped by construction now, so the clause could never exclude
-  # a row again. A pool carrying MORE THAN ONE rate rule is still skipped outright: its spend
-  # cannot be attributed between them, and a suggestion that guessed the split would put a figure
-  # on a money screen that no entry supports.
+  # A CATEGORY-OWNED RULE, AND THE FILTER IS BACK FOR THE LENGTH OF THE BRANCH (two-ledger spec §3,
+  # Task 5 — deleted by Task 8 with `budgets.pool_id`). `Budget.for_user` still spans both owner
+  # lanes, so `#budgets` can hand back a rule written before the cutover that names only a pool;
+  # the observed figure below is "what drained this CATEGORY", which such a rule has none of, and
+  # grouping it under a nil key would attribute every pool-only rate rule's silence to one another.
+  #
+  # A CATEGORY CARRYING MORE THAN ONE RATE RULE IS SKIPPED OUTRIGHT: its spend cannot be attributed
+  # between them, and a suggestion that guessed the split would put a figure on a money screen that
+  # no entry supports.
   def attributable_rate_rules
-    rate_rules = budgets.select { |budget| rate_shape?(budget) }
+    rate_rules = budgets.select { |budget| budget.category_id.present? && rate_shape?(budget) }
 
-    rate_rules.group_by(&:pool_id).filter_map { |_pool_id, rules| rules.first if rules.one? }
+    rate_rules.group_by(&:category_id).filter_map { |_category_id, rules| rules.first if rules.one? }
   end
 
   # ITEM-LESS, and that condition is amendment A's own consequence rather than an extra filter. The
   # observed figure EXCLUDES entries on items that carry a rule; if the rate rule under examination
-  # is itself item-backed, the exclusion subtracts its own lane. Where the pool holds nothing else,
+  # is itself item-backed, the exclusion subtracts its own lane. Where the category holds nothing else,
   # the figure is $0 and the zero-guard hides drift that is genuinely there; where it holds
   # something else, the figure is built entirely from dollars this rule does not cover. Both are a
   # number on a money screen that describes different money from the sentence around it. An
@@ -608,49 +612,49 @@ class SuggestionEngine
     budget.anchor_date.blank? && budget.item_id.blank? && [:per_period, :monthly].include?(budget.cadence)
   end
 
-  # `{ pool_id => total }` over the drift window, in one query for every pool at once.
+  # `{ category_id => total }` over the drift window, in one query for every category at once.
   #
-  # `PoolBalanceLedger::ENTRY_POOL_ID` is reused rather than restated: "which pool does this entry
-  # reach" already has one SQL form in this app (the entry's own pool, else its category's), and a
-  # third spelling of it is how a suggestion and a balance come to describe different money.
+  # `CategoryLedger::ENTRY_CATEGORY_ID` is reused rather than restated, and the objection is exactly
+  # the one its pool-era predecessor answered: "which category does this entry drain" already has
+  # one SQL form in this app — the start-date rule, `funded_since` compared in the owner's own
+  # calendar day — and a second spelling of it is how a suggestion and a balance come to describe
+  # different money. An UNFUNDED category answers NULL there and so contributes nothing here, which
+  # is why #drift_suggestion's zero-guard asks `holder?` rather than reading the silence as spend.
   #
-  # THE LATENT THIRD SPELLING WAS `Entry#effective_pool`, AND IT IS NO LONGER ONE. It used to add a
-  # final fallback to `user.default_account`, so an entry whose category had no pool reached the
-  # account there and reached NOTHING here (`COALESCE(NULL, NULL)` is NULL) — this comment named
-  # the disagreement and predicted it would have to be decided by whoever tried to unify them.
-  # Task 8's fix round decided it: the fallback was a promise no ledger kept, `Σ pools` turned on
-  # the difference, and `Category#effective_pool` now says what this SQL says. The Ruby pair and
-  # this constant are one rule in two languages, which is what they always claimed to be.
-  #
-  # `ENTRY_POOL_JOINS` travels with the constant (its contract): since the start-date rule
-  # (main-account spec §3) the expression reads the category's pool and the category's user, so a
-  # reader that took the SQL without the joins would not compile — and one that took it with a
-  # DIFFERENT pair of joins would be the third spelling this comment exists to forbid.
-  def pool_spend(pool_ids, window)
+  # `ENTRY_CATEGORY_JOINS` travels with the constant (its contract): the expression reads the
+  # category's own user for the timezone, so a reader that took the SQL without the join would not
+  # compile — and one that took it with a DIFFERENT join would be the second spelling this comment
+  # exists to forbid.
+  def category_spend(category_ids, window)
     Entry.expenses
-      .joins(*PoolBalanceLedger::ENTRY_POOL_JOINS)
+      .joins(*CategoryLedger::ENTRY_CATEGORY_JOINS)
       .where(categories: { user_id: user.id })
       .where(date: datetimes_over(window))
       .where.not(item_id: item_backed_ids.to_a)
-      .where("#{PoolBalanceLedger::ENTRY_POOL_ID} IN (:ids)", ids: pool_ids)
-      .group(PoolBalanceLedger::ENTRY_POOL_ID)
+      .where("#{CategoryLedger::ENTRY_CATEGORY_ID} IN (:ids)", ids: category_ids)
+      .group(CategoryLedger::ENTRY_CATEGORY_ID)
       .sum(:amount)
       .transform_values(&:to_d)
   end
 
   # NO SPEND AND NO LANE IS NOT DRIFT; NO SPEND WITH A LANE IS THE STARKEST DRIFT THERE IS.
   #
-  # The first half is the correction the demo forced: five envelopes there have NO expense category
-  # pointing at them, so they record no spending by construction, and reading that silence as "you
-  # spend nothing, cut the rule to zero" told the demo user to zero their $400 grocery rule.
+  # The first half is the correction the demo forced, RE-ANCHORED (two-ledger spec §4). It used to
+  # ask whether any category pointed at the rule's envelope: five demo envelopes had none, recorded
+  # no spending by construction, and reading that silence as "you spend nothing, cut the rule to
+  # zero" told the demo user to zero their $400 grocery rule. The category IS the lane now, so the
+  # question that survives is whether the lane can record anything at all — `Category#holder?`,
+  # which is exactly what `CategoryLedger::ENTRY_CATEGORY_ID` gates on. An unfunded category sends
+  # every one of its entries to AVAILABLE, so its $0.00 is a fact about the start-date rule and not
+  # about the user's spending.
   #
   # The second half is the lane that silence used to swallow, and it is the more valuable sentence.
-  # A category DOES point at the pool, four complete periods have passed, and nothing was spent:
-  # "Groceries has averaged $0.00 for 4 periods, your rule says $400" is spec §8's drift sentence
-  # with the starkest figure it can carry. Detector 4 cannot say it — that one is item-backed rules
-  # only — so without this the category-fed envelope that quietly stopped has no owner at all.
+  # The category HOLDS money, four complete periods have passed, and nothing was spent: "Groceries
+  # has averaged $0.00 for 4 periods, your rule says $400" is spec §8's drift sentence with the
+  # starkest figure it can carry. Detector 4 cannot say it — that one is item-backed rules only — so
+  # without this the funded category that quietly stopped has no owner at all.
   def drift_suggestion(rule, observed_total, window)
-    return nil if observed_total.zero? && fed_pool_ids.exclude?(rule.pool_id)
+    return nil if observed_total.zero? && !rule.category.holder?
 
     rule_amount = rule.steady_ask(user, today: today)
     observed = (observed_total / window.size).round(2)
@@ -672,7 +676,7 @@ class SuggestionEngine
       observed: observed,
       periods: window.size,
       direction: observed > rule_amount ? :up : :down,
-      pool_name: rule.pool.name,
+      category_name: rule.category.name,
       basis: rule.basis,
       per_period_cost: observed,
       guessed: false
@@ -738,7 +742,11 @@ class SuggestionEngine
         periods_empty: window.size,
         rule_amount: rule.amount.to_d,
         item_name: rule.item.name,
-        pool_name: rule.pool&.name,
+        # `&.`, AND IT IS TRANSITIONAL RATHER THAN DEFENSIVE (Task 8 deletes the nil): `Budget
+        # .for_user` still spans both owner lanes, so a rule written before the cutover names only a
+        # pool and has no category to be filled from. The row's own partial prints the clause only
+        # where there is one.
+        category_name: rule.category&.name,
         per_period_cost: per_period,
         guessed: false
       },

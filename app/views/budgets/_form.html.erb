@@ -1,59 +1,40 @@
 <%# Budget Form Partial - matches Categories design patterns
 
-    POOL-MODE ONLY (plan 3, task 3). This form used to be MODE-AWARE because a rule could belong to
-    a category OR a pool, and it served both: a category picker offering a monthly spending cap,
-    and a pool branch about how an envelope gets filled. The cap is deleted, so the two category
-    arms — the picker for a new one and the read-only name for an existing one — are gone with it,
-    along with the `prorated` switch, which spread a monthly cap across the days of the month and
-    was already omitted from the pool branch for reading nothing there.
+    ONE OWNER AND ONE SHAPE (two-ledger spec §3). This form has been three things in three plans: a
+    mode-aware form serving a category CAP and a pool rule at once, then a pool-only rule form with
+    an optional ENVELOPE HALF for the suggestion panel's accept flow, and now a rule on the
+    category that holds the money. The envelope half is gone with the layer — there is no pool to
+    mint, no name to choose, no account to fund it from and no category to re-point — so the two
+    headings that promised one of those acts ("A new Utilities envelope", "Joining your Utilities
+    envelope") are deleted along with the `envelope[...]` fields that carried them. What accepting
+    a proposal does besides writing the rule is stamp `funded_since`, which `BudgetProposal` owns
+    and the panel's own row says before the click.
 
-    THE SECOND SHAPE IS A PROPOSAL (§8's suggestion panel, amendment A): the form has an OPTIONAL
-    ENVELOPE HALF rather than the accept flow having a second controller. What that half makes
-    happen is BudgetProposal's to explain; what matters here is that the form must say which of the
-    two things it is about to do — JOIN an envelope the user already has, or MAKE one — because
-    those are different acts and the panel sentence one click earlier already named one of them.
-
-    THE THIRD SHAPE IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it is what this comment
-    used to say could not exist. It read: "A BARE `/budgets/new` NOW RENDERS NO OWNER CONTROL AT
-    ALL, and that is the honest state: every link into this form carries an owner… the form says so
-    in its error notification rather than offering a picker for a mode that no longer exists." The
-    premise was true and the conclusion did not follow — nothing linked to the bare URL because
-    there was no button, so "every link carries an owner" was a fact about the links that existed
-    rather than about what a user might want. A rule for a bill your entries have not shown yet has
-    no other door.
-
-    SO THE OWNER PICKER IS BACK, ON THAT PATH ONLY. It offers `Pool.rule_owners` — this user's
-    envelopes and goals, never an account, which is `Budget#pool_must_not_be_an_account` stated as
-    a choice instead of a refusal — and `BudgetsController#owner_picker?` is the one decision about
-    when it renders. Every path that ALREADY names an owner is untouched: the Edit link's rule, the
-    panel's envelope half, the panel's reused `pool_id`.
+    THE OWNER PICKER IS A CATEGORY PICKER, on the paths where nothing named an owner. It offers
+    this user's EXPENSE categories — income lands in available and is allocated out of it (§2), so
+    a rule on one would be a claim on money that category never holds — and
+    `BudgetsController#new`/`#create` own the one decision about when it renders. Every path that
+    ALREADY names an owner is untouched: the Edit link's rule, and the panel's accept link, which
+    carries `budget[category_id]` like any other field.
 
     A HAND-MADE RULE IS A PER-PERIOD RATE, and `basis` rides hidden saying so. That is the only
     shape this form can build without asking a second question ("$X a period" needs no schedule,
     while §3.1's other three rows all need an interval, an anchor or both), and it is the shape a
-    user typing a rule from scratch means: money set aside every period. A DATED bill still arrives
-    the way it always has — measured, from the suggestion panel, with its date and interval on
-    screen and correctable. %>
-<% pool_mode = @budget.pool_mode? %>
-<% proposal = @envelope.present? %>
+    user typing a rule from scratch means: money set aside every period. A DATED bill arrives the
+    way it always has — measured, from the suggestion panel, with its date and interval on screen
+    and correctable. %>
+<% category_mode = @budget.category_mode? %>
 <%# WHETHER THIS FORM IS ASKING WHO OWNS THE RULE. The controller's answer, not a re-derivation:
-    "an owner is already in context" is a fact about how the request arrived (a prefill, an envelope
-    half, a persisted rule) and cannot be read off the record once the picker's own choice has been
-    assigned to it. %>
+    "an owner is already in context" is a fact about how the request arrived (a prefill, a persisted
+    rule) and cannot be read off the record once the picker's own choice has been assigned to it. %>
 <% owner_picker = @owner_picker.present? %>
-<%# THE ENVELOPE THIS WOULD JOIN, or nil where it would create one. Resolved by
-    BudgetsController#set_envelope through BudgetProposal::Envelope#existing — the same reader the
-    save uses, so this heading cannot promise something the write will not do. %>
-<% joining = proposal && @joined_envelope %>
 <%# THE SCHEDULE IS ONLY EDITABLE ON THE WAY IN. A rule's shape (basis, interval, anchor, item) is
     measured by the engine and submitted back; changing it later is the edit form's business, and
     an existing rule's shape is not this partial's to re-offer. %>
-<% new_pool_rule = @budget.new_record? && (pool_mode || proposal || owner_picker) %>
-<% subtitle = "How an envelope gets filled each period" %>
+<% new_rule = @budget.new_record? && (category_mode || owner_picker) %>
+<% subtitle = "How a category gets filled each period" %>
 <% subtitle = "Pick what this rule fills, and how much it asks for each period" if owner_picker %>
-<% subtitle = "How #{@budget.pool.name} gets filled each period" if pool_mode && !owner_picker %>
-<% subtitle = "A new #{@envelope.name} envelope, and the rule that fills it" if proposal %>
-<% subtitle = "Joining your #{joining.name} envelope, and the rule that adds to it" if joining %>
+<% subtitle = "How #{@budget.category.name} gets filled each period" if category_mode && !owner_picker %>
 <% cancel_path = budget_page_path %>
 <%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
 
@@ -65,112 +46,49 @@
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
       <div class="space-y-6">
-        <% if joining %>
-          <%# JOINING AN ENVELOPE THE USER ALREADY HAS. No name field and no account picker: the
-              name is not a decision here (renaming it would not make a second envelope, it would
-              simply stop matching), and the account is the one the envelope already sits in —
-              `BudgetProposal` never reads `envelope[account_id]` on this path, so a picker would
-              be a control that changes nothing under a heading that says it does.
+        <% if owner_picker %>
+          <%# THE OWNER, ASKED — the one branch of this form where the category is a question rather
+              than something the request arrived carrying.
 
-              BOTH STILL GO ON THE WIRE, hidden. `Envelope#existing` is resolved again at save
-              time, and if the envelope were deleted between this render and the submit the
-              creation branch takes over — with the name and the account it was going to need. A
-              form that dropped them would answer that race with "Account must be set for budget
-              pools" on a screen that never asked for one. %>
-          <div>
-            <label class="form-label">Envelope</label>
-            <div class="form-input flex items-center bg-gray-50">
-              <%= joining.name %>
-            </div>
-            <p class="form-hint">
-              You already have this envelope<%= " — funded from #{joining.account.name}" if joining.account %>.
-              This rule joins it, and all <%= @envelope.category.name %> spending is pointed at it from now on.
-            </p>
-            <%# `id: nil` on both: `hidden_field_tag` would otherwise mint `envelope_name` and
-                `envelope_account_id`, the same ids the creation branch gives its VISIBLE controls.
-                The two branches are mutually exclusive so nothing collides today, but a hidden
-                input answering to the id of a control the user is meant to fill in is a trap for
-                the next person to open this file — and these two are carriers, not fields. %>
-            <%= hidden_field_tag "envelope[name]", joining.name, id: nil %>
-            <%= hidden_field_tag "envelope[account_id]", joining.account_id, id: nil %>
-          </div>
-
-          <%= hidden_field_tag "envelope[category_id]", @envelope.category.id %>
-        <% elsif proposal %>
-          <%# THE ENVELOPE HALF. Editable, because both fields can legitimately need changing: the
-              proposed name is the CATEGORY's name and the user may already have a pool called
-              that (Pool validates name uniqueness per user), and `account_id` is read from
-              `users.default_account_id`, which is nullable — a user who has nominated no account
-              must be ASKED for one rather than have a blank submitted on their behalf, since
-              `account_matches_pool_type` refuses an account-less budget pool outright.
-
-              `envelope[category_id]` is hidden and is NOT the rule's owner: it is the category to
-              be re-pointed at the new envelope. See BudgetsController#set_envelope for why it
-              cannot travel under the form's own `category_id`. %>
-          <div>
-            <%= label_tag "envelope_name", "New envelope", class: "form-label" %>
-            <%= text_field_tag "envelope[name]", @envelope.name, id: "envelope_name", class: "form-input" %>
-            <p class="form-hint">
-              Accepting this points <%= @envelope.category.name %> at this envelope, so all
-              <%= @envelope.category.name %> spending comes out of it from now on.
-            </p>
-          </div>
-
-          <div>
-            <%= label_tag "envelope_account_id", "Funded from", class: "form-label" %>
-            <%= select_tag "envelope[account_id]",
-                           options_from_collection_for_select(
-                             current_user.pools.accounts.order(:name), :id, :name, @envelope.account&.id
-                           ),
-                           include_blank: "Select an account",
-                           id: "envelope_account_id",
-                           class: "form-input" %>
-            <p class="form-hint">The account this envelope is filled from when you distribute a period's income.</p>
-          </div>
-
-          <%= hidden_field_tag "envelope[category_id]", @envelope.category.id %>
-        <% elsif owner_picker %>
-          <%# THE OWNER, ASKED (Henry's ruling of 2026-08-20) — the one branch of this form where
-              the pool is a question rather than something the request arrived carrying.
-
-              `Pool.rule_owners` THROUGH `current_user.pools`, which is both halves of the scoping:
-              the model scope answers WHAT KIND of pool may own a rule (an envelope or a goal, never
-              an account) and the association answers WHOSE. A foreign id typed into a submit is
-              refused a second time on the way in — `BudgetsController#scoped_owner` looks `pool_id`
-              up through `current_user.pools` and 404s — so this select is the affordance, not the
+              `current_user.categories.expenses`, which is both halves of the scoping: the scope
+              answers WHAT KIND of category may own a rule and the association answers WHOSE. A
+              foreign id typed into a submit is refused a second time on the way in —
+              `BudgetsController#scoped_owner` looks `category_id` up through
+              `current_user.categories` and 404s — so this select is the affordance, not the
               boundary.
 
               THE BLANK IS OFFERED because "I have not chosen yet" is a real state on a form that
               opens with nothing chosen, not because a rule may have no owner:
-              `Budget#must_belong_to_a_pool` refuses the blank on `:base`, which is where this form
+              `Budget#must_have_an_owner` refuses the blank on `:base`, which is where this form
               renders base errors. %>
           <div>
-            <%= f.input :pool_id,
+            <%= f.input :category_id,
                 as: :select,
-                collection: current_user.pools.rule_owners.order(:name),
+                collection: current_user.categories.expenses.order(:name),
                 label_method: :name,
                 value_method: :id,
-                include_blank: "Select an envelope or goal",
-                label: "Pool",
-                hint: "The envelope or goal this rule fills each period." %>
+                include_blank: "Select a category",
+                label: "Category",
+                hint: "The category this rule fills each period. A rule is one of the two things " \
+                      "that make a category start holding its own money." %>
           </div>
-        <% elsif pool_mode %>
-          <%# THE FORM DOES NOT OFFER THE POOL, which is not the same as the pool being
-              unwritable: `budget_params` permits `pool_id`, so a tampered submission DOES
-              re-parent the rule — within the user's own pools and nowhere else, because
-              `scoped_owner` looks it up through `current_user.pools` and a stranger's id 404s.
-              Both directions are pinned in spec/requests/budgets_spec.rb.
+        <% elsif category_mode %>
+          <%# THE FORM DOES NOT OFFER THE CATEGORY, which is not the same as the category being
+              unwritable: `budget_params` permits `category_id`, so a tampered submission DOES
+              re-parent the rule — within the user's own categories and nowhere else, because
+              `scoped_owner` looks it up through `current_user.categories` and a stranger's id
+              404s. Both directions are pinned in spec/requests/budgets_spec.rb.
 
-              No picker because the page that lists rules groups them BY pool, so moving one
-              between envelopes is a re-parenting that list should own rather than a control
+              No picker because the page that lists rules groups them BY category, so moving one
+              between categories is a re-parenting that list should own rather than a control
               buried in one rule's form. The field is submitted back so the record keeps the
               owner it arrived with. %>
           <div>
-            <label class="form-label">Pool</label>
+            <label class="form-label">Category</label>
             <div class="form-input flex items-center bg-gray-50">
-              <%= @budget.pool.name %>
+              <%= @budget.category.name %>
             </div>
-            <%= f.hidden_field :pool_id %>
+            <%= f.hidden_field :category_id %>
           </div>
         <% end %>
 
@@ -184,7 +102,7 @@
                 step: 0.01,
                 min: 0
               },
-              hint: budget_amount_hint(@budget, schedule_shown: new_pool_rule) %>
+              hint: budget_amount_hint(@budget, schedule_shown: new_rule) %>
 
           <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
               The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts
@@ -199,7 +117,7 @@
           <% end %>
         </div>
 
-        <% if new_pool_rule %>
+        <% if new_rule %>
           <%# THE SHAPE OF THE RULE, measured by the suggestion engine and submitted back. `basis`
               rides hidden because it is not a decision the user is being asked to make here — it
               is which of the two rule shapes was detected — while the INTERVAL and the ANCHOR are
@@ -216,8 +134,8 @@
               THE PAIR IS STILL RENDERED TOGETHER, and that is the shape rule rather than a
               layout choice: §3.1's row 3 is `monthly + interval + anchor`, and a form offering
               the interval without the anchor (or the reverse) could submit row 2 with an N > 1,
-              which `shape_must_be_valid` refuses. A rule with NO anchor — every rate — renders
-              neither, and its interval rides hidden. %>
+              which `shape_must_be_valid` refuses. A rule with NO anchor — every rate, including
+              every hand-made one — renders neither, and its interval rides hidden. %>
           <%= f.hidden_field :basis %>
 
           <% if @budget.anchor_date.present? %>
@@ -263,8 +181,8 @@
 
     <%# Action Buttons %>
     <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-      <%# Back where the rule is listed, which for a pool-mode rule is the Budget page and never
-          the pool page — the same destination BudgetsController sends a save to. %>
+      <%# Back where the rule is listed, which is the Budget page — the same destination
+          BudgetsController sends a save to. %>
       <%= link_to "Cancel", cancel_path, class: "btn btn-secondary" %>
 
       <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",

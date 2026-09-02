@@ -19,6 +19,6 @@
 
 <p class="text-gray-500">
   The rule says <%= number_to_currency(suggestion.detail[:rule_amount]) %>
-  <%= budget_rule_basis(suggestion.subject) %><% if suggestion.detail[:pool_name] %>, filling <%= suggestion.detail[:pool_name] %><% end %>.
+  <%= budget_rule_basis(suggestion.subject) %><% if suggestion.detail[:category_name] %>, filling <%= suggestion.detail[:category_name] %><% end %>.
   Keep it or delete it — nothing here decides that for you.
 </p>

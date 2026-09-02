@@ -6,116 +6,118 @@ RSpec.describe BudgetPagePresenter do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6), typical_income: 2_400)
   end
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let(:today) { Date.new(2026, 2, 6) }
   let(:presenter) { described_class.new(user: user, today: today) }
 
-  def envelope(name, priority: 1, account: checking)
-    create(:pool, :budget_pool, user: user, account: account, name: name, priority: priority)
+  # A CATEGORY THAT HOLDS MONEY (two-ledger spec §3) — `:funded` is what makes `Category#holder?`
+  # true, and a rule is one of the two things that stamp it in the app. Every `envelope(...)` in the
+  # pool era of this file became this: the fixture is one record shorter, because the envelope and
+  # the category it was twinned with were always one thing.
+  def holder(name, priority: 1)
+    create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
   # A flat per-period rule: no anchor, so no date to be due on.
-  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
+  def rate(category, amount)
+    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+  end
 
   # A rule that rolls: its due date moves with the cycles gone by, which is what makes it
   # answer something other than its own anchor.
-  def rolling(pool, amount:, anchor:, every: 1)
-    create(:pool_budget, pool: pool, amount: amount, interval_months: every, anchor_date: anchor)
+  def rolling(category, amount:, anchor:, every: 1)
+    create(:budget, pool: nil, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
-  # `#stranded_rule` IS DELETED WITH THE SHAPE IT BUILT (plan 3, task 6). It planted a rule on an
-  # account-less pool — the one `#orphan_reason` still answers about — and task 3 had already
-  # re-planted the deleted category-mode examples onto it. `Pool#account_matches_pool_type` now
-  # requires an account for goals as well as envelopes and `CHECK ((pool_type = 0) = (account_id
-  # IS NULL))` requires it again past the model, so nothing in this suite can build one.
-  #
-  # `#orphan_rules`, `#orphan_reason` and the `_orphans` partial they feed are KEPT and now answer
-  # empty on every database; deleting the whole orphan apparatus is the follow-up this tightening
-  # creates. See `Pool::REFUSALS` and the task 6 report.
+  # `#orphan_rules`, `#orphan_reason`, `Rule#reason` AND THE `_orphans` PARTITION ARE ALL DELETED
+  # (two-ledger spec §5), and with them the one example that survived here — "leaves a rule that
+  # does fill an envelope out of the orphans". A rule belongs to a category and every category is in
+  # the waterfall, so there is no shape left to be outside the fill order; the half of that example
+  # that still says something (a rule appears under its owner) is `#category_groups`' first example.
 
   def names(rules) = rules.map { |rule| rule.budget.id }
 
-  describe "#pool_groups" do
-    it "puts each rule under the pool it fills", :aggregate_failures do
-      groceries = envelope("Groceries")
-      rent = envelope("Rent", priority: 2)
+  describe "#category_groups" do
+    it "puts each rule under the category it fills", :aggregate_failures do
+      groceries = holder("Groceries")
+      rent = holder("Rent", priority: 2)
       groceries_rule = rate(groceries, 400)
       rent_rule = rate(rent, 1_500)
 
-      expect(presenter.pool_groups.map(&:pool)).to eq([groceries, rent])
-      expect(names(presenter.pool_groups.first.rules)).to eq([groceries_rule.id])
-      expect(names(presenter.pool_groups.last.rules)).to eq([rent_rule.id])
+      expect(presenter.category_groups.map(&:category)).to eq([groceries, rent])
+      expect(names(presenter.category_groups.first.rules)).to eq([groceries_rule.id])
+      expect(names(presenter.category_groups.last.rules)).to eq([rent_rule.id])
     end
 
     # PRIORITY FIRST, NAME AS THE TIE-BREAK, on a fixture where all three candidate orders
     # disagree. Insertion order is Zebra, Alpha, Middle — the exact reverse of the answer — and
-    # name order alone is Alpha, Middle, Zebra. `pools` carries no ORDER BY, so without the key
+    # name order alone is Alpha, Middle, Zebra. `categories` carries no ORDER BY, so without the key
     # the order is whatever Postgres hands back, and a plain UPDATE relocates a row in the heap:
-    # renaming a pool would reshuffle the fill order with no change to what actually fills first.
-    it "orders pools by priority and then by name" do
-      ["Zebra", "Alpha"].each { |name| rate(envelope(name, priority: 2), 100) }
-      rate(envelope("Middle", priority: 1), 100)
+    # renaming a category would reshuffle the fill order with no change to what actually fills
+    # first.
+    it "orders categories by priority and then by name" do
+      ["Zebra", "Alpha"].each { |name| rate(holder(name, priority: 2), 100) }
+      rate(holder("Middle", priority: 1), 100)
 
-      expect(presenter.pool_groups.map { |group| group.pool.name }).to eq(["Middle", "Alpha", "Zebra"])
+      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Middle", "Alpha", "Zebra"])
     end
 
     # BudgetCalculator#due_order breaks a shared due date toward the LARGER obligation, because
     # the bigger bill is the one you can least afford to be short on. Insertion order says the
     # $100 rule first, so a sort that fell through to it would pass a bare "both rules render".
-    it "orders rules within a pool by due order, larger amount first on a tie", :aggregate_failures do
-      pool = envelope("Pet Care")
-      small = rolling(pool, amount: 100, anchor: Date.new(2026, 3, 1))
-      large = rolling(pool, amount: 500, anchor: Date.new(2026, 3, 1))
+    it "orders rules within a category by due order, larger amount first on a tie", :aggregate_failures do
+      category = holder("Pet Care")
+      small = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1))
+      large = rolling(category, amount: 500, anchor: Date.new(2026, 3, 1))
 
-      expect(names(presenter.pool_groups.first.rules)).to eq([large.id, small.id])
+      expect(names(presenter.category_groups.first.rules)).to eq([large.id, small.id])
       expect(small.created_at).to be < large.created_at
     end
 
     it "orders an earlier due date ahead of a larger amount" do
-      pool = envelope("Pet Care")
-      later = rolling(pool, amount: 900, anchor: Date.new(2026, 4, 1))
-      sooner = rolling(pool, amount: 100, anchor: Date.new(2026, 3, 1))
+      category = holder("Pet Care")
+      later = rolling(category, amount: 900, anchor: Date.new(2026, 4, 1))
+      sooner = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1))
 
-      expect(names(presenter.pool_groups.first.rules)).to eq([sooner.id, later.id])
+      expect(names(presenter.category_groups.first.rules)).to eq([sooner.id, later.id])
     end
 
-    it "leaves out a pool with no rule at all, and another user's rules", :aggregate_failures do
-      envelope("Empty")
-      rate(envelope("Groceries"), 400)
+    it "leaves out a category with no rule at all, and another user's rules", :aggregate_failures do
+      holder("Empty")
+      rate(holder("Groceries"), 400)
       stranger = create(:user)
-      rate(create(:pool, :budget_pool, user: stranger, name: "Their Rent"), 900)
+      rate(create(:category, :expense, :funded, user: stranger, name: "Their Rent"), 900)
 
-      expect(presenter.pool_groups.map { |group| group.pool.name }).to eq(["Groceries"])
-      expect(presenter.pool_groups.first.rules.size).to eq(1)
+      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Groceries"])
+      expect(presenter.category_groups.first.rules.size).to eq(1)
     end
   end
 
   describe "a group's own reading" do
-    it "reports the pool's balance and its status against the ledger", :aggregate_failures do
-      pool = envelope("Groceries")
-      rate(pool, 400)
-      create(:pool_movement, from_pool: checking, to_pool: pool, amount: 250, date: today)
-      group = presenter.pool_groups.first
+    it "reports the category's holdings and its status against the ledger", :aggregate_failures do
+      category = holder("Groceries")
+      rate(category, 400)
+      create(:allocation, to_category: category, amount: 250, date: today)
+      group = presenter.category_groups.first
 
       expect(group.balance).to eq(250)
       expect(group.balance).to be_a(BigDecimal)
       expect(group.status.state).to eq(:left_to_spend)
     end
 
-    # A pool with no money in any term must not turn a money figure into an Integer: five empty
+    # A category with no money in any term must not turn a money figure into an Integer: the empty
     # `sum(:amount)` calls each answer the literal 0, and this page divides nothing but prints
     # everything.
-    it "reports a decimal zero for an untouched envelope", :aggregate_failures do
-      rate(envelope("Groceries"), 400)
+    it "reports a decimal zero for an untouched category", :aggregate_failures do
+      rate(holder("Groceries"), 400)
 
-      expect(presenter.pool_groups.first.balance).to eq(0)
-      expect(presenter.pool_groups.first.balance).to be_a(BigDecimal)
+      expect(presenter.category_groups.first.balance).to eq(0)
+      expect(presenter.category_groups.first.balance).to be_a(BigDecimal)
     end
 
-    it "states the pool's priority position" do
-      rate(envelope("Groceries", priority: 4), 400)
+    it "states the category's priority position" do
+      rate(holder("Groceries", priority: 4), 400)
 
-      expect(presenter.pool_groups.first.priority).to eq(4)
+      expect(presenter.category_groups.first.priority).to eq(4)
     end
   end
 
@@ -123,9 +125,9 @@ RSpec.describe BudgetPagePresenter do
     # THE NEXT OCCURRENCE, NOT THE ANCHOR. A recurring bill's anchor is its FIRST occurrence —
     # printing the column would show a date in the past as the next thing to pay.
     it "is the calculator's next occurrence for a recurring rule", :aggregate_failures do
-      pool = envelope("Car Insurance")
-      budget = rolling(pool, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6)
-      rule = presenter.pool_groups.first.rules.first
+      category = holder("Car Insurance")
+      budget = rolling(category, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6)
+      rule = presenter.category_groups.first.rules.first
 
       expect(rule.due_on).to eq(Date.new(2026, 3, 1))
       expect(rule.due_on).not_to eq(budget.anchor_date)
@@ -135,44 +137,43 @@ RSpec.describe BudgetPagePresenter do
     # An anchorless rate rule is never due. BudgetCalculator#due_date answers the end of the
     # period for one, which is a real number for the maths and a lie on screen.
     it "is nil for an anchorless rate rule", :aggregate_failures do
-      rate(envelope("Groceries"), 400)
-      rule = presenter.pool_groups.first.rules.first
+      rate(holder("Groceries"), 400)
+      rule = presenter.category_groups.first.rules.first
 
       expect(rule.due_on).to be_nil
       expect(rule).not_to be_anchored
     end
   end
 
-  describe "#orphan_rules" do
-    # THREE EXAMPLES DELETED (plan 3, task 6): the rule on an account-less pool with its
-    # `:no_account` reason, the ordering of two such rules, and the stranger's stranded rule left
-    # out. All three planted the shape the tightening abolished — see the note on
-    # `#stranded_rule`'s deletion above. What survives is the direction that is now the only one:
-    # a rule that fills an envelope is not an orphan, and nothing is.
-    it "leaves a rule that does fill an envelope out of the orphans", :aggregate_failures do
-      budget = rate(envelope("Groceries"), 400)
-
-      expect(presenter.orphan_rules).to be_empty
-      expect(names(presenter.pool_groups.first.rules)).to eq([budget.id])
-    end
-  end
-
   describe "#no_rules?" do
     it "is true for a user with no rules anywhere" do
-      envelope("Groceries")
+      holder("Groceries")
 
       expect(presenter).to be_no_rules
     end
 
-    # DELETED (plan 3, task 6): "is false once any rule exists, including one no distribution
-    # reaches", which planted `#stranded_rule`'s account-less pool. `#no_rules?` still asks about
-    # every rule the user has rather than about `#pool_groups`, and the example below is the
-    # reachable half of that claim.
-
     it "is false for a rule in the fill order" do
-      rate(envelope("Groceries"), 400)
+      rate(holder("Groceries"), 400)
 
       expect(presenter).not_to be_no_rules
+    end
+
+    # THE TRANSITIONAL GAP, PINNED RATHER THAN LEFT TO BE DISCOVERED (Task 8 closes it).
+    # `Budget.for_user` still spans both owner lanes, so a rule written before the cutover names
+    # only a pool and no group on this page can show it — and telling that user they have no rules
+    # would be this screen contradicting the rules they can see elsewhere. `#no_rules?` asks about
+    # every rule the user has; `budget_page/show` prints its own sentence for the difference.
+    it "is false for a rule that names only a pool, which no group can show", :aggregate_failures do
+      account = create(:pool, :account, user: user, name: "Checking")
+      create(
+        :pool_budget,
+        :per_period_rate,
+        amount: 90,
+        pool: create(:pool, :budget_pool, user: user, account: account, name: "Legacy")
+      )
+
+      expect(presenter).not_to be_no_rules
+      expect(presenter.category_groups).to be_empty
     end
   end
 
@@ -181,17 +182,14 @@ RSpec.describe BudgetPagePresenter do
   # that produced it is an identity, and it passes whichever way both sides are wrong.
   describe "the structural check" do
     describe "#rules_need" do
-      it "sums what every rule that fills an envelope claims from one period", :aggregate_failures do
-        rate(envelope("Groceries"), 400) # $400 a period
-        create(:pool_budget, :rate, pool: envelope("Utilities", priority: 2), amount: 260) # $120
-        rolling(envelope("Car Insurance", priority: 3), amount: 1_200, anchor: today + 3.months, every: 6)
+      it "sums what every rule claims from one period", :aggregate_failures do
+        rate(holder("Groceries"), 400) # $400 a period
+        create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260) # $120
+        rolling(holder("Car Insurance", priority: 3), amount: 1_200, anchor: today + 3.months, every: 6)
 
         expect(presenter.rules_need).to eq(BigDecimal("612.31"))
         expect(presenter.rules_need).to be_a(BigDecimal)
       end
-
-      # The cap-exclusion example is deleted with the cap (plan 3, task 3): it pinned that a $650
-      # monthly cap contributed nothing to this figure, and there is no cap to exclude.
 
       # A user with no rules at all is on the same numeric type as one with rules — an empty
       # `sum` is Integer 0, and this figure is subtracted from and compared against income.
@@ -201,14 +199,9 @@ RSpec.describe BudgetPagePresenter do
       end
     end
 
-    # `#caps_not_counted?` and its three examples are deleted (plan 3, task 3). The predicate
-    # explained why the figure above could read $0.00 over a page listing the user's own rules —
-    # because those rules were caps, which no distribution fills. Every rule this page can show is
-    # a claim on income now, so a zero means no rules at all, which `#no_rules?` already says.
-
     describe "#typical_income and #leftover" do
       it "reports the declared income and what survives the rules", :aggregate_failures do
-        rate(envelope("Groceries"), 400)
+        rate(holder("Groceries"), 400)
 
         expect(presenter.typical_income).to eq(2_400)
         expect(presenter.typical_income).to be_a(BigDecimal)
@@ -219,14 +212,14 @@ RSpec.describe BudgetPagePresenter do
       # the block renders its invitation off exactly that distinction.
       it "answers nil for both when no income is declared", :aggregate_failures do
         user.update!(typical_income: nil)
-        rate(envelope("Groceries"), 400)
+        rate(holder("Groceries"), 400)
 
         expect(presenter.typical_income).to be_nil
         expect(presenter.leftover).to be_nil
       end
 
       it "goes negative when the rules outrun the income" do
-        rate(envelope("Rent"), 3_000)
+        rate(holder("Rent"), 3_000)
 
         expect(presenter.leftover).to eq(-600)
       end
@@ -234,13 +227,13 @@ RSpec.describe BudgetPagePresenter do
 
     describe "#underwater?" do
       it "is true when the rules claim more than the declared income" do
-        rate(envelope("Rent"), 3_000)
+        rate(holder("Rent"), 3_000)
 
         expect(presenter).to be_underwater
       end
 
       it "is false when they fit" do
-        rate(envelope("Rent"), 500)
+        rate(holder("Rent"), 500)
 
         expect(presenter).not_to be_underwater
       end
@@ -248,7 +241,7 @@ RSpec.describe BudgetPagePresenter do
       # The boundary `>` sits on: rules that consume the income exactly are not a structural
       # problem, and a `>=` would tell a user their budget is impossible on the day it balances.
       it "is false when they land exactly on the income" do
-        rate(envelope("Rent"), 2_400)
+        rate(holder("Rent"), 2_400)
 
         expect(presenter).not_to be_underwater
       end
@@ -257,7 +250,7 @@ RSpec.describe BudgetPagePresenter do
       # told their budget fits an income they never stated.
       it "is false when no income is declared" do
         user.update!(typical_income: nil)
-        rate(envelope("Rent"), 3_000)
+        rate(holder("Rent"), 3_000)
 
         expect(presenter).not_to be_underwater
       end
@@ -266,7 +259,7 @@ RSpec.describe BudgetPagePresenter do
       # premium due inside this period asks for all of it now, and this page must still read the
       # standing claim of $200 a period.
       it "is false in a catch-up period whose rules still fit", :aggregate_failures do
-        rolling(envelope("Car Insurance"), amount: 5_200, anchor: today + 3.days, every: 12)
+        rolling(holder("Car Insurance"), amount: 5_200, anchor: today + 3.days, every: 12)
 
         expect(presenter.rules_need).to eq(200)
         expect(presenter).not_to be_underwater
@@ -289,7 +282,7 @@ RSpec.describe BudgetPagePresenter do
       # which pins nothing about this gate.
       it "is false when an income is declared but no cadence is", :aggregate_failures do
         user.update!(period_cadence: nil, period_anchor_date: nil)
-        rate(envelope("Rent"), 3_000)
+        rate(holder("Rent"), 3_000)
 
         expect(presenter.rules_need).to eq(3_000)
         expect(presenter).not_to be_underwater

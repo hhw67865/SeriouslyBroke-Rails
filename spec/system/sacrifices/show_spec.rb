@@ -16,31 +16,35 @@ RSpec.describe "Sacrifice view", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
   before { sign_in user, scope: :user }
 
-  def envelope(name, priority: 1)
-    create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+  # A CATEGORY THAT HOLDS MONEY (two-ledger spec §3) — what `envelope(...)` built here in the pool
+  # era, one record shorter. Every figure on this page is `Budget#steady_ask`, which reads the RULE
+  # and never its owner, so the conversion moves no number on the screen; what it changes is the
+  # name each row prints, which `BudgetPageHelper#budget_rule_name` now reads off the category.
+  def holder(name, priority: 1)
+    create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
   # Anchorless per-period: a rate, and cuttable.
   def rate(name, amount, priority: 1)
-    create(:pool_budget, :per_period_rate, pool: envelope(name, priority: priority), amount: amount)
+    create(:budget, :per_period_rate, pool: nil, category: holder(name, priority: priority), amount: amount)
   end
 
   # Anchorless MONTHLY: also a rate and also cuttable, but its per-period claim is
   # `amount * 12 / 26` — nothing like its own amount. This is the shape the dial's units live or
   # die on.
   def monthly_rate(name, amount, priority: 1)
-    create(:pool_budget, :rate, pool: envelope(name, priority: priority), amount: amount)
+    create(:budget, :rate, pool: nil, category: holder(name, priority: priority), amount: amount)
   end
 
   # Anchored and recurring: a bill, and fixed.
   def rolling(name, amount, priority: 1, anchor: Date.current + 2.months, every: 1)
     create(
-      :pool_budget,
-      pool: envelope(name, priority: priority),
+      :budget,
+      pool: nil,
+      category: holder(name, priority: priority),
       amount: amount,
       interval_months: every,
       anchor_date: anchor
@@ -49,7 +53,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
   # Anchored with no interval: a one-off, marked `dated` rather than `fixed`.
   def one_off(name, amount, priority: 1, anchor: Date.current + 10.days)
-    create(:pool_budget, :one_time, pool: envelope(name, priority: priority), amount: amount, anchor_date: anchor)
+    create(:budget, :one_time, pool: nil, category: holder(name, priority: priority), amount: amount, anchor_date: anchor)
   end
 
   def figure(name) = find("[data-figure='#{name}']")

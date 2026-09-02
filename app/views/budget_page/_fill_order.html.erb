@@ -1,0 +1,32 @@
+<%# THE FILL ORDER: every category a rule fills, in the order the money reaches them. Local:
+    `groups` (BudgetPagePresenter::Group list).
+
+    ONE LIST FOR THE PAGE, WHERE `_account_band` RENDERED ONE PER ACCOUNT (two-ledger spec §2). The
+    band existed because priority was only ever compared inside an account —
+    `AllocationCalculator#fill` walked `account.child_pools.by_priority`, so a drag across accounts
+    moved a row past rows whose relative order decided nothing. The waterfall now walks
+    `Category.in_fill_order` over ONE root, so every holder is ranked against every other and what
+    is inside this element is exactly what `PATCH /budget/reorder` rewrites.
+
+    The form is EMPTY and hidden: reorder_controller fills it with one `category_ids[]` per card in
+    DOM order at drop time. The ▲▼ buttons carry their own already-swapped list (see
+    BudgetPageHelper#reordered_category_ids) so the order is reachable with no JavaScript at all —
+    the drag is the enhancement, not the mechanism. %>
+<section class="space-y-3" data-fill-order
+         data-controller="app--budget-page--reorder"
+         data-action="dragover->app--budget-page--reorder#over
+                      drop->app--budget-page--reorder#drop">
+  <div class="flex items-baseline justify-between gap-4 px-1">
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fill order</h2>
+    <p class="text-xs text-gray-400">Drag a card, or use the arrows, to set the order your money fills them</p>
+  </div>
+
+  <% groups.each do |group| %>
+    <%= render "category_group", group: group, groups: groups %>
+  <% end %>
+
+  <% form_data = { app__budget_page__reorder_target: "form" } %>
+  <%= form_with(url: budget_page_reorder_path, method: :patch, class: "hidden", data: form_data) do %>
+    <%# One hidden `category_ids[]` per card, appended by reorder_controller in DOM order at drop. %>
+  <% end %>
+</section>

@@ -10,7 +10,6 @@ require "rails_helper"
 # line's own container and a swapped pair of labels would pass.
 RSpec.describe "Budget page structural check", type: :system do
   let(:user) { create(:user) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
   before { sign_in user, scope: :user }
 
@@ -18,11 +17,14 @@ RSpec.describe "Budget page structural check", type: :system do
 
   def figure(name) = find("[data-figure='#{name}']")
 
-  def envelope(name, priority: 1)
-    create(:pool, :budget_pool, user: user, account: checking, name: name, priority: priority)
+  # A CATEGORY THAT HOLDS MONEY (two-ledger spec §3) — what `envelope(...)` built here in the pool
+  # era. Every figure this block prints is `Budget.steady_need`, which reads the RULE and never its
+  # owner, so the conversion moves no number on the page.
+  def holder(name, priority: 1)
+    create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
-  def rate(pool, amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
+  def rate(category, amount) = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
 
   def declare(income:, cadence:, anchor:)
     fill_in "You typically bring in", with: income
@@ -40,7 +42,7 @@ RSpec.describe "Budget page structural check", type: :system do
   # button — a comparison nobody has made cannot have an answer.
   describe "before anything is declared", :aggregate_failures do
     before do
-      rate(envelope("Rent"), 3_000)
+      rate(holder("Rent"), 3_000)
       visit budget_page_path
     end
 
@@ -80,8 +82,8 @@ RSpec.describe "Budget page structural check", type: :system do
   describe "when the rules fit the income", :aggregate_failures do
     before do
       declared_user(2_400)
-      rate(envelope("Groceries"), 400)
-      create(:pool_budget, :rate, pool: envelope("Utilities", priority: 2), amount: 260)
+      rate(holder("Groceries"), 400)
+      create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260)
       visit budget_page_path
     end
 
@@ -113,7 +115,7 @@ RSpec.describe "Budget page structural check", type: :system do
   end
 
   # ZERO NEED IS NOW THE BRAND-NEW USER AND NOTHING ELSE. It used to be the legacy shape too —
-  # caps and no envelope rules — which is what the deleted note explained.
+  # caps and no funding rules — which is what the deleted note explained.
   describe "a declared user with no rules at all", :aggregate_failures do
     before do
       declared_user(2_400)
@@ -139,7 +141,7 @@ RSpec.describe "Budget page structural check", type: :system do
   describe "when the rules outrun the income", :aggregate_failures do
     before do
       declared_user(2_400)
-      rate(envelope("Rent"), 3_000)
+      rate(holder("Rent"), 3_000)
       visit budget_page_path
     end
 
@@ -168,8 +170,9 @@ RSpec.describe "Budget page structural check", type: :system do
     before do
       declared_user(2_400)
       create(
-        :pool_budget,
-        pool: envelope("Car Insurance"),
+        :budget,
+        pool: nil,
+        category: holder("Car Insurance"),
         amount: 5_200,
         interval_months: 12,
         anchor_date: Date.current + 3.days
@@ -200,7 +203,7 @@ RSpec.describe "Budget page structural check", type: :system do
   describe "Home's standing band", :aggregate_failures do
     it "warns when the budget does not fit" do
       declared_user(2_400)
-      rate(envelope("Rent"), 3_000)
+      rate(holder("Rent"), 3_000)
 
       visit root_path
 
@@ -218,7 +221,7 @@ RSpec.describe "Budget page structural check", type: :system do
     # warns and `/budget` prints the figures; with it cleared, both fall silent together.
     it "says nothing when income is declared but no period is" do
       declared_user(2_400)
-      rate(envelope("Rent"), 3_000)
+      rate(holder("Rent"), 3_000)
 
       visit root_path
       expect(page).to have_content("Your budget doesn't fit your income")
@@ -235,7 +238,7 @@ RSpec.describe "Budget page structural check", type: :system do
 
     it "stays silent when it does" do
       declared_user(2_400)
-      rate(envelope("Groceries"), 400)
+      rate(holder("Groceries"), 400)
 
       visit root_path
 
@@ -247,8 +250,8 @@ RSpec.describe "Budget page structural check", type: :system do
   # now only seeds could write.
   describe "declaring a period and an income", :aggregate_failures do
     before do
-      rate(envelope("Groceries"), 400)
-      create(:pool_budget, :rate, pool: envelope("Utilities", priority: 2), amount: 260)
+      rate(holder("Groceries"), 400)
+      create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260)
       visit budget_page_path
     end
 

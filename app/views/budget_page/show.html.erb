@@ -10,31 +10,29 @@
     `standard_action_button` rather than markup of its own, which is what puts it in the same
     treatment as the New Category button on the categories index. %>
 <%= page_header(title: "Budget",
-                subtitle: "The rules that fill your envelopes",
+                subtitle: "The rules that fill your categories",
                 actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
 
 <div class="space-y-6">
   <% if @presenter.no_rules? %>
     <%= render "empty" %>
   <% else %>
-    <%# The fill order itself: pool by pool, top to bottom, exactly as a distribution spends —
-        banded by the account that spends it, because that is the scope one reorder rewrites. %>
-    <% @presenter.account_bands.each do |band| %>
-      <%= render "account_band", band: band %>
-    <% end %>
+    <%# The fill order itself: category by category, top to bottom, exactly as a distribution
+        spends. One list — the account bands are gone with the per-account waterfall. %>
+    <% groups = @presenter.category_groups %>
+    <%= render "fill_order", groups: groups if groups.any? %>
 
-    <%# Rules exist but none of them fills an envelope — every one is an orphan. Said plainly
-        rather than left as a gap above the orphan band, which would read as a section that
-        failed to render. %>
-    <% if @presenter.pool_groups.empty? %>
+    <%# Rules exist but none of them names a category. TRANSITIONAL (Task 8 closes it):
+        `Budget.for_user` still spans both owner lanes, so a rule written before the cutover names
+        only a pool and no group on this page can show it. Said plainly rather than left as a gap
+        above nothing, which would read as a section that failed to render. %>
+    <% if groups.empty? %>
       <section class="bg-white border border-gray-200 rounded px-6 py-4">
         <p class="text-sm text-gray-500">
-          Nothing is in the fill order yet — none of your rules is attached to a pool an account can reach.
+          Nothing is in the fill order yet — none of your rules names a category that holds money.
         </p>
       </section>
     <% end %>
-
-    <%= render "orphans", presenter: @presenter %>
   <% end %>
 
   <%# OUTSIDE the no_rules? branch, deliberately. §8 puts the check under the rules, but a

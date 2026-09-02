@@ -1,0 +1,53 @@
+<%# One category and the rules that fill it. Locals: `group` (BudgetPagePresenter::Group) and
+    `groups` (the whole fill order — the card is a row of that drag list).
+
+    THE LIST IS THE PAGE, WHERE IT USED TO BE ONE ACCOUNT'S BAND (two-ledger spec §2). Priority was
+    compared only inside an account while the fill walked `account.child_pools.by_priority`;
+    `AllocationCalculator` fills every holder off one root now, so `groups` is the whole order and
+    the scope of one reorder.
+
+    The header says how the category is doing in the app's ONE row vocabulary
+    (`HomeHelper#pool_status_label`, spec §4.4) — the same words, the same red, as Home and the
+    distribution screen. A second vocabulary here would have two screens describe one envelope
+    differently on the same afternoon.
+
+    `priority` is stated because this page is where funding priority is set; the number is what
+    decides who gets filled first when the money runs out, and dragging this card — or its ▲▼ —
+    is what writes it. %>
+<section class="bg-white border border-gray-200 rounded"
+         data-category-group="<%= group.category.name %>"
+         data-category-id="<%= group.category.id %>"
+         data-app--budget-page--reorder-target="row"
+         draggable="true"
+         data-action="dragstart->app--budget-page--reorder#start
+                      dragend->app--budget-page--reorder#finish">
+  <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
+    <div class="flex items-baseline gap-3">
+      <%= render "reorder_controls", group: group, groups: groups %>
+      <h3 class="text-sm font-semibold text-gray-900"><%= group.category.name %></h3>
+      <span class="text-xs text-gray-400">priority <%= group.priority %></span>
+    </div>
+    <%# BOTH SUFFIXES, and neither is optional here — which is a property of the SHAPE rather
+        than of this file remembering to pass them (see `shared/_pool_status`).
+
+        `period_closed:` says WHICH PERIOD the figure belongs to, and a swept rate-rule envelope
+        reading `$400.00 left · last period` on one screen while another reads `$400.00 left` for
+        the same category on the same afternoon is two screens describing one envelope
+        differently. It rides off the status's own memoised calculator, so this page still builds
+        exactly one calculator per category.
+
+        `changed_after_distributing:` is the same objection said about the other clause, and this
+        page is the one that owed it most: the row below is the very form the user changed — the
+        clause names the act, on the screen the act happened on. Through the group, never a query
+        of the partial's own: the period it compares against is `today`'s. Silent on every state
+        but `:behind` (HomeHelper#pool_status_label owns that gate).
+
+        Passing an OBJECT rather than two keywords is what makes an omission unwritable rather
+        than merely absent. `· holds $X` rides on `Group#balance_clause?`. %>
+    <%= render "shared/pool_status", row: group %>
+  </div>
+
+  <% group.rules.each do |rule| %>
+    <%= render "rule_row", rule: rule %>
+  <% end %>
+</section>

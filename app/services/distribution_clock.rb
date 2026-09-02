@@ -52,11 +52,14 @@
 class DistributionClock
   attr_reader :user, :today, :account_ids
 
-  # `account_ids:` IS A TRANSITIONAL SURFACE AND HAS A DELETER NAMED: Tasks 5 and 6, which move
-  # HomePresenter, BudgetPagePresenter and CategoryBudgetPresenter off pools. All three still hand
-  # this class a list of accounts and ask it about a POOL, and until they stop, the pool-era question
-  # has to keep its pool-era answer — a clock that read `allocations` for them would be silently
-  # `false` on every one of those screens, because no pool movement is a distribution any more.
+  # `account_ids:` IS A TRANSITIONAL SURFACE AND HAS A DELETER NAMED: Task 6, which moves
+  # HomePresenter and CategoryBudgetPresenter off pools. `BudgetPagePresenter` was the third and it
+  # took the category arm in Task 5 — it is the first caller of it anywhere. The two that remain
+  # still hand this class a list of accounts and ask it about a POOL, and until they stop, the
+  # pool-era question has to keep its pool-era answer: a clock that read `allocations` for them
+  # would be silently `false` on every one of those screens, because no pool movement is a
+  # distribution any more. When the last of the two moves, everything below the `── THE POOL-ERA
+  # ARM` line goes with it.
   #
   # OMITTING IT IS THE NEW SHAPE, and the two arms are told apart by presence rather than by
   # emptiness: `account_ids: []` is a real pool-era question about a user with no accounts (it is the
@@ -117,9 +120,9 @@ class DistributionClock
       in_period.where(from_category_id: mine).or(in_period.where(to_category_id: mine)).maximum(:created_at)
   end
 
-  # ── THE POOL-ERA ARM. Tasks 5 and 6 delete everything below with the last caller that passes
+  # ── THE POOL-ERA ARM. Task 6 deletes everything below with the last caller that passes
   # `account_ids:`. Nothing here changed with the two-ledger cutover; it is kept verbatim so the
-  # three screens that have not moved yet keep the answer they had.
+  # two screens that have not moved yet keep the answer they had.
   #
   # ONE QUERY FOR THE WHOLE SCREEN rather than one per `behind` row, keyed by account id. `{}` on a
   # user with no accounts rather than a query with an empty IN list: an empty set makes the whole

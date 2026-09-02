@@ -60,7 +60,8 @@
     as optional keywords, so every caller of it is free to thread one and forget the other, and a
     forgotten suffix is silent — the row still renders, just describing the same envelope
     differently from the screen next to it. That defect shipped twice: once between Home and
-    /budget (`_pool_group` passed `period_closed:` alone) and once between Home's OWN two bands
+    /budget (`budget_page/_pool_group`, since renamed `_category_group`, passed `period_closed:`
+    alone) and once between Home's OWN two bands
     (`pool_problem_label` passed `changed_after_distributing:` alone). Both were caught in review,
     neither by a test, because there is nothing to fail — the assertion has to already suspect the
     missing clause.

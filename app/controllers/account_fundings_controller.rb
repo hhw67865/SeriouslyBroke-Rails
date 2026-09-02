@@ -28,7 +28,7 @@ class AccountFundingsController < HomeController
   # LOCKED, so two submits for the same account — a double-click, a resubmit before the redirect
   # lands — cannot both read "not yet funded" and both write. The second request's own
   # `account.lock!` blocks until the first transaction commits, exactly the idiom
-  # Pool.apply_fill_order and AllocationCommitter#call already use for the same reason: a row
+  # Category.apply_fill_order and AllocationCommitter#call already use for the same reason: a row
   # lock serialises the second writer behind the first rather than letting both act on a balance
   # that was only true for an instant.
   #

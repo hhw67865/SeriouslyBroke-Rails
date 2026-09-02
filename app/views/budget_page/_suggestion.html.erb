@@ -1,11 +1,15 @@
-<%# ONE SUGGESTION: its sentence, and the control that acts on it. Locals: `suggestion`
-    (SuggestionEngine::Suggestion), `presenter`.
+<%# ONE SUGGESTION: its sentence, and the control that acts on it. Local: `suggestion`
+    (SuggestionEngine::Suggestion).
 
     The sentence is per kind (§8's table is the copy target) and lives in its own partial; what is
     shared is the frame, the accept control and the clause every PROPOSING kind carries — what
     accepting does to the category. It is here rather than in each kind's partial precisely so a
     bill and a rate cannot come to describe the same act in two different ways. (A second clause
     named the cap the acceptance would destroy; it is deleted with the cap.)
+
+    `presenter` LEFT THE LOCALS with `#joined_pool` (two-ledger spec §5): the effect clause asked
+    the page which envelope an acceptance would join, and the engine states what accepting does on
+    the suggestion itself now, so this partial takes exactly what it renders.
 
     `data-suggestion` is kind AND subject id: a category and a pool may share a name, and
     `Capybara.exact` is unset, so a name-keyed row is one rename away from matching two. %>
@@ -14,62 +18,33 @@
     <div class="text-sm text-gray-700 space-y-1">
       <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>
 
-      <% joined = presenter.joined_pool(suggestion) %>
-      <% if suggestion_re_points_category?(suggestion) %>
-        <%# THE RE-POINT, SAID BEFORE THE CLICK. Accepting a $45 Parking proposal moves EVERY
-            Transportation entry into the envelope — the gas, the rideshares, all of it — and a
-            user who was not told that has had several hundred dollars of unrelated flow moved for
-            them. `Budget#item_must_belong_to_pool` is why it has to happen at all: a rule's item
-            must sit in a category pointing at the rule's pool.
+      <%# WHAT ACCEPTING DOES, SAID BEFORE THE CLICK.
 
-            WHETHER THE ENVELOPE IS NEW IS A SEPARATE QUESTION from whether the category moves, and
-            the two are said separately because they are two acts. A user who already has an
-            envelope by that name is JOINING it, not creating a second — the demo's "Utilities" is
-            exactly that shape — and a sentence promising a new one would be describing something
-            the save is not going to do.
+          THE RE-POINT SENTENCE IS DELETED AND THIS IS WHAT REPLACES IT (two-ledger spec §3/§4).
+          Accepting used to move the CATEGORY onto an envelope — "puts all Utilities spending in a
+          new Utilities envelope" / "joins your existing Utilities envelope" — because a rule was
+          owned by a pool and money only reached one through `categories.pool_id`. There is no
+          envelope and nothing is re-pointed: the category holds the money itself, and the whole of
+          what accepting changes besides writing the rule is `funded_since`.
 
-            THE CLAUSE USED TO READ "PAST AND FUTURE", AND THE START-DATE RULE INVERTED IT
-            (main-account spec §3). `ENTRY_POOL_ID` had no date bound, so the re-point dragged the
-            category's WHOLE history and a new envelope opened at minus its lifetime spend — the
-            demo read `overdrawn $496.00`, a red row the user did nothing to earn, and §1 opens
-            with exactly that complaint from real data. The rule bounds the lane at the pool's
-            `start_date` now, so the clause says WHEN instead of "everything": earlier spending
-            reads against the main account and the envelope opens at $0.
+          THAT IS STILL WORTH A SENTENCE, and the same one the deleted clause was really about:
+          which side of the start-date rule the user's spending falls on. From `funded_since`
+          onward an entry drains the CATEGORY; before it, the entry drains what is available. So a
+          category that has never held money is being started here, and one that already holds it is
+          not — which is the state the SECOND rule in a category is in, and the honest replacement
+          for the old "joins the envelope you already have".
 
-            THE TWO BRANCHES STILL SAY IT DIFFERENTLY BECAUSE THEY STILL DO DIFFERENT THINGS. A NEW
-            envelope is dated TODAY by `Pool#set_default_start_date`, so its bound is today and its
-            opening balance is nothing. A JOINED one already exists and carries its OWN start date,
-            which may be months back — so joining it CAN move history, bounded by that date, and
-            the date is printed because it is the only thing on the row that predicts how much. %>
+          `detail[:starts_holding]` is the engine's own answer (it reads `funded_since`, which is
+          exactly what `BudgetProposal` stamps), so the row and the write cannot disagree. %>
+      <% if suggestion_proposes_a_rule?(suggestion) %>
+        <% subject_name = suggestion.detail[:category_name] || suggestion.subject.name %>
         <p class="text-gray-500" data-suggestion-effect>
-          <% if joined %>
-            <%# `joined.noun`, NOT THE WORD "envelope" (plan 3, task 5). The reuse arm accepts any
-                non-account pool, so this sentence was calling the demo's Vacation to Europe GOAL an
-                envelope while the category page said "Goal" about it. `Pool::NOUNS` is the one
-                mapping. %>
-            This rule joins your existing <%= joined.name %> <%= joined.noun %>, and points all
-            <%= suggestion.detail[:category_name] || suggestion.subject.name %> spending at it
-            from <%= joined.start_date.strftime("%b %-d, %Y") %> onward — spending before that
-            stays with your main account.
+          <% if suggestion.detail[:starts_holding] %>
+            Accepting this starts <%= subject_name %> holding its own money, from today onward —
+            spending before today stays with what is available.
           <% else %>
-            Accepting this puts all <%= suggestion.detail[:category_name] || suggestion.subject.name %>
-            spending in a new <%= suggestion_proposed_envelope_name(suggestion) %> envelope
-            from today onward — spending before today stays with your main account.
+            <%= subject_name %> already holds its own money; this rule adds to what fills it.
           <% end %>
-        </p>
-
-        <%# THE CAP WARNING IS DELETED (plan 3, task 3). Accepting a proposal used to destroy the
-            category's monthly cap as a side effect of re-pointing it, so the row had to name the
-            rule the click was about to delete. There is no cap to delete, so the row is one clause
-            shorter and the re-point sentence above is the whole of what accepting does. %>
-      <% elsif joined %>
-        <%# THE SHARING CASE, and it is the whole reason the envelope is the CATEGORY's rather than
-            the item's. Phone, Internet and Streaming Services are three bills in one Utilities
-            category: the first acceptance settles the envelope, and from then on the engine's own
-            payload reuses it (the category is pool-covered), so this rule ADDS to the envelope
-            rather than making a second one — and the category does not move again. %>
-        <p class="text-gray-500" data-suggestion-effect>
-          This rule joins your existing <%= joined.name %> <%= joined.noun %>, alongside what is already in it.
         </p>
       <% end %>
     </div>

@@ -89,7 +89,7 @@
       </div>
 
       <% group.each do |suggestion| %>
-        <%= render "budget_page/suggestion", suggestion: suggestion, presenter: presenter %>
+        <%= render "budget_page/suggestion", suggestion: suggestion %>
       <% end %>
     <% end %>
   <% end %>
@@ -103,10 +103,9 @@
       a Turbo navigation. The COUNT is in the summary, always visible, because the count is the
       part that has to be true whether or not anyone opens it.
 
-      NO INDEX, NO KIND HEADINGS, NO `presenter` PASSED. This is a list to find one row in and put
-      it back, not a second panel: the rows carry the kind's own sentence and a Show button, and the
-      accept-effect clause above (which is what wants `presenter`) would be describing an act
-      nobody can perform from here. %>
+      NO INDEX AND NO KIND HEADINGS. This is a list to find one row in and put it back, not a
+      second panel: the rows carry the kind's own sentence and a Show button, and the accept-effect
+      clause above would be describing an act nobody can perform from here. %>
   <% if presenter.hidden_suggestions.any? %>
     <details class="border-t border-gray-200" data-hidden-suggestions>
       <summary class="px-6 py-3 text-sm text-gray-500 cursor-pointer hover:text-gray-700">

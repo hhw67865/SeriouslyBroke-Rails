@@ -45,11 +45,27 @@ RSpec.shared_context "with a rule changed after the money went out" do
   # unambiguously older than the distribution's `created_at`.
   def before_distributing(&) = travel_to(3.hours.ago, &)
 
-  # `from:` defaults to the account every one of these four files calls `checking`; it is a
-  # keyword rather than a hard reference so a fifth screen with two accounts can say which.
+  # `from:` defaults to the account every one of these files calls `checking`; it is a
+  # keyword rather than a hard reference so a screen with two accounts can say which.
+  #
+  # THE POOL ARM, and it has a deleter named: Task 6, with the last screen that reads
+  # `DistributionClock`'s `account_ids:` surface. Home's pool rows and the category page's two
+  # blocks still ask the pool-era question, so the fixture that answers it stays until they move.
   def distribute(pool, amount, from: checking)
     travel_to(2.hours.ago) do
       create(:pool_movement, kind: :allocation, from_pool: from, to_pool: pool, amount: amount, date: today)
+    end
+  end
+
+  # THE PURPOSE-LEDGER TWIN (two-ledger spec §2), for the screens that have moved. An allocation
+  # names no account — it moves money between the user's one root and a category — so there is no
+  # `from:` to say and `DistributionClock`'s category arm reads `Allocation.distributed` rather
+  # than `PoolMovement.distributed`. Everything else about the recipe is unchanged, which is the
+  # whole reason this lives here: the three controlled moments and the `today` resolved at real now
+  # are what the two arms have in common and what kept being got wrong when they were hand-rolled.
+  def allocate(category, amount)
+    travel_to(2.hours.ago) do
+      create(:allocation, kind: :allocation, to_category: category, amount: amount, date: today)
     end
   end
 

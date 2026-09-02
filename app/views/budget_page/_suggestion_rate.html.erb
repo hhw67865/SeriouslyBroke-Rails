@@ -1,8 +1,11 @@
-<%# A CATEGORY THAT BEHAVES LIKE A RATE AND IS FUNDED BY NOTHING. Local: `suggestion`.
+<%# A CATEGORY THAT BEHAVES LIKE A RATE AND HOLDS NOTHING. Local: `suggestion`.
 
     §8's copy target: `Coffee — $35 a period for 6 months, currently comes out of your buffer`.
-    The "out of your buffer" half is the reason the suggestion exists at all — the category has no
-    pool, so nothing reserves this money and every dollar of it lands on whatever is left over.
+    THE SECOND HALF IS RE-ANCHORED (two-ledger spec §4) and says the same thing about the model
+    that replaced the buffer: the category has no `funded_since`, so `CategoryLedger
+    ::ENTRY_CATEGORY_ID` sends every one of its entries to AVAILABLE. Nothing reserves this money
+    and every dollar of it lands on whatever is left over — which is the reason the suggestion
+    exists at all, and is now a literal reading of the detector's own population.
 
     THE DIVISOR IS NAMED. `amount` is the observed total divided by the periods the category has
     been ALIVE for, not by the periods it appeared in (a per-occurrence figure proposed as a rate
@@ -11,7 +14,7 @@
 <p>
   <span class="font-medium text-gray-900"><%= suggestion.subject.name %></span> —
   <span class="tabular-nums"><%= number_to_currency(suggestion.amount) %></span> a period,
-  currently comes out of your buffer.
+  currently comes out of what's available.
 </p>
 
 <p class="text-gray-500">

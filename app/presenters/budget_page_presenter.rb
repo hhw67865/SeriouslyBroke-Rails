@@ -1,37 +1,45 @@
 # frozen_string_literal: true
 
-# Everything the Budget page renders: every rule the user owns, grouped under the pool it fills,
+# Everything the Budget page renders: every rule the user owns, grouped under the category it fills,
 # in the order the money actually arrives. Read-only — the rule forms it links to own the writes.
 #
-# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8
+# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
+# docs/superpowers/specs/2026-08-21-two-ledger-design.md §3
 class BudgetPagePresenter
   # ONE RULE ON THE PAGE. `due_on` is nil for an anchorless rule and that nil is information, not
   # a gap: BudgetCalculator#due_date answers `period_end` for a rule with no anchor, which is a
   # real number for the maths and a lie on screen — "due Aug 31" printed against a rate rule that
   # is never due. The row prints a date only where one exists.
   #
-  # `reason` is nil for a rule in the fill order and a symbol for one outside it (see
-  # #orphan_reason). It travels on the rule rather than on the section so the row can say WHY it
-  # is not in the main list — the two orphan kinds are different problems with different fixes.
-  Rule = Data.define(:budget, :due_on, :reason) do
+  # `reason` IS GONE WITH THE ORPHANS (two-ledger spec §5, Task 5). It said WHY a rule was outside
+  # the fill order, and the one reason left — a pool no account holds — is a fact about a layer that
+  # no longer owns rules. A category-owned rule is always in the fill order; there is nothing left
+  # for a row to have to excuse.
+  Rule = Data.define(:budget, :due_on) do
     def anchored? = due_on.present?
   end
 
-  # ONE POOL AND THE RULES THAT FILL IT. `status` is a PoolStatus, so the group header speaks the
-  # app's existing row vocabulary through `pool_status_label` rather than a second one of its own,
-  # and its #balance is the pool's balance — the same object, so the header's state and its figure
-  # cannot disagree, and the page does not build a second calculator to ask.
+  # ONE CATEGORY AND THE RULES THAT FILL IT. `status` is a HoldingStatus, so the group header speaks
+  # the app's existing row vocabulary through `pool_status_label` rather than a second one of its
+  # own, and its #balance is the category's holdings — the same object, so the header's state and
+  # its figure cannot disagree, and the page does not build a second calculator to ask.
+  #
+  # THE MEMBER NAMES THE VOCABULARY READS ARE UNCHANGED, and deliberately so: `shared/_pool_status`
+  # renders `HomePresenter::Row`, this and `CategoryBudgetPresenter` off ONE set of questions
+  # (#status, #needs_attention?, #period_closed?, #changed_after_distributing?, #due_marker?,
+  # #balance_clause?), and Home does not move onto categories until Task 6. Renaming the shared
+  # partial is that task's; what this one owes is to keep answering.
   #
   # `changed_after_distributing` rides on the group rather than being asked in the partial, for the
-  # same reason `status` does: it compares this pool's rules against THIS period's latest
+  # same reason `status` does: it compares this category's rules against THIS period's latest
   # distribution, and which period that is depends on the presenter's `today`. It is the second
   # half of the row vocabulary — `period_closed?` is the first — and this page carries BOTH because
   # a suffix on Home and not here is two screens describing one envelope differently on the same
   # afternoon. That the Budget page is where rules are EDITED makes the clause more nearly a
   # caption for what the user just did here than anywhere else in the app.
-  Group = Data.define(:pool, :rules, :status, :changed_after_distributing) do
+  Group = Data.define(:category, :rules, :status, :changed_after_distributing) do
     delegate :balance, to: :status
-    delegate :priority, to: :pool
+    delegate :priority, to: :category
 
     # THE ROW VOCABULARY'S FOUR QUESTIONS, so this Data and `HomePresenter::Row` answer the same
     # set and `shared/_pool_status` can render either without asking which screen it is on. These
@@ -47,20 +55,13 @@ class BudgetPagePresenter
     def changed_after_distributing? = changed_after_distributing
 
     # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE. `· holds $X` on the three states whose figure
-    # is a bill's shortfall rather than this pool's money — `pool_balance_clause` owns which — and
-    # never a date: every rule's own date is printed in the rows below this header, so a date up
+    # is a bill's shortfall rather than this category's money — `pool_balance_clause` owns which —
+    # and never a date: every rule's own date is printed in the rows below this header, so a date up
     # here would be one of them repeated without saying which. The mirror of
     # `HomePresenter::Row#due_marker?`, where the screen is missing the opposite thing.
     def balance_clause? = true
     def due_marker? = false
   end
-
-  # ONE ACCOUNT AND ITS POOLS IN FILL ORDER. The page's main list is banded by account rather
-  # than flat, and Task 5 is why: priority is only ever compared within an account (the fill is
-  # per-account), so a flat list interleaved by `[priority, name]` across two accounts would
-  # offer the user a drag between rows whose relative order decides nothing. The band is the
-  # scope of one reorder — what is inside it is exactly what `PATCH /budget/reorder` rewrites.
-  Band = Data.define(:account, :groups)
 
   attr_reader :user, :today
 
@@ -82,52 +83,33 @@ class BudgetPagePresenter
     @declaration = declaration || user
   end
 
-  # The top half of §8: pools in fill order, each carrying its rules in due order.
+  # The top half of §8: categories in fill order, each carrying its rules in due order.
   #
-  # `[priority, name]` is the in-memory twin of `Pool.by_priority` and the same tie-break
+  # `[priority, name]` is the in-memory twin of `Category.in_fill_order` and the same tie-break
   # HomePresenter#by_priority uses. Priority alone is not a total order, and a tie falling through
   # to database order is the defect Plan 1 shipped in its waterfall — heap order deciding who gets
   # funded first, so the same page reported a different order on consecutive loads with no data
   # change.
   #
-  # Only pools that OWN a rule are groups, and only pools with an account. A pool with no rule has
-  # nothing to show on a page about rules, and an account-less pool can be funded by no
-  # distribution at all — its rules are named in #orphan_rules with the step that fixes them.
-  def pool_groups
-    @pool_groups ||= grouped_pools.sort_by { |pool| [pool.priority, pool.name] }.map { |pool| build_group(pool) }
-  end
-
-  # #pool_groups banded by the account that funds them, accounts in their own `[priority, name]`
-  # order. `group_by` preserves insertion order, so each band's groups arrive already in fill
-  # order — there is no second sort here to disagree with #pool_groups' one.
+  # ONLY CATEGORIES THAT OWN A RULE, which is the same boundary the pool era drew and one condition
+  # shorter: there is no second requirement about an account that could reach them, because a
+  # distribution reaches every holder off one root (`AllocationCalculator`). It is exactly
+  # `Category.with_a_rule`, and `.apply_fill_order` refuses any list that is not this set.
   #
-  # Every group has an account by construction (#rules_by_pool selects on `pool.account_id`), so
-  # there is no nil band to render and no pool falls out of the page by being banded.
-  def account_bands
-    @account_bands ||= pool_groups.group_by { |group| group.pool.account }
-      .sort_by { |account, _groups| [account.priority, account.name] }
-      .map { |account, groups| Band.new(account: account, groups: groups) }
-  end
-
-  # THE RULES NO DISTRIBUTION CAN REACH, each saying why.
-  #
-  # ONE REASON NOW: an account-less pool has no account whose money could arrive. The other was a
-  # category-mode rule, which funded a category rather than an envelope so no pool ever filled it —
-  # a shape deleted in plan 3, task 3. The reason still rides on the row rather than on the section,
-  # because it is the row that has to say what the fix is.
-  #
-  # Ordered by owner name and then by the same #due_order the groups use, because this is a
-  # rendered list and `all_budgets` carries no ORDER BY: without a key its order is whatever
-  # Postgres hands back, and a plain UPDATE relocates a row in the heap. Every rule here is
-  # persisted (see #rules), so `due_order`'s id tie-break cannot meet an unsaved record.
-  def orphan_rules
-    @orphan_rules ||= rules.filter_map { |budget| build_orphan(budget) }
-      .sort_by { |rule| [owner_name(rule.budget), *rule_order(rule.budget)] }
+  # THE BANDS ARE GONE. `Band`/`#account_bands` split this list by the account that funded each
+  # envelope, because priority was only ever compared inside an account; the waterfall now ranks
+  # every holder against every other, so there is one list and one reorder scope.
+  def category_groups
+    @category_groups ||= grouped_categories.sort_by { |category| [category.priority, category.name] }
+      .map { |category| build_group(category) }
   end
 
   # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user
-  # has rather than of #pool_groups: a user whose only rules are orphans has rules, and telling
-  # them they have none above a list of their own rules is a screen contradicting itself.
+  # has rather than of #category_groups, and the gap between the two is TRANSITIONAL (Task 8 closes
+  # it): `Budget.for_user` still spans both owner lanes, so a rule written before the cutover that
+  # names only a pool is a rule the user has and no group can show. Telling such a user they have
+  # none would be a screen contradicting the rules they can see on their own pool pages;
+  # `budget_page/show` says what is actually true for them instead.
   def no_rules? = rules.empty?
 
   # §8's structural check, three lines: what the rules claim from a period, what the user says
@@ -135,7 +117,7 @@ class BudgetPagePresenter
   #
   # `Budget.steady_need`, NOT a sum over #rules — even though #rules is already loaded and
   # preloaded, and this therefore costs a second pass over the same rows. The figure is read by
-  # this page, by Home's standing band and (Task 9) by the sacrifice view, and the moment two of
+  # this page, by Home's standing band and by the sacrifice view, and the moment two of
   # them spell the sum themselves they are free to disagree about which rules count. One reader,
   # measured: see the query note in the task report.
   #
@@ -214,38 +196,11 @@ class BudgetPagePresenter
   # full; the index above them is navigation, not a filter.
   def suggestions_by_kind = @suggestions_by_kind ||= suggestions.group_by(&:kind)
 
-  # THE NAME OF THE ENVELOPE THIS ACCEPTANCE WOULD JOIN, or nil if it would make a new one — the
-  # difference between "joins your existing Utilities envelope" and "puts all Utilities spending in
-  # a new Utilities envelope", which are two different acts and must not share a sentence.
-  #
-  # TWO WAYS TO JOIN ONE, and they are the two `BudgetProposal#find_or_create_envelope` reuses on:
-  #
-  #   1. the category already points at an envelope — the engine says so itself, with `pool_id`,
-  #      and it is the state the SECOND bill in a category is in once the first was accepted;
-  #   2. the user already has a budget pool by the proposed name. The engine names a proposal after
-  #      the CATEGORY and cannot see pools it did not propose, so this one is only visible here —
-  #      and on the demo seeds it is the ordinary case, not the edge one.
-  #
-  # Two queries for the whole panel, and neither is per row.
-  # NIL FOR THE TWO KINDS THAT PROPOSE NOTHING, and the guard is explicit rather than left to a
-  # `&.`: drift and a dead rule are about a rule that already has an envelope, so their payloads
-  # carry neither half and asking this of them is a question with no answer.
-  #
-  # THE POOL, NOT ITS NAME (plan 3, task 5 — Task 2's second stale noun). This returned a String and
-  # the row printed "your existing <name> envelope" after it, which is FALSE for the reuse arm: the
-  # `pool_id` branch accepts any non-account pool, savings goals included (see
-  # `BudgetProposal`'s own note), so the demo read *"This rule joins your existing Vacation to
-  # Europe envelope"* about a GOAL — three inches from a category page saying "Goal" about the same
-  # pool. Handing the record back lets the row say `pool.noun`, which is the one-noun helper
-  # `Pool::NOUNS` exists to be. The NAME branch is unaffected — it looks in `budget_pools` only, so
-  # it was always an envelope — and it goes through the same reader so the two arms cannot drift.
-  def joined_pool(suggestion)
-    prefill = suggestion.prefill
-    return reused_pools[prefill[:pool_id]] if prefill.key?(:pool_id)
-    return nil unless prefill.key?(:pool)
-
-    existing_envelopes[prefill[:pool][:name].to_s.downcase]
-  end
+  # `#joined_pool` IS DELETED (two-ledger spec §5). It answered which envelope an acceptance would
+  # JOIN rather than mint — two queries for the whole panel, and a whole paragraph about the two
+  # ways to reuse one — and there is no envelope to join or mint. What accepting does now is stamp
+  # `funded_since`, which the engine states on the suggestion itself (`detail[:starts_holding]`), so
+  # the row needs nothing from this class to say it.
 
   private
 
@@ -253,97 +208,50 @@ class BudgetPagePresenter
   # run of the four detectors, and it holds the dismissal lookup they are split by.
   def engine = @engine ||= SuggestionEngine.new(user: user, today: today)
 
-  def reused_pools
-    @reused_pools ||=
-      begin
-        ids = suggestions.filter_map { |suggestion| suggestion.prefill[:pool_id] }
-        ids.empty? ? {} : user.pools.where(id: ids).index_by(&:id)
-      end
-  end
-
-  # Every envelope the user already has, keyed by its lower-cased name — the same
-  # case-insensitivity `Pool`'s uniqueness validation and `BudgetProposal`'s lookup use, so the
-  # sentence and the write cannot disagree about whether a name is taken.
-  def existing_envelopes
-    @existing_envelopes ||=
-      if suggestions.any? { |suggestion| suggestion.prefill.key?(:pool) }
-        user.pools.budget_pools.index_by { |pool| pool.name.downcase }
-      else
-        {}
-      end
-  end
-
   # EVERY RULE THE USER OWNS. `user.all_budgets` is `Budget.for_user`, the app's one answer to
   # which rules are a user's.
   #
-  # `pool: :budgets` is preloaded because PoolStatus reads `pool.budgets` for every anchored rule
-  # it ranks — without it every group header is one SELECT per pool, on the widest per-rule screen
-  # in the app.
-  #
-  # `pool: :user` because `Budget#user` walks an owner and BudgetCalculator#periods_until_due asks
-  # it for every dated rule on the page. Measured on the demo seeds: eleven
-  # `SELECT users WHERE id = ?` for one user, and the page's whole cost fell from 37 queries to 26
-  # when they were preloaded.
-  #
-  # `category: :user` IS BACK, AND IT PRELOADS A LINK THAT IS NOW SET ON EVERY ROW (two-ledger spec
-  # §3, fix round 2). It rode alongside once for the cap and was dropped with that mode on the
-  # grounds that the column was nil everywhere; Task 1's migration filled it on every rule, and
-  # `Budget#user` asks the CATEGORY before the pool — so without this the widest per-rule screen in
-  # the app pays two queries per dated rule for the owner it used to get free.
+  # `category: [:user, :budgets]` is the whole preload and it replaces four pool-shaped ones.
+  # `:budgets` because `HoldingStatus` reads `category.budgets` for every anchored rule it ranks and
+  # `DistributionClock#changed_after_distributing?` reads it again — without it every group header
+  # is one SELECT per category, on the widest per-rule screen in the app. `:user` because
+  # `Budget#user` walks the owner and `BudgetCalculator#periods_until_due` asks it for every dated
+  # rule on the page; measured on the demo seeds in the pool era, eleven `SELECT users WHERE id = ?`
+  # for one user.
   def rules
-    @rules ||= user.all_budgets.includes(:item, pool: [:user, :budgets, :account], category: :user).to_a
+    @rules ||= user.all_budgets.includes(:item, category: [:user, :budgets]).to_a
   end
 
-  def rules_by_pool
-    @rules_by_pool ||= rules.select { |budget| budget.pool&.account_id }.group_by(&:pool_id)
+  def rules_by_category
+    @rules_by_category ||= rules.select(&:category_id).group_by(&:category_id)
   end
 
-  def pools_by_id = @pools_by_id ||= rules.filter_map(&:pool).index_by(&:id)
+  def categories_by_id = @categories_by_id ||= rules.filter_map(&:category).index_by(&:id)
 
-  def grouped_pools = rules_by_pool.keys.map { |id| pools_by_id.fetch(id) }
+  def grouped_categories = rules_by_category.keys.map { |id| categories_by_id.fetch(id) }
 
-  def build_group(pool)
+  def build_group(category)
     Group.new(
-      pool: pool,
-      rules: rules_by_pool.fetch(pool.id).sort_by { |budget| rule_order(budget) }.map { |budget| build_rule(budget) },
-      status: pool.status(today: today, terms: ledger.terms_for(pool)),
-      changed_after_distributing: distribution_clock.changed_after_distributing?(pool)
+      category: category,
+      rules: rules_by_category.fetch(category.id).sort_by { |budget| rule_order(budget) }.map { |budget| build_rule(budget) },
+      status: category.status(today: today, terms: ledger.terms_for(category)),
+      changed_after_distributing: distribution_clock.changed_after_distributing?(category)
     )
   end
 
-  # ONE CLOCK FOR THE WHOLE PAGE, over exactly the accounts the groups sit in — one movement query
-  # for the screen rather than one per group. `pool.account_id` is in memory already (`#rules`
-  # preloads `pool: [..., :account]`), and `#changed_after_distributing?` reads `pool.budgets`,
-  # which the same preload loaded.
+  # ONE CLOCK FOR THE WHOLE PAGE, and it is the CATEGORY ARM — the first caller to take it. An
+  # allocation names no account (it moves money between the user's root and their categories, and
+  # the root is one), so there is one distribution per period and one moment it happened at: one
+  # query for the screen, O(1) in groups, and no `account_ids:` to thread. `HomePresenter` is the
+  # last caller of the transitional per-account arm and Task 6 moves it; the arm dies with it.
   #
-  # Off `grouped_pools` rather than `user.pools.accounts`: an account holding no rule-carrying
-  # envelope has no group on this page, so widening the query to it would fetch a distribution
-  # nothing renders.
-  #
-  # MEASURED ON THE DEMO SEEDS, because a per-group query on the widest per-rule screen in the app
-  # is exactly the shape this page has been bitten by before: the whole page costs 31 statements
-  # without the clause and 32 with it. One query for thirteen groups, O(1) in groups.
+  # `category.budgets` is in memory already (`#rules` preloads it), so this asks the database
+  # nothing per row.
   def distribution_clock
-    @distribution_clock ||=
-      DistributionClock.new(user: user, account_ids: grouped_pools.map(&:account_id), today: today)
+    @distribution_clock ||= DistributionClock.new(user: user, today: today)
   end
 
-  def build_orphan(budget)
-    reason = orphan_reason(budget)
-
-    build_rule(budget, reason) if reason
-  end
-
-  # `budget.pool &&` is kept though every rule the page loads is pool-owned: `#rules` is
-  # `Budget.for_user`, which is pool-scoped, but an unsaved rule assigned no pool would reach here
-  # through a future caller and `.account_id` on nil is a 500 on a money screen.
-  def orphan_reason(budget)
-    :no_account if budget.pool && budget.pool.account_id.nil?
-  end
-
-  def build_rule(budget, reason = nil)
-    Rule.new(budget: budget, due_on: due_on_for(budget), reason: reason)
-  end
+  def build_rule(budget) = Rule.new(budget: budget, due_on: due_on_for(budget))
 
   # THROUGH THE CALCULATOR, NEVER THE RAW ANCHOR. A recurring bill's `anchor_date` is its FIRST
   # occurrence — the demo's car insurance anchors in March and is due every six months — so
@@ -353,7 +261,7 @@ class BudgetPagePresenter
   def due_date_for(budget) = (@due_dates ||= {})[budget] ||= calculator_for(budget).due_date
 
   # BudgetCalculator#due_order, never a `[due_date, -amount, id]` of our own: that key decides
-  # which rule a pool row names, which one `allocated_balances` fills first and therefore which
+  # which rule a category row names, which one `allocated_balances` fills first and therefore which
   # one slips — and it lives in exactly one place.
   #
   # The already-computed due date is handed in rather than left for the key to ask again, because
@@ -365,14 +273,14 @@ class BudgetPagePresenter
   # nil as a cache key would hand every such rule the first one's calculator.
   def calculator_for(budget) = (@calculators ||= {})[budget] ||= budget.calculator(today: today)
 
-  def owner_name(budget) = budget.pool&.name.to_s
-
-  # ONE LEDGER FOR THE WHOLE PAGE, over every pool that owns a rule — five grouped queries for the
-  # set instead of five aggregates per pool per status. Orphan pools are in it too: they cost the
-  # ledger nothing extra (the queries are grouped over the whole set) and a pool that is uncovered
-  # would quietly fall back to five queries of its own.
+  # ONE LEDGER FOR THE WHOLE PAGE, over every category that owns a rule — grouped queries for the
+  # set instead of five aggregates per category per status.
   #
   # Lazy, like Home's. This page writes nothing, so there is no deletion for a snapshot to fall
   # the wrong side of; the laziness only keeps a presenter that is built and never rendered free.
-  def ledger = @ledger ||= PoolBalanceLedger.new(pools_by_id.values)
+  #
+  # `user:` is passed so a page whose groups are empty still names an owner — `CategoryLedger`
+  # raises `NoSingleOwner` rather than guessing, and a brand-new user's page has no categories at
+  # all to read one off.
+  def ledger = @ledger ||= CategoryLedger.new(categories_by_id.values, user: user)
 end

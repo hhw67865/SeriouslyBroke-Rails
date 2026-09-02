@@ -4,16 +4,13 @@
     BudgetCalculator#due_date answers the end of the period for one, which is a real number for
     the maths and a lie on screen — so #due_on is nil there and the row stays quiet about dates.
 
-    A rule that is out of the fill order carries its reason on its own row: the band's heading says
-    there is a problem, and this says which of the two it is. A CLAUSE beside the name rather than
-    a sentence below it — see BudgetPageHelper#budget_rule_reason for the measurement. %>
+    THE REASON CLAUSE IS GONE WITH THE ORPHANS (two-ledger spec §5). It said why a rule was outside
+    the fill order; every rule this page renders is owned by a category, and every category is in
+    the waterfall. %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-rule="<%= budget_rule_name(rule.budget) %>">
   <div class="flex justify-between items-baseline gap-4">
     <span class="font-medium text-gray-900">
       <%= budget_rule_name(rule.budget) %>
-      <% if rule.reason %>
-        <span class="text-xs font-normal text-status-danger">· <%= budget_rule_reason(rule) %></span>
-      <% end %>
     </span>
     <span class="text-sm text-gray-700 flex items-baseline gap-2">
       <span><%= budget_rule_amount(rule.budget) %></span>

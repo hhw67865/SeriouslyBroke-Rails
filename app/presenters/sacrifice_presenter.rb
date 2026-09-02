@@ -88,7 +88,7 @@ class SacrificePresenter
   # `steady_need > typical_income` are the same test over the same BigDecimals.
   def underwater? = declared? && gap.positive?
 
-  # THE CUT LIST: anchorless pool-mode rules, biggest per-period claim first.
+  # THE CUT LIST: the anchorless rules, biggest per-period claim first.
   #
   # TASK 4'S RULING, INHERITED RATHER THAN RE-DECIDED (see `Budget.steady_need`'s comment, which
   # says so in as many words). Three boundaries, each with its own reason:
@@ -103,18 +103,19 @@ class SacrificePresenter
   #   user the whole of what their rules claim, and marked as such because "pretending rent is
   #   optional would be a lie" is the spec's own wording.
   #
-  #   ORPHAN POOL RULES ARE CUTTABLE like any other rate. A rule on an account-less pool is a real
-  #   claim the user declared and it is inside `rules_need`; leaving it out of the cut list would
-  #   put money in the gap that nothing on this page could reach.
+  #   EVERY RULE INSIDE `rules_need` IS ON THE PAGE, in one list or the other. The pool era spelled
+  #   an exception here for a rule on an account-less pool — a real claim no distribution could
+  #   reach — and the shape is gone; what the sentence was protecting survives as the rule itself:
+  #   nothing counted in the headline may be missing from the rows beneath it (see #rows_total).
   #
   # Biggest claim first because the page answers "what do I sacrifice" and the largest cut is the
-  # first thing anyone looks for. `[-claim, pool name, id]` is a total order — two rules can share
-  # a claim and a pool — so the list cannot reshuffle between page loads on unchanged data, which
-  # is the defect Plan 1 shipped in its waterfall.
+  # first thing anyone looks for. `[-claim, owner name, id]` is a total order — two rules can share
+  # a claim and a category — so the list cannot reshuffle between page loads on unchanged data,
+  # which is the defect Plan 1 shipped in its waterfall.
   def cuttable_rows = rows.select(&:cuttable?)
 
   # THE RULES THAT CANNOT MOVE, each saying which kind of immovable it is. Same order as the cut
-  # list, and every pool-mode rule the user owns is in exactly one of the two lists — see
+  # list, and every rule the user owns is in exactly one of the two lists — see
   # #rows_total, which is `rules_need` and is asserted to be.
   def fixed_rows = rows.reject(&:cuttable?)
 
@@ -148,10 +149,20 @@ class SacrificePresenter
   private
 
   def rows
-    @rows ||= pool_rules
+    @rows ||= rules
       .map { |budget| Row.new(budget: budget, claim: budget.steady_ask(user, today: today), reason: reason_for(budget)) }
-      .sort_by { |row| [-row.claim, row.budget.pool.name, row.budget.id] }
+      .sort_by { |row| [-row.claim, owner_name(row.budget), row.budget.id] }
   end
+
+  # THE NAME THE TIE-BREAK SORTS ON — the category that holds the money (two-ledger spec §3), with
+  # the pool behind it FOR THE LENGTH OF THE BRANCH ONLY (Task 8 deletes `budgets.pool_id` and the
+  # second arm with it). `Budget.for_user` spans both owner lanes, so a rule written before the
+  # cutover names only a pool and `category.name` would raise on it mid-sort. `to_s` because a rule
+  # with neither is `#must_have_an_owner`'s refusal rather than something to crash a page over.
+  #
+  # Same order `BudgetPageHelper#budget_rule_name` reads the owner in, for the same reason: the row
+  # this key sorts is the row that helper labels.
+  def owner_name(budget) = (budget.category&.name || budget.pool&.name).to_s
 
   # `:dated` and `:fixed` are the spec's own two markings, and they are told apart by SHAPE rather
   # than by a second reading of the three schedule columns: `Budget#cadence` is the one place that
@@ -167,24 +178,24 @@ class SacrificePresenter
     budget.cadence == :one_off ? :dated : :fixed
   end
 
-  # POOL-MODE RULES ONLY, scoped exactly as `Budget.steady_need` scopes its own sum — same
-  # `for_user`, same `where.not(pool_id: nil)` — so the rows and the figure they must add up to
-  # are drawn from one population. A second pass over rows `steady_need` has already loaded, and
-  # deliberately: the alternative is this page summing the rules itself, which is the one thing
-  # amendment A forbids.
+  # EVERY RULE THE USER OWNS, scoped exactly as `Budget.steady_need` scopes its own sum — the same
+  # `for_user` and nothing on top of it — so the rows and the figure they must add up to are drawn
+  # from one population. A second pass over rows `steady_need` has already loaded, and deliberately:
+  # the alternative is this page summing the rules itself, which is the one thing amendment A
+  # forbids.
   #
-  # `pool: :user` because `Budget#steady_ask` divides by `user.periods_per_year` and `#cadence`
-  # reads nothing off the pool, while the one-off branch builds a BudgetCalculator that asks
-  # `budget.user` for its period boundaries and `budget.item` for what has been paid. `:account`
-  # is not preloaded: no reader here touches it.
+  # `where.not(pool_id: nil)` IS GONE, AND ITS DELETION IS WHAT KEEPS #rows_total TRUE (two-ledger
+  # spec §3). It excluded the category-mode CAP, a shape deleted a plan ago, and `steady_need`'s own
+  # copy of it went with the cap; kept here it would now exclude exactly the rules this branch
+  # writes — every category-owned rule — so the cut list would be missing rows the headline above it
+  # counted, which is the one defect `#rows_total` exists to catch.
   #
-  # `category: :user` BESIDE IT, and the `where.not(pool_id: nil)` above is not a reason to skip it
-  # (two-ledger spec §3, fix round 2): these rows have a pool, but `Budget#user` asks the CATEGORY
-  # first, and Task 1's migration wrote a `category_id` onto every one of them. Filtering on one
-  # column says nothing about which column the owner is read through — `Budget.steady_need` loads
-  # this same population with the same pair, and this page exists to add up to that figure.
-  def pool_rules
-    @pool_rules ||= Budget.for_user(user).where.not(pool_id: nil)
-      .includes(:item, pool: :user, category: :user).to_a
+  # BOTH OWNER LANES ARE PRELOADED, matching `Budget.steady_need`'s pair exactly. `Budget#user` asks
+  # the CATEGORY first and the pool second, and `#steady_ask`'s one-off branch builds a
+  # BudgetCalculator that asks `budget.user` for its period boundaries and `budget.item` for what
+  # has been paid. `pool: :user` is the transitional half (Task 8 deletes it with the column);
+  # `:account` is not preloaded, because no reader here touches it.
+  def rules
+    @rules ||= Budget.for_user(user).includes(:item, pool: :user, category: :user).to_a
   end
 end
