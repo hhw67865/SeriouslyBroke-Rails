@@ -408,11 +408,13 @@ class SuggestionEngine
   # consequence that made two bills in one category a design decision — is simply the ordinary case:
   # two rules on one category, which is what one category, one budget line always meant.
   #
-  # `funded_since` IS THE QUESTION because it is what `Category#holder?` reads and what the write
-  # stamps. A category already holding money is not started by this acceptance; one that is not is,
-  # and the row says so before the click because it changes which side of the start-date rule every
-  # future entry falls on.
-  def starts_holding?(category) = category.funded_since.nil?
+  # `Category#holder?` IS THE QUESTION, asked through the model's own predicate rather than through
+  # a hand copy of the column test. It is what the panel's clause is about and what
+  # `BudgetProposal`'s write turns true, so the row and the write read one reader. (This was
+  # `funded_since.nil?` for one commit — the same answer for every category this class can reach,
+  # since `#expense_categories` is expenses only, and a second spelling of a predicate forty lines
+  # above its correct use.)
+  def starts_holding?(category) = !category.holder?
 
   # ---------------------------------------------------------------------------------------------
   # Detector 2 — a category that behaves like a rate and is funded by nothing
@@ -454,12 +456,11 @@ class SuggestionEngine
     end
   end
 
-  # The categories that hold nothing, read off the column rather than through a predicate: the
-  # positive spelling is `Category#holder?` (`expense? && funded_since.present?`) and every category
-  # here is already an expense by construction, so the negation of the half that is left is the
-  # whole of the question. Costs no query — the categories are in memory above.
+  # The categories that hold nothing — `Category#holder?` rejected, which is the model's own
+  # predicate and the one `#drift_suggestion` already asks forty lines below. Costs no query: the
+  # categories are in memory above, and `holder?` reads two of their columns.
   def unfunded_categories
-    @unfunded_categories ||= expense_categories.select { |category| category.funded_since.nil? }.sort_by(&:id)
+    @unfunded_categories ||= expense_categories.reject(&:holder?).sort_by(&:id)
   end
 
   # `[{ category_id => { period_index => total } }, { category_id => earliest entry date }]`, rolled

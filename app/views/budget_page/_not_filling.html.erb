@@ -1,0 +1,40 @@
+<%# THE RULES NOTHING FILLS, and why each one. Local: `rules` (BudgetPagePresenter::Rule list).
+
+    A band of its own, because the list above it is the FILL ORDER and these are not in it: a rule
+    whose category is not holding money yet, and a rule written before the cutover that names only a
+    pool, both ask for money no distribution will ever hand them. Rendering them among the groups
+    would put rows in a sequence they are not part of — and would draw a priority badge and two
+    reorder arrows on a card `Category.apply_fill_order` refuses to include.
+
+    THEY ARE NOT HIDDEN, and that is the point of the band rather than a filter. Every rule here is
+    inside `Budget.steady_need`, so the structural check below counts it: a user told their rules
+    need $500 a period, over a fill order showing nothing, has to be able to see where the $500
+    went.
+
+    Silent when there are none — an empty "Not in the fill order" heading invents a problem out of a
+    healthy screen. `data-not-filling` rather than the groups' own selector, so a category a user
+    named "Not in the fill order" cannot collide with it. %>
+<% if rules.any? %>
+  <section class="bg-white border border-status-danger rounded" data-not-filling>
+    <div class="px-6 py-3 border-b border-gray-200 bg-status-danger-light flex justify-between items-baseline gap-4">
+      <h3 class="text-sm font-semibold text-status-danger">Not in the fill order</h3>
+      <span class="text-sm text-status-danger">no distribution reaches these</span>
+    </div>
+
+    <% rules.each do |rule| %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
+           data-not-filling-rule="<%= budget_rule_name(rule.budget) %>">
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="font-medium text-gray-900">
+            <%= budget_rule_name(rule.budget) %>
+            <span class="text-xs font-normal text-status-danger">· <%= budget_rule_unfilled_reason(rule.budget) %></span>
+          </span>
+          <span class="text-sm text-gray-700 flex items-baseline gap-2">
+            <span><%= budget_rule_amount(rule.budget) %></span>
+            <%= link_to "Edit", edit_budget_path(rule.budget), class: "text-brand-dark hover:text-brand underline" %>
+          </span>
+        </div>
+      </div>
+    <% end %>
+  </section>
+<% end %>

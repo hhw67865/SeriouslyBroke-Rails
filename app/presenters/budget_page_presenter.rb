@@ -91,10 +91,18 @@ class BudgetPagePresenter
   # funded first, so the same page reported a different order on consecutive loads with no data
   # change.
   #
-  # ONLY CATEGORIES THAT OWN A RULE, which is the same boundary the pool era drew and one condition
-  # shorter: there is no second requirement about an account that could reach them, because a
-  # distribution reaches every holder off one root (`AllocationCalculator`). It is exactly
-  # `Category.with_a_rule`, and `.apply_fill_order` refuses any list that is not this set.
+  # HOLDER CATEGORIES THAT OWN A RULE — `Category.in_fill_order.with_a_rule`, and the population is
+  # THE SAME SET `.apply_fill_order` REFUSES ANY OTHER LIST THAN. That agreement is the whole point
+  # of stating it twice: the reorder endpoint compares the submitted ids against
+  # `in_fill_order.with_a_rule`, so a page that drew a draggable card for anything else would offer
+  # the user a control whose every use is refused — and the refusal it produced would say "that
+  # order didn't match your categories" about the order the page itself had just rendered.
+  #
+  # THE `holder?` HALF IS THIS FIX ROUND'S CORRECTION (MED-1). It was `with_a_rule` alone, which is
+  # wider by exactly the rules on categories that hold nothing: an expense category whose
+  # `funded_since` is still NULL is not in `Category.in_fill_order`, so no distribution can ever
+  # reach it and no reorder can ever include it — a group with a priority badge and two arrows,
+  # unorderable forever. Those rules are not hidden; they go to #unfilled_rules, which says why.
   #
   # THE BANDS ARE GONE. `Band`/`#account_bands` split this list by the account that funded each
   # envelope, because priority was only ever compared inside an account; the waterfall now ranks
@@ -102,6 +110,28 @@ class BudgetPagePresenter
   def category_groups
     @category_groups ||= grouped_categories.sort_by { |category| [category.priority, category.name] }
       .map { |category| build_group(category) }
+  end
+
+  # THE RULES NO GROUP CAN SHOW, each of which is a claim on income that no distribution will
+  # reach. Two shapes today, both TRANSITIONAL and both with a deleter named:
+  #
+  #   * a rule on a category that is not holding money yet (`funded_since` NULL). None exist on
+  #     real data — every writer in the app stamps the date through `BudgetProposal` — and Task 7
+  #     makes `funded_since` user-editable, at which point clearing it is two clicks.
+  #   * a rule written before the cutover, naming only a pool. Task 8 drops `budgets.pool_id`.
+  #
+  # THIS IS THE ORPHAN BAND'S JOB, AND NOT ITS RETURN. The old one listed rules on account-less
+  # pools — a setup problem inside a layer being deleted. This lists rules whose OWNER cannot hold
+  # money yet, which is a fact about the purpose ledger and is exactly what `Budget.steady_need`
+  # counts and the fill order cannot: a user whose structural check says $500 and whose fill order
+  # shows nothing has to be told where the $500 went.
+  #
+  # Ordered by owner name then by the groups' own `#rule_order`, because `all_budgets` carries no
+  # ORDER BY and a plain UPDATE relocates a row in the heap.
+  def unfilled_rules
+    @unfilled_rules ||= (rules - grouped_rules)
+      .sort_by { |budget| [owner_name(budget), *rule_order(budget)] }
+      .map { |budget| build_rule(budget) }
   end
 
   # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user
@@ -222,13 +252,23 @@ class BudgetPagePresenter
     @rules ||= user.all_budgets.includes(:item, category: [:user, :budgets]).to_a
   end
 
+  # `Category#holder?` IN MEMORY — the Ruby twin of `Category.in_fill_order`'s `expenses.where.not
+  # (funded_since: nil)`, asked of the categories the preload already loaded rather than through a
+  # second query that could disagree with the one `.apply_fill_order` runs.
   def rules_by_category
-    @rules_by_category ||= rules.select(&:category_id).group_by(&:category_id)
+    @rules_by_category ||= rules.select { |budget| budget.category&.holder? }.group_by(&:category_id)
   end
+
+  def grouped_rules = @grouped_rules ||= rules_by_category.values.flatten
 
   def categories_by_id = @categories_by_id ||= rules.filter_map(&:category).index_by(&:id)
 
   def grouped_categories = rules_by_category.keys.map { |id| categories_by_id.fetch(id) }
+
+  # THE OWNER'S NAME, category first and the pool behind it — `Budget#user`'s own order, and
+  # `BudgetPageHelper#budget_rule_name`'s. `to_s` because a rule with neither owner is
+  # `#must_have_an_owner`'s refusal rather than something to crash a sort over.
+  def owner_name(budget) = (budget.category&.name || budget.pool&.name).to_s
 
   def build_group(category)
     Group.new(
@@ -273,8 +313,10 @@ class BudgetPagePresenter
   # nil as a cache key would hand every such rule the first one's calculator.
   def calculator_for(budget) = (@calculators ||= {})[budget] ||= budget.calculator(today: today)
 
-  # ONE LEDGER FOR THE WHOLE PAGE, over every category that owns a rule — grouped queries for the
-  # set instead of five aggregates per category per status.
+  # ONE LEDGER FOR THE WHOLE PAGE, over exactly the categories the groups render — grouped queries
+  # for the set instead of five aggregates per category per status. A category in #unfilled_rules is
+  # not in it and needs no term: it holds nothing by definition, which is why its rule is in that
+  # list rather than in a group.
   #
   # Lazy, like Home's. This page writes nothing, so there is no deletion for a snapshot to fall
   # the wrong side of; the laziness only keeps a presenter that is built and never rendered free.
@@ -282,5 +324,5 @@ class BudgetPagePresenter
   # `user:` is passed so a page whose groups are empty still names an owner — `CategoryLedger`
   # raises `NoSingleOwner` rather than guessing, and a brand-new user's page has no categories at
   # all to read one off.
-  def ledger = @ledger ||= CategoryLedger.new(categories_by_id.values, user: user)
+  def ledger = @ledger ||= CategoryLedger.new(grouped_categories, user: user)
 end

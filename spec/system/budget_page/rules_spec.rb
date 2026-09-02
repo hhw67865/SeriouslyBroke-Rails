@@ -86,6 +86,55 @@ RSpec.describe "Budget page rules", type: :system do
   # is pinned on the presenter rather than here, where it would need a fixture nothing in the app
   # can write any more.
 
+  # A RULE WHOSE CATEGORY IS NOT HOLDING MONEY YET (fix round 1, MED-1) — the orphan band's job,
+  # re-anchored on the purpose ledger. `Category.in_fill_order` is HOLDERS, so no distribution can
+  # reach such a rule and `Category.apply_fill_order` refuses any list naming its category; drawing
+  # it as a group would put a priority badge and two arrows on a card whose every use is rejected.
+  #
+  # THE MIXED PAGE IS THE POINT. A page with only unfillable rules would pass a presenter that
+  # simply rendered nothing; this one has two holders that ARE orderable beside one that is not, so
+  # the panel and the fill order have to be right about the same screen at the same time.
+  #
+  # NONE OF THIS EXISTS ON REAL DATA — every writer stamps `funded_since` through `BudgetProposal`
+  # — and it is two clicks away once Task 7 ships `funded_since` editing. The rule is planted
+  # directly for that reason.
+  describe "a rule whose category holds nothing yet", :aggregate_failures do
+    before do
+      rate(holder("Groceries", priority: 1), 400)
+      rate(holder("Fun Money", priority: 2), 300)
+      create(
+        :budget,
+        :per_period_rate,
+        pool: nil,
+        amount: 35,
+        category: create(:category, :expense, user: user, name: "Coffee")
+      )
+      visit budget_page_path
+    end
+
+    it "keeps it out of the fill order and names its category in the panel" do
+      expect(category_groups).to eq(["Groceries", "Fun Money"])
+      expect(page).to have_no_css("[data-category-group='Coffee']")
+      within("[data-not-filling-rule='Coffee']") do
+        expect(page).to have_content("Coffee isn't holding money yet — nothing fills it")
+        expect(page).to have_content("$35.00 / period")
+      end
+    end
+
+    # THE REFUSAL THE ALIGNMENT KILLED. The endpoint compares the submitted ids against
+    # `in_fill_order.with_a_rule`; before the fix the page drew a Coffee card, so its own ▲▼ carried
+    # a list containing Coffee and came back "That order didn't match your categories" — a page
+    # refusing the order it had just rendered. The message is asserted absent BY ITS OWN WORDS, not
+    # merely by the success flash, because a redirect could be right while the flash was wrong.
+    it "cannot be refused for the order it rendered itself" do
+      click_button "Move Fun Money up"
+
+      expect(page).to have_content("Your money fills them in that order now.")
+      expect(page).to have_no_content("nothing was changed")
+      expect(category_groups).to eq(["Fun Money", "Groceries"])
+    end
+  end
+
   describe "a brand-new user", :aggregate_failures do
     before { visit budget_page_path }
 

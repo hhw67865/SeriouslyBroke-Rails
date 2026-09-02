@@ -41,7 +41,19 @@
 <div class="max-w-2xl mx-auto">
   <%= simple_form_for @budget, html: { class: "space-y-6" } do |f| %>
     <%= f.error_notification %>
-    <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+    <%# ERRORS WITH NOWHERE ELSE TO LAND. simple_form prints an attribute's error under that
+        attribute's input, so an error on a field this form does not RENDER produces a 422 whose
+        only visible text is "please review the problems below". `:base` was always lifted here for
+        that reason — an owner-less rule is a fact about the whole record and has no control at all.
+
+        THE OWNER JOINS IT EXACTLY WHEN THE FORM IS NOT ASKING FOR ONE (fix round 1). On the picker
+        path `category_must_be_an_expense` lands under the select the user chose in, which is right;
+        on the EDIT path the category is a read-only box and a hidden field, so the same message was
+        invisible — and that is the one path the validation exists to close, since `#update` is what
+        `BudgetProposal` never sees. Duplicating it would print the sentence twice on the picker
+        path, hence the branch rather than an unconditional merge. %>
+    <% lifted = f.object.errors[:base] + (owner_picker ? [] : f.object.errors[:category]) %>
+    <%= f.error_notification message: lifted.to_sentence if lifted.present? %>
 
     <%# Main Form Card %>
     <div class="bg-white shadow-sm rounded border border-gray-100 p-6">

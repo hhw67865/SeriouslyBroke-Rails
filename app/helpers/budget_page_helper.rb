@@ -98,10 +98,34 @@ module BudgetPageHelper
     offset.negative? ? index.zero? : index == groups.size - 1
   end
 
-  # `#budget_rule_reason` IS DELETED WITH THE ORPHAN BAND (two-ledger spec §5, Task 5). It said "no
-  # account — nothing can fund it" about a rule on an account-less pool, which was the last shape a
-  # rule outside the fill order could take. A rule belongs to a category and every category is in
-  # the waterfall, so there is no row left for the clause to appear on.
+  # WHY THIS RULE IS NOT IN THE FILL ORDER, and never merely that it is not — a row that fell silent
+  # here would read as a rule that failed to render.
+  #
+  # IT REPLACES `#budget_rule_reason`, WHICH SAID SOMETHING ELSE. That one worded one reason ("no
+  # account — nothing can fund it") about a rule on an account-less pool, a setup problem inside the
+  # layer being deleted. Both reasons here are about the PURPOSE ledger and both are transitional,
+  # with a deleter each:
+  #
+  #   * a category that is not holding money yet — `Category#holder?` false, so it is outside
+  #     `Category.in_fill_order` and no distribution reaches it. Task 7 makes `funded_since`
+  #     editable, which is what makes this reachable at all.
+  #   * a rule that names only a pool, written before the cutover. Task 8 drops the column, and
+  #     this arm goes with it.
+  #
+  # A CLAUSE RATHER THAN A SENTENCE, which is the correction its predecessor made at the browser: a
+  # full sentence under each row rendered the identical text down the whole band and read as a
+  # rendering fault. Each row says why beside its own name, in the length the rest of this app's
+  # rows use.
+  #
+  # THE CATEGORY IS NAMED, because it is the thing the user has to act on — `#budget_rule_name`
+  # prefers the ITEM it pays, so an item-backed rule would otherwise say "Phone · isn't holding
+  # money yet" without ever saying what is not holding it.
+  def budget_rule_unfilled_reason(budget)
+    category = budget.category
+    return "written before the cutover — no category to hold it" if category.blank?
+
+    "#{category.name} isn't holding money yet — nothing fills it"
+  end
 
   # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the second clause is about WHERE THE SCHEDULE IS. It
   # is true on the EDIT form, where the shape is not on screen and a user reading "$1,200.00 every

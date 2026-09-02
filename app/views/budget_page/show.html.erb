@@ -22,17 +22,11 @@
     <% groups = @presenter.category_groups %>
     <%= render "fill_order", groups: groups if groups.any? %>
 
-    <%# Rules exist but none of them names a category. TRANSITIONAL (Task 8 closes it):
-        `Budget.for_user` still spans both owner lanes, so a rule written before the cutover names
-        only a pool and no group on this page can show it. Said plainly rather than left as a gap
-        above nothing, which would read as a section that failed to render. %>
-    <% if groups.empty? %>
-      <section class="bg-white border border-gray-200 rounded px-6 py-4">
-        <p class="text-sm text-gray-500">
-          Nothing is in the fill order yet — none of your rules names a category that holds money.
-        </p>
-      </section>
-    <% end %>
+    <%# The rules no group can show, each saying why — a category not holding money yet, or a rule
+        written before the cutover that names only a pool. Both are transitional and both are
+        counted by the structural check below, so the band is what keeps that figure explicable.
+        Silent when there are none. %>
+    <%= render "not_filling", rules: @presenter.unfilled_rules %>
   <% end %>
 
   <%# OUTSIDE the no_rules? branch, deliberately. §8 puts the check under the rules, but a

@@ -70,6 +70,39 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  # THE CATEGORY-SIDE ANALOGUE of "cannot be an account" (two-ledger spec §2/§3, fix round 1). Income
+  # lands in AVAILABLE and is allocated out of it, so an income category holds nothing ever — a
+  # funding rule on one is a standing claim on money no `Category#holder?` can be true of. Both
+  # directions, because a validation asserted only where it fires says nothing about what it lets
+  # through, and the expense case here is the one the whole app writes.
+  describe "category ownership" do
+    let(:user) { create(:user) }
+
+    it "is valid on an expense category" do
+      expect(build(:budget, :rate, pool: nil, category: create(:category, :expense, :funded, user: user))).to be_valid
+    end
+
+    it "rejects a rule on an income category", :aggregate_failures do
+      budget = build(:budget, :rate, pool: nil, category: create(:category, :income, user: user))
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:category]).to include("must be an expense category")
+    end
+
+    # THE HOLE THIS CLOSED, STATED AS THE RECORD RATHER THAN THE ROUTE. `BudgetProposal` stamps
+    # `funded_since`, which `Category#only_expenses_hold_money` refuses on an income category — so
+    # `POST /budgets` was already answered and `PATCH` was not, because `#update` writes straight
+    # through. A rule that saved clean there counted into `Budget.steady_need` and could never be
+    # filled by any distribution, because `Category.in_fill_order` is holders.
+    it "refuses the re-parent that used to save clean", :aggregate_failures do
+      rule = create(:budget, :rate, pool: nil, category: create(:category, :expense, :funded, user: user))
+      income = create(:category, :income, user: user)
+
+      expect(rule.update(category: income)).to be(false)
+      expect(rule.reload.category).not_to eq(income)
+    end
+  end
+
   describe "the four valid shapes" do
     let(:user) { create(:user) }
     let(:pool) { create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user)) }

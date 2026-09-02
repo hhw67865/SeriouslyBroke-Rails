@@ -53,6 +53,7 @@ class Budget < ApplicationRecord
   validate :must_have_an_owner
   validate :pool_must_not_be_an_account, if: :pool_mode?
   validate :item_must_belong_to_pool, if: :pool_mode?
+  validate :category_must_be_an_expense, if: :category_mode?
   validate :item_must_belong_to_category, if: :category_mode?
   # UNGATED, BOTH OF THEM, and they were gated on `pool_mode?` only because a pool was the only
   # owner a rule could have. Neither reads a pool: `#shape_must_be_valid` is about the three
@@ -273,6 +274,30 @@ class Budget < ApplicationRecord
 
   def pool_must_not_be_an_account
     errors.add(:pool, "cannot be an account") if pool&.pool_type_account?
+  end
+
+  # THE DIRECT ANALOGUE OF #pool_must_not_be_an_account, ONE LAYER IN (two-ledger spec §2/§3). That
+  # one refuses a rule on the thing money physically sits in; this refuses a rule on a category that
+  # cannot hold money at all. Income lands in AVAILABLE and is allocated out of it — an income
+  # category holds nothing, ever — so a funding rule on one is a standing claim on money no
+  # `Category#holder?` can ever be true of.
+  #
+  # IT CLOSES A PATH `BudgetProposal` ALREADY CLOSED FROM THE OTHER END, AND THE GAP BETWEEN THE TWO
+  # IS THE WHOLE REASON THIS EXISTS. Accepting a rule stamps `funded_since`, and
+  # `Category#only_expenses_hold_money` refuses that stamp on an income category — so `POST /budgets`
+  # was answered. `PATCH /budgets/:id` is not: `#update` writes `budget.update(budget_params)`
+  # directly, never through `BudgetProposal`, so re-parenting a rule onto the user's own income
+  # category saved clean. The rule then counted into `Budget.steady_need` (measured: $500 a period
+  # of a claim nothing can fill), rendered a group on the Budget page, and was UNFILLABLE FOREVER —
+  # `Category.in_fill_order` is holders, so no distribution could ever reach it and no reorder could
+  # include it. A validation is the right layer for that: it is a fact about the record, not about
+  # which of two writers reached it.
+  #
+  # `income?` RATHER THAN `!expense?`, matching the enum's own two arms — a third type added later
+  # is a decision somebody has to make about this rule rather than one this line makes silently by
+  # refusing everything it does not recognise.
+  def category_must_be_an_expense
+    errors.add(:category, "must be an expense category") if category&.income?
   end
 
   # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §3.1

@@ -87,13 +87,18 @@ Rails.application.routes.draw do
   # show a validation message.
   patch "budget/user" => "budget_page#update", as: :budget_page_user
 
-  # WHERE FUNDING PRIORITY IS SET (spec §8). Until this route `pools.priority` was seed data with
-  # no writer in the app at all, while every distribution spent by it: `Pool.by_priority` is the
-  # fill order AllocationCalculator#fill and Home's waterfall both read.
+  # WHERE FUNDING PRIORITY IS SET (spec §8). Until this route `priority` was seed data with no
+  # writer in the app at all, while every distribution spent by it.
   #
-  # ONE ACCOUNT'S ENVELOPES IN THEIR NEW ORDER, as `pool_ids[]`, because priority is only ever
-  # compared within an account — the fill is per-account, so a cross-account ordering is a number
-  # nothing reads. Pool.apply_fill_order owns the refusal and the write.
+  # EVERY CLAUSE OF THIS COMMENT WAS FALSE FOR ONE COMMIT and is rewritten rather than patched: it
+  # described `pool_ids[]`, a per-account ordering and `Pool.apply_fill_order`, and the two-ledger
+  # cutover (spec §2) replaced all three. `AllocationCalculator#fill` walks
+  # `Category.in_fill_order` over ONE root, so there is no account to compare priority within.
+  #
+  # THE USER'S RULE-CARRYING HOLDER CATEGORIES IN THEIR NEW ORDER, as `category_ids[]` — one list
+  # for the whole page. `Category.apply_fill_order` owns the refusal and the write, and it refuses
+  # any list that is not exactly `in_fill_order.with_a_rule`, which is exactly what the page
+  # renders a draggable card for.
   patch "budget/reorder" => "budget_page#reorder", as: :budget_page_reorder
 
   # THE SACRIFICE VIEW (spec §9): what would have to give for these rules to fit this income.

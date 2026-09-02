@@ -34,6 +34,18 @@ RSpec.describe BudgetPagePresenter do
   # the waterfall, so there is no shape left to be outside the fill order; the half of that example
   # that still says something (a rule appears under its owner) is `#category_groups`' first example.
 
+  # A rule written before the cutover: a pool for an owner and no category at all. Nothing in the
+  # app writes one any more (Task 8 drops the column), so it is planted rather than reached.
+  def legacy_rule
+    account = create(:pool, :account, user: user, name: "Checking")
+    create(
+      :pool_budget,
+      :per_period_rate,
+      amount: 90,
+      pool: create(:pool, :budget_pool, user: user, account: account, name: "Legacy")
+    )
+  end
+
   def names(rules) = rules.map { |rule| rule.budget.id }
 
   describe "#category_groups" do
@@ -164,16 +176,64 @@ RSpec.describe BudgetPagePresenter do
     # would be this screen contradicting the rules they can see elsewhere. `#no_rules?` asks about
     # every rule the user has; `budget_page/show` prints its own sentence for the difference.
     it "is false for a rule that names only a pool, which no group can show", :aggregate_failures do
-      account = create(:pool, :account, user: user, name: "Checking")
-      create(
-        :pool_budget,
-        :per_period_rate,
-        amount: 90,
-        pool: create(:pool, :budget_pool, user: user, account: account, name: "Legacy")
-      )
+      legacy_rule
 
       expect(presenter).not_to be_no_rules
       expect(presenter.category_groups).to be_empty
+    end
+  end
+
+  # THE POPULATION IS `Category.in_fill_order.with_a_rule` — the SAME set `.apply_fill_order`
+  # refuses any other list than (fix round 1, MED-1). It was `with_a_rule` alone, which is wider by
+  # exactly the rules on categories that hold nothing, and every one of those rendered a group with
+  # a priority badge and two reorder arrows the endpoint would refuse: the page offering a control
+  # whose every use is rejected, and rejected with a message about the order the page itself had
+  # just drawn.
+  describe "#unfilled_rules" do
+    def unfunded_rule(name, amount)
+      create(
+        :budget,
+        :per_period_rate,
+        pool: nil,
+        amount: amount,
+        category: create(:category, :expense, user: user, name: name)
+      )
+    end
+
+    # BOTH DIRECTIONS ON ONE FIXTURE, and `funded_since` is the only variable that moves: two rules
+    # of the same shape, one on a category that holds money and one on a category that does not.
+    it "takes the rule on a category that holds nothing, and leaves the holder's alone", :aggregate_failures do
+      filling = rate(holder("Groceries"), 400)
+      waiting = unfunded_rule("Coffee", 35)
+
+      expect(names(presenter.unfilled_rules)).to eq([waiting.id])
+      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Groceries"])
+      expect(names(presenter.category_groups.sole.rules)).to eq([filling.id])
+    end
+
+    # THE ALIGNMENT ITSELF, asserted as the identity it is rather than inferred from the two lists
+    # above: what the page draws a card for and what the endpoint will accept are one set, so the
+    # page can never render an order its own button is refused for. The savings category is in the
+    # fill order and carries no rule, which is the one shape that is in neither list.
+    it "leaves the groups exactly the set apply_fill_order accepts" do
+      rate(holder("Groceries"), 400)
+      unfunded_rule("Coffee", 35)
+      create(:category, :expense, :savings, user: user, name: "Vacation")
+
+      expect(presenter.category_groups.map { |group| group.category.id })
+        .to match_array(user.categories.in_fill_order.with_a_rule.ids)
+    end
+
+    it "takes a rule that names only a pool too" do
+      legacy = legacy_rule
+
+      expect(names(presenter.unfilled_rules)).to eq([legacy.id])
+    end
+
+    it "is empty when every rule fills a holder" do
+      rate(holder("Groceries"), 400)
+
+      expect(presenter.unfilled_rules).to be_empty
     end
   end
 

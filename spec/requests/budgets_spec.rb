@@ -163,6 +163,25 @@ RSpec.describe "Budgets", type: :request do
       expect(response).to have_http_status(:not_found)
       expect(rule.reload.category).to eq(groceries)
     end
+
+    # THE PATH `BudgetProposal` DOES NOT GUARD (fix round 1). `#create` goes through the proposal,
+    # whose `funded_since` stamp `Category#only_expenses_hold_money` refuses on an income category —
+    # `#update` writes straight through, so this re-parent SAVED CLEAN. The rule then counted into
+    # `Budget.steady_need` and was unfillable forever, because `Category.in_fill_order` is holders
+    # and an income category can never be one.
+    #
+    # A 422 AND NOT A 404: the category is the user's OWN, so ownership is not the objection — the
+    # model's is, and `Budget#category_must_be_an_expense` says it where the form can print it.
+    it "refuses to re-parent onto the user's own income category", :aggregate_failures do
+      income = create(:category, :income, user: user)
+
+      patch budget_path(rule), params: { budget: { category_id: income.id } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("must be an expense category")
+      expect(rule.reload.category).to eq(groceries)
+      expect(income.budgets.reload).to be_empty
+    end
   end
 
   describe "DELETE /budgets/:id" do
