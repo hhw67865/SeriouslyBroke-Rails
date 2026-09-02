@@ -31,11 +31,17 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # `CategoriesHoldTheMoney` is the third name and it is here for a different reason than the other
   # two: it refuses nothing this file plants, but it re-adds `budgets.category_id` on top of
   # `DropCapEraBudgetColumns`, so leaving it out would have the rewind try to add a column that is
-  # already there. Newest last in this list, first on the way down.
+  # already there.
+  #
+  # `DropThePoolLayer` IS THE FOURTH AND THE MOST LOAD-BEARING OF ALL: it deletes `pools.account_id`,
+  # `categories.pool_id`, `budgets.pool_id`, `entries.pool_id` and the `pool_movements` table name —
+  # every column this file's four planted worlds are built out of. Newest last in this list, first
+  # on the way down.
   include_context "with the schema its subject was written for",
                   TightenPoolShape,
                   DropCapEraBudgetColumns,
-                  CategoriesHoldTheMoney
+                  CategoriesHoldTheMoney,
+                  DropThePoolLayer
 
   # Four worlds, planted in creation order — the migration walks users by `created_at`, and the
   # sabotage examples below name which user is expected to raise first.
@@ -67,20 +73,13 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     {
       checking: checking,
       holiday: plant_houseless_pool(user: user, name: "Holiday Fund", target_amount: 2_000.00),
-      utilities_pool: create(
-        :pool,
-        user: user,
-        name: "Utilities",
-        pool_type: :budget,
-        account: checking,
-        target_amount: nil
-      ),
-      rent_goal: create(:pool, user: user, name: "Rent", account: checking, target_amount: 5_000.00),
+      utilities_pool: plant_pool(user: user, name: "Utilities", pool_type: budget_type, account: checking),
+      rent_goal: plant_pool(user: user, name: "Rent", account: checking, target_amount: 5_000.00),
       # AN OVERSPENT GOAL, reached below by an EXPENSE category — a shape the demo has held since
       # Plan 2c (Health → Emergency Fund). It is here because step 5b's boundary is "budget pools
       # only", and a boundary is only tested by something sitting on the far side of it: with every
       # goal at zero or better, a step that wrongly zeroed goals too would pass every example.
-      medical: create(:pool, user: user, name: "Medical Fund", account: checking, target_amount: 1_000.00)
+      medical: plant_pool(user: user, name: "Medical Fund", account: checking, target_amount: 1_000.00)
     }
   end
 
@@ -91,7 +90,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       rent: plant_unpooled_category(:expense, user: user, name: "Rent"),
       salary: plant_unpooled_category(:income, user: user, name: "Salary"),
       coffee: plant_unpooled_category(:expense, user: user, name: "Coffee"),
-      health: create(:category, :expense, user: user, name: "Health", pool: pools[:medical]),
+      health: plant_category_in(pools[:medical], user: user, name: "Health"),
       vacation: plant_savings_category(user: user, name: "Vacation", pool: pools[:holiday])
     }
   end
@@ -126,11 +125,127 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # timestamps, `save!` still raises on a database refusal, and the only thing skipped is the set of
   # rules that postdate the rows being planted.
   # ---------------------------------------------------------------------------------------------
+  # `pool: nil` IS NO LONGER SPELLABLE — `categories.pool_id` is dropped and the association with it
+  # (two-ledger spec §5, Task 8) — so an unpooled category is simply a category. The
+  # `save!(validate: false)` stays: `Category#holding_columns_are_sane` and the uniqueness rule are
+  # still younger than some of the rows below.
   def plant_unpooled_category(type, **attrs)
-    build(:category, type, pool: nil, **attrs).tap { |category| category.save!(validate: false) }
+    build(:category, type, **attrs).tap { |category| category.save!(validate: false) }
   end
 
-  # A SAVINGS CATEGORY, WHICH IS NOT A TYPE ANY MORE (plan 3, task 5). `savings: 2` left
+  # THE POOL ERA'S OWN TABLES, planted through the MIGRATION'S table classes rather than the app's
+  # (decision 1's own reasoning, one layer out). After the drop, `Pool`'s enum has a single member
+  # and raises `ArgumentError` on `pool_type: 1` before `save(validate: false)` can help, and
+  # `Category` and `Budget` have no `pool` association at all — so the app models cannot express
+  # these rows even with every validation switched off. The rewound schema still HAS the columns;
+  # only the Ruby is gone.
+  # Methods rather than constants: a constant declared inside an example group leaks into the
+  # global namespace, which is exactly what `RSpec/LeakyConstantDeclaration` is about.
+  def budget_type = 1
+  def savings_type = 2
+
+  def pool_rows = described_class::MigrationPool
+  def movement_rows = described_class::MigrationMovement
+  def user_pools(user) = pool_rows.where(user_id: user.id)
+  def pool_named(user, name) = user_pools(user).find_by(name: name)
+
+  # AN ACCOUNT STANDS IN AS ITS OWN — `PoolMovement#crosses_accounts?` spelled out here because the
+  # method died with the pool layer (Task 8) and this file's subject is the world before that.
+  def crosses_accounts?(movement)
+    containing_account(movement.from_pool_id) != containing_account(movement.to_pool_id)
+  end
+
+  def containing_account(pool_id)
+    pool = pool_rows.find(pool_id)
+    pool.account_id || pool.id
+  end
+
+  # ---------------------------------------------------------------------------------------------
+  # THE POOL-ERA BALANCE, IN SQL, because the reader is deleted (two-ledger spec §5, Task 8).
+  #
+  # `PoolCalculator#balance` was `income entries + movements in − movements out − expense entries`
+  # over `PoolBalanceLedger::ENTRY_POOL_ID` — the entry's own pool first, else its category's from
+  # that pool's `start_date` on, else the user's main account, with an ACCOUNT pool ungated. Both
+  # the class and the constant are gone, so the expression is written out here once and read from
+  # nowhere else. It is a copy of dead code ON PURPOSE: this file's whole subject is a database the
+  # app can no longer describe, and a spec that could only ask today's readers about it would be
+  # asking the wrong question.
+  #
+  # THE `AT TIME ZONE` PAIR IS THE CONSTANT'S OWN and is not decoration: `entries.date` is a naive
+  # UTC datetime and `pools.start_date` a date, so an east-of-UTC user's first day inside an
+  # envelope is exiled to main without it.
+  # ---------------------------------------------------------------------------------------------
+  def entry_pool_id
+    <<~SQL.squish
+      COALESCE(
+        e.pool_id,
+        CASE
+          WHEN c.pool_id IS NULL THEN NULL
+          WHEN cp.pool_type = 0 THEN c.pool_id
+          WHEN (e.date AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(u.timezone, 'UTC'))::date >= cp.start_date
+            THEN c.pool_id
+          ELSE u.default_account_id
+        END
+      )
+    SQL
+  end
+
+  def sql_decimal(statement, **binds)
+    BigDecimal(
+      ActiveRecord::Base.connection.select_value(
+        ActiveRecord::Base.sanitize_sql_array([statement, binds])
+      ).to_s
+    )
+  end
+
+  def entries_reaching(pool_ids)
+    sql_decimal(<<~SQL.squish, ids: pool_ids)
+      SELECT COALESCE(SUM(CASE WHEN c.category_type = 1 THEN e.amount::numeric
+                               WHEN c.category_type = 0 THEN -e.amount::numeric
+                               ELSE 0 END), 0)
+        FROM entries e
+        JOIN items i ON i.id = e.item_id
+        JOIN categories c ON c.id = i.category_id
+        JOIN users u ON u.id = c.user_id
+        LEFT JOIN pools cp ON cp.id = c.pool_id
+       WHERE #{entry_pool_id} IN (:ids)
+    SQL
+  end
+
+  def movement_net(pool_ids)
+    sql_decimal(<<~SQL.squish, ids: pool_ids)
+      SELECT COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m WHERE m.to_pool_id IN (:ids)), 0)
+           - COALESCE((SELECT SUM(m.amount::numeric) FROM pool_movements m WHERE m.from_pool_id IN (:ids)), 0)
+    SQL
+  end
+
+  def pool_balance(pool)
+    ids = [pool.id]
+    entries_reaching(ids) + movement_net(ids)
+  end
+
+  def plant_pool(user:, name:, account: nil, pool_type: savings_type, target_amount: nil)
+    pool_rows.create!(
+      user_id: user.id,
+      name: name,
+      pool_type: pool_type,
+      account_id: account&.id,
+      target_amount: target_amount,
+      start_date: 1.year.ago.to_date,
+      priority: 0,
+      created_at: Time.current,
+      updated_at: Time.current
+    )
+  end
+
+  # `update_column`, because the column exists in the rewound schema and the writer does not.
+  def plant_category_in(pool, type: :expense, **attrs)
+    plant_unpooled_category(type, **attrs).tap do |category|
+      category.update_column(:pool_id, pool.id) # rubocop:disable Rails/SkipsModelValidations
+    end
+  end
+
+  # A savings_type CATEGORY, WHICH IS NOT A TYPE ANY MORE (plan 3, task 5). `savings: 2` left
   # `Category`'s enum with the cutover's last code slice, so `create(:category, :savings)` raises
   # ArgumentError and the very shape step 5 exists to convert could no longer be built through the
   # model — the same trap Amendment C armed for task 3's required `belongs_to :pool`, one task
@@ -139,7 +254,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # read the retired value from one place. The migration's own table classes never consult the app
   # enum, so what it meets here is exactly what it would meet in a real database.
   def plant_savings_category(user:, name:, pool:)
-    create(:category, :expense, user: user, name: name, pool: pool).tap do |category|
+    plant_category_in(pool, user: user, name: name).tap do |category|
       # rubocop:disable Rails/SkipsModelValidations -- the enum refuses this value; a database does not
       Category.where(id: category.id).update_all(category_type: described_class::SAVINGS_CATEGORY)
       # rubocop:enable Rails/SkipsModelValidations
@@ -154,7 +269,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # trap: the tightening that lands one task after the migration spec that has to plant what it
   # tightens.
   def plant_houseless_pool(**attrs)
-    build(:pool, account: nil, **attrs).tap { |pool| pool.save!(validate: false) }
+    plant_pool(account: nil, **attrs)
   end
 
   def plant_cap(category, amount)
@@ -224,17 +339,10 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # AN OVERDRAWN ENVELOPE LIVING SOMEWHERE OTHER THAN THE DEFAULT ACCOUNT — the shape the demo does
   # not have and therefore cannot test. Step 5b has to fund it from Old Account, the buffer that
   # historically paid for it; funding it from Main would invent a transfer between two real bank
-  # accounts, which is what `PoolMovement#crosses_accounts?` reports and spec §5.4 defers.
+  # accounts, which is the shape spec §5.4 defers.
   def settled_lodger(user, old_account)
-    travel = create(
-      :pool,
-      user: user,
-      name: "Travel",
-      pool_type: :budget,
-      account: old_account,
-      target_amount: nil
-    )
-    category = create(:category, :expense, user: user, name: "Travel", pool: travel)
+    travel = plant_pool(user: user, name: "Travel", pool_type: budget_type, account: old_account)
+    category = plant_category_in(travel, user: user, name: "Travel")
     entry_on(item_in(category, "Train Ticket"), 70.00, 7, 9)
 
     { travel: travel, travel_category: category }.merge(settled_lodging_goal(user, old_account))
@@ -243,9 +351,9 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # A GOAL PRE-HOUSED IN A NON-DEFAULT ACCOUNT, holding savings entries. Step 2 fills only a NULL
   # `account_id`, so this one keeps Old Account throughout — and step 5's entry→movement conversion
   # has to source from Old Account, not from the flagged default. Sourced from Main it would be a
-  # transfer between two real banks: the shape §5.4 defers and `#crosses_accounts?` reports.
+  # transfer between two real banks: the shape §5.4 defers.
   def settled_lodging_goal(user, old_account)
-    goal = create(:pool, user: user, name: "Retirement", account: old_account, target_amount: 9_000.00)
+    goal = plant_pool(user: user, name: "Retirement", account: old_account, target_amount: 9_000.00)
     category = plant_savings_category(user: user, name: "Retirement", pool: goal)
     entry_on(item_in(category, "Monthly Top-up"), 120.00, 7, 10)
 
@@ -257,7 +365,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # Task 6's tightening would meet it with no remedy. Written past the model deliberately.
   def misfile_a_pool_inside_an_envelope(user, pool, envelope)
     # rubocop:disable Rails/SkipsModelValidations -- the model refuses this row; a database does not
-    Pool.where(id: pool.id).update_all(account_id: envelope.id)
+    pool_rows.where(id: pool.id).update_all(account_id: envelope.id)
     # rubocop:enable Rails/SkipsModelValidations
   end
 
@@ -296,7 +404,10 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # `Σ pools` THROUGH THE APP'S OWN CALCULATORS — deliberately not the migration's SQL, so this
   # figure is a second and independent answer to the question the migration verified for itself.
   def app_total(user)
-    user.pools.reload.to_a.sum(0.to_d) { |pool| pool.calculator.balance }
+    ids = user_pools(user).pluck(:id)
+    return 0.to_d if ids.empty?
+
+    entries_reaching(ids) + movement_net(ids)
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -316,13 +427,13 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # ---------------------------------------------------------------------------------------------
   def legacy_savings_in(pool)
     savings_categories = Category.where(pool_id: pool.id, category_type: described_class::SAVINGS_CATEGORY)
-    Entry.where(item_id: Item.where(category_id: savings_categories.select(:id)).select(:id)).sum(:amount)
+    Entry.where(item_id: Item.where(category_id: savings_categories.select(:id)).select(:id)).sum(:amount).to_d
   end
 
-  def legacy_balance(pool) = pool.calculator.balance + legacy_savings_in(pool)
+  def legacy_balance(pool) = pool_balance(pool) + legacy_savings_in(pool)
 
   def legacy_app_total(user)
-    user.pools.reload.to_a.sum(0.to_d) { |pool| legacy_balance(pool) }
+    user_pools(user).to_a.sum(0.to_d) { |pool| legacy_balance(pool) }
   end
 
   describe "the invariant it exists to create" do
@@ -357,14 +468,15 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       migrate!
 
       expect(settled[:user].reload.default_account_id).to eq(settled[:main].id)
-      expect(settled[:user].pools.accounts.count).to eq(2)
+      expect(user_pools(settled[:user]).where(pool_type: 0).count).to eq(2)
     end
 
     it "creates a Checking account for a user who has none", :aggregate_failures do
       migrate!
 
-      expect(bare.reload.default_account).to have_attributes(name: "Checking", pool_type: "account", account_id: nil)
-      expect(bare.pools.count).to eq(1)
+      expect(pool_rows.find(bare.reload.default_account_id))
+        .to have_attributes(name: "Checking", pool_type: 0, account_id: nil)
+      expect(user_pools(bare).count).to eq(1)
     end
 
     it "suffixes the new account around a name a goal already holds", :aggregate_failures do
@@ -412,15 +524,15 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     before { migrate! }
 
     it "creates an envelope named for the capped category and re-points the category at it", :aggregate_failures do
-      envelope = wild[:user].pools.find_by(name: "Groceries")
+      envelope = pool_named(wild[:user], "Groceries")
 
-      expect(envelope).to have_attributes(pool_type: "budget", account_id: wild[:checking].id)
+      expect(envelope).to have_attributes(pool_type: budget_type, account_id: wild[:checking].id)
       expect(wild[:groceries].reload.pool_id).to eq(envelope.id)
     end
 
     it "moves the cap onto the envelope in place, as a monthly rule" do
       expect(wild[:groceries_cap].reload).to have_attributes(
-        pool_id: wild[:user].pools.find_by(name: "Groceries").id,
+        pool_id: pool_named(wild[:user], "Groceries").id,
         category_id: nil,
         amount: BigDecimal("400.00"),
         interval_months: 1,
@@ -434,13 +546,13 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     it "reuses an envelope that already carries the category's name", :aggregate_failures do
       expect(wild[:utilities].reload.pool_id).to eq(wild[:utilities_pool].id)
       expect(wild[:utilities_cap].reload.pool_id).to eq(wild[:utilities_pool].id)
-      expect(wild[:user].pools.where(name: "Utilities").count).to eq(1)
+      expect(user_pools(wild[:user]).where(name: "Utilities").count).to eq(1)
     end
 
     it "refuses to hang a cap on a same-named GOAL and suffixes instead", :aggregate_failures do
-      envelope = wild[:user].pools.find_by(name: "Rent 2")
+      envelope = pool_named(wild[:user], "Rent 2")
 
-      expect(envelope.pool_type).to eq("budget")
+      expect(envelope.pool_type).to eq(budget_type)
       expect(wild[:rent].reload.pool_id).to eq(envelope.id)
       expect(wild[:rent_cap].reload.pool_id).to eq(envelope.id)
       expect(Budget.where(pool_id: wild[:rent_goal].id)).not_to exist
@@ -448,11 +560,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
 
     it "leaves no category-mode rule anywhere, and one pool-mode rule per cap", :aggregate_failures do
       expect(Budget.where.not(category_id: nil).count).to eq(0)
-      expect(Budget.for_user(wild[:user]).count).to eq(3)
+      expect(Budget.where(pool_id: user_pools(wild[:user]).select(:id)).count).to eq(3)
     end
 
     it "gives the new envelopes a fill priority behind the pools the user already ordered" do
-      expect(wild[:user].pools.where(name: ["Groceries", "Rent 2"]).pluck(:priority)).to contain_exactly(1, 2)
+      expect(user_pools(wild[:user]).where(name: ["Groceries", "Rent 2"]).pluck(:priority)).to contain_exactly(1, 2)
     end
   end
 
@@ -476,32 +588,32 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     before { migrate! }
 
     it "writes one transfer per savings entry, at that entry's amount and moment", :aggregate_failures do
-      movements = PoolMovement.where(to_pool: wild[:holiday]).order(:date)
+      movements = movement_rows.where(to_pool_id: wild[:holiday]).order(:date)
 
       expect(movements.pluck(:amount)).to eq([BigDecimal("100.00"), BigDecimal("250.00"), BigDecimal("50.00")])
       expect(movements.pluck(:date)).to eq(savings_moments)
     end
 
     it "sends them out of the buffer, unattributed, as plain transfers", :aggregate_failures do
-      movements = PoolMovement.where(to_pool: wild[:holiday])
+      movements = movement_rows.where(to_pool_id: wild[:holiday])
 
       expect(movements.pluck(:from_pool_id).uniq).to eq([wild[:checking].id])
       expect(movements.pluck(:source_entry_id).uniq).to eq([nil])
-      expect(movements.map(&:kind).uniq).to eq(["transfer"])
+      expect(movements.map(&:kind).uniq).to eq([0])
     end
 
     # THE SHAPE THE DEMO CANNOT TEST, on the step that had it wrong. Settled's Retirement goal lives
     # in Old Account while their default is Main; the conversion has to come out of the account the
     # goal actually lives in.
     it "funds a goal from the account it lives in, not from the default one", :aggregate_failures do
-      movement = PoolMovement.find_by(to_pool: settled[:retirement])
+      movement = movement_rows.find_by(to_pool_id: settled[:retirement])
 
       expect(movement).to have_attributes(from_pool_id: settled[:old_account].id, amount: BigDecimal("120.00"))
-      expect(movement.crosses_accounts?).to be(false)
+      expect(crosses_accounts?(movement)).to be(false)
     end
 
     it "writes no movement anywhere that crosses an account boundary" do
-      expect(PoolMovement.all.reject { |movement| movement.crosses_accounts? == false }).to eq([])
+      expect(movement_rows.all.reject { |movement| crosses_accounts?(movement) == false }).to eq([])
     end
 
     it "deletes the entries, their items and the savings categories", :aggregate_failures do
@@ -511,7 +623,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     end
 
     it "conserves the count — three entries in, three movements out, none left behind", :aggregate_failures do
-      expect(PoolMovement.where(to_pool: wild[:holiday]).count).to eq(3)
+      expect(movement_rows.where(to_pool_id: wild[:holiday]).count).to eq(3)
       expect(Entry.count).to eq(13)
     end
   end
@@ -550,7 +662,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # The state below exists only between those two steps. Left unpinned, the next reader would
     # meet +$300 in a file that says "open at zero" and take it for a bug.
     it "leaves the migration's own envelopes holding their relocated history, and the older one at zero" do
-      balances = wild[:user].pools.budget_pools.to_h { |pool| [pool.name, pool.calculator.balance] }
+      balances = user_pools(wild[:user]).where(pool_type: budget_type).to_h { |pool| [pool.name, pool_balance(pool)] }
 
       expect(balances).to eq(
         "Groceries" => BigDecimal("300.00"),
@@ -565,7 +677,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # two migration-created envelopes gained — $1,490.25 − $1,500.00 = −$9.75. Utilities' $90 is
     # not in that difference, because its history never left it (see the control above).
     it "pays each deficit out of the buffer, exactly once and exactly in full", :aggregate_failures do
-      zeroing = PoolMovement.where(from_pool: wild[:checking], date: Time.zone.today.all_day)
+      zeroing = movement_rows.where(from_pool_id: wild[:checking], date: Time.zone.today.all_day)
 
       expect(zeroing.pluck(:amount).sort).to eq(
         [
@@ -574,35 +686,35 @@ RSpec.describe CutoverToEnvelopeBudgeting do
           BigDecimal("1200.00")
         ]
       )
-      expect(zeroing.map(&:kind).uniq).to eq(["transfer"])
-      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("-9.75"))
+      expect(zeroing.map(&:kind).uniq).to eq([0])
+      expect(pool_balance(wild[:checking].reload)).to eq(BigDecimal("-9.75"))
     end
 
     # THE FAR SIDE OF THE BOUNDARY: Medical Fund is a GOAL sitting at −$60.00, which is exactly the
     # shape step 5b would zero if it selected on the balance alone. It is left overdrawn, because a
     # goal's balance is real accumulated savings and this one really is overspent.
     it "does not touch the goals, whose balances are real savings", :aggregate_failures do
-      expect(wild[:holiday].reload.calculator.balance).to eq(BigDecimal("400.00"))
-      expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
-      expect(PoolMovement.where(to_pool: [wild[:rent_goal], wild[:medical]])).not_to exist
+      expect(pool_balance(wild[:holiday].reload)).to eq(BigDecimal("400.00"))
+      expect(pool_balance(wild[:medical].reload)).to eq(BigDecimal("-60.00"))
+      expect(movement_rows.where(to_pool_id: [wild[:rent_goal], wild[:medical]])).not_to exist
     end
 
     it "writes nothing on a second run, because nothing is negative any more" do
-      expect { migrate! }.not_to change(PoolMovement, :count)
+      expect { migrate! }.not_to change(movement_rows, :count)
     end
 
     # THE SHAPE THE DEMO CANNOT TEST. Settled's Travel envelope is overdrawn $70.00 and lives in Old
     # Account, while the user's DEFAULT account is Main. Sourced from the default it would be a
     # transfer between two real banks; sourced from its own account it is a move inside one.
     it "funds an envelope from the account it lives in, not from the default one", :aggregate_failures do
-      zeroing = PoolMovement.find_by(to_pool: settled[:travel])
+      zeroing = movement_rows.find_by(to_pool_id: settled[:travel])
 
       expect(zeroing).to have_attributes(from_pool_id: settled[:old_account].id, amount: BigDecimal("70.00"))
-      expect(zeroing.crosses_accounts?).to be(false)
-      expect(settled[:travel].reload.calculator.balance).to eq(0)
+      expect(crosses_accounts?(zeroing)).to be(false)
+      expect(pool_balance(settled[:travel].reload)).to eq(0)
       # −70.00 opening Travel at zero, −120.00 funding the Retirement goal: both out of the account
       # that houses them, neither out of the flagged default.
-      expect(settled[:old_account].reload.calculator.balance).to eq(BigDecimal("-190.00"))
+      expect(pool_balance(settled[:old_account].reload)).to eq(BigDecimal("-190.00"))
     end
   end
 
@@ -611,11 +723,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # `+amount`, and no step re-points a category away from a goal or zeroes one.
   describe "what the migration promises not to move" do
     it "leaves every savings pool's balance exactly where it found it" do
-      before_run = wild[:user].pools.savings_pools.to_h { |pool| [pool.id, legacy_balance(pool)] }
+      before_run = user_pools(wild[:user]).where(pool_type: savings_type).to_h { |pool| [pool.id, legacy_balance(pool)] }
 
       migrate!
 
-      expect(wild[:user].pools.savings_pools.reload.to_h { |pool| [pool.id, pool.calculator.balance] })
+      expect(user_pools(wild[:user]).where(pool_type: savings_type).to_h { |pool| [pool.id, pool_balance(pool)] })
         .to eq(before_run)
     end
 
@@ -624,16 +736,23 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       expect(legacy_balance(wild[:medical])).to eq(BigDecimal("-60.00"))
       # The medical goal holds no savings entries at all, so the legacy reading and the live one
       # are the same number for it — which is what says the helper adds a term rather than a figure.
-      expect(wild[:medical].calculator.balance).to eq(BigDecimal("-60.00"))
+      expect(pool_balance(wild[:medical])).to eq(BigDecimal("-60.00"))
     end
   end
 
   describe "the state it leaves behind" do
     before { migrate! }
 
+    # THE RULES ARE OUT OF THIS POPULATION AND THE REASON IS NOT A WEAKENING (two-ledger spec §5,
+    # Task 8). This migration's output rule is POOL-owned, and the pool lane on `Budget` is deleted:
+    # `#must_have_a_category` refuses every one of them, so including them here would assert that
+    # the cutover's output is illegal — which is true, and is a statement about the SEQUENCE rather
+    # than about the cutover. `CategoriesHoldTheMoney` is what gives every rule a category, and
+    # `spec/migrations/two_ledger_spec.rb` is where that rule's legality under today's model is
+    # asserted. What is still this file's claim, and still checked, is that the pools, the
+    # categories and the movements it writes are shapes today's models accept.
     it "is legal under the app's own models, which never saw it written" do
-      records = wild[:user].pools.to_a + wild[:user].categories.to_a +
-                Budget.for_user(wild[:user]).to_a + PoolMovement.all.to_a
+      records = user_pools(wild[:user]).to_a + wild[:user].categories.to_a + movement_rows.all.to_a
 
       expect(records.reject(&:valid?)).to eq([])
     end
@@ -657,11 +776,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # so no user is ever shown this buffer. It is pinned so the next reader knows −$9.75 is two
     # rules composing on a state nobody ships, not a lost $1,500.
     it "leaves the buffer holding everything no envelope or goal claimed", :aggregate_failures do
-      expect(wild[:checking].reload.calculator.balance).to eq(BigDecimal("-9.75"))
-      expect(wild[:holiday].reload.calculator.balance).to eq(BigDecimal("400.00"))
-      expect(wild[:medical].reload.calculator.balance).to eq(BigDecimal("-60.00"))
-      expect(wild[:user].pools.budget_pools.sum(0.to_d) { |pool| pool.calculator.balance }).to eq(BigDecimal("1500.00"))
-      expect(wild[:rent_goal].reload.calculator.balance).to eq(0)
+      expect(pool_balance(wild[:checking].reload)).to eq(BigDecimal("-9.75"))
+      expect(pool_balance(wild[:holiday].reload)).to eq(BigDecimal("400.00"))
+      expect(pool_balance(wild[:medical].reload)).to eq(BigDecimal("-60.00"))
+      expect(user_pools(wild[:user]).where(pool_type: budget_type).sum(0.to_d) { |pool| pool_balance(pool) }).to eq(BigDecimal("1500.00"))
+      expect(pool_balance(wild[:rent_goal].reload)).to eq(0)
     end
   end
 
@@ -678,8 +797,8 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       output = captured_migration_output
 
       # Dated on the run day; every planted entry is in July, so nothing else lands on today.
-      wild_ids = PoolMovement.where(from_pool: wild[:checking], date: Time.zone.today.all_day).pluck(:id)
-      settled_id = PoolMovement.find_by(to_pool: settled[:travel]).id
+      wild_ids = movement_rows.where(from_pool_id: wild[:checking], date: Time.zone.today.all_day).pluck(:id)
+      settled_id = movement_rows.find_by(to_pool_id: settled[:travel]).id
 
       expect(wild_ids.size).to eq(3)
       expect(output).to include(*wild_ids, settled_id)
@@ -738,11 +857,11 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   def snapshot
     {
       users: User.order(:email).pluck(:email, :default_account_id),
-      pools: Pool.order(:user_id, :name).pluck(:user_id, :name, :pool_type, :account_id, :priority),
+      pools: pool_rows.order(:user_id, :name).pluck(:user_id, :name, :pool_type, :account_id, :priority),
       categories: Category.order(:user_id, :name).pluck(:user_id, :name, :category_type, :pool_id),
       budgets: Budget.order(:amount).pluck(:pool_id, :category_id, :amount, :interval_months, :basis),
       entries: Entry.order(:date, :amount).pluck(:item_id, :amount, :date),
-      movements: PoolMovement.order(:date, :amount).pluck(:from_pool_id, :to_pool_id, :amount, :date)
+      movements: movement_rows.order(:date, :amount).pluck(:from_pool_id, :to_pool_id, :amount, :date)
     }
   end
 
@@ -821,7 +940,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # uniqueness `case_sensitive: false` and `TightenPoolShape`'s index says the same thing in SQL, so
   # this row needs the same past-the-model planting every legacy shape in this file needs.
   def plant_duplicate_of(pool, name)
-    build(:pool, user: pool.user, name: name, pool_type: :budget, account: pool.account, target_amount: nil)
+    pool_rows.new(user_id: pool.user_id, name: name, pool_type: budget_type, account_id: pool.account_id)
       .tap { |twin| twin.save!(validate: false) }
   end
 
@@ -830,7 +949,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   # excludes ACCOUNT pools by type, so nothing in the migration ever looks at this row.
   def misfile_an_account_inside(account, parent)
     # rubocop:disable Rails/SkipsModelValidations -- the model refuses this row; a database does not
-    Pool.where(id: account.id).update_all(account_id: parent.id)
+    pool_rows.where(id: account.id).update_all(account_id: parent.id)
     # rubocop:enable Rails/SkipsModelValidations
   end
 
@@ -892,7 +1011,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
       steal_a_movement
 
       expect { migrate! }.to raise_error(described_class::VerificationFailed)
-      expect(wild[:user].pools.where(name: "Gym")).not_to exist
+      expect(user_pools(wild[:user]).where(name: "Gym")).not_to exist
       expect(cap.reload).to have_attributes(category_id: gym.id, pool_id: nil)
     end
 
@@ -902,7 +1021,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
     # invariant is a movement whose two ends stop belonging to the same user, which is the first
     # example above. This is the other direction of that pair.
     it "is not fooled into failing by a movement that simply went away", :aggregate_failures do
-      PoolMovement.where(to_pool: wild[:holiday]).order(:amount).first.delete
+      movement_rows.where(to_pool_id: wild[:holiday]).order(:amount).first.delete
 
       expect { migrate! }.not_to raise_error
       expect(app_total(wild[:user])).to eq(wild_bank_truth)
@@ -910,9 +1029,9 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   end
 
   def steal_a_movement
-    movement = PoolMovement.where(to_pool: wild[:holiday]).order(:amount).first
+    movement = movement_rows.where(to_pool_id: wild[:holiday]).order(:amount).first
     # rubocop:disable Rails/SkipsModelValidations -- bypassing `pools_must_share_a_user` is the point
-    PoolMovement.where(id: movement.id).update_all(to_pool_id: bare.reload.default_account_id)
+    movement_rows.where(id: movement.id).update_all(to_pool_id: bare.reload.default_account_id)
     # rubocop:enable Rails/SkipsModelValidations
   end
 
@@ -939,7 +1058,7 @@ RSpec.describe CutoverToEnvelopeBudgeting do
   def unpool_a_category_and_evict_a_goal
     # rubocop:disable Rails/SkipsModelValidations -- planting states the models refuse to write
     Category.where(id: wild[:coffee].id).update_all(pool_id: nil)
-    Pool.where(id: wild[:holiday].id).update_all(account_id: nil)
+    pool_rows.where(id: wild[:holiday].id).update_all(account_id: nil)
     # rubocop:enable Rails/SkipsModelValidations
   end
 

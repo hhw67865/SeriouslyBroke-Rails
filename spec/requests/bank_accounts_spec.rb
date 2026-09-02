@@ -40,18 +40,13 @@ RSpec.describe "BankAccounts", type: :request do
       user.pools.find_by(name: "Sneaky")
     end
 
-    it "keeps the pool's type and its containment the server's own", :aggregate_failures do
-      sneaky = post_crafted
-
-      expect(sneaky).to be_pool_type_account
-      expect(sneaky.account_id).to be_nil
-    end
-
-    it "drops the ordering and the target a param could carry", :aggregate_failures do
-      sneaky = post_crafted
-
-      expect(sneaky.priority).to eq(0)
-      expect(sneaky.target_amount).to be_nil
+    # THE COLUMNS THE CRAFTED PAYLOAD NAMES ARE GONE (two-ledger spec §5, Task 8) — `account_id`,
+    # `priority` and `target_amount` are dropped and `pool_type` has one member — so the pair of
+    # examples that read them back is one example about the only thing left to get wrong. The
+    # payload still carries all four, because what is under test is that a permit list narrowed to
+    # `[:name]` ignores whatever arrives beside it.
+    it "keeps the pool's type the server's own" do
+      expect(post_crafted).to be_pool_type_account
     end
 
     it "answers 422 with nothing written when the name is refused", :aggregate_failures do
@@ -104,16 +99,14 @@ RSpec.describe "BankAccounts", type: :request do
 
     # THE SAME CRAFTED PAYLOAD AS THE CREATE DOOR ABOVE, ON THE OTHER VERB. A permit list narrowed
     # for `create` and forgotten for `update` is the ordinary way this contract comes apart, and
-    # `pool_type` is the one that matters: a "bank account" talked into `savings` would then fail
-    # the database's `pools_account_matches_pool_type` CHECK on its next save, and its required
-    # target would never have been asked for.
+    # `pool_type` is the one that matters: a "bank account" talked into `savings` would fail the
+    # database's `pools_are_accounts` CHECK on its next save.
     it "keeps everything but the name the server's own", :aggregate_failures do
       patch_crafted
 
       checking.reload
       expect(checking).to be_pool_type_account
-      expect(checking.account_id).to be_nil
-      expect([checking.priority, checking.target_amount]).to eq([0, nil])
+      expect(checking.name).to eq("Checking")
     end
 
     it "answers 422 with nothing written when the name is refused", :aggregate_failures do
@@ -123,10 +116,10 @@ RSpec.describe "BankAccounts", type: :request do
       expect(checking.reload.name).to eq("Checking")
     end
 
-    # THE SCOPE IS `current_user.pools.accounts`, AND BOTH HALVES ARE PINNED. A stranger's id is
-    # the ordinary 404; a NON-ACCOUNT pool of the user's own is the half the `.accounts` clause
-    # adds, and it is what keeps a route named `bank_accounts` from being the app's last general
-    # pool editor.
+    # THE SCOPE IS `current_user.pools.accounts`. A stranger's id is the ordinary 404; the
+    # `.accounts` half no longer has a second shape to exclude, because every pool is an account
+    # (Task 8) — the example that planted a non-account pool of the user's own is deleted with the
+    # shape, and the clause is kept because it is what the route's own name promises.
     it "404s on another user's account", :aggregate_failures do
       stranger = create(:pool, :account, user: create(:user), name: "Theirs")
 
@@ -134,15 +127,6 @@ RSpec.describe "BankAccounts", type: :request do
 
       expect(response).to have_http_status(:not_found)
       expect(stranger.reload.name).to eq("Theirs")
-    end
-
-    it "404s on a pool of this user's that is not an account", :aggregate_failures do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-
-      patch bank_account_path(envelope), params: { bank_account: { name: "Renamed" } }
-
-      expect(response).to have_http_status(:not_found)
-      expect(envelope.reload.name).to eq("Groceries")
     end
   end
 
@@ -162,44 +146,21 @@ RSpec.describe "BankAccounts", type: :request do
     # "deleted." over a row still sitting in the database.
     #
     # ** BOTH LIVE REFUSALS, ASKED OF WHAT `Pool` RESTRICTS ON TODAY (fix round 1, LOW-3). ** The
-    # deleted `spec/system/pools/show/header_actions_spec.rb` carried "refuses to delete an account
-    # that still holds pools", and that arm is STILL LIVE — `has_many :child_pools, dependent:
-    # :restrict_with_error` — even though nothing in the app can create a nested pool any more:
-    # seeds, a console and the migration's own fixtures all can, and `dependent:` guards the
-    # database rather than the screens. It dies with T8, which removes nesting entirely; until then
-    # a refusal nothing pins is a 500 waiting for the one user whose data still has one.
+    # BOTH REFUSAL EXAMPLES ARE DELETED WITH THE REFUSALS (two-ledger spec §5, Task 8). One planted
+    # a CATEGORY pointing at the account (`has_many :categories, dependent: :restrict_with_error`)
+    # and one a POOL sitting inside it (`has_many :child_pools`); neither association exists, because
+    # neither column does. The second was the console-only pin this file kept expressly until the
+    # drop, and the drop is here.
     #
-    # THE `categories` ARM IS THE ONE A USER CAN REACH TODAY, and the MAIN account is the only
-    # account it can fire on: `Category#pool_must_be_reachable` lets a category point only at the
-    # user's default account.
-    #
-    # THE MOVEMENTS ARM IS NOT A REFUSAL and is asserted as such below — `movements_in`/`out` are
-    # `dependent: :destroy`, so an account's transfers go WITH it. That is what Home's delete
-    # confirm now says, and the sentence it replaced ("its movements move to your main account")
-    # described an ENVELOPE.
-    it "refuses while a category still points at it, and says so", :aggregate_failures do
-      create(:category, :expense, user: user, name: "Groceries", pool: checking)
-
-      delete bank_account_path(checking)
-
-      expect(user.pools.find_by(name: "Checking")).to be_present
-      expect(flash[:alert]).to include("can't be deleted while categories still belong to it")
-    end
-
-    it "refuses while a pool still sits inside it, and says so", :aggregate_failures do
-      create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-
-      delete bank_account_path(checking)
-
-      expect(user.pools.find_by(name: "Checking")).to be_present
-      expect(flash[:alert]).to include("can't be deleted while envelopes and goals still belong to it")
-    end
+    # WHAT DELETING AN ACCOUNT DOES NOW is the one example below: `movements_in`/`out` are
+    # `dependent: :destroy`, so an account's transfers go WITH it and the money main had moved into
+    # it returns to the pot.
 
     it "destroys the account's movements rather than moving them anywhere", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
-      create(:pool_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current)
 
-      expect { delete bank_account_path(ally) }.to change(PoolMovement, :count).by(-1)
+      expect { delete bank_account_path(ally) }.to change(AccountMovement, :count).by(-1)
       expect(user.pools.find_by(name: "Ally")).to be_nil
     end
   end

@@ -14,7 +14,7 @@ require "rails_helper"
 #   ENTRIES, of which there are none.
 # * the "Net Savings" stat card — two examples, one of them a whole `describe` planting a savings
 #   category and an expense category on the same pool to drive the figure negative. Contributions
-#   are `PoolMovement`s now; contributions-minus-withdrawals over entries is not a figure this
+#   are `AccountMovement`s now; contributions-minus-withdrawals over entries is not a figure this
 #   data supports.
 # * the "Budget Used" card — already gone with the cap in Task 3, and its `have_no_content("%
 #   used")` negative retires with the reader.
@@ -148,7 +148,7 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   # a target, holding money from a year back — and its own spending comes out of what it holds. The
   # $500 arriving in the goal is deliberately still here: it is what makes the "no savings
   # vocabulary" negative above a real claim rather than an empty fixture. It was a $500 entry in a
-  # SAVINGS category until plan 3 task 5 and a `PoolMovement` until Task 7; it is the ALLOCATION
+  # SAVINGS category until plan 3 task 5 and a `AccountMovement` until Task 7; it is the ALLOCATION
   # those became, at the same amount on the same day, and the strip's balance ($500 in, $200 spent)
   # is unchanged.
   def seed_mixed_financial_data

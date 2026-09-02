@@ -26,7 +26,7 @@ RSpec.describe "Entry impact", type: :request do
   # envelope sitting inside Checking.
   before do
     create(:allocation, kind: :allocation, to_category: groceries, amount: 240, date: Time.zone.now)
-    create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 300)
+    create(:budget, :per_period_rate, category: groceries, amount: 300)
     sign_in user, scope: :user
   end
 

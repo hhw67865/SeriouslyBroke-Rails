@@ -28,11 +28,10 @@ require "rails_helper"
 RSpec.describe HoldingCalculator, type: :model do
   let(:user) { create(:user) }
 
-  # EVERY RULE IN THIS FILE BELONGS TO A CATEGORY. `pool: nil` is the whole of what says so — the
-  # budget factory's default owner is still a pool for the length of this branch, and
-  # `Budget#must_have_an_owner` accepts either — so it is said once here rather than on every line.
+  # EVERY RULE IN THIS FILE BELONGS TO A CATEGORY, which is the only owner a rule has — said once
+  # here rather than on every line.
   def rule(category, trait = nil, **attrs)
-    create(:budget, *Array(trait), pool: nil, category: category, **attrs)
+    create(:budget, *Array(trait), category: category, **attrs)
   end
 
   # A GOAL'S BALANCE, FUNDED THE WAY A GOAL IS FUNDED (spec §3): contributing is available →

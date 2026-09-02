@@ -22,40 +22,20 @@ RSpec.describe User, type: :model do
   # caps, this one reached both modes — and that pairing is what the cap's deletion retires.
   describe "#all_budgets" do
     let(:user) { create(:user) }
-    let(:account) { create(:pool, :account, user: user) }
-    let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
-
-    let!(:pool_rule) { create(:budget, :rate, pool: pool) }
+    let!(:rule) { create(:budget, :rate, category: create(:category, :expense, :funded, user: user)) }
     let!(:stranger_rule) { create(:budget, :rate) }
 
     it "returns every rule the user owns and nobody else's", :aggregate_failures do
-      expect(user.all_budgets).to contain_exactly(pool_rule)
+      expect(user.all_budgets).to contain_exactly(rule)
       expect(user.all_budgets).not_to include(stranger_rule)
     end
   end
 
-  # These two are a pair and must be read together: deleting one account pool and
-  # deleting a whole user want opposite behaviour from `child_pools`, so the
-  # cascade is sequenced on User rather than by relaxing Pool's protection.
-  describe "destroying a user that owns an account pool with envelopes inside it" do
-    let(:user) { create(:user) }
-    let!(:account) { create(:pool, :account, user: user) }
-    let!(:envelope) { create(:pool, :budget_pool, user: user, account: account) }
-
-    it "deletes the user, the account, and the envelopes inside it", :aggregate_failures do
-      expect { user.destroy! }.to change(described_class, :count).by(-1)
-      expect(Pool.where(id: [account.id, envelope.id])).to be_empty
-    end
-
-    # Counterweight to the example above: the cascade must not be bought by
-    # weakening `child_pools`' restrict_with_error, which is what stops a user
-    # deleting an account that still holds envelopes with money in them.
-    it "still refuses to delete that account pool on its own", :aggregate_failures do
-      expect(account.destroy).to be false
-      expect(account).to be_persisted
-      expect(Pool.exists?(account.id)).to be true
-    end
-  end
+  # DELETED WITH THE NESTING (two-ledger spec §5, Task 8): "destroying a user that owns an account
+  # pool with envelopes inside it". Its two examples were a pair — the user cascade had to delete an
+  # account holding envelopes while `Pool#child_pools`' `restrict_with_error` still refused the same
+  # delete on its own, which is why `User#destroy_child_pools_first` existed. Nothing nests inside an
+  # account any more, so both the callback and the pair it balanced are gone.
 
   describe "#toggle_theme!", :aggregate_failures do
     let(:user) { create(:user) }

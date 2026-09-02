@@ -182,7 +182,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
       create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
     end
 
-    before { create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 400) }
+    before { create(:budget, :per_period_rate, category: groceries, amount: 400) }
 
     it "drops the category out of the fill order and into the band that says why" do
       visit edit_category_path(groceries)

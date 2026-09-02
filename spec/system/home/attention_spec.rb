@@ -25,7 +25,7 @@ RSpec.describe "Home Attention", type: :system do
   # A CATEGORY THAT HOLDS MONEY, filled at a rate every period.
   def envelope(name, amount, priority: 1)
     holder(name, priority: priority).tap do |category|
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+      create(:budget, :per_period_rate, category: category, amount: amount)
     end
   end
 
@@ -43,7 +43,7 @@ RSpec.describe "Home Attention", type: :system do
 
   # Income lands in main and raises available at the same instant (§2).
   def deposit(amount)
-    category = create(:category, :income, user: user, pool: checking, name: "Pay #{SecureRandom.hex(3)}")
+    category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
@@ -64,7 +64,6 @@ RSpec.describe "Home Attention", type: :system do
       item = create(:item, category: category, name: "#{name} Bill")
       create(
         :budget,
-        pool: nil,
         category: category,
         item: item,
         amount: amount,
@@ -79,7 +78,7 @@ RSpec.describe "Home Attention", type: :system do
   # that uses it.
   def move_out(amount)
     ally = create(:pool, :account, user: user, name: "Ally")
-    create(:pool_movement, from_pool: checking, to_pool: ally, amount: amount, date: Date.current, kind: :transfer)
+    create(:account_movement, from_pool: checking, to_pool: ally, amount: amount, date: Date.current, kind: :transfer)
   end
 
   def attention_section = find("section[aria-labelledby='attention-heading']")
@@ -88,7 +87,7 @@ RSpec.describe "Home Attention", type: :system do
 
   it "lists a category that can't be funded in time", :aggregate_failures do
     dentist = holder("Dentist")
-    create(:budget, :one_time, pool: nil, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
+    create(:budget, :one_time, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
 
     visit root_path
 
@@ -130,7 +129,7 @@ RSpec.describe "Home Attention", type: :system do
   # resolution is the worst combination of the two.
   it "shows where the money goes when a category needs you on a covered period", :aggregate_failures do
     dentist = holder("Dentist")
-    create(:budget, :one_time, pool: nil, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
+    create(:budget, :one_time, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
     deposit(1_000)
 
     visit root_path
@@ -250,7 +249,7 @@ RSpec.describe "Home Attention", type: :system do
   # validation cannot promise.
   def broken_goal(name, amount)
     holder(name, priority: 2, target_amount: 2_400).tap do |category|
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: amount.abs)
+      create(:budget, :per_period_rate, category: category, amount: amount.abs)
       category.budgets.first.update_column(:amount, amount) # rubocop:disable Rails/SkipsModelValidations
     end
   end
@@ -297,7 +296,6 @@ RSpec.describe "Home Attention", type: :system do
       car = holder("Car Insurance", priority: 1)
       create(
         :budget,
-        pool: nil,
         category: car,
         amount: 1_200,
         interval_months: 6,

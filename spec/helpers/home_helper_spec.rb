@@ -3,7 +3,7 @@
 require "rails_helper"
 
 RSpec.describe HomeHelper, type: :helper do
-  # `needs_attention?` is answered from PoolStatus's own constant rather than a hand-set
+  # `needs_attention?` is answered from HoldingStatus's own constant rather than a hand-set
   # flag, so a double can never claim a combination the real object cannot produce.
   #
   # `period_closed?` is on the double because #pool_problem_label now READS it off the status
@@ -11,13 +11,13 @@ RSpec.describe HomeHelper, type: :helper do
   # gave a caller the option of omitting it, and the attention band took that option.
   def status(state, amount: 0, due_on: nil, target: nil, period_closed: false)
     instance_double(
-      PoolStatus,
+      HoldingStatus,
       state: state,
       amount: amount,
       due_on: due_on,
       target: target,
       period_closed?: period_closed,
-      needs_attention?: PoolStatus::ATTENTION_STATES.include?(state)
+      needs_attention?: HoldingStatus::ATTENTION_STATES.include?(state)
     )
   end
 
@@ -115,25 +115,25 @@ RSpec.describe HomeHelper, type: :helper do
   # missing from the line is the rule's SHAPE — how often it comes round.
   describe "#pool_rule_label" do
     it "uses the item's name when the rule has one" do
-      budget = build(:pool_budget, item: build(:item, name: "Electric Bill"), anchor_date: Date.new(2026, 3, 1))
+      budget = build(:budget, item: build(:item, name: "Electric Bill"), anchor_date: Date.new(2026, 3, 1))
 
       expect(helper.pool_rule_label(budget)).to eq("Electric Bill")
     end
 
     it "names a monthly rule by its cadence" do
-      budget = build(:pool_budget, interval_months: 1, anchor_date: Date.new(2026, 3, 1))
+      budget = build(:budget, interval_months: 1, anchor_date: Date.new(2026, 3, 1))
 
       expect(helper.pool_rule_label(budget)).to eq("Monthly")
     end
 
     it "names a multi-month rule by its interval" do
-      budget = build(:pool_budget, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
+      budget = build(:budget, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
 
       expect(helper.pool_rule_label(budget)).to eq("Every 6 months")
     end
 
     it "names a rule that never rolls a one-off" do
-      budget = build(:pool_budget, :one_time, anchor_date: Date.new(2026, 3, 1))
+      budget = build(:budget, :one_time, anchor_date: Date.new(2026, 3, 1))
 
       expect(helper.pool_rule_label(budget)).to eq("One-off")
     end
@@ -142,7 +142,7 @@ RSpec.describe HomeHelper, type: :helper do
     # the one shape whose blank interval does NOT mean "never rolls", and reading it as a
     # one-off would be silently wrong the day something asks.
     it "names a per-period rule by its cadence, not as a one-off" do
-      budget = build(:pool_budget, :per_period_rate)
+      budget = build(:budget, :per_period_rate)
 
       expect(helper.pool_rule_label(budget)).to eq("Per period")
     end

@@ -19,13 +19,13 @@ RSpec.describe BudgetPagePresenter do
 
   # A flat per-period rule: no anchor, so no date to be due on.
   def rate(category, amount)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   # A rule that rolls: its due date moves with the cycles gone by, which is what makes it
   # answer something other than its own anchor.
   def rolling(category, amount:, anchor:, every: 1)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: every, anchor_date: anchor)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
   # `#orphan_rules`, `#orphan_reason`, `Rule#reason` AND THE `_orphans` PARTITION ARE ALL DELETED
@@ -34,16 +34,12 @@ RSpec.describe BudgetPagePresenter do
   # the waterfall, so there is no shape left to be outside the fill order; the half of that example
   # that still says something (a rule appears under its owner) is `#category_groups`' first example.
 
-  # A rule written before the cutover: a pool for an owner and no category at all. Nothing in the
-  # app writes one any more (Task 8 drops the column), so it is planted rather than reached.
-  def legacy_rule
-    account = create(:pool, :account, user: user, name: "Checking")
-    create(
-      :pool_budget,
-      :per_period_rate,
-      amount: 90,
-      pool: create(:pool, :budget_pool, user: user, account: account, name: "Legacy")
-    )
+  # A RULE NO GROUP CAN SHOW. It was a rule that named a POOL and no category at all — a shape the
+  # drop deleted outright (two-ledger spec §5, Task 8) — and the surviving shape with the same
+  # property is a rule on a category that holds nothing: `Category.in_fill_order` is holders, so it
+  # draws no group, while `Budget.for_user` still counts it among the user's rules.
+  def unshowable_rule
+    create(:budget, :per_period_rate, amount: 90, category: create(:category, :expense, user: user, name: "Coffee"))
   end
 
   def names(rules) = rules.map { |rule| rule.budget.id }
@@ -170,13 +166,13 @@ RSpec.describe BudgetPagePresenter do
       expect(presenter).not_to be_no_rules
     end
 
-    # THE TRANSITIONAL GAP, PINNED RATHER THAN LEFT TO BE DISCOVERED (Task 8 closes it).
-    # `Budget.for_user` still spans both owner lanes, so a rule written before the cutover names
-    # only a pool and no group on this page can show it — and telling that user they have no rules
-    # would be this screen contradicting the rules they can see elsewhere. `#no_rules?` asks about
-    # every rule the user has; `budget_page/show` prints its own sentence for the difference.
-    it "is false for a rule that names only a pool, which no group can show", :aggregate_failures do
-      legacy_rule
+    # THE GAP BETWEEN "has rules" AND "has groups", pinned rather than left to be discovered. A rule
+    # on a category that holds nothing draws no group here — `Category.in_fill_order` is holders —
+    # and telling that user they have no rules would be this screen contradicting the rules they can
+    # see elsewhere. `#no_rules?` asks about every rule the user has; `budget_page/show` prints its
+    # own sentence for the difference.
+    it "is false for a rule no group can show", :aggregate_failures do
+      unshowable_rule
 
       expect(presenter).not_to be_no_rules
       expect(presenter.category_groups).to be_empty
@@ -194,7 +190,6 @@ RSpec.describe BudgetPagePresenter do
       create(
         :budget,
         :per_period_rate,
-        pool: nil,
         amount: amount,
         category: create(:category, :expense, user: user, name: name)
       )
@@ -224,10 +219,10 @@ RSpec.describe BudgetPagePresenter do
         .to match_array(user.categories.in_fill_order.with_a_rule.ids)
     end
 
-    it "takes a rule that names only a pool too" do
-      legacy = legacy_rule
+    it "takes a rule no group can show too" do
+      unshowable = unshowable_rule
 
-      expect(names(presenter.unfilled_rules)).to eq([legacy.id])
+      expect(names(presenter.unfilled_rules)).to eq([unshowable.id])
     end
 
     it "is empty when every rule fills a holder" do
@@ -244,7 +239,7 @@ RSpec.describe BudgetPagePresenter do
     describe "#rules_need" do
       it "sums what every rule claims from one period", :aggregate_failures do
         rate(holder("Groceries"), 400) # $400 a period
-        create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260) # $120
+        create(:budget, :rate, category: holder("Utilities", priority: 2), amount: 260) # $120
         rolling(holder("Car Insurance", priority: 3), amount: 1_200, anchor: today + 3.months, every: 6)
 
         expect(presenter.rules_need).to eq(BigDecimal("612.31"))

@@ -5,7 +5,7 @@ require "rails_helper"
 # The form itself: how it arrives from a link, how it recomputes, and the two things about it that no
 # assertion on its figures can see.
 #
-# THE PORT OF `spec/system/pool_movements/new/form_spec.rb`.
+# THE PORT OF `spec/system/account_movements/new/form_spec.rb`.
 RSpec.describe "Allocations New Form", type: :system do
   include_context "with categories to reallocate between"
 

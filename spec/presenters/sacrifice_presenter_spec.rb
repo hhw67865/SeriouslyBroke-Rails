@@ -22,16 +22,16 @@ RSpec.describe SacrificePresenter do
   end
 
   # Anchorless: a rate, and therefore cuttable.
-  def rate(category, amount) = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
   # Anchored and recurring: a bill, and therefore fixed.
   def rolling(category, amount:, anchor: Date.new(2026, 3, 1), every: 1)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: every, anchor_date: anchor)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
   # Anchored with no interval: a one-off, marked `dated` rather than `fixed`.
   def one_off(category, amount:, anchor:)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: nil, anchor_date: anchor)
+    create(:budget, category: category, amount: amount, interval_months: nil, anchor_date: anchor)
   end
 
   # `#cap` is deleted with the shape it built (plan 3, task 3): a rule owned by a category. The
@@ -142,7 +142,7 @@ RSpec.describe SacrificePresenter do
     # five sixths of a period they do not have.
     it "carries each rule's per-period claim rather than its own amount", :aggregate_failures do
       rate(holder("Groceries"), 400)
-      monthly = create(:budget, :rate, pool: nil, category: holder("Streaming", priority: 2), amount: 1_500)
+      monthly = create(:budget, :rate, category: holder("Streaming", priority: 2), amount: 1_500)
 
       claims = presenter.cuttable_rows.to_h { |row| [row.budget.id, row.claim] }
 
@@ -251,7 +251,7 @@ RSpec.describe SacrificePresenter do
   # out of fifteen hundred, and every figure on the page would still look right.
   describe "Row#claim_param" do
     it "prints a fractional claim to the cent" do
-      monthly = create(:budget, :rate, pool: nil, category: holder("Streaming"), amount: 1_500)
+      monthly = create(:budget, :rate, category: holder("Streaming"), amount: 1_500)
 
       row = presenter.cuttable_rows.find { |candidate| candidate.budget.id == monthly.id }
 

@@ -24,7 +24,7 @@ RSpec.describe "Budget page structural check", type: :system do
     create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
-  def rate(category, amount) = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
   def declare(income:, cadence:, anchor:)
     fill_in "You typically bring in", with: income
@@ -83,7 +83,7 @@ RSpec.describe "Budget page structural check", type: :system do
     before do
       declared_user(2_400)
       rate(holder("Groceries"), 400)
-      create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260)
+      create(:budget, :rate, category: holder("Utilities", priority: 2), amount: 260)
       visit budget_page_path
     end
 
@@ -171,7 +171,6 @@ RSpec.describe "Budget page structural check", type: :system do
       declared_user(2_400)
       create(
         :budget,
-        pool: nil,
         category: holder("Car Insurance"),
         amount: 5_200,
         interval_months: 12,
@@ -251,7 +250,7 @@ RSpec.describe "Budget page structural check", type: :system do
   describe "declaring a period and an income", :aggregate_failures do
     before do
       rate(holder("Groceries"), 400)
-      create(:budget, :rate, pool: nil, category: holder("Utilities", priority: 2), amount: 260)
+      create(:budget, :rate, category: holder("Utilities", priority: 2), amount: 260)
       visit budget_page_path
     end
 

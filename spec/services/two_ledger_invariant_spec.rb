@@ -44,7 +44,7 @@ RSpec.describe "The two-ledger invariant", type: :model do
     create(:entry, item: create(:item, category: food), amount: 40, date: Date.new(2026, 8, 7)) # funded
     create(:entry, item: create(:item, category: misc), amount: 25, date: Date.new(2026, 8, 7)) # unfunded
     create(:entry, item: create(:item, category: food), amount: 10, date: Date.new(2026, 7, 20)) # pre-funded
-    create(:pool_movement, from_pool: main, to_pool: ally, amount: 200, date: Time.zone.parse("2026-08-08 12:00"))
+    create(:account_movement, from_pool: main, to_pool: ally, amount: 200, date: Time.zone.parse("2026-08-08 12:00"))
     create(:allocation, from_category: food, amount: 50, date: Time.zone.parse("2026-08-09 12:00")) # back to available
 
     expect(bank_truth).to eq(925)
@@ -73,7 +73,7 @@ RSpec.describe "The two-ledger invariant", type: :model do
     # category it was not built over, which is the guard doing its job on a fixture ordering mistake.
     misc
     food.update!(priority: 1)
-    create(:budget, :per_period_rate, pool: nil, category: food, amount: 400)
+    create(:budget, :per_period_rate, category: food, amount: 400)
     create(:entry, item: create(:item, category: pay), amount: 1000, date: Date.new(2026, 8, 5))
     create(:allocation, to_category: food, amount: 120, date: Time.zone.parse("2026-07-12 12:00"))
 

@@ -50,13 +50,13 @@ RSpec.describe EntryImpactPresenter do
 
   # $300 EVERY PERIOD — a rate rule, so its own amount IS its per-period claim.
   def rate(category, amount)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   # $X A MONTH — its per-period claim under a biweekly user is `amount * 12 / 26`, nothing like its
   # own amount. This is the shape the bar's denominator lives or dies on.
   def monthly_rate(category, amount)
-    create(:budget, :rate, pool: nil, category: category, amount: amount)
+    create(:budget, :rate, category: category, amount: amount)
   end
 
   # A HOLDER WITH A TARGET AND NO RULE — `Category#savings?`, which is the card's goal question.
@@ -448,7 +448,7 @@ RSpec.describe EntryImpactPresenter do
   end
 
   describe "an income category" do
-    let(:paycheck) { create(:category, user: user, name: "Paycheck", category_type: :income, pool: checking) }
+    let(:paycheck) { create(:category, user: user, name: "Paycheck", category_type: :income) }
 
     # §6 leaves income out on purpose: it lands in available (§2), and how income meets categories
     # is the distribution screen's subject — a concept the daily screen deliberately does not

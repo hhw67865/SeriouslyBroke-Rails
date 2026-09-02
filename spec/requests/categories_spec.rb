@@ -23,7 +23,11 @@ require "rails_helper"
 # looks exactly like a param that was never sent — which only this layer can tell apart.
 RSpec.describe "Categories", type: :request do
   let(:user) { create(:user) }
+  # rubocop:disable RSpec/LetSetup -- nothing NAMES this account and every example needs it:
+  # the `:account` trait's `after(:create)` is what makes the user's first account their MAIN
+  # one, and the pot is where every entry below lands.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
   # `scope:` explicitly, as the other request specs do: Devise's mappings are populated when the
   # routes are drawn, and routes load lazily.
@@ -46,18 +50,14 @@ RSpec.describe "Categories", type: :request do
       expect(response).to redirect_to(categories_path(type: "expense"))
     end
 
-    # ** `pool_id` IS NOT MERELY UNUSED, IT IS UNWRITABLE. ** The column still exists for the
-    # length of this branch (`Category belongs_to :pool, optional: true`), so a param naming it
-    # would be assigned if it were permitted — including a STRANGER's, which is the exact IDOR the
-    # deleted lookup existed to refuse. Pinned as an absence so the permit list cannot quietly
-    # regain it before Task 8 drops the column.
-    it "drops a pool a crafted param names", :aggregate_failures do
-      stranger_account = create(:pool, :account, user: create(:user), name: "Their Checking")
-
-      create_category(pool_id: stranger_account.id)
+    # ** `pool_id` IS NEITHER PERMITTED NOR A COLUMN (Task 8). ** It was the IDOR the deleted
+    # `current_user.pools.find` lookup existed to refuse; the column is gone, so the payload is what
+    # a client written against the pool era would still send and the answer must be an ordinary
+    # write rather than an UnknownAttribute 500.
+    it "drops a pool a crafted param names" do
+      create_category(pool_id: SecureRandom.uuid)
 
       expect(response).to redirect_to(categories_path(type: "expense"))
-      expect(user.categories.find_by(name: "Vacation").pool).to be_nil
     end
 
     # THE MODEL'S OWN LINE, WHICH IS THE ONE THAT SURVIVES. `Category#holding_columns_are_sane`
@@ -171,12 +171,10 @@ RSpec.describe "Categories", type: :request do
     # this example could inspect. The realistic crafted request is a real form submission with one
     # extra field, which is what this sends.
     it "drops a pool a crafted param names on update", :aggregate_failures do
-      stranger_account = create(:pool, :account, user: create(:user), name: "Their Checking")
-
-      patch category_path(category), params: { category: { name: "Groceries", pool_id: stranger_account.id } }
+      patch category_path(category), params: { category: { name: "Groceries", pool_id: SecureRandom.uuid } }
 
       expect(response).to redirect_to(categories_path(type: "expense"))
-      expect(category.reload.pool).to eq(checking)
+      expect(category.reload.name).to eq("Groceries")
     end
   end
 end

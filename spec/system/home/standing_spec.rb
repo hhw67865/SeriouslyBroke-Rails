@@ -28,7 +28,7 @@ RSpec.describe "Home Standing", type: :system do
       priority: priority,
       funded_since: Date.current - 1.year
     )
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
     category
   end
 
@@ -40,7 +40,7 @@ RSpec.describe "Home Standing", type: :system do
   # waterfall could reach; an allocation crosses nothing (§2), so where the cash physically sits has
   # no bearing on available at all.
   def deposit(amount)
-    category = create(:category, :income, user: user, pool: checking)
+    category = create(:category, :income, user: user)
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 

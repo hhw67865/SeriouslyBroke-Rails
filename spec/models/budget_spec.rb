@@ -4,17 +4,15 @@ require "rails_helper"
 
 RSpec.describe Budget, type: :model do
   describe "associations" do
-    # `optional` at the association level, required by #must_belong_to_a_pool — so an owner-less
-    # rule reports on `:base` ("must belong to a pool"), which is where the form renders it, rather
-    # than as "Pool must exist" against a control the form does not offer.
-    it { is_expected.to belong_to(:pool).optional }
     it { is_expected.to belong_to(:item).optional }
 
-    # THE CATEGORY LANE IS BACK, AND IT IS NOT THE CAP COMING BACK (two-ledger spec §3, Task 2).
-    # This example read "has no category association at all", on plan 3's deletion of the per-
-    # category CEILING; what `category_id` names now is the OWNER — the thing that holds the money —
-    # and Task 8 makes it the only owner there is. Optional on both sides for the length of the
-    # branch, with #must_have_an_owner the one line that says a rule has one.
+    # `belongs_to(:pool)` IS DELETED WITH `budgets.pool_id` (two-ledger spec §5, Task 8). A rule
+    # belongs to the category that holds the money, and that is the only owner there is.
+    #
+    # `optional` AT THE ASSOCIATION LEVEL, required by `#must_have_a_category` — so an owner-less
+    # rule reports on `:base` ("must belong to a category"), which is where the form renders it,
+    # rather than as "Category must exist" against a picker the form re-renders empty. The gate is
+    # also what lets two migration specs plant rules against a schema rewound past the column.
     it { is_expected.to belong_to(:category).optional }
   end
 
@@ -38,17 +36,16 @@ RSpec.describe Budget, type: :model do
     end
   end
 
-  # ONE OWNER, AND IT IS A POOL. `#exactly_one_owner` used to police a pair — neither, and both —
-  # because a rule could be owned by a category instead; the cap is deleted, so there is one owner
-  # to have or lack. Both directions, because "must belong to a pool" is worth nothing if a rule
-  # with a pool is also refused.
-  describe "pool ownership" do
+  # ONE OWNER, AND IT IS A CATEGORY (two-ledger spec §3, Task 8). `#exactly_one_owner` policed a
+  # pair while a rule could be owned by a category OR a pool, and `#must_have_an_owner` accepted
+  # either while both lanes stood; `budgets.pool_id` is gone, so there is one owner to have or lack.
+  # Both directions, because "must belong to a category" is worth nothing if a rule with one is also
+  # refused.
+  describe "category ownership is required" do
     let(:user) { create(:user) }
-    let(:account) { create(:pool, :account, user: user) }
-    let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
 
-    it "is valid attached to a pool" do
-      expect(build(:budget, :rate, pool: pool)).to be_valid
+    it "is valid attached to a category" do
+      expect(build(:budget, :rate, category: create(:category, :expense, :funded, user: user))).to be_valid
     end
 
     # THE MESSAGE NAMES THE CATEGORY (two-ledger spec §3, Task 5), and the wording is about the
@@ -56,17 +53,10 @@ RSpec.describe Budget, type: :model do
     # the control it offers is a category picker, so the sentence has to describe the form the user
     # is looking at.
     it "rejects a rule attached to nothing", :aggregate_failures do
-      budget = build(:budget, pool: nil)
+      budget = build(:budget, category: nil)
 
       expect(budget).not_to be_valid
       expect(budget.errors[:base]).to include("must belong to a category")
-    end
-
-    it "rejects a budget on an account pool", :aggregate_failures do
-      budget = build(:budget, pool: account)
-
-      expect(budget).not_to be_valid
-      expect(budget.errors[:pool]).to include("cannot be an account")
     end
   end
 
@@ -79,11 +69,11 @@ RSpec.describe Budget, type: :model do
     let(:user) { create(:user) }
 
     it "is valid on an expense category" do
-      expect(build(:budget, :rate, pool: nil, category: create(:category, :expense, :funded, user: user))).to be_valid
+      expect(build(:budget, :rate, category: create(:category, :expense, :funded, user: user))).to be_valid
     end
 
     it "rejects a rule on an income category", :aggregate_failures do
-      budget = build(:budget, :rate, pool: nil, category: create(:category, :income, user: user))
+      budget = build(:budget, :rate, category: create(:category, :income, user: user))
 
       expect(budget).not_to be_valid
       expect(budget.errors[:category]).to include("must be an expense category")
@@ -95,7 +85,7 @@ RSpec.describe Budget, type: :model do
     # through. A rule that saved clean there counted into `Budget.steady_need` and could never be
     # filled by any distribution, because `Category.in_fill_order` is holders.
     it "refuses the re-parent that used to save clean", :aggregate_failures do
-      rule = create(:budget, :rate, pool: nil, category: create(:category, :expense, :funded, user: user))
+      rule = create(:budget, :rate, category: create(:category, :expense, :funded, user: user))
       income = create(:category, :income, user: user)
 
       expect(rule.update(category: income)).to be(false)
@@ -105,12 +95,12 @@ RSpec.describe Budget, type: :model do
 
   describe "the four valid shapes" do
     let(:user) { create(:user) }
-    let(:pool) { create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user)) }
+    let(:owner) { create(:category, :expense, :funded, user: user) }
 
     it "accepts a per-period rate rule" do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: nil,
         interval_months: nil,
         basis: :per_period
@@ -122,7 +112,7 @@ RSpec.describe Budget, type: :model do
     it "accepts a monthly rate rule" do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: nil,
         interval_months: 1,
         basis: :monthly
@@ -134,7 +124,7 @@ RSpec.describe Budget, type: :model do
     it "accepts a recurring obligation" do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: Date.new(2026, 6, 1),
         interval_months: 6,
         basis: :monthly
@@ -146,7 +136,7 @@ RSpec.describe Budget, type: :model do
     it "accepts a one-time obligation" do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: Date.new(2026, 6, 1),
         interval_months: nil,
         basis: :monthly
@@ -158,7 +148,7 @@ RSpec.describe Budget, type: :model do
     it "rejects a per-period rule with an anchor date", :aggregate_failures do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: Date.new(2026, 6, 1),
         interval_months: nil,
         basis: :per_period
@@ -171,7 +161,7 @@ RSpec.describe Budget, type: :model do
     it "rejects a monthly rule with neither an anchor nor an interval", :aggregate_failures do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: nil,
         interval_months: nil,
         basis: :monthly
@@ -182,7 +172,7 @@ RSpec.describe Budget, type: :model do
     end
 
     it "rejects a non-positive interval", :aggregate_failures do
-      budget = build(:budget, pool: pool, interval_months: 0, basis: :monthly)
+      budget = build(:budget, category: owner, interval_months: 0, basis: :monthly)
 
       expect(budget).not_to be_valid
       expect(budget.errors[:interval_months]).to include("must be greater than 0")
@@ -194,7 +184,7 @@ RSpec.describe Budget, type: :model do
     it "rejects a multi-month interval with no anchor date", :aggregate_failures do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: nil,
         interval_months: 6,
         basis: :monthly
@@ -209,7 +199,7 @@ RSpec.describe Budget, type: :model do
     it "rejects a per-period rule with an interval", :aggregate_failures do
       budget = build(
         :budget,
-        pool: pool,
+        category: owner,
         anchor_date: nil,
         interval_months: 6,
         basis: :per_period
@@ -226,7 +216,7 @@ RSpec.describe Budget, type: :model do
   # their own words. Every arm is asserted, because a helper reduced to a lookup can no longer
   # catch a misclassification itself.
   describe "#cadence" do
-    def pool_rule(*traits, **attrs) = build(:pool_budget, *traits, **attrs)
+    def pool_rule(*traits, **attrs) = build(:budget, *traits, **attrs)
 
     it "calls a per-period rate rule per-period" do
       expect(pool_rule(:per_period_rate).cadence).to eq(:per_period)
@@ -268,7 +258,7 @@ RSpec.describe Budget, type: :model do
   # the new name produces, and the raw-SQL plant asserts what a row written before the rename now
   # reads as.
   describe "the stored basis mapping" do
-    let(:rule) { create(:pool_budget, :per_period_rate, amount: 300) }
+    let(:rule) { create(:budget, :per_period_rate, amount: 300) }
 
     def raw_basis(record)
       Budget.connection.select_value(Budget.sanitize_sql_array(["SELECT basis FROM budgets WHERE id = ?", record.id]))
@@ -279,13 +269,13 @@ RSpec.describe Budget, type: :model do
     end
 
     it "writes monthly as the integer 0" do
-      expect(raw_basis(create(:pool_budget, :rate, amount: 300))).to eq(0)
+      expect(raw_basis(create(:budget, :rate, amount: 300))).to eq(0)
     end
 
     # Planted by SQL rather than by the enum writer, because a row created before the rename is
     # exactly what no Ruby-side spelling can produce today.
     it "reads a row planted at 1 as per_period", :aggregate_failures do
-      planted = create(:pool_budget, :rate, amount: 300)
+      planted = create(:budget, :rate, amount: 300)
       described_class.connection.execute(described_class.sanitize_sql_array(["UPDATE budgets SET basis = 1 WHERE id = ?", planted.id]))
 
       planted.reload
@@ -298,15 +288,15 @@ RSpec.describe Budget, type: :model do
   describe "#user" do
     let(:user) { create(:user) }
 
-    it "comes from the pool" do
-      pool = create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user))
+    it "comes from the category that owns it" do
+      owner = create(:category, :expense, :funded, user: user)
 
-      expect(build(:budget, :rate, pool: pool).user).to eq(user)
+      expect(build(:budget, :rate, category: owner).user).to eq(user)
     end
 
     # The state the form re-renders in after a failed submission.
     it "is nil for an owner-less budget rather than raising" do
-      expect(build(:budget, pool: nil).user).to be_nil
+      expect(build(:budget, category: nil).user).to be_nil
     end
   end
 
@@ -320,125 +310,60 @@ RSpec.describe Budget, type: :model do
   # scope that returns everything passes every "finds it" assertion ever written.
   describe ".for_user" do
     let(:user) { create(:user) }
-    let(:pool) { create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user)) }
+    let(:owner) { create(:category, :expense, :funded, user: user) }
 
     let(:stranger) { create(:user) }
-    let(:stranger_pool) do
-      create(:pool, :budget_pool, user: stranger, account: create(:pool, :account, user: stranger))
-    end
+    let(:stranger_category) { create(:category, :expense, :funded, user: stranger) }
 
-    let!(:pool_rule) { create(:budget, :rate, pool: pool) }
-    let!(:stranger_pool_rule) { create(:budget, :rate, pool: stranger_pool) }
+    let!(:rule) { create(:budget, :rate, category: owner) }
+    let!(:stranger_rule) { create(:budget, :rate, category: stranger_category) }
 
     it "returns the user's rules and nobody else's", :aggregate_failures do
-      expect(described_class.for_user(user)).to contain_exactly(pool_rule)
-      expect(described_class.for_user(user)).not_to include(stranger_pool_rule)
+      expect(described_class.for_user(user)).to contain_exactly(rule)
+      expect(described_class.for_user(user)).not_to include(stranger_rule)
     end
 
     # What BudgetsController#set_budget does with it. Findability is the point of the
     # scope; raising on a stranger's id is the point of it still being a scope.
     it "finds a rule by id" do
-      expect(described_class.for_user(user).find(pool_rule.id)).to eq(pool_rule)
+      expect(described_class.for_user(user).find(rule.id)).to eq(rule)
     end
 
     it "raises RecordNotFound for another user's rule" do
-      expect { described_class.for_user(user).find(stranger_pool_rule.id) }
+      expect { described_class.for_user(user).find(stranger_rule.id) }
         .to raise_error(ActiveRecord::RecordNotFound)
     end
 
-    # The Budget page groups these by account and by pool, so the scope has to stay composable.
+    # The Budget page groups these, so the scope has to stay composable.
     it "chains with further conditions" do
-      expect(described_class.for_user(user).where(pool_id: pool.id)).to contain_exactly(pool_rule)
+      expect(described_class.for_user(user).where(category_id: owner.id)).to contain_exactly(rule)
     end
   end
 
-  describe ":pool_budget factory" do
+  describe ":budget factory" do
     # Guards the interface later tasks build on: every shape trait must produce a
     # valid record under `build`, where associations are not yet persisted.
     it "builds a valid rate rule by default" do
-      expect(build(:pool_budget)).to be_valid
+      expect(build(:budget)).to be_valid
     end
 
     it "builds a valid record for every shape trait", :aggregate_failures do
       [:rate, :per_period_rate, :recurring, :one_time].each do |trait|
-        expect(build(:pool_budget, trait)).to be_valid
+        expect(build(:budget, trait)).to be_valid
       end
     end
   end
 
+  # THE POOL HALF OF THIS BLOCK IS DELETED (two-ledger spec §5, Task 8) —
+  # `#item_must_belong_to_pool` and its six examples went with `budgets.pool_id`. What is left is
+  # the twin one layer in, which is the only rule there is now.
   describe "item attribution" do
     let(:user) { create(:user) }
-    let(:account) { create(:pool, :account, user: user) }
-    let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
-    let(:category) { create(:category, :expense, user: user, pool: pool) }
+    let(:category) { create(:category, :expense, :funded, user: user) }
     let(:item) { create(:item, category: category) }
 
-    it "accepts an item whose category points at this pool" do
-      budget = build(:budget, :recurring, pool: pool, item: item)
-
-      expect(budget).to be_valid
-    end
-
-    it "rejects an item from a category pointing at a different pool", :aggregate_failures do
-      other_pool = create(:pool, :budget_pool, user: user, account: account)
-      stray = create(:item, category: create(:category, :expense, user: user, pool: other_pool))
-      budget = build(:budget, :recurring, pool: pool, item: stray)
-
-      expect(budget).not_to be_valid
-      expect(budget.errors[:item]).to include("must belong to a category in this pool")
-    end
-
-    it "rejects an item already claimed by another rule", :aggregate_failures do
-      create(:budget, :recurring, pool: pool, item: item)
-      budget = build(:budget, :recurring, pool: pool, item: item)
-
-      expect(budget).not_to be_valid
-      expect(budget.errors[:item]).to include("is already used by another rule")
-    end
-
-    it "does not treat item-less rules as claiming each other" do
-      create(:budget, :recurring, pool: pool, item: nil)
-
-      expect(build(:budget, :rate, pool: pool, item: nil)).to be_valid
-    end
-
-    it "does not report a conflict for an unsaved item" do
-      unsaved = Item.new(name: "Maintenance", category: category)
-
-      expect(build(:budget, :recurring, pool: pool, item: unsaved)).to be_valid
-    end
-
-    # THE UNSAVED-POOL BRANCH, AND AN HONEST NOTE ABOUT WHAT IT NO LONGER DISCRIMINATES. Against an
-    # unsaved pool `pool_id` is nil, and the comparison in #item_must_belong_to_pool is between
-    # OBJECTS for that reason: an id comparison equated every POOL-LESS category with this pool and
-    # let a stray item in. A pool-less category is not a shape the app can hold any more
-    # (`Category belongs_to :pool`), so this example exercises the branch but can no longer kill the
-    # ids-instead-of-objects mutant — an item in another pool's category is refused either way.
-    # Recorded rather than dressed up: the guard is still right, and the fixture that proved it is
-    # gone with the data shape.
-    it "rejects a stray item even when this rule's pool is unsaved", :aggregate_failures do
-      unsaved_pool = build(:pool, :budget_pool, user: user, account: account)
-      other_pool = create(:pool, :budget_pool, user: user, account: account)
-      stray = create(:item, category: create(:category, :expense, user: user, pool: other_pool))
-      budget = build(:budget, :recurring, pool: unsaved_pool, item: stray)
-
-      expect(budget).not_to be_valid
-      expect(budget.errors[:item]).to include("must belong to a category in this pool")
-    end
-
-    # The self-exclusion branch of `where.not(id: id)`. UUID PKs are assigned at
-    # insert, so every other example here runs the id-is-nil branch; only a
-    # persisted rule re-validating exercises this one. A wrong `where.not` would
-    # make a saved budget permanently unsavable.
-    it "lets a persisted rule keep the item it already owns" do
-      budget = create(:budget, :recurring, pool: pool, item: item)
-
-      expect(budget).to be_valid
-    end
-
-    # THE CATEGORY-OWNED TWIN (two-ledger spec §3, Task 2). A dated bill anchors on an item, and
-    # after Task 8 the rule's owner is the category — so the item has to be an item OF that
-    # category rather than of anything in an envelope's orbit. Both directions.
+    # A dated bill anchors on an item, and the rule's owner is the category — so the item has to be
+    # an item OF that category rather than of anything in an envelope's orbit. Both directions.
     context "when the rule is owned by a category" do
       let(:holder) { create(:category, :expense, :funded, user: user, name: "Insurance") }
 
@@ -455,18 +380,18 @@ RSpec.describe Budget, type: :model do
         expect(budget.errors[:item]).to include("must belong to this category")
       end
 
-      # `#must_have_an_owner` is the one line that makes "a rule has an owner" true while both
-      # associations are optional — and the message names the CATEGORY, because that is the owner
-      # the one form able to submit this state asks for.
+      # `#must_have_a_category` is the one line that makes "a rule has an owner" true while the
+      # association stays `optional` — and the message names the CATEGORY, because that is the
+      # owner the one form able to submit this state asks for.
       it "still refuses a rule owned by neither", :aggregate_failures do
-        budget = build(:budget, :rate, pool: nil, category: nil)
+        budget = build(:budget, :rate, category: nil)
 
         expect(budget).not_to be_valid
         expect(budget.errors[:base]).to include("must belong to a category")
       end
 
-      # UNGATED NOW, both of them: neither rule reads a pool, and a category-owned rule that
-      # skipped them would be a second definition of what a rule's shape is.
+      # UNGATED, both of them: neither rule reads an owner at all, and a rule that skipped them
+      # would be a second definition of what a rule's shape is.
       it "holds a category rule to the same shape rules and the same one-item-one-rule rule",
          :aggregate_failures do
            create(:budget, :category_rule, :recurring, category: holder, item: create(:item, category: holder))

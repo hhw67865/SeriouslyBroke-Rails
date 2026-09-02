@@ -34,7 +34,7 @@ RSpec.describe DistributionPresenter, type: :model do
   def presenter = described_class.new(user: user, today: today)
 
   def rule(category, *traits, **attrs)
-    create(:budget, *traits, pool: nil, category: category, **attrs)
+    create(:budget, *traits, category: category, **attrs)
   end
 
   def rate_category(name, rate, funded: nil, priority: 0)

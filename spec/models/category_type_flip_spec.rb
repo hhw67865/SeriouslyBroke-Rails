@@ -17,7 +17,7 @@ RSpec.describe "Category type flips", type: :model do
   let(:user) { create(:user) }
   let(:main) { create(:pool, :account, user: user, name: "Main") }
   let(:ally) { create(:pool, :account, user: user, name: "Ally") }
-  let(:pay) { create(:category, :income, user: user, pool: main, name: "Pay") }
+  let(:pay) { create(:category, :income, user: user, name: "Pay") }
   let(:paycheck) { create(:entry, item: create(:item, category: pay), amount: 500, date: Date.current) }
 
   before do
@@ -25,46 +25,37 @@ RSpec.describe "Category type flips", type: :model do
     paycheck.route_income_to!(ally)
   end
 
-  def routing_count(entry) = PoolMovement.kind_transfer.where(source_entry: entry).count
+  def routing_count(entry) = AccountMovement.kind_transfer.where(source_entry: entry).count
 
   it "destroys the routing movements of its entries and hands the money back to main", :aggregate_failures do
     expect(routing_count(paycheck)).to eq(1)
-    expect(ally.calculator.balance).to eq(500)
+    expect(ally.balance).to eq(500)
 
     pay.update!(category_type: :expense)
 
     expect(routing_count(paycheck)).to eq(0)
     # THE DESTINATION IS EMPTIED, which is the half a user would have seen as a phantom balance.
-    expect(ally.calculator.balance).to eq(0)
+    expect(ally.balance).to eq(0)
     # AND MAIN IS DEBITED ONCE, NOT TWICE. The entry is an expense now, so main reads -$500 — had
     # the mirror survived, the same $500 would have left main a second time and main would read
     # -$1,000 against a bank that saw one $500 transaction.
-    expect(main.calculator.balance).to eq(-500)
+    expect(main.balance).to eq(-500)
   end
 
-  # `kind_transfer` IS LOAD-BEARING IN THE SWEEP, not decoration: allocation and sweep movements
-  # carry a `source_entry` too — that link is what makes a distribution replaceable — so a callback
-  # that went by the link alone would delete the period's envelope split every time somebody
-  # re-typed a category.
-  it "leaves the distribution's own movements alone", :aggregate_failures do
-    groceries = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
-    allocation = PoolMovement.create!(
-      from_pool: main, to_pool: groceries, amount: 120, date: Date.current, kind: :allocation, source_entry: paycheck
-    )
-
-    pay.update!(category_type: :expense)
-
-    expect(allocation.reload).to be_persisted
-    expect(groceries.calculator.balance).to eq(120)
-  end
+  # THE DISTRIBUTION'S OWN ROWS ARE ON THE OTHER TABLE NOW (two-ledger spec §5, Task 8). This
+  # example planted an `allocation`-kind `pool_movement` beside the routing transfer and asserted
+  # the callback's `kind_transfer` filter spared it; a distribution writes `allocations` and the
+  # movement table holds transfers only, so the filter has nothing left to tell apart HERE. The
+  # equivalent fact is asserted where it now lives: `Allocation.distributed` in
+  # `spec/services/allocation_committer_spec.rb`.
 
   # THE GUARD IS THE EXACT PAIR, income → expense, and these two prove it from the other side.
   it "destroys nothing when an expense category becomes income", :aggregate_failures do
-    spending = create(:category, :expense, user: user, pool: main, name: "Misc")
+    spending = create(:category, :expense, user: user, name: "Misc")
     outgoing = create(:entry, item: create(:item, category: spending), amount: 40, date: Date.current)
     # Planted directly: an expense entry never gets a mirror through the app, so this row exists
     # only to prove the callback does not reach for it on a flip in the other direction.
-    PoolMovement.create!(
+    AccountMovement.create!(
       from_pool: main, to_pool: ally, amount: 40, date: Date.current, kind: :transfer, source_entry: outgoing
     )
 
@@ -77,6 +68,6 @@ RSpec.describe "Category type flips", type: :model do
     pay.update!(name: "Salary")
 
     expect(routing_count(paycheck)).to eq(1)
-    expect(ally.calculator.balance).to eq(500)
+    expect(ally.balance).to eq(500)
   end
 end

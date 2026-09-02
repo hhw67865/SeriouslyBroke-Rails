@@ -15,7 +15,7 @@ RSpec.describe "OpeningBalances", type: :request do
     sign_in user, scope: :user
   end
 
-  def app_balance = PoolCalculator.new(main.reload).balance
+  def app_balance = AccountLedger.new(user).balance_of(main.reload)
 
   # THE ONE ENTRY THE CORRECTION WRITES. `sole` twice deliberately: the correction is exactly one
   # category, one item and one entry, so a second of any of them is a failure here rather than a
@@ -23,7 +23,7 @@ RSpec.describe "OpeningBalances", type: :request do
   def correction_entry = user.categories.find_by(name: "Opening Balance").items.sole.entries.sole
 
   it "raises main to the entered figure with an income-type correction", :aggregate_failures do
-    income = create(:category, :income, user: user, pool: main, name: "Pay")
+    income = create(:category, :income, user: user, name: "Pay")
     create(:entry, item: create(:item, category: income), amount: 300, date: Date.current)
 
     post opening_balance_path, params: { opening_balance: { actual: 1000 } }
@@ -31,12 +31,12 @@ RSpec.describe "OpeningBalances", type: :request do
     expect(app_balance).to eq(1000)
     correction = user.categories.find_by(name: "Opening Balance")
     expect(correction).to be_income
-    expect(correction.pool).to eq(main)
+    expect(correction.funded_since).to be_nil
     expect(correction_entry.date.to_date).to eq(Date.current - 1)
   end
 
   it "lowers main with an expense-type correction when the app holds too much", :aggregate_failures do
-    income = create(:category, :income, user: user, pool: main, name: "Pay")
+    income = create(:category, :income, user: user, name: "Pay")
     create(:entry, item: create(:item, category: income), amount: 300, date: Date.current)
 
     post opening_balance_path, params: { opening_balance: { actual: 120 } }
@@ -58,7 +58,7 @@ RSpec.describe "OpeningBalances", type: :request do
   # main): the app already agrees with the bank, so nothing is written — no category, no item, no
   # entry — and the user is told so rather than left to wonder whether the click did anything.
   it "writes nothing when the entered figure already matches main", :aggregate_failures do
-    income = create(:category, :income, user: user, pool: main, name: "Pay")
+    income = create(:category, :income, user: user, name: "Pay")
     create(:entry, item: create(:item, category: income), amount: 300, date: Date.current)
 
     post opening_balance_path, params: { opening_balance: { actual: 300 } }
@@ -89,7 +89,7 @@ RSpec.describe "OpeningBalances", type: :request do
   # through the ordinary categories screen — must read as already-latched rather than sail past an
   # exact-case check and crash on `create!`'s own uniqueness refusal.
   it "treats a differently-cased existing category as the latch, not a crash", :aggregate_failures do
-    create(:category, :expense, user: user, pool: main, name: "opening balance")
+    create(:category, :expense, user: user, name: "opening balance")
 
     post opening_balance_path, params: { opening_balance: { actual: 1000 } }
 
@@ -99,7 +99,7 @@ RSpec.describe "OpeningBalances", type: :request do
   end
 
   # NO MAIN ACCOUNT: reachable by a crafted POST (the card itself never renders without one), and
-  # refused before the balance math runs rather than crashing on `PoolCalculator.new(nil)`.
+  # refused before the balance math runs rather than crashing on a nil account.
   it "refuses when the user has no main account", :aggregate_failures do
     user.update!(default_account: nil)
 
@@ -134,7 +134,7 @@ RSpec.describe "OpeningBalances", type: :request do
   # $150 held.
   it "corrects against the pot, which money already claimed by a category does not lower",
      :aggregate_failures do
-       income = create(:category, :income, user: user, pool: main, name: "Pay")
+       income = create(:category, :income, user: user, name: "Pay")
        create(:entry, item: create(:item, category: income), amount: 1000, date: Date.current)
        groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
        create(:allocation, kind: :allocation, to_category: groceries, amount: 150, date: Date.current)
@@ -150,18 +150,18 @@ RSpec.describe "OpeningBalances", type: :request do
   # WHERE THE CORRECTION IS DATED (Henry's ruling of 2026-08-20, from real use). It used to be
   # stamped `Date.current`, which put years of untracked history INSIDE the period the user is
   # standing in — and `tracked: false` does not save it there, because the reader that matters on
-  # the Distribute screen (`PoolCalculator#income_within`) sums by DATE and pool, not by
+  # the Distribute screen (`AccountLedger#income_within`) sums by DATE, not by
   # `categories.tracked`. So the entry is backdated to the day BEFORE the user's earliest entry:
   # before all history, inside no period anyone will ever distribute.
   #
-  # IT STILL LANDS IN MAIN, which is an ACCOUNT and has no start-date gate on the categories that
-  # point at it, so `Σ pools == the bank balance` is untouched by the move — the two examples above
-  # that measure the balance are unchanged and still read the corrected figure.
+  # IT STILL LANDS IN THE POT, because the correction's category carries no `funded_since` and so
+  # holds nothing — the invariant is untouched by the move, and the two examples above that measure
+  # the balance are unchanged and still read the corrected figure.
   describe "where the correction is dated", :aggregate_failures do
     # PLANTED ON BOTH SIDES OF THE BOUNDARY: the oldest entry is what the correction has to get in
     # front of, and the newest is what proves it is the OLDEST that decides rather than the latest.
     it "dates it the day before the user's earliest entry" do
-      income = create(:category, :income, user: user, pool: main, name: "Pay")
+      income = create(:category, :income, user: user, name: "Pay")
       item = create(:item, category: income)
       create(:entry, item: item, amount: 300, date: Date.current - 90.days)
       create(:entry, item: item, amount: 120, date: Date.current - 3.days)
@@ -191,7 +191,7 @@ RSpec.describe "OpeningBalances", type: :request do
     # Backdated, the figure is the $50 that actually came in.
     it "does not count as this period's income on the Distribute screen" do
       user.update!(period_cadence: :biweekly, period_anchor_date: Date.current)
-      income = create(:category, :income, user: user, pool: main, name: "Pay")
+      income = create(:category, :income, user: user, name: "Pay")
       item = create(:item, category: income)
       create(:entry, item: item, amount: 300, date: Date.current - 60.days)
       create(:entry, item: item, amount: 50, date: Date.current)
@@ -203,7 +203,7 @@ RSpec.describe "OpeningBalances", type: :request do
     end
 
     def this_periods_income
-      main.reload.calculator(today: Date.current).income_within(user.period_datetimes_containing(Date.current))
+      AccountLedger.new(user).income_within(user.period_datetimes_containing(Date.current))
     end
   end
 

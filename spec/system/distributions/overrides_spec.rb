@@ -795,10 +795,10 @@ RSpec.describe "Distribution Overrides", type: :system do
     category
   end
 
-  # `pool: nil` on every rule, because the budget factory's default owner is still a pool for the
-  # length of this branch and `Budget#must_have_an_owner` accepts either.
+  # EVERY RULE BELONGS TO A CATEGORY (two-ledger spec §3), which is the only owner a rule has —
+  # said once here rather than on every line.
   def rule(category, *traits, **attrs)
-    create(:budget, *traits, pool: nil, category: category, **attrs)
+    create(:budget, *traits, category: category, **attrs)
   end
 
   # A bill: an anchored rule with a due date. `spec` goes straight to the budget factory, so an

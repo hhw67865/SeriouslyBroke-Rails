@@ -4,14 +4,16 @@ require "rails_helper"
 
 # TWO TOTALS PER DAY, NOT THREE (plan 3, task 5). The grid's columns are
 # `CategoryTypeHelper::CATEGORY_TYPES`, so the savings one left with the enum value — and what a
-# contribution BECAME does not arrive in its place: a `PoolMovement` is the user's own money
+# contribution BECAME does not arrive in its place: a `AccountMovement` is the user's own money
 # changing pockets, not money entering or leaving their life. Both directions asserted below.
 RSpec.describe "Calendar Index - Grid", type: :system do
   let!(:user) { create(:user) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let!(:goal) { create(:pool, :savings_pool, user: user, name: "Emergency Fund", account: checking) }
-  let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries", pool: checking) }
-  let!(:income_category) { create(:category, :income, user: user, name: "Salary", pool: checking) }
+  # The other end of the transfer: a SECOND ACCOUNT, because a movement now has an account on
+  # both ends (two-ledger spec §5, Task 8). It was a savings POOL sitting inside Checking.
+  let!(:savings_account) { create(:pool, :account, user: user, name: "Emergency Fund") }
+  let!(:expense_category) { create(:category, :expense, user: user, name: "Groceries") }
+  let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
 
   before { sign_in user, scope: :user }
 
@@ -43,7 +45,7 @@ RSpec.describe "Calendar Index - Grid", type: :system do
       create(:entry, item: income_item, amount: 1000.00, date: Date.current)
       # A $200 contribution ON THE SAME DAY, as the movement it is now. Nothing on this grid may
       # report it: the presenters read `Entry` and nothing else.
-      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 200.00, date: Date.current)
+      create(:account_movement, from_pool: checking, to_pool: savings_account, amount: 200.00, date: Date.current)
 
       visit calendar_path
     end

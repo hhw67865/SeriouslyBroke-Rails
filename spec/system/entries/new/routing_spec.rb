@@ -15,19 +15,24 @@ require "rails_helper"
 # chosen account gains the money AND main nets to zero rather than keeping it.
 RSpec.describe "Entries New Routing", type: :system do
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:disable RSpec/LetSetup -- nothing NAMES it and every example needs it: the first account
+  # a user is given becomes their MAIN one, and this fixture's whole shape is "Checking is main,
+  # Ally is somewhere income can be routed TO". A lazy `let` was enough only while the deleted
+  # envelope below referenced it; with that gone, nothing forced it and Ally became main.
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
-  # ORDER IS THE FIXTURE. The first account a user is given becomes their main one, so Checking is
-  # realised on the first line here and Ally after it — Ally is an account income can be routed TO
-  # and never the one it lands IN. Groceries is the third pool and is not an account at all, which
-  # is what makes "the select offers accounts only" a claim with something to fail against.
+  # ORDER IS THE FIXTURE. Checking is minted by the `let!` above, before anything here, and Ally
+  # after it — Ally is an account income can be routed TO and never the one it lands IN. The third
+  # pool that used to sit here was an ENVELOPE, planted so "the select offers accounts only" had
+  # something to fail against; every pool is an account now (Task 8), so what the select still
+  # decides is ownership alone.
   before do
-    salary = create(:category, :income, user: user, pool: checking, name: "Salary")
+    salary = create(:category, :income, user: user, name: "Salary")
     create(:item, category: salary, name: "Paycheck")
     create(:pool, :account, user: user, name: "Ally")
 
-    groceries = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-    food = create(:category, user: user, pool: groceries, name: "Food", category_type: :expense)
+    food = create(:category, user: user, name: "Food", category_type: :expense)
     create(:item, category: food, name: "Bananas")
 
     sign_in user, scope: :user
@@ -79,7 +84,7 @@ RSpec.describe "Entries New Routing", type: :system do
       select_category("Salary")
 
       expect(page).to have_select("Lands in", options: ["Checking", "Ally"])
-      expect(page).to have_no_select("Lands in", options: ["Groceries"])
+      expect(page).to have_no_select("Lands in", options: ["Checking", "Ally", create(:pool, :account).name])
     end
 
     it "is not asked before a category is picked" do

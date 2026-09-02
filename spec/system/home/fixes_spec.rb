@@ -6,7 +6,7 @@ require "rails_helper"
 # the figure it prints and the figure the button acts on are the same one.
 #
 # CONVERTED TO THE PURPOSE LEDGER (Task 6). Every fixture here was an envelope inside Checking and
-# every button opened `/pool_movements/new`; the fixture is now `spec/support/allocation_move_
+# every button opened `/account_movements/new`; the fixture is now `spec/support/allocation_move_
 # context.rb` — the same eight shapes at the same figures — and the buttons open `/allocations/new`.
 # The pool-era context and the screen it served are deleted.
 #
@@ -284,7 +284,7 @@ RSpec.describe "Home Fixes", type: :system do
     #   * "an overdrawn account is fixed out of an envelope inside it, ranked by the user's own
     #     priorities". An overdrawn ACCOUNT is not a problem row any more, and cannot be: the fix
     #     beside a row is an ALLOCATION, which moves nothing physical (§2), so it could not repay a
-    #     bank overdraft whatever it named. The example turned on `PoolMovement#containing_account`
+    #     bank overdraft whatever it named. The example turned on `AccountMovement#containing_account`
     #     making an account its own container on both ends — a concept with no successor. The debt is
     #     still named, by the standing band and by the accounts band; see
     #     `spec/system/home/attention_spec.rb`'s "names an overdrawn account without counting it as
@@ -300,20 +300,24 @@ RSpec.describe "Home Fixes", type: :system do
   # the OTHER reading, so neither can have moved alone.
   describe "the post-sweep view" do
     let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
+    # rubocop:disable RSpec/LetSetup -- nothing NAMES this account and every example needs it:
+    # the `:account` trait's `after(:create)` is what makes the user's first account their MAIN
+    # one, and the pot is where every entry below lands.
     let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    # rubocop:enable RSpec/LetSetup
 
     before { sign_in user, scope: :user }
 
     def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
 
     def deposit(amount)
-      category = create(:category, :income, user: user, pool: checking)
+      category = create(:category, :income, user: user)
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
     def envelope(name, rate:, priority:, funded: 0, funded_on: Date.current)
       category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+      create(:budget, :per_period_rate, category: category, amount: rate)
       create(:allocation, to_category: category, amount: funded, date: funded_on) if funded.positive?
       category
     end
@@ -484,7 +488,11 @@ RSpec.describe "Home Fixes", type: :system do
   #   3 Cushion  a savings goal holding $700, no rules — asks nothing, and is the source Roof needs
   describe "a problem the next distribution already solves" do
     let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
+    # rubocop:disable RSpec/LetSetup -- nothing NAMES this account and every example needs it:
+    # the `:account` trait's `after(:create)` is what makes the user's first account their MAIN
+    # one, and the pot is where every entry below lands.
     let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+    # rubocop:enable RSpec/LetSetup
 
     before do
       sign_in user, scope: :user
@@ -500,7 +508,7 @@ RSpec.describe "Home Fixes", type: :system do
     def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
 
     def deposit(amount)
-      category = create(:category, :income, user: user, pool: checking)
+      category = create(:category, :income, user: user)
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
@@ -513,7 +521,6 @@ RSpec.describe "Home Fixes", type: :system do
     def bill(category, item_name, amount)
       create(
         :budget,
-        pool: nil,
         category: category,
         item: create(:item, category: category, name: item_name),
         amount: amount,

@@ -81,7 +81,7 @@ RSpec.describe Allocation, type: :model do
     end
   end
 
-  # THE GUARD `PoolMovement` HAS CARRIED SINCE PLAN 2 (spec §7a), ported here by Task 4 — the task
+  # THE GUARD `AccountMovement` HAS CARRIED SINCE PLAN 2 (spec §7a), ported here by Task 4 — the task
   # that writes the first `source_entry` allocations. `allocations.source_entry_id` is a bare FK to
   # `entries` and no column on this table says whose entry it is, so without this an allocation
   # between MY categories may name a STRANGER'S paycheck as its cause. The money would still land

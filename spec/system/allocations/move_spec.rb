@@ -5,7 +5,7 @@ require "rails_helper"
 # THE WRITE: moving money by hand when life happens — one allocation, from, to, amount, on the
 # purpose ledger.
 #
-# THE PORT OF `spec/system/pool_movements/move_spec.rb`. One refusal could not come across —
+# THE PORT OF `spec/system/account_movements/move_spec.rb`. One refusal could not come across —
 # "refuses a source in another account" — because `must_not_cross_accounts` dies with the concept
 # (two-ledger spec §2: an allocation moves intention, not location). The floor at the write survives
 # it, ported to `Allocation#source_must_hold_it`, and is the example below it.

@@ -5,7 +5,7 @@ require "rails_helper"
 # The source list: which parties the money can come from, and what a row that cannot make the move
 # says instead (spec §5).
 #
-# THE PORT OF `spec/system/pool_movements/new/sources_spec.rb`. One assertion could not come across —
+# THE PORT OF `spec/system/account_movements/new/sources_spec.rb`. One assertion could not come across —
 # "an envelope in a second account is not offered" — because nothing crosses anything on the purpose
 # ledger (two-ledger spec §2). Its place is taken by AVAILABLE, which is offered and is the one
 # source that is not a category at all.

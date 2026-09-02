@@ -137,7 +137,6 @@ RSpec.shared_context "with categories to reallocate between" do
   def dated_rule(category, item_name, amount, due_in:)
     create(
       :budget,
-      pool: nil,
       category: category,
       item: create(:item, category: category, name: item_name),
       amount: amount,
@@ -147,7 +146,7 @@ RSpec.shared_context "with categories to reallocate between" do
   end
 
   def rate_rule(category, amount)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   # A category funded a fortnight ago — one biweekly boundary back — so its rate period has closed

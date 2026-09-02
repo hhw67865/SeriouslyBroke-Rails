@@ -124,7 +124,7 @@ RSpec.describe "Budget page declaration", type: :request do
     # refuses a list that is not exactly the set of.
     def holder(name, priority:)
       category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: 100)
+      create(:budget, :per_period_rate, category: category, amount: 100)
       category
     end
 

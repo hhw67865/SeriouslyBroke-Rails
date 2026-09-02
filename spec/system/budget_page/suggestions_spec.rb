@@ -653,7 +653,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   end
 
   def dining_rule
-    @dining_rule ||= create(:budget, :per_period_rate, pool: nil, category: dining, amount: 150)
+    @dining_rule ||= create(:budget, :per_period_rate, category: dining, amount: 150)
   end
 
   # A rate rule against a lane that carries far less than it reserves: $180 over the four-period
@@ -673,7 +673,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   end
 
   def retirement_rule
-    @retirement_rule ||= create(:budget, :rate, pool: nil, category: retirement, amount: 260)
+    @retirement_rule ||= create(:budget, :rate, category: retirement, amount: 260)
   end
 
   def plant_monthly_drift
@@ -693,7 +693,6 @@ RSpec.describe "Budget page suggestions", type: :system do
   def netflix_rule
     @netflix_rule ||= create(
       :budget,
-      pool: nil,
       category: streaming,
       item: netflix_item,
       amount: 120,

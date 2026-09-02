@@ -25,14 +25,14 @@ RSpec.describe "Budget page rules", type: :system do
     create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
-  def rate(category, amount) = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
   def fund(category, amount, on:)
     create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
   end
 
   def rolling(category, amount:, anchor:, every: 1)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: every, anchor_date: anchor)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
   describe "the fill order", :aggregate_failures do
@@ -105,7 +105,6 @@ RSpec.describe "Budget page rules", type: :system do
       create(
         :budget,
         :per_period_rate,
-        pool: nil,
         amount: 35,
         category: create(:category, :expense, user: user, name: "Coffee")
       )

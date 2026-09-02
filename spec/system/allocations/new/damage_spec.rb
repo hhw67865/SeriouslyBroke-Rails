@@ -5,7 +5,7 @@ require "rails_helper"
 # The damage statement: what a move costs the source, and what it buys the destination — stated
 # before a cent has moved (spec §5).
 #
-# THE PORT OF `spec/system/pool_movements/new/damage_spec.rb`, figure for figure. Every per-period
+# THE PORT OF `spec/system/account_movements/new/damage_spec.rb`, figure for figure. Every per-period
 # figure below is a REAL RECOMPUTATION of HoldingCalculator#required with the balance this move would
 # leave, never the amount divided by something. The two are only equal when one period remains, and
 # on the pool-era twin the subtraction printed `$206.43` where the truth was `$194.17`.

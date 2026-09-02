@@ -85,20 +85,10 @@ RSpec.describe "Category, as a holder of money", type: :model do
     end
   end
 
-  # THE NIL POOL, EXPRESSIBLE AGAIN AND ANSWERING THE OPPOSITE OF WHAT IT ONCE DID. Before the
-  # cutover a pool-less category WAS the buffer-funded shape; a category holds its own money now, so
-  # it is the one shape this predicate must say is not coming out of the buffer. Both directions,
-  # and the pool-less half is planted through `create` rather than past the model — that it saves at
-  # all is half the fact under test.
-  describe "#buffer_funded?" do
-    it "is false for a category that names no pool" do
-      expect(create(:category, :expense, user: user, name: "Holder", pool: nil)).not_to be_buffer_funded
-    end
-
-    it "is still true for an expense category pointing at an account" do
-      expect(create(:category, :expense, user: user, name: "Misc")).to be_buffer_funded
-    end
-  end
+  # `#buffer_funded?` IS DELETED WITH `categories.pool_id` (two-ledger spec §5, Task 8), and with
+  # it the two examples that stood here. It asked which POOL a category's spending came out of; the
+  # question the app asks now is `#holder?`, above — a category either holds its own money from
+  # `funded_since` on or its spending drains available.
 
   describe "the columns" do
     it "refuses a negative priority" do

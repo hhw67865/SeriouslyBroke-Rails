@@ -34,7 +34,7 @@ RSpec.describe AllocationCommitter, type: :model do
   def this_period = Date.new(2026, 8, 15)
 
   def rule(category, *traits, **attrs)
-    create(:budget, *traits, pool: nil, category: category, **attrs)
+    create(:budget, *traits, category: category, **attrs)
   end
 
   # A category carrying one per-period rate rule, optionally already holding money — funded by an

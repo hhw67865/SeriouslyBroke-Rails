@@ -8,10 +8,12 @@ RSpec.describe "Calendar Week - Summary", type: :system do
   # implicit-pool factory default mints its OWN anonymous account before `checking` is ever
   # referenced, and the auto-main trait claims that one instead — leaving `checking` non-main for
   # `income_category` below, which names it explicitly and needs it to be.
-  let!(:expense_category) { create(:category, :expense, user: user, name: "Food", pool: checking) }
+  let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let!(:goal) { create(:pool, :savings_pool, user: user, name: "Emergency", account: checking) }
-  let!(:income_category) { create(:category, :income, user: user, name: "Salary", pool: checking) }
+  # The other end of the transfer: a SECOND ACCOUNT, because a movement now has an account on
+  # both ends (two-ledger spec §5, Task 8). It was a savings POOL sitting inside Checking.
+  let!(:savings_account) { create(:pool, :account, user: user, name: "Emergency") }
+  let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
   let(:test_date) { Date.current }
 
   before { sign_in user, scope: :user }
@@ -42,7 +44,7 @@ RSpec.describe "Calendar Week - Summary", type: :system do
       create(:entry, item: expense_item, amount: 100.00, date: week_start)
       create(:entry, item: expense_item, amount: 50.00, date: week_start + 2)
       create(:entry, item: income_item, amount: 3000.00, date: week_start + 1)
-      create(:pool_movement, from_pool: checking, to_pool: goal, amount: 500.00, date: week_start + 3)
+      create(:account_movement, from_pool: checking, to_pool: savings_account, amount: 500.00, date: week_start + 3)
 
       visit calendar_week_path(date: test_date.strftime("%Y-%m-%d"))
     end

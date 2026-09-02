@@ -101,7 +101,7 @@ RSpec.describe "Budget page reorder", type: :system do
 
   def holder(name, rate:, priority:)
     category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+    create(:budget, :per_period_rate, category: category, amount: rate)
     category
   end
 

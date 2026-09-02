@@ -1,14 +1,13 @@
 # frozen_string_literal: true
 
 require "rails_helper"
-require Rails.root.join("db/migrate/20260817000000_cutover_to_envelope_budgeting")
 
 # THE DEMO IS INFRASTRUCTURE, so it gets a spec.
 #
 # `db/seeds.rb` is what every visual check on this plan is performed against and what `bin/ci`
-# replants on every run, and after the cutover it is also a CLAIM: that the demo speaks the
-# post-cutover language natively — no category-mode cap, no savings category or entry, no category
-# without a pool, no pool without an account.
+# replants on every run, and after the drop it is also a CLAIM: that the demo speaks the two-ledger
+# language natively — accounts and categories, allocations and account movements, and not one
+# construct from the pool layer, which no longer has columns to be written into.
 #
 # THE CLAIM IS CHECKED IN BOTH DIRECTIONS, and that is the point of the file-level half. Grepping
 # the source catches a legacy construct written into the seeds; asserting the database catches one
@@ -33,6 +32,11 @@ RSpec.describe "db/seeds.rb" do
   around { |example| Time.use_zone(Time.zone) { example.run } }
 
   let(:source) { Rails.root.join("db/seeds.rb").read }
+
+  # THE CODE ALONE, WITH EVERY COMMENT STRIPPED. The seeds' header explains at length what the pool
+  # layer WAS, so a grep over the raw file finds `categories.pool_id` in prose and fails on a
+  # sentence rather than on a construct. What this file polices is what the demo WRITES.
+  let(:code) { source.lines.reject { |line| line.strip.start_with?("#") }.join }
   let(:user) { User.find_by!(email: "demo@example.com") }
   let(:today) { Time.find_zone!(user.timezone).today }
 
@@ -50,33 +54,70 @@ RSpec.describe "db/seeds.rb" do
       items: Item.count,
       entries: Entry.count,
       budgets: Budget.count,
-      movements: PoolMovement.count
+      movements: AccountMovement.count,
+      allocations: Allocation.count
     }
   end
 
-  # THE INTEGER THE SCHEMA HOLDS TODAY, not `Category.savings`. `category_type: 2` is deleted from
-  # the enum in Task 5, and this assertion has to outlive that: a spec that stopped compiling the
+  # THE INTEGER THE SCHEMA HOLDS TODAY, not `Category.savings`. `category_type: 2` was deleted from
+  # the enum in plan 3, and this assertion has to outlive that: a spec that stopped compiling the
   # moment the legacy value went away would stop guarding the seeds exactly when the guard became
-  # cheap to break. Same reasoning as the migration's own written-out constants. A method rather
-  # than a constant because a constant declared in a block leaks out of the example group.
+  # cheap to break. A method rather than a constant because a constant declared in a block leaks out
+  # of the example group.
   def savings_category_type = 2
 
+  # The root, in the app's own tables and nobody's reader: income, minus the spending NO category
+  # holds, minus what has been allocated out of it, plus what has come back.
+  #
+  # "SPENDING NO CATEGORY HOLDS" IS TWO SHAPES, not one, and both arms are here because the second
+  # is the funding-start rule itself (§4): a category with no `funded_since` holds nothing ever, and
+  # a category that has one still sends everything dated BEFORE it to the root. Every seeded holder
+  # starts six months back and nothing is dated earlier, so today the second arm is empty — it is
+  # written anyway, because a spec that only happens to be right on one fixture is a spec that
+  # stops being right the first time the fixture moves.
+  def available_at_the_root
+    (earned - unheld - allocated_out + allocated_back).to_d
+  end
+
+  def earned = user.entries.joins(item: :category).where(categories: { category_type: :income }).sum(:amount)
+
+  def unheld
+    user.entries.joins(item: :category).where(categories: { category_type: :expense })
+      .where("categories.funded_since IS NULL OR entries.date < categories.funded_since").sum(:amount)
+  end
+
+  def allocated_out = Allocation.where(from_category_id: nil, to_category_id: user.categories.select(:id)).sum(:amount)
+
+  def allocated_back = Allocation.where(to_category_id: nil, from_category_id: user.categories.select(:id)).sum(:amount)
+
+  # THE FILE-LEVEL HALF IS NOW ABOUT THE POOL LAYER (two-ledger spec §5, Task 8), because that is
+  # what the demo may no longer speak. The cap and the savings category are two schema eras back and
+  # have no columns to be written into at all; a pool CONSTRUCT is different in kind — `pools` still
+  # exists as the accounts table, so `pool_type: :budget` or a `Budget.create!(pool: …)` is a
+  # sentence somebody could still type, and it is the one this grep is for.
   describe "the file itself" do
-    it "never writes a category-mode cap", :aggregate_failures do
-      expect(source).not_to match(/create_budget/)
-      expect(source.scan(/Budget\.create!\((?:[^()]|\([^()]*\))*\)/m).join("\n")).not_to match(/\bcategory:/)
+    it "never writes a pool that is not an account", :aggregate_failures do
+      expect(code).not_to match(/pool_type:\s*:(budget|savings)/)
+      expect(code).not_to match(/\baccount:\s/)
+    end
+
+    it "never names a column the drop deleted", :aggregate_failures do
+      expect(code).not_to match(/\bpool_id\b/)
+      expect(code).not_to match(/\bstart_date\b/)
+      expect(code).not_to match(/\bPoolMovement\b/)
+    end
+
+    # A rule belongs to the category that holds the money, and nothing else can own one.
+    it "gives every rule a category", :aggregate_failures do
+      rules = code.scan(/Budget\.create!\((?:[^()]|\([^()]*\))*\)/m)
+
+      expect(rules.length).to eq(16)
+      expect(rules.reject { |rule| rule.include?("category:") }).to eq([])
     end
 
     it "never writes a savings category", :aggregate_failures do
-      expect(source).not_to match(/category_type:\s*:savings/)
-      expect(source).not_to match(/lane\.call\([^)]*:savings/)
-    end
-
-    # An entry can only be savings-typed through a savings category, so the absence above is the
-    # absence of a savings entry too — said out loud because the two are separate promises and a
-    # future edit could reintroduce either.
-    it "never writes an entry against a savings category" do
-      expect(source).not_to match(/savings.*\.items\.create!/)
+      expect(code).not_to match(/category_type:\s*:savings/)
+      expect(code).not_to match(/lane\.call\([^)]*:savings/)
     end
   end
 
@@ -85,157 +126,113 @@ RSpec.describe "db/seeds.rb" do
 
     it "holds exactly the rows the demo is made of" do
       expect(row_counts).to eq(
-        users: 1, pools: 23, categories: 18, items: 22, entries: 67, budgets: 16, movements: 53
+        users: 1,
+        pools: 4,
+        categories: 28,
+        items: 24,
+        entries: 75,
+        budgets: 16,
+        movements: 8,
+        allocations: 61
       )
     end
 
-    it "writes no cap, no savings category and no savings entry", :aggregate_failures do
+    it "writes no savings category and no savings entry", :aggregate_failures do
       savings_categories = Category.where(category_type: savings_category_type)
 
-      # `budgets.category_id` is DROPPED (plan 3, task 6), so "no cap" is now asked as "every
-      # rule names the pool that owns it" — the post-drop spelling of the same claim.
-      expect(Budget.where(pool_id: nil).count).to eq(0)
       expect(savings_categories.count).to eq(0)
       expect(Entry.joins(item: :category).where(categories: { category_type: savings_category_type }).count).to eq(0)
     end
 
-    it "gives every category a lane and every pool a home", :aggregate_failures do
-      expect(Category.where(pool_id: nil).count).to eq(0)
-      expect(Pool.where.not(pool_type: :account).where(account_id: nil).count).to eq(0)
-      expect(Category.incomes.map { |category| category.pool.pool_type }.uniq).to eq(["account"])
+    # EVERY POOL IS AN ACCOUNT AND EVERY RULE HAS A HOLDER — the two structural promises the drop
+    # leaves the demo with, plus the pot itself, which every entry lands in.
+    it "writes accounts, holders and a nominated pot", :aggregate_failures do
+      expect(Pool.where.not(pool_type: :account).count).to eq(0)
+      expect(Budget.where(category_id: nil).count).to eq(0)
+      expect(Budget.all.map { |rule| rule.category.holder? }.uniq).to eq([true])
       expect(user.default_account).to eq(Pool.find_by!(name: "Checking"))
     end
 
-    # THE INVARIANT THE WHOLE CONVERSION TURNS ON, asked of the demo: every dollar the bank says
-    # the household has is sitting in exactly one pool.
-    it "conserves the bank balance across the pool tree", :aggregate_failures do
-      pooled = user.pools.sum { |pool| pool.calculator.balance }
-      # `::numeric` on both arms: `money` is a fixed-scale Postgres type with no unary minus at
-      # all, so the expense arm is a type error rather than a wrong figure. The migration's own
-      # balance expression casts for the same reason.
+    # SPEC §2'S INVARIANT, ASKED OF THE DEMO AND IN BOTH PARTITIONS: every dollar the bank says the
+    # household has is sitting in exactly one account AND has exactly one job.
+    #
+    # AVAILABLE IS COMPUTED HERE RATHER THAN READ OFF `AllocationCalculator#available`, and the
+    # difference is the whole reason: that reader adds back what the closed rate categories would
+    # SWEEP ($125.00 on this demo), because the screen it feeds is about to offer the sweep. The
+    # money is still in those categories until the user confirms, so adding it to the holdings would
+    # count it twice. This is the root as it stands — income, less the spending of categories that
+    # hold nothing, less everything allocated out of it and plus everything given back.
+    #
+    # `::numeric` on the entry arms: `money` is a fixed-scale Postgres type with no unary minus at
+    # all, so the expense arm is a type error rather than a wrong figure.
+    it "conserves the bank balance across both ledgers", :aggregate_failures do
+      ledger = AccountLedger.new(user)
+      physical = user.pools.accounts.sum(0.to_d) { |account| ledger.balance_of(account) }
+      holdings = user.categories.expenses.sum(0.to_d) { |category| category.status(today: today).balance }
       bank = user.entries.joins(item: :category).sum(
         "CASE WHEN categories.category_type = 1 THEN entries.amount::numeric ELSE -entries.amount::numeric END"
       )
 
-      expect(pooled).to eq(7_841.00)
-      expect(bank).to eq(7_841.00)
+      expect(bank).to eq(7_461.00)
+      expect(physical).to eq(7_461.00)
+      expect(holdings + available_at_the_root).to eq(7_461.00)
     end
 
-    # ── THE DEMO NO LONGER FEEDS THE DISTRIBUTION SCREEN, AND THAT IS THE POINT OF THIS EXAMPLE.
+    # ── THE DISTRIBUTION SCREEN, RESTORED (Task 8). This example was INVERTED for four tasks: while
+    # the seeds still planted pools, no category carried a `funded_since`, `Category.in_fill_order`
+    # was empty and the converted waterfall had no rows at all — so it asserted the emptiness and
+    # said in capitals that the seeds were Task 7/8's to convert. They are converted, and this is
+    # what they now put on the app's headline screen.
     #
-    # It used to carry four states — one per account, `Ally Savings` short-and-alerting, `Checking`
-    # short, `Health Savings` all-clear, `Side Gig Checking` overdrawn — because each of the four
-    # screens the demo exists for was carried by exactly ONE account. There is one screen now
-    # (two-ledger spec §2), and `db/seeds.rb` still writes POOLS: not one category it plants carries
-    # a `funded_since`, so `Category.in_fill_order` is EMPTY and the converted waterfall has no rows
-    # to render at all.
+    # ONE SCREEN CARRIES WHAT FOUR ACCOUNTS USED TO. `AllocationCalculator` walks one root, so SHORT
+    # (the cutoff line), the ALERTS band and both sweep clauses have to coexist on it — see the
+    # table in `db/seeds.rb`'s own header, beside the data it describes.
     #
-    # KEPT AND INVERTED RATHER THAN DELETED, because "the demo stopped exercising the app's headline
-    # screen" is exactly the kind of thing that goes unnoticed: this is the row that fails the moment
-    # the seeds start planting holder categories, which is where the four states have to be rebuilt.
-    # THE SEEDS ARE TASK 7/8'S TO CONVERT and this example is the marker.
-    #
-    # `available` IS THE WHOLE $7,841 for the same reason, and it ties to the conservation example
-    # above: every dollar the household has is money no category has claimed.
-    it "leaves the distribution screen empty, because the seeds still plant pools", :aggregate_failures do
+    # `available` IS $1,900.00 AND IT IS TWO FIGURES: $1,775.00 at the root, plus the $125.00 the
+    # two closed rate categories would sweep back. The root figure is the conservation example's own
+    # arithmetic — income, less spending no category holds, less everything allocated out.
+    it "puts the household on a short waterfall with one alert", :aggregate_failures do
       presenter = DistributionPresenter.new(user: user, today: today)
 
       expect(
         [presenter.available, presenter.short?, presenter.expanded?, presenter.alerts.length, presenter.lines.length]
-      ).to eq([7_841.00, false, false, 0, 0])
-      expect(user.categories.in_fill_order).to be_empty
+      ).to eq([1_900.00, true, true, 1, 12])
+      expect(user.categories.in_fill_order.count).to eq(19)
     end
 
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_661.92)
+      expect(Budget.steady_need(user, today: today)).to eq(2_484.99)
       expect(user.typical_income).to eq(2_400.00)
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
 
-    # EVERY DETECTOR FED — AND ONE OF THE FOUR IS STARVED, for the same reason the distribution
-    # screen above is empty: the seeds still plant POOLS. Task 5 moved the detectors onto categories,
-    # and drift now measures what drained a rule's own CATEGORY (`CategoryLedger
-    # ::ENTRY_CATEGORY_ID`) — so a seeded rule, which names only a pool, is not attributable to any
-    # lane and is skipped outright. The demo's four drifting envelopes are four zeroes.
+    # EVERY DETECTOR FED, AND `drift: 4` IS THE FIGURE THIS EXAMPLE WAS INVERTED AGAINST. While the
+    # seeds planted pools, a seeded rule named no category, `CategoryLedger::ENTRY_CATEGORY_ID` could
+    # not attribute a penny of spending to it, and the demo's four drifting envelopes read as four
+    # zeroes the detector declined to report — so this asserted `dead_rule` without `drift` and said
+    # so. The rules belong to categories now and the four are back.
     #
-    # THE RATE COUNT MOVED BY ONE IN THE OPPOSITE DIRECTION, and it is the same cause read from the
-    # other side. The population was `buffer_funded?` — a category pointing at an ACCOUNT — and is
-    # `funded_since IS NULL`; the seeds give no category a `funded_since`, so the one category that
-    # was excluded for pointing at an envelope is now in the population like every other.
-    #
-    # KEPT AND INVERTED RATHER THAN DELETED, on the distribution example's own reasoning: "the demo
-    # stopped exercising the app's headline screen" is exactly the thing that goes unnoticed, and
-    # this is the row that fails the moment the seeds start planting category-owned rules. THE SEEDS
-    # ARE TASK 7/8'S TO CONVERT and this example is the marker; the figure to restore is
-    # `drift: 4`.
-    it "feeds three of the four suggestion detectors, because the seeds still plant pools" do
+    # WHICH FOUR, AND WHY NOT MORE: Groceries (the one UPWARD suggestion), Dining Out, Household
+    # Supplies and Pet Care are the categories whose spending genuinely diverges from their rules.
+    # Every other rate rule in the demo either has spending that matches it or is dated instead —
+    # `db/seeds.rb` chooses those shapes deliberately, because a rate rule on a category with no
+    # spending at all is drift's starkest sentence and four of those would be four suggestions
+    # telling the demo user to zero rules they simply have not spent from yet.
+    it "feeds all four suggestion detectors" do
       kinds = SuggestionEngine.new(user: user, today: today).suggestions.group_by(&:kind)
         .transform_values(&:length)
 
-      expect(kinds).to eq(dated_bill: 6, rate: 5, dead_rule: 1)
+      expect(kinds).to eq(dated_bill: 6, rate: 4, drift: 4, dead_rule: 1)
     end
   end
 
-  # THE CUTOVER'S IDEMPOTENCE RECEIPT, READ FROM THE OTHER SIDE. Task 1 proved a second run of the
-  # migration finds nothing; this proves the FIRST run finds nothing to convert, because the seeds
-  # already wrote what the migration exists to produce.
-  describe "the cutover migration run against fresh seeds" do
-    # The migration reads and writes `budgets.category_id`, which a later migration drops and a
-    # later one still puts back. BOTH have to be rewound, and in order: `CategoriesHoldTheMoney`
-    # re-adds that very column for the purpose ledger's rules, so rolling `DropCapEraBudgetColumns`
-    # back on its own would try to add a column that is already there — which it did, once, and
-    # the `after(:all)` that followed then dropped the two-ledger column on its way past. Newest
-    # first on the way down; the shared context reverses the list itself.
-    #
-    # `TightenPoolShape` is still NOT rewound — the seeds already satisfy it and this file asserts
-    # as much two examples up ("gives every category a lane and every pool a home").
-    include_context "with the schema its subject was written for",
-                    DropCapEraBudgetColumns,
-                    CategoriesHoldTheMoney
-
-    before { replant }
-
-    # ALL FIVE CONVERSION COUNTERS ARE ZERO, which is the whole of the claim: no pool to house, no
-    # cap to convert, no category to point at the buffer, no savings entry to move.
-    #
-    # `envelopes zeroed` IS NOT ZERO, AND THAT IS A CORRECTION TO THE BRIEF RATHER THAN A MISS.
-    # Step 5b is shape-driven by design — it zeroes ANY overdrawn budget envelope, whoever
-    # overdrew it — and an overdrawn envelope is an ordinary POST-cutover state: the demo's Dining
-    # Out holds $100 against $180 of dinners, which is §4.4's `overdrawn` row, the distribution
-    # screen's `overdrawn $80.00` line, Home's one problem row with a real fix candidate, and the
-    # entry form's overdraw arm. Seeding a demo with no overdrawn envelope would buy one zero in
-    # this receipt at the price of four screens. See the task report.
-    it "converts nothing, and its one write is the overdraft it is designed to find" do
-      expect { CutoverToEnvelopeBudgeting.new.tap { |m| m.verbose = true }.up }
-        .to output(
-          /0 pools housed; 0 caps -> 0 envelope rules; 0 categories -> buffer; 0 savings entries -> 0 movements; 1 envelopes zeroed/
-        ).to_stdout
-    end
-
-    it "leaves every table but pool_movements byte-identical, and a second run writes nothing", :aggregate_failures do
-      before_counts = row_counts.except(:movements)
-      silence_stream { CutoverToEnvelopeBudgeting.new.up }
-      zeroing = PoolMovement.order(:created_at).last
-
-      expect(row_counts.except(:movements)).to eq(before_counts)
-      expect(PoolMovement.count).to eq(54)
-      expect([zeroing.from_pool.name, zeroing.to_pool.name, zeroing.amount, zeroing.kind])
-        .to eq(["Checking", "Dining Out", 80.00, "transfer"])
-
-      expect { silence_stream { CutoverToEnvelopeBudgeting.new.up } }
-        .not_to change { [Pool.count, Category.count, Item.count, Entry.count, Budget.count, PoolMovement.count] }
-    end
-
-    # `ActiveRecord::Migration#say` writes to `$stdout` unconditionally when verbose; the receipt
-    # is asserted in the example above, so the runs that only care about the rows keep the suite's
-    # output readable.
-    def silence_stream
-      original = $stdout
-      $stdout = StringIO.new
-      yield
-    ensure
-      $stdout = original
-    end
-  end
+  # ── "the cutover migration run against fresh seeds" IS DELETED (two-ledger spec §5, Task 8), and
+  # the reason is the schema rather than the claim. That describe rewound the schema past
+  # `CategoriesHoldTheMoney` and replanted INSIDE the rewind, so it could run
+  # `CutoverToEnvelopeBudgeting` over fresh seeds and prove it found nothing to convert. The seeds
+  # are category-native now: replanting them against a schema with no `categories.funded_since` and
+  # no `allocations` table cannot even build the demo, and the migration it exercised is two schema
+  # eras back — its own idempotence is asserted in `spec/migrations/cutover_spec.rb`, against the
+  # legacy worlds it was written for, which is where a claim about a migration belongs.
 end
 # rubocop:enable RSpec/DescribeClass

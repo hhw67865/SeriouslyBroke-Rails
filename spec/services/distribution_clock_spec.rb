@@ -36,7 +36,7 @@ RSpec.describe DistributionClock do
   # controlled clock the rule and the allocation are written milliseconds apart and every example
   # here would be a coin toss.
   let(:distributed_on) { Time.zone.local(2026, 2, 6, 9, 0, 0) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking", target_amount: 2_000) }
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let(:today) { Date.new(2026, 2, 6) }
 
   def raise_rule(rule, to:, at:)
@@ -65,7 +65,7 @@ RSpec.describe DistributionClock do
     end
 
     def rate(category, amount)
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+      create(:budget, :per_period_rate, category: category, amount: amount)
     end
 
     # An allocation, which is half of what a distribution writes. `date` is the period day the split
@@ -196,14 +196,14 @@ RSpec.describe DistributionClock do
     def two_loaded_categories
       rate(rent_category, 400)
       food = create(:category, :expense, :funded, user: user, name: "Food")
-      create(:budget, :per_period_rate, pool: nil, category: food, amount: 100)
+      create(:budget, :per_period_rate, category: food, amount: 100)
 
       [rent_category, food].each { |category| category.budgets.load }
     end
   end
 
   # ── THE POOL-ERA ARM IS DELETED (Task 6), and its whole describe with it: nine examples over
-  # `account_ids:`, `PoolMovement.distributed` and the per-account map.
+  # `account_ids:`, `AccountMovement.distributed` and the per-account map.
   #
   #   * "is true when a rule was raised after this period's distribution"
   #   * "is false when the rule was last touched before the distribution"

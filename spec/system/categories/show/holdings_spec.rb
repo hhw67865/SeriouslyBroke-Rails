@@ -39,7 +39,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
   end
 
   def rate(category, amount)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   def allocate(category, amount, on: Date.current)
@@ -180,7 +180,6 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       holder("House Deposit", target_amount: 2_400).tap do |house|
         create(
           :budget,
-          pool: nil,
           category: house,
           amount: 300,
           interval_months: 1,
@@ -378,7 +377,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
   # category is `left to spend` however little is in it — so the rate helper above cannot reach it.
   def dated(name, anchor:, amount: 1_200)
     holder(name).tap do |category|
-      create(:budget, pool: nil, category: category, amount: amount, interval_months: 6, anchor_date: anchor)
+      create(:budget, category: category, amount: amount, interval_months: 6, anchor_date: anchor)
     end
   end
 

@@ -20,7 +20,12 @@ require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 # top of every example, when the rewound schema is the truth, and again the moment `up` returns.
 # rubocop:disable RSpec/SpecFilePathFormat
 RSpec.describe CategoriesHoldTheMoney do
-  include_context "with the schema its subject was written for", described_class
+  # `DropThePoolLayer` JOINS THE REWIND (Task 8) AND IT IS NOT OPTIONAL: it deletes
+  # `categories.pool_id`, `budgets.pool_id`, `entries.pool_id` and the `pool_movements` table name,
+  # which are the whole world this migration converts. Named in the order the two run FORWARD; the
+  # context reverses them itself, so the drop's `down` restores the pool era before this one's
+  # `down` takes the two-ledger columns away.
+  include_context "with the schema its subject was written for", described_class, DropThePoolLayer
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com") }
@@ -60,29 +65,78 @@ RSpec.describe CategoriesHoldTheMoney do
   # The planted worlds
   # ---------------------------------------------------------------------------------------------
 
-  def envelope(name, start:, priority: 1, target: nil)
-    create(
-      :pool,
-      :budget_pool,
-      user: user,
-      account: main,
+  # THE POOL ERA IS PLANTED THROUGH THE MIGRATION'S OWN TABLE CLASSES, and after Task 8 that is the
+  # only way left: `Pool`'s enum has one member, so `pool_type: 1` raises `ArgumentError` before any
+  # `save(validate: false)` can help, `Category` and `Entry` have no `pool` association, and
+  # `PoolMovement` is `AccountMovement` over a table that does not exist in the rewound schema. Same
+  # move `cutover_spec` makes, borrowed rather than redeclared so nothing here is a second opinion
+  # about a table's name.
+  def pools = described_class::MigrationPool
+  def movements = described_class::MigrationMovement
+  def budgets = described_class::MigrationBudget
+
+  def plant_pool(name:, pool_type:, start:, priority: 0, target: nil)
+    pools.create!(
+      user_id: user.id,
       name: name,
+      pool_type: pool_type,
+      account_id: main.id,
       start_date: start,
       priority: priority,
-      target_amount: target
+      target_amount: target,
+      created_at: Time.current,
+      updated_at: Time.current
     )
   end
 
+  def envelope(name, start:, priority: 1, target: nil)
+    plant_pool(name: name, pool_type: 1, start: start, priority: priority, target: target)
+  end
+
   def goal(name, start:, target:)
-    create(:pool, :savings_pool, user: user, account: main, name: name, start_date: start, target_amount: target)
+    plant_pool(name: name, pool_type: 2, start: start, target: target)
+  end
+
+  # `update_column`, because `categories.pool_id` exists in the rewound schema but the model has no
+  # association for it — the column is assignable, the writer is not.
+  def category_in(pool, name, type: :expense)
+    create(:category, type, user: user, name: name).tap do |category|
+      category.update_column(:pool_id, pool.id) # rubocop:disable Rails/SkipsModelValidations
+    end
+  end
+
+  def rule_on(pool, amount:)
+    budgets.create!(
+      pool_id: pool.id,
+      amount: amount,
+      basis: 1,
+      interval_months: nil,
+      created_at: Time.current,
+      updated_at: Time.current
+    )
   end
 
   def spend(category, amount, on: Date.current, pool: nil)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on, pool: pool)
+    create(:entry, item: create(:item, category: category), amount: amount, date: on).tap do |entry|
+      entry.update_column(:pool_id, pool.id) if pool # rubocop:disable Rails/SkipsModelValidations
+    end
   end
 
-  def move(from, to, amount, kind: :transfer, at: Time.zone.now)
-    create(:pool_movement, from_pool: from, to_pool: to, amount: amount, date: at, kind: kind)
+  # The pool era's three movement kinds as integers, in a method rather than a constant: a constant
+  # declared inside an example group leaks into the global namespace.
+  def kind_number(name) = { transfer: 0, allocation: 1, sweep: 2 }.fetch(name)
+
+  def move(from, to, amount, kind: :transfer, **attrs)
+    movements.create!(
+      from_pool_id: from.id,
+      to_pool_id: to.id,
+      amount: amount,
+      date: attrs.fetch(:at, Time.zone.now),
+      kind: kind_number(kind),
+      source_entry_id: attrs[:source_entry]&.id,
+      created_at: Time.current,
+      updated_at: Time.current
+    )
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -152,8 +206,8 @@ RSpec.describe CategoriesHoldTheMoney do
 
   it "folds an envelope into its one category and re-parents its rule", :aggregate_failures do
     food = envelope("Food", start: Date.new(2026, 8, 1), priority: 2)
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
-    rule = create(:pool_budget, :per_period_rate, pool: food, amount: 120)
+    category = category_in(food, "Food")
+    rule = rule_on(food, amount: 120)
 
     migrate!
 
@@ -173,7 +227,7 @@ RSpec.describe CategoriesHoldTheMoney do
     allocation = allocations.find_by(to_category_id: saved.id)
     expect(allocation.from_category_id).to be_nil # from AVAILABLE
     expect(allocation.amount).to eq(250)
-    expect(PoolMovement.where(to_pool: trip)).to be_empty
+    expect(movements.where(to_pool_id: trip.id)).to be_empty
   end
 
   # `kind` IS CARRIED VERBATIM, not defaulted. A distribution's replace-on-re-run deletes
@@ -181,7 +235,7 @@ RSpec.describe CategoriesHoldTheMoney do
   # column would either resurrect a swept envelope or make next payday delete a hand-made move.
   it "carries each movement's kind and date onto the allocation", :aggregate_failures do
     food = envelope("Food", start: Date.new(2026, 8, 1))
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
+    category = category_in(food, "Food")
     moment = Time.zone.local(2026, 8, 14, 9)
     move(main, food, 200, kind: :allocation, at: moment)
     move(food, main, 30, kind: :sweep, at: moment)
@@ -192,14 +246,14 @@ RSpec.describe CategoriesHoldTheMoney do
     expect(allocations.where(from_category_id: category.id).pick(:kind, :amount)).to eq([2, 30])
   end
 
-  # `source_entry_id` IS WHAT MAKES A DISTRIBUTION REPLACEABLE — `PoolMovement.for_entry` finds a
+  # `source_entry_id` IS WHAT MAKES A DISTRIBUTION REPLACEABLE — `AccountMovement.for_entry` finds a
   # movement by it, and the column is carried onto `allocations` with its own foreign key. A
   # conversion that dropped it would leave next payday unable to find what it wrote last time.
   it "carries a movement's source entry onto the allocation" do
     food = envelope("Food", start: Date.new(2026, 8, 1))
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
+    category = category_in(food, "Food")
     source = spend(category, 45)
-    create(:pool_movement, from_pool: main, to_pool: food, amount: 45, date: Time.zone.now, source_entry: source)
+    move(main, food, 45, source_entry: source)
 
     migrate!
 
@@ -210,7 +264,7 @@ RSpec.describe CategoriesHoldTheMoney do
     ally = create(:pool, :account, user: user, name: "Ally")
     move(main, ally, 40)
 
-    expect { migrate! }.not_to change(PoolMovement, :count)
+    expect { migrate! }.not_to change(movements, :count)
   end
 
   # SPEC §2: "no paid from field on entries; the pot is where cash leaves." The column survives
@@ -218,7 +272,7 @@ RSpec.describe CategoriesHoldTheMoney do
   # still disagree about.
   it "clears every paid-from override and counts them in the receipt", :aggregate_failures do
     food = envelope("Food", start: Date.new(2026, 8, 1))
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
+    category = category_in(food, "Food")
     spend(category, 25, pool: food)
     spend(category, 15, pool: main)
 
@@ -234,8 +288,8 @@ RSpec.describe CategoriesHoldTheMoney do
 
   it "refuses an envelope with two categories, naming it, and writes nothing", :aggregate_failures do
     food = envelope("Food", start: Date.current)
-    create(:category, :expense, user: user, pool: food, name: "Groceries")
-    create(:category, :expense, user: user, pool: food, name: "Restaurants")
+    category_in(food, "Groceries")
+    category_in(food, "Restaurants")
 
     expect { migrate! }.to raise_error(described_class::PreflightFailed, /Food.*2 categories/)
     expect(allocations.count).to eq(0)
@@ -245,13 +299,13 @@ RSpec.describe CategoriesHoldTheMoney do
   # with no category is the ordinary shape (it gets one minted), a BUDGET pool with none is an
   # envelope whose spending lane nothing names, and there is nothing to fold it into.
   it "refuses an envelope with no category at all, before it re-parents a rule", :aggregate_failures do
-    rule = create(:pool_budget, :per_period_rate, pool: envelope("Food", start: Date.current), amount: 90)
+    rule = rule_on(envelope("Food", start: Date.current), amount: 90)
 
     expect { migrate! }.to raise_error(described_class::PreflightFailed, /Food.*0 categories/)
     # THROUGH THE MIGRATION'S OWN TABLE CLASS, not `Budget`: `create_schema` runs before
     # `preflight!`, so the column exists in the database at the moment of the raise while the app
     # model — reset at the top of this example against the rewound schema — has never seen it.
-    expect(described_class::MigrationBudget.find(rule.id).category_id).to be_nil
+    expect(budgets.find(rule.id).category_id).to be_nil
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -261,8 +315,8 @@ RSpec.describe CategoriesHoldTheMoney do
   # A $1,000 paycheck, $200 of it given a job, and $60 of that job spent — the four planted
   # literals below are that world read back through both partitions of spec §2.
   def plant_a_month(food)
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
-    spend(create(:category, :income, user: user, pool: main, name: "Pay"), 1000)
+    category = category_in(food, "Food")
+    spend(category_in(main, "Pay", type: :income), 1000)
     spend(category, 60)
     move(main, food, 200, kind: :allocation)
     category
@@ -284,8 +338,8 @@ RSpec.describe CategoriesHoldTheMoney do
   # carried across rather than stamped `Date.current`.
   it "leaves pre-funding spending on available", :aggregate_failures do
     food = envelope("Food", start: Date.new(2026, 8, 1))
-    category = create(:category, :expense, user: user, pool: food, name: "Food")
-    pay = create(:category, :income, user: user, pool: main, name: "Pay")
+    category = category_in(food, "Food")
+    pay = category_in(main, "Pay", type: :income)
     spend(pay, 500)
     spend(category, 70, on: Date.new(2026, 7, 20))
 
@@ -307,7 +361,7 @@ RSpec.describe CategoriesHoldTheMoney do
     # $200 given a job, so a lost or miswritten allocation has a figure to be wrong about.
     def a_funded_envelope
       food = envelope("Food", start: Date.new(2026, 8, 1))
-      create(:category, :expense, user: user, pool: food, name: "Food")
+      category_in(food, "Food")
       move(main, food, 200, kind: :allocation)
       food
     end
@@ -394,11 +448,11 @@ RSpec.describe CategoriesHoldTheMoney do
   # OUT of this user's category and into somebody else's — the one shape `Σ` can see. An allocation
   # from AVAILABLE into a stranger's category is invisible to this user's arithmetic (neither side
   # is theirs), which is exactly why the sabotage has to name one of their own categories.
-  # PAST THE MODEL — `PoolMovement#pools_must_share_a_user` refuses this row and a database does
+  # PAST THE MODEL — `AccountMovement#accounts_must_share_a_user` refuses this row and a database does
   # not, which is the same move `cutover_spec#steal_a_movement` makes for the same reason.
   def wire_money_to_a_strangers_account
     theirs = create(:pool, :account, user: create(:user), name: "Their Bank")
-    described_class::MigrationMovement.create!(
+    movements.create!(
       from_pool_id: main.id,
       to_pool_id: theirs.id,
       amount: 75,

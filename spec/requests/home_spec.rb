@@ -48,7 +48,7 @@ RSpec.describe "Home", type: :request do
   end
 
   it "offers no funding card once a movement has funded the account", :aggregate_failures do
-    PoolMovement.create!(from_pool: checking, to_pool: ally, amount: 500, date: Date.current, kind: :transfer)
+    AccountMovement.create!(from_pool: checking, to_pool: ally, amount: 500, date: Date.current, kind: :transfer)
 
     get root_path
 
@@ -76,7 +76,7 @@ RSpec.describe "Home", type: :request do
   end
 
   it "no longer renders the opening-balance card once the latch closes", :aggregate_failures do
-    income = create(:category, :income, user: user, pool: checking, name: "Pay")
+    income = create(:category, :income, user: user, name: "Pay")
     create(:entry, item: create(:item, category: income), amount: 300, date: Date.current)
     post opening_balance_path, params: { opening_balance: { actual: 1000 } }
 

@@ -53,18 +53,14 @@ RSpec.describe "Home Navigation", type: :system do
   describe "reaching the distribution screen" do
     let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
-    # TWO LEDGERS, TWO FIXTURES, until Task 6 makes Home's rows categories (two-ledger spec §2).
-    # The POOL envelope is what Home's own waterfall band renders — the band carrying the second
-    # link asserted below — and the holder CATEGORY is what `/distributions/new` fills, since the
-    # distribution screen reads `Category.in_fill_order` now. Planted with the same $400 rule so the
-    # two screens describe the same shortfall; without the category the screen this file navigates
-    # TO renders no waterfall at all and "Where your money goes" is simply absent.
+    # ONE LEDGER, ONE FIXTURE (two-ledger spec §2, Task 8). This block planted an envelope POOL
+    # beside the holder category, because Home's waterfall band read one and `/distributions/new`
+    # read the other; both screens read `Category.in_fill_order` now, so the pool half is deleted
+    # with the layer and the category carries both.
     before do
-      rent = create(:pool, :budget_pool, user: user, account: checking, name: "Rent", priority: 1)
-      create(:pool_budget, :per_period_rate, pool: rent, amount: 400)
       groceries = create(:category, :expense, :funded, user: user, name: "Groceries", priority: 1)
-      create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 400)
-      category = create(:category, :income, user: user, pool: checking)
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+      category = create(:category, :income, user: user)
       create(:entry, item: create(:item, category: category), amount: 100, date: Date.current)
       visit root_path
     end

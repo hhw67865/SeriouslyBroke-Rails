@@ -24,7 +24,7 @@ RSpec.describe "Budgets Forms", type: :system do
   before { sign_in user, scope: :user }
 
   describe "Edit Budget Form", :aggregate_failures do
-    let!(:rule) { create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 400.00) }
+    let!(:rule) { create(:budget, :per_period_rate, category: groceries, amount: 400.00) }
 
     before { visit edit_budget_path(rule) }
 

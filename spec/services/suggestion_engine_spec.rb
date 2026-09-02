@@ -76,7 +76,7 @@ RSpec.describe SuggestionEngine do
   # arrangement one layer out.
   def claimed_item(name, category:, amount: 500, **rule)
     owned = item(name, in_category: category)
-    create(:budget, pool: nil, category: category, item: owned, amount: amount, **rule)
+    create(:budget, category: category, item: owned, amount: amount, **rule)
     owned
   end
 
@@ -92,7 +92,7 @@ RSpec.describe SuggestionEngine do
     in_last_three_periods(beans, 150)
 
     groceries = funded_category("Groceries")
-    create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 100)
+    create(:budget, :per_period_rate, category: groceries, amount: 100)
     in_drift_window(item("Food", in_category: groceries), 200)
 
     netflix = funded_category("Netflix")
@@ -453,7 +453,7 @@ RSpec.describe SuggestionEngine do
     # second category pointing at the same pool).
     def rate_category(name, amount, **rule)
       category = funded_category(name)
-      rule_record = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount, **rule)
+      rule_record = create(:budget, :per_period_rate, category: category, amount: amount, **rule)
       [category, rule_record, item("#{name} food", in_category: category)]
     end
 
@@ -462,7 +462,7 @@ RSpec.describe SuggestionEngine do
     # user's behaviour.
     def unfunded_rule(name, amount)
       category = category(name)
-      [category, create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)]
+      [category, create(:budget, :per_period_rate, category: category, amount: amount)]
     end
 
     it "reports a rule the spending has outgrown", :aggregate_failures do
@@ -517,7 +517,7 @@ RSpec.describe SuggestionEngine do
     # reported has to be the normalised one — read off Budget#steady_ask, never off `amount`.
     it "states a monthly rate rule in per-period money", :aggregate_failures do
       utilities = funded_category("Utilities")
-      rule = create(:budget, :rate, pool: nil, category: utilities, amount: 260)
+      rule = create(:budget, :rate, category: utilities, amount: 260)
       in_drift_window(item("Bills", in_category: utilities), 200)
 
       suggestion = of_kind(:drift).sole
@@ -534,7 +534,7 @@ RSpec.describe SuggestionEngine do
     # than the $120 the user was just told was too low, on a suggestion that asked them to raise it.
     it "puts the drift prefill in the rule's own unit, not in per-period money", :aggregate_failures do
       utilities = funded_category("Utilities")
-      rule = create(:budget, :rate, pool: nil, category: utilities, amount: 260)
+      rule = create(:budget, :rate, category: utilities, amount: 260)
       in_drift_window(item("Bills", in_category: utilities), 200)
 
       suggestion = of_kind(:drift).sole
@@ -565,7 +565,7 @@ RSpec.describe SuggestionEngine do
 
     it "fires on the same shape once the rule is item-less — the fixture discriminates", :aggregate_failures do
       netflix = funded_category("Netflix")
-      rule = create(:budget, :per_period_rate, pool: nil, category: netflix, amount: 20)
+      rule = create(:budget, :per_period_rate, category: netflix, amount: 20)
       in_drift_window(item("Netflix", in_category: netflix), 200)
 
       expect(of_kind(:drift).sole.subject).to eq(rule)
@@ -574,7 +574,7 @@ RSpec.describe SuggestionEngine do
 
     it "does not fire on a dated rule, whose spending is not a rate" do
       insurance = funded_category("Car Insurance")
-      create(:budget, :recurring, pool: nil, category: insurance, amount: 1_200, anchor_date: Date.new(2026, 6, 1))
+      create(:budget, :recurring, category: insurance, amount: 1_200, anchor_date: Date.new(2026, 6, 1))
       in_drift_window(item("Premium", in_category: insurance), 400)
 
       expect(of_kind(:drift)).to be_empty
@@ -601,7 +601,7 @@ RSpec.describe SuggestionEngine do
 
     it "is silent on a category carrying two rate rules, whose spend cannot be attributed" do
       groceries, _rule, food = rate_category("Groceries", 100)
-      create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 40)
+      create(:budget, :per_period_rate, category: groceries, amount: 40)
       in_drift_window(food, 300)
 
       expect(of_kind(:drift)).to be_empty
@@ -703,7 +703,7 @@ RSpec.describe SuggestionEngine do
 
     it "does not fire on a rule with no item, which nothing can stop paying" do
       dentist = funded_category("Dentist")
-      create(:budget, :per_period_rate, pool: nil, category: dentist, amount: 75)
+      create(:budget, :per_period_rate, category: dentist, amount: 75)
       spend(item("Fillings", in_category: dentist), 75, on: Date.new(2025, 11, 20))
 
       expect(of_kind(:dead_rule)).to be_empty

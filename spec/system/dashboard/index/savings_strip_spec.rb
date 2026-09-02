@@ -5,7 +5,7 @@ require "rails_helper"
 # THE GOALS STRIP, WHICH IS NOW ON THE ALL TAB AND ONLY THERE (plan 3, task 5), AND WHICH IS NOW
 # ABOUT CATEGORIES (two-ledger spec §3, Task 7).
 #
-# THE FIXTURES ARE THE MODEL CHANGE. They planted savings POOLS funded by `PoolMovement`s and
+# THE FIXTURES ARE THE MODEL CHANGE. They planted savings POOLS funded by `AccountMovement`s and
 # spent by categories pointing at them; a savings goal is a CATEGORY now — a target, a funding
 # start and no refill rule (`Category#savings?`, which is exactly what Task 1's migration mints out
 # of a savings pool) — funded by `Allocation`s and spent by its own entries. Every balance and

@@ -6,7 +6,7 @@ RSpec.describe BudgetPageHelper, type: :helper do
   # Real Budget records rather than doubles: every branch below reads a combination of `basis`,
   # `interval_months` and `anchor_date` that Budget's own validations decide is legal, and a
   # double is free to claim a shape the model would refuse.
-  def rule(*traits, **attrs) = build(:budget, *traits, pool: nil, **attrs)
+  def rule(*traits, **attrs) = build(:budget, *traits, **attrs)
 
   describe "#budget_rule_name" do
     it "names the item it pays" do
@@ -21,15 +21,9 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_rule_name(budget)).to eq("Groceries")
     end
 
-    # THE POOL ARM IS TRANSITIONAL AND IS PINNED AS SUCH (Task 8 deletes it with
-    # `budgets.pool_id`). `Budget.for_user` spans both owner lanes, so the sacrifice view lists
-    # rules written before the cutover, and a row that could not say its own name would print a
-    # blank label beside a real figure. This example is deleted with the column, not before.
-    it "falls back to the pool for a rule written before the cutover" do
-      budget = build(:pool_budget, pool: build(:pool, :budget_pool, name: "Legacy"))
-
-      expect(helper.budget_rule_name(budget)).to eq("Legacy")
-    end
+    # THE POOL ARM AND ITS EXAMPLE ARE DELETED WITH `budgets.pool_id` (two-ledger spec §5,
+    # Task 8). It read "falls back to the pool for a rule written before the cutover"; there is one
+    # owner lane now and the category arm above is it.
   end
 
   # THE FIGURE AND WHAT IT IS A FIGURE PER. $600 a period and $600 every six months are the same
@@ -56,19 +50,21 @@ RSpec.describe BudgetPageHelper, type: :helper do
 
   # ALL SEVEN STATES, IN BOTH DIRECTIONS. Three were asserted in neither, and :overdue and
   # :wont_make_it are the dangerous pair: their labels print a DATE and no money figure at all,
-  # so if either fell out of the balance side the pool's balance would vanish from the page and
+  # so if either fell out of the balance side the category's balance would vanish from the page and
   # every example here would stay green.
   describe "#pool_balance_clause" do
-    # A REAL PoolStatus with only its state and balance stubbed, never an `instance_double`
+    # A REAL HoldingStatus with only its state and balance stubbed, never an `instance_double`
     # answering `amount_is_balance?` itself: the helper is a lookup on that method now, and a
     # double told what to answer would assert nothing about which states print their own money.
-    # This way the mapping under test is PoolStatus's real one.
+    # This way the mapping under test is HoldingStatus's real one. It was a `PoolStatus` over a
+    # pool until the drop (Task 8); the states and the mapping are the same, because the class was
+    # ported onto the category rather than rewritten.
     #
     # A BARE STATUS, which is what the helper now takes — the Categories page's budget block
-    # (spec §8.1) renders the same clause off a pool it holds no Group for, and wrapping one here
-    # would test a shape only one of the two callers has.
+    # (spec §8.1) renders the same clause off a category it holds no Group for, and wrapping one
+    # here would test a shape only one of the two callers has.
     def status_for(state, balance: 250)
-      PoolStatus.new(build(:pool)).tap do |status|
+      HoldingStatus.new(build(:category, :expense, :funded)).tap do |status|
         allow(status).to receive_messages(state: state, balance: balance)
       end
     end

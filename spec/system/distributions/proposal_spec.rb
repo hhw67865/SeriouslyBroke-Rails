@@ -221,7 +221,7 @@ RSpec.describe "Distributions Proposal", type: :system do
 
     before do
       rent = create(:category, :expense, :funded, user: user, name: "Rent", priority: 1)
-      create(:budget, pool: nil, category: rent, amount: 1_200, interval_months: 12, anchor_date: due_on)
+      create(:budget, category: rent, amount: 1_200, interval_months: 12, anchor_date: due_on)
       deposit(100, on: Date.current)
       visit new_distribution_path
     end
@@ -290,7 +290,7 @@ RSpec.describe "Distributions Proposal", type: :system do
 
   def envelope(name, rate, funded: nil, priority: 0)
     category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+    create(:budget, :per_period_rate, category: category, amount: rate)
     create(:allocation, to_category: category, amount: funded, date: Date.current - 14) if funded
     category
   end
@@ -301,7 +301,6 @@ RSpec.describe "Distributions Proposal", type: :system do
     category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
     create(
       :budget,
-      pool: nil,
       category: category,
       item: create(:item, category: category),
       amount: amount,

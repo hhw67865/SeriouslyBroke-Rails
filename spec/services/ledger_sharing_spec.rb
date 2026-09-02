@@ -4,32 +4,25 @@ require "rails_helper"
 
 # THE LEDGER-SHARING SEAM, which is not any one class's subject and so is not any one class's spec.
 #
-# Four classes take part: PoolBalanceLedger owns the rule (#for_as_of!) and CategoryLedger states
-# it verbatim on the purpose side, AllocationCalculator shares one with another fill of itself
-# through a `protected` writer, and ReallocationPresenter accepts one from HomePresenter through a
-# documented keyword.
+# Three classes take part: CategoryLedger owns the rule (#for_as_of!), AllocationCalculator shares
+# one with another fill of itself through a `protected` writer, and ReallocationPresenter accepts
+# one from HomePresenter through a documented keyword.
 #
-# BOTH HALVES ARE OVER CATEGORIES SINCE TASK 6, and the ledger both of them share is a
-# `CategoryLedger`. `PoolBalanceLedger#for_as_of!` is still the rule's home and is still asserted
-# here, because it is the class the purpose-side one was written from. What is pinned here is the
-# SEAM —
-# who may hand a ledger to whom, and what happens when the two are about different moments. What
-# each class MEANS is measured where it always was: pool_balance_ledger_spec for the terms,
-# allocation_calculator_spec for the fill, allocation_committer_spec for the write. Restating any
-# of that here would be a second reader of the same rules, which is the defect this branch polices.
+# `PoolBalanceLedger` OWNED THE RULE AND IS DELETED (two-ledger spec §5, Task 8); `CategoryLedger`
+# states it verbatim, which is why its own `#for_as_of!` block below is the one that remains. What
+# is pinned here is the SEAM — who may hand a ledger to whom, and what happens when the two are
+# about different moments. What each class MEANS is measured where it always was:
+# category_ledger_spec for the terms, allocation_calculator_spec for the fill,
+# allocation_committer_spec for the write. Restating any of that here would be a second reader of
+# the same rules, which is the defect this branch polices.
 #
 # BOTH DIRECTIONS FOR EVERY GUARD. A raise asserted only where it fires is satisfied by a method
 # that raises always, and this branch has found that shape before — so every example below has a
 # twin asserting the guard stays out of the way.
 RSpec.describe "ledger sharing", type: :model do
   let(:user) { create(:user, :biweekly) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let(:groceries) { create(:pool, user: user, name: "Groceries", account: checking, priority: 1) }
   let(:today) { Date.new(2026, 8, 20) }
   let(:bound) { Date.new(2026, 8, 1) }
-
-  def unbounded = PoolBalanceLedger.new([checking, groceries])
-  def bounded = PoolBalanceLedger.new([checking, groceries], as_of: bound)
 
   # Every SQL statement a block issued, so "no second ledger was built" is read off the database
   # rather than off the source. Same helper shape as pool_balance_ledger_spec's.
@@ -42,7 +35,12 @@ RSpec.describe "ledger sharing", type: :model do
     statements
   end
 
-  describe "PoolBalanceLedger#for_as_of!" do
+  describe "CategoryLedger#for_as_of!" do
+    let!(:food) { create(:category, :expense, :funded, user: user, name: "Food", priority: 1) }
+
+    def unbounded = CategoryLedger.new([food], user: user)
+    def bounded = CategoryLedger.new([food], user: user, as_of: bound)
+
     it "hands back the ledger itself when the bounds agree" do
       ledger = unbounded
 
@@ -59,18 +57,18 @@ RSpec.describe "ledger sharing", type: :model do
 
     it "refuses a bounded ledger to a caller reading the ledger as it stands" do
       expect { bounded.for_as_of!(nil) }
-        .to raise_error(PoolBalanceLedger::AsOfMismatch, /one ledger per `as_of`/)
+        .to raise_error(CategoryLedger::AsOfMismatch, /one ledger per `as_of`/)
     end
 
     it "refuses an unbounded ledger to a caller asking about an earlier moment" do
       expect { unbounded.for_as_of!(bound) }
-        .to raise_error(PoolBalanceLedger::AsOfMismatch, /one ledger per `as_of`/)
+        .to raise_error(CategoryLedger::AsOfMismatch, /one ledger per `as_of`/)
     end
 
     # The message is the whole value of the raise: two `as_of`s and the rule that relates them.
     it "names both moments in the message" do
       expect { bounded.for_as_of!(nil) }
-        .to raise_error(PoolBalanceLedger::AsOfMismatch, /#{Regexp.escape(bound.inspect)}.*nil/m)
+        .to raise_error(CategoryLedger::AsOfMismatch, /#{Regexp.escape(bound.inspect)}.*nil/m)
     end
   end
 
@@ -78,8 +76,10 @@ RSpec.describe "ledger sharing", type: :model do
     let(:proposal) { AllocationCalculator.new(user: user, today: today) }
     let!(:food) { create(:category, :expense, :funded, user: user, name: "Food", priority: 1) }
 
+    def unbounded = CategoryLedger.new([food], user: user)
+
     before do
-      create(:budget, :per_period_rate, pool: nil, category: food, amount: 400)
+      create(:budget, :per_period_rate, category: food, amount: 400)
       create(:allocation, to_category: food, amount: 85, date: Date.new(2026, 7, 12))
     end
 

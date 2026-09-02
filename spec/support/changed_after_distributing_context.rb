@@ -53,8 +53,8 @@ RSpec.shared_context "with a rule changed after the money went out" do
   # THE PURPOSE-LEDGER TWIN (two-ledger spec §2), for the screens that have moved. An allocation
   # names no account — it moves money between the user's one root and a category — so there is no
   # `from:` to say and `DistributionClock`'s category arm reads `Allocation.distributed` rather
-  # than `PoolMovement.distributed`. Everything else about the recipe is unchanged, which is the
-  # whole reason this lives here: the three controlled moments and the `today` resolved at real now
+  # than the pool era's `PoolMovement.distributed`. Everything else about the recipe is unchanged,
+  # which is the whole reason this lives here: the three controlled moments and the `today` resolved at real now
   # are what the two arms have in common and what kept being got wrong when they were hand-rolled.
   def allocate(category, amount)
     travel_to(2.hours.ago) do

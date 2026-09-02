@@ -4,18 +4,21 @@ require "rails_helper"
 
 RSpec.describe BudgetCalculator, type: :model do
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
-  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let(:car) { create(:pool, :budget_pool, user: user, account: checking, name: "Car") }
-  let(:category) { create(:category, :expense, user: user, name: "Car Spending", pool: car) }
+  # THE ENVELOPE AND THE CATEGORY WERE TWO RECORDS AND ARE ONE (two-ledger spec §3, Task 8): a rule
+  # belongs to the category that holds the money, and its dated bills anchor on items of that same
+  # category. `car` was the envelope and `category` its twin; `category` is now an alias, kept so the
+  # 30-odd `create(:item, category: category)` lines below still read as what they mean.
+  let(:car) { create(:category, :expense, :funded, user: user, name: "Car") }
+  let(:category) { car }
   let(:today) { Date.new(2026, 2, 6) }
 
   # Spec §4.4's recurring bill: $800 every 6 months, next due Jun 1. Pass an item
   # to give it a fulfillment signal; without one it is assumed paid on time.
   def insurance_rule(item: nil, interval: 6, anchor: Date.new(2026, 6, 1), amount: 800)
     create(
-      :pool_budget,
+      :budget,
       :recurring,
-      pool: car,
+      category: car,
       amount: amount,
       interval_months: interval,
       anchor_date: anchor,
@@ -35,30 +38,30 @@ RSpec.describe BudgetCalculator, type: :model do
 
   # A dated obligation with no fulfillment signal — the §4.4 `required` fixtures.
   def dated_rule(amount:, interval:, anchor:)
-    create(:pool_budget, pool: car, amount: amount, interval_months: interval, anchor_date: anchor)
+    create(:budget, category: car, amount: amount, interval_months: interval, anchor_date: anchor)
   end
 
   # A dated one-off — a bill or a savings goal that never repeats.
   def one_time_rule(item: nil, amount: 500, anchor: Date.new(2026, 2, 1))
-    create(:pool_budget, :one_time, pool: car, amount: amount, anchor_date: anchor, item: item)
+    create(:budget, :one_time, category: car, amount: amount, anchor_date: anchor, item: item)
   end
 
   # A user who never declared a period, so User#period_boundaries returns [].
   def cadence_less_rule(*traits, **attrs)
     other = create(:user)
-    pool = create(:pool, :budget_pool, user: other, name: "Car")
-    create(:pool_budget, *traits, pool: pool, **attrs)
+    theirs = create(:category, :expense, :funded, user: other, name: "Car")
+    create(:budget, *traits, category: theirs, **attrs)
   end
 
   describe "#target" do
     it "is the rule's amount" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).target).to eq(80)
     end
 
     it "is an exact decimal even when the amount was assigned as an integer" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).target).to be_a(BigDecimal)
     end
@@ -66,13 +69,13 @@ RSpec.describe BudgetCalculator, type: :model do
 
   describe "#period_end" do
     it "is the end of the calendar month for a monthly rule" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 28))
     end
 
     it "is the day before the next period boundary for a per-period rule" do
-      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
+      budget = create(:budget, :per_period_rate, category: car, amount: 300)
 
       expect(budget.calculator(today: today).period_end).to eq(Date.new(2026, 2, 19))
     end
@@ -119,13 +122,13 @@ RSpec.describe BudgetCalculator, type: :model do
     # #due_date, which guards on the same nils first, but the method is public
     # so it must answer rather than raise on a perfectly valid record.
     it "is zero for a rate rule, which has no anchor to count from" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).elapsed_cycles).to eq(0)
     end
 
     it "is zero for a one-time rule, which has no interval to divide by" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 2, 1))
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: Date.new(2026, 2, 1))
 
       expect(budget.calculator(today: Date.new(2026, 6, 3)).elapsed_cycles).to eq(0)
     end
@@ -159,14 +162,14 @@ RSpec.describe BudgetCalculator, type: :model do
 
     it "is zero for an anchorless rate rule even when it has an item" do
       gas = create(:item, category: category, name: "Gas")
-      budget = create(:pool_budget, :rate, pool: car, amount: 80, item: gas)
+      budget = create(:budget, :rate, category: car, amount: 80, item: gas)
       create(:entry, item: gas, amount: 10, date: Date.new(2026, 2, 3))
 
       expect(budget.calculator(today: today).cycles_completed).to eq(0)
     end
 
     it "is zero for an anchorless rate rule with no item" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).cycles_completed).to eq(0)
     end
@@ -260,7 +263,7 @@ RSpec.describe BudgetCalculator, type: :model do
     # dressed up as a real one, at a public entry point.
     it "is zero for an anchorless rate rule that has an item" do
       gas = create(:item, category: category, name: "Gas")
-      budget = create(:pool_budget, :rate, pool: car, amount: 80, item: gas)
+      budget = create(:budget, :rate, category: car, amount: 80, item: gas)
       create(:entry, item: gas, amount: 10, date: Date.new(2026, 2, 3))
 
       expect(budget.calculator(today: today).paid_since_anchor).to eq(0)
@@ -275,19 +278,19 @@ RSpec.describe BudgetCalculator, type: :model do
 
   describe "#due_date" do
     it "is the end of the calendar month for a monthly rate rule" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 28))
     end
 
     it "is the day before the next period boundary for a per-period rate rule" do
-      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
+      budget = create(:budget, :per_period_rate, category: car, amount: 300)
 
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 2, 19))
     end
 
     it "is the anchor itself for a one-time rule" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
       expect(budget.calculator(today: today).due_date).to eq(Date.new(2026, 8, 1))
     end
@@ -388,7 +391,7 @@ RSpec.describe BudgetCalculator, type: :model do
     # so this is the only shape where the `item.present?` guard does real work.
     # No item means no fulfillment signal, which the design reads as "assume paid".
     it "is not true for a one-time rule with no item whose date has long passed" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 2, 1))
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: Date.new(2026, 2, 1))
 
       expect(budget.calculator(today: Date.new(2026, 6, 3))).not_to be_overdue
     end
@@ -474,7 +477,7 @@ RSpec.describe BudgetCalculator, type: :model do
     end
 
     it "is false for a rate rule, which never finishes" do
-      expect(create(:pool_budget, :rate, pool: car, amount: 80).calculator(today: today)).not_to be_fulfilled
+      expect(create(:budget, :rate, category: car, amount: 80).calculator(today: today)).not_to be_fulfilled
     end
   end
 
@@ -518,14 +521,14 @@ RSpec.describe BudgetCalculator, type: :model do
 
   describe "#periods_until_due" do
     it "counts every period boundary from today through the due date inclusive" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 3, 6))
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: Date.new(2026, 3, 6))
 
       # Feb 6, Feb 20, Mar 6 — both endpoints are boundaries and both count.
       expect(budget.calculator(today: today).periods_until_due).to eq(3)
     end
 
     it "is one when the bill is due today" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: today)
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: today)
 
       expect(budget.calculator(today: today).periods_until_due).to eq(1)
     end
@@ -595,21 +598,21 @@ RSpec.describe BudgetCalculator, type: :model do
     end
 
     it "spreads a monthly rate rule over the periods left in the month" do
-      budget = create(:pool_budget, :rate, pool: car, amount: 80)
+      budget = create(:budget, :rate, category: car, amount: 80)
 
       # due Feb 28; boundaries Feb 6 and Feb 20.
       expect(budget.calculator(today: today).required(0)).to eq(40.00)
     end
 
     it "demands the full amount of a per-period rate rule every period" do
-      budget = create(:pool_budget, :per_period_rate, pool: car, amount: 300)
+      budget = create(:budget, :per_period_rate, category: car, amount: 300)
 
       # due Feb 19; only Feb 6 falls in [Feb 6, Feb 19].
       expect(budget.calculator(today: today).required(0)).to eq(300.00)
     end
 
     it "spreads a one-time goal across every boundary before it" do
-      budget = create(:pool_budget, :one_time, pool: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
+      budget = create(:budget, :one_time, category: car, amount: 500, anchor_date: Date.new(2026, 8, 1))
 
       # 13 boundaries in [Feb 6, Aug 1]. 500 / 13 = 38.4615...
       expect(budget.calculator(today: today).required(0)).to eq(38.46)

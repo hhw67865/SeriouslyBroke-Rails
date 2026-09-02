@@ -30,7 +30,7 @@ RSpec.describe HoldingStatus, type: :model do
   end
 
   def rule(category, trait = nil, **attrs)
-    create(:budget, *Array(trait), pool: nil, category: category, **attrs)
+    create(:budget, *Array(trait), category: category, **attrs)
   end
 
   def spend(category, amount, name: "Something")

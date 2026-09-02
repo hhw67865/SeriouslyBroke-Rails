@@ -29,21 +29,20 @@ RSpec.describe "Sacrifice view", type: :system do
 
   # Anchorless per-period: a rate, and cuttable.
   def rate(name, amount, priority: 1)
-    create(:budget, :per_period_rate, pool: nil, category: holder(name, priority: priority), amount: amount)
+    create(:budget, :per_period_rate, category: holder(name, priority: priority), amount: amount)
   end
 
   # Anchorless MONTHLY: also a rate and also cuttable, but its per-period claim is
   # `amount * 12 / 26` — nothing like its own amount. This is the shape the dial's units live or
   # die on.
   def monthly_rate(name, amount, priority: 1)
-    create(:budget, :rate, pool: nil, category: holder(name, priority: priority), amount: amount)
+    create(:budget, :rate, category: holder(name, priority: priority), amount: amount)
   end
 
   # Anchored and recurring: a bill, and fixed.
   def rolling(name, amount, priority: 1, anchor: Date.current + 2.months, every: 1)
     create(
       :budget,
-      pool: nil,
       category: holder(name, priority: priority),
       amount: amount,
       interval_months: every,
@@ -53,7 +52,7 @@ RSpec.describe "Sacrifice view", type: :system do
 
   # Anchored with no interval: a one-off, marked `dated` rather than `fixed`.
   def one_off(name, amount, priority: 1, anchor: Date.current + 10.days)
-    create(:budget, :one_time, pool: nil, category: holder(name, priority: priority), amount: amount, anchor_date: anchor)
+    create(:budget, :one_time, category: holder(name, priority: priority), amount: amount, anchor_date: anchor)
   end
 
   def figure(name) = find("[data-figure='#{name}']")

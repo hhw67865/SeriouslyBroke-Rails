@@ -15,11 +15,10 @@ RSpec.describe "Entries income routing", type: :request do
   let(:user) { create(:user) }
   let(:main) { create(:pool, :account, user: user, name: "Main") }
   let(:ally) { create(:pool, :account, user: user, name: "Ally") }
-  let(:income) { create(:category, :income, user: user, pool: main, name: "Pay") }
+  let(:income) { create(:category, :income, user: user, name: "Pay") }
   let(:pay_item) { create(:item, category: income, name: "Paycheck") }
 
-  let(:groceries_pool) { create(:pool, :budget_pool, user: user, account: main, name: "Groceries") }
-  let(:expense) { create(:category, user: user, pool: groceries_pool, name: "Food", category_type: :expense) }
+  let(:expense) { create(:category, user: user, name: "Food", category_type: :expense) }
   let(:food_item) { create(:item, category: expense, name: "Bananas") }
 
   before do
@@ -27,7 +26,7 @@ RSpec.describe "Entries income routing", type: :request do
     sign_in user, scope: :user
   end
 
-  def routing_for(entry) = entry.pool_movements.kind_transfer
+  def routing_for(entry) = entry.account_movements.kind_transfer
 
   def post_income(destination:, amount: 500)
     post entries_path,
@@ -124,7 +123,7 @@ RSpec.describe "Entries income routing", type: :request do
     it "takes the movement with the entry on delete" do
       entry = post_income(destination: ally.id)
 
-      expect { delete entry_path(entry) }.to change(PoolMovement, :count).by(-1)
+      expect { delete entry_path(entry) }.to change(AccountMovement, :count).by(-1)
     end
   end
 
@@ -151,37 +150,37 @@ RSpec.describe "Entries income routing", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    it "refuses to route to a pool of the user's that is not an account" do
-      post_income(destination: groceries_pool.id)
-
-      expect(response).to have_http_status(:not_found)
-    end
-
+    # "refuses to route to a pool of the user's that is not an account" IS DELETED WITH THE SHAPE
+    # (two-ledger spec §5, Task 8): `pools_are_accounts` makes an envelope id unwritable, so the
+    # type half of `current_user.pools.pool_type_account.find` has nothing left to exclude. The
+    # OWNERSHIP half above is the whole of what the scoping still decides.
     it "saves nothing when the destination is refused" do
-      expect { post_income(destination: groceries_pool.id) }.not_to change(Entry, :count)
+      expect { post_income(destination: create(:pool, :account, user: create(:user)).id) }
+        .not_to change(Entry, :count)
     end
   end
 
   # THE APP'S ONE INVARIANT, ASKED OF THE FEATURE THAT MOVES MONEY WITHOUT EARNING IT.
   #
-  # `Σ pools == your bank balance`. A routing movement is a transfer BETWEEN two of the user's own
-  # pools, so it must net to exactly zero across them — the $500 leaves main and arrives in Ally,
-  # and the bank never sees it. The two ways this feature could break that are the two ways it is
-  # written: counting the paycheck in main AND in Ally (a missing outflow) or in neither (an
-  # outflow with no inflow), and NEITHER shows up in any per-pool assertion above, because each of
-  # those reads one pool at a time.
+  # `pot + Σ accounts == your bank balance` (§2). A routing movement is a transfer BETWEEN two of
+  # the user's own accounts, so it must net to exactly zero across them — the $500 leaves main and
+  # arrives in Ally, and the bank never sees it. The two ways this feature could break that are the
+  # two ways it is written: counting the paycheck in main AND in Ally (a missing outflow) or in
+  # neither (an outflow with no inflow), and NEITHER shows up in any per-account assertion above,
+  # because each of those reads one account at a time.
   #
-  # BOTH SIDES COMPUTED INDEPENDENTLY, house precedent `spec/services/start_date_rule_spec.rb`: the
-  # pool side by PoolCalculator, the bank side by raw SQL over `entries → items → categories` and
-  # keyed on CATEGORY OWNERSHIP, so no app reader referees itself. The expense is here so the sum
-  # is not trivially the one income figure on both sides: $500 in, $40 out, $460 either way.
-  it "keeps Σ pools == bank truth with the income routed away from main" do
+  # BOTH SIDES COMPUTED INDEPENDENTLY: the physical side through `AccountLedger`, one account at a
+  # time and summed in Ruby, and the bank side by raw SQL over `entries → items → categories` keyed
+  # on CATEGORY OWNERSHIP, so no app reader referees itself. The expense is here so the sum is not
+  # trivially the one income figure on both sides: $500 in, $40 out, $460 either way.
+  it "keeps pot + Σ accounts == bank truth with the income routed away from main" do
     post_income(destination: ally.id)
     create(:entry, item: food_item, amount: 40, date: Date.current)
 
-    pool_side = user.pools.sum { |pool| PoolCalculator.new(pool).balance }
+    ledger = AccountLedger.new(user)
+    account_side = user.pools.accounts.sum { |account| ledger.balance_of(account) }
 
-    expect(pool_side).to eq(bank_truth_for(user))
+    expect(account_side).to eq(bank_truth_for(user))
   end
 
   def bank_truth_for(user)

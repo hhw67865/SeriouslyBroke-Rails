@@ -11,7 +11,7 @@ RSpec.describe HomePresenter do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6), typical_income: 2_400)
   end
-  let(:checking) { create(:pool, :account, user: user, name: "Checking", target_amount: 2_000) }
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
   let(:today) { Date.new(2026, 2, 6) }
   let(:presenter) { described_class.new(user: user, today: today) }
 
@@ -36,25 +36,26 @@ RSpec.describe HomePresenter do
   end
 
   # A flat per-period rule: the catch-all shape, and the one that makes `required` exactly the amount
-  # asked for. `pool: nil` because a rule belongs to the thing that holds the money now.
+  # asked for. A rule belongs to the thing that holds the money now — the budget factory's owner
+  # is a funded category (two-ledger spec §3).
   def rate(category, amount)
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   def bill(category, amount:, due:)
-    create(:budget, :one_time, pool: nil, category: category, amount: amount, anchor_date: due)
+    create(:budget, :one_time, category: category, amount: amount, anchor_date: due)
   end
 
   # A rule that rolls: its due date moves with the cycles that have gone by, which is what makes it
   # depend on which day the calculator is asked about.
   def rolling(category, amount:, anchor:)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: 1, anchor_date: anchor)
+    create(:budget, category: category, amount: amount, interval_months: 1, anchor_date: anchor)
   end
 
   # INCOME RAISES BOTH LEDGERS AT ONCE (§2): the pot, and available. It lands in the user's main
   # account, which is the only place income may land.
   def income(amount, on: today)
-    category = create(:category, :income, user: user, pool: checking, name: "Pay #{SecureRandom.hex(3)}")
+    category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
@@ -67,7 +68,7 @@ RSpec.describe HomePresenter do
   # A BILL THAT ROLLS ONCE A YEAR: its whole face value falls due inside the current period, which
   # is what makes `total_required` and `Budget.steady_need` diverge.
   def annual(category, amount:, due:)
-    create(:budget, pool: nil, category: category, amount: amount, interval_months: 12, anchor_date: due)
+    create(:budget, category: category, amount: amount, interval_months: 12, anchor_date: due)
   end
 
   # A DATED BILL THE USER ACTUALLY PAYS: an item is the only fulfilment signal BudgetCalculator
@@ -75,7 +76,7 @@ RSpec.describe HomePresenter do
   def payable(name, amount:, due:, priority: 1)
     holder(name, priority: priority).tap do |category|
       item = create(:item, category: category, name: "#{name} Bill")
-      create(:budget, :one_time, pool: nil, category: category, item: item, amount: amount, anchor_date: due)
+      create(:budget, :one_time, category: category, item: item, amount: amount, anchor_date: due)
     end
   end
 
@@ -124,7 +125,7 @@ RSpec.describe HomePresenter do
     it "is movements only on an account that is not main", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       income(1_000)
-      create(:pool_movement, from_pool: checking, to_pool: ally, amount: 600, date: today, kind: :transfer)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 600, date: today, kind: :transfer)
 
       expect(presenter.balance_of(ally)).to eq(600)
       expect(presenter.balance_of(checking)).to eq(400)
@@ -143,7 +144,7 @@ RSpec.describe HomePresenter do
       apples = holder("Apples", priority: 1)
       later = holder("Later", priority: 2)
       create(:category, :expense, user: user, name: "Never Funded", priority: 0)
-      create(:category, :income, user: user, pool: checking, name: "Salary")
+      create(:category, :income, user: user, name: "Salary")
 
       expect(presenter.categories).to eq([apples, zoo, later])
     end
@@ -484,7 +485,7 @@ RSpec.describe HomePresenter do
 
     it "names the accounts below zero and no others", :aggregate_failures do
       income(500)
-      create(:pool_movement, from_pool: checking, to_pool: ally, amount: 900, date: today, kind: :transfer)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 900, date: today, kind: :transfer)
 
       expect(presenter.overdrawn_accounts.map(&:name)).to eq(["Checking"])
       expect(presenter.overdraft_for(checking)).to eq(400)
@@ -713,7 +714,7 @@ RSpec.describe HomePresenter do
 
     it "rounds the amount so the button, the link and the preview name one figure", :aggregate_failures do
       car = holder("Car Insurance", priority: 1)
-      create(:budget, pool: nil, category: car, amount: 7_200, interval_months: 12, anchor_date: Date.new(2026, 8, 1))
+      create(:budget, category: car, amount: 7_200, interval_months: 12, anchor_date: Date.new(2026, 8, 1))
       income(1)
 
       fix = presenter.fix_for(car)

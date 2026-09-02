@@ -22,7 +22,7 @@ RSpec.describe AccountLedger, type: :model do
   end
 
   def move(from:, to:, amount:, on: Time.zone.parse("2026-08-08 12:00"))
-    create(:pool_movement, from_pool: from, to_pool: to, amount: amount, date: on)
+    create(:account_movement, from_pool: from, to_pool: to, amount: amount, date: on)
   end
 
   describe "#pot" do
@@ -52,29 +52,11 @@ RSpec.describe AccountLedger, type: :model do
       expect(ledger.pot).to eq(440)
     end
 
-    # A LEGACY ENVELOPE IS NOT A PLACE MONEY SITS. Task 1's migration converted the pool movements
-    # with a non-account end into allocations, but a pool layer still exists until Task 8 — and a
-    # movement into a budget pool must not lower the pot, or the physical ledger would count an
-    # act of intention as an act of location.
-    it "ignores a movement into a pool that is not an account" do
-      earn(300)
-      envelope = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
-      move(from: main, to: envelope, amount: 120)
-
-      expect(ledger.pot).to eq(300)
-    end
-
-    # THE OTHER END OF THE SAME RULE, and it needs its own example because the two conditions on
-    # `#account_movements` are separately deletable: a legacy sweep out of an envelope back to
-    # checking is money that never left the pot to begin with, so counting it would credit the pot
-    # twice for one dollar.
-    it "ignores a movement out of a pool that is not an account" do
-      earn(300)
-      envelope = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
-      move(from: envelope, to: main, amount: 75)
-
-      expect(ledger.pot).to eq(300)
-    end
+    # THE TWO "ignores a movement into / out of a pool that is not an account" EXAMPLES ARE DELETED
+    # WITH THE SHAPE (two-ledger spec §5, Task 8). They planted a movement with an envelope on one
+    # end and asserted the pot did not move; `pools_are_accounts` makes that row unwritable, so the
+    # fixture cannot be built at all. What the join still discriminates — both ends belonging to
+    # THIS user — is asserted by "leaves another user's movements out" below.
 
     it "is a decimal zero for a user with nothing at all", :aggregate_failures do
       expect(ledger.pot).to eq(0)
@@ -117,13 +99,8 @@ RSpec.describe AccountLedger, type: :model do
       expect(ledger.balance_of(main)).to eq(ledger.pot)
     end
 
-    # A pool that is not an account has no physical balance to report, and zero would be a wrong
-    # money figure rather than an absent one.
-    it "refuses a pool that is not an account" do
-      envelope = create(:pool, :budget_pool, user: user, account: main, name: "Groceries")
-
-      expect { ledger.balance_of(envelope) }.to raise_error(described_class::NotAnAccount, /Groceries/)
-    end
+    # "refuses a pool that is not an account" IS DELETED WITH THE ARM (Task 8): `pools_are_accounts`
+    # makes the type condition unfalsifiable, and the guard now asks only whose account it is.
 
     it "refuses another user's account" do
       theirs = create(:pool, :account, user: create(:user), name: "Their Bank")

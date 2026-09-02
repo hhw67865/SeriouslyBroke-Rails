@@ -17,19 +17,18 @@ RSpec.describe Budget, type: :model do
   # mixed-unit bug. Under a monthly user every "a month" figure passes through unchanged and the
   # trap below cannot fire at all.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: today) }
-  let(:account) { create(:pool, :account, user: user) }
-  let(:pool) { create(:pool, :budget_pool, user: user, account: account) }
+  let(:owner) { create(:category, :expense, :funded, user: user, name: "Car") }
 
-  def rate(amount) = create(:pool_budget, :per_period_rate, pool: pool, amount: amount)
+  def rate(amount) = create(:budget, :per_period_rate, category: owner, amount: amount)
 
-  def monthly(amount) = create(:pool_budget, :rate, pool: pool, amount: amount)
+  def monthly(amount) = create(:budget, :rate, category: owner, amount: amount)
 
   def every(months, amount:, anchor:)
-    create(:pool_budget, pool: pool, amount: amount, interval_months: months, anchor_date: anchor)
+    create(:budget, category: owner, amount: amount, interval_months: months, anchor_date: anchor)
   end
 
   def one_off(amount, anchor:, item: nil)
-    create(:pool_budget, pool: pool, amount: amount, interval_months: nil, anchor_date: anchor, item: item)
+    create(:budget, category: owner, amount: amount, interval_months: nil, anchor_date: anchor, item: item)
   end
 
   describe "#steady_ask on a per-period rate rule" do
@@ -163,7 +162,7 @@ RSpec.describe Budget, type: :model do
   # structural check sits permanently underwater on money that has already left the account — the
   # same fulfilled gate `BudgetCalculator#shortfall` applies to the same shape.
   describe "an anchored one-time rule, fulfilled" do
-    let(:category) { create(:category, :expense, user: user, pool: pool) }
+    let(:category) { owner }
     let(:item) { create(:item, category: category, name: "Dentist") }
     let(:rule) { one_off(500, anchor: today - 10.days, item: item) }
 
@@ -195,17 +194,16 @@ RSpec.describe Budget, type: :model do
   # reached is still pinned, by the anchorless monthly rate rule above.
 
   # THE UNDECLARED USER. The structural-check block renders nothing without a cadence, so this path
-  # feeds no verdict yet — but the drift detector calls `steady_ask` for every pool-mode rate rule
+  # feeds no verdict yet — but the drift detector calls `steady_ask` for every rate rule
   # regardless of whether a period has been declared, and a divisor of zero here would 500 the very
   # page that exists to fix the missing declaration. The shapes below are asserted because the
   # method must ANSWER for all of them, not because a screen prints them.
   describe "a user who has declared no period" do
     let(:undeclared) { create(:user) }
-    let(:their_account) { create(:pool, :account, user: undeclared) }
-    let(:their_pool) { create(:pool, :budget_pool, user: undeclared, account: their_account) }
+    let(:their_owner) { create(:category, :expense, :funded, user: undeclared, name: "Car") }
 
     it "passes a per-period amount through" do
-      rule = create(:pool_budget, :per_period_rate, pool: their_pool, amount: 300)
+      rule = create(:budget, :per_period_rate, category: their_owner, amount: 300)
 
       expect(rule.steady_ask(undeclared, today: today)).to eq(300)
     end
@@ -213,15 +211,15 @@ RSpec.describe Budget, type: :model do
     # The documented answer: with no period declared the period IS the calendar month, matching
     # what `BudgetCalculator#period_end` and `User#period_containing` already fall back to.
     it "leaves a monthly amount monthly" do
-      rule = create(:pool_budget, :rate, pool: their_pool, amount: 260)
+      rule = create(:budget, :rate, category: their_owner, amount: 260)
 
       expect(rule.steady_ask(undeclared, today: today)).to eq(260)
     end
 
     it "still answers for a dated rule rather than dividing by zero" do
       rule = create(
-        :pool_budget,
-        pool: their_pool,
+        :budget,
+        category: their_owner,
         amount: 1_200,
         interval_months: 6,
         anchor_date: today + 3.months
@@ -232,8 +230,8 @@ RSpec.describe Budget, type: :model do
 
     it "gives a one-off rule the whole amount, there being no periods to spread over" do
       rule = create(
-        :pool_budget,
-        pool: their_pool,
+        :budget,
+        category: their_owner,
         amount: 500,
         interval_months: nil,
         anchor_date: today + 140.days
@@ -264,17 +262,15 @@ RSpec.describe Budget, type: :model do
 
     # DELETED (plan 3, task 6): "counts a rule on a pool no account can reach". It pinned 2b's
     # ruling that an orphan's rule is a real claim with a broken route — in the need, out of the
-    # waterfall. `#steady_need` has no account filter to lose (it sums every rule `Budget.for_user`
-    # answers), so the ruling survives its example; the shape does not, because
-    # `Pool#account_matches_pool_type` and `CHECK ((pool_type = 0) = (account_id IS NULL))` refuse
-    # an account-less pool. See `Pool::REFUSALS` and the task 6 report.
+    # waterfall. `#steady_need` has no owner filter to lose (it sums every rule `Budget.for_user`
+    # answers), so the ruling survives its example; the shape does not, and the layer that could
+    # express it is deleted outright (two-ledger spec §5, Task 8).
 
     it "does not count another user's rules" do
       rate(300)
       stranger = create(:user, period_cadence: :biweekly, period_anchor_date: today)
-      stranger_account = create(:pool, :account, user: stranger)
-      stranger_pool = create(:pool, :budget_pool, user: stranger, account: stranger_account)
-      create(:pool_budget, :per_period_rate, pool: stranger_pool, amount: 999)
+      stranger_owner = create(:category, :expense, :funded, user: stranger, name: "Car")
+      create(:budget, :per_period_rate, category: stranger_owner, amount: 999)
 
       expect(described_class.steady_need(user, today: today)).to eq(300)
     end
@@ -312,12 +308,11 @@ RSpec.describe Budget, type: :model do
       statements
     end
 
-    # A rule in the shape the migration left behind, with a category of its OWN — sharing one
-    # category between rules would hide a per-rule load behind a repeated id.
+    # A rule with a category of its OWN — sharing one category between rules would hide a per-rule
+    # load behind a repeated id.
     def migrated_one_off(amount)
       create(
-        :pool_budget,
-        pool: pool,
+        :budget,
         amount: amount,
         interval_months: nil,
         anchor_date: today + 60,
@@ -332,11 +327,12 @@ RSpec.describe Budget, type: :model do
       five = sql_for { described_class.steady_need(user, today: today) }
 
       expect(five.size).to eq(one.size)
-      # FOUR, NAMED: the rules themselves, then the three preloads that answer for every row at
-      # once — `pools`, `categories`, and the one `users` both owner lanes resolve to. `:item` is
-      # in the `includes` and costs nothing here, because every rule in this fixture is item-less
-      # and the preloader skips a branch whose foreign keys are all nil.
-      expect(five.size).to eq(4)
+      # THREE, NAMED: the rules themselves, then the two preloads that answer for every row at once
+      # — `categories` and the `users` the owner lane resolves to. It was FOUR while `pools` was a
+      # second owner lane to preload (two-ledger spec §5, Task 8). `:item` is in the `includes` and
+      # costs nothing here, because every rule in this fixture is item-less and the preloader skips
+      # a branch whose foreign keys are all nil.
+      expect(five.size).to eq(3)
     end
   end
 end

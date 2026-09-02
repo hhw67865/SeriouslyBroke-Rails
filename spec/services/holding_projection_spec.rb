@@ -26,7 +26,7 @@ RSpec.describe HoldingProjection, type: :model do
   # `net_of_sweep` projection actually derives a sweep rather than subtracting zero.
   let(:groceries) do
     category = create(:category, :expense, :funded, user: user, name: "Groceries")
-    create(:budget, :per_period_rate, pool: nil, category: category, amount: 400)
+    create(:budget, :per_period_rate, category: category, amount: 400)
     category
   end
 

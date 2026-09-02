@@ -6,18 +6,19 @@ require "rails_helper"
 # Task 7). `pools/index` and `pools/show` both had a Rename and a Delete button and both screens are
 # deleted; Home IS the accounts index, so the buttons are on the account's own section here.
 #
-# ** THE RESTORED GUARD (fix round 1, MED-1). ** `spec/system/pools/show/header_actions_spec.rb`
-# carried "keeps the plain warning on an account, which has nothing above it to absorb anything" —
-# the example that stopped an ENVELOPE's confirm sentence being printed over an ACCOUNT. It died
-# with that file and had no successor, and the sentence it guarded against came back immediately:
-# the first draft of this screen's confirm promised that "movements and any categories pointing at
-# it move to your main account", which is what happens to an ENVELOPE and is false of an account
-# twice over. `Pool#return_holdings_to_the_account` returns early for an account; its movements are
-# DESTROYED (`dependent: :destroy`); and a category still pointing at it REFUSES the delete
-# (`dependent: :restrict_with_error`). The guard is back, in both directions.
+# ** THE RESTORED GUARD (fix round 1, MED-1; narrowed by Task 8). ** `spec/system/pools/show/
+# header_actions_spec.rb` carried "keeps the plain warning on an account, which has nothing above it
+# to absorb anything" — the example that stopped an ENVELOPE's confirm sentence being printed over
+# an ACCOUNT. It died with that file and had no successor, and the sentence it guarded against came
+# back immediately: the first draft of this screen's confirm promised that "movements and any
+# categories pointing at it move to your main account", which is what happens to an ENVELOPE and was
+# false of an account twice over.
 #
-# The refusal itself is pinned at the wire, where the status code and the flash are visible —
-# see `spec/requests/bank_accounts_spec.rb`.
+# ONE OF THOSE TWO HALVES IS NOW MOOT. No category points at an account (`categories.pool_id` is
+# dropped, two-ledger spec §5), so the refusal the confirm used to promise cannot be raised by
+# anything and its example is deleted with it. What is left is the half that was always the
+# account's own: `dependent: :destroy` DELETES its movements, so the money they moved goes back to
+# the pot rather than being absorbed by something above it — because there is nothing above it.
 RSpec.describe "Home account actions", type: :system do
   let(:user) { create(:user) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
@@ -44,17 +45,20 @@ RSpec.describe "Home account actions", type: :system do
       find("form[action='#{bank_account_path(checking)}']")["data-turbo-confirm"]
     end
 
-    # THE POSITIVE HALF: it names what actually happens to the movements, and the condition on which
-    # the delete does not happen at all.
-    it "says the movements go and that a pointing category refuses the delete" do
+    # THE POSITIVE HALF: it names what actually happens to the movements, and where the money they
+    # moved ends up.
+    it "says the movements go and the money they moved comes back" do
       expect(confirm_text).to include("The movements into and out of it are deleted with it")
-      expect(confirm_text).to include("If a category still points at it, the delete is refused")
+      expect(confirm_text).to include("the money they moved goes back to your main account")
     end
 
     # THE NEGATIVE HALF, and it is the one that died with `pools/show/header_actions_spec.rb`. The
-    # envelope sentence must not be printed over an account: nothing of an account's moves anywhere,
-    # because there is nothing above it to absorb it.
-    it "never promises that anything moves to the main account" do
+    # envelope sentence must not be printed over an account: the account's MOVEMENTS do not move
+    # anywhere, they are deleted, and there is nothing above it to absorb them. The distinction the
+    # strings below draw is between the money coming BACK because a transfer was undone (true, and
+    # asserted above) and the movements themselves being re-pointed (the envelope's, and false).
+    it "never promises that the movements themselves move to the main account" do
+      expect(confirm_text).not_to include("movements and any categories")
       expect(confirm_text).not_to include("move to your main account")
       expect(confirm_text).not_to include("returns to")
       expect(confirm_text).not_to include("buffer")
@@ -73,19 +77,9 @@ RSpec.describe "Home account actions", type: :system do
       expect(user.pools.count).to eq(1)
     end
 
-    # THE REFUSAL, AT THE BROWSER: the confirm's second clause is a promise about behaviour, so the
-    # behaviour is asserted rather than only the sentence. A category may point only at the user's
-    # MAIN account (`Category#pool_must_be_reachable`), so main is the one account a category can
-    # still be blocking.
-    it "refuses while a category still points at the account, and says so" do
-      create(:category, :expense, user: user, name: "Groceries", pool: checking)
-      visit root_path
-
-      within(account_section("Checking")) { accept_confirm { click_button "Delete" } }
-
-      expect(page).to have_content("This account can't be deleted while categories still belong to it.")
-      expect(page).to have_css("[data-account-group='Checking']")
-      expect(user.pools.count).to eq(1)
-    end
+    # ── "refuses while a category still points at the account" IS DELETED WITH THE REFUSAL
+    # (two-ledger spec §5, Task 8). `has_many :categories, dependent: :restrict_with_error` is gone
+    # with `categories.pool_id`: nothing points at an account, so nothing can block its delete and
+    # the confirm no longer promises that it might.
   end
 end

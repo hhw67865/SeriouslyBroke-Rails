@@ -61,7 +61,7 @@ RSpec.describe "Distributions", type: :request do
     it "proposes only the signed-in user's own categories", :aggregate_failures do
       rate(holder("Groceries"), 400)
       stranger = create(:category, :expense, :funded, user: create(:user), name: "Not Yours")
-      create(:budget, :per_period_rate, pool: nil, category: stranger, amount: 400)
+      create(:budget, :per_period_rate, category: stranger, amount: 400)
       deposit(300)
 
       get new_distribution_path
@@ -181,7 +181,7 @@ RSpec.describe "Distributions", type: :request do
     # user's confirm and this user's confirm cannot touch a stranger's ledger.
     it "writes nothing into another user's categories" do
       stranger = create(:category, :expense, :funded, user: create(:user), name: "Theirs")
-      create(:budget, :per_period_rate, pool: nil, category: stranger, amount: 400)
+      create(:budget, :per_period_rate, category: stranger, amount: 400)
 
       post distributions_path
 
@@ -243,7 +243,7 @@ RSpec.describe "Distributions", type: :request do
 
   def holder(name) = create(:category, :expense, :funded, user: user, name: name)
 
-  def rate(category, amount) = create(:budget, :per_period_rate, pool: nil, category: category, amount: amount)
+  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
   def deposit(amount)
     category = create(:category, :income, user: user)

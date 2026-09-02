@@ -22,7 +22,7 @@ RSpec.describe "Budgets", type: :request do
   let(:stranger) { create(:user) }
   let(:stranger_category) { create(:category, :expense, :funded, user: stranger, name: "Their Rent") }
 
-  let!(:rule) { create(:budget, :rate, pool: nil, category: groceries, amount: 200) }
+  let!(:rule) { create(:budget, :rate, category: groceries, amount: 200) }
 
   # `scope:` explicitly, as the other request specs do: Devise's mappings are populated when
   # the routes are drawn, and routes load lazily.
@@ -39,7 +39,7 @@ RSpec.describe "Budgets", type: :request do
     # the 404 a real request would get rather than as a raised exception. The status is what
     # the user meets, so the status is what is asserted.
     it "refuses another user's rule" do
-      foreign = create(:budget, :rate, pool: nil, category: stranger_category)
+      foreign = create(:budget, :rate, category: stranger_category)
 
       get edit_budget_path(foreign)
 
@@ -109,18 +109,15 @@ RSpec.describe "Budgets", type: :request do
       expect(response.body).to include("must belong to a category")
     end
 
-    # `pool_id` IS NO LONGER PERMITTED BY THIS CONTROLLER (two-ledger spec §3), and the refusal is
-    # silent by design: an unpermitted key is dropped, so the request is exactly the owner-less one
-    # above. This is the mirror of the pin `category_id` carried through the cap era, now that the
-    # two columns have swapped places — and it is what stops a tampered POST re-parenting a rule
-    # onto the layer Task 8 deletes.
+    # `pool_id` IS NEITHER PERMITTED NOR A COLUMN (two-ledger spec §3/§5). The refusal is silent by
+    # design: an unpermitted key is dropped, so the request is exactly the owner-less one above.
+    # Kept after the drop because the payload is what a tampered POST would actually send — a client
+    # written against the pool era — and the answer must be a 422 rather than an UnknownAttribute
+    # 500.
     it "ignores a pool_id entirely and writes no rule", :aggregate_failures do
-      own_pool = create(:pool, :budget_pool, user: user, account: create(:pool, :account, user: user))
-
-      expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: own_pool.id } } }
+      expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: SecureRandom.uuid } } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(own_pool.reload.budgets).to be_empty
     end
   end
 
@@ -135,7 +132,7 @@ RSpec.describe "Budgets", type: :request do
     end
 
     it "refuses another user's rule and leaves it alone", :aggregate_failures do
-      foreign = create(:budget, :rate, pool: nil, category: stranger_category, amount: 90)
+      foreign = create(:budget, :rate, category: stranger_category, amount: 90)
 
       patch budget_path(foreign), params: { budget: { amount: "999.00" } }
 
@@ -192,7 +189,7 @@ RSpec.describe "Budgets", type: :request do
     end
 
     it "refuses to delete another user's rule", :aggregate_failures do
-      foreign = create(:budget, :rate, pool: nil, category: stranger_category)
+      foreign = create(:budget, :rate, category: stranger_category)
 
       delete budget_path(foreign)
 

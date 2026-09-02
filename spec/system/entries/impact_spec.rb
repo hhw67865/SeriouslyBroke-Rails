@@ -24,7 +24,11 @@ RSpec.describe "Entry impact card", type: :system do
   # `let!` AND FIRST, so this is the account the `:account` trait nominates as main — a category
   # minted before it would pull the factory's own account into being and claim the nomination,
   # leaving the income category below pointing at an account that is not main.
+  # rubocop:disable RSpec/LetSetup -- nothing NAMES this account and every example needs it:
+  # the `:account` trait's `after(:create)` is what makes the user's first account their MAIN
+  # one, and the pot is where every entry below lands.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
   # THE DAY EVERY CATEGORY HERE STARTED HOLDING MONEY, a year back, so an entry dated today or
   # yesterday counts against it.
@@ -34,7 +38,7 @@ RSpec.describe "Entry impact card", type: :system do
   let!(:groceries) do
     create(:category, :expense, user: user, name: "Groceries", funded_since: funded_since).tap do |category|
       create(:allocation, kind: :allocation, to_category: category, amount: 240, date: Time.zone.now)
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: 300)
+      create(:budget, :per_period_rate, category: category, amount: 300)
       create(:item, category: category, name: "Weekly shop")
     end
   end
@@ -45,7 +49,7 @@ RSpec.describe "Entry impact card", type: :system do
   # (which must land in an account, `Category#income_must_land_in_an_account`).
   before do
     create(:category, :expense, user: user, name: "Shopping")
-    create(:category, user: user, name: "Paycheck", category_type: :income, pool: checking)
+    create(:category, user: user, name: "Paycheck", category_type: :income)
     sign_in user, scope: :user
   end
 
@@ -233,7 +237,7 @@ RSpec.describe "Entry impact card", type: :system do
     before do
       rent = create(:category, :expense, user: user, name: "Rent", funded_since: funded_since)
       create(:allocation, kind: :allocation, to_category: rent, amount: 1_500, date: Time.zone.now)
-      create(:budget, :per_period_rate, pool: nil, category: rent, amount: 1_500)
+      create(:budget, :per_period_rate, category: rent, amount: 1_500)
 
       visit new_entry_path
       select_category("Rent")
@@ -481,7 +485,6 @@ RSpec.describe "Entry impact card", type: :system do
       create(:allocation, kind: :allocation, to_category: house, amount: 600, date: Time.zone.now)
       create(
         :budget,
-        pool: nil,
         category: house,
         amount: 300,
         interval_months: 1,

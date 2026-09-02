@@ -36,11 +36,10 @@ RSpec.describe AllocationCalculator, type: :model do
   def last_period = Date.new(2026, 7, 12)
   def this_period = Date.new(2026, 8, 15)
 
-  # EVERY RULE HERE BELONGS TO A CATEGORY. `pool: nil` is the whole of what says so — the budget
-  # factory's default owner is still a pool for the length of this branch — so it is said once here
+  # EVERY RULE HERE BELONGS TO A CATEGORY, which is the only owner a rule has — said once here
   # rather than on every line.
   def rule(category, *traits, **attrs)
-    create(:budget, *traits, pool: nil, category: category, **attrs)
+    create(:budget, *traits, category: category, **attrs)
   end
 
   def holder(name, **attrs)

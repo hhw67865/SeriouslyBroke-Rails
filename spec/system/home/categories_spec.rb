@@ -12,7 +12,7 @@ RSpec.describe "Home Categories", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
-  let(:checking) { create(:pool, :account, user: user, name: "Checking", target_amount: 2_000) }
+  let(:checking) { create(:pool, :account, user: user, name: "Checking") }
 
   # `sign_in` touches `user` at REAL NOW, which is what keeps `period_anchor_date: Date.current`
   # from being resolved inside a `travel_to` further down this file (CLAUDE.md's third flake cause).
@@ -44,7 +44,7 @@ RSpec.describe "Home Categories", type: :system do
   # A rate category: refilled every period, and the shape that reads `left to spend`.
   def envelope(name, rate:, priority: 1)
     holder(name, priority: priority).tap do |category|
-      create(:budget, :per_period_rate, pool: nil, category: category, amount: rate)
+      create(:budget, :per_period_rate, category: category, amount: rate)
     end
   end
 
@@ -52,19 +52,19 @@ RSpec.describe "Home Categories", type: :system do
   # filled on schedule.
   def accumulating(name, amount:, due:, priority: 1, every: 1)
     holder(name, priority: priority).tap do |category|
-      create(:budget, pool: nil, category: category, amount: amount, interval_months: every, anchor_date: due)
+      create(:budget, category: category, amount: amount, interval_months: every, anchor_date: due)
     end
   end
 
   # A one-off bill with no interval to spread it over.
   def one_off(name, amount:, due:, priority: 1)
     holder(name, priority: priority).tap do |category|
-      create(:budget, :one_time, pool: nil, category: category, amount: amount, anchor_date: due)
+      create(:budget, :one_time, category: category, amount: amount, anchor_date: due)
     end
   end
 
   def deposit(amount)
-    category = create(:category, :income, user: user, pool: checking, name: "Pay #{SecureRandom.hex(3)}")
+    category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
@@ -87,7 +87,6 @@ RSpec.describe "Home Categories", type: :system do
       item = create(:item, category: category, name: "#{name} Bill")
       create(
         :budget,
-        pool: nil,
         category: category,
         item: item,
         amount: amount,
@@ -186,7 +185,6 @@ RSpec.describe "Home Categories", type: :system do
     holder(name, target_amount: 2_400).tap do |category|
       create(
         :budget,
-        pool: nil,
         category: category,
         amount: 300,
         interval_months: 1,
@@ -350,7 +348,7 @@ RSpec.describe "Home Categories", type: :system do
     # quiet `on track` one, which is the only quiet state carrying a date.
     def goal_with_rule(name, amount:, due:)
       holder(name, target_amount: 5_000).tap do |category|
-        create(:budget, pool: nil, category: category, amount: amount, interval_months: 1, anchor_date: due)
+        create(:budget, category: category, amount: amount, interval_months: 1, anchor_date: due)
       end
     end
 
@@ -411,7 +409,6 @@ RSpec.describe "Home Categories", type: :system do
       category = holder(name, priority: priority)
       rule = create(
         :budget,
-        pool: nil,
         category: category,
         amount: amount,
         interval_months: 6,
