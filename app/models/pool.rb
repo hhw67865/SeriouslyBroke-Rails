@@ -51,6 +51,38 @@ class Pool < ApplicationRecord
 
   validates :name, presence: true, uniqueness: { scope: :user_id, case_sensitive: false }
 
+  # ** THE MAIN ACCOUNT IS NOT DELETABLE WHILE IT IS MAIN (final fix wave, C-1). ** The one refusal
+  # this class still carries, and it is about the PHYSICAL LEDGER rather than about anything nested:
+  #
+  #   MEASURED, on the shape Home offered before this callback existed. Main is on one side of EVERY
+  #   `AccountMovement` the app can write — `Entry#route_income_to!` and `AccountFundingsController
+  #   #build_movement` both put `user.default_account` on `from_pool` — so `dependent: :destroy` over
+  #   `movements_in`/`movements_out` does not merely take main's own transfers: it takes every
+  #   transfer there is. `users.default_account_id` then nullifies (`on_delete: :nullify`),
+  #   `AccountLedger#pot` answers 0 because there is no main to read entries against, and every other
+  #   account's balance goes to 0 with the movements that fed it. `pot + Σ accounts == 0` while
+  #   `available + Σ holdings` stands untouched on the other ledger — two-ledger §2's invariant broken
+  #   by one button, with no undo and no screen saying anything happened.
+  #
+  # RESTRICT-SHAPED RATHER THAN CASCADING, and deliberately: there is no correct thing to do with the
+  # user's entire transfer history, so the honest answer is to refuse. This is `restrict_with_error`'s
+  # own body (a sentence on `:base`, then `throw :abort`) written by hand because what it restricts on
+  # is not an association — it is the `users.default_account_id` pointer aimed back at this row.
+  #
+  # `prepend: true` so the refusal is decided BEFORE `dependent: :destroy` runs. A halted chain rolls
+  # its transaction back either way, so this is not what makes the guard correct — it is what keeps a
+  # refused delete from doing thousands of rows of work first.
+  #
+  # THE ONE ESCAPE IS THE USER'S OWN DELETION. `User has_many :pools, dependent: :destroy` reaches
+  # main like any other pool, and a refusal there would make a user undeletable — so the callback
+  # stands down when Rails is destroying this row THROUGH that association (`destroyed_by_association`
+  # is the reflection then, and nil for every other caller). Nothing is stranded: the user goes with
+  # it.
+  #
+  # NOT A VALIDATION, because `destroy` does not run validations. The controller already checks the
+  # return value and renders `errors[:base]`, which is what makes the sentence reach the screen.
+  before_destroy :main_account_is_not_deletable, prepend: true
+
   searchable :name, label: "Name"
 
   # WHAT THIS ACCOUNT HOLDS, PHYSICALLY — the pot's entries plus every movement in, minus every
@@ -64,4 +96,21 @@ class Pool < ApplicationRecord
   # confirmation sentence, a model's refusal — where one ledger is the same number of queries as
   # none.
   def balance = AccountLedger.new(user).balance_of(self)
+
+  # IS THIS THE ACCOUNT EVERYTHING FLOWS THROUGH? `users.default_account_id`, asked of the id rather
+  # than of the record so an unloaded association costs no query. The one place the question is
+  # spelled — `HomePresenter#main?` and the callback below both come here — because a screen that
+  # hid the Delete button on a different account from the one the model refuses would be worse than
+  # either half alone.
+  def main? = user.present? && user.default_account_id == id
+
+  private
+
+  def main_account_is_not_deletable
+    return unless main?
+    return if destroyed_by_association
+
+    errors.add(:base, "This is your main account — everything flows through it")
+    throw(:abort)
+  end
 end

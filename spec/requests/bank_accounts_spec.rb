@@ -140,21 +140,21 @@ RSpec.describe "BankAccounts", type: :request do
       expect(response).to redirect_to(root_path)
     end
 
-    # THE REFUSAL IS REPORTED, NOT SWALLOWED. `Pool has_many :categories, dependent:
-    # :restrict_with_error` halts the callback chain and writes a sentence onto `:base` rather
-    # than raising, so a controller that ignored `#destroy`'s return value would redirect with
-    # "deleted." over a row still sitting in the database.
+    # THE POOL ERA'S REFUSAL EXAMPLES ARE DELETED WITH THE REFUSALS (two-ledger spec §5, Task 8). One
+    # planted a CATEGORY pointing at the account (`has_many :categories, dependent:
+    # :restrict_with_error`) and one a POOL sitting inside it (`has_many :child_pools`); neither
+    # association exists, because neither column does. The second was the console-only pin this file
+    # kept expressly until the drop, and the drop is here.
     #
-    # ** BOTH LIVE REFUSALS, ASKED OF WHAT `Pool` RESTRICTS ON TODAY (fix round 1, LOW-3). ** The
-    # BOTH REFUSAL EXAMPLES ARE DELETED WITH THE REFUSALS (two-ledger spec §5, Task 8). One planted
-    # a CATEGORY pointing at the account (`has_many :categories, dependent: :restrict_with_error`)
-    # and one a POOL sitting inside it (`has_many :child_pools`); neither association exists, because
-    # neither column does. The second was the console-only pin this file kept expressly until the
-    # drop, and the drop is here.
-    #
-    # WHAT DELETING AN ACCOUNT DOES NOW is the one example below: `movements_in`/`out` are
+    # WHAT DELETING AN ACCOUNT DOES is the first example below: `movements_in`/`out` are
     # `dependent: :destroy`, so an account's transfers go WITH it and the money main had moved into
     # it returns to the pot.
+    #
+    # THE REFUSAL IS REPORTED, NOT SWALLOWED, and there is one again (final fix wave, C-1):
+    # `Pool#main_account_is_not_deletable` halts the callback chain and writes a sentence onto
+    # `:base` rather than raising, so a controller that ignored `#destroy`'s return value would
+    # redirect with "deleted." over a row still sitting in the database. The flash below is what
+    # pins that the controller reads it.
 
     it "destroys the account's movements rather than moving them anywhere", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
@@ -162,6 +162,45 @@ RSpec.describe "BankAccounts", type: :request do
 
       expect { delete bank_account_path(ally) }.to change(AccountMovement, :count).by(-1)
       expect(user.pools.find_by(name: "Ally")).to be_nil
+    end
+
+    # ** THE CRAFTED DELETE ON MAIN (final fix wave, C-1). ** Home renders no Delete button on main's
+    # card, and a button is a rendering: this is the door the model's refusal is actually behind. The
+    # request spec is where it belongs because what is under test is a status, a flash and an
+    # unchanged table — none of which Capybara's driver can see.
+    #
+    # THE FIXTURE IS THE WHOLE REGRESSION IN MINIATURE. `checking` is main (the pool factory makes
+    # the first account the user's default, exactly as `#create` does), the movement runs main → Ally
+    # the way both writers in the app write it, and the entry gives the pot something to hold. A
+    # successful destroy takes the movement with it, nullifies `default_account_id`, and leaves
+    # `pot + Σ accounts == 0` against an untouched purpose ledger.
+    it "refuses to delete the main account and changes nothing", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current)
+
+      expect { delete bank_account_path(checking) }.not_to change(AccountMovement, :count)
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:alert]).to eq("This is your main account — everything flows through it")
+      expect(user.reload.default_account).to eq(checking)
+      expect([checking.reload.balance, ally.reload.balance]).to eq([2_500, 500])
+    end
+
+    # THE OTHER DIRECTION ON THE SAME FIXTURE: the account that is not main deletes, and the money it
+    # held returns to the pot rather than vanishing — which is the sentence Home's confirm promises.
+    it "deletes a non-main account and returns what it held to the pot", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current)
+
+      delete bank_account_path(ally)
+
+      expect(flash[:notice]).to eq("Ally deleted.")
+      expect(user.pools.find_by(name: "Ally")).to be_nil
+      expect(checking.reload.balance).to eq(3_000)
     end
   end
 end

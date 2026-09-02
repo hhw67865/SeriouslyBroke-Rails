@@ -72,19 +72,26 @@ class BankAccountsController < HomeController
 
   # DELETE /bank_accounts/1
   #
-  # EVERY REFUSAL THIS BRANCH WAS WRITTEN FOR IS GONE (Task 8). `Pool` used to halt its own destroy
-  # three ways — `restrict_with_error` on `#child_pools` and on `#categories`, and
-  # `#return_holdings_to_the_account`'s two — and all three were about a layer that no longer
-  # exists: nothing nests inside an account and no category points at one.
+  # THE POOL ERA'S THREE REFUSALS ARE GONE (Task 8). `Pool` used to halt its own destroy on
+  # `restrict_with_error` over `#child_pools` and `#categories`, and on
+  # `#return_holdings_to_the_account`'s two — all three about a layer that no longer exists: nothing
+  # nests inside an account and no category points at one.
   #
-  # WHAT DELETING AN ACCOUNT DOES NOW, said plainly because nothing refuses it: `dependent: :destroy`
-  # on `#movements_in` / `#movements_out` takes its transfers with it, so the money main had moved
-  # into it goes back to the pot and `pot + Σ accounts` is unchanged to the penny. There is nothing
-  # to strand, which is why there is nothing left to refuse.
+  # ** ONE REFUSAL REPLACED THEM (final fix wave, C-1): MAIN. ** `Pool#main_account_is_not_deletable`
+  # halts the chain with a sentence on `:base`, because main is on one side of every AccountMovement
+  # the app writes — deleting it cascades over the whole physical ledger and zeroes `pot + Σ accounts`
+  # while the purpose ledger stands, which is two-ledger §2's invariant broken by a button. Home
+  # renders no Delete on main's card, and this is the half of the pair a crafted DELETE meets.
   #
-  # THE RETURN VALUE IS STILL CHECKED. `destroy` answers false for a halted chain or a foreign key
-  # the database refuses, and a screen that redirected with "deleted." over a row still sitting in
-  # the table would be lying about the one thing the button is for.
+  # WHAT DELETING ANY OTHER ACCOUNT DOES: `dependent: :destroy` on `#movements_in` / `#movements_out`
+  # takes its transfers with it, and main is on the other side of every one of them, so the money main
+  # had moved into it goes back to the pot and `pot + Σ accounts` is unchanged to the penny. There is
+  # nothing to strand, which is why there is nothing else left to refuse.
+  #
+  # THE RETURN VALUE IS CHECKED, and it is now load-bearing rather than defensive. `destroy` answers
+  # false for a halted chain or a foreign key the database refuses, and a screen that redirected with
+  # "deleted." over a row still sitting in the table would be lying about the one thing the button is
+  # for.
   def destroy
     account = scoped_account
 

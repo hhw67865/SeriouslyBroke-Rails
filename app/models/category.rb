@@ -266,6 +266,34 @@ class Category < ApplicationRecord
   # This is the predicate every screen asks where it used to ask `pool.pool_type_budget?`.
   def holder? = expense? && funded_since.present?
 
+  # ** THE STAMP THAT MAKES A CATEGORY START HOLDING (§4), SPELLED ONCE (final fix wave, I-1). **
+  # §4's own sentence names TWO events — "the date it first got a rule OR AN ALLOCATION" — and only
+  # the rule path ever wrote the date: `BudgetProposal#start_holding` stamped it beside a new rule,
+  # and the hand-allocation path wrote money into a category and left `funded_since` NULL. What that
+  # produced was money nothing could see: the category is absent from `Category.in_fill_order` and
+  # from every holder population, its show page said "doesn't hold money yet" over the balance, and
+  # the reallocation picker offered no way to move it back out. Both callers come here now, so the
+  # rule cannot drift into two spellings of "when does a category start holding".
+  #
+  # A NO-OP ON A CATEGORY THAT IS ALREADY HOLDING, which is the whole reason it is a method rather
+  # than an `update`: re-stamping to today would silently push the start date FORWARD and hand the
+  # category's own recent spending back to available. The second rule in a category, and every
+  # allocation after the first, take this arm.
+  #
+  # `today` IS THE DEFAULT AND THE CALLER MAY NAME IT, on `BudgetProposal`'s reasoning: a category
+  # starts holding the moment the user says so, which is now, and earlier spending stays where it
+  # physically was. `ApplicationController` wraps every request in the owner's zone, so `Date.current`
+  # is the user's own calendar day — the same day `CategoryLedger::ENTRY_CATEGORY_ID` compares
+  # against.
+  #
+  # TRUE OR FALSE, like the `update` underneath it: a caller that needs to say why reads
+  # `errors` off the record, which is what both callers do.
+  def start_holding(today: Date.current)
+    return true if funded_since.present?
+
+    update(funded_since: today)
+  end
+
   # A GOAL IS A HOLDER WITH A TARGET AND NO RULE (spec §3: "a savings category is just a category
   # with a target and typically no refill rule"). The rule half is what tells a goal apart from an
   # envelope somebody also set a ceiling on: a category the waterfall refills every period is being
@@ -396,6 +424,7 @@ class Category < ApplicationRecord
     priority_is_a_fill_order
     target_is_a_goal
     funding_start_is_not_in_the_future
+    money_may_not_be_stranded
     only_expenses_hold_money
   end
 
@@ -438,6 +467,52 @@ class Category < ApplicationRecord
       "day you give it some, so set today or a past date"
     )
   end
+
+  # ** MONEY MAY NOT BE LEFT IN A CATEGORY THAT NO LONGER HOLDS (final fix wave, I-1). ** The other
+  # half of the stranding pair, and the form-reachable one: the categories form makes `funded_since`
+  # user-editable, and CLEARING it on a category carrying allocations left the money exactly where it
+  # was while every reader of it stopped looking. MEASURED on a $400 envelope: the category vanishes
+  # from `Category.in_fill_order` and from every holder population, its show page headlines "This
+  # category doesn't hold money yet", the reallocation picker offers no radio for it — so there is no
+  # screen in the app that can move the $400 back out, and no screen that admits it is there.
+  #
+  # REFUSED RATHER THAN SWEPT, on `#funding_start_is_not_in_the_future`'s reasoning: quietly moving
+  # $400 to available is a write the user did not ask for, and a message naming the move they DO have
+  # to make is the honest answer. `/allocations/new` is that move.
+  #
+  # THE FIGURE IS THE PERSISTED HOLDING, not the one the submitted attributes imply, and the SQL is
+  # what makes that free: `HoldingCalculator#expense_entries_total` reaches entries through
+  # `Entry.draining` — `CategoryLedger::ENTRY_CATEGORY_ID` against `categories.funded_since` IN THE
+  # DATABASE — so the balance read here is the category's holdings as they stand a moment before the
+  # UPDATE, which is exactly the money that would be stranded. No `_was` arithmetic of this
+  # validator's own, and so no second reader of the start-date rule.
+  #
+  # ** THE COST, JUSTIFIED AT THE SITE. ** This is the only validator in the class that touches the
+  # database, and it is three aggregate queries (the draining expenses, the allocations in, the
+  # allocations out). They run on ONE transition and no other: `funded_since` present in the database
+  # and blank in the submitted record. Every ordinary save — a rename, a colour, a target, SETTING a
+  # funding start, saving a category that never had one — fails the guard on its first clause and
+  # costs nothing. A cheaper column test cannot answer this question: allocations and entries both
+  # move the holding, so "has allocations" would refuse a category whose money has been fully spent
+  # and let through one whose spending predates its funding date.
+  def money_may_not_be_stranded
+    return unless funded_since.blank? && funded_since_in_database.present?
+
+    held = holding_calculator.balance
+    return if held.zero?
+
+    errors.add(
+      :funded_since,
+      "can't be cleared while this category still holds " \
+      "#{ActiveSupport::NumberHelper.number_to_currency(held)} — move the money out first"
+    )
+  end
+
+  # The value the UPDATE is about to overwrite, and `_in_database` rather than `_was` deliberately:
+  # `_was` reads the value at the start of the current CHANGE, which on a record assigned twice
+  # before a save is not necessarily what the row holds. The queries above read the row, so the guard
+  # that decides whether to run them has to read the row too.
+  def funded_since_in_database = attribute_in_database(:funded_since)
 
   def only_expenses_hold_money
     return if expense?

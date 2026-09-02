@@ -129,13 +129,35 @@
         the Budget page — which is what the pointer below offers. %>
     <h2 class="text-xl font-semibold mb-4">Available</h2>
 
-    <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
-      This category doesn't hold money yet.
-    </p>
-    <p class="text-sm text-gray-500 mb-4">
-      Its spending comes out of what's available. Nothing reserves money for this category, so
-      nothing here can run out — and nothing tells you when it has cost more than you meant it to.
-    </p>
+    <%# ** THE HONEST ARM FOR A NON-HOLDER THAT STILL HAS MONEY IN IT (final fix wave, I-1, belt). **
+        `CategoryBudgetPresenter#stranded?` carries the whole argument: no live path can produce this
+        state once the stamp and the clearing refusal are in, and a planted or pre-wave row still
+        must not be told $400 of its own money is not there. The figure is printed under the SAME
+        `data-figure="balance"` hook the holding arm uses, because it is the same question with the
+        same answer — what this category holds — and a second hook would let a screen-level assertion
+        pass over a card that shows nothing. %>
+    <% if presenter.stranded? %>
+      <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+        This category still holds <%= number_to_currency(presenter.balance) %>, but it isn't set up to
+        hold money.
+      </p>
+      <p class="text-sm text-gray-500 mb-4">
+        Money was moved in and then its holding date was removed, so its spending comes out of what's
+        available while this sits here doing nothing. Move it back to available, or set a holding
+        date to start counting this category's spending against it.
+      </p>
+      <p class="text-sm text-gray-900 font-medium mb-4" data-figure="balance">
+        <%= number_to_currency(presenter.balance) %>
+      </p>
+    <% else %>
+      <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+        This category doesn't hold money yet.
+      </p>
+      <p class="text-sm text-gray-500 mb-4">
+        Its spending comes out of what's available. Nothing reserves money for this category, so
+        nothing here can run out — and nothing tells you when it has cost more than you meant it to.
+      </p>
+    <% end %>
 
     <%# THE POINTER WHERE THERE IS ONE, AND THE STANDING OFFER WHERE THERE IS NOT — one route to
         /budget either way, never both. This arm IS the rate detector's population, so it is

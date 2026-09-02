@@ -35,34 +35,59 @@
     </span>
   </div>
 
-  <%# THE TWO DOORS AN ACCOUNT STILL HAS. Deliberately quiet — this screen is about money, and a
-      rename is housekeeping — but present, because deleting them with the Pools screens would
-      have left a user no way to correct a typo in a bank name. %>
-  <div class="px-6 py-2 border-b border-gray-200 flex justify-end gap-3">
+  <%# THE TWO DOORS AN ACCOUNT STILL HAS — and MAIN has only one of them. Deliberately quiet — this
+      screen is about money, and a rename is housekeeping — but present, because deleting them with
+      the Pools screens would have left a user no way to correct a typo in a bank name. %>
+  <div class="px-6 py-2 border-b border-gray-200 flex justify-end items-baseline gap-3">
+    <%# ** MAIN HAS NO DELETE BUTTON (final fix wave, C-1). ** `Pool#main_account_is_not_deletable`
+        is the refusal and this is the affordance agreeing with it: main is on one side of every
+        AccountMovement the app writes, so destroying it would take the whole physical ledger with
+        it — the model halts, and a button that always ends in a red flash is worse than no button.
+
+        THE LABEL RATHER THAN A DISABLED BUTTON, because the absence is a fact about the account
+        rather than a state it might leave: main is main until the user changes it, and changing it
+        is a future affordance this app does not have yet. The screen says which account this is,
+        which is also the only place Home names the role at all. %>
+    <% if presenter.main?(account) %>
+      <span class="text-xs font-medium text-gray-500" data-account-main="<%= account.name %>">
+        Main account — everything flows through it
+      </span>
+    <% end %>
+
     <%= link_to "Rename",
                 edit_bank_account_path(account),
                 class: "text-xs font-medium text-brand hover:text-brand-dark",
                 data: { account_edit: account.name } %>
-    <%# ** THE CONFIRM SAYS WHAT DELETING AN ACCOUNT ACTUALLY DOES (fix round 1, MED-1; narrowed by
-        Task 8). ** Its first draft carried the ENVELOPE sentence off the deleted `PoolsHelper
-        #pool_delete_confirmation` — "its movements and any categories pointing at it move to your
-        main account" — and every clause of it was false of an account.
 
-        ONE FACT NOW, WHERE THERE WERE TWO, because the second stopped being true when the pool
-        layer went: no category points at an account any more (`categories.pool_id` is dropped), so
-        the "the delete is refused instead" clause described a refusal nothing can raise. What is
-        left is the whole of what happens: `dependent: :destroy` on `movements_in`/`movements_out`
-        deletes the account's transfers, so the money main had moved into it goes back to the pot
-        and every balance on this page changes. %>
-    <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
-                 "so the money they moved goes back to your main account and your balances will " \
-                 "change. This action cannot be undone." %>
-    <%= button_to "Delete",
-                  bank_account_path(account),
-                  method: :delete,
-                  class: "text-xs font-medium text-status-danger hover:opacity-80",
-                  form: { data: { turbo_confirm: confirm } },
-                  data: { account_delete: account.name } %>
+    <% unless presenter.main?(account) %>
+      <%# ** THE CONFIRM SAYS WHAT DELETING AN ACCOUNT ACTUALLY DOES (fix round 1, MED-1; narrowed by
+          Task 8; re-verified in the final fix wave). ** Its first draft carried the ENVELOPE sentence
+          off the deleted `PoolsHelper#pool_delete_confirmation` — "its movements and any categories
+          pointing at it move to your main account" — and every clause of it was false of an account.
+
+          ONE FACT NOW, WHERE THERE WERE TWO, because the second stopped being true when the pool
+          layer went: no category points at an account any more (`categories.pool_id` is dropped), so
+          the "the delete is refused instead" clause described a refusal nothing can raise. What is
+          left is the whole of what happens: `dependent: :destroy` on `movements_in`/`movements_out`
+          deletes the account's transfers.
+
+          "GOES BACK TO YOUR MAIN ACCOUNT" IS TRUE, CHECKED AGAINST THE WRITERS RATHER THAN ASSUMED.
+          Both of them — `Entry#route_income_to!` and `AccountFundingsController#build_movement` —
+          put `user.default_account` on `from_pool`, so main is on the OTHER side of every movement
+          this account has. Deleting them subtracts nothing from main and restores each `moves out`
+          it was carrying: the pot rises by exactly what this account held, and `pot + Σ accounts` is
+          unchanged to the penny. The sentence is only ever rendered here, on a NON-main account,
+          which is precisely the population it is true of. %>
+      <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
+                   "so the money they moved goes back to your main account and your balances will " \
+                   "change. This action cannot be undone." %>
+      <%= button_to "Delete",
+                    bank_account_path(account),
+                    method: :delete,
+                    class: "text-xs font-medium text-status-danger hover:opacity-80",
+                    form: { data: { turbo_confirm: confirm } },
+                    data: { account_delete: account.name } %>
+    <% end %>
   </div>
 
   <%# ONBOARDING STEP 2 (main-account spec §5): `HomePresenter#awaiting_funding?` is the ONE gate,

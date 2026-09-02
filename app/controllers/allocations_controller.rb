@@ -27,10 +27,9 @@ class AllocationsController < ApplicationController
 
   # POST /allocations
   #
-  # THE MOVE. One row, so one `save` IS the whole transaction: there is no second write for a failure
-  # to leave half-done, and wrapping a single INSERT in an explicit transaction would be ceremony
-  # rather than a guard. A refusal writes nothing and says why, because the validations that refuse it
-  # run before the INSERT.
+  # THE MOVE. TWO WRITES AND ONE ACT since the final fix wave (I-1) — the row, and the `funded_since`
+  # stamp on a destination that was not holding money yet — which is `BudgetProposal`'s shape for
+  # `BudgetProposal`'s reason. See #commit.
   #
   # `context: :reallocation` CARRIES ONE VALIDATOR NOW, WHERE THE POOL ERA'S CARRIED TWO. The
   # same-account rule died with the concept — nothing crosses anything on the purpose ledger — and
@@ -43,12 +42,68 @@ class AllocationsController < ApplicationController
     return refuse(missing_side_errors) if missing_side_errors.any?
 
     allocation = @presenter.allocation
-    return redirect_to(root_path, notice: confirmation_for(allocation)) if allocation.save(context: :reallocation)
+    return redirect_to(root_path, notice: confirmation_for(allocation)) if commit(allocation)
 
     refuse(allocation.errors.full_messages)
   end
 
   private
+
+  # ** ALLOCATING INTO A CATEGORY STARTS IT HOLDING (§4, final fix wave I-1). ** The spec's own
+  # sentence is "the date it first got a rule OR AN ALLOCATION", and only the rule half was ever
+  # written. The screen cannot reach the other half — the destination select is built from holders —
+  # but `#party_from` resolves against `current_user.categories`, not against holders, so a crafted
+  # POST (or a stale tab, or the next screen that widens the picker) wrote money INTO a category with
+  # a NULL `funded_since`: money in a category that every reader in the app calls empty, with no
+  # screen offering to move it back out. Stamped rather than refused, because the spec says an
+  # allocation is one of the two things that make a category start holding — refusing it would be a
+  # different rule from the one §4 states.
+  #
+  # THE DESTINATION ONLY. A move OUT of a category does not make it start holding — §4's "got" is
+  # arriving money — and a non-holder cannot be a source anyway: `Allocation#source_must_hold_it`
+  # refuses one that does not hold the amount, and the pair of guards in this wave is what keeps a
+  # non-holder's balance at zero.
+  #
+  # ONE TRANSACTION OVER THE TWO, and `requires_new: true` for `BudgetProposal#save`'s own reason: a
+  # nested `transaction` opens no savepoint by default, so `Rollback` would be swallowed and the
+  # outer transaction would commit the half it did write. The dangerous half-state here is the
+  # MIRROR of that class's — a row of money in a category whose clock never started — and it is the
+  # very state this method exists to prevent, so it must not be reachable through a failed stamp
+  # either.
+  #
+  # THE ROW IS WRITTEN FIRST so a refused move never touches the category: `save(context:
+  # :reallocation)` is where affordability and ownership are decided, and a stamp landing ahead of it
+  # would be a visible change (the category enters the fill order) on a request that moved nothing.
+  def commit(allocation)
+    written = false
+
+    ActiveRecord::Base.transaction(requires_new: true) do
+      written = allocation.save(context: :reallocation) && start_holding(allocation).present?
+      raise ActiveRecord::Rollback unless written
+    end
+
+    written
+  end
+
+  # `Category#start_holding` — the app's ONE spelling of the stamp, shared with `BudgetProposal`. The
+  # root has no clock to start, which is what the first arm is: `to_category` is NULL for a move back
+  # to AVAILABLE (§2), and AVAILABLE holds money for no rule and has no `funded_since` of its own.
+  #
+  # ANSWERS THE RECORD IT WROTE RATHER THAN A BOOLEAN, on `BudgetProposal#write_all`'s rule: a caller
+  # reading `&&` must not be able to mistake "there was nothing to do" for "it worked". The
+  # root's arm hands back the allocation, which is the thing that was written on that path.
+  #
+  # The refusal is carried onto the allocation, the record this controller renders errors from, in
+  # `BudgetProposal#carry_errors`' words: the failing attribute belongs to the category, and
+  # `allocation.errors[:funded_since]` would name a field this form does not have.
+  def start_holding(allocation)
+    category = allocation.to_category
+    return allocation if category.nil?
+    return category if category.start_holding
+
+    category.errors.full_messages.each { |message| allocation.errors.add(:base, "Envelope: #{message}") }
+    nil
+  end
 
   # A MISSING SIDE IS NOT THE ROOT, AND THIS IS THE ONLY PLACE THAT DIFFERENCE CAN BE ENFORCED.
   # `ReallocationPresenter` carries `nil` for "the user has not chosen yet" and `ROOT` for AVAILABLE;

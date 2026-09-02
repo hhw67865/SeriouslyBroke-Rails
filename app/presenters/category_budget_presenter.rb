@@ -55,6 +55,25 @@ class CategoryBudgetPresenter
 
   def holding? = state == :holding
 
+  # ** MONEY IN A CATEGORY THAT IS NOT A HOLDER (final fix wave, I-1, belt). ** The unfunded arm's
+  # sentence is "this category doesn't hold money yet", and the one shape that makes it a lie is a
+  # non-holder whose balance is not zero — allocations sitting in a category whose `funded_since` is
+  # NULL. §2's partition still counts that money; every screen that reads `holder?` stops looking at
+  # it.
+  #
+  # UNREACHABLE ONCE THE TWO GUARDS IN THIS WAVE LAND, and rendered anyway. `AllocationsController`
+  # stamps the date on the way in and `Category#money_may_not_be_stranded` refuses to clear it on the
+  # way out, so no live path produces this state — but it is PLANTABLE (an `update_column`, a console,
+  # an import, a row from before this wave), and a page that says $0 over $400 of the user's money is
+  # the worst of the three possible answers. The card tells the truth and names the door out.
+  #
+  # `#balance` READS FOR A NON-HOLDER, which is why this costs nothing extra: `HoldingCalculator
+  # #balance` is allocations in, less allocations out, less the spending `Entry.draining` attributes —
+  # and for a NULL `funded_since` that last term is zero by `CategoryLedger::ENTRY_CATEGORY_ID`'s own
+  # arm. So the figure is exactly the stranded allocations, on the calculator this class already
+  # memoises.
+  def stranded? = !holding? && !balance.zero?
+
   # ---- The holding arm --------------------------------------------------------------------------
 
   # ONE CALCULATOR AND ONE STATUS FOR THE CARD, so the balance, the bar and the words beside them

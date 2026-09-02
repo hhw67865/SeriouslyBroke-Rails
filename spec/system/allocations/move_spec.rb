@@ -219,6 +219,68 @@ RSpec.describe "Allocations Move", type: :system do
     end
   end
 
+  # ** ALLOCATING INTO A CATEGORY STARTS IT HOLDING (§4, final fix wave I-1). ** The spec's own
+  # sentence is "the date it first got a rule OR AN ALLOCATION", and only the rule path
+  # (`BudgetProposal`) ever wrote the date. This screen's destination select is built from HOLDERS, so
+  # the gap was not reachable by clicking — but `AllocationsController#party_from` resolves against
+  # `current_user.categories`, not against holders, so a crafted POST wrote money INTO a category with
+  # a NULL `funded_since`: money every reader in the app calls absent, in a category no picker offers
+  # to move it back out of.
+  #
+  # REACHED THE ONLY WAY IT CAN BE — the real form with the destination option appended and selected,
+  # which is the same door `submit_with_destination` opens for a stranger's category below. What
+  # separates the two is ownership: this one IS the user's, so it is stamped and taken rather than
+  # refused.
+  describe "moving money into a category that is not holding yet", :aggregate_failures do
+    let!(:misc) { create(:category, :expense, user: user, name: "Misc", priority: 8) }
+
+    before do
+      visit new_allocation_path(to_category_id: dentist.id, from_category_id: car.id, amount: 300)
+      submit_with_destination(misc)
+      await("Moved $300.00")
+    end
+
+    it "stamps the funding start and reports the money as held" do
+      expect(page).to have_content("Moved $300.00 from Car to Misc. Car $700.00 · Misc $300.00")
+      expect(misc.reload.funded_since).to eq(Date.current)
+      expect(misc).to be_holder
+      expect(holding_of("Misc")).to eq(300)
+    end
+
+    # THE MONEY IS REACHABLE AGAIN, which is the whole point of the stamp rather than a second
+    # consequence of it: a holder is in `Category.in_fill_order` and in every population the
+    # reallocation screen builds its radios from, so the $300 has a door back out.
+    it "puts the category in the fill order and on the screen that moves money out", :aggregate_failures do
+      expect(user.categories.in_fill_order).to include(misc)
+
+      visit new_allocation_path(to_category_id: dentist.id)
+      expect(page).to have_css("#from-#{misc.id}")
+    end
+
+    # §2 IS UNMOVED. A hand move cannot change the partition, and stamping a date does not either —
+    # it changes which side of it the money is counted on, and there was no spending here to move.
+    it "leaves the partition exactly where it was" do
+      expect(page).to have_css("h1", text: "Home")
+      expect(purpose_total).to eq(3_000)
+    end
+  end
+
+  # THE OTHER DIRECTION: a destination that is ALREADY holding keeps its own start date. Re-stamping
+  # to today would push the date forward and hand the category's own recent spending back to
+  # available, which is the failure `Category#start_holding`'s no-op arm exists to prevent — and this
+  # is the ordinary path, taken by every move the screen itself offers.
+  describe "moving money into a category that is already holding", :aggregate_failures do
+    it "leaves the funding start exactly where it was" do
+      started_on = dentist.funded_since
+      visit new_allocation_path(to_category_id: dentist.id, from_category_id: car.id, amount: 300)
+      click_on "Move the money"
+
+      expect(page).to have_content("Moved $300.00 from Car to Dentist")
+      expect(started_on).to be < Date.current
+      expect(dentist.reload.funded_since).to eq(started_on)
+    end
+  end
+
   # A stranger's category can be neither end. Both ends, both verbs, and each paired with the request
   # that does work.
   describe "another user's categories", :aggregate_failures do

@@ -291,6 +291,61 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     end
   end
 
+  # ** MONEY IN A CATEGORY THAT IS NOT A HOLDER (final fix wave, I-1, belt). ** The unfunded arm's
+  # headline is "this category doesn't hold money yet", and the one shape that makes it a lie is a
+  # non-holder with a non-zero balance — $400 of the user's own money, printed as nothing.
+  #
+  # ** PLANTED PAST THE MODEL, AND THAT IS THE POINT. ** Both live doors into this state are shut in
+  # this same wave — `AllocationsController` stamps `funded_since` on the way in, and
+  # `Category#money_may_not_be_stranded` refuses to clear it on the way out — so `update_column` is
+  # the ONLY way to build the fixture, and it stands for the shapes the app cannot refuse: a console
+  # session, an import, an `update_all`, a row written before this wave. A page that says $0 over
+  # $400 is the worst of the three answers available, so it is asserted rather than assumed
+  # unreachable.
+  describe "a category that is not holding but still has money in it", :aggregate_failures do
+    let!(:orphaned) { holder("Orphaned") }
+
+    before do
+      allocate(orphaned, 400)
+      # rubocop:disable Rails/SkipsModelValidations -- THE VALIDATION IS WHAT THIS PLANTS AROUND.
+      # `#money_may_not_be_stranded` refuses exactly this write; the card under test is what renders
+      # for a row that reached the state some other way.
+      orphaned.update_column(:funded_since, nil)
+      # rubocop:enable Rails/SkipsModelValidations
+      visit category_path(orphaned)
+    end
+
+    it "names the money and says the category is not set up to hold it" do
+      expect(card["data-holdings-state"]).to eq("unfunded")
+      within(card) do
+        expect(page).to have_content("This category still holds $400.00, but it isn't set up to hold money.")
+        expect(page).to have_content("Move it back to available, or set a holding date")
+      end
+    end
+
+    # THE FIGURE IS ON THE SAME HOOK THE HOLDING ARM USES, because it is the same question with the
+    # same answer — what this category holds — and a second hook would let a screen-level assertion
+    # pass over a card showing nothing.
+    it "prints the balance under the card's own figure hook" do
+      expect(card.find("[data-figure='balance']")).to have_content("$400.00")
+    end
+
+    # THE OTHER DIRECTION, ON THE SAME ARM: an unfunded category that really holds nothing keeps the
+    # honest "doesn't hold money yet" sentence and no figure at all. Asserted here rather than only
+    # in the block above so the two arms are compared on one fixture shape.
+    it "keeps the plain sentence when the category truly holds nothing" do
+      streaming = create(:category, :expense, user: user, name: "Streaming")
+
+      visit category_path(streaming)
+
+      within(card) do
+        expect(page).to have_content("This category doesn't hold money yet.")
+        expect(page).to have_no_content("isn't set up to hold money")
+      end
+      expect(card).to have_no_css("[data-figure='balance']")
+    end
+  end
+
   # AN INCOME CATEGORY HOLDS NOTHING BY THE MODEL'S OWN RULE (`Category#holder?` is `expense? &&
   # …`), so there is no card at all rather than an "Available" arm that would be true and useless.
   describe "an income category", :aggregate_failures do

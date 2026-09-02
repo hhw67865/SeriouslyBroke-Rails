@@ -112,7 +112,14 @@ type,
             it drains THIS category, spending before it drains available. So changing this field
             re-reads spending that is already recorded, in both directions — and clearing it on a
             category that carries a rule drops that category out of `Category.in_fill_order`
-            entirely, which the Budget page shows as its "Not in the fill order" band. %>
+            entirely, which the Budget page shows as its "Not in the fill order" band.
+
+            THE HINT NAMES THE ONE CASE THE FORM WILL REFUSE (final fix wave, I-1).
+            `Category#money_may_not_be_stranded` rejects a cleared date on a category whose holdings
+            are not zero, because the money would stay in a category every reader of the app has
+            stopped looking at. A constraint a user meets as a 422 they were never warned about is a
+            constraint the form is hiding, so the sentence says it before the click and says what to
+            do instead — which is the reallocation screen, the same door the error message names. %>
         <div class="mt-5">
           <%= f.input :funded_since,
               as: :date,
@@ -121,7 +128,8 @@ type,
               hint: "The day this category started holding its own money. Spending before it " \
                     "reads against what's available instead — so changing this date moves " \
                     "history. Clear it and the category stops holding money and leaves the " \
-                    "fill order." %>
+                    "fill order — which you can only do once it holds nothing, so move any " \
+                    "money out first." %>
         </div>
       </div>
     </div>

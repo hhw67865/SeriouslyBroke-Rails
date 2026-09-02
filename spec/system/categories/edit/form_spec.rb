@@ -215,6 +215,55 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
   end
 
+  # ** CLEARING THE FUNDING START IS REFUSED WHILE THE CATEGORY HOLDS MONEY (final fix wave, I-1). **
+  # The form is where the stranding was reachable: clear the date on a category carrying allocations
+  # and the money stays exactly where it is while every reader stops looking at it — out of
+  # `Category.in_fill_order`, out of every holder population, and out of the reallocation picker, so
+  # there is no screen left that can move it back out. `Category#money_may_not_be_stranded` refuses
+  # it, and this is that refusal arriving at the screen the user is on.
+  #
+  # THE BLOCK ABOVE IS THE OTHER DIRECTION AND STAYS UNCHANGED: Groceries there holds nothing, and it
+  # clears freely. The guard is about money, not about rules.
+  describe "clearing the funding start on a category holding money", :aggregate_failures do
+    let!(:groceries) do
+      create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
+    end
+
+    before { create(:allocation, to_category: groceries, amount: 400, date: Date.current) }
+
+    it "refuses, says the figure, and writes nothing" do
+      visit edit_category_path(groceries)
+      fill_in "Holding since", with: ""
+      click_button "Update Category"
+
+      expect(page).to have_content("can't be cleared while this category still holds $400.00")
+      expect(page).to have_no_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).not_to be_nil
+    end
+
+    # THE DOOR THE MESSAGE NAMES, WALKED. Moving the $400 back to available is what the reallocation
+    # screen writes, and the clear must then go through — a refusal a user cannot resolve would be a
+    # lock rather than a guard.
+    it "goes through once the money has been moved back to available" do
+      create(:allocation, from_category: groceries, to_category: nil, amount: 400, date: Date.current)
+
+      visit edit_category_path(groceries)
+      fill_in "Holding since", with: ""
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).to be_nil
+    end
+
+    # THE HINT SAYS IT BEFORE THE CLICK. A constraint a user only meets as a 422 is a constraint the
+    # form is hiding.
+    it "warns in the field's own hint that the money has to move first" do
+      visit edit_category_path(groceries)
+
+      expect(page).to have_content("which you can only do once it holds nothing, so move any money out first")
+    end
+  end
+
   describe "navigation", :aggregate_failures do
     before { visit edit_category_path(category) }
 

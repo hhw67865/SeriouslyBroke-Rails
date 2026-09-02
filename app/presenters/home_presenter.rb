@@ -164,11 +164,16 @@ class HomePresenter
   # zero however many categories the user owns, because a category is not inside it. Deliberately NOT
   # "has no categories" in any spelling — money is the only signal.
   #
-  # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): `users.default_account_id` nullifies
-  # when main is deleted, and the card used to read `main_account.name` unconditionally — a user with
-  # no main account 500'd on Home with no door back in. No main account means no card anywhere, full
-  # stop, not merely "no card on the pool that used to be main": every account is equally un-fundable
-  # with nothing to fund it FROM.
+  # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): the card used to read
+  # `main_account.name` unconditionally, and a user with no main account 500'd on Home with no door
+  # back in. No main account means no card anywhere, full stop, not merely "no card on the pool that
+  # used to be main": every account is equally un-fundable with nothing to fund it FROM.
+  #
+  # THE SHAPE THAT REACHES IT IS NOW THE FIRST DAY, not a deletion (final fix wave, C-1). This note
+  # used to credit `users.default_account_id`'s `on_delete: :nullify` — main being DELETED out from
+  # under the pointer — and `Pool#main_account_is_not_deletable` closed that path: main cannot be
+  # destroyed while it is main. What remains reachable is a user who has not created an account yet,
+  # which is every user on their first visit, so the guard is load-bearing exactly as before.
   def awaiting_funding?(account)
     user.default_account.present? && account != user.default_account && balance_of(account).zero?
   end
@@ -188,6 +193,16 @@ class HomePresenter
   def awaiting_opening_balance?(account)
     user.default_account.present? && account == user.default_account && !opening_balance_recorded?
   end
+
+  # IS THIS THE ACCOUNT EVERYTHING FLOWS THROUGH (final fix wave, C-1)? The view's gate on the Delete
+  # button, and it is `Pool#main?` rather than a comparison of this screen's own: the model REFUSES
+  # the destroy on exactly that predicate, so a screen asking a differently-spelled question could
+  # offer a button the server then rejects — or, worse, hide one it would have accepted.
+  #
+  # FREE ON THIS SCREEN: `#accounts` loads through `user.pools`, so each row's `belongs_to :user` is
+  # the presenter's own already-loaded user through the automatic inverse, and `default_account_id` is
+  # a column on it. No query per card.
+  def main?(account) = account.main?
 
   # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is the
   # account it was refused for — so its typed amount and its errors survive the re-render, the same

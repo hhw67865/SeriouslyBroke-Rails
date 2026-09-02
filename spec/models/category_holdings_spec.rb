@@ -186,6 +186,102 @@ RSpec.describe "Category, as a holder of money", type: :model do
     end
   end
 
+  # ** THE STAMP THAT STARTS THE CLOCK, SPELLED ONCE (final fix wave, I-1). ** §4 names TWO events —
+  # "the date it first got a rule OR AN ALLOCATION" — and only the rule half was ever written.
+  # `BudgetProposal` and `AllocationsController` both come here now, so the rule cannot drift into two
+  # answers about when a category starts holding.
+  describe "#start_holding" do
+    let(:misc) { create(:category, :expense, user: user, name: "Misc") }
+
+    it "stamps today on a category that was not holding money yet", :aggregate_failures do
+      expect(misc.start_holding).to be(true)
+      expect(misc.reload.funded_since).to eq(Date.current)
+      expect(misc).to be_holder
+    end
+
+    # THE OTHER DIRECTION, AND IT IS THE ONE WITH TEETH: re-stamping a category that is already
+    # holding would push its start date FORWARD and hand its own recent spending back to available.
+    # The second rule in a category, and every allocation after the first, take this arm.
+    it "leaves a category that is already holding exactly where it is", :aggregate_failures do
+      food = create(:category, :expense, user: user, name: "Food", funded_since: Date.current - 90.days)
+
+      expect(food.start_holding).to be(true)
+      expect(food.reload.funded_since).to eq(Date.current - 90.days)
+    end
+
+    # A caller may name the day; `Date.current` is only the default. The refusal below is the future
+    # validator's, reached through this writer — which is what keeps the stamp from being a way past
+    # the model.
+    it "refuses a day the category may not start on, and says so on the record", :aggregate_failures do
+      expect(misc.start_holding(today: Date.current + 1.day)).to be(false)
+      expect(misc.errors[:funded_since].to_sentence).to include("can't be in the future")
+      expect(misc.reload.funded_since).to be_nil
+    end
+  end
+
+  # ** MONEY MAY NOT BE LEFT IN A CATEGORY THAT NO LONGER HOLDS (final fix wave, I-1). ** The
+  # form-reachable half of the stranding pair: `funded_since` is user-editable, and clearing it on a
+  # category carrying allocations left the money exactly where it was while every reader stopped
+  # looking — absent from `Category.in_fill_order` and from every holder population, its show page
+  # headlining "doesn't hold money yet" over the balance, and no picker offering to move it back out.
+  #
+  # BOTH DIRECTIONS, and the second is the one that keeps the guard from being a lock: a category
+  # that holds nothing clears freely, which is the ordinary "I set this up by mistake" flow the form's
+  # hint has always promised.
+  describe "clearing the funding start" do
+    let(:groceries) do
+      create(:category, :expense, user: user, name: "Groceries", funded_since: Date.current - 10.days)
+    end
+
+    it "is refused while the category still holds money, and names the figure", :aggregate_failures do
+      create(:allocation, to_category: groceries, amount: 400, date: Date.current)
+
+      groceries.funded_since = nil
+
+      expect(groceries).not_to be_valid
+      expect(groceries.errors[:funded_since].to_sentence)
+        .to eq("can't be cleared while this category still holds $400.00 — move the money out first")
+      expect(groceries.reload.funded_since).to eq(Date.current - 10.days)
+    end
+
+    it "is allowed on a category that holds nothing", :aggregate_failures do
+      expect(groceries.update(funded_since: nil)).to be(true)
+      expect(groceries.reload.funded_since).to be_nil
+    end
+
+    # SPENDING IS PART OF THE FIGURE, which is why the guard reads the LEDGER rather than asking
+    # whether any allocations exist: $400 in and $400 out is a category holding nothing, and refusing
+    # that clear would be a lock on a category with no money in it. The entry is dated after the
+    # funding start, so `CategoryLedger::ENTRY_CATEGORY_ID` attributes it here.
+    it "is allowed once the money that came in has been spent", :aggregate_failures do
+      create(:allocation, to_category: groceries, amount: 400, date: Date.current)
+      item = create(:item, category: groceries, name: "Weekly shop")
+      create(:entry, item: item, amount: 400, date: Date.current - 1.day)
+
+      expect(groceries.update(funded_since: nil)).to be(true)
+      expect(groceries.reload.funded_since).to be_nil
+    end
+
+    # A MOVE BACK OUT IS THE DOOR THE MESSAGE NAMES, so it has to actually open the lock. The
+    # withdrawal is the `category → available` row `/allocations/new` writes.
+    it "is allowed once the money has been moved back to available", :aggregate_failures do
+      create(:allocation, to_category: groceries, amount: 400, date: Date.current)
+      create(:allocation, from_category: groceries, to_category: nil, amount: 400, date: Date.current)
+
+      expect(groceries.update(funded_since: nil)).to be(true)
+      expect(groceries.reload.funded_since).to be_nil
+    end
+
+    # THE GUARD IS ABOUT CLEARING, NOT ABOUT HOLDING MONEY. A funded category with a balance must
+    # still be editable in every other respect, or the guard would have made a holder read-only.
+    it "leaves every other edit on a category that holds money alone", :aggregate_failures do
+      create(:allocation, to_category: groceries, amount: 400, date: Date.current)
+
+      expect(groceries.update(name: "Food & Grocery", funded_since: Date.current - 20.days)).to be(true)
+      expect(groceries.reload.funded_since).to eq(Date.current - 20.days)
+    end
+  end
+
   describe "what dies with the category" do
     let(:food) { create(:category, :expense, :funded, user: user, name: "Food") }
 

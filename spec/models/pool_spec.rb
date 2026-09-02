@@ -77,6 +77,81 @@ RSpec.describe Pool, type: :model do
     end
   end
 
+  # ** THE MAIN ACCOUNT IS NOT DELETABLE WHILE IT IS MAIN (final fix wave, C-1). ** The regression
+  # this replaces was reachable from Home's own Delete button: main is on one side of EVERY
+  # AccountMovement the app writes, so `dependent: :destroy` took the whole physical ledger with it
+  # and `pot + Σ accounts` went to 0 while the purpose ledger stood — two-ledger §2 broken by a
+  # button. Both directions in every block: main refuses, a non-main account still deletes.
+  describe "deleting" do
+    let(:user) { create(:user) }
+    let!(:main) { create(:pool, :account, user: user, name: "Checking") }
+    let(:ally) { create(:pool, :account, user: user, name: "Ally") }
+
+    it "refuses to destroy the main account, and says why", :aggregate_failures do
+      expect(main.destroy).to be(false)
+      expect(main.errors[:base]).to include("This is your main account — everything flows through it")
+      expect(described_class.exists?(main.id)).to be(true)
+    end
+
+    it "destroys an account that is not main", :aggregate_failures do
+      expect(ally.destroy).to be_truthy
+      expect(described_class.exists?(ally.id)).to be(false)
+    end
+
+    # THE INVARIANT IS WHAT THE REFUSAL IS FOR, so it is asserted rather than alluded to: the movement
+    # is main → Ally, which is the only shape either writer produces, and a successful destroy of main
+    # would delete it and leave the pot with nothing to read entries against.
+    it "leaves every movement and every balance standing when main is refused", :aggregate_failures do
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      create(:account_movement, from_pool: main, to_pool: ally, amount: 750, date: Time.zone.now)
+
+      main.destroy
+
+      expect(AccountMovement.count).to eq(1)
+      expect(user.reload.default_account).to eq(main)
+      expect([main.reload.balance, ally.reload.balance]).to eq([2_250, 750])
+    end
+
+    # THE ONE ESCAPE. `User has_many :pools, dependent: :destroy` reaches main like any other pool, and
+    # a refusal there would make the user undeletable — `destroyed_by_association` is what stands the
+    # callback down. Asserted because the guard is invisible until it is missing.
+    it "goes with the user, whose deletion is the one thing that may take it", :aggregate_failures do
+      ally
+
+      expect(user.destroy).to be_truthy
+      expect(described_class.where(id: [main.id, ally.id])).not_to exist
+    end
+
+    # PAST THE MODEL IS PAST THE REFUSAL, and that is a statement rather than a gap: this is a Ruby
+    # callback, not a constraint, so `delete` writes the DELETE straight out. Recorded so the next
+    # reader does not mistake the callback for a database-level guarantee — the pointer's own
+    # `on_delete: :nullify` is what the schema says, and it says nothing about refusing.
+    it "is a model refusal only, which `delete` walks straight past" do
+      main.delete
+
+      expect(described_class.exists?(main.id)).to be(false)
+    end
+  end
+
+  describe "#main?" do
+    let(:user) { create(:user) }
+    let!(:main) { create(:pool, :account, user: user, name: "Checking") }
+
+    it "is true for the account the user's pointer names, and false for the next one", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+
+      expect(main).to be_main
+      expect(ally).not_to be_main
+    end
+
+    it "is false for every account once the user names none" do
+      user.update!(default_account: nil)
+
+      expect(main.reload).not_to be_main
+    end
+  end
+
   describe ".accounts" do
     it "returns the user's accounts" do
       user = create(:user)

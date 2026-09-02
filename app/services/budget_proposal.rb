@@ -76,13 +76,17 @@ class BudgetProposal
 
   # THE STAMP, AND IT IS A BIGGER ACT THAN THE RULE BESIDE IT: from this date on, every entry in
   # this category drains the category rather than available, which is why the suggestion panel says
-  # so out loud before the user clicks. A NO-OP ON A CATEGORY THAT IS ALREADY HOLDING — the state
-  # the SECOND rule in a category is in — because re-stamping it to today would silently push the
-  # start date forward and hand the category's own recent spending back to available.
+  # so out loud before the user clicks.
+  #
+  # `Category#start_holding` IS THE WRITE (final fix wave, I-1), and the no-op-when-already-holding
+  # arm went with it: §4 names an ALLOCATION as the other event that starts the clock, so
+  # `AllocationsController` needed the same rule, and two copies of "when does a category start
+  # holding" is exactly the drift the one-reader discipline exists to prevent. What is left here is
+  # this class's own contract — answer the RECORD rather than a boolean, so `#write_all`'s `&&` can
+  # never read "nothing to do" as "it worked", and carry the refusal onto the form's record.
   def start_holding
     category = budget.category
-    return category if category.funded_since.present?
-    return category if category.update(funded_since: Date.current)
+    return category if category.start_holding
 
     carry_errors(category, "Category")
     nil
