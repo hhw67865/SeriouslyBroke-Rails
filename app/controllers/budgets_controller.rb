@@ -95,8 +95,10 @@ class BudgetsController < ApplicationController
   private
 
   # `Budget.for_user`, not a bare `Budget` — a scoped lookup, so another user's rule raises
-  # RecordNotFound. It spans both owner lanes until Task 8, which is what keeps a rule written
-  # before the cutover reachable by its own Edit link.
+  # RecordNotFound. ONE LANE since Task 8: the scope is `where(category_id: user.categories
+  # .select(:id))` and `budgets.category_id` is NOT NULL, so a rule's owner is its category and
+  # ownership is that category's owner. The `.or` over `pool_id` it used to carry — the arm that kept
+  # a pre-cutover rule reachable by its own Edit link — died with the column.
   def set_budget
     @budget = Budget.for_user(current_user).find(params[:id])
   end

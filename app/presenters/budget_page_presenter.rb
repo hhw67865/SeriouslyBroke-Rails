@@ -113,12 +113,16 @@ class BudgetPagePresenter
   end
 
   # THE RULES NO GROUP CAN SHOW, each of which is a claim on income that no distribution will
-  # reach. Two shapes today, both TRANSITIONAL and both with a deleter named:
+  # reach. ONE SHAPE, and it is permanent rather than transitional: a rule on a category that is not
+  # holding money yet (`funded_since` NULL). The second shape — a rule written before the cutover,
+  # naming only a pool — is GONE with `budgets.pool_id` (Task 8): `budgets.category_id` is NOT NULL
+  # and `Budget.for_user` is `where(category_id: user.categories.select(:id))`, one lane.
   #
-  #   * a rule on a category that is not holding money yet (`funded_since` NULL). None exist on
-  #     real data — every writer in the app stamps the date through `BudgetProposal` — and Task 7
-  #     makes `funded_since` user-editable, at which point clearing it is two clicks.
-  #   * a rule written before the cutover, naming only a pool. Task 8 drops `budgets.pool_id`.
+  # THE SURVIVING SHAPE IS REACHED FROM THE CATEGORY FORM, which Task 7 made able to clear
+  # `funded_since`, and it is narrower than it was: the final fix wave refuses that clear while the
+  # category still holds money (`Category#money_may_not_be_stranded`), so a rule can land here only
+  # on a category that has been emptied first — which is exactly the "I set this up by mistake"
+  # flow, and exactly the user this band has something to tell.
   #
   # THIS IS THE ORPHAN BAND'S JOB, AND NOT ITS RETURN. The old one listed rules on account-less
   # pools — a setup problem inside a layer being deleted. This lists rules whose OWNER cannot hold
@@ -135,11 +139,12 @@ class BudgetPagePresenter
   end
 
   # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user
-  # has rather than of #category_groups, and the gap between the two is TRANSITIONAL (Task 8 closes
-  # it): `Budget.for_user` still spans both owner lanes, so a rule written before the cutover that
-  # names only a pool is a rule the user has and no group can show. Telling such a user they have
-  # none would be a screen contradicting the rules they can see on their own pool pages;
-  # `budget_page/show` says what is actually true for them instead.
+  # has rather than of #category_groups, and the gap between the two is what #unfilled_rules is
+  # about: a rule on a category that holds nothing is a rule the user HAS and no group can show, so
+  # a screen that answered "no rules" off #category_groups would tell that user they have none while
+  # the band below them lists one. The pool lane that used to be the second half of this gap is gone
+  # (Task 8, `budgets.category_id` NOT NULL); the holder gap is not, and it is why this is asked of
+  # `#rules`.
   def no_rules? = rules.empty?
 
   # §8's structural check, three lines: what the rules claim from a period, what the user says
@@ -279,11 +284,13 @@ class BudgetPagePresenter
     )
   end
 
-  # ONE CLOCK FOR THE WHOLE PAGE, and it is the CATEGORY ARM — the first caller to take it. An
-  # allocation names no account (it moves money between the user's root and their categories, and
-  # the root is one), so there is one distribution per period and one moment it happened at: one
-  # query for the screen, O(1) in groups, and no `account_ids:` to thread. `HomePresenter` is the
-  # last caller of the transitional per-account arm and Task 6 moves it; the arm dies with it.
+  # ONE CLOCK FOR THE WHOLE PAGE, and it is the ONLY ARM `DistributionClock` has. An allocation
+  # names no account (it moves money between the user's root and their categories, and the root is
+  # one), so there is one distribution per period and one moment it happened at: one query for the
+  # screen, O(1) in groups, and no `account_ids:` to thread. The pool era's per-account map and the
+  # `account_ids:` keyword that reached it were deleted in Task 6 with their last caller
+  # (`HomePresenter`), so this is no longer "the first caller to take" a second arm — there is no
+  # second arm.
   #
   # `category.budgets` is in memory already (`#rules` preloads it), so this asks the database
   # nothing per row.

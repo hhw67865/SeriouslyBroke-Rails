@@ -81,9 +81,25 @@ RSpec.describe "db/seeds.rb" do
 
   def earned = user.entries.joins(item: :category).where(categories: { category_type: :income }).sum(:amount)
 
+  # ** THE DAY BOUNDARY IS THE OWNER'S, AND THE TWO `AT TIME ZONE`s ARE WHY (final fix wave, M-5). **
+  # The second arm compared `entries.date` — a naive DATETIME holding a UTC instant — against
+  # `categories.funded_since`, a DATE. `CategoryLedger::ENTRY_CATEGORY_ID` is the app's ONE statement
+  # of that comparison and it re-zones first: the demo user is `America/New_York`, so an entry filed
+  # at 8pm on the funding date is stored `…T00:00Z` the NEXT day and a raw comparison would put it on
+  # the wrong side of the line — this arm would then call the app's answer wrong, or agree with it by
+  # accident. The spelling below is that constant's, with the user's own zone bound rather than read
+  # off a joined `users` row, because this whole reader is already scoped to one user.
+  #
+  # RUNS OVER AN ARM THAT IS EMPTY ON TODAY'S FIXTURE, and is written correctly anyway for the reason
+  # the arm exists at all: a conservation anchor that only happens to be right on one fixture stops
+  # being right the first time the fixture moves, and a timezone-naive one stops being right at 8pm.
   def unheld
     user.entries.joins(item: :category).where(categories: { category_type: :expense })
-      .where("categories.funded_since IS NULL OR entries.date < categories.funded_since").sum(:amount)
+      .where(
+        "categories.funded_since IS NULL OR " \
+        "(entries.date AT TIME ZONE 'UTC' AT TIME ZONE :zone)::date < categories.funded_since",
+        zone: user.timezone.presence || "UTC"
+      ).sum(:amount)
   end
 
   def allocated_out = Allocation.where(from_category_id: nil, to_category_id: user.categories.select(:id)).sum(:amount)

@@ -587,17 +587,19 @@ class SuggestionEngine
   # through `steady_ask`, and a screen that reported drift on only one of the two spellings would
   # be silent on half the rate rules the app can store.
   #
-  # A CATEGORY-OWNED RULE, AND THE FILTER IS BACK FOR THE LENGTH OF THE BRANCH (two-ledger spec §3,
-  # Task 5 — deleted by Task 8 with `budgets.pool_id`). `Budget.for_user` still spans both owner
-  # lanes, so `#budgets` can hand back a rule written before the cutover that names only a pool;
-  # the observed figure below is "what drained this CATEGORY", which such a rule has none of, and
-  # grouping it under a nil key would attribute every pool-only rate rule's silence to one another.
+  # EVERY RULE IS CATEGORY-OWNED, so the `category_id.present?` filter this method carried for the
+  # length of the branch is DELETED (two-ledger spec §3, Task 5; the deletion Task 8 scheduled and
+  # this fix wave landed). `budgets.category_id` is NOT NULL and `Budget.for_user` — which is how
+  # `#budgets` is built — is `where(category_id: user.categories.select(:id))`, so a rule with no
+  # category is not a row this class can be handed. The filter guarded against a rule written before
+  # the cutover that named only a pool, whose observed spend would have grouped under a nil key and
+  # pooled every such rule's silence into one; there is no such row and no such column.
   #
   # A CATEGORY CARRYING MORE THAN ONE RATE RULE IS SKIPPED OUTRIGHT: its spend cannot be attributed
   # between them, and a suggestion that guessed the split would put a figure on a money screen that
   # no entry supports.
   def attributable_rate_rules
-    rate_rules = budgets.select { |budget| budget.category_id.present? && rate_shape?(budget) }
+    rate_rules = budgets.select { |budget| rate_shape?(budget) }
 
     rate_rules.group_by(&:category_id).filter_map { |_category_id, rules| rules.first if rules.one? }
   end
@@ -743,11 +745,14 @@ class SuggestionEngine
         periods_empty: window.size,
         rule_amount: rule.amount.to_d,
         item_name: rule.item.name,
-        # `&.`, AND IT IS TRANSITIONAL RATHER THAN DEFENSIVE (Task 8 deletes the nil): `Budget
-        # .for_user` still spans both owner lanes, so a rule written before the cutover names only a
-        # pool and has no category to be filled from. The row's own partial prints the clause only
-        # where there is one.
-        category_name: rule.category&.name,
+        # A RULE ALWAYS HAS A CATEGORY, so the `&.` this line carried is DELETED (the nil Task 8
+        # scheduled, landed in this fix wave). `budgets.category_id` is NOT NULL and `Budget
+        # .for_user` scopes by it, so there is no rule here whose owner could be missing — the
+        # safe-nav guarded a pre-cutover pool-only rule, and neither the row nor the column exists.
+        # `budget_page/_suggestion_dead_rule` still wraps its ", filling X" clause in an `if` on this
+        # key; that branch is now always taken, and it is left standing because a partial reading a
+        # detail hash defensively costs nothing and is not what this deletion is about.
+        category_name: rule.category.name,
         per_period_cost: per_period,
         guessed: false
       },

@@ -168,9 +168,53 @@ email, `available 225,584.20 + Σ holdings 0.00` == `pot 3,039.33 + Σ accounts 
   category's funding date", which `CategoryLedger::ENTRY_CATEGORY_ID` spells in SQL and
   `Category#counts_spending_on?` mirrors in Ruby, and nothing else may spell. `funded_since.present?`
   asks a different question — "has this category started holding money at all" — and answering it
-  cannot disagree with the comparison. So the three live spellings (`Category#holder?` at
-  `category.rb:267`, `budget_proposal.rb:84`, `suggestion_engine.rb:414`) break no law. They are a
-  CODE-QUALITY point and only that: `#holder?` exists, and two of the three could call it.
+  cannot disagree with the comparison, so no spelling of it breaks the law. **The count is at least
+  six, not three** (final fix wave, M-3 — the Task 5 note listed only the ones that branch may have
+  written). Ruby: `Category#holder?` (`category.rb:267`), `Category#start_holding`
+  (`category.rb:291`), `Category#money_may_not_be_stranded` (`category.rb:498`). SQL:
+  `Category.in_fill_order` (`category.rb:140`), `DashboardPresenter#buffer_funded_expenses` /
+  `#enveloped_expenses` (`dashboard_presenter.rb:183,185`), `Dashboard::OverviewPresenter
+  #savings_categories` (`overview_presenter.rb:108`). `SuggestionEngine#starts_holding?`
+  (`suggestion_engine.rb:417`) is not on the list: it CALLS `#holder?`, which is the shape the rest
+  of them could take. That is the whole of the finding — a CODE-QUALITY point, not a law breach —
+  and the SQL half cannot take it at all, which is why it stays a point rather than a task.
+- **The MAIN account is not deletable while it is main** (final fix wave, C-1). Main is on one side
+  of every `AccountMovement` the app writes (`Entry#route_income_to!` and
+  `AccountFundingsController#build_movement` both put `user.default_account` on `from_pool`), so
+  `dependent: :destroy` over its movements did not take its own transfers — it took every transfer
+  there is, nullified `users.default_account_id`, and left `pot + Σ accounts == 0` against an
+  untouched purpose ledger. §2 broken by a button. `Pool#main_account_is_not_deletable` halts the
+  destroy with a sentence on `:base`, Home renders no Delete on main's card, and the one escape is
+  the USER's own deletion (`destroyed_by_association`), where nothing is stranded because everything
+  goes. Model-level only: `delete` still walks past it, which the spec records.
+- **§4's "or an allocation" is now written, and clearing the date is refused over money** (final fix
+  wave, I-1). §4 defines `funded_since` as "the date it first got a rule OR AN ALLOCATION" and only
+  the rule path (`BudgetProposal`) ever stamped it; `AllocationsController#create` now stamps it too,
+  in one transaction with the allocation, through `Category#start_holding` — the app's one spelling
+  of the stamp, shared by both callers. The other end is `Category#money_may_not_be_stranded`, which
+  refuses a cleared `funded_since` while the category's holdings are non-zero (three aggregate
+  queries, on that one transition and no other) and names the figure and the door. Between them there
+  is no live path into "money in a category no reader looks at"; the category show page renders that
+  state honestly anyway, for rows planted past the model.
+- **There is a THIRD day comparison, and it is blessed** (final fix wave, M-4). `Category
+  #funding_start_is_not_in_the_future` (`category.rb:460-462`) compares `funded_since` against the
+  owner's day through `Category#local_day` — the same re-zoning `ENTRY_CATEGORY_ID` does with its two
+  `AT TIME ZONE`s. It is NOT a second reader of the start-date rule and does not breach the
+  one-reader law: that law governs "does THIS EXPENSE fall on or after the funding date", and this
+  asks "is the funding date itself in the future", a question about one column and no entry. It goes
+  through `#local_day` precisely so the two cannot disagree about where a day begins. Recorded
+  because grepping for `funded_since` beside a date comparison finds it, and the next reader should
+  not have to re-derive that it is legal.
+- **§9's migration idempotence was not delivered, by ruling** (final fix wave, M-6). §9's testing
+  outline promised "cutover-spec discipline — planted legacy shapes, sabotage arms, Σ verified
+  against independent SQL, **idempotence**", and Task 1 ruled the DDL-first migrations NOT
+  re-runnable — their first act is DDL, so a second run meets a schema the first one already changed
+  and there is nothing coherent for it to assert. The audit property idempotence was standing in for
+  is bought a different way instead: each migration's `#verify!` is callable on its own against a
+  live database, which is how the dev receipts on the restored production copy were produced and what
+  the migration specs' sabotage arms use. Everything else on §9's migration line — planted legacy
+  shapes, sabotage arms, Σ against independent SQL — was delivered
+  (`spec/migrations/cutover_spec.rb`, `two_ledger_spec.rb`, `drop_the_pool_layer_spec.rb`).
 - **`app/services/` reads `HoldingCalculator` / `HoldingStatus` / `HoldingProjection`, reached by
   `Category#holding_calculator` and `Category#status`.** Bare `Category#calculator` still belongs
   to `CategoryCalculator` (spending metrics) — the two are different questions and the names say so.

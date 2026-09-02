@@ -34,11 +34,10 @@ module BudgetPageHelper
   # does — and where there is none the rule is named by whatever owns it, because a rule with no
   # item is the category's own rate and the owner IS the subject.
   #
-  # THE CATEGORY FIRST AND THE POOL BEHIND IT, in `Budget#user`'s own order and for its reason: the
-  # category is the owner that survives, and the pool arm is TRANSITIONAL — `Budget.for_user` spans
-  # both lanes until Task 8, and the sacrifice view lists every rule the user owns, so a rule
-  # written before the cutover still has to be able to say its own name. Task 8 deletes the second
-  # arm with the column.
+  # THE ITEM FIRST AND THE CATEGORY BEHIND IT, and there is no third arm. The POOL arm this note
+  # used to describe — kept so a rule written before the cutover could still say its own name — is
+  # GONE with `budgets.pool_id` (Task 8): `budgets.category_id` is NOT NULL, `Budget.for_user` is
+  # one lane, and every rule the sacrifice view lists is owned by a category that has a name.
   #
   # Deliberately NOT `HomeHelper#pool_rule_label`, which falls back to the rule's SHAPE
   # ("Every 6 months"). That fallback is right on Home, where a row prints a pool's rules
