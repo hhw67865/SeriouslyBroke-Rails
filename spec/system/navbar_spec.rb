@@ -14,11 +14,19 @@ RSpec.describe "Navbar", type: :system do
     it "shows all main navigation links" do
       # Check for navigation links anywhere on the page (sidebar or mobile nav)
       expect(page).to have_link("Home")
-      expect(page).to have_link("Categories")
+      expect(page).to have_link("Distribute")
+      expect(page).to have_link("Budget")
       expect(page).to have_link("Entries")
-      expect(page).to have_link("Pools").or have_link("Savings")
-      expect(page).to have_link("Reports")
+      expect(page).to have_link("Categories")
       expect(page).to have_link("Calendar")
+      expect(page).to have_link("Reports")
+      # THE "Pools" ITEM IS GONE (two-ledger spec §5, Task 7), and its ABSENCE is asserted rather
+      # than merely unmentioned. The line it replaces was `have_link("Pools").or
+      # have_link("Savings")` — an `or` that would have gone on passing under either name — and a
+      # deletion nothing pins is a link that comes back on the next edit to `shared/_sidebar`
+      # without a single example objecting. A savings goal is a CATEGORY now, so Categories above
+      # is where that screen went.
+      expect(page).to have_no_link("Pools")
     end
 
     # SPEC §2'S ORDER, END TO END — Home · Distribute · Budget · Entries · Categories · Calendar ·
@@ -29,12 +37,12 @@ RSpec.describe "Navbar", type: :system do
     #
     # A LITERAL LIST, so neither side is derived from the other — the same shape as
     # budget_page/rules_spec's `first(4)`, which asserts Budget's position inside the Main section
-    # and stays green under this. `Pools` is in the list because it is on the screen: §2's table
-    # never named it, and an assertion that skipped it would pass just as happily if a future edit
-    # moved it below Reports.
+    # and stays green under this. `Pools` used to sit between Categories and Calendar and was in
+    # this list because it was on the screen; it is deleted with the layer (Task 8's sweep), and
+    # the list is now exactly §2's own — the Management section carries one link.
     it "puts the sections in spec §2's order, Reports last" do
       expect(page.all("nav a").map { |link| link.text.strip })
-        .to eq(["Home", "Distribute", "Budget", "Entries", "Categories", "Pools", "Calendar", "Reports"])
+        .to eq(["Home", "Distribute", "Budget", "Entries", "Categories", "Calendar", "Reports"])
     end
 
     # THE NEGATIVE HALF OF THE ORDER, and it is not redundant with the list above: the list would
