@@ -4,13 +4,19 @@ This document defines the architecture, patterns, and coding conventions for the
 
 ## Core Domain Models
 
-- **User** → has_many Categories, Pools
-- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` also HOLDS money (a target makes it a savings goal)
+Two ledgers over one total (`docs/superpowers/specs/2026-08-21-two-ledger-design.md`): the
+PHYSICAL ledger says where money sits, the PURPOSE ledger says what it is for, and
+`pot + Σ accounts == income − expenses == available + Σ category holdings` to the cent. The only
+connection between an account and a category is that both are partitions of the same money —
+there is no account→category movement.
+
+- **User** → has_many Categories (purpose ledger) and Pools (physical ledger); `default_account` is the pot
+- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` also HOLDS money (`target_amount` makes it a savings goal, `priority` sets its place in the fill order)
 - **Item** → has_many Entries
-- **Entry** → the actual transaction record
-- **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name)
-- **AccountMovement** → a transfer between two of a user's own accounts
-- **Allocation** → money leaving the purpose ledger's root and taking on a job (a NULL side is "available")
+- **Entry** → the actual transaction record; the one thing that touches BOTH ledgers
+- **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name — the rename is §8 out-of-scope)
+- **AccountMovement** → a transfer between two of a user's own accounts (physical ledger's only writer besides entries; its columns are still named `from_pool_id`/`to_pool_id`)
+- **Allocation** → money leaving the purpose ledger's root and taking on a job, or moving between jobs (purpose ledger's only writer besides entries; a NULL side is "available")
 - **Budget** → a funding rule, owned by the expense Category that holds the money
 
 ## Custom Patterns
@@ -28,12 +34,23 @@ Uses Ruby `Data.define` for immutable value objects. Controllers instantiate pre
 
 ### Calculator Pattern (`app/services/`)
 
-Memoized service objects for computing metrics. Accessed via model method:
+Memoized service objects for computing metrics. Accessed via model method. A Category answers two
+different questions and each has its own calculator — spending metrics, and what it holds:
 
 ```ruby
-category.calculator(date).budget_percentage
-category.calculator(date).top_items
+category.calculator(date).top_items              # CategoryCalculator — spending metrics
+category.holding_calculator(today:).free_amount  # HoldingCalculator — the purpose ledger
+category.status(today:)                          # HoldingStatus — behind / on track / saving / ...
 ```
+
+### Ledger Pattern (`app/services/`)
+
+`CategoryLedger` and `AccountLedger` are the ONE reader of each partition — batched grouped sums
+over the whole set a screen is about, memoized at first read and stale after any write. A screen
+builds one ledger and threads its `terms_for(...)` into every calculator it makes, rather than
+letting N calculators run their own aggregates. `CategoryLedger#available` is the conservation
+figure; `AllocationCalculator#available` is a projection that includes a pending sweep and must
+never be used to check the invariant.
 
 ### Searchable System (Custom DSL)
 

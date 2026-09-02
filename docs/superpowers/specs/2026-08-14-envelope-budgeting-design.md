@@ -1,5 +1,9 @@
 # Envelope Budgeting — Design
 
+**SUPERSEDED IN PART (2026-09-02):** the pool layer this document builds — envelope and goal pools,
+the category↔envelope wiring, `pools.start_date` — is DELETED. Categories hold the money now; read
+`2026-08-21-two-ledger-design.md` (DELIVERED) for the model that replaced it. What survives here is
+the history of the cutover and the rulings the two-ledger model inherited.
 **Date:** 2026-08-14
 **Status:** **DELIVERED.** Plans 1, 2a–2d and 3 are shipped; the cutover (Plan 3, migration
 `20260817000000_cutover_to_envelope_budgeting`) is complete, and the app this document describes

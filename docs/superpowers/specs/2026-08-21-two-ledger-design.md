@@ -1,6 +1,8 @@
 # Categories Hold the Money: the Two-Ledger Model
 
-**Status:** DRAFT — awaiting Henry's review
+**Status:** DELIVERED 2026-09-02 (plan `docs/superpowers/plans/2026-08-21-two-ledger.md`, tasks
+1–9; ledger `.superpowers/sdd/2026-08-21-two-ledger/progress.md`). §10 below records where the
+build differs from this text, the rulings taken during it, and what it leaves open.
 **Date:** 2026-08-21
 **Supersedes the pool structure of:** `2026-08-14-envelope-budgeting-design.md` and the account
 half of `2026-08-18-main-account-design.md` (which survives intact as the physical ledger).
@@ -113,3 +115,72 @@ commit, against pre-migration totals.
   envelope refused with names), Σ verified against independent SQL, idempotence.
 - **Screens**: Budget page drives rules on categories; distribute fills categories by
   priority; Home shows the physical ledger; savings categories show target progress.
+
+## 10. As built (2026-09-02)
+
+Delivered across nine tasks, `0e829ed..` on `feature/envelope-budgeting`. §2's invariant is the
+acceptance test and it holds on the restored production copy: for Ming, by raw SQL scoped to her
+email, `available 225,584.20 + Σ holdings 0.00` == `pot 3,039.33 + Σ accounts 222,544.87` ==
+`income 586,654.80 − expenses 361,070.60` == **225,584.20**, to the cent.
+
+### Where the build differs from this text
+
+- **Accounts lost target semantics entirely.** §6's parked buffer-marker question (inherited from
+  `2026-08-18-main-account-design.md` §7: "how the account header labels its number is a separate
+  open question") is answered **no**: `pools.target_amount` and `pools.start_date` are dropped, the
+  account header says `balance now $X` and nothing else, and a target is now a property only a
+  CATEGORY can carry. There is no account-level buffer marker and no plan for one.
+- **The reallocation screen's route is `/allocations/new`**, not a movements route. §5 said
+  `pool_movements` "becomes `movements` in shape"; in the build the purpose ledger got its own
+  table (`allocations`, paired nullable `from_category_id`/`to_category_id` with NULL = the root)
+  and the physical one kept its own (`account_movements`), so the two ledgers never share a writer
+  — which is what makes "allocating money moves nothing physical" structural rather than checked.
+- **`account_movements` kept the `from_pool_id` / `to_pool_id` column names.** Renaming them is
+  the `pools`→`accounts` table rename in miniature and §8 puts that out of scope; the columns are
+  account-only by constraint (`pools_are_accounts`, `account_movements_are_transfers`). Residue,
+  recorded so the next reader does not mistake it for a surviving category link.
+- **Two-level goal classification** (Task 7 ruling). CHROME — the heading, the target bar, the
+  word "Goal" — keys on `saving_toward_a_target?` (target-positive), so a category with a target
+  reads as a goal everywhere. STATUS stays schedule-aware: a dated goal is `on_track`/`behind`, a
+  dateless one is "saving". "Goal · on track" is a deliberate pairing, not a disagreement between
+  two readers.
+- **Savings never sweep, full stop** (Task 3 ruling, MED-1). A target-positive category never
+  period-closes and never sweeps, whatever mix of rate and anchored rules it carries — the pool
+  era's rule, restated on the column. The cost is deliberate and visible: a user who wants a
+  target-bearing envelope SWEPT must clear its target. Corollary residue: an ordinary envelope
+  given a decorative target takes the goal path and hoards instead of sweeping.
+- **A future `funded_since` is refused by validation** (Task 7 ruling, LOW-1). A future start is
+  scheduling, which nothing in the app supports; accepting one silently created a fund-now,
+  spend-counts-later trap. Set the date on the day. The migration tolerates a future value that
+  already exists — the validation is new on an old column.
+- **`AllocationCalculator#available` is NOT the figure to check §2's invariant with.** It adds
+  `total_swept` — money the categories still HOLD, since nothing moves until the user confirms the
+  distribution — so `#available + Σ holdings` overstates bank truth by exactly the swept amount.
+  The conservation figure is `CategoryLedger#available`. The hazard is warned in the reader itself
+  (`app/services/allocation_calculator.rb`), measured on the demo seeds at $1,900.00 vs $1,775.00.
+- **A rule may only be owned by a category that can hold money** (Task 5 ruling, MED-1). Two
+  guards: `Budget` refuses a rule on an income category outright, and the Budget page's fill-order
+  list is populated with exactly what `Category.apply_fill_order` accepts (holders with rules).
+  A rule on an expense category that is not yet funded renders in the "Not in the fill order"
+  band rather than in an unorderable group.
+- **`app/services/` reads `HoldingCalculator` / `HoldingStatus` / `HoldingProjection`, reached by
+  `Category#holding_calculator` and `Category#status`.** Bare `Category#calculator` still belongs
+  to `CategoryCalculator` (spending metrics) — the two are different questions and the names say so.
+
+### Open — deliberately not done here
+
+- **The `pool_`-named helper residue.** `HomeHelper#pool_status_label` / `#pool_state_label` /
+  `#pool_rule_label` / `#pool_problem_label` and `BudgetPageHelper#pool_balance_clause` all render
+  CATEGORY status now. Renaming them is a mechanical sweep across every screen and its specs for
+  zero behavior, and it belongs with the table rename below rather than smeared across nine tasks.
+- **The `pools` table / `Pool` class → `accounts` / `Account` rename**, and with it
+  `account_movements`' two column names. §8 put it out of scope and it stays there: cosmetic,
+  large, and safer as one pass than as a tail on this one.
+- **The picker-path error lift** on the reallocation form would swallow a `:category` error
+  reachable only by planted or legacy data (Task 5, deferred minor).
+- **Copy questions carried to Henry's browser pass, both UNSEEN on real data** (Task 9): the
+  "You're covered this period" headline paired with a NEGATIVE available (Ming's available is
+  positive, so the pairing never rendered — the law that gates it,
+  `projected_buffer.negative? ⟺ available.negative?`, is stated at `HomePresenter:311`), and the
+  live look of the "Not in the fill order"
+  band (Ming has no ruled non-holder: all five of her rules sit on funded categories).

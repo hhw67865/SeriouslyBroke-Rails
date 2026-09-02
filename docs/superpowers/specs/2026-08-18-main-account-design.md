@@ -1,5 +1,10 @@
 # The Main Account: Source, Mirrors, and the Start-Date Rule
 
+**SUPERSEDED IN PART (2026-09-02):** the physical ledger below — main-as-pot, movement-fed mirror
+accounts, income routing, the onboarding cards — survives intact and is still the reference for it.
+Its envelope half does not: the start-date rule now reads `categories.funded_since`, accounts carry
+no target or start date, and §7's parked buffer-marker question is answered "no". See
+`2026-08-21-two-ledger-design.md` (DELIVERED), §10.
 **Status:** DELIVERED 2026-08-20 (plan `docs/superpowers/plans/2026-08-18-main-account.md`, tasks
 1–7; ledger `.superpowers/sdd/2026-08-18-main-account/progress.md`). §9 below records where the
 build differs from this text and what it left open.
