@@ -144,7 +144,11 @@
           post-sweep. Both figures are right and both are wanted (see HomePresenter#fix_amount_for),
           and on the demo they sit inches apart on one screen. That is the bridge, and it belongs in
           the band's own framing rather than as a seventh clause on every row. %>
-      <div class="flex items-baseline justify-between gap-4 mb-2">
+      <%# STACKS BELOW `sm` (design review H1). At 375px the eyebrow, its sentence and a 38px
+          button could not share a row: the button overflowed the card's right edge and its label
+          clipped. The band's own copy is the thing that must stay whole, so the button drops
+          beneath it and goes full-width there, which is also the easier tap target. %>
+      <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 sm:gap-4 mb-2">
         <div>
           <p id="waterfall-heading" class="text-xs font-semibold tracking-wide text-gray-500">Where your money goes</p>
           <p class="text-xs text-gray-500">
@@ -157,7 +161,7 @@
             shared/_nav_section.html.erb, where the same link says why at length. %>
         <%= link_to "Distribute this period",
                     new_distribution_path,
-                    class: "btn btn-secondary",
+                    class: "btn btn-secondary w-full sm:w-auto shrink-0",
                     data: { turbo_prefetch: false } %>
       </div>
 

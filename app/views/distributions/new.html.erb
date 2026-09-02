@@ -35,7 +35,8 @@
     <%# The all-clear density's ONE button (spec §5). The waterfall carries its own, beside the
         recompute, so this branch is the whole of the collapsed screen's action — without it a
         comfortable period is a screen with nothing to press. %>
-    <div class="flex items-center justify-between gap-4">
+    <%# STACKS BELOW `sm` (design review H6), like the waterfall's own action row. %>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
       <p class="text-xs text-gray-500">Nothing has moved yet.</p>
       <%= render "confirm", presenter: @presenter, standalone: true %>
     </div>

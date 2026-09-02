@@ -14,7 +14,17 @@
     that is no longer the user's `in_fill_order.with_a_rule` set, and `Category.apply_fill_order`
     refuses it whole. The stale press writes nothing and says to reload, which is the same answer
     a stale drag gets — no half-order is reachable from either. %>
-<span class="flex items-center gap-1">
+<%# THE TARGET IS 44px SQUARE AND THE DISABLED STATE IS VISIBLE (design review M4).
+
+    It was `px-1 text-xs` — a control roughly 18×16, which is under half the 44px minimum and sits
+    a few pixels from its twin, on the one screen in this app that asks a user to press the same
+    button repeatedly. The glyph stays small; the BOX grew, which is the whole fix.
+
+    DISABLED WAS `text-gray-200` ON WHITE — 1.2:1, invisible. A disabled control still has to be
+    findable: a user who cannot see the top card's ▲ cannot tell "already first" from "the arrows
+    stopped working". Grey-500 on a grey-100 fill is 4.2:1, and the FILL rather than a paler glyph
+    is what tells it apart from the enabled state, so neither reading depends on colour alone. %>
+<span class="flex items-center gap-1 shrink-0">
   <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
     <%= button_to glyph,
                   budget_page_reorder_path,
@@ -24,8 +34,9 @@
                   form_class: "inline-block leading-none",
                   aria: { label: "Move #{group.category.name} #{direction}" },
                   title: "Move #{group.category.name} #{direction}",
-                  class: "px-1 text-xs rounded border border-gray-200 text-gray-500 " \
+                  class: "inline-flex h-11 w-11 items-center justify-center text-xs rounded " \
+                         "border border-gray-200 text-gray-700 transition-colors " \
                          "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \
-                         "disabled:text-gray-200 disabled:border-gray-100" %>
+                         "disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-200" %>
   <% end %>
 </span>

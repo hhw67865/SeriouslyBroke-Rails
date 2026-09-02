@@ -22,24 +22,24 @@
     `pools/show` carried those two buttons and both screens are deleted. %>
 <% balance = presenter.balance_of(account) %>
 <section class="bg-white border border-gray-200 rounded" data-account-group="<%= account.name %>">
-  <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
-    <%# Not the `uppercase` eyebrow this codebase gives short labels like "Current Balance": an
-        account name is a proper noun the user typed, and rendering "Ally Savings" as ALLY SAVINGS
-        shouts a name back at them. %>
-    <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
-    <%# An overdraft is the loudest thing in the app and this is the row that owns the number, so
-        it says so here too rather than leaving the standing band's sentence as the only place a
-        negative balance is visible. %>
-    <span class="text-sm <%= balance.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
-      balance now <strong><%= number_to_currency(balance) %></strong>
-    </span>
-  </div>
+  <%# ONE HEADER ROW, NOT TWO (design review H9). The name and the balance sat in one strip and
+      Rename/Delete in a second one below it, which on a funded account with nothing else to say
+      rendered as an empty band of white between two borders — a card whose BODY was a pair of
+      links. The two doors are housekeeping, so they belong beside the name, not under the money.
 
-  <%# THE TWO DOORS AN ACCOUNT STILL HAS — and MAIN has only one of them. Deliberately quiet — this
-      screen is about money, and a rename is housekeeping — but present, because deleting them with
-      the Pools screens would have left a user no way to correct a typo in a bank name. %>
-  <div class="px-6 py-2 border-b border-gray-200 flex justify-end items-baseline gap-3">
-    <%# ** MAIN HAS NO DELETE BUTTON (final fix wave, C-1). ** `Pool#main_account_is_not_deletable`
+      IT STACKS BELOW `sm`: on a 375px screen the name, the balance and two controls cannot share a
+      line, and the balance is the figure that must not be the thing that wraps. %>
+  <div class="px-6 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 sm:gap-4">
+    <%# `flex-wrap` AND NO `truncate` (measured at 375px). Truncating the name put "Ev…" beside a
+        full-length "Main account — everything flows through it": the app abbreviated the one word
+        the user typed in order to keep a sentence it wrote itself. The note wraps to its own line
+        below `sm` instead, and the name is never shortened. %>
+    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+      <%# Not the `uppercase` eyebrow this codebase gives short labels like "Current Balance": an
+          account name is a proper noun the user typed, and rendering "Ally Savings" as ALLY SAVINGS
+          shouts a name back at them. %>
+      <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
+      <%# ** MAIN HAS NO DELETE BUTTON (final fix wave, C-1). ** `Pool#main_account_is_not_deletable`
         is the refusal and this is the affordance agreeing with it: main is on one side of every
         AccountMovement the app writes, so destroying it would take the whole physical ledger with
         it — the model halts, and a button that always ends in a red flash is worse than no button.
@@ -48,18 +48,39 @@
         rather than a state it might leave: main is main until the user changes it, and changing it
         is a future affordance this app does not have yet. The screen says which account this is,
         which is also the only place Home names the role at all. %>
-    <% if presenter.main?(account) %>
-      <span class="text-xs font-medium text-gray-500" data-account-main="<%= account.name %>">
-        Main account — everything flows through it
+      <% if presenter.main?(account) %>
+        <span class="text-xs font-medium text-gray-500" data-account-main="<%= account.name %>">
+          Main account — everything flows through it
+        </span>
+      <% end %>
+    </div>
+
+    <div class="flex items-baseline gap-4 shrink-0">
+      <%# An overdraft is the loudest thing in the app and this is the row that owns the number, so
+          it says so here too rather than leaving the standing band's sentence as the only place a
+          negative balance is visible. %>
+      <span class="text-sm <%= balance.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
+        balance now <strong><%= number_to_currency(balance) %></strong>
       </span>
-    <% end %>
 
-    <%= link_to "Rename",
-                edit_bank_account_path(account),
-                class: "text-xs font-medium text-brand hover:text-brand-dark",
-                data: { account_edit: account.name } %>
+      <%# THE TWO DOORS AN ACCOUNT STILL HAS — and MAIN has only one of them. Deliberately quiet —
+          this screen is about money, and a rename is housekeeping — but present, because deleting
+          them with the Pools screens would have left a user no way to correct a typo in a bank name.
 
-    <% unless presenter.main?(account) %>
+          RENAME IS `text-brand`, WHICH IS NOW A READABLE OLIVE (design review H9/B2). It measured
+          1.75:1 against this white card while it painted `--color-primary`; the token now resolves
+          to #63612F, 6.4:1, with the hover one step darker again.
+
+          DELETE IS TERTIARY UNTIL YOU REACH FOR IT. It was permanently red — the loudest colour in
+          the app, spent on the rarest and most destructive act, sitting at the same weight as a
+          rename on every account on the page. Grey at rest, red on hover and on focus, which is
+          where the warning is actually wanted. %>
+      <%= link_to "Rename",
+                  edit_bank_account_path(account),
+                  class: "text-xs font-medium text-brand hover:text-brand-dark",
+                  data: { account_edit: account.name } %>
+
+      <% unless presenter.main?(account) %>
       <%# ** THE CONFIRM SAYS WHAT DELETING AN ACCOUNT ACTUALLY DOES (fix round 1, MED-1; narrowed by
           Task 8; re-verified in the final fix wave). ** Its first draft carried the ENVELOPE sentence
           off the deleted `PoolsHelper#pool_delete_confirmation` — "its movements and any categories
@@ -78,16 +99,18 @@
           it was carrying: the pot rises by exactly what this account held, and `pot + Σ accounts` is
           unchanged to the penny. The sentence is only ever rendered here, on a NON-main account,
           which is precisely the population it is true of. %>
-      <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
-                   "so the money they moved goes back to your main account and your balances will " \
-                   "change. This action cannot be undone." %>
-      <%= button_to "Delete",
-                    bank_account_path(account),
-                    method: :delete,
-                    class: "text-xs font-medium text-status-danger hover:opacity-80",
-                    form: { data: { turbo_confirm: confirm } },
-                    data: { account_delete: account.name } %>
-    <% end %>
+        <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
+                     "so the money they moved goes back to your main account and your balances will " \
+                     "change. This action cannot be undone." %>
+        <%= button_to "Delete",
+                      bank_account_path(account),
+                      method: :delete,
+                      class: "text-xs font-medium text-gray-500 hover:text-status-danger " \
+                             "focus-visible:text-status-danger transition-colors",
+                      form: { class: "inline-block leading-none", data: { turbo_confirm: confirm } },
+                      data: { account_delete: account.name } %>
+      <% end %>
+    </div>
   </div>
 
   <%# ONBOARDING STEP 2 (main-account spec §5): `HomePresenter#awaiting_funding?` is the ONE gate,

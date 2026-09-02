@@ -21,11 +21,19 @@
          draggable="true"
          data-action="dragstart->app--budget-page--reorder#start
                       dragend->app--budget-page--reorder#finish">
-  <div class="px-6 py-3 border-b border-gray-200 flex justify-between items-baseline gap-4">
-    <div class="flex items-baseline gap-3">
+  <%# STACKS BELOW `sm` (design review H5). Four things wanted this row — two 44px arrows, the
+      category's name, its priority and a status clause that runs to "$400.00 left · last period" —
+      and at 375px the status wrapped under the arrows and the name truncated to a syllable. The
+      handle and the name keep the first line; the status takes the second, indented past the
+      arrows so it still reads as belonging to this category.
+
+      `items-center` and not `items-baseline`, because the arrows are now 44px tall (M4) and a
+      baseline-aligned 44px control drags the whole row's text to its bottom edge. %>
+  <div class="px-6 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4">
+    <div class="flex items-center gap-3 min-w-0">
       <%= render "reorder_controls", group: group, groups: groups %>
-      <h3 class="text-sm font-semibold text-gray-900"><%= group.category.name %></h3>
-      <span class="text-xs text-gray-400">priority <%= group.priority %></span>
+      <h3 class="text-sm font-semibold text-gray-900 truncate"><%= group.category.name %></h3>
+      <span class="text-xs text-gray-500 shrink-0">priority <%= group.priority %></span>
     </div>
     <%# BOTH SUFFIXES, and neither is optional here — which is a property of the SHAPE rather
         than of this file remembering to pass them (see `shared/_holding_status`).

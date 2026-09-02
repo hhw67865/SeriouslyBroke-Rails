@@ -16,9 +16,13 @@
          data-controller="app--budget-page--reorder"
          data-action="dragover->app--budget-page--reorder#over
                       drop->app--budget-page--reorder#drop">
-  <div class="flex items-baseline justify-between gap-4 px-1">
+  <%# STACKS BELOW `sm` (design review H5). The eyebrow and its eighteen-word instruction were on
+      one baseline row: at 375px the instruction squeezed into a two-word column beside "FILL
+      ORDER" and ran to five lines. `text-gray-500` rather than `-400`, which measured 2.9:1 on
+      white — a hint nobody could read is not a quieter hint. %>
+  <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fill order</h2>
-    <p class="text-xs text-gray-400">Drag a card, or use the arrows, to set the order your money fills them</p>
+    <p class="text-xs text-gray-500">Drag a card, or use the arrows, to set the order your money fills them</p>
   </div>
 
   <% groups.each do |group| %>

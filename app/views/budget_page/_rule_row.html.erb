@@ -7,12 +7,15 @@
     THE REASON CLAUSE IS GONE WITH THE ORPHANS (two-ledger spec §5). It said why a rule was outside
     the fill order; every rule this page renders is owned by a category, and every category is in
     the waterfall. %>
+<%# STACKS BELOW `sm` (design review H5): the name, "$1,200.00 every 6 months", "· next Mar 1" and
+    an Edit link are four things, and at 375px the figure and its date wrapped into the name's
+    column. %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-rule="<%= budget_rule_name(rule.budget) %>">
-  <div class="flex justify-between items-baseline gap-4">
+  <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
     <span class="font-medium text-gray-900">
       <%= budget_rule_name(rule.budget) %>
     </span>
-    <span class="text-sm text-gray-700 flex items-baseline gap-2">
+    <span class="text-sm text-gray-700 flex items-baseline gap-2 shrink-0">
       <span><%= budget_rule_amount(rule.budget) %></span>
       <% if rule.anchored? %>
         <span class="text-gray-500">· next <%= rule.due_on.strftime("%b %-d") %></span>
