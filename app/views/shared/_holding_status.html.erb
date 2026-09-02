@@ -93,5 +93,5 @@
                             period_closed: row.period_closed?,
                             changed_after_distributing: row.changed_after_distributing?) %>
 <% if row.due_marker? %>        · <%= row.status.due_on.strftime("%b %-d") %>
-<% end %><% if row.balance_clause? %>      <span class="text-gray-400"><%= pool_balance_clause(row.status) %></span>
+<% end %><% if row.balance_clause? %>      <span class="text-gray-500"><%= pool_balance_clause(row.status) %></span>
 <% end %>    </span>

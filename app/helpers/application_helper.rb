@@ -102,8 +102,12 @@ module ApplicationHelper
 
   private
 
+  # `bg-brand-dark`, NOT `bg-brand` (design review B2). This is the class every page's primary
+  # action wears — "New rule", "New Expense Category", "Add an entry" — and white on the brand sage
+  # measured 1.75:1: the label on the app's most prominent control was the least readable text on
+  # the screen. The olive is four steps down the same scale at 6.4:1, with the hover darker again.
   def primary_button_classes
-    "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition"
+    "inline-flex items-center gap-2 px-4 py-2 rounded bg-brand-dark text-white text-sm font-medium hover:bg-brand-darker shadow-sm transition"
   end
 
   def secondary_button_classes

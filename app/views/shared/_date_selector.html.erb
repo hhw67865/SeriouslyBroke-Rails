@@ -64,7 +64,7 @@
   
   # Professional arrow buttons (rectangular, high-contrast)
   button_classes = if variant == "sidebar"
-    "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-brand border border-brand hover:bg-brand hover:text-white shadow-sm transition"
+    "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-brand border border-brand hover:bg-brand-dark hover:text-white shadow-sm transition"
                    else
     "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-gray-800 border border-gray-300 hover:bg-gray-100 shadow-sm transition"
   end
@@ -78,9 +78,9 @@
 
   # Grouped control styling (single widget look)
   group_classes = if variant == "sidebar"
-    "flex w-full items-stretch rounded-md border-2 border-brand bg-white shadow-sm"
+    "flex w-full items-stretch rounded border-2 border-brand bg-white shadow-sm"
                   else
-    "inline-flex items-stretch rounded-md border border-gray-300 bg-white shadow-sm"
+    "inline-flex items-stretch rounded border border-gray-300 bg-white shadow-sm"
   end
 
   # Base button within group
@@ -104,7 +104,7 @@
       <% end %>
       <%= f.hidden_field :month, value: prev_month, id: nil %>
       <%= f.hidden_field :year, value: prev_year, id: nil %>
-      <button type="submit" class="<%= btn_group_base %> rounded-l-md border-r <%= divider_class %> border-0 cursor-pointer" title="Previous month">
+      <button type="submit" class="<%= btn_group_base %> rounded-l border-r <%= divider_class %> border-0 cursor-pointer" title="Previous month">
         <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
       </button>
     <% end %>
@@ -121,7 +121,7 @@
       <% end %>
       <%= f.hidden_field :month, value: next_month, id: nil %>
       <%= f.hidden_field :year, value: next_year, id: nil %>
-      <button type="submit" class="<%= btn_group_base %> rounded-r-md border-l <%= divider_class %> border-0 cursor-pointer" title="Next month">
+      <button type="submit" class="<%= btn_group_base %> rounded-r border-l <%= divider_class %> border-0 cursor-pointer" title="Next month">
         <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
       </button>
     <% end %>

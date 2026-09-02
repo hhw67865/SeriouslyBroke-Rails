@@ -43,8 +43,8 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
     it "Year to Date toggle becomes active after clicking" do
       click_link "Year to Date"
 
-      expect(page).to have_css("a.bg-brand", text: "Year to Date")
-      expect(page).not_to have_css("a.bg-brand", text: "Monthly")
+      expect(page).to have_css("a.bg-brand-dark", text: "Year to Date")
+      expect(page).not_to have_css("a.bg-brand-dark", text: "Monthly")
     end
   end
 
@@ -54,7 +54,7 @@ RSpec.describe "Dashboard Index - Period Toggle", type: :system do
       within("nav[aria-label='Tabs']") { click_link "Income" }
 
       expect(page).to have_current_path(reports_path(tab: "income"))
-      expect(page).to have_css("a.bg-brand", text: "Monthly")
+      expect(page).to have_css("a.bg-brand-dark", text: "Monthly")
     end
   end
 end

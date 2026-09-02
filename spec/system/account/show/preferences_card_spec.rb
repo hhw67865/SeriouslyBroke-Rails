@@ -39,7 +39,7 @@ RSpec.describe "Account Show - Preferences Card", type: :system do
 
       toggle("Theme")
 
-      expect(page).to have_css("#{track_for(toggle_theme_account_path)}.bg-brand")
+      expect(page).to have_css("#{track_for(toggle_theme_account_path)}.bg-brand-dark")
       expect(user.reload.theme).to eq("dark")
     end
 
@@ -61,7 +61,7 @@ RSpec.describe "Account Show - Preferences Card", type: :system do
 
       toggle("Ming Mode")
 
-      expect(page).to have_css("#{track_for(toggle_ming_mode_account_path)}.bg-brand")
+      expect(page).to have_css("#{track_for(toggle_ming_mode_account_path)}.bg-brand-dark")
       expect(user.reload.ming_mode).to be true
     end
 

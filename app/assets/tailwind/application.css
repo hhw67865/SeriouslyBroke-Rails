@@ -117,9 +117,12 @@
     cursor: pointer;
   }
 
+  /* #8b897c was 3.52:1 on a white card at 12px — the hint under every field in the app, and the
+     only place several rules ("a target switches off use-it-or-lose-it") are ever stated. Same
+     warm grey, darkened to 5.2:1. */
   .form-hint {
     font-size: 12px;
-    color: #8b897c;
+    color: #6F6D61;
     margin-top: 5px;
     line-height: 1.45;
   }
@@ -173,9 +176,16 @@
     cursor: pointer;
     transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
+  /* THE SAME RING THE REST OF THE APP GETS (design review M3), and it replaces a 32%-alpha sage
+     glow that measured under 1.5:1 against a white card — a focus style you could only find if
+     you already knew where the button was. See the `:focus-visible` block in custom.css for why
+     it is a near-black ring over a white halo rather than a brand-coloured one. Stated here as
+     well as there because `.btn` is a class and would otherwise beat the zero-specificity
+     `:where()` rule with the old glow. */
   .btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(201, 199, 139, 0.32);
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px #ffffff;
   }
   .btn:disabled {
     opacity: 0.5;
