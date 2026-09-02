@@ -194,9 +194,10 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       visit budget_page_path
       expect(page).to have_no_css("[data-category-group='Groceries']")
-      within("[data-not-filling-rule='Groceries']") do
-        expect(page).to have_content("Groceries isn't holding money yet")
-      end
+      # The heading names the category (this rule pays no item), so the reason clause beside it
+      # does not repeat it — see budget_page/rules_spec.rb for the whole of that rule.
+      expect(find("[data-not-filling-rule='Groceries']").text)
+        .to include("Groceries", "isn't holding money yet")
     end
 
     it "puts it back in the fill order when the date is set again" do

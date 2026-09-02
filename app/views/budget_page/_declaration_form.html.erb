@@ -30,10 +30,23 @@
         model disagreeing about the same field. Blank is still allowed (the validation is
         `allow_nil`) because clearing the income back to undeclared is a legitimate move; `min`
         constrains what a value may be, not whether there is one. %>
+    <%# TWO DECIMALS, ALWAYS (design review, nits). The column is a decimal and Rails renders one
+        as `4000.0` — a money figure with a single trailing digit, in a box whose placeholder says
+        `0.00` and whose own hint calls it an income. It read as a truncation. `number_with_
+        precision` and not `number_to_currency`: this is a `number` input, so a `$` and a thousands
+        comma would be a value the browser refuses to parse and silently blanks.
+
+        NIL STAYS NIL — an undeclared income shows an empty box, not `0.00`, because "not yet said"
+        and "nothing" are different answers and only one of them is a figure. %>
     <%= f.input :typical_income,
                 as: :decimal,
                 label: "You typically bring in",
-                input_html: { placeholder: "0.00", step: 0.01, min: 0.01 },
+                input_html: {
+                  placeholder: "0.00",
+                  step: 0.01,
+                  min: 0.01,
+                  value: number_with_precision(presenter.declaration.typical_income, precision: 2)
+                },
                 hint: "Per period, after tax. A rough figure is fine — nothing is inferred from it." %>
 
     <%# The enum's own keys, so a cadence this app cannot compute boundaries for is unselectable.

@@ -82,11 +82,25 @@
 
       Not the OTHER suffix, exactly as the waterfall rows below: `changed_after_distributing` is
       about a rule edited since the last split, and this screen is the split being made. %>
+  <%# THE FIGURES ON A REDISTRIBUTION ARE ROLLED BACK, AND THE ROWS SAY SO (design review H7). When
+      this period has already been distributed, every reader on this screen is computed AS IF that
+      split had never happened — see `_replacement`, which says exactly that in a banner at the top.
+      The banner is a hundred rows away by the time a user reaches this band, and "overdrawn $80.00"
+      in red is not a proposal, it is a statement about the present tense. It was false: the
+      category is not overdrawn, it WOULD be, if this period's split were undone.
+
+      A CLAUSE ON THE ROW rather than a second vocabulary. `pool_status_label` keeps its seven
+      states and its one wording — the row simply says which world the state is a state OF, in the
+      banner's own words, on the only screen and the only branch where that world is not the
+      present one. %>
   <% presenter.alerts.each do |category, standing| %>
     <div class="px-6 py-3 border-b border-gray-100 bg-status-danger-light" data-alert-category="<%= category.name %>">
-      <div class="flex items-baseline justify-between gap-4">
+      <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4">
         <span class="font-medium text-gray-900"><%= category.name %></span>
-        <span class="text-sm text-status-danger"><%= pool_status_label(standing, period_closed: standing.period_closed?) %></span>
+        <span class="text-sm text-status-danger">
+          <%= pool_status_label(standing, period_closed: standing.period_closed?) %><%
+              %><% if presenter.redistribution? %> · before this period's split<% end %>
+        </span>
       </div>
       <p class="mt-0.5 text-xs text-gray-600">
         Its money is already there — this distribution has nothing to add.
@@ -118,7 +132,10 @@
         <li class="px-6 py-3 border-b border-gray-100" data-category-name="<%= line.category.name %>">
           <div class="flex items-baseline justify-between gap-4">
             <span class="text-gray-900">
-              <span class="text-xs text-gray-400"><%= index + 1 %></span>
+              <%# `text-gray-500`, not `-400`, which measured 2.52:1 (design review, token pass).
+                  The ordinal is the row's PLACE IN THE FILL ORDER — the single most load-bearing
+                  fact on this screen after the figures — and it was the least legible thing on it. %>
+              <span class="text-xs text-gray-500"><%= index + 1 %></span>
               <span class="font-medium"><%= line.category.name %></span>
             </span>
             <span class="flex items-center gap-3">
@@ -151,9 +168,15 @@
                                                       "border-status-warning" => line.overridden?) %>
             </span>
           </div>
+          <%# THE SAME CLAUSE THE ALERTS BAND TAKES (design review H7), and for the same reason:
+              `distribution_line_detail` opens with `pool_status_label`, so on a redistribution
+              this line reads "overdrawn $1,500.00" about a category that is not overdrawn — it
+              is the state the ledger would be in with this period's split undone, which is
+              exactly what the screen has done to compute the proposal. %>
           <p class="mt-0.5 text-xs text-gray-500">
             <%= distribution_line_detail(line) %>
             <% if line.swept? %>· <%= number_to_currency(line.swept) %> swept back<% end %>
+            <% if presenter.redistribution? %>· before this period's split<% end %>
           </p>
           <%# WHERE THE MONEY WENT, said on the row that moved it and nowhere else. The cascade
               re-fills every category below an edit, so rows nobody touched change their figures;
@@ -221,7 +244,9 @@
         Enter therefore recomputes, as it did before the confirm existed, and the example
         "recomputes rather than confirming when Enter is pressed in a box" is what holds it. Do
         not reorder these two without moving the reverse with them. %>
-    <div class="flex items-center justify-between gap-4 border-t border-gray-200 px-6 py-4">
+    <%# STACKS BELOW `sm` (design review H6), and the reverse pair above is untouched by it: the
+        outer axis changes, the inner one does not, so Enter still lands on "Update figures". %>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-t border-gray-200 px-6 py-4">
       <p class="text-xs text-gray-500">Edits are applied when you confirm — nothing has moved yet.</p>
       <span class="flex flex-row-reverse items-center gap-3">
         <button type="submit" class="btn btn-secondary">Update figures</button>

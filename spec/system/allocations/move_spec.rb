@@ -289,9 +289,9 @@ RSpec.describe "Allocations Move", type: :system do
     it "does not open on one as the destination" do
       visit new_allocation_path(to_category_id: stranger_category.id)
       expect(page).to have_content("We couldn't find that envelope")
-      expect(page).to have_no_content("Where it comes from")
+      expect(page).to have_no_content("Where it's from")
       visit new_allocation_path(to_category_id: dentist.id)
-      expect(page).to have_content("Where it comes from")
+      expect(page).to have_content("Where it's from")
     end
 
     # THE FOURTH CORNER of a 2x2 the other three examples cover between them: a stranger's category

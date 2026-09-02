@@ -333,7 +333,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "writes the corrected date rather than the inferred one" do
       accept(:dated_bill, phone)
       fill_in "First due", with: corrected_due_on
-      click_button "Create Budget"
+      click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(Budget.find_by(item_id: phone.id).anchor_date).to eq(corrected_due_on)
@@ -420,12 +420,12 @@ RSpec.describe "Budget page suggestions", type: :system do
       accept(:drift, dining_rule)
 
       expect(page).to have_field("Rule Amount", with: "45.0")
-      expect(page).to have_content("Currently $150.00 / period")
+      expect(page).to have_content("Currently $150.00 per period")
     end
 
     it "changes the rule and retires the drift" do
       accept(:drift, dining_rule)
-      click_button "Update Budget"
+      click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
       expect(dining_rule.reload.amount).to eq(45)
@@ -468,7 +468,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # figure, so the rule now asks for what the entries actually say.
     it "writes a rule whose per-period claim is the observed figure" do
       accept(:drift, retirement_rule)
-      click_button "Update Budget"
+      click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
       expect(retirement_rule.reload.amount).to eq(433.33)
@@ -604,7 +604,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   # click is dispatched, and a bare `expect(model.reload…)` would end the example mid-request.
   def accept_and_create(kind, subject)
     accept(kind, subject)
-    click_button "Create Budget"
+    click_button "Create rule"
     expect(page).to have_css("[data-suggestions]")
   end
 

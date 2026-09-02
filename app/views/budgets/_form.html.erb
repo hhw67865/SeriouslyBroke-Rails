@@ -36,7 +36,13 @@
 <% subtitle = "Pick what this rule fills, and how much it asks for each period" if owner_picker %>
 <% subtitle = "How #{@budget.category.name} gets filled each period" if category_mode && !owner_picker %>
 <% cancel_path = budget_page_path %>
-<%= page_header(title: @budget.persisted? ? "Edit Budget" : "New Budget", subtitle: subtitle) %>
+<%# "RULE", NOT "BUDGET" (design review M1). The screen this form is reached from calls the thing a
+    RULE in every one of its own words — the heading above the list, the "New rule" button, the
+    band that says which rules nothing fills — and then the form it opened said "New Budget" in the
+    largest type on the page and "Create Budget" on its only button. "Budget" is also the name of
+    the whole SCREEN, so the old title read as if it created another one of those. The model class
+    keeps its name; the user-facing noun is one word everywhere. %>
+<%= page_header(title: @budget.persisted? ? "Edit rule" : "New rule", subtitle: subtitle) %>
 
 <div class="max-w-2xl mx-auto">
   <%= simple_form_for @budget, html: { class: "space-y-6" } do |f| %>
@@ -124,7 +130,7 @@
               field IS the current amount and repeating it would be one number printed twice. %>
           <% if @current_amount.present? && @budget.amount.to_d != @current_amount.to_d %>
             <p class="mt-2 text-sm text-gray-500" data-current-amount>
-              Currently <%= number_to_currency(@current_amount) %> <%= budget_rule_basis(@budget) %>.
+              Currently <%= number_to_currency(@current_amount) %> <%= budget_rule_basis_phrase(@budget) %>.
             </p>
           <% end %>
         </div>
@@ -197,7 +203,7 @@
           BudgetsController sends a save to. %>
       <%= link_to "Cancel", cancel_path, class: "btn btn-secondary" %>
 
-      <%= f.submit @budget.persisted? ? "Update Budget" : "Create Budget",
+      <%= f.submit @budget.persisted? ? "Update rule" : "Create rule",
           class: "btn btn-primary" %>
     </div>
   <% end %>

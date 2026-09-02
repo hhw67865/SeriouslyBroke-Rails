@@ -14,27 +14,61 @@
     Silent when there are none — an empty "Not in the fill order" heading invents a problem out of a
     healthy screen. `data-not-filling` rather than the groups' own selector, so a category a user
     named "Not in the fill order" cannot collide with it. %>
+<%# WARNING, NOT DANGER (design review, nits). A rule outside the fill order is a SETUP fact — a
+    category that has not started holding money yet, a rule the cutover left behind — and both are
+    fixed by filling a field in. Red is this app's colour for money that is short or a bill that is
+    late; spending it here put a band the user can resolve at leisure in the same register as an
+    overdraft, and the two bands sat one above the other on the same screen.
+
+    ITS OWN EYEBROW, matching `_fill_order`'s (design review, nits). Without one the card read as
+    another item in the fill-order list — the very sequence its whole point is that it is not part
+    of — because the list above it is introduced by a heading and this was not. Same shape, same
+    two lines, so the two bands read as two sections rather than one list with a red row in it. %>
 <% if rules.any? %>
-  <section class="bg-white border border-status-danger rounded" data-not-filling>
-    <div class="px-6 py-3 border-b border-gray-200 bg-status-danger-light flex justify-between items-baseline gap-4">
-      <h3 class="text-sm font-semibold text-status-danger">Not in the fill order</h3>
-      <span class="text-sm text-status-danger">no distribution reaches these</span>
+  <section class="space-y-3" data-not-filling>
+    <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
+      <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Not in the fill order</h2>
+      <p class="text-xs text-gray-500">No distribution reaches these — each row says why</p>
     </div>
 
-    <% rules.each do |rule| %>
-      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
-           data-not-filling-rule="<%= budget_rule_name(rule.budget) %>">
-        <div class="flex justify-between items-baseline gap-4">
-          <span class="font-medium text-gray-900">
-            <%= budget_rule_name(rule.budget) %>
-            <span class="text-xs font-normal text-status-danger">· <%= budget_rule_unfilled_reason(rule.budget) %></span>
-          </span>
-          <span class="text-sm text-gray-700 flex items-baseline gap-2">
-            <span><%= budget_rule_amount(rule.budget) %></span>
-            <%= link_to "Edit", edit_budget_path(rule.budget), class: "text-brand-dark hover:text-brand underline" %>
-          </span>
-        </div>
+    <div class="bg-white border border-status-warning rounded">
+      <div class="px-6 py-3 border-b border-gray-200 bg-status-warning-light">
+        <h3 class="text-sm font-semibold text-status-warning">
+          <%= pluralize(rules.size, "rule") %> nothing fills
+        </h3>
       </div>
-    <% end %>
+
+      <% rules.each do |rule| %>
+        <%# STACKS BELOW `sm` (design review H5), for the same reason the group cards do: the name
+            plus a reason clause plus a figure plus two links is four things, and the reason is the
+            longest of them. %>
+        <div class="px-6 py-3 border-b border-gray-100 last:border-b-0"
+             data-not-filling-rule="<%= budget_rule_name(rule.budget) %>">
+          <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+            <span class="font-medium text-gray-900">
+              <%= budget_rule_name(rule.budget) %>
+              <span class="text-xs font-normal text-status-warning">· <%= budget_rule_unfilled_reason(rule.budget) %></span>
+            </span>
+            <span class="text-sm text-gray-700 flex items-baseline gap-3 shrink-0">
+              <span><%= budget_rule_amount(rule.budget) %></span>
+              <%# TWO DOORS, AND THE SECOND IS THE ONE THAT ACTUALLY FIXES THIS (design review,
+                  nits). "Edit" opens the RULE, and there is nothing wrong with the rule: the row's
+                  own sentence says the CATEGORY is not holding money yet, and the field that
+                  changes that — "Holding since" — is on the category form. A band that names a
+                  cause and links only to the thing that is not the cause sends the user round a
+                  loop. Rendered only where there is a category to edit; the cutover arm has none,
+                  which is exactly what its own reason says. %>
+              <%= link_to "Edit rule", edit_budget_path(rule.budget), class: "text-brand-dark hover:text-brand underline" %>
+              <% if rule.budget.category.present? %>
+                <%= link_to "Set a holding date",
+                            edit_category_path(rule.budget.category),
+                            class: "text-brand-dark hover:text-brand underline",
+                            data: { not_filling_category: rule.budget.category.name } %>
+              <% end %>
+            </span>
+          </div>
+        </div>
+      <% end %>
+    </div>
   </section>
 <% end %>

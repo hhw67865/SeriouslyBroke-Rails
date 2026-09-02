@@ -23,16 +23,16 @@ RSpec.describe "Budgets Forms", type: :system do
 
   before { sign_in user, scope: :user }
 
-  describe "Edit Budget Form", :aggregate_failures do
+  describe "Edit rule form", :aggregate_failures do
     let!(:rule) { create(:budget, :per_period_rate, category: groceries, amount: 400.00) }
 
     before { visit edit_budget_path(rule) }
 
     it "shows the rule's own controls and none of the cap's" do
-      expect(page).to have_content("Edit Budget")
+      expect(page).to have_content("Edit rule")
       expect(page).to have_content("How Groceries gets filled each period")
       expect(page).to have_field("Amount")
-      expect(page).to have_button("Update Budget")
+      expect(page).to have_button("Update rule")
       expect(page).to have_link("Cancel")
 
       expect(page).to have_no_field("Prorate daily")
@@ -52,7 +52,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # the only screen that lists rules.
     it "updates the rule and returns to the Budget page" do
       fill_in "Amount", with: "750.00"
-      click_button "Update Budget"
+      click_button "Update rule"
 
       expect(page).to have_current_path(budget_page_path)
       expect(page).to have_content("Budget was successfully updated")
@@ -61,7 +61,7 @@ RSpec.describe "Budgets Forms", type: :system do
 
     it "shows an error for a missing amount" do
       fill_in "Amount", with: ""
-      click_button "Update Budget"
+      click_button "Update rule"
 
       expect(page).to have_current_path(edit_budget_path(rule))
       expect(page).to have_content("can't be blank")
@@ -80,7 +80,7 @@ RSpec.describe "Budgets Forms", type: :system do
   # and nothing linked to the bare URL. Real use found the gap that leaves: a user who wants a rule
   # for something their entries have not yet shown has no door at all, and the only screen that
   # lists rules had no "new" button on it.
-  describe "New Budget Form with no owner", :aggregate_failures do
+  describe "New rule form with no owner", :aggregate_failures do
     let!(:vacation) { create(:category, :expense, :savings, user: user, name: "Vacation to Europe") }
     let!(:salary) { create(:category, :income, user: user, name: "Salary") }
     let(:stranger) { create(:user) }
@@ -100,7 +100,7 @@ RSpec.describe "Budgets Forms", type: :system do
       click_link "New rule"
 
       expect(page).to have_current_path(new_budget_path)
-      expect(page).to have_content("New Budget")
+      expect(page).to have_content("New rule")
       expect(page).to have_select("Category")
       expect(page).to have_no_select("Pool")
       expect(page).to have_no_field("Prorate daily")
@@ -128,7 +128,7 @@ RSpec.describe "Budgets Forms", type: :system do
       click_link "New rule"
       select "Groceries", from: "Category"
       fill_in "Rule Amount", with: "125.00"
-      click_button "Create Budget"
+      click_button "Create rule"
 
       expect(page).to have_current_path(budget_page_path)
       expect(page).to have_content("Budget was successfully created")
@@ -140,7 +140,7 @@ RSpec.describe "Budgets Forms", type: :system do
       click_link "New rule"
       select "Vacation to Europe", from: "Category"
       fill_in "Rule Amount", with: "60.00"
-      click_button "Create Budget"
+      click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(vacation.budgets.sole.amount).to eq(60)
@@ -155,7 +155,7 @@ RSpec.describe "Budgets Forms", type: :system do
       click_link "New rule"
       select "Coffee", from: "Category"
       fill_in "Rule Amount", with: "35.00"
-      click_button "Create Budget"
+      click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(unfunded.reload.funded_since).to eq(Date.current)
@@ -167,7 +167,7 @@ RSpec.describe "Budgets Forms", type: :system do
     it "refuses the save when no category is chosen, and says why" do
       click_link "New rule"
       fill_in "Rule Amount", with: "500.00"
-      click_button "Create Budget"
+      click_button "Create rule"
 
       expect(page).to have_css(".bg-status-danger-light", text: "must belong to a category")
       expect(page).to have_select("Category")

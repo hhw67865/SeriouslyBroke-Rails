@@ -309,7 +309,10 @@ RSpec.describe "Budget page structural check", type: :system do
         expect(page).to have_no_css("[data-figure]")
         expect(page).to have_no_content("$2,400.00 a period")
       end
-      expect(page).to have_field("You typically bring in", with: "2400")
+      # "2400.00", not "2400": the box renders the figure to two decimals now (design review,
+      # nits) — a decimal column was printing `4000.0` into a money field whose placeholder says
+      # `0.00`. The figure the user typed is unchanged, and that is what this example is about.
+      expect(page).to have_field("You typically bring in", with: "2400.00")
       expect(page).to have_select("How long is a period?", selected: "Biweekly")
     end
   end

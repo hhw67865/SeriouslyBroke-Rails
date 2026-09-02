@@ -2,11 +2,22 @@
 
 <%# MOVING MONEY BETWEEN TWO ENVELOPES — spec §5's reallocation, and the single-row twin of the
     distribution screen. The subtitle is the invariant said in words: allocating money is an act of
-    intention rather than of location (two-ledger spec §2), so nothing physical moves at all. %>
-<%= page_header(title: "Move money",
-                subtitle: "One move on the purpose ledger — your bank balance doesn't change") %>
+    intention rather than of location (two-ledger spec §2), so nothing physical moves at all.
 
-<div class="max-w-3xl space-y-6">
+    IT SAYS THE INVARIANT WITHOUT THE INTERNAL NOUN (design review H10). "One move on the purpose
+    ledger" named a structure this app has never shown a user: there is no screen, no label and no
+    other sentence anywhere that mentions a purpose ledger, so the one phrase carrying the reason
+    this screen is safe was the one phrase nobody could decode. The reassurance is the same and the
+    words are the user's own — the money is already theirs; this only changes what it is for.
+
+    CENTRED, LIKE EVERY OTHER FORM IN THIS APP. The category form, the rule form and the account
+    form are all `mx-auto` under a full-width header; this one was left-aligned in a 1440px column,
+    so its card ended a third of the way across the screen with the header spanning all of it. %>
+<%= page_header(title: "Move money",
+                subtitle: "Change what money you already have is set aside for — " \
+                          "your bank balance doesn't change") %>
+
+<div class="max-w-3xl mx-auto space-y-6">
   <%# THE MOVE WAS REFUSED. Above everything else, because the screen below it is a proposal again
       and there is nothing in the figures to say so. The second sentence is the fact that makes the
       first safe: one row, so a refusal happens before the INSERT and there is no half-written state
@@ -34,7 +45,13 @@
     <div class="bg-white border border-gray-200 rounded p-6 space-y-4">
       <h3 class="text-sm font-semibold text-gray-900">Where it's going</h3>
 
-      <div>
+      <%# BOTH FIELDS SHARE ONE MEASURE (design review H10). The select ran the full width of the
+          card while the amount box was 160px, so the two questions on one card read as two
+          different KINDS of control — and at 1440px the select's caret sat 700px from its own
+          label. `max-w-sm` on each wrapper is the smallest change that makes them one set: same
+          left edge, same right edge, same width at every viewport, and neither of them as wide as
+          the page. %>
+      <div class="max-w-sm">
         <%# EXPLICIT IDS, not the param names, and this was measured on screen rather than reasoned
             about. `shared/_date_selector` — the month scrubber in the sidebar chrome — re-emits
             every scalar query parameter as `hidden_field_tag key, value` in EACH of its two forms,
@@ -57,7 +74,7 @@
                        class: "form-select" %>
       </div>
 
-      <div>
+      <div class="max-w-sm">
         <%= label_tag "move-amount", "How much", class: "form-label" %>
         <%# `min` refuses a zero or a negative before it is submitted. Neither is an event and
             `Allocation` refuses both anyway — this only keeps the user from having to be told so. %>
@@ -68,7 +85,7 @@
               step: "0.01",
               min: "0.01",
               placeholder: "0.00",
-              class: "form-input w-40 text-right tabular-nums"
+              class: "form-input w-full text-right tabular-nums"
             ) %>
       </div>
 
@@ -85,7 +102,25 @@
       <section id="reallocation-sources" class="bg-white border border-gray-200 rounded"
                aria-labelledby="sources-heading">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 id="sources-heading" class="text-sm font-semibold text-gray-900">Where it comes from</h3>
+          <h3 id="sources-heading" class="text-sm font-semibold text-gray-900">Where it's from</h3>
+          <%# THE SOURCE IS NAMED IN A SENTENCE, NOT ONLY BY A RADIO (design review H10). This
+              screen stated its destination in words at the top and left its OTHER end to a dot in
+              a list of up to a dozen rows — and the one path that matters most arrives with a
+              source already chosen: Home's "Take $120 from Groceries" button preselects it, so the
+              user lands on a screen that has decided half the move for them and says so nowhere.
+              Both ends of the move are now readable without hunting for a checked control.
+
+              `sources.find(&:selected?)` is the presenter's own answer to "which row is ticked",
+              the same Candidate the row below renders, so the sentence cannot name a source the
+              list disagrees with. %>
+          <% chosen = @presenter.sources.find(&:selected?) %>
+          <p class="mt-1 text-sm text-gray-700" data-move-source>
+            <% if chosen %>
+              Taking it from <strong class="font-semibold"><%= chosen.name %></strong>.
+            <% else %>
+              No source chosen yet — pick one below.
+            <% end %>
+          </p>
           <p class="mt-1 text-sm text-gray-600">
             Any envelope, and your unallocated money — nothing here moves between banks, so nothing
             is out of reach.
@@ -171,7 +206,11 @@
         The token rides on the button rather than in a hidden field, for _confirm's reason: this form
         is a GET, and a hidden `authenticity_token` would be serialised into the query string on
         every recompute — into the URL bar, the history and the logs. %>
-    <div class="flex items-center justify-between gap-4">
+    <%# STACKS BELOW `sm` (design review H6). Two 38px buttons and a sentence cannot share a 375px
+        row: the pair wrapped under the helper text and the confirm ended up flush against the
+        card's edge. The buttons take their own row, still in reverse DOM order so Enter reaches
+        "Update figures" first — see above, and do not flatten this into one flex direction. %>
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
       <p class="text-xs text-gray-500">Nothing moves until you press the button.</p>
       <span class="flex flex-row-reverse items-center gap-3">
         <button type="submit" class="btn btn-secondary">Update figures</button>

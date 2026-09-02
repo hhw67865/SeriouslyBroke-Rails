@@ -73,6 +73,16 @@ module BudgetPageHelper
     end
   end
 
+  # THE SAME FACT SAID IN A SENTENCE RATHER THAN BESIDE A FIGURE (design review M1). `/ period` is
+  # right in a row where it sits against `$400.00` and reads as a unit; in prose it produced "What
+  # this rule asks for / period." and "Currently $45.00 / period.", where the slash is a piece of
+  # notation stranded in an English sentence. Only the `:per_period` arm differs — the other three
+  # already read as words — so this delegates rather than restating the classification, and a fifth
+  # cadence cannot be added to one of the two and forgotten in the other.
+  def budget_rule_basis_phrase(budget)
+    budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
+  end
+
   # THE LIST `PATCH /budget/reorder` TAKES, with one category moved one place. `offset` is -1 for ▲
   # and +1 for ▼, and the whole list goes on the wire rather than "this category, one place up",
   # because the endpoint's contract is an ORDER and not an instruction — the same shape the drag
@@ -116,14 +126,21 @@ module BudgetPageHelper
   # rendering fault. Each row says why beside its own name, in the length the rest of this app's
   # rows use.
   #
-  # THE CATEGORY IS NAMED, because it is the thing the user has to act on — `#budget_rule_name`
-  # prefers the ITEM it pays, so an item-backed rule would otherwise say "Phone · isn't holding
-  # money yet" without ever saying what is not holding it.
+  # THE CATEGORY IS NAMED ONLY WHERE THE ROW HAS NOT ALREADY NAMED IT (design review, nits).
+  # `#budget_rule_name` prefers the ITEM a rule pays and falls back to its CATEGORY, so this clause
+  # named the category twice on every item-less rule — the band rendered "Subscriptions ·
+  # Subscriptions isn't holding money yet", which reads as a rendering fault rather than as
+  # emphasis. An item-backed rule still needs the name, and for the original reason: "Phone · isn't
+  # holding money yet" would never say WHAT is not holding it.
+  #
+  # `budget.item` is the same question `#budget_rule_name` asks to make its own choice — the two
+  # branch on one fact, so the clause cannot repeat a name the row did not print.
   def budget_rule_unfilled_reason(budget)
     category = budget.category
     return "written before the cutover — no category to hold it" if category.blank?
 
-    "#{category.name} isn't holding money yet — nothing fills it"
+    subject = budget.item.present? ? "#{category.name} isn't" : "isn't"
+    "#{subject} holding money yet — nothing fills it"
   end
 
   # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the second clause is about WHERE THE SCHEDULE IS. It
@@ -140,7 +157,7 @@ module BudgetPageHelper
   # Keyed on `schedule_shown:` rather than on "is this a proposal", because the two are not the
   # same set — a hand-made rate renders no schedule and is still a proposal of the user's own.
   def budget_amount_hint(budget, schedule_shown: false)
-    basis = "What this rule asks for #{budget_rule_basis(budget)}"
+    basis = "What this rule asks for #{budget_rule_basis_phrase(budget)}"
     schedule_shown ? "#{basis}." : "#{basis} — the schedule itself is already set on this rule."
   end
 

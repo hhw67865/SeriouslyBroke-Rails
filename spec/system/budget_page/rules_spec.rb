@@ -111,11 +111,18 @@ RSpec.describe "Budget page rules", type: :system do
       visit budget_page_path
     end
 
+    # THE NAME IS PRINTED ONCE (design review, nits). `budget_rule_name` falls back to the
+    # CATEGORY for an item-less rule like this one, so the row's own heading already says
+    # "Coffee" — and the reason clause used to say it again, rendering "Coffee · Coffee isn't
+    # holding money yet". The clause names the category only where the heading named an ITEM
+    # instead; the row as a whole still says both, which is what this example checks.
     it "keeps it out of the fill order and names its category in the panel" do
       expect(category_groups).to eq(["Groceries", "Fun Money"])
       expect(page).to have_no_css("[data-category-group='Coffee']")
       within("[data-not-filling-rule='Coffee']") do
-        expect(page).to have_content("Coffee isn't holding money yet — nothing fills it")
+        expect(page).to have_content("Coffee")
+        expect(page).to have_content("isn't holding money yet — nothing fills it")
+        expect(page).to have_no_content("Coffee isn't holding money yet")
         expect(page).to have_content("$35.00 / period")
       end
     end
@@ -331,7 +338,7 @@ RSpec.describe "Budget page rules", type: :system do
 
     it "saves the new amount and comes back to the Budget page" do
       fill_in "Rule Amount", with: "425"
-      click_button "Update Budget"
+      click_button "Update rule"
 
       expect(page).to have_current_path(budget_page_path)
       within(rule_row("Groceries")) { expect(page).to have_content("$425.00 / period") }

@@ -74,8 +74,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # its rules and its allocations, and neither is edited here.
     it "offers no editor of its own" do
       within(card) do
-        expect(page).to have_no_link("Create Budget")
-        expect(page).to have_no_link("Update Budget")
+        expect(page).to have_no_link("Create rule")
+        expect(page).to have_no_link("Update rule")
         expect(page).to have_no_content("Budget Amount")
       end
     end
