@@ -126,7 +126,7 @@ email, `available 225,584.20 + Σ holdings 0.00` == `pot 3,039.33 + Σ accounts 
 ### Where the build differs from this text
 
 - **Accounts lost target semantics entirely.** §6's parked buffer-marker question (inherited from
-  `2026-08-18-main-account-design.md` §7: "how the account header labels its number is a separate
+  `2026-08-18-main-account-design.md` §6: "how the account header labels its number is a separate
   open question") is answered **no**: `pools.target_amount` and `pools.start_date` are dropped, the
   account header says `balance now $X` and nothing else, and a target is now a property only a
   CATEGORY can carry. There is no account-level buffer marker and no plan for one.
@@ -163,6 +163,14 @@ email, `available 225,584.20 + Σ holdings 0.00` == `pot 3,039.33 + Σ accounts 
   list is populated with exactly what `Category.apply_fill_order` accepts (holders with rules).
   A rule on an expense category that is not yet funded renders in the "Not in the fill order"
   band rather than in an unorderable group.
+- **A `funded_since` PRESENCE check is not a second reader of the start-date rule** (Task 5
+  ruling). The one-reader law governs the DAY COMPARISON — "does this expense fall on or after the
+  category's funding date", which `CategoryLedger::ENTRY_CATEGORY_ID` spells in SQL and
+  `Category#counts_spending_on?` mirrors in Ruby, and nothing else may spell. `funded_since.present?`
+  asks a different question — "has this category started holding money at all" — and answering it
+  cannot disagree with the comparison. So the three live spellings (`Category#holder?` at
+  `category.rb:267`, `budget_proposal.rb:84`, `suggestion_engine.rb:414`) break no law. They are a
+  CODE-QUALITY point and only that: `#holder?` exists, and two of the three could call it.
 - **`app/services/` reads `HoldingCalculator` / `HoldingStatus` / `HoldingProjection`, reached by
   `Category#holding_calculator` and `Category#status`.** Bare `Category#calculator` still belongs
   to `CategoryCalculator` (spending metrics) — the two are different questions and the names say so.
