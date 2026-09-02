@@ -34,7 +34,10 @@ RSpec.describe "Home Navigation", type: :system do
 
     expect(page).to have_link("Home", href: root_path)
     expect(page).to have_no_link("Dashboard")
-    expect(page).to have_link("Pools", href: pools_path)
+    # THE "Pools" ITEM IS GONE (two-ledger spec §5, Task 7): it opened the savings-goals index,
+    # and a savings goal is a CATEGORY now, so the Management section has one link.
+    expect(page).to have_link("Categories", href: categories_path)
+    expect(page).to have_no_link("Pools")
     expect(page).to have_no_link("Savings Pools")
     expect(page).to have_no_link("Statistics")
   end

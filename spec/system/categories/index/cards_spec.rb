@@ -18,14 +18,13 @@ RSpec.describe "Categories Index - Cards", type: :system do
     sign_in user, scope: :user
   end
 
-  # THE CARD'S CAP ARM IS DELETED (plan 3, task 3). Every expense category points at a pool now, so
-  # the card takes its pooled arm — "Spent <period>" and the pool's name — and the "Monthly Budget
-  # $150.00 / $1,000.00 · 15% used" arm it used to take has no rule left to read. The figures under
-  # test move from the cap's percentage to the spending itself, which is the half the card still
-  # renders and the half the month navigation is about.
+  # THE CARD'S CAP ARM IS DELETED (plan 3, task 3) and its POOL LINE with it (Task 7). The card
+  # printed "Pool: Checking" — the name of the pool the category pointed at, which under the
+  # two-ledger model says nothing about the category — and it says what the category HOLDS now,
+  # or that its spending comes out of what's available. The spending figures and the month
+  # navigation are unchanged.
   describe "expense card shows the period's spending and links to show", :aggregate_failures do
-    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-    let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food", pool: checking) }
+    let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food") }
     let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
     let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
 
@@ -43,9 +42,9 @@ RSpec.describe "Categories Index - Cards", type: :system do
       visit categories_path(type: "expense", month: base_date.month, year: base_date.year)
     end
 
-    it "displays the period's spending, its pool and the top items for selected month" do
+    it "displays the period's spending, its lane and the top items for selected month" do
       expect(page).to have_content(currency(150))
-      expect(page).to have_content("Pool: Checking")
+      expect(page).to have_content("Comes out of what's available")
       expect(page).to have_no_content("% used")
 
       # Top items with amounts (expense shows negative sign)
@@ -117,9 +116,35 @@ RSpec.describe "Categories Index - Cards", type: :system do
     end
   end
 
-  # THE SAVINGS CARD IS DELETED WITH THE TYPE (plan 3, task 5). Two examples read a "Monthly
-  # Contribution" figure, a "Savings Pool: Main Pool" line and plain (unsigned) top-item amounts off
-  # a card arm that no longer exists — money reaches a goal as a `PoolMovement`, and the goal's own
-  # page lists them. The expense and income card arms above make the same month-navigation claim
-  # over the two types that survive.
+  # THE SAVINGS CARD IS BACK, AS A CATEGORY (two-ledger spec §3, Task 7). It was deleted with the
+  # savings TYPE in plan 3 task 5 — its two examples read a "Monthly Contribution" figure and a
+  # "Savings Pool: Main Pool" line off a card arm that no longer existed — and savings now live
+  # here, on the screen that replaced the Pools index. The classifier is
+  # `HoldingCalculator#saving_toward_a_target?`, the same one the show page's holdings card and the
+  # entry form's impact card ask.
+  describe "what a card says about the money the category holds", :aggregate_failures do
+    it "shows a goal's balance and its progress toward the target" do
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 2_000)
+      create(:allocation, kind: :allocation, to_category: vacation, amount: 500, date: Date.current)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Holding")
+      expect(page).to have_content(currency(500))
+      expect(page).to have_css("[data-goal-progress]")
+      expect(page).to have_content("25% of #{currency(2_000)}")
+    end
+
+    # An envelope holds money too — it just has no target for a bar to be a fraction of.
+    it "shows an envelope's balance and no bar" do
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
+      create(:allocation, kind: :allocation, to_category: groceries, amount: 400, date: Date.current)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Holding")
+      expect(page).to have_content(currency(400))
+      expect(page).to have_no_css("[data-goal-progress]")
+    end
+  end
 end

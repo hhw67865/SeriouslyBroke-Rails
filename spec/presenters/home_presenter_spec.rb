@@ -330,9 +330,9 @@ RSpec.describe HomePresenter do
     it "records each row's shortfall", :aggregate_failures do
       rows = presenter.waterfall
 
-      expect(rows[0][:short]).to eq(0)
-      expect(rows[1][:short]).to eq(200)
-      expect(rows[2][:short]).to eq(150)
+      expect(rows[0].short).to eq(0)
+      expect(rows[1].short).to eq(200)
+      expect(rows[2].short).to eq(150)
     end
 
     it "reports the total gap", :aggregate_failures do
@@ -346,7 +346,11 @@ RSpec.describe HomePresenter do
       expect(rows.pluck(:needed)).to eq([500, 400, 150])
       # `needed` is the ask, never the outcome: the cut-off row must still state its full
       # requirement, or the screen cannot show what running out actually cost.
-      expect(rows.map { |r| r[:needed] - r[:funded] }).to eq(rows.pluck(:short))
+      #
+      # `.short` RATHER THAN `[:short]` (Task 7): the rows are `AllocationCalculator::Row` structs
+      # now, and `short` is a METHOD (`needed - funded`) rather than a member — `Struct#[]` raises
+      # `no member 'short' in struct`. `[:needed]` and `[:funded]` are members and still answer.
+      expect(rows.map { |r| r[:needed] - r[:funded] }).to eq(rows.map(&:short))
     end
 
     # THE FILL IS AllocationCalculator'S, ASSERTED AS AN IDENTITY rather than as two matching lists
@@ -403,7 +407,7 @@ RSpec.describe HomePresenter do
 
       expect(presenter.available).to eq(-400)
       expect(rows.pluck(:funded)).to eq([0])
-      expect(rows.pluck(:short)).to eq([300])
+      expect(rows.map(&:short)).to eq([300])
       expect(presenter.shortfall).to eq(300)
       expect(presenter).not_to be_covered
     end
@@ -676,7 +680,7 @@ RSpec.describe HomePresenter do
 
       fix = presenter.fix_for(dentist)
 
-      expect(presenter.waterfall.map { |r| [r[:category].name, r[:short]] }).to eq([["Dentist", 0]])
+      expect(presenter.waterfall.map { |r| [r.category.name, r.short] }).to eq([["Dentist", 0]])
       expect(fix).to be_covered
       expect(fix.source).to be_nil
     end

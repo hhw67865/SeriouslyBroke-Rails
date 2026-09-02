@@ -5,14 +5,11 @@ require "rails_helper"
 RSpec.describe "Categories New - Form", type: :system do
   let!(:user) { create(:user) }
 
-  # EVERY CATEGORY NAMES A POOL (plan 3 decision 3), so this form now needs one to offer — and a
-  # brand-new user has none, which is a state this file has to hold BOTH sides of.
-  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-
-  before do
-    user.update!(default_account: checking)
-    sign_in user, scope: :user
-  end
+  # THE POOL PICKER IS GONE (two-ledger spec §5, Task 7). This file used to need an account to
+  # offer it — and used to hold both sides of "a user with no pools at all", the state a required
+  # `pool_id` made reachable. A category holds its own money now, so there is nothing to point at
+  # and no such state: what the form asks instead is what the category HOLDS.
+  before { sign_in user, scope: :user }
 
   describe "form display", :aggregate_failures do
     before { visit new_category_path }
@@ -22,6 +19,7 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("Set up a new category to organize your finances")
       expect(page).to have_field("Name")
       expect(page).to have_content("Basic Information")
+      expect(page).to have_content("Holding money")
       expect(page).to have_content("Appearance")
       expect(page).to have_button("Create Category")
     end
@@ -46,43 +44,25 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_link("Cancel")
     end
 
-    # DECISION 3'S CONTROL. The pool is required, so the form must ask — and it must OPEN on the
-    # default account rather than on a blank, because a blank is the one answer the model refuses
-    # and a new category's honest default is "this comes out of my buffer".
-    it "asks where the money lives and opens on the default account", :aggregate_failures do
-      expect(page).to have_select("Where this money lives", selected: "Checking")
-      # No blank option: the choice is required, and a prompt that submits an empty string would
-      # offer the one answer the model refuses.
-      expect(page).to have_css("select[name='category[pool_id]'] option", count: 1)
-    end
-
-    # The pools are grouped by what they ARE, in the nouns the rest of the app prints.
-    it "groups the pools by their noun", :aggregate_failures do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-      create(:pool, :savings_pool, user: user, account: checking, name: "Vacation")
-
-      visit new_category_path
-
-      expect(page).to have_css("optgroup[label='Buffer'] option", text: "Checking")
-      expect(page).to have_css("optgroup[label='Envelope'] option", text: envelope.name)
-      expect(page).to have_css("optgroup[label='Goal'] option", text: "Vacation")
-    end
-  end
-
-  # THE STATE DECISION 3 MAKES REACHABLE FOR THE FIRST TIME: a user with no pools at all. An empty
-  # picker would submit blank and meet "Pool must exist" with nothing the user could do about it,
-  # so the form says what is missing and names the route to it.
-  describe "a user with no pools", :aggregate_failures do
-    before do
-      user.update!(default_account: nil)
-      checking.destroy!
-      visit new_category_path
-    end
-
-    it "says so and points at the pool form rather than offering an empty picker" do
+    # THE THREE COLUMNS THAT REPLACED THE PICKER (two-ledger spec §3, §4), all three blank on a
+    # new category: a category that holds nothing is the honest default, and its spending drains
+    # available until it gets a rule or an allocation.
+    it "asks what the category holds, and opens on nothing", :aggregate_failures do
+      expect(page).to have_field("Target", with: "")
+      expect(page).to have_field("Holding since", with: "")
+      # `categories.priority` is NOT NULL DEFAULT 0, so the box opens on the front of the queue
+      # rather than on a blank — the column has no "unset" to render.
+      expect(page).to have_field("Funding priority", with: "0")
       expect(page).to have_no_select("Where this money lives")
-      expect(page).to have_css("[data-no-pools]", text: "you have no accounts yet")
-      expect(page).to have_link("Make an account first", href: new_pool_path)
+    end
+
+    # ** THE TWO HINTS THAT DESCRIBE A CONSEQUENCE, not a field. ** A target switches off
+    # use-it-or-lose-it (`HoldingCalculator#compute_period_closed` refuses to sweep a
+    # target-bearing category at all), and editing the funding start RE-READS spending that is
+    # already recorded. Both are things a user meets a period later if the form does not say them.
+    it "says a target stops the sweep and a start date moves history", :aggregate_failures do
+      expect(page).to have_content("never swept back to available")
+      expect(page).to have_content("changing this date moves history")
     end
   end
 
@@ -187,26 +167,36 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("New Income Category")
     end
 
-    it "keeps the pool the picker was opened on" do
+    it "creates a category that holds nothing when the three boxes are left alone", :aggregate_failures do
       fill_in "Name", with: "Buffer Spending"
       find("label", text: "Expense").click
       click_button "Create Category"
 
       expect(page).to have_content("Category was successfully created")
-      expect(Category.find_by(name: "Buffer Spending").pool).to eq(checking)
+      category = Category.find_by(name: "Buffer Spending")
+      expect(category).not_to be_holder
+      expect([category.target_amount, category.funded_since]).to eq([nil, nil])
     end
 
-    it "writes the pool the user picked instead" do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-      visit new_category_path
-
-      fill_in "Name", with: "Weekly Shop"
-      find("label", text: "Expense").click
-      select envelope.name, from: "Where this money lives"
-      click_button "Create Category"
+    it "writes the target, the priority and the funding start", :aggregate_failures do
+      submit_goal
 
       expect(page).to have_content("Category was successfully created")
-      expect(Category.find_by(name: "Weekly Shop").pool).to eq(envelope)
+      category = Category.find_by(name: "Vacation")
+      expect([category.target_amount, category.priority]).to eq([2_400, 3])
+      expect(category.funded_since).to eq(Date.new(2026, 2, 6))
+      expect(category).to be_savings
+    end
+
+    def submit_goal
+      fill_in "Name", with: "Vacation"
+      find("label", text: "Expense").click
+      fill_in "Target", with: "2400"
+      fill_in "Funding priority", with: "3"
+      # A `Date`, NOT a formatted string: Capybara sends a String into a date input as KEYSTROKES,
+      # which reads back as the year 60206. See spec/system/budget_page/suggestions_spec.rb.
+      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      click_button "Create Category"
     end
 
     it "creates category with custom color" do

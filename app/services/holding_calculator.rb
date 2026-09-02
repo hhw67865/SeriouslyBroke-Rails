@@ -348,6 +348,28 @@ class HoldingCalculator
 
   def withdrawals = (movements_out_total + expense_entries_total).to_d
 
+  # IS THIS CATEGORY SAVING TOWARD A FIGURE — the goal test, spelled ONCE (fix round 1, LOW-2).
+  # Three readers ask it and they must not be free to drift: #dateless_goal? above (what a goal
+  # ASKS for), #compute_period_closed (savings never sweep) and `HoldingStatus#saving?`, which
+  # reaches it through #dateless_goal? rather than re-deriving a target test of its own. The two
+  # that add a leg add it in the open, beside the reader that needs it.
+  #
+  # `holder?` IS PART OF THE TEST AND NOT A GUARD AROUND IT. A category with no `funded_since`
+  # holds nothing — its spending drains available (§4) — so a target on it is a goal nothing can
+  # progress toward, and it is neither saving nor sweeping. It was the leg the status\'s own copy of
+  # this test was missing, which is what made the two copies a divergence rather than a duplication.
+  #
+  # PUBLIC SINCE TASK 7, AND THE THREE READERS ARE NOW SIX. One classification was being asked by
+  # three SCREENS in three different spellings: the entry form's impact card asked
+  # `Category#savings?` — holder + target + NO RULE — so the demo's Retirement Supplement (a
+  # $100,000 goal carrying a $150 rate rule) drew the ENVELOPE bar there while Home's row
+  # vocabulary called the same category `saving` through #dateless_goal?. Three screens, two
+  # answers, one category. The ruling (Task 7) is that every RENDERING asks this predicate, so a
+  # rule-bearing goal is a goal on the impact card, on Home and on the categories page's holdings
+  # card alike. `Category#savings?` survives for the one question it is actually the right sentence
+  # for — which categories are the user's savings, on an index that lists them.
+  def saving_toward_a_target? = category.holder? && category.target_amount.to_d.positive?
+
   private
 
   # The body of #period_closed?, split out only so the memo above it stays one line of bookkeeping
@@ -384,18 +406,6 @@ class HoldingCalculator
 
     rate_budgets.all? { |budget| budget.calculator(today: last_funded_on).period_end < today }
   end
-
-  # IS THIS CATEGORY SAVING TOWARD A FIGURE — the goal test, spelled ONCE (fix round 1, LOW-2).
-  # Three readers ask it and they must not be free to drift: #dateless_goal? above (what a goal
-  # ASKS for), #compute_period_closed (savings never sweep) and `HoldingStatus#saving?`, which
-  # reaches it through #dateless_goal? rather than re-deriving a target test of its own. The two
-  # that add a leg add it in the open, beside the reader that needs it.
-  #
-  # `holder?` IS PART OF THE TEST AND NOT A GUARD AROUND IT. A category with no `funded_since`
-  # holds nothing — its spending drains available (§4) — so a target on it is a goal nothing can
-  # progress toward, and it is neither saving nor sweeping. It was the leg the status\'s own copy of
-  # this test was missing, which is what made the two copies a divergence rather than a duplication.
-  def saving_toward_a_target? = category.holder? && category.target_amount.to_d.positive?
 
   # What an unpaid dated bill is already holding. #sweepable_amount is otherwise the whole category,
   # so a mixed one would sweep the rent to top up available on the strength of its gas rule alone.

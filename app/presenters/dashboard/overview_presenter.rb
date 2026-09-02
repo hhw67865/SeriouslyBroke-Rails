@@ -64,28 +64,52 @@ module Dashboard
 
     # === The goals strip ===
     #
-    # MOVED HERE FROM `Dashboard::SavingsPresenter`, WHICH IS DELETED (plan 3, task 5). The strip
-    # (`dashboard/_pools_strip`) is rendered by the ALL tab, and its two readers lived on the
-    # presenter behind the SAVINGS tab — so deleting that class with its tab would have taken this
-    # tab down with it (Task 4's coordination note). Nothing here is category-type machinery:
-    # `pools.savings_pools` is a POOL type and `PoolCalculator` is the app's one reader for what a
-    # pool holds, so neither has anything to do with the enum value that died.
+    # SAVINGS ARE CATEGORIES (two-ledger spec §3, Task 7). This read `pools.savings_pools` through
+    # `PoolCalculator`, and both are gone with the screens: a savings goal is now just a category
+    # with a target and no refill rule, holding its own money. `#pools_summary` and
+    # `#total_pools_balance` are renamed with the thing they describe, and the strip they feed
+    # (`dashboard/_pools_strip` → `dashboard/_savings_strip`) went with them.
+    #
+    # `Category#savings?` IS THE CLASSIFIER, and it is the app's DISPLAY question — holder, with a
+    # target, carrying no rule — which is exactly the shape Task 1's migration mints out of each
+    # savings pool. It is deliberately NOT `HoldingCalculator#saving_toward_a_target?`, the
+    # rendering predicate the impact card, Home and the categories page's holdings card now share:
+    # this strip is an INDEX of the user's savings, and a Retirement Supplement the waterfall
+    # refills every period belongs with the envelopes on a page organised by where money went, not
+    # in a band headed "Savings".
+    #
+    # SELECTED IN RUBY rather than composed in SQL, because `savings?` reads `budgets.none?` and
+    # the rows are already loaded for the entry sums beneath them; the scope narrows to holders
+    # with a target first, so the `budgets` question is asked of a handful of rows at most.
     #
     # `as_of: period_range.end` is what makes the figures period-aware — a YTD strip and a monthly
-    # strip describe different moments — and it is `PoolCalculator`'s own bound, not a second one.
-    def pools_summary
-      @pools_summary ||= @user.pools.savings_pools.includes(categories: { items: :entries }).map do |pool|
-        calculator = pool.calculator(as_of: @parent.period_range.end)
+    # strip describe different moments — and it is `HoldingCalculator`'s own bound, not a second
+    # one.
+    def savings_summary
+      @savings_summary ||= savings_categories.map do |category|
+        calculator = category.holding_calculator(as_of: @parent.period_range.end)
         {
-          id: pool.id,
-          name: pool.name,
-          balance: calculator.current_balance,
-          target_amount: pool.target_amount,
+          id: category.id,
+          name: category.name,
+          balance: calculator.balance,
+          target_amount: category.target_amount,
           progress_percentage: calculator.progress_percentage
         }
       end
     end
 
-    def total_pools_balance = pools_summary.sum { |pool| pool[:balance] }
+    def total_savings_balance = savings_summary.sum { |row| row[:balance] }
+
+    private
+
+    def savings_categories
+      @savings_categories ||= @user.categories
+        .expenses
+        .where.not(funded_since: nil)
+        .where.not(target_amount: nil)
+        .includes(:budgets)
+        .order(:name)
+        .select(&:savings?)
+    end
   end
 end

@@ -2,35 +2,50 @@
 
 require "rails_helper"
 
-# THE GOALS STRIP, WHICH IS NOW ON THE ALL TAB AND ONLY THERE (plan 3, task 5). It was rendered by
-# both tabs; the savings TAB is deleted with the category type it summed, and the strip's two
-# readers moved from `Dashboard::SavingsPresenter` to `Dashboard::OverviewPresenter` rather than
-# dying with it — the strip is POOL-type machinery, and the pool type survives.
+# THE GOALS STRIP, WHICH IS NOW ON THE ALL TAB AND ONLY THERE (plan 3, task 5), AND WHICH IS NOW
+# ABOUT CATEGORIES (two-ledger spec §3, Task 7).
 #
-# EVERY FIXTURE HERE FUNDS ITS POOL WITH MOVEMENTS. They funded it with entries in a savings
-# CATEGORY, which is the shape the cutover converted; the balances asserted are unchanged, because
-# `PoolCalculator#balance` counted that term and counts `movements_in` at the same sign.
-RSpec.describe "Dashboard Index - Savings Pools", type: :system do
+# THE FIXTURES ARE THE MODEL CHANGE. They planted savings POOLS funded by `PoolMovement`s and
+# spent by categories pointing at them; a savings goal is a CATEGORY now — a target, a funding
+# start and no refill rule (`Category#savings?`, which is exactly what Task 1's migration mints out
+# of a savings pool) — funded by `Allocation`s and spent by its own entries. Every balance and
+# every badge asserted below is unchanged, because `HoldingCalculator#balance` counts allocations
+# in and spending out at the same signs `PoolCalculator` did.
+#
+# THE LINKS POINT AT THE CATEGORY, because the pool page is deleted and the category's own page is
+# where a goal's balance, target and history all live now.
+RSpec.describe "Dashboard Index - Savings strip", type: :system do
   let!(:user) { create(:user) }
+  # rubocop:disable RSpec/LetSetup -- THE POT HAS TO EXIST for the category factory's own `pool`
+  # default, which still names a pool for the length of this branch. Nothing on the strip reads it;
+  # it was funded FROM until Task 7 replaced the movements with allocations.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
   let(:base_date) { Date.current.beginning_of_month }
 
   before { sign_in user, scope: :user }
 
+  # A GOAL: an expense category with a target, holding money from a year back, carrying no rule.
   def goal(name, target)
-    create(:pool, user: user, name: name, target_amount: target, start_date: 1.year.ago, account: checking)
+    create(
+      :category,
+      :expense,
+      user: user,
+      name: name,
+      target_amount: target,
+      funded_since: 1.year.ago.to_date
+    )
   end
 
-  def fund(pool, amount, on)
-    create(:pool_movement, from_pool: checking, to_pool: pool, amount: amount, date: on)
+  def fund(category, amount, on)
+    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
   end
 
-  # One category per pool, reused across calls: Category validates its name unique per user, so a
-  # pool spent from twice would otherwise collide with itself.
-  def spend(pool, amount, on)
-    category = user.categories.find_by(name: "#{pool.name} Spending") ||
-               create(:category, :expense, user: user, name: "#{pool.name} Spending", pool: pool)
-    create(:entry, item: create(:item, category: category), amount: amount, date: on)
+  # One item per category, reused across calls, so a goal spent from twice does not collide with
+  # itself on Item's per-category name uniqueness.
+  def spend(category, amount, on)
+    item = category.items.find_by(name: "Spending") || create(:item, category: category, name: "Spending")
+    create(:entry, item: item, amount: amount, date: on)
   end
 
   describe "pool balance reflects selected month", :aggregate_failures do
@@ -49,7 +64,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
     it "shows the pool's balance on the All tab" do
       visit reports_path
 
-      within(find("a[href='#{pool_path(pool)}']")) do
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) do
         expect(page).to have_content("Vacation Fund")
         expect(page).to have_content("$1,000.00") # 1300 - 300
       end
@@ -57,12 +72,12 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
 
     # THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4), and the example that read it goes
     # with the behaviour. "In" was `Pool#contribution_entries` — savings-TYPED entries — so on the
-    # post-cutover demo it printed $0.00 on every card while those goals were receiving $525 a
-    # period as PoolMovements.
+    # post-cutover demo it printed $0.00 on every card while those goals were visibly receiving
+    # $525 a period.
     it "shows the card's balance against its target, and no per-period flow" do
       visit reports_path
 
-      within(find("a[href='#{pool_path(pool)}']")) do
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) do
         expect(page).to have_content("$1,000.00")
         expect(page).to have_content("of $5,000.00")
         expect(page).to have_no_content("In")
@@ -78,7 +93,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
 
       expect(page).to have_no_link("Savings")
       expect(find("nav[aria-label='Tabs'] a", text: "All")[:class]).to include("border-brand")
-      within(find("a[href='#{pool_path(pool)}']")) { expect(page).to have_content("$1,000.00") }
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) { expect(page).to have_content("$1,000.00") }
     end
   end
 
@@ -106,7 +121,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
 
       visit reports_path
 
-      within(find("a[href='#{pool_path(pool)}']")) { expect(page).to have_content("funded") }
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) { expect(page).to have_content("funded") }
     end
 
     it "shows 'low' badge when pool is under 10%" do
@@ -115,7 +130,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
 
       visit reports_path
 
-      within(find("a[href='#{pool_path(pool)}']")) { expect(page).to have_content("low") }
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) { expect(page).to have_content("low") }
     end
 
     it "shows 'negative' badge when spending exceeds what was moved in" do
@@ -125,7 +140,7 @@ RSpec.describe "Dashboard Index - Savings Pools", type: :system do
 
       visit reports_path
 
-      within(find("a[href='#{pool_path(pool)}']")) { expect(page).to have_content("negative") }
+      within(find("[data-savings-strip] a[href='#{category_path(pool)}']")) { expect(page).to have_content("negative") }
     end
   end
 end

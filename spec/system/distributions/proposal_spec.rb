@@ -18,9 +18,12 @@ RSpec.describe "Distributions Proposal", type: :system do
   # which is what makes Groceries' $85 sweepable.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
   # The pot, for income to land in (`Category#income_must_land_in_an_account`). No figure below is
-  # read off it, and the buffer target on the all-clear example is the one exception — see
-  # DistributionPresenter#buffer_target, which still reads `pools.target_amount`.
+  # read off it — the buffer target was the one exception, and it is deleted with the concept
+  # (Task 7; see the note in spec/presenters/distribution_presenter_spec.rb).
+  # rubocop:disable RSpec/LetSetup -- see the comment above: setup for the physical side of a
+  # fixture whose every assertion is on the purpose side.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
   before { sign_in user, scope: :user }
 
@@ -98,12 +101,6 @@ RSpec.describe "Distributions Proposal", type: :system do
   # that rendered the table unconditionally would pass every example above.
   describe "an all-clear distribution", :aggregate_failures do
     before do
-      # THE TARGET IS SET FIRST, and the order is load-bearing rather than tidy. `buffer_target` reads
-      # `user.default_account.target_amount`, and the FIRST thing to ask `user.default_account` is the
-      # category factory a line below — which caches the association on the user object Warden hands
-      # the first request. Updated afterwards, the column moves in the database and the cached Pool
-      # keeps the `nil` it was loaded with, and the clause silently stays off.
-      checking.update!(target_amount: 4_000)
       envelope("Groceries", 400, funded: 85, priority: 1)
       envelope("Car", 100, priority: 2)
       envelope("Vacation", 150, priority: 3)
@@ -117,7 +114,11 @@ RSpec.describe "Distributions Proposal", type: :system do
 
       within("#distribution-summary") do
         expect(page).to have_content("3 envelopes funded in full, $650.00 out", normalize_ws: true)
-        expect(page).to have_content("$2,250.00 stays in your buffer · you wanted $4,000.00", normalize_ws: true)
+        # THE ` · you wanted $4,000.00` CLAUSE IS DELETED (Task 7) with `buffer_target` — the last
+        # pool read on this screen, and one about the POT while every figure beside it is about
+        # AVAILABLE.
+        expect(page).to have_content("$2,250.00 stays in your buffer.", normalize_ws: true)
+        expect(page).to have_no_content("you wanted")
       end
 
       expect(page).to have_no_css("#distribution-waterfall")

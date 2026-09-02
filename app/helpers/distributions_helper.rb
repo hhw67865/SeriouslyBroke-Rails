@@ -32,15 +32,6 @@ module DistributionsHelper
     "#{label} · due #{line.due_on.strftime("%b %-d")} · #{pluralize(line.periods_left, "period")} left"
   end
 
-  # The buffer target, said as a want rather than as a denominator. `$1,419.00 of $2,000.00`
-  # reads as a limit on a figure that has none — the buffer target is a health marker and never
-  # a cap (spec §7.1) — so the clause names what it measures or stays off entirely.
-  def buffer_target_clause(presenter)
-    return "" unless presenter.buffer_target?
-
-    " · you wanted #{number_to_currency(presenter.buffer_target)}"
-  end
-
   # What the row proposes to put in, on the right-hand side. `$315.00 of $400.00` only where
   # the two differ: `$400.00 of $400.00` on a fully funded row is noise, and it is the row that
   # is NOT fully funded that has to stand out on a screen whose job is showing where the money

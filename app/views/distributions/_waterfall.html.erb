@@ -193,7 +193,7 @@
         That is `available + Σ holdings` shown before it is written. %>
     <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
       <span class="text-sm font-medium text-gray-900">
-        Stays in buffer<span class="text-gray-500"><%= buffer_target_clause(presenter) %></span>
+        Stays in buffer
       </span>
       <span class="tabular-nums text-sm <%= presenter.leftover.negative? ? "text-status-danger" : "text-gray-900" %>">
         <%= number_to_currency(presenter.buffer_carried) %> → <%= number_to_currency(presenter.leftover) %>

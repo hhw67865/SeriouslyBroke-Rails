@@ -3,30 +3,29 @@
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
   <% calc = category.calculator(selected_date, period: current_period) %>
-  <%# EVERY EXPENSE CATEGORY POINTS AT A POOL (plan 3, task 3), so this arm and `expense?` are the
-      same set and the cap arm that used to sit between them — a monthly budget bar, a pace line and
-      a "No budget set" empty state — is deleted with the cap it read. %>
+  <%# ONE ARM PER CATEGORY TYPE. The cap arm that used to sit between them — a monthly budget bar,
+      a pace line and a "No budget set" empty state — was deleted with the cap it read (plan 3,
+      task 3). %>
   <% if category.expense? %>
-    <!-- Pool-Covered Expense Category Summary -->
+    <!-- Expense Category Summary -->
     <div class="space-y-6">
       <div>
         <div class="flex justify-between text-sm mb-2">
           <span class="text-gray-500">Spent <%= period_time_label %></span>
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
-        <%# THE THIRD CARD ON THIS PAGE, AND IT HELD THE SAME DEFECT AS THE OTHER TWO (2d
-            whole-plan review, fix 2, found in the visual check). This arm is every EXPENSE
-            category — each of which points at some pool — and it said "Funded by savings pool" about
-            all of them: about a budget ENVELOPE, which is not a savings pool, and about a savings
-            goal this category SPENDS from rather than is funded by. Both halves are now read from
-            the pool: `Pool#noun` for the word, and the direction from what an expense category
-            actually does to a pool it points at (`PoolBalanceLedger::ENTRY_POOL_ID` subtracts it).
-            The trailing clause is true of both kinds — this spending is separate from whatever
-            else the user's budget is doing, whichever pool it comes out of. %>
+        <%# WHERE THE SPENDING WENT, IN ONE SENTENCE, AND THE POOL IS OUT OF IT (Task 7). This
+            named `category.pool` — "Spending here comes out of the envelope Groceries", linked to
+            the pool page — and both halves are gone: the pool screens are deleted and a category
+            holds its own money (two-ledger spec §3). The line asks `Category#holder?`, which is
+            the one predicate the holdings card in the right-hand column branches on, so the two
+            cards on this page cannot say different things about the same category. %>
         <p class="text-xs text-gray-500">
-          Spending here comes out of the <%= category.pool.noun %>
-          <%= link_to category.pool.name, pool_path(category.pool), class: "text-brand hover:text-brand-dark" %>
-          — separate from your monthly budget
+          <% if category.holder? %>
+            Spending here comes out of what this category holds
+          <% else %>
+            Spending here comes out of what's available — nothing reserves it
+          <% end %>
         </p>
       </div>
 

@@ -88,16 +88,17 @@ class DashboardPresenter
   #
   # THE SAVINGS TAB'S THIRTEEN DELEGATIONS ARE GONE (plan 3, task 5) — the chart, the flow chart,
   # the two contribution totals, the balance, the two breakdowns, the withdrawals and
-  # `#savings_rate`, all of them summing entries in a savings CATEGORY. `#pools_summary` and
-  # `#total_pools_balance` are the two that survived the tab, because the ALL tab renders the goals
-  # strip they feed; they moved to `Dashboard::OverviewPresenter` rather than dying with the class.
+  # `#savings_rate`, all of them summing entries in a savings CATEGORY. `#savings_summary` and
+  # `#total_savings_balance` are the two that survived the tab, because the ALL tab renders the
+  # goals strip they feed; they moved to `Dashboard::OverviewPresenter` rather than dying with the
+  # class, and Task 7 renamed them off the pool they used to read.
   delegate :net_amount,
            :expense_ratio,
            :top_expense_categories,
            :buffer_categories_breakdown,
            :envelope_categories_breakdown,
-           :pools_summary,
-           :total_pools_balance,
+           :savings_summary,
+           :total_savings_balance,
            to: :overview
 
   # === Tracked Filter ===
@@ -135,46 +136,53 @@ class DashboardPresenter
   # an answer that was nil every time, and what justified paying for them was `#total_budget`,
   # which this task deletes. `Category has_one :budget` goes with it.
   def tracked_expense_categories
-    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:pool, items: :entries)
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(items: :entries)
   end
 
   # ---------------------------------------------------------------------------------------------
   # WHICH LANE A CATEGORY SPENDS FROM — the split this page is built on, and the only split it
-  # draws. Task 3 landed these four as a mechanical bridge with the semantics deferred here;
-  # decision 6 keeps the line and drops the cap-era names that sat on top of it.
+  # draws.
   #
-  # BUFFER: an expense category pointing at an ACCOUNT. Nothing reserves this money — it is spent
-  # straight out of the account it lands in.
-  # ENVELOPE: a category pointing at a budget envelope or a savings goal. The money was moved
-  # there before it was spent.
+  # AVAILABLE: an expense category that holds no money of its own. Nothing reserves this spending —
+  # it drains AVAILABLE, money with no job yet (two-ledger spec §2).
+  # HELD: a category that has started holding money. It was allocated there before it was spent.
   #
-  # ONE PREDICATE, and it is `Category#buffer_funded?`'s — the same line the suggestion engine's
-  # rate detector, the Categories page's `account_pointed` arm and the entry form's impact card
-  # all draw. The four readers below are its SQL twin (`categories.pool_id IN (accounts)`) so the
-  # entry sums and the category breakdowns beside them cannot describe different money.
+  # ONE PREDICATE, AND IT IS `Category#holder?` — `expense? && funded_since.present?`, the model's
+  # own reader, the same line `AllocationCalculator` fills by, `SuggestionEngine` proposes for and
+  # `EntryImpactPresenter` draws its honest card on.
   #
-  # THE CATEGORY'S POOL, NOT `PoolBalanceLedger::ENTRY_POOL_ID`. The ledger resolves an entry
-  # through `COALESCE(entries.pool_id, categories.pool_id)` because an entry may name the pool it
-  # actually landed in; this page groups BY CATEGORY, so its rows and its totals have to answer
-  # the same question or the breakdown would not sum to the stat card above it. Nothing writes
-  # `entries.pool_id` today (it is not permitted by EntriesController and is nil on every row), so
-  # the two readers agree — but they are answers to different questions and the day an override
-  # can be written this page still wants the category's lane.
+  # IT WAS `Category#buffer_funded?`, WHICH IS A POOL READER (Task 7's re-aim). That predicate is
+  # `expense? && pool.pool_type_account?` — "points at an account" — and under the two-ledger model
+  # a category's pool says nothing about whether it holds money: the whole layer is being deleted
+  # (§5), the column is nullable again, and a category that holds its own money is precisely the
+  # one whose pool is nil. So the old reader had already inverted on the shapes this branch mints.
+  # `buffer_funded?` itself dies with the column in Task 8; this page stops reading it now.
+  #
+  # THE SQL TWIN MOVES WITH IT. The entry-level halves below were `categories.pool_id IN
+  # (accounts)`; they are `categories.funded_since IS NULL` now — `holder?` in SQL, exactly as
+  # `Category.in_fill_order` spells it. This page groups BY CATEGORY, so its rows and its totals
+  # have to answer the same question or the breakdown would not sum to the stat card above it.
+  #
+  # WHAT THIS SPLIT IS *NOT*: it is not `CategoryLedger::ENTRY_CATEGORY_ID`, which additionally
+  # gates each entry on its own DATE against `funded_since` — spending a category recorded before
+  # it started holding money drains available even though the category holds money today. That is
+  # the right rule for a BALANCE and the wrong one for this page, which is a breakdown of
+  # CATEGORIES: a category cannot be in two bands at once, and the band it belongs in is the lane
+  # it spends from now.
   # ---------------------------------------------------------------------------------------------
   def tracked_buffer_funded_categories
-    @tracked_buffer_funded_categories ||= tracked_expense_categories.select(&:buffer_funded?)
+    @tracked_buffer_funded_categories ||= tracked_expense_categories.reject(&:holder?)
   end
 
   def tracked_enveloped_categories
-    @tracked_enveloped_categories ||= tracked_expense_categories.reject(&:buffer_funded?)
+    @tracked_enveloped_categories ||= tracked_expense_categories.select(&:holder?)
   end
 
-  # The entry-level half of the same line. `account_pool_ids` is a sub-SELECT rather than a loaded
-  # array so these compose into the `group_by_day`/`group_by_month` scopes the charts build on
-  # without a second round trip.
-  def buffer_funded_expenses = @user.entries.expenses.where(categories: { pool_id: account_pool_ids })
+  # The entry-level half of the same line, composing into the `group_by_day`/`group_by_month`
+  # scopes the charts build on.
+  def buffer_funded_expenses = @user.entries.expenses.where(categories: { funded_since: nil })
 
-  def enveloped_expenses = @user.entries.expenses.where.not(categories: { pool_id: account_pool_ids })
+  def enveloped_expenses = @user.entries.expenses.where.not(categories: { funded_since: nil })
 
   def tracked_income_categories
     @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)
@@ -205,8 +213,4 @@ class DashboardPresenter
     end
     results.reject { |c| c[:amount].zero? }.sort_by { |c| -c[:amount] }
   end
-
-  private
-
-  def account_pool_ids = @user.pools.accounts.select(:id)
 end

@@ -12,10 +12,16 @@ Rails.application.routes.draw do
   # The former dashboard: still the backward-looking view, no longer the front door.
   get "reports", to: "dashboard#index", as: :reports
 
-  # WHERE BANK ACCOUNTS ARE CREATED — from Home, where accounts render. Plural `bank_accounts`
-  # because `resource :account` below is already the user-settings page. Create-only: rename and
-  # delete stay on the pool's own edit screen, which already handles every pool type.
-  resources :bank_accounts, only: [:create]
+  # WHERE BANK ACCOUNTS ARE BORN, RENAMED AND DELETED — from Home, where accounts render. Plural
+  # `bank_accounts` because `resource :account` below is already the user-settings page.
+  #
+  # THE THREE MEMBER ACTIONS ARRIVED FROM `resources :pools` (two-ledger spec §5, Task 7). Rename
+  # and delete lived on the pool's own edit screen, which handled all three pool types; two of the
+  # three are gone (a budget envelope and a savings goal are CATEGORIES now), so what is left is a
+  # screen about accounts, and it belongs on the resource that names them. `index`, `show` and
+  # `new` are deliberately absent: Home IS the accounts index and each account's own card is its
+  # show, and the create form is the card on Home.
+  resources :bank_accounts, only: [:create, :edit, :update, :destroy]
 
   # ONBOARDING STEP 2 (main-account spec §5): giving a fresh account its real balance, as one
   # movement from main. Create-only, same shape as `bank_accounts` above and for the same
@@ -28,12 +34,17 @@ Rails.application.routes.draw do
   # above it: one door, on Home, where the card lives.
   resource :opening_balance, only: [:create]
 
-  resources :pools do
-    member do
-      get :categories, to: "pools/categories#index"
-      patch :categories, to: "pools/categories#update"
-    end
-  end
+  # ── `resources :pools` IS GONE (two-ledger spec §5, Task 7), and with it `PoolsController`,
+  # `Pools::CategoriesController`, every view under `app/views/pools/` and `PoolsHelper`. The
+  # index was the savings-goals list (savings are CATEGORIES now and render on /categories), the
+  # show page described a pool's balance and history (a category's own page does), the form
+  # created envelopes and goals (rules live on /budget, goals on /categories) and the member
+  # `categories` pair was the connect/disconnect manager for a link that no longer exists — "the
+  # only connection between an account and a category is the movement" (§1).
+  #
+  # ACCOUNTS KEEP EVERY DOOR THEY HAD: `resources :bank_accounts` above now carries `edit`,
+  # `update` and `destroy` alongside `create`.
+
   # THE §6 IMPACT CARD'S FRAGMENT. The envelope on the entry form is DERIVED from the category, so
   # the card has to follow the category select, and the whole of the card — the honest
   # no-envelope shape, the goal shape, whether a period end date exists at all — is a server

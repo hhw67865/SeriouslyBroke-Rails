@@ -2,112 +2,122 @@
 
 require "rails_helper"
 
-# §7a'S WIDENED-PARAMETER CLASS, ASKED OF `category[pool_id]`.
+# THE CATEGORY FORM'S WIRE CONTRACT, AFTER `pool_id` LEFT IT (two-ledger spec §3–§5, Task 7).
 #
-# Plan 3 decision 3 made a pool REQUIRED on every category, which turned `pool_id` from a corner of
-# this form that nothing routinely wrote into the ordinary payload of every create and every update.
-# A scoped READ beside an unscoped WRITE is ownership on the way in only, and the consequence here
-# is the app's central invariant rather than one screen's chrome:
-# `PoolBalanceLedger::ENTRY_POOL_ID` resolves an entry through
-# `COALESCE(entries.pool_id, categories.pool_id)` and joins on pool id with no user filter, so a
-# stranger's pool id puts this user's whole spending history into that user's balance and breaks
-# `Σ pools == your bank balance` for both of them.
+# WHAT THIS FILE USED TO BE. Every example here was §7a's widened-parameter class asked of
+# `category[pool_id]`: plan 3 made a pool REQUIRED on every category, which turned that param into
+# the ordinary payload of every create and update, and a scoped READ beside an unscoped WRITE would
+# have put this user's whole spending history into a STRANGER's pool balance —
+# `PoolBalanceLedger::ENTRY_POOL_ID` joined on pool id with no user filter. The controller answered
+# it with a `current_user.pools.find`, and this file pinned the 404-vs-422 line that lookup drew.
 #
-# A REQUEST SPEC because these are answers to requests the UI cannot make: the form's picker only
-# ever renders `current_user.pools`, so a foreign id can only arrive by tampering — which is exactly
-# the case a form-driven system spec cannot reach.
+# THE PARAM IS GONE, SO THE HAZARD CLASS IS TOO. Nothing reads `categories.pool_id` any more, the
+# form offers no picker, and `category_params` permits no foreign id of any kind — the three
+# attributes that replaced it (`target_amount`, `priority`, `funded_since`) are plain columns of
+# the record itself, so there is no "whose is this" question for a request to get wrong. The six
+# examples that pinned the pool lookup are DELETED, each named in the task report; what stands in
+# their place is the contract of the three that arrived.
 #
-# EVERY EXAMPLE IS A PAIR. A controller that 404s everything passes every "it refuses" assertion
-# ever written, and the 404-vs-422 line is the one every ownership fix on this branch has drawn:
-# WHOSE is the controller's question and answers 404; WHAT SHAPE is the model's and answers 422.
+# STILL A REQUEST SPEC, for the reason the old one was: these are answers to requests the UI does
+# not make. The form never submits a `pool_id`, and a param dropped silently back to its default
+# looks exactly like a param that was never sent — which only this layer can tell apart.
 RSpec.describe "Categories", type: :request do
   let(:user) { create(:user) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let!(:groceries) { create(:pool, :budget_pool, user: user, account: checking, name: "Groceries") }
-
-  let(:stranger) { create(:user) }
-  let!(:stranger_account) { create(:pool, :account, user: stranger, name: "Their Checking") }
 
   # `scope:` explicitly, as the other request specs do: Devise's mappings are populated when the
   # routes are drawn, and routes load lazily.
   before { sign_in user, scope: :user }
 
   describe "POST /categories" do
-    def create_category(pool_id:, type: "expense", name: "Groceries Spending")
-      post categories_path, params: { category: { name: name, category_type: type, pool_id: pool_id } }
+    def create_category(attributes)
+      post categories_path, params: { category: { name: "Vacation", category_type: "expense" }.merge(attributes) }
     end
 
     # THE REACH DIRECTION, first. Without it every refusal below would pass just as well against a
     # controller that wrote nothing at all.
-    it "writes the user's own pool onto the category", :aggregate_failures do
-      expect { create_category(pool_id: groceries.id) }.to change(Category, :count).by(1)
+    it "writes the three holding columns", :aggregate_failures do
+      expect { create_category(target_amount: 2_400, priority: 3, funded_since: "2026-02-06") }
+        .to change(Category, :count).by(1)
 
-      expect(user.categories.find_by(name: "Groceries Spending").pool).to eq(groceries)
+      category = user.categories.find_by(name: "Vacation")
+      expect([category.target_amount, category.priority]).to eq([2_400, 3])
+      expect(category.funded_since).to eq(Date.new(2026, 2, 6))
       expect(response).to redirect_to(categories_path(type: "expense"))
     end
 
-    it "refuses a stranger's pool and writes nothing", :aggregate_failures do
-      expect { create_category(pool_id: stranger_account.id) }.not_to change(Category, :count)
+    # ** `pool_id` IS NOT MERELY UNUSED, IT IS UNWRITABLE. ** The column still exists for the
+    # length of this branch (`Category belongs_to :pool, optional: true`), so a param naming it
+    # would be assigned if it were permitted — including a STRANGER's, which is the exact IDOR the
+    # deleted lookup existed to refuse. Pinned as an absence so the permit list cannot quietly
+    # regain it before Task 8 drops the column.
+    it "drops a pool a crafted param names", :aggregate_failures do
+      stranger_account = create(:pool, :account, user: create(:user), name: "Their Checking")
 
-      expect(response).to have_http_status(:not_found)
-      expect(stranger.categories.reload).to be_empty
+      create_category(pool_id: stranger_account.id)
+
+      expect(response).to redirect_to(categories_path(type: "expense"))
+      expect(user.categories.find_by(name: "Vacation").pool).to be_nil
     end
 
-    # THE OTHER SIDE OF THE SAME LINE: this pool is the user's OWN, so the controller must let it
-    # through and the MODEL must answer. Scoping the lookup to `.accounts` here would 404 a record
-    # the user can see in their own picker.
-    it "answers the user's own budget pool on an income category with a 422, not a 404", :aggregate_failures do
-      expect { create_category(pool_id: groceries.id, type: "income", name: "Salary") }
+    # THE MODEL'S OWN LINE, WHICH IS THE ONE THAT SURVIVES. `Category#holding_columns_are_sane`
+    # refuses a target on a category that cannot hold money, and a shape refusal is a 422 — the
+    # same division the deleted pool examples drew between "whose" (404) and "what shape" (422).
+    it "answers a target on an income category with a 422", :aggregate_failures do
+      expect { create_category(category_type: "income", target_amount: 2_400) }
         .not_to change(Category, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    # THIS PIN IS WITHDRAWN AND REVERSED (two-ledger spec §5, Task 2). It read "a blank pool is a
-    # 422", on the required `belongs_to :pool`; a category holds its own money now and names an
-    # account only while the pool layer stands, so a blank picker is a category with no account
-    # question answered rather than an invalid record. What the example still guards is the half
-    # that mattered: a blank must not be mistaken for a stranger's id and answered with a 404,
-    # which would tell the user their own form had vanished.
-    it "accepts a blank pool rather than mistaking it for a stranger's id", :aggregate_failures do
-      expect { create_category(pool_id: "") }.to change(Category, :count).by(1)
+    # A CATEGORY THAT HOLDS NOTHING IS THE HONEST DEFAULT (§4): its spending drains available until
+    # it gets a rule or an allocation. Blank is not a refusal.
+    it "accepts all three blank", :aggregate_failures do
+      expect { create_category(target_amount: "", funded_since: "") }.to change(Category, :count).by(1)
 
-      expect(response).not_to have_http_status(:not_found)
-      expect(user.categories.reload.last.pool).to be_nil
-    end
-
-    # M10 (main-account spec §6, fix round 2): THE WIRE REFUSAL — a non-main account is the
-    # user's OWN, same as `groceries` above, so the controller lets it through and
-    # `Category#pool_must_be_reachable` is what answers 422. §6 refuses this shape for every
-    # category, not only income ones, so this pins the expense arm the income example above does
-    # not reach.
-    it "answers the user's own non-main account with a 422, not a 404", :aggregate_failures do
-      ally = create(:pool, :account, user: user, name: "Ally")
-
-      expect { create_category(pool_id: ally.id) }.not_to change(Category, :count)
-
-      expect(response).to have_http_status(:unprocessable_content)
+      category = user.categories.find_by(name: "Vacation")
+      expect(category).not_to be_holder
+      expect(category.target_amount).to be_nil
     end
   end
 
   describe "PATCH /categories/:id" do
-    let!(:category) { create(:category, :expense, user: user, name: "Groceries Spending", pool: checking) }
-
-    it "re-points onto another of the user's own pools", :aggregate_failures do
-      patch category_path(category), params: { category: { pool_id: groceries.id } }
-
-      expect(response).to redirect_to(categories_path(type: "expense"))
-      expect(category.reload.pool).to eq(groceries)
+    let!(:category) do
+      create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 500)
     end
 
-    # THE UPDATE-SHAPED HOLE, and it is the sharper of the two: the category is mine and
-    # `#set_category` finds it, so the refusal has to come from the assignment rather than from the
-    # lookup. Nothing in `Category` objects — a stranger's account is an account — so this user's
-    # entire spending history would have moved into that user's balance.
-    it "refuses to re-point onto a stranger's pool and leaves the category alone", :aggregate_failures do
-      patch category_path(category), params: { category: { pool_id: stranger_account.id } }
+    # ** CLEARING `funded_since` STOPS THE CATEGORY HOLDING MONEY (§4). ** A blank has to reach the
+    # column as NULL rather than being skipped as "unchanged": the whole affordance the form
+    # promises is that a user can take a category back out of the fill order, and a permit list
+    # that ignored the blank would leave the checkbox and the data disagreeing.
+    it "clears the funding start when the field is submitted blank", :aggregate_failures do
+      patch category_path(category), params: { category: { funded_since: "" } }
 
-      expect(response).to have_http_status(:not_found)
+      expect(response).to redirect_to(categories_path(type: "expense"))
+      expect(category.reload.funded_since).to be_nil
+      expect(category).not_to be_holder
+    end
+
+    it "clears the target the same way" do
+      patch category_path(category), params: { category: { target_amount: "" } }
+
+      expect(category.reload.target_amount).to be_nil
+    end
+
+    # THE UPDATE-SHAPED HOLE, and it was the sharper of the two on the pool lookup: the category is
+    # mine and `#set_category` finds it, so a refusal has to come from the assignment rather than
+    # from the lookup. There is nothing left to refuse — the param is simply not permitted.
+    #
+    # `name` RIDES ALONG, and it is not padding: `params.expect` raises ParameterMissing when NONE
+    # of the listed keys is present, so a payload of `pool_id` alone is a 400 rather than a write
+    # this example could inspect. The realistic crafted request is a real form submission with one
+    # extra field, which is what this sends.
+    it "drops a pool a crafted param names on update", :aggregate_failures do
+      stranger_account = create(:pool, :account, user: create(:user), name: "Their Checking")
+
+      patch category_path(category), params: { category: { name: "Groceries", pool_id: stranger_account.id } }
+
+      expect(response).to redirect_to(categories_path(type: "expense"))
       expect(category.reload.pool).to eq(checking)
     end
   end

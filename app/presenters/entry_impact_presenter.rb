@@ -114,16 +114,28 @@ class EntryImpactPresenter
   # sentence here and the offer there is reading one app.
   def unbudgeted? = holding.nil?
 
-  # A SAVINGS CATEGORY IS A GOAL, so the card takes the goal shape (`$X → $Y of $Z goal`) rather
-  # than the envelope's. `Category#savings?` is the app's DISPLAY question — holder, with a target,
-  # carrying no refill rule (§3: "a savings category is just a category with a target and typically
-  # no refill rule") — and it is deliberately NOT `HoldingCalculator#dateless_goal?`, which is the
-  # FUNDING question and answers true for a goal that also carries a rate rule. The card is a
-  # rendering, so it asks the rendering question.
+  # A CATEGORY SAVING TOWARD A FIGURE IS A GOAL, so the card takes the goal shape
+  # (`$X → $Y of $Z goal`) rather than the envelope's.
+  #
+  # IT ASKED `Category#savings?` AND THAT WAS THE CARRIED INCONSISTENCY (Task 7's ruling). That
+  # predicate is holder + target + NO RULE, so a goal the user ALSO refills at a rate — the demo's
+  # Retirement Supplement, $150 a period against a $100,000 target — was classified as an envelope
+  # HERE and as `saving` on Home, which reads its state through `HoldingStatus#saving?` →
+  # `HoldingCalculator#dateless_goal?`. One category, two screens, two answers, and the bar was the
+  # visible half: this card drew Σ steady_ask as the denominator of a $100,000 goal.
+  #
+  # `HoldingCalculator#saving_toward_a_target?` is the calculator's OWN predicate and the one the
+  # sweep already runs on ("savings never sweep, whatever their rule mix"), so asking it here makes
+  # the classification the same on the impact card, on Home and on the categories page's holdings
+  # card. Asked of the CALCULATOR rather than re-derived from the columns for the reason that
+  # predicate's own comment gives: a second spelling is a second answer waiting to happen.
+  #
+  # Off #calculator, the one object this card's balance is already read from, so the classification
+  # and the figure beside it cannot come from two different readings of one category.
   #
   # Spending from a goal is still spending against a goal, which is why this arm exists at all: the
   # figures are the same two figures, and only the trailing phrase differs.
-  def goal? = category.present? && category.savings?
+  def goal? = holding.present? && calculator.saving_toward_a_target?
 
   def goal_target = goal? ? category.target_amount.to_d : nil
 
@@ -149,7 +161,14 @@ class EntryImpactPresenter
   # `Category#holding_calculator`, the ONE door onto what a category holds — never
   # `HoldingCalculator.new`, and never `Category#calculator`, which is the unrelated per-period
   # spending reader the categories and dashboard screens ask.
-  def balance = @balance ||= (holding.holding_calculator(today: today).balance - own_contribution).to_d
+  def balance = @balance ||= (calculator.balance - own_contribution).to_d
+
+  # ONE CALCULATOR PER CARD, and it is the reason #goal? can be asked of it. `#balance` built one
+  # inline and threw it away; #goal? needs the same object's `saving_toward_a_target?`, and two
+  # calculators over one category on one render is how a bar's shape and the figure inside it come
+  # to disagree. `Category#holding_calculator` is still the one door — this is a memo, not a second
+  # construction path.
+  def calculator = @calculator ||= holding.holding_calculator(today: today)
 
   # The figure the amount box currently holds, as money. See TYPED_AMOUNT for what "currently holds"
   # is allowed to mean.

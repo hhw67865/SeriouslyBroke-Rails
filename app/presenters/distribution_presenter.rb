@@ -434,17 +434,15 @@ class DistributionPresenter
   # did before, which is what the rest of this screen promises.
   def moved_this_period = available - buffer_carried - income_this_period - total_swept
 
-  # A health marker, never a cap (spec §7.1). Zero for a user with no main account or no target set,
-  # which is the shape the view suppresses the `you wanted …` clause on.
-  #
-  # STILL READ OFF THE MAIN ACCOUNT, and that is a carry rather than a decision: the target lives on
-  # `pools.target_amount` and nothing has moved it to the user or to the root, so this is the one
-  # line on the screen whose figure is about the POT while the number beside it is about AVAILABLE.
-  # They coincide for the user who keeps one checking account and allocates all of it, which is
-  # every user on the demo data. Task 7 owns where a buffer target should live.
-  def buffer_target = user.default_account&.target_amount.to_d
-
-  def buffer_target? = buffer_target.positive?
+  # THE BUFFER TARGET IS DELETED (Task 7). `#buffer_target` read `user.default_account.target_amount`
+  # and `#buffer_target?` gated the ` · you wanted $2,000.00` clause on two lines of this screen.
+  # It was the LAST pool read on the distribution screen, and it was already reading the wrong
+  # ledger: the target sat on the POT (an account's column) while every figure beside it is about
+  # AVAILABLE (the purpose ledger's root) — they coincide only for a user with one checking account
+  # who allocates all of it. Two-ledger §2 gives accounts no target semantics at all, and the plan's
+  # T8 drops the column, so there is nothing left to re-aim this at: the concept goes rather than
+  # moving. `DistributionsHelper#buffer_target_clause` and its two call sites
+  # (`distributions/_sources`, `distributions/_waterfall`) went with it.
 
   # True when this period has already been distributed and confirming would REPLACE that split
   # rather than add to it. A user who cannot see that their last split is about to be discarded

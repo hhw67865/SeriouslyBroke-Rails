@@ -53,54 +53,75 @@ type,
           <% end %>
         </div>
 
-        <%# WHERE THIS CATEGORY'S MONEY LIVES — required since plan 3 decision 3.
-            `categories.pool_id` used to be nullable and a nil was documented as meaning "the user's
-            default account", which no reader implemented: `PoolBalanceLedger::ENTRY_POOL_ID`
-            resolves `COALESCE(entries.pool_id, categories.pool_id)` to NOTHING, so a pool-less
-            category's spending left the pool tree entirely while `Σ pools == your bank balance`
-            claimed otherwise. The cutover migration filled every nil with the user's default
-            account; this control is how a new one gets an answer instead of a null.
+      </div>
+    </div>
 
-            DEFAULTED TO THE DEFAULT ACCOUNT (CategoriesController#new) rather than to a blank, and
-            the default is the honest one: an account IS the buffer (§7.1), so "this spending comes
-            out of my buffer" is what a category means before the user has given it an envelope, and
-            it is the state the Budget page's rate detector then proposes an envelope for.
+    <%# WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4). This block REPLACES the pool picker —
+        "Where this money lives", a grouped select over every pool the user owned — which is gone
+        with the layer it named: a category holds its own money now, so there is nowhere else for
+        it to live and nothing to point at.
 
-            GROUPED BY POOL TYPE, in `Pool::NOUNS`' words rather than the enum's, because those are
-            the nouns the rest of the app uses on screen — a user who reads "Envelope" on the
-            Categories page should not meet "budget" here.
+        ALL THREE ARE USER-EDITABLE, which §4 requires of `funded_since` and which the two beside
+        it have always needed: `priority` was seed data with no writer in the app until the Budget
+        page's drag handle, and `target_amount` had no door at all once the savings pool died.
 
-            NO `include_blank`: the choice is required, and a prompt option that submits an empty
-            string would offer the one answer the model refuses. An INCOME category must name an
-            account (Category#income_must_land_in_an_account); the list is not filtered by type
-            because the type is switched client-side on this same form, and a picker whose options
-            changed under the user would be worse than a legible 422. %>
-        <% pools_by_noun = current_user.pools.order(:pool_type, :name).group_by { |pool| pool.noun.capitalize } %>
+        THEY ARE SHOWN FOR EVERY TYPE, not just expenses, for the reason the pool picker was: the
+        type is switched CLIENT-SIDE on this same form, so fields that appeared and vanished under
+        the user would be worse than the legible 422 `Category#holding_columns_are_sane` gives for
+        a target on an income category. %>
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Holding money</h2>
+
+        <p class="text-sm text-gray-500 mb-5" data-holding-intro>
+          An expense category holds its own money once it has a funding start. Until then its
+          spending comes out of what's available.
+        </p>
+
+        <%# THE TARGET, AND THE HINT SAYS WHAT IT SWITCHES OFF. A target does not merely draw a
+            progress bar: `HoldingCalculator#saving_toward_a_target?` is the guard on
+            `#compute_period_closed`, so a category with one NEVER has its leftover swept back to
+            available at the end of a period (Task 3's savings-never-sweep ruling). Setting a
+            target on an ordinary funded category therefore turns off use-it-or-lose-it, quietly,
+            and a user who is not told that will meet it as a surprise a period later. %>
         <div class="mt-5">
-          <% if pools_by_noun.any? %>
-            <%= f.input :pool_id,
-                collection: pools_by_noun,
-                as: :grouped_select,
-                group_method: :last,
-                group_label_method: :first,
-                label_method: :name,
-                value_method: :id,
-                include_blank: false,
-                label: "Where this money lives",
-                hint: "A buffer is money you simply hold; an envelope or a goal reserves it. You can move this later." %>
-          <% else %>
-            <%# A USER WITH NO POOLS AT ALL, and the form has to say so rather than offer an empty
-                picker. Requiring a pool makes this state reachable for the first time: a brand-new
-                account has no pools, nothing in the app creates one for them, and a select with no
-                options would submit blank and meet "Pool must exist" with no way to act on it.
-                Naming the route is the whole fix — every user needs an account before anything
-                else in this app means anything. %>
-            <label class="form-label">Where this money lives</label>
-            <p class="form-hint" data-no-pools>
-              Every category has to say where its money lives, and you have no accounts yet.
-            </p>
-            <%= link_to "Make an account first", new_pool_path, class: "btn btn-secondary mt-2" %>
-          <% end %>
+          <%= f.input :target_amount,
+              as: :decimal,
+              label: "Target",
+              input_html: { placeholder: "0.00", step: 0.01, min: 0.01 },
+              hint: "The figure you're saving toward. A target makes this a goal — and money " \
+                    "here is never swept back to available at the end of a period, so a target " \
+                    "switches off use-it-or-lose-it. Leave it blank for an ordinary envelope." %>
+        </div>
+
+        <%# THE FILL ORDER. `Category.apply_fill_order` is the Budget page's drag handle and the
+            other writer; both write the same column, and it is dense there rather than here — a
+            number typed in this box may tie with another category's, and `Category.in_fill_order`
+            breaks a tie on NAME. Said plainly rather than left to be discovered. %>
+        <div class="mt-5">
+          <%= f.input :priority,
+              as: :integer,
+              label: "Funding priority",
+              input_html: { min: 0, step: 1 },
+              hint: "Where this category sits when you distribute — lower is funded first. Ties " \
+                    "are broken by name. You can also drag the order on the Budget page." %>
+        </div>
+
+        <%# THE FUNDING START, AND THE HINT SAYS THAT EDITING IT MOVES HISTORY. It is the date
+            `CategoryLedger::ENTRY_CATEGORY_ID` compares every entry against: spending on or after
+            it drains THIS category, spending before it drains available. So changing this field
+            re-reads spending that is already recorded, in both directions — and clearing it on a
+            category that carries a rule drops that category out of `Category.in_fill_order`
+            entirely, which the Budget page shows as its "Not in the fill order" band. %>
+        <div class="mt-5">
+          <%= f.input :funded_since,
+              as: :date,
+              html5: true,
+              label: "Holding since",
+              hint: "The day this category started holding its own money. Spending before it " \
+                    "reads against what's available instead — so changing this date moves " \
+                    "history. Clear it and the category stops holding money and leaves the " \
+                    "fill order." %>
         </div>
       </div>
     </div>

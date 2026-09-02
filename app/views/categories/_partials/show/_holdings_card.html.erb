@@ -1,0 +1,148 @@
+<%# WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4). Local: `presenter`
+    (CategoryBudgetPresenter).
+
+    ONE CARD WHERE THERE WERE TWO (Task 7). `_budget_card` printed the pool's standing in the row
+    vocabulary and `_pool_card`, four inches below it, drew the SAME pool again with a name, a
+    progress bar and a noun of its own — "Envelope" above "Savings Pool" about one pool on one
+    afternoon, which took three review rounds to converge and could always drift again. The
+    category holds the money now, so there is one thing to describe and one card describing it.
+
+    TWO ARMS, AND THE LINE IS `Category#holder?`: a category with a `funded_since` holds its own
+    money, and one without it spends AVAILABLE. The old arms were "points at an account" against
+    "points at an envelope or a goal", which is the same distinction asked of a layer that no
+    longer exists.
+
+    THE GOAL BAR IS DRAWN ON `HoldingCalculator#saving_toward_a_target?`, NOT `Category#savings?`
+    (Task 7's ruling — see the presenter's header). A goal the user also refills at a rate is still
+    a goal, and it is now classified as one here, on Home and on the entry form's impact card
+    alike. %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
+     data-holdings-card
+     data-holdings-state="<%= presenter.state %>">
+  <% if presenter.holding? %>
+    <%# THE CATEGORY HOLDS MONEY. The heading names what it is — a goal, or an envelope — from the
+        one predicate, so the word and the bar below it cannot describe different things. %>
+    <h2 class="text-xl font-semibold mb-4">
+      <%= presenter.saving_toward_a_target? ? "Goal" : "Envelope" %>
+    </h2>
+
+    <p class="text-sm text-gray-500 mb-4">
+      <% if presenter.saving_toward_a_target? %>
+        This category is saving toward a figure. It holds its own money from
+        <%= presenter.funded_since.strftime("%b %-d, %Y") %> onward — spending before then read
+        against what was available — and nothing here is ever swept back at the end of a period.
+      <% else %>
+        This category holds its own money from
+        <%= presenter.funded_since.strftime("%b %-d, %Y") %> onward — spending before then read
+        against what was available. What is in it is what there is to spend, and the rules on the
+        Budget page are what fill it.
+      <% end %>
+    </p>
+
+    <dl class="divide-y divide-gray-200 mb-4">
+      <div class="py-3 flex justify-between gap-4">
+        <dt class="text-sm font-medium text-gray-500">Holding</dt>
+        <dd class="text-sm text-gray-900 font-medium <%= "text-status-danger" if presenter.balance.negative? %>"
+            data-figure="balance"><%= number_to_currency(presenter.balance) %></dd>
+      </div>
+
+      <div class="py-3 flex justify-between gap-4">
+        <dt class="text-sm font-medium text-gray-500">Standing</dt>
+        <%# THROUGH `shared/_holding_status`, never hand-threaded: the partial takes ONE object and
+            reads all four of the row vocabulary's questions off it, which is what stops a caller
+            dropping a suffix the screen beside it keeps. `CategoryBudgetPresenter` answers all
+            four. %>
+        <dd data-holdings-status>
+    <%= render "shared/holding_status", row: presenter %>
+        </dd>
+      </div>
+
+      <div class="py-3 flex justify-between gap-4">
+        <dt class="text-sm font-medium text-gray-500">Holding since</dt>
+        <dd class="text-sm text-gray-900" data-figure="funded-since">
+          <%= presenter.funded_since.strftime("%b %-d, %Y") %>
+        </dd>
+      </div>
+    </dl>
+
+    <%# THE PROGRESS BAR IS THE GOAL'S ALONE. `progress_percentage` clamps at both ends, so an
+        overdrawn goal draws an empty bar rather than the "-30% complete" the pool card used to
+        print on this app's own demo data. %>
+    <% if presenter.saving_toward_a_target? %>
+      <% progress = presenter.progress_percentage %>
+      <div class="mb-4" data-goal-progress>
+        <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
+          <div class="h-2.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand" %>"
+               style="width: <%= progress %>%;"></div>
+        </div>
+        <div class="flex justify-between text-xs text-gray-500 mt-1">
+          <span><%= progress %>% complete</span>
+          <span>Target: <%= number_to_currency(presenter.target) %></span>
+        </div>
+      </div>
+    <% end %>
+
+    <%# THE RULES THAT FILL IT, NAMED. The card lists them and links to the page that edits them —
+        it offers no editor of its own, because the money a category has to spend is decided by its
+        rules and its allocations, both of which live elsewhere. `pool_rule_label` is the same
+        reader Home's expanded row uses, so a rule is named one way on both screens. %>
+    <% if presenter.rules? %>
+      <div class="mb-4" data-holdings-rules>
+        <h3 class="text-sm font-medium text-gray-500 mb-2">
+          <%= pluralize(presenter.rules.size, "rule") %>
+        </h3>
+        <ul class="divide-y divide-gray-100">
+          <% presenter.rules.each do |rule| %>
+            <li class="py-2 flex justify-between gap-4 text-sm">
+              <span class="text-gray-700 truncate"><%= pool_rule_label(rule) %></span>
+              <span class="text-gray-900 font-medium"><%= number_to_currency(rule.amount) %></span>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    <% else %>
+      <p class="text-sm text-gray-500 mb-4" data-figure="no-rules">
+        No rule fills this category — its money arrives when you distribute or move some in by hand.
+      </p>
+    <% end %>
+
+    <%= link_to budget_page_path, class: "w-full inline-flex items-center justify-center gap-2 px-4 py-2 rounded border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 shadow-sm transition", data: { budget_link: true } do %>
+      <%= heroicon "adjustments-horizontal", options: { class: "h-4 w-4" } %>
+      <span>Rules on the Budget page</span>
+    <% end %>
+  <% else %>
+    <%# THE CATEGORY HOLDS NOTHING, so its spending drains AVAILABLE (§2, §4).
+
+        THE REGISTER IS THE APP'S EXISTING ONE for this exact shape — `entries/_impact`'s honest
+        card and `budget_page/_suggestion_rate`'s "currently comes out of what's available", both
+        of which speak about the same population (`Category#holder?` rejected). Three screens, one
+        sentence.
+
+        NO EDITOR, and the sentence says why rather than leaving a missing button to be noticed:
+        nothing reserves this money, and the way to change that is to give the category a rule on
+        the Budget page — which is what the pointer below offers. %>
+    <h2 class="text-xl font-semibold mb-4">Available</h2>
+
+    <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+      This category doesn't hold money yet.
+    </p>
+    <p class="text-sm text-gray-500 mb-4">
+      Its spending comes out of what's available. Nothing reserves money for this category, so
+      nothing here can run out — and nothing tells you when it has cost more than you meant it to.
+    </p>
+
+    <%# THE POINTER WHERE THERE IS ONE, AND THE STANDING OFFER WHERE THERE IS NOT — one route to
+        /budget either way, never both. This arm IS the rate detector's population, so it is
+        precisely the shape the panel is most likely to be proposing a rule for, and the pointer
+        names what is waiting. Without a proposal the card would otherwise be a dead end, so it
+        makes the offer in the impact card's own words. %>
+    <% if presenter.suggested? %>
+      <%= render "categories/_partials/show/suggestion_pointer", presenter: presenter %>
+    <% else %>
+      <%= link_to budget_page_path, class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
+        <span>Give it a rule on the Budget page</span>
+        <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

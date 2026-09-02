@@ -1,0 +1,35 @@
+<%# RENAMING A BANK ACCOUNT — the account arm of the deleted `pools/edit`, and all that is left of
+    it (two-ledger spec §5, Task 7). One field, because a name is the only thing about an account
+    the user decides: its balance is the bank's, and the target, priority, start date, type and
+    containing account the pool form also carried either moved onto the category (`priority`,
+    `funded_since`) or were deleted with the pool layer. See BankAccountsController#edit. %>
+<% content_for :title, "Rename #{@bank_account.name}" %>
+
+<%= page_header(
+    title: @bank_account.name,
+    subtitle: "Bank account",
+    breadcrumbs: [
+      { label: "Home", url: root_path },
+      { label: @bank_account.name }
+    ]
+) %>
+
+<div class="container mx-auto px-4 py-6 max-w-2xl">
+  <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100">
+    <div class="p-6">
+      <%= simple_form_for @bank_account, as: :bank_account, url: bank_account_path(@bank_account) do |f| %>
+        <%= f.error_notification %>
+        <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+
+        <%= f.input :name,
+            label: "Account name",
+            hint: "What your bank calls it. Nothing else about an account is yours to set — its balance comes from the movements you record." %>
+
+        <div class="flex flex-col sm:flex-row sm:justify-end gap-3 mt-6">
+          <%= link_to "Cancel", root_path, class: "btn btn-secondary" %>
+          <%= f.button :submit, "Save account" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

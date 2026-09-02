@@ -14,42 +14,37 @@ class CategoriesController < ApplicationController
 
   # GET /categories/1
   #
-  # The budget block is spec §8.1's, and it is built for EXPENSE categories only because that is
-  # the only kind whose pool answers a question about a budget — an income category names the
-  # account its money lands in, which is not a state the block has words for. Nil for the others,
-  # and the view renders nothing for a nil.
-  # THE POOL CARD GETS THE SAME OBJECT, and one instance serves both blocks (2d task 6). The card
-  # is older than the budget block and rendered savings chrome for every pool it was given — an
-  # ACCOUNT read "Savings Pool / Target: $1,000.00 / -30% complete", a savings progress bar drawn
-  # on a buffer — so it now asks what its pool IS, which is exactly the question this presenter
-  # already answers for the block above it.
+  # THE HOLDINGS CARD, AND IT IS ONE CARD WHERE THERE WERE TWO (Task 7). `@budget_block` and
+  # `@pool_card` both described the POOL behind a category — one in the row vocabulary, one with a
+  # progress bar — and under the two-ledger model there is no pool behind a category at all: the
+  # category holds the money (spec §3). Both are replaced by `_holdings_card`, built off the same
+  # presenter, and the two-cards-one-envelope drift they spent three review rounds converging is
+  # structurally gone.
   #
-  # It is built for every pooled category, not just `expense?` ones: an INCOME category names the
-  # account its money lands in, and the card renders that pool honestly. Memoised, so an expense
-  # category pointing at an envelope builds ONE PoolStatus for both blocks rather than two that
-  # could disagree about the same envelope on the same page.
+  # EXPENSE ONLY, and now that is the model's own line rather than a choice this action makes:
+  # `Category#holder?` is `expense? && funded_since.present?`, so an INCOME category cannot hold
+  # money and there is nothing for the card to say about one. Nil for the others, and the view
+  # renders nothing for a nil.
   def show
-    @budget_block = category_pool_presenter if @category.expense?
-    @pool_card = category_pool_presenter if @category.pool.present?
+    @holdings_card = CategoryBudgetPresenter.new(category: @category) if @category.expense?
   end
 
   # GET /categories/new
-  # THE POOL DEFAULTS TO THE USER'S DEFAULT ACCOUNT (plan 3 decision 3). `categories.pool_id` is
-  # required now, and a form that opened with nothing selected would make every new category a
-  # 422 the user has to read before they can guess what the field wants. The default is also the
-  # right answer for most new categories: an account IS the buffer (§7.1), so "this comes out of my
-  # buffer" is what spending means before it has an envelope, and it is the shape the Budget page's
-  # rate detector then offers to give one to.
   #
-  # `default_account` is nullable on `users`, so this can still leave the field unset — the form
-  # then opens on the first pool in the list and the validation is what refuses a genuine blank.
-  # `?type=` IS CHECKED AGAINST THE ENUM HERE TOO (plan 3, task 5), and this arm is a 500 rather
-  # than a wrong heading: assigning an enum value the mapping does not hold raises ArgumentError,
-  # so `/categories/new?type=savings` — a bookmark, a browser history entry, a link in an old email
-  # — took the whole page down. `#known_type` is the same check `#set_categories` runs; an
+  # NOTHING IS DEFAULTED ANY MORE. This built `categories.new(pool: current_user.default_account)`
+  # because `pool_id` was required and a blank picker made every create a 422; the picker is gone
+  # with the pool layer (two-ledger spec §5), and the three columns that replaced it —
+  # `target_amount`, `priority`, `funded_since` — are all legitimately blank on an ordinary new
+  # category. A category that holds nothing is the honest default: its spending drains available
+  # until the user gives it a rule or an allocation, which is exactly what §4 says.
+  #
+  # `?type=` IS CHECKED AGAINST THE ENUM (plan 3, task 5), and this arm is a 500 rather than a
+  # wrong heading: assigning an enum value the mapping does not hold raises ArgumentError, so
+  # `/categories/new?type=savings` — a bookmark, a browser history entry, a link in an old email —
+  # took the whole page down. `#known_type` is the same check `#set_categories` runs; an
   # unrecognised type simply selects nothing, which is what this form does with no `type` at all.
   def new
-    @category = current_user.categories.new(pool: current_user.default_account)
+    @category = current_user.categories.new
     @category.category_type = known_type(params[:type]) if known_type(params[:type])
   end
 
@@ -101,10 +96,6 @@ class CategoriesController < ApplicationController
 
   private
 
-  def category_pool_presenter
-    @category_pool_presenter ||= CategoryBudgetPresenter.new(category: @category)
-  end
-
   def set_category
     @category = current_user.categories.find(params[:id])
 
@@ -112,34 +103,29 @@ class CategoriesController < ApplicationController
     @recent_entries = @category.entries.includes(:item).order(date: :desc).limit(5)
   end
 
-  # §7a'S WIDENED-PARAMETER CLASS, FOURTH APPEARANCE — and the widening is decision 3's. `pool_id`
-  # has been permitted here for a long time, but it was a corner of the form nothing routinely
-  # wrote; requiring a pool on every category made it the ORDINARY payload of every create and
-  # every update, which is exactly when an unscoped write starts to matter.
+  # `pool_id` IS OUT AND THE THREE HOLDING COLUMNS ARE IN (two-ledger spec §3/§4, Task 7).
   #
-  # WHAT IT COSTS UNSCOPED, and it is the invariant rather than a leak of one screen.
-  # `PoolBalanceLedger::ENTRY_POOL_ID` resolves an entry through
-  # `COALESCE(entries.pool_id, categories.pool_id)` and joins on pool id with NO user filter — so a
-  # stranger's `pool_id` here puts THIS user's whole spending history into THAT user's pool balance,
-  # and `Σ pools == your bank balance` becomes false for both of them at once. `categories#show`
-  # then renders the stranger's pool name, noun and status back to this user.
+  # WHAT THE REMOVAL BUYS. `pool_id` was permitted here through a `current_user.pools.find` because
+  # an unscoped write put THIS user's whole spending history into a STRANGER's pool balance —
+  # `PoolBalanceLedger::ENTRY_POOL_ID` joined on pool id with no user filter. Nothing reads
+  # `categories.pool_id` any more (the ledger is `CategoryLedger` and it joins on the category's own
+  # user), so the parameter is not narrowed, it is gone: the whole IDOR class it guarded against
+  # cannot be expressed through this form.
   #
-  # `find` through `current_user.pools`, so a stranger's id raises RecordNotFound and arrives as the
-  # same 404 `#set_category` gives — the identical shape `BudgetsController#scoped_owner` uses two
-  # files away, for the identical reason.
+  # THE THREE THAT ARRIVE ARE ALL PLAIN COLUMNS OF THE RECORD ITSELF, so none of them needs an
+  # ownership check — there is no foreign id to point at somebody else's row. Each is validated by
+  # `Category#holding_columns_are_sane` (a target must be positive, a priority a non-negative
+  # integer, and only an expense category may carry any of them), so a bad value is a legible 422
+  # on the form that submitted it rather than a silent write.
   #
-  # WHERE THE LINE SITS, deliberately: ownership here, SHAPE in the model. A user naming one of
-  # their OWN budget pools on an income category is `Category#income_must_land_in_an_account`'s
-  # legible 422, not a 404 — scoping to `.accounts` here would make the user's own record vanish
-  # instead. Both directions are pinned in spec/requests/categories_spec.rb.
-  #
-  # Skipped when blank, because a blank pool is the owner-less create re-rendering, which the
-  # required `belongs_to :pool` already answers, and which is not a stranger's id.
+  # `funded_since` IS USER-EDITABLE, WHICH SPEC §4 REQUIRES AND WHICH MOVES MONEY. It is the day a
+  # category starts counting its own spending; earlier spending drains available. Editing it
+  # therefore RE-READS history in both directions, and it moves the category in and out of
+  # `Category.in_fill_order` — clearing it on a rule-bearing category drops it out of the
+  # distribution waterfall and onto the Budget page's "Not in the fill order" band. The form says
+  # both things beside the field; this is where the value is allowed in.
   def category_params
-    permitted = params.expect(category: [:name, :category_type, :color, :pool_id])
-    return permitted if permitted[:pool_id].blank?
-
-    permitted.merge(pool_id: current_user.pools.find(permitted[:pool_id]).id)
+    params.expect(category: [:name, :category_type, :color, :target_amount, :priority, :funded_since])
   end
 
   # THE ONE CHECK BOTH `?type=` READERS RUN. A type the enum does not hold is a stale bookmark now

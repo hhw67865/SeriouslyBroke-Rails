@@ -4,10 +4,15 @@ require "rails_helper"
 
 # THE EXPENSES TAB AFTER DECISION 6 (plan 3, task 4).
 #
-# The two sections are the two lanes spending comes out of, and they are named that way now:
-# "Out of the Buffer" (a category pointing at an ACCOUNT — nothing reserved the money) and "Out of
-# an Envelope" (a category pointing at an envelope or a goal). The FIGURES are unchanged from the
-# bridge Task 3 left; the words "Monthly Budget", "Budgeted" and "Pool-Covered" are not.
+# The two sections are the two lanes spending comes out of: "Out of the Buffer" (a category that
+# holds no money of its own — nothing reserved it, so it drains AVAILABLE) and "Out of an Envelope"
+# (a category that holds its own money). The FIGURES are unchanged from the bridge Task 3 left; the
+# words "Monthly Budget", "Budgeted" and "Pool-Covered" are not.
+#
+# THE PREDICATE IS `Category#holder?` SINCE TASK 7, where it was `Category#buffer_funded?` — "this
+# category points at an ACCOUNT". Under the two-ledger model a category's pool says nothing about
+# whether it holds money (the layer is being deleted, and a holder's pool is nil), so the old
+# reader had inverted on exactly the shapes this fixture now plants.
 #
 # WHAT WENT WITH THE CAP HERE: the "Budget" line drawn across the chart, the Monthly/YTD Budget
 # stat card (already gated away in Task 3, deleted with its reader here) and the two column totals
@@ -30,12 +35,10 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   end
 
   describe "buffer vs envelope split", :aggregate_failures do
-    let!(:pool) { create(:pool, user: user, name: "Car Fund", target_amount: 5000, start_date: 1.year.ago) }
-
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
 
-    let!(:car_repair) { create(:category, :expense, user: user, name: "Car Repair", pool: pool) }
+    let!(:car_repair) { create(:category, :expense, :funded, user: user, name: "Car Repair") }
     let!(:car_repair_item) { create(:item, category: car_repair, name: "Mechanic") }
 
     before do
@@ -44,7 +47,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows the buffer section with only account-pointed categories" do
+    it "shows the buffer section with only the categories that hold nothing" do
       within buffer_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
@@ -52,7 +55,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       end
     end
 
-    it "shows the envelope section with only pool-pointed categories" do
+    it "shows the envelope section with only the categories that hold money" do
       within envelope_section do
         expect(page).to have_link("Car Repair")
         expect(page).to have_content("$200.00")

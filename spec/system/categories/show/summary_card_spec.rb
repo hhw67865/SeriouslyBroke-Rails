@@ -38,33 +38,24 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     end
   end
 
-  # THE LEFT COLUMN'S OWN NOUN (2d whole-plan review, fix 2, found in the visual check). This
-  # sentence read "Funded by savings pool <name>" for every pool-covered expense category — false
-  # twice over about an ENVELOPE (not a savings pool, and it is not funding anything: the money
-  # comes out of it), and false once about a goal an expense category SPENDS from. The card sits on
-  # the same page as the budget block and the pool card, which had both been moved onto
-  # `Pool#noun`; this one was still saying the third thing.
-  describe "what the pool-covered sentence calls the pool", :aggregate_failures do
-    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # THE LEFT COLUMN'S OWN SENTENCE ABOUT WHERE THE SPENDING COMES FROM (Task 7). It named the POOL
+  # — "Spending here comes out of the envelope Groceries", linked to the pool page — and both
+  # halves are gone with the layer: a category holds its own money (two-ledger spec §3). It asks
+  # `Category#holder?` now, which is the SAME predicate the holdings card in the right-hand column
+  # branches on, so the two cards on one page cannot say different things about one category.
+  describe "what the sentence says the spending comes out of", :aggregate_failures do
+    it "names the category's own holdings when it holds money" do
+      visit category_path(create(:category, :expense, :funded, user: user, name: "Food"))
 
-    it "names an envelope an envelope" do
-      envelope = create(:pool, :budget_pool, user: user, account: checking, name: "Groceries")
-
-      visit category_path(create(:category, :expense, user: user, name: "Food", pool: envelope))
-
-      expect(page).to have_content("Spending here comes out of the envelope Groceries")
-      expect(page).to have_no_content("Funded by savings pool")
+      expect(page).to have_content("Spending here comes out of what this category holds")
+      expect(page).to have_no_content("comes out of what's available")
     end
 
-    # The other direction on the same sentence, and the one the demo actually holds
-    # (Health → Emergency Fund).
-    it "names a savings pool a goal" do
-      goal = create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000)
+    it "names available when it holds nothing" do
+      visit category_path(create(:category, :expense, user: user, name: "Health"))
 
-      visit category_path(create(:category, :expense, user: user, name: "Health", pool: goal))
-
-      expect(page).to have_content("Spending here comes out of the goal Emergency Fund")
-      expect(page).to have_no_content("comes out of the envelope")
+      expect(page).to have_content("Spending here comes out of what's available")
+      expect(page).to have_no_content("what this category holds")
     end
   end
 
@@ -100,21 +91,18 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
   # "Expected by today: $150.00". The cap and the `prorated` ramp are both gone, so the fixture is
   # unbuildable and the sentences are unrenderable; they are deleted with the behaviour.
 
-  # THE POOL'S WORDS INSIDE THE FRAGMENT CACHE, AND THE KEY THAT BUSTS IT (2d task 6, revised in
-  # plan 3 task 5).
+  # THE LEFT COLUMN'S FRAGMENT CACHE, AND THE KEY THAT BUSTS IT (2d task 6, revised in plan 3 task
+  # 5 and again in Task 7).
   #
-  # 2d narrowed this cache to the left column because an envelope's BALANCE is not derived from THIS
-  # category's entries, and put the POOL in the key for the one balance it could not move out —
-  # `_summary_card`'s savings arm. That arm is deleted with the savings category, and no pool FIGURE
-  # is left under this cache. The pool stays in the key for what remains: the expense arm prints the
-  # pool's NOUN and NAME ("Spending here comes out of the envelope Groceries"), so a renamed pool
-  # would go on being described by its old name here while the pool card in the uncached right
-  # column showed the new one — one page, two names.
+  # `@category.pool` IS OUT OF THE KEY. It was there for one rendered byte — the pool's noun and
+  # name in the sentence above — and that sentence names no pool now, so keying on a column nothing
+  # under the cache reads bought nothing and would have outlived the association. What the sentence
+  # DOES read is `Category#holder?`, and the category is in the key, so an ordinary write busts it.
   #
   # THE ENVIRONMENT MAKES THIS INVISIBLE BY DEFAULT — `config.cache_store = :null_store` in test —
   # so every other example in this suite would pass against a key that never busts anything. These
   # two turn a real store on, which is the only way either half means anything.
-  describe "the pool's words inside the fragment cache" do
+  describe "the funding start inside the fragment cache" do
     around do |example|
       cache = Rails.cache
       controller_cache = ActionController::Base.cache_store
@@ -129,46 +117,39 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
       ActionController::Base.perform_caching = caching
     end
 
-    let(:checking) { create(:pool, :account, user: user, name: "Checking") }
-    let(:goal) { create(:pool, user: user, name: "Emergency Fund", target_amount: 2_000) }
-    let!(:spending) { create(:category, category_type: "expense", user: user, name: "Rainy Day", pool: goal) }
+    let!(:spending) { create(:category, category_type: "expense", user: user, name: "Rainy Day") }
 
-    def fund(amount) = create(:pool_movement, from_pool: checking, to_pool: goal, amount: amount, date: Date.current)
-
-    # THE STALENESS FIX ITSELF: the pool is renamed, and the sentence has moved on the next load.
-    # `Category belongs_to :pool, touch: true` is not the chain that saves this — the CATEGORY is
-    # untouched by a pool edit — the pool's own `updated_at` in the key is.
-    it "moves when the pool is renamed", :aggregate_failures do
-      fund(500)
+    # THE BUST ITSELF: the category starts holding money, and the sentence has moved on the next
+    # load. `update!` moves `updated_at`, which is the whole of what puts the category in the key.
+    it "moves when the category starts holding money", :aggregate_failures do
       visit category_path(spending)
-      expect(page).to have_content("comes out of the goal")
-      expect(page).to have_content("Emergency Fund")
+      expect(page).to have_content("comes out of what's available")
 
-      goal.update!(name: "Renamed Fund")
+      spending.update!(funded_since: Date.current - 1.month)
       visit category_path(spending)
 
-      expect(page).to have_content("Renamed Fund")
-      expect(page).to have_no_content("Emergency Fund")
+      expect(page).to have_content("comes out of what this category holds")
+      expect(page).to have_no_content("comes out of what's available")
     end
 
     # AND THE CACHE IS GENUINELY ON, which the example above cannot show on its own — it would read
     # exactly the same against a store that never stored anything, and the null store is what this
-    # environment configures. `update_column` writes the name with no callbacks, so no `touch`
-    # reaches the pool and the key does not move: the LEFT column keeps serving the stale name while
-    # the pool card in the uncached right column already shows the new one. One load, both halves.
+    # environment configures. `update_column` writes the date with no callbacks, so `updated_at`
+    # does not move and the key does not either: the LEFT column keeps serving the old sentence
+    # while the holdings card in the uncached right column already says the category holds money.
+    # One load, both halves.
     it "still serves a cached left column when nothing in the key moved", :aggregate_failures do
-      fund(500)
       visit category_path(spending)
-      expect(page).to have_content("Emergency Fund")
+      expect(page).to have_content("comes out of what's available")
 
       # SKIPPING THE CALLBACKS IS THE POINT, not a shortcut: `update!` would move `updated_at`,
       # which is exactly what this example needs NOT to happen — a key that moved would prove
       # nothing about whether anything was ever stored.
-      goal.update_column(:name, "Renamed Fund") # rubocop:disable Rails/SkipsModelValidations
+      spending.update_column(:funded_since, Date.current - 1.month) # rubocop:disable Rails/SkipsModelValidations
       visit category_path(spending)
 
-      expect(page).to have_content("Emergency Fund")
-      expect(page).to have_content("Renamed Fund")
+      expect(page).to have_content("comes out of what's available")
+      expect(find("[data-holdings-card]")["data-holdings-state"]).to eq("holding")
     end
   end
 end

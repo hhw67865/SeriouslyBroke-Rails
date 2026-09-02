@@ -397,19 +397,27 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.overdrawn?).to be(true)
     end
 
-    # THE ONE SHAPE THE DISPLAY QUESTION AND THE FUNDING QUESTION DISAGREE ON, pinned rather than
-    # left latent. A goal that ALSO carries a refill rule is not `savings?` — a category the
-    # waterfall tops up every period is being SPENT toward a rate rather than SAVED toward a figure
-    # — so this card draws it as an envelope against its rule's claim, while `HoldingStatus` still
-    # calls it `saving` on Home (it asks the target through `dateless_goal?`). Recorded here because
-    # a divergence with a reason is a design and an undisclosed one is the next drift.
-    it "is an envelope, not a goal, once a refill rule fills it", :aggregate_failures do
+    # ** THE CARRIED INCONSISTENCY, AND IT IS REVERSED HERE (Task 7's ruling). ** This example read
+    # "is an envelope, not a goal, once a refill rule fills it": the card asked
+    # `Category#savings?` — holder + target + NO RULE — so a goal the waterfall ALSO refills at a
+    # rate (the demo's Retirement Supplement, $150 a period against a $100,000 target) drew the
+    # ENVELOPE bar here while `HoldingStatus` called the same category `saving` on Home. One
+    # category, two screens, two answers, and the bar was the visible half: Σ steady_ask as the
+    # denominator of a six-figure goal, drawn FULL an inch under "of $100,000.00 goal".
+    #
+    # Every RENDERING asks `HoldingCalculator#saving_toward_a_target?` now — the calculator's own
+    # predicate, the one the sweep already runs on — so a rule-bearing goal is a goal on this card,
+    # on Home and on the categories page's holdings card alike. `Category#savings?` still answers
+    # FALSE, deliberately and without contradiction: it is the question an INDEX of the user's
+    # savings asks, not the question a rendering asks, and both are asserted here so the two cannot
+    # be quietly folded together.
+    it "is still a goal once a refill rule fills it", :aggregate_failures do
       rate(vacation, 500)
 
       expect(vacation.reload.savings?).to be(false)
-      expect(present(vacation).goal?).to be(false)
-      expect(present(vacation).goal_target).to be_nil
-      expect(present(vacation).denominator).to eq(BigDecimal("500"))
+      expect(present(vacation).goal?).to be(true)
+      expect(present(vacation).goal_target).to eq(BigDecimal("2400"))
+      expect(present(vacation).denominator).to eq(BigDecimal("2400"))
     end
 
     it "is not a goal without a target, and falls back to the category's own claim", :aggregate_failures do

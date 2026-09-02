@@ -144,6 +144,77 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
   end
 
+  # ── WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4, Task 7). The three columns that replaced
+  # the pool picker, and the two of them that move something.
+  describe "the holding fields", :aggregate_failures do
+    let(:goal_attributes) do
+      { name: "Vacation", target_amount: 2_400, priority: 3, funded_since: Date.new(2026, 2, 6) }
+    end
+
+    it "pre-fills the target, the priority and the funding start" do
+      visit edit_category_path(create(:category, :expense, user: user, **goal_attributes))
+
+      expect(page).to have_field("Target", with: "2400.0")
+      expect(page).to have_field("Funding priority", with: "3")
+      expect(page).to have_field("Holding since", with: "2026-02-06")
+    end
+
+    it "turns an ordinary category into a goal" do
+      visit edit_category_path(category)
+      fill_in "Target", with: "2400"
+      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(category.reload).to be_savings
+    end
+  end
+
+  # ** EDITING `funded_since` MOVES A CATEGORY IN AND OUT OF THE FILL ORDER (Task 7's ruling). **
+  #
+  # `Category.in_fill_order` is `expenses.where.not(funded_since: nil)`, and `AllocationCalculator`
+  # walks exactly that scope — so clearing the date on a category that CARRIES A RULE does not
+  # merely change a balance's start line: the rule stops being reachable by any distribution, and
+  # the Budget page has a band that says so. This is the pair the form's hint promises, asserted on
+  # the screen that shows the consequence rather than on the record alone.
+  describe "clearing and setting the funding start on a ruled category", :aggregate_failures do
+    let!(:groceries) do
+      create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
+    end
+
+    before { create(:budget, :per_period_rate, pool: nil, category: groceries, amount: 400) }
+
+    it "drops the category out of the fill order and into the band that says why" do
+      visit edit_category_path(groceries)
+      fill_in "Holding since", with: ""
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).to be_nil
+
+      visit budget_page_path
+      expect(page).to have_no_css("[data-category-group='Groceries']")
+      within("[data-not-filling-rule='Groceries']") do
+        expect(page).to have_content("Groceries isn't holding money yet")
+      end
+    end
+
+    it "puts it back in the fill order when the date is set again" do
+      groceries.update!(funded_since: nil)
+
+      visit edit_category_path(groceries)
+      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).to eq(Date.new(2026, 2, 6))
+
+      visit budget_page_path
+      expect(page).to have_css("[data-category-group='Groceries']")
+      expect(page).to have_no_css("[data-not-filling-rule='Groceries']")
+    end
+  end
+
   describe "navigation", :aggregate_failures do
     before { visit edit_category_path(category) }
 

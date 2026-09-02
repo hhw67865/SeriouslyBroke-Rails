@@ -56,9 +56,9 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expect(page).to have_no_content("% used")
     end
 
-    it "shows savings pools section with pool card" do
-      expect(page).to have_content("Savings Pools")
-      expect(page).to have_content("Emergency Fund")
+    it "shows the savings strip with the goal's card" do
+      expect(page).to have_content("Savings Goals")
+      within("[data-savings-strip]") { expect(page).to have_content("Emergency Fund") }
     end
 
     it "shows top spending categories" do
@@ -67,8 +67,8 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     end
   end
 
-  # Income $3,000; $400 spent out of the buffer (Groceries points at an account), $200 spent out of
-  # an envelope (Car Repair points at Emergency Fund). Left over = $3,000 − $600 = $2,400.
+  # Income $3,000; $400 spent out of what is available (Groceries holds nothing), $200 spent out of
+  # a category that holds money (Emergency Fund). Left over = $3,000 − $600 = $2,400.
   describe "the money flow bar — number accuracy", :aggregate_failures do
     before do
       seed_mixed_financial_data
@@ -143,20 +143,29 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
 
   private
 
+  # THE TWO LANES ARE `Category#holder?`'s NOW (two-ledger spec §3, Task 7). `Groceries` holds
+  # nothing, so its spending drains what is available; `Emergency Fund` is a goal — a category with
+  # a target, holding money from a year back — and its own spending comes out of what it holds. The
+  # $500 arriving in the goal is deliberately still here: it is what makes the "no savings
+  # vocabulary" negative above a real claim rather than an empty fixture. It was a $500 entry in a
+  # SAVINGS category until plan 3 task 5 and a `PoolMovement` until Task 7; it is the ALLOCATION
+  # those became, at the same amount on the same day, and the strip's balance ($500 in, $200 spent)
+  # is unchanged.
   def seed_mixed_financial_data
-    pool = create(:pool, user: user, name: "Emergency Fund", target_amount: 5000, start_date: 1.year.ago)
-    # `Groceries` points at an ACCOUNT (the factory's default) — buffer-funded spending — while
-    # `Car Repair` points at a pool. The $500 arriving in the goal is deliberately still here: it is
-    # what makes the "no savings vocabulary" negative above a real claim rather than an empty
-    # fixture. It was a $500 entry in a SAVINGS category until plan 3 task 5; it is the movement
-    # such an entry became, at the same amount on the same day, and the pool's balance on the strip
-    # ($500 in, $200 spent) is unchanged.
+    goal = create(
+      :category,
+      :expense,
+      user: user,
+      name: "Emergency Fund",
+      target_amount: 5000,
+      funded_since: 1.year.ago.to_date
+    )
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
 
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)
-    create_entry_for(create(:category, :expense, user: user, name: "Car Repair", pool: pool), "Mechanic", 200.00, 3)
-    create(:pool_movement, from_pool: expense_cat.pool, to_pool: pool, amount: 500.00, date: base_date + 4.days)
+    create_entry_for(goal, "Mechanic", 200.00, 3)
+    create(:allocation, kind: :allocation, to_category: goal, amount: 500.00, date: base_date + 4.days)
   end
 
   def create_entry_for(category, item_name, amount, day_offset)

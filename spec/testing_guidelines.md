@@ -1168,23 +1168,23 @@ end
 
 **✅ Good: Background Data in before Block**
 ```ruby
-describe "search by category" do
+describe "search by name" do
   # ✅ Main subjects are referenced by name
-  let!(:emergency_fund) { create(:pool, user: user, name: "Emergency Fund") }
-  let!(:vacation_fund) { create(:pool, user: user, name: "Vacation Fund") }
-  
+  let!(:emergency_fund) { create(:category, :expense, :savings, user: user, name: "Emergency Fund") }
+  let!(:vacation_fund) { create(:category, :expense, :savings, user: user, name: "Vacation Fund") }
+
   before do
     # ✅ Background data not referenced by variable name
-    create(:category, user: user, name: "Home Savings", pool: emergency_fund)
-    create(:category, user: user, name: "Travel Budget", pool: vacation_fund)
-    visit pools_path
+    create(:item, category: emergency_fund, name: "Home Savings")
+    create(:item, category: vacation_fund, name: "Travel Budget")
+    visit categories_path(type: "expense")
   end
-  
-  it "finds savings pools by category name" do
-    fill_in "q", with: "Home"
+
+  it "finds savings categories by name" do
+    fill_in "q", with: "Emergency"
     find("input[name='q']").send_keys(:return)
-    
-    # Using the let! objects, not the category variables
+
+    # Using the let! objects, not the item variables
     expect(page).to have_content(emergency_fund.name)
     expect(page).not_to have_content(vacation_fund.name)
   end

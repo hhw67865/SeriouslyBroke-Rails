@@ -1,18 +1,23 @@
 <%# THE GOALS STRIP. Rendered by the ALL tab; its two readers are `Dashboard::OverviewPresenter`'s
-    since task 5 moved them off the deleted `Dashboard::SavingsPresenter`. %>
-<% pools = @presenter.pools_summary %>
-<% if pools.any? %>
-  <div class="mb-8">
+    since task 5 moved them off the deleted `Dashboard::SavingsPresenter`.
+
+    SAVINGS ARE CATEGORIES NOW (two-ledger spec §3, Task 7) — `_pools_strip` renamed with the
+    thing it draws. Each card links to the category's own page, which is where a goal's balance,
+    its target and its history all live since the Pools screens were deleted. The classifier is
+    `Category#savings?` (see the presenter): a target, a funding start, and no refill rule. %>
+<% goals = @presenter.savings_summary %>
+<% if goals.any? %>
+  <div class="mb-8" data-savings-strip>
     <div class="mb-4">
-      <h3 class="text-lg font-medium text-gray-900">Savings Pools</h3>
+      <h3 class="text-lg font-medium text-gray-900">Savings Goals</h3>
       <p class="text-sm text-gray-500">
-        Total: <span class="font-semibold <%= @presenter.total_pools_balance >= 0 ? "text-brand-dark" : "text-terracotta" %>"><%= number_to_currency(@presenter.total_pools_balance) %></span>
+        Total: <span class="font-semibold <%= @presenter.total_savings_balance >= 0 ? "text-brand-dark" : "text-terracotta" %>"><%= number_to_currency(@presenter.total_savings_balance) %></span>
       </p>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <% pools.each do |pool| %>
-        <% progress = pool[:progress_percentage] %>
-        <% negative = pool[:balance].negative? %>
+      <% goals.each do |goal| %>
+        <% progress = goal[:progress_percentage] %>
+        <% negative = goal[:balance].negative? %>
 
         <%# Status based purely on funding level %>
         <% if negative %>
@@ -20,7 +25,7 @@
           <% bar_class = "bg-status-danger" %>
           <% badge_class = "text-white bg-status-danger" %>
           <% badge_text = "negative" %>
-        <% elsif progress < 10 && pool[:target_amount].positive? %>
+        <% elsif progress < 10 && goal[:target_amount].positive? %>
           <% card_class = "border-2 border-status-warning/40 bg-status-warning-light" %>
           <% bar_class = "bg-status-warning" %>
           <% badge_class = "text-status-warning bg-status-warning/20" %>
@@ -42,10 +47,10 @@
           <% badge_text = "#{progress}%" %>
         <% end %>
 
-        <%= link_to pool_path(pool[:id]),
+        <%= link_to category_path(goal[:id]),
             class: "block rounded p-4 hover:opacity-90 transition #{card_class}" do %>
           <div class="flex items-center justify-between mb-2">
-            <p class="text-sm font-medium text-gray-900 truncate"><%= pool[:name] %></p>
+            <p class="text-sm font-medium text-gray-900 truncate"><%= goal[:name] %></p>
             <span class="text-xs font-medium px-2 py-0.5 rounded shrink-0 <%= badge_class %>"><%= badge_text %></span>
           </div>
           <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
@@ -53,16 +58,13 @@
           </div>
           <%# THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4). "In" read
               `Pool#contribution_entries` — savings-TYPED entries — so it printed $0.00 on every
-              card while the demo's goals were visibly receiving $525 a period as PoolMovements:
-              a figure that denies money that arrived is worse than no figure. "Out" alone is half
-              a story, and its movement-based partner would be a second reader of pool funding
-              (see Dashboard::OverviewPresenter). The balance, the target and the progress bar are
-              `PoolCalculator`'s — the app's one reader for what a pool holds — and stay.
-              (Task 5 deleted `#contribution_entries` itself; `Pool#timeline` is what the pool page
-              lists now, and it is movements plus spending.) %>
+              card while the demo's goals were visibly receiving $525 a period: a figure that
+              denies money that arrived is worse than no figure. "Out" alone is half a story. The
+              balance, the target and the progress bar are `HoldingCalculator`'s — the app's one
+              reader for what a category holds — and stay. %>
           <div class="flex items-center justify-between text-xs text-gray-500">
-            <span class="font-medium"><%= number_to_currency(pool[:balance]) %></span>
-            <span>of <%= number_to_currency(pool[:target_amount]) %></span>
+            <span class="font-medium"><%= number_to_currency(goal[:balance]) %></span>
+            <span>of <%= number_to_currency(goal[:target_amount]) %></span>
           </div>
         <% end %>
       <% end %>

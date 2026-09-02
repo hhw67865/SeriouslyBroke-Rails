@@ -11,8 +11,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }
 
     # The cap this planted (`create(:budget, category: …)`) is deleted with the shape, and the
-    # summary card's "Monthly Budget" arm went with it: an expense category names a pool now, so
-    # the card says what it spent and which pool it came out of.
+    # summary card's "Monthly Budget" arm went with it: the card says what the category spent and
+    # which lane it came out of (Task 7 — its own holdings, or what's available).
     before { visit category_path(category) }
 
     it "shows key sections and expense summary" do
@@ -72,14 +72,14 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     end
   end
 
-  # AN EXPENSE CATEGORY POINTING AT A GOAL (plan 3, task 5). This described a SAVINGS category and
-  # read "Savings category details and management" / "Monthly Contribution" off the summary arm
-  # deleted with the type. The claim worth keeping is the noun one — the page calls a savings POOL a
-  # Goal and never a "Savings Pool" — and it belongs to the shape that survives.
-  describe "a category pointing at a goal", :aggregate_failures do
-    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-    let!(:pool) { create(:pool, user: user, name: "Main Pool", account: checking) }
-    let!(:category) { create(:category, category_type: "expense", user: user, name: "Emergency Fund", pool: pool) }
+  # A SAVINGS GOAL IS A CATEGORY (two-ledger spec §3, Task 7). This described a category POINTING
+  # AT a savings pool — the shape the pool layer made possible — and the pool is gone: a goal is a
+  # category with a target and a funding start, and its own page is the only page about it. The
+  # claim worth keeping is the noun one: the app calls it a Goal and never a "Savings Pool".
+  describe "a category saving toward a goal", :aggregate_failures do
+    let!(:category) do
+      create(:category, :expense, :funded, user: user, name: "Emergency Fund", target_amount: 2_000)
+    end
 
     before { visit category_path(category) }
 
@@ -87,11 +87,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_content("Emergency Fund")
       expect(page).to have_content("Expense category details and management")
       expect(page).to have_content("Summary")
-      # CHANGED WITH THE ONE NAMER (2d whole-plan review, fix 2): a savings pool is a "Goal" in
-      # every sentence the app writes about one.
       expect(page).to have_content("Goal")
       expect(page).to have_no_content("Savings Pool")
-      expect(page).to have_content("Main Pool")
     end
 
     it "navigates with Edit button" do

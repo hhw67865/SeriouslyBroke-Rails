@@ -105,6 +105,13 @@ RSpec.describe "Home Categories", type: :system do
   # Each assertion below includes its time word, so dropping one fails here rather than passing on a
   # substring of the old wording. The pool era had two of these three and shipped both under the
   # bare noun "buffer"; the third arrived with the second ledger.
+  #
+  # THE ` · target $2,000.00` CLAUSE IS DELETED (Task 7) and is asserted ABSENT here instead. It
+  # printed `pools.target_amount` — the "buffer marker" — and the concept goes with the Pools
+  # screens: two-ledger §2 gives accounts no target semantics (the buffer is AVAILABLE, on the other
+  # ledger), the last reader of the figure (`DistributionPresenter#buffer_target`) is deleted, the
+  # plan's T8 drops the column, and the account form is name-only. A number nothing can change and
+  # nothing reads is worse than no number.
   it "heads the band with available and the accounts with their own balances", :aggregate_failures do
     deposit(1_000)
     fund(envelope("Groceries", rate: 400), 100)
@@ -115,8 +122,7 @@ RSpec.describe "Home Categories", type: :system do
     expect(band).to have_content("$100.00 left")
     expect(band).to have_content("available now $900.00")
     expect(account_group("Checking")).to have_content("balance now $1,000.00")
-    # "target", not "of": a bare "of $2,000.00" never said what the figure measures.
-    expect(account_group("Checking")).to have_content("target $2,000.00")
+    expect(account_group("Checking")).to have_no_content("target")
     expect(page).to have_content("$600.00 is still unclaimed after this period")
   end
 

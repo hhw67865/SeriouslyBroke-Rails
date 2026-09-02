@@ -19,6 +19,25 @@
 # and the alternative is qualifying every partial name inside Home's own views for a foreign
 # controller's benefit.
 class BankAccountsController < HomeController
+  # GET /bank_accounts/1/edit
+  #
+  # THE POOL EDIT SCREEN'S ACCOUNT ARM, FOLDED IN (two-ledger spec §5, Task 7). `pools/edit` was
+  # one form for three kinds of pool — a type picker, a containing-account select, a target, a
+  # priority and a start date — and two of the three kinds are CATEGORIES now. What an account
+  # still has is a NAME, and that is the whole form:
+  #
+  #   * `target_amount` — an account's target was the "buffer marker", a health line the
+  #     distribution screen printed as ` · you wanted $2,000.00`. Two-ledger §2 gives accounts no
+  #     target semantics at all (the buffer is AVAILABLE, on the other ledger), the plan's T8 drops
+  #     the column, and Task 7 deleted the last reader (`DistributionPresenter#buffer_target`).
+  #   * `pool_type` and `account` — an account is an account and sits inside nothing.
+  #   * `priority` and `start_date` — the fill order and the start-date rule both moved onto the
+  #     category (`categories.priority`, `categories.funded_since`), where the categories form
+  #     edits them.
+  def edit
+    @bank_account = scoped_account
+  end
+
   # POST /bank_accounts
   def create
     pool = Pool.new(user: current_user, pool_type: :account, **bank_account_params)
@@ -40,7 +59,42 @@ class BankAccountsController < HomeController
     end
   end
 
+  # PATCH /bank_accounts/1
+  def update
+    @bank_account = scoped_account
+
+    if @bank_account.update(bank_account_params)
+      redirect_to root_path, notice: "#{@bank_account.name} updated."
+    else
+      render :edit, status: :unprocessable_content
+    end
+  end
+
+  # DELETE /bank_accounts/1
+  #
+  # THE RETURN VALUE IS CHECKED, and it has to be: `Pool` refuses a destroy in more than one way —
+  # `has_many :child_pools, dependent: :restrict_with_error`, `has_many :categories, dependent:
+  # :restrict_with_error` and its own `#return_holdings_to_the_account` refusals — all of which
+  # halt the callback chain and put a sentence on `:base` rather than raising. A screen that
+  # redirected with "deleted." over a pool still sitting in the database would be lying about the
+  # one thing the button is for. Same shape `PoolsController#destroy` had, minus the pool kinds.
+  def destroy
+    account = scoped_account
+
+    if account.destroy
+      redirect_to root_path, notice: "#{account.name} deleted."
+    else
+      redirect_to root_path, alert: account.errors[:base].to_sentence
+    end
+  end
+
   private
+
+  # `current_user.pools.accounts`, NOT `current_user.pools`. A stranger's id is a 404 through the
+  # ownership scope, as everywhere; the `.accounts` half is what keeps this controller's promise
+  # that it is about bank accounts — the route no longer has a sibling that edits any other kind
+  # of pool, so a non-account id arriving here is a URL nothing in the app produces.
+  def scoped_account = current_user.pools.accounts.find(params[:id])
 
   def bank_account_params
     params.expect(bank_account: [:name])

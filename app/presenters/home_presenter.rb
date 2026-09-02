@@ -229,15 +229,19 @@ class HomePresenter
   # fact the screen must state rather than a figure to round up to nothing, exactly as
   # AllocationCalculator leaves it. The two screens no longer diverge; the divergence that used to be
   # pinned in spec/system/home/fixes_spec.rb is gone with the accounts it was about.
-  def available
-    @available ||= (ledger.available + total_swept).to_d
-  end
+  #
+  # IT IS NOW THE PROPOSAL'S OWN FIGURE RATHER THAN AN EXPRESSION THAT MATCHED IT (Task 7, the T6
+  # review's adopted recommendation). This read `ledger.available + total_swept`, which is
+  # character-for-character `AllocationCalculator#available` — two spellings of one figure, kept in
+  # step by three cross-pins in the specs. Delegated, they cannot drift at all.
+  delegate :available, to: :proposal
 
   # What every rule asks for this period — an honest answer to "what do I owe". Post-sweep, exactly
-  # as the distribution screen computes it; see #ask_calculator_for.
-  def total_required
-    @total_required ||= categories.sum(0.to_d) { |category| required_for(category) }
-  end
+  # as the distribution screen computes it, and now off the SAME ROWS: a category the fill rejects
+  # for asking nothing contributes nothing to a sum over the rows, which is what the per-category
+  # loop this replaced computed the long way round. The `0.to_d` seed is the type guarantee for the
+  # user with no rows at all.
+  def total_required = waterfall.sum(0.to_d, &:needed)
 
   # Fills top-down by priority, exactly as a distribution would, so the user sees who gets paid first
   # and where the money ran out.
@@ -248,9 +252,17 @@ class HomePresenter
   #
   # Memoised because #shortfall, #covered?, #projected_buffer and #covered_by_waterfall? all derive
   # from these rows, so a Home render asks for them several times over.
-  def waterfall
-    @waterfall ||= fill_waterfall
-  end
+  # ROWS ARE `AllocationCalculator::Row` NOW, not hashes this class fills itself (Task 7). They
+  # answer #category, #needed, #funded and #short.
+  #
+  # `Struct#[]` ANSWERS THE FIRST THREE BY NAME AND RAISES ON THE FOURTH, which is worth writing
+  # down because it decided which lines had to change: `category`, `needed` and `funded` are
+  # MEMBERS, so `home/_attention.html.erb`'s `row[:funded]` renders unchanged; `short` is a METHOD
+  # (`needed - funded`, so a fourth member would be a second place for one number to be wrong), and
+  # `row[:short]` raises `NameError: no member 'short' in struct`. Every reader of it here is
+  # `row.short` — measured, not reasoned about: #cutoff's block took the root route down until it
+  # was.
+  def waterfall = proposal.rows
 
   # WHERE THE MONEY RAN OUT, or nil when there is no such moment. The rule itself is Waterfall's —
   # the distribution screen draws the same line off the same reader — and only the GATE is Home's.
@@ -266,7 +278,7 @@ class HomePresenter
   def cutoff
     return nil if covered?
 
-    Waterfall.cutoff(waterfall) { |row| [row[:funded], row[:short]] }
+    Waterfall.cutoff(waterfall) { |row| [row.funded, row.short] }
   end
 
   # Derived from the waterfall rows, NOT from `total_required - available`.
@@ -278,7 +290,7 @@ class HomePresenter
   #
   # No `max` clamp is needed: every row's `short` is `needed - funded` where `funded` is clamped to
   # at most `needed`, so no row can contribute a negative.
-  def shortfall = waterfall.sum(0.to_d) { |row| row[:short] }
+  def shortfall = waterfall.sum(0.to_d, &:short)
 
   def covered? = shortfall.zero?
 
@@ -301,7 +313,7 @@ class HomePresenter
   # at most what is left and `Σ funded ≤ available`, while with a negative root every row funds
   # exactly zero and this IS `available`. `home/_standing.html.erb` gates on that one condition
   # rather than on this figure's own sign, so the band has one question to ask on either branch.
-  def projected_buffer = available - waterfall.sum(0.to_d) { |row| row[:funded] }
+  def projected_buffer = proposal.leftover
 
   # Sorted for the same reason #waterfall is, and by the same key: this is a rendered list, and the
   # order the user ranked their categories in is the order "what do I deal with" wants. #categories
@@ -575,11 +587,11 @@ class HomePresenter
   def covered_by_waterfall?(category)
     row = waterfall_rows_by_category[category.id]
 
-    row.present? && row[:short].zero?
+    row.present? && row.short.zero?
   end
 
   def waterfall_rows_by_category
-    @waterfall_rows_by_category ||= waterfall.index_by { |row| row[:category].id }
+    @waterfall_rows_by_category ||= waterfall.index_by { |row| row.category.id }
   end
 
   # THE SCREEN'S OWN LEDGER GOES WITH IT, and that is the whole of what `ledger:` is for. One of these
@@ -600,87 +612,38 @@ class HomePresenter
     )
   end
 
-  # ONE POT, SPENT DOWN AS IT GOES — `AllocationCalculator#fill`'s shape, so the band and the action
-  # it describes cannot disagree about who gets funded.
+  # THE PROPOSAL THIS SCREEN RENDERS, AND IT IS THE OBJECT THE DISTRIBUTE BUTTON ACTS ON.
   #
-  # A category that asks for nothing is not a row, and the reason is what it looked like on a screen:
-  # "$0.00 of $0.00", below the "ran out here" line, which reads as money DENIED rather than money not
-  # wanted. This band answers where the money goes; a category with no ask is not part of that story,
-  # and the categories band below already shows it.
+  # HOME USED TO KEEP A HAND-COPIED WATERFALL — `#fill_waterfall`, plus `#required_for` and
+  # `#ask_calculator_for` to feed it, plus `#total_swept` and an `available` expression, all of them
+  # transcriptions of `AllocationCalculator`. They agreed, and they agreed by being watched: five
+  # cross-screen pins in `spec/presenters/home_presenter_spec.rb` and `spec/system/home/fixes_spec.rb`
+  # exist for no other reason than to catch the day they stopped. Consuming the class removes the
+  # copy rather than the check — those pins now compare an object with itself and stay green, which
+  # is what "structurally cannot drift" looks like from a spec's side.
   #
-  # Rejected BEFORE the fill, exactly as AllocationCalculator rejects it, so `remaining` is spent by
-  # the rows the screen actually shows. Arithmetic-neutral either way — a zero-need row contributes 0
-  # to `needed`, `funded` and `short` alike — but one shape rather than two.
-  def fill_waterfall
-    remaining = available
-    categories.filter_map do |category|
-      needed = required_for(category)
-      next if needed.zero?
+  # THE COST IS ONE EXTRA `CategoryLedger`, AND IT IS THE HONEST PRICE. This presenter keeps its own
+  # ledger for the statuses, the free-money reads and the `ReallocationPresenter`s it builds; the
+  # proposal builds a second over the same categories at the same moment, because `#share_ledger` is
+  # `protected` — only another AllocationCalculator may hand one over, deliberately, since only
+  # another instance can honestly promise it was constructed after the last write. Widening that
+  # surface to save four grouped queries would trade the guarantee for the saving, and Home writes
+  # nothing, so the two ledgers cannot disagree about anything. The alternative — keeping the copy —
+  # costs the same queries AND the drift.
+  #
+  # NO `overrides:`: Home renders the proposal as it stands. The overrides are the distribution
+  # screen's, where there are boxes to type them into.
+  def proposal = @proposal ||= AllocationCalculator.new(user: user, today: today)
 
-      funded = remaining.clamp(0.to_d, needed)
-      remaining -= funded
-      { category: category, needed: needed, funded: funded, short: needed - funded }
-    end
-  end
-
-  # Memoised per category. #total_required and #waterfall both ask every category what it needs, and
-  # each calculator is a set of aggregate queries plus a per-rule sort — Home would run the whole lot
-  # twice for every category on the screen, and two calculators over the same category could in
-  # principle disagree.
+  # THE PLAIN CALCULATOR — what a category holds right now. #period_closed? and #free_amount_for
+  # both ask it, once per rendered category, and each calculator is a set of aggregate queries plus
+  # a per-rule sort, so the memo is what stops the screen building two for one category.
   #
-  # THE AGGREGATES ARE NOW ONE LEDGER'S SHARE OF FOUR. The memo only ever stopped this screen building
-  # the same calculator twice; it did nothing about the other categories, each paying four aggregates
-  # of its own.
+  # THE AGGREGATES ARE ONE LEDGER'S SHARE OF FOUR. The memo only ever stopped this screen building
+  # the same calculator twice; the ledger is what stops each category paying four aggregates of its
+  # own.
   def calculator_for(category)
     (@calculators ||= {})[category.id] ||= category.holding_calculator(today: today, terms: ledger.terms_for(category))
-  end
-
-  # THE POST-SWEEP ASK, which is the one the button on this screen would actually act on.
-  #
-  # A plain #required reads the LIVE balance, and at proposal time a closed category's leftover is
-  # still sitting in it — so Groceries holding $85 of last period's money against a $400 rate rule
-  # asked for $315 here while the distribution screen asked $400, and the $85 was swept away between
-  # the two. Not recoverable by adding the sweep back afterwards: on a mixed category, removing the
-  # swept money changes which rules #allocated_balances fills and by how much, so only substituting
-  # the balance and re-reading gives the right answer. Same reader, same reason and same shape as
-  # AllocationCalculator#ask_calculator_for.
-  #
-  # A SECOND MEMO rather than a flag on #calculator_for, because the two calculators answer different
-  # questions and the flagged one may not be asked either of the sweep's own questions —
-  # #period_closed? and #sweepable_amount raise on it, and this screen asks both.
-  #
-  # `terms:` HERE TOO: a `net_of_sweep` calculator is TWO sets of aggregates (the projection builds a
-  # plain twin to derive its sweep, see HoldingProjection#twin) and #total_required asks one of every
-  # holder the user has. Same ledger, same category, same `as_of` — the terms are identical by
-  # construction.
-  def ask_calculator_for(category)
-    (@ask_calculators ||= {})[category.id] ||=
-      category.holding_calculator(today: today, net_of_sweep: true, terms: ledger.terms_for(category))
-  end
-
-  # `[required, 0.to_d].max`, THE GUARD AllocationCalculator#fill ALREADY HAS AND THIS SCREEN DID NOT,
-  # and it is the same reachable shape rather than a defensive flourish. HoldingCalculator#goal_required
-  # returns `[rate, remaining].min`, so a savings goal carrying a rule with a negative amount asks for
-  # a negative figure — and `remaining.clamp(0.to_d, needed)` raises ArgumentError on it. Budget
-  # validates the sign, but a validation is an input rule and this is a read path; Home is the root
-  # route, so this took out the whole app rather than one screen.
-  #
-  # HERE RATHER THAN AT THE CLAMP, because #total_required reads the same figure and a negative there
-  # quietly UNDERSTATES what the user owes — a wrong number is worse than a crash on a money screen.
-  # One floor, every Home reader.
-  def required_for(category)
-    (@required ||= {})[category.id] ||= [ask_calculator_for(category).required, 0.to_d].max
-  end
-
-  # WHAT THE NEXT DISTRIBUTION HANDS BACK TO THE ROOT — `AllocationCalculator#total_swept`, over the
-  # same set in the same order. Read off #calculator_for, the plain calculator every other reader on
-  # this screen shares: a `net_of_sweep` one RAISES here by construction, and rightly — the sweep it
-  # names has already been subtracted, so asking again derives a second, smaller one.
-  #
-  # PER USER, where the pool era summed per account. Sweeps crossed no account boundary then and
-  # cross nothing now; there is simply one root for them to land in.
-  def total_swept
-    @total_swept ||= categories.sum(0.to_d) { |category| calculator_for(category).sweepable_amount }
   end
 
   # Keyed by the record, not by id: an unsaved rule has no id, and `nil` as a cache key would hand

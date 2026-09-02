@@ -11,15 +11,19 @@ require "rails_helper"
 #     and a day;
 #   * "buffer" on this screen is `CategoryLedger#available` throughout (see
 #     DistributionPresenter#buffer_carried for why the word is kept);
-#   * `buffer_target` is still read off the user's MAIN ACCOUNT, because nothing has moved
-#     `target_amount` off `pools` — the two examples at the bottom pin exactly that, and say so.
+#   * `buffer_target` is DELETED (Task 7) — see the note where its three examples stood.
 RSpec.describe DistributionPresenter, type: :model do
   # The same calendar the calculator's and committer's specs use: biweekly, anchored Fri 6 Feb 2026,
   # so the boundaries around August are Aug 7 and Aug 21 and the period containing Aug 20 is
   # Aug 7..Aug 20. Money allocated on Jul 12 belongs to a period that ended Jul 23 — closed, and
   # therefore swept.
   let(:user) { create(:user, :biweekly) }
+  # rubocop:disable RSpec/LetSetup -- THE POT HAS TO EXIST and nothing here reads it: income lands
+  # in a category and `Category#income_must_land_in_an_account` says that category may only point
+  # at the user's MAIN account, so a user with no account cannot be paid at all. It was referenced
+  # by name until Task 7 deleted the buffer-target examples, which were the only ones about it.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # rubocop:enable RSpec/LetSetup
 
   def today = Date.new(2026, 8, 20)
   def last_period = Date.new(2026, 7, 12)
@@ -465,34 +469,19 @@ RSpec.describe DistributionPresenter, type: :model do
     end
   end
 
-  # The buffer target is a health marker and never a cap (spec §7.1), so it is a separate question
-  # from the buffer itself — and a user with no target must not print a `you wanted $0.00` clause.
+  # ── THE BUFFER TARGET IS DELETED (Task 7), AND ITS THREE EXAMPLES WITH IT:
   #
-  # STILL READ OFF THE MAIN ACCOUNT, which is a carry rather than a decision: `target_amount` lives on
-  # `pools` and nothing has moved it. See DistributionPresenter#buffer_target — Task 7 owns where a
-  # buffer target should live once the screens are category-shaped.
-  describe "the buffer target" do
-    it "reports the main account's target when it has one", :aggregate_failures do
-      checking.update!(target_amount: 2_000)
-
-      expect(presenter.buffer_target).to eq(2_000)
-      expect(presenter).to be_buffer_target
-    end
-
-    it "reports no target when the main account has none", :aggregate_failures do
-      expect(presenter.buffer_target).to eq(0)
-      expect(presenter).not_to be_buffer_target
-    end
-
-    # The user who has never named a main account at all — nullable on `users`, and the one shape
-    # `&.` is here for. A NoMethodError on this reader would take the whole screen down.
-    it "reports no target when the user has no main account", :aggregate_failures do
-      user.update!(default_account: nil)
-
-      expect(presenter.buffer_target).to eq(0)
-      expect(presenter).not_to be_buffer_target
-    end
-  end
+  #   * "reports the main account's target when it has one"
+  #   * "reports no target when the main account has none"
+  #   * "reports no target when the user has no main account"
+  #
+  # `#buffer_target` read `user.default_account.target_amount` and gated the ` · you wanted
+  # $2,000.00` clause on two lines of this screen. It was the LAST pool read here, and it was
+  # already reading the wrong ledger: the target sat on the POT while every figure beside it is
+  # about AVAILABLE. Two-ledger §2 gives accounts no target semantics, the plan's T8 drops the
+  # column, and the concept goes rather than moving. `DistributionsHelper#buffer_target_clause`
+  # went with it, along with the "you wanted" assertion in
+  # `spec/system/distributions/proposal_spec.rb`.
 
   # The §2 partition, read off a fresh ledger: available plus every holding equals what came in less
   # what went out.

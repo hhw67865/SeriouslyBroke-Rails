@@ -27,18 +27,48 @@
     
     <div class="mt-2">
       <% calc = category.calculator(selected_date) %>
-      <%# `expense?` rather than the deleted `pool_covered?`: every expense category points at a
-          pool now, so the cap arm that followed this one is unreachable and is deleted with the
-          cap (plan 3, task 3). %>
+      <%# `expense?` rather than the deleted `pool_covered?`: the cap arm that used to follow this
+          one is deleted with the cap it read (plan 3, task 3). %>
       <% if category.expense? %>
         <div class="mb-4">
           <div class="flex justify-between text-sm mb-1">
             <span class="text-gray-500">Spent <%= period_time_label %></span>
             <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
           </div>
-          <p class="text-xs text-gray-500 mt-2">
-            Pool: <%= category.pool.name %>
-          </p>
+          <%# WHAT IT HOLDS, WHERE IT HOLDS ANYTHING (two-ledger spec §3, Task 7). This line read
+              "Pool: Checking" — the name of the pool the category pointed at, which under this
+              model says nothing about the category at all. `Category#holder?` is the question, and
+              a card that is saving toward a figure gets the goal's own bar so the savings the
+              Pools index used to list are findable on the screen that replaced it.
+
+              THE GOAL TEST IS `HoldingCalculator#saving_toward_a_target?` (Task 7's ruling), the
+              same predicate the show page's holdings card, Home and the entry form's impact card
+              ask — so a rule-bearing goal is a goal on every one of them. %>
+          <% if category.holder? %>
+            <% holdings = category.holding_calculator %>
+            <div class="flex justify-between text-xs mt-2" data-holding-line>
+              <span class="text-gray-500">Holding</span>
+              <span class="font-medium <%= holdings.balance.negative? ? "text-status-danger" : "text-gray-900" %>">
+                <%= number_to_currency(holdings.balance) %>
+              </span>
+            </div>
+            <% if holdings.saving_toward_a_target? %>
+              <% progress = holdings.progress_percentage %>
+              <div class="mt-2" data-goal-progress>
+                <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand" %>"
+                       style="width: <%= progress %>%;"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                  <%= progress %>% of <%= number_to_currency(category.target_amount) %>
+                </p>
+              </div>
+            <% end %>
+          <% else %>
+            <p class="text-xs text-gray-500 mt-2" data-holding-line>
+              Comes out of what's available
+            </p>
+          <% end %>
         </div>
       <% elsif category.income? %>
         <div class="mb-4">
