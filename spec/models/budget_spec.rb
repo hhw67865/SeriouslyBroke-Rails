@@ -14,6 +14,30 @@ RSpec.describe Budget, type: :model do
     # rather than as "Category must exist" against a picker the form re-renders empty. The gate is
     # also what lets two migration specs plant rules against a schema rewound past the column.
     it { is_expected.to belong_to(:category).optional }
+
+    # THE DATED, SIGNED DELTAS ON THIS RULE'S ACCRUAL (computed-claims spec §3.3). `dependent:
+    # :destroy` because a delta with no accrual to be a delta ON is a claim with no arm to land on.
+    it { is_expected.to have_many(:adjustments).dependent(:destroy) }
+  end
+
+  # THE ONE DOOR ONTO WHAT THIS RULE CLAIMS (computed-claims spec §3), and the port of
+  # `Category#holding_calculator`'s role: the keywords thread through and default to nothing, so a
+  # caller that batches and a caller that does not are on the same object.
+  describe "#claim_calculator" do
+    it "hands back a calculator for this rule on the day it was asked about", :aggregate_failures do
+      rule = create(:budget, :per_period_rate, amount: 400)
+      calculator = rule.claim_calculator(today: Date.new(2026, 9, 3))
+
+      expect(calculator).to be_a(ClaimCalculator)
+      expect(calculator.claim).to eq(400)
+    end
+
+    it "reads the rows it is handed rather than the database" do
+      rule = create(:budget, :per_period_rate, amount: 400)
+
+      expect(rule.claim_calculator(today: Date.new(2026, 9, 3), spending: [[Date.new(2026, 9, 2), 150.to_d]]).claim)
+        .to eq(250)
+    end
   end
 
   describe "validations" do

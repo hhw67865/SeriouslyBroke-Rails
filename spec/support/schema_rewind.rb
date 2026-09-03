@@ -59,6 +59,19 @@ require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 #                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney, DropThePoolLayer
 #
 # Named in the order they run FORWARD; the rewind reverses them itself.
+#
+# ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
+# It is newer than all four, so the question is live; it is left out because it touches NOTHING any
+# rewound migration gives or takes away. It adds a table of its own whose only foreign key is to
+# `budgets.id`, and no `down` here drops `budgets` or its primary key — `CategoriesHoldTheMoney#down`
+# removes `budgets.category_id`, which the adjustments table has never read. Measured by running all
+# three migration files against the current schema with it left out: cutover 49, two_ledger 15,
+# drop_the_pool_layer 18, every one green.
+#
+# Adding it anyway would cost every migration spec a create/drop cycle of a table nothing in them
+# plants, and would leave a `down` in the list that no `up` in the list depends on — a dead entry
+# that reads as a dependency. The rule this file follows is that a migration joins the list when a
+# rewound `down` would collide with it, and this one does not.
 RSpec.shared_context "with the schema its subject was written for" do |*tightenings|
   # rubocop:disable RSpec/BeforeAfterAll
   before(:all) { step_the_schema(:down, tightenings.reverse) }

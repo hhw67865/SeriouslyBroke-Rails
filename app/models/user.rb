@@ -91,6 +91,27 @@ class User < ApplicationRecord
     update(theme: light? ? :dark : :light)
   end
 
+  # THE CALENDAR DAY AN INSTANT FELL ON, IN THIS USER'S ZONE — the Ruby half of
+  # `CategoryLedger::ENTRY_LOCAL_DAY`'s `AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(…, 'UTC')`, and the
+  # ONE spelling of it. `entries.date` and `adjustments.date` are both datetimes, so a Tokyo user's
+  # Sep 12 is stored as Sep 11 15:00 UTC and `.to_date` under an ambient UTC zone (a job, a console,
+  # a spec outside a request) answers Sep 11 while the SQL answers Sep 12. Re-zoning from the USER
+  # rather than from `Time.zone` is what makes the two agree wherever this runs.
+  #
+  # IT LIVES ON THE USER because that is where the timezone lives and because three callers need it:
+  # `Category#local_day` (the funded-since comparison), `Adjustment#local_day` (which period a delta
+  # lands in) and `ClaimCalculator` (which period a spend lands in). It was `Category`'s private
+  # method until the claims work gave it a second and a third caller.
+  #
+  # A DATE PASSES THROUGH UNTOUCHED, and the `DateTime` exclusion is load-bearing: `DateTime < Date`
+  # in Ruby, so a plain `is_a?(Date)` test would let a real instant skip the conversion. A Date has
+  # no instant to re-zone — `Date#in_time_zone` would invent midnight and shift the day.
+  def local_day(moment)
+    return moment if moment.is_a?(Date) && !moment.is_a?(DateTime)
+
+    moment.in_time_zone(timezone.presence || "UTC").to_date
+  end
+
   # Every period boundary in [from, to], ascending. Empty unless a period is configured.
   # A period is DECLARED by the user — it is not inferred from income, so multiple jobs
   # and irregular pay are simply not a question here.

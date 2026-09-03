@@ -14,6 +14,14 @@ class Budget < ApplicationRecord
   belongs_to :category, optional: true, touch: true
   belongs_to :item, optional: true
 
+  # THE DATED, SIGNED DELTAS ON THIS RULE'S ACCRUAL (computed-claims spec §3.3). `dependent: :destroy`
+  # because an adjustment is a delta on a schedule: with the rule gone there is no accrual for it to
+  # be a delta ON, and a `+$500 into Vacation` left behind would be a claim with no arm to land on.
+  #
+  # `foreign_key: :rule_id` — the column is named for the app's word for a `budgets` row, and this is
+  # the one place the two spellings meet (see the migration's header).
+  has_many :adjustments, foreign_key: :rule_id, dependent: :destroy, inverse_of: :rule
+
   enum :basis, { monthly: 0, per_period: 1 }, prefix: true
 
   # EVERY RULE A USER OWNS, IN ONE RELATION — the reader `User has_many :budgets, through:
@@ -68,6 +76,21 @@ class Budget < ApplicationRecord
 
   def calculator(today: Date.current)
     BudgetCalculator.new(self, today: today)
+  end
+
+  # WHAT THIS RULE CLAIMS FROM THE USER'S MONEY (computed-claims spec §3) — the ONE door onto the
+  # claim, and the port of `Category#holding_calculator`'s role: `spending:` and `adjustments:` thread
+  # straight through and DEFAULT TO NOTHING, which keeps this the unbatched single-rule door. Only the
+  # callers that ITERATE rules build a `ClaimLedger` and let it inject the grouped rows.
+  #
+  # A SECOND CONSTRUCTION PATH IS HOW A KEYWORD ENDS UP HONOURED ON ONE SCREEN AND FORGOTTEN ON THE
+  # NEXT, so nothing outside `ClaimLedger` calls `ClaimCalculator.new` itself.
+  #
+  # IT IS NOT `#calculator`, and that is a collision rather than a preference: that name is
+  # `BudgetCalculator`'s — what this rule needs from the NEXT distribution — and Task 4 deletes it
+  # along with the distribution. Until then the two answer different questions about the same row.
+  def claim_calculator(today: Date.current, spending: nil, adjustments: nil)
+    ClaimCalculator.new(self, today: today, spending: spending, adjustments: adjustments)
   end
 
   # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`

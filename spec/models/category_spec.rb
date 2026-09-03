@@ -19,6 +19,28 @@ RSpec.describe Category, type: :model do
     it { is_expected.to validate_presence_of(:category_type) }
   end
 
+  # ** A CATEGORY'S MONEY IS THE SUM OF ITS RULES' CLAIMS AND NOTHING ELSE (computed-claims spec
+  # §2). ** Nothing was moved to put it there, so a category with no rules claims nothing however
+  # much has been spent against it — §3.4's unbudgeted row shows `spent $X`, which is a fact about
+  # entries rather than a claim.
+  describe "#claim" do
+    let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
+    let(:groceries) { create(:category, :expense, user: user, name: "Groceries", funded_since: Date.new(2026, 1, 1)) }
+
+    it "adds up every rule it carries" do
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+      create(:budget, :per_period_rate, category: groceries, amount: 75)
+
+      expect(groceries.claim(today: Date.new(2026, 9, 3))).to eq(475)
+    end
+
+    it "claims nothing at all when no rule names it" do
+      create(:entry, item: create(:item, category: groceries), amount: 250, date: Date.new(2026, 9, 2))
+
+      expect(groceries.claim(today: Date.new(2026, 9, 3))).to eq(0)
+    end
+  end
+
   # TWO VALUES, AND `savings: 2` IS RETIRED RATHER THAN RENUMBERED (plan 3, task 5). This is the
   # planted literal that says integer 2 is not reused: a third type added later takes 3, and this
   # example fails if anybody puts one at 2.

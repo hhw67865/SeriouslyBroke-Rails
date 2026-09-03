@@ -75,12 +75,23 @@ class CategoryLedger
   # its one Ruby mirror and says so; the day-boundary spelling here is character-for-character the
   # one `CategoriesHoldTheMoney#funded_gate` verified the migration with, so a divergence between
   # them is a bug in one of the two rather than a difference of opinion.
+  # THE CALENDAR DAY AN ENTRY FELL ON, IN THE OWNER'S ZONE — pulled out of ENTRY_CATEGORY_ID below
+  # so that the day and the funding gate are ONE expression rather than two that happen to agree.
+  # `ClaimCalculator`'s spending is grouped BY PERIOD (computed-claims spec §3.2), which needs the
+  # day itself rather than the gate's verdict, and a second `AT TIME ZONE` pair written out in that
+  # class is exactly the divergence this constant's own header warns about. Interpolated below, so
+  # the emitted SQL is character-for-character what `CategoriesHoldTheMoney#funded_gate` verified the
+  # migration with. `User#local_day` is its Ruby mirror.
+  ENTRY_LOCAL_DAY = Arel.sql(<<~SQL.squish)
+    (entries.date AT TIME ZONE 'UTC'
+       AT TIME ZONE COALESCE(category_users.timezone, 'UTC'))::date
+  SQL
+
   ENTRY_CATEGORY_ID = Arel.sql(<<~SQL.squish)
     CASE
       WHEN categories.category_type = #{Category.category_types[:income]} THEN NULL
       WHEN categories.funded_since IS NULL THEN NULL
-      WHEN (entries.date AT TIME ZONE 'UTC'
-              AT TIME ZONE COALESCE(category_users.timezone, 'UTC'))::date
+      WHEN #{ENTRY_LOCAL_DAY}
            >= categories.funded_since THEN categories.id
       ELSE NULL
     END

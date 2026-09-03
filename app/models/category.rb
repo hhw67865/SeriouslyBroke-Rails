@@ -336,6 +336,22 @@ class Category < ApplicationRecord
     holder? && local_day(date) >= funded_since
   end
 
+  # WHAT THIS CATEGORY'S MONEY IS (computed-claims spec §2): the SUM OF ITS RULES' CLAIMS, and
+  # nothing else. There is no balance here to read and nothing was ever moved into this record — a
+  # category's money is a function of its rules, the calendar, its spending and its adjustments, so a
+  # category with no rules claims nothing however much has been spent against it (§3.4: an unbudgeted
+  # category with spending shows `spent $X`, which is a fact about entries rather than a claim).
+  #
+  # `sum(0.to_d)` with an explicit BigDecimal seed, on `Budget.steady_need`'s reason: an empty
+  # relation's `sum` is the Integer `0`, and this figure is subtracted from a user's total money.
+  #
+  # UNBATCHED, DELIBERATELY, exactly as `Category#holding_calculator` is: one category is a handful
+  # of queries whether they are grouped or not. A screen iterating categories builds a `ClaimLedger`,
+  # which is the batched door and which pins itself against this one figure for figure.
+  def claim(today: Date.current)
+    budgets.sum(0.to_d) { |budget| budget.claim_calculator(today: today).claim }
+  end
+
   def calculator(date = Date.current, period: :monthly)
     CategoryCalculator.new(self, date, period: period)
   end
@@ -394,20 +410,16 @@ class Category < ApplicationRecord
     entries.includes(item: { category: :user }).find_each { |entry| entry.route_income_to!(nil) }
   end
 
-  # THE CALENDAR DAY AN INSTANT FELL ON, IN THE OWNER'S ZONE — the Ruby half of ENTRY_POOL_ID's
-  # `AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(category_users.timezone, 'UTC')`. `entries.date` is a
-  # datetime, so a Tokyo user's Aug 1 is stored as Jul 31 15:00 UTC and `.to_date` under an ambient
-  # UTC zone (a job, a console, a spec outside a request) would answer Jul 31 while the SQL answers
-  # Aug 1. Re-zoning from the USER rather than from `Time.zone` is what makes the two agree wherever
-  # this runs, not only inside the request ApplicationController has already wrapped.
-  #
-  # A DATE PASSES THROUGH UNTOUCHED, and the `DateTime` exclusion is load-bearing: `DateTime < Date`
-  # in Ruby, so a plain `is_a?(Date)` test would let a real instant skip the conversion. A Date has
-  # no instant to re-zone — `Date#in_time_zone` would invent midnight and shift the day.
+  # THE CALENDAR DAY AN INSTANT FELL ON, IN THE OWNER'S ZONE — the Ruby half of ENTRY_LOCAL_DAY's
+  # `AT TIME ZONE 'UTC' AT TIME ZONE COALESCE(category_users.timezone, 'UTC')`, delegated to
+  # `User#local_day` where the rule now lives (the claims work gave it a second and a third caller —
+  # `Adjustment#local_day` and `ClaimCalculator`). What stays here is the OWNER-LESS arm alone: a
+  # category is `belongs_to :user` and the column is NOT NULL, so it is reachable only from an
+  # unsaved record, and re-zoning by nothing is the same answer the SQL's `COALESCE(…, 'UTC')` gives.
   def local_day(moment)
-    return moment if moment.is_a?(Date) && !moment.is_a?(DateTime)
+    return user.local_day(moment) if user
 
-    moment.in_time_zone(user&.timezone.presence || "UTC").to_date
+    moment.is_a?(Date) && !moment.is_a?(DateTime) ? moment : moment.in_time_zone("UTC").to_date
   end
 
   # THE THREE COLUMNS THAT MAKE A CATEGORY A HOLDER (two-ledger spec §3), in one validator:

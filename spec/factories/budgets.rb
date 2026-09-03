@@ -49,5 +49,26 @@ FactoryBot.define do
       interval_months { nil }
       anchor_date { Date.new(2026, 8, 1) }
     end
+
+    # A TARGET RULE (computed-claims spec §3.2/§3.3): the target lives on the CATEGORY —
+    # `categories.target_amount` — and the rule is what accrues toward it, because every claim comes
+    # from a rule and every adjustment targets one. The anchor is deliberately left OPTIONAL and
+    # unset here: an anchored target rule accrues by the catch-up formula toward its due date, and an
+    # anchorless one accrues at its own rate toward the category's figure until it gets there. Two
+    # shapes, one trait, and each example that wants the dated one adds `anchor_date:` itself.
+    #
+    # `:per_period` BASIS, so the rate is stated in the user's own periods and no example has to
+    # divide a monthly figure by a cadence to say what a period accrues. `target_amount` is a
+    # transient so an example can plant the figure the formula is about in one line.
+    trait :target do
+      transient do
+        target_amount { 1_200 }
+      end
+
+      basis { :per_period }
+      interval_months { nil }
+      anchor_date { nil }
+      category { association :category, :expense, :funded, target_amount: target_amount }
+    end
   end
 end

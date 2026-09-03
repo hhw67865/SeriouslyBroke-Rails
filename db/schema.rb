@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_03_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -31,6 +31,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_010000) do
     t.check_constraint "amount > 0::money", name: "account_movements_positive_amount"
     t.check_constraint "from_pool_id <> to_pool_id", name: "account_movements_distinct_accounts"
     t.check_constraint "kind = 0", name: "account_movements_are_transfers"
+  end
+
+  create_table "adjustments", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
+    t.money "amount", scale: 2, null: false
+    t.datetime "created_at", null: false
+    t.datetime "date", null: false
+    t.uuid "rule_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["date"], name: "index_adjustments_on_date"
+    t.index ["rule_id"], name: "index_adjustments_on_rule_id"
+    t.check_constraint "amount <> 0::money", name: "adjustments_non_zero_amount"
   end
 
   create_table "allocations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -149,6 +160,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_010000) do
   add_foreign_key "account_movements", "entries", column: "source_entry_id"
   add_foreign_key "account_movements", "pools", column: "from_pool_id"
   add_foreign_key "account_movements", "pools", column: "to_pool_id"
+  add_foreign_key "adjustments", "budgets", column: "rule_id"
   add_foreign_key "allocations", "categories", column: "from_category_id"
   add_foreign_key "allocations", "categories", column: "to_category_id"
   add_foreign_key "allocations", "entries", column: "source_entry_id"
