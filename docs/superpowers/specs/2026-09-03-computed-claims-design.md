@@ -47,7 +47,7 @@ the cumulative form Henry named: `max(0, periods_since_start × rate − Σ spen
 
 ### 3.2 Dated / interval rule ("$5,000 every 2 years, next due …") — accrues toward the target
 ```
-saved         = Σ over periods since funded_since of (planned_accrual − adjustment) − spent_since_last_fulfilment
+saved         = Σ over periods since funded_since of (planned_accrual + Σ adjustments in that period) − spent_since_last_fulfilment
 saved         = clamp(saved, 0, target)
 claim         = saved
 planned_accrual(this period) = (target − saved_before_this_period) / periods_remaining_until_due
@@ -61,7 +61,7 @@ planned_accrual(this period) = (target − saved_before_this_period) / periods_r
   category) — the claim drops by the amount spent, and accrual restarts toward the next due date.
   A fulfilment larger than the claim spills into free (the category shows "over").
 - A dateless target (the old savings goal) is the same formula with no due date: it accrues by
-  its rate if it has one, and otherwise only by explicit set-asides (§5).
+  its rate if it has one, and otherwise only by positive adjustments (§3.3).
 
 ### 3.3 Adjustments — dated, signed, as many as you like (Henry, 2026-09-03)
 An **adjustment** is a record `(category, rule — nullable, date, signed amount)`: "on Sep 12,
