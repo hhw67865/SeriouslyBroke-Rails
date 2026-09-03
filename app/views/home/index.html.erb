@@ -2,13 +2,13 @@
 
 <%= page_header(title: "Home", subtitle: "Where your money stands") %>
 
-<%# TWO LEDGERS, IN THE ORDER THE HEADLINE IS ABOUT (two-ledger spec §2). The standing band and the
-    attention band both talk about the PURPOSE ledger — what the money is for and what is short —
-    so the categories band follows them, and the accounts band (where the money physically sits)
-    comes after. The orphans band is deleted: nothing belongs to no account any more, because a
-    category belongs to no account by design. %>
+<%# ANSWERS FIRST (answers-first spec §1). The hero card leads because the two questions a user
+    actually opens this screen with — how much is in my checking, how much of it is free — are its
+    two figures; everything below it is the working. The remaining bands are still the two-ledger
+    ones (spec §2) and Task 2 replaces them: the attention band becomes the trouble strip, the
+    categories band becomes spent-of-planned bars, and the accounts collapse to one line. %>
 <div class="space-y-6">
-  <%= render "standing", presenter: @presenter %>
+  <%= render "hero", presenter: @presenter %>
   <%= render "attention", presenter: @presenter %>
   <%= render "categories", presenter: @presenter %>
   <% @presenter.accounts.each do |account| %>

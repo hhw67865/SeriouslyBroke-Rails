@@ -173,7 +173,7 @@ class BudgetPagePresenter
 
   # §9's gate, and the ONE state the sacrifice button renders in.
   #
-  # Steady need against declared income, never `HomePresenter#total_required` against it — see
+  # Steady need against declared income, never `HomePresenter#remaining_plan` against it — see
   # Budget#steady_ask.
   #
   # `declared?` AND NOT `typical_income.present?`, WHICH IS THIS FIX ROUND'S CORRECTION. The gate

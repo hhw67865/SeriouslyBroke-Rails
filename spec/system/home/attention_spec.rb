@@ -134,7 +134,11 @@ RSpec.describe "Home Attention", type: :system do
 
     visit root_path
 
-    expect(page).to have_content("You're covered")
+    # WAS `have_content("You're covered")` (answers-first Task 1). The standing band's headline is
+    # deleted — the hero card renders in every state (spec §2) — so the covered period is now the
+    # figure it produces: $1,000 in, $300 spoken for, $700 free. The example is about the WATERFALL
+    # rendering beside a flagged category, and that half is untouched.
+    expect(page).to have_css("[data-free-to-spend]", text: "$700.00")
     expect(waterfall_section).to have_content("$300.00 of $300.00")
     # Nothing ran out, so the cutoff must stay away.
     expect(waterfall_section).to have_no_content("ran out here")
@@ -196,8 +200,14 @@ RSpec.describe "Home Attention", type: :system do
 
     visit root_path
 
-    expect(page).to have_content("Checking is overdrawn $400.00")
-    expect(page).to have_content("none of the figures above count it")
+    # WAS the standing band's strip, "Checking is overdrawn $400.00 — … none of the figures above
+    # count it" (answers-first Task 1). Checking is MAIN, and the hero's own figure IS the pot, so
+    # that last clause became false the moment the card started printing it: the overdraft is now
+    # the red "In Checking" line with its own sentence (spec §2). The strip survives verbatim for a
+    # NON-main account, which `spec/system/home/hero_spec.rb` covers — what this example is about is
+    # the attention band staying quiet, and that is unchanged.
+    expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$400.00")
+    expect(page).to have_content("already spent past zero")
     within(attention_section) do
       expect(page).to have_content("Nothing needs you")
       expect(page).to have_no_content("overdrawn")
@@ -262,7 +272,7 @@ RSpec.describe "Home Attention", type: :system do
   # ArgumentError on it — `BigDecimal("100").clamp(0, -150)` raises.
   #
   # BOTH SIDES OF THE GUARD, and they are independent: the raw reader is still negative (that is the
-  # input), while the SCREEN renders and #total_required counts the bad rule as zero rather than
+  # input), while the SCREEN renders and #remaining_plan counts the bad rule as zero rather than
   # subtracting $150 from what the user owes — a wrong total is worse than a crash on a money
   # screen, and only the floor prevents both.
   it "renders when a rule's amount is negative", :aggregate_failures do
@@ -272,10 +282,13 @@ RSpec.describe "Home Attention", type: :system do
 
     visit root_path
 
-    expect(page).to have_content("$300.00 short this period")
+    # WAS `have_content("$300.00 short this period")` (answers-first Task 1): the same $300 gap,
+    # said in the user's words by the card that replaced the standing band — $100 in checking
+    # against a $400 plan.
+    expect(page).to have_css("[data-free-to-spend]", text: "-$300.00")
     expect(waterfall_section).to have_content("$100.00 of $400.00")
     expect(Category.find(vacation.id).holding_calculator.required).to eq(-150)
-    expect(HomePresenter.new(user: user).total_required).to eq(400)
+    expect(HomePresenter.new(user: user).remaining_plan).to eq(400)
   end
 
   # THE TWO BANDS ANSWER DIFFERENT QUESTIONS AND SAY SO.

@@ -359,9 +359,15 @@ RSpec.describe "Home Fixes", type: :system do
 
       # THE INVARIANCE, and it holds here: required rose by $85 (315 → 400) and available rose by the
       # same $85 (200 → 285), so the gap is the same $225 read either way.
-      it "reports the same gap the live-holding reading did" do
-        expect(page).to have_content("$225.00 short this period")
-        expect(page).to have_content("You need $510.00 to stay on schedule. You have $285.00.")
+      # WAS "$225.00 short this period" over "You need $510.00 to stay on schedule. You have
+      # $285.00." (answers-first Task 1). The standing band's two sentences are deleted with it —
+      # "need"/"have" is the system explaining its own subtraction — and the invariance they pinned
+      # is unchanged and still measurable: free is `available − remaining_plan`, so $285 against a
+      # $510 ask IS the same $225, printed once instead of derived from two figures beside it.
+      it "reports the same gap the live-holding reading did", :aggregate_failures do
+        expect(page).to have_css("[data-free-to-spend]", text: "-$225.00")
+        expect(HomePresenter.new(user: user).available).to eq(285)
+        expect(HomePresenter.new(user: user).remaining_plan).to eq(510)
       end
 
       # ** THE CROSS-SCREEN PIN, RESTORED (Task 6). ** It was withdrawn by two-ledger Task 4, when
@@ -400,10 +406,14 @@ RSpec.describe "Home Fixes", type: :system do
         visit root_path
       end
 
-      it "puts the surplus back into available and closes the gap by exactly that much" do
-        expect(page).to have_content("$250.00 short this period")
-        expect(page).to have_content("You have $150.00")
-        expect(page).to have_no_content("$300.00 short this period")
+      # WAS the standing band's "$250.00 short this period" / "You have $150.00" (answers-first
+      # Task 1). Same three figures through the card that replaced it: $150 available less the $400
+      # the post-sweep ask comes to. The negative assertion is what the example is really about — a
+      # pre-sweep reading would say $300 — so it is kept, in the new spelling.
+      it "puts the surplus back into available and closes the gap by exactly that much", :aggregate_failures do
+        expect(page).to have_css("[data-free-to-spend]", text: "-$250.00")
+        expect(HomePresenter.new(user: user).available).to eq(150)
+        expect(page).to have_no_css("[data-free-to-spend]", text: "-$300.00")
       end
 
       # The pre-sweep reading gave Coffee no row at all: it held $150 against a $100 rule, so it
@@ -453,7 +463,11 @@ RSpec.describe "Home Fixes", type: :system do
         expect(waterfall_section).to have_content("$0.00 of $100.00")
         # The POT is $200 down — income $150 against $350 of spending. The allocation into Coffee
         # moved nothing physical, which is why the account is not $350 down as it was in the pool era.
-        expect(page).to have_content("Checking is overdrawn $200.00")
+        #
+        # WAS "Checking is overdrawn $200.00", the standing band's strip (answers-first Task 1).
+        # Checking is MAIN, so the debt is now the hero's own "In Checking" figure in red (spec §2);
+        # the strip and its copy survive for a non-main account, covered in `home/hero_spec.rb`.
+        expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$200.00")
       end
 
       # THE THIRD RESTORED CROSS-SCREEN PIN, and the one that changed meaning: a negative available

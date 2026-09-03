@@ -122,7 +122,13 @@ RSpec.describe "Home Categories", type: :system do
     expect(band).to have_content("available now $900.00")
     expect(account_group("Checking")).to have_content("balance now $1,000.00")
     expect(account_group("Checking")).to have_no_content("target")
-    expect(page).to have_content("$600.00 is still unclaimed after this period")
+    # WAS "$600.00 is still unclaimed after this period" (answers-first Task 1). The figure is the
+    # same $600 and the reader is not: `projected_buffer` is deleted, "unclaimed" is a dead word
+    # (spec §3), and the hero card states it as free money — $1,000 in checking capping nothing,
+    # $900 available less the $300 this period's rule still asks for. The third time word this
+    # example is about ("after this period") is gone with the sentence that needed one; the card
+    # says "free" once, which is the whole point of the rename.
+    expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
   end
 
   # THE ACCOUNT HOLDS NOTHING INSIDE IT ANY MORE. The pool era nested a section's envelopes under

@@ -16,11 +16,18 @@
 # per-account pot map, `#cutoff`'s `accounts.one?` gate and `#projected_buffer`'s "cash in an account
 # with nothing left to fund" reading. Allocating money is an act of intention rather than of location
 # (§2), so there is no account for money to be stranded in and no second reason the standing band's
-# figures fail to subtract. #shortfall and `total_required - available` now agree wherever available
-# is non-negative, and #projected_buffer is positive only on a covered period.
+# figures fail to subtract. #shortfall and `remaining_plan - available` now agree wherever available
+# is non-negative.
 #
-# See docs/superpowers/specs/2026-08-21-two-ledger-design.md §2 and
-# docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §4
+# THE HERO CARD REPLACED THE STANDING BAND (answers-first spec §§2-3), and with it went the last of
+# that machinery: `#projected_buffer` is deleted and `#total_required` is `#remaining_plan`. Home
+# stops describing the system and answers "how much is in checking, how much of it is free, where
+# are we in the period" — see #in_checking, #free_to_spend and #period_progress below, all three
+# composed from readers this class already had.
+#
+# See docs/superpowers/specs/2026-08-21-two-ledger-design.md §2,
+# docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §4 and
+# docs/superpowers/specs/2026-09-02-answers-first-home-design.md §§2-3
 class HomePresenter
   # WHAT ONE PROBLEM ROW OFFERS TO DO ABOUT ITSELF (spec §4.2): the amount to move, the source that
   # can genuinely cover it, and what the move would cost the source.
@@ -90,6 +97,24 @@ class HomePresenter
     # rule underneath and is missing only the money. Said here rather than in the partial so the
     # partial asks the row instead of asking which screen it is on.
     def balance_clause? = false
+  end
+
+  # WHERE THE PERIOD IS, AS THE CARD DRAWS IT (answers-first spec §2). Four members and two derived
+  # answers, because the two are one subtraction apart and a member for each would be a second place
+  # for the same number to be wrong — `AllocationCalculator::Row#short`'s rule, one level up.
+  #
+  # `day` IS 1-BASED AND INCLUSIVE AT BOTH ENDS, which is the only reading that makes both edges
+  # true: the opening day is day 1 of 14 rather than day 0 (nobody is zero days into a period they
+  # are standing in), and the closing day is day 14 with nothing left. That fixes #days_left as
+  # `days - day` — the same figure as `last - today`, spelled off the members this object already
+  # carries so the two cannot disagree.
+  Progress = Data.define(:first, :last, :day, :days) do
+    def days_left = days - day
+
+    # WHOLE PERCENT, CLAMPED, matching `HoldingCalculator#progress_percentage` — the app's other
+    # bar — so the two draw the same way. The clamp is belt and braces: `period_containing(today)`
+    # contains today by construction, so neither bound is reachable from here.
+    def percent = ((day.to_f / days) * 100).round.clamp(0, 100)
   end
 
   attr_reader :user, :today
@@ -251,12 +276,30 @@ class HomePresenter
   # step by three cross-pins in the specs. Delegated, they cannot drift at all.
   delegate :available, to: :proposal
 
-  # What every rule asks for this period — an honest answer to "what do I owe". Post-sweep, exactly
-  # as the distribution screen computes it, and now off the SAME ROWS: a category the fill rejects
-  # for asking nothing contributes nothing to a sum over the rows, which is what the per-category
-  # loop this replaced computed the long way round. The `0.to_d` seed is the type guarantee for the
-  # user with no rows at all.
-  def total_required = waterfall.sum(0.to_d, &:needed)
+  # WHAT THE REST OF THIS PERIOD'S PLAN STILL ASKS FOR AND HAS NOT BEEN GIVEN — the hero card's
+  # "spoken for" (answers-first spec §3). Post-sweep, exactly as the distribution screen computes
+  # it, and off the SAME ROWS: a category the fill rejects for asking nothing contributes nothing to
+  # a sum over the rows. The `0.to_d` seed is the type guarantee for the user with no rows at all.
+  #
+  # ** ONE SPELLING, AND THIS IS THE READER IT IS. ** `AllocationCalculator::Row#needed` is
+  # `HoldingCalculator#required` on the net-of-sweep calculator `AllocationCalculator
+  # #ask_calculator_for` builds — the same object, from the same class, that the distribute
+  # waterfall prints a row of and that `DistributionPresenter::Line#needed` carries. Spec §3 writes
+  # the figure as `Σ max(0, this period's ask − allocated this period)`, and every part of that is
+  # ALREADY inside `needed`: `#required` measures each rule against `#allocated_balances` (what the
+  # category is already holding for it), and `AllocationCalculator#fill` floors the category's ask
+  # at zero and drops the rows that ask for nothing. Re-deriving any of it here would be a second
+  # answer to "what do I still owe this period", which is the one thing this plan forbids —
+  # `spec/presenters/home_presenter_spec.rb` reads the figure through both entry points on one
+  # fixture and compares them.
+  #
+  # IT WAS `#total_required`, RENAMED RATHER THAN JOINED (answers-first Task 1). Two names for one
+  # sum is the drift the rule is written against; what changed is Home's word for it.
+  #
+  # DELIBERATELY NOT `Budget.steady_need`, which is the STRUCTURAL question — what the rules claim
+  # from a TYPICAL period — and diverges from this in both directions on the same budget. See
+  # #structurally_underwater?, which is the reader that wants the other one.
+  def remaining_plan = waterfall.sum(0.to_d, &:needed)
 
   # Fills top-down by priority, exactly as a distribution would, so the user sees who gets paid first
   # and where the money ran out.
@@ -265,7 +308,7 @@ class HomePresenter
   # could not cross an account boundary; an allocation crosses nothing, so a single `remaining` is
   # the model rather than a simplification of it — and it is `AllocationCalculator#fill`'s own shape.
   #
-  # Memoised because #shortfall, #covered?, #projected_buffer and #covered_by_waterfall? all derive
+  # Memoised because #shortfall, #covered?, #free_to_spend and #covered_by_waterfall? all derive
   # from these rows, so a Home render asks for them several times over.
   # ROWS ARE `AllocationCalculator::Row` NOW, not hashes this class fills itself (Task 7). They
   # answer #category, #needed, #funded and #short.
@@ -296,7 +339,7 @@ class HomePresenter
     Waterfall.cutoff(waterfall) { |row| [row.funded, row.short] }
   end
 
-  # Derived from the waterfall rows, NOT from `total_required - available`.
+  # Derived from the waterfall rows, NOT from `remaining_plan - available`.
   #
   # The two agree on every ordinary screen now — one root, no orphans — and they still part company
   # on a NEGATIVE available, where the subtraction reports more than any distribution could be short
@@ -309,26 +352,68 @@ class HomePresenter
 
   def covered? = shortfall.zero?
 
-  # Money that has no job even after this period's funding — `available` less every row's funding.
+  # ── THE HERO CARD (answers-first spec §§2-3) ───────────────────────────────────────────────────
   #
-  # WITH ONE ROOT IT IS POSITIVE ONLY ON A COVERED PERIOD, which is a real simplification rather than
-  # an accident: it used to double as "cash in an account whose own pools are already funded, which
-  # cannot close a gap somewhere else", and that reading died with the accounts. A short period
-  # drains the root to zero, so the standing band's short branch has no buffer clause left to print.
+  # `#projected_buffer` IS DELETED HERE, and the deletion is what these three readers are for. It
+  # was `available − Σ FUNDED`, so it clamped itself to what the waterfall actually handed out and
+  # read $0.00 on every short period — "nothing left over", said to a user $250 short. Worse, the
+  # band that printed it had to gate on `available.negative?` to stop calling a deficit "unclaimed
+  # money" (fix round 1, MED-1). `#free_to_spend` subtracts what the plan still ASKS for, so the
+  # gap is the figure rather than a state to be branched on, and there is one card in every state.
+
+  # THE NUMBER THE USER'S BANK APP SHOWS — `AccountLedger#pot`, which is main's balance and only
+  # main's (§2: main carries the entry side of the physical ledger, every other account is movements
+  # alone). Named for what the card calls it, off the same ledger the accounts band reads, so the
+  # two figures on one screen cannot come from two snapshots.
   #
-  # ** THE CONVERSE IS FALSE, AND SAYING IT WAS THE DEFECT (fix round 1 — MED-1). ** A covered period
-  # does NOT imply this is positive. `#covered?` is `shortfall.zero?`, which a user with no holder
-  # categories satisfies trivially — nothing asks, so nothing is short — while their unbudgeted
-  # spending has drained the root below zero. Measured: $100 of spending with no rules rendered
-  # "You're covered this period" over "-$100.00 is still unclaimed after this period", a deficit
-  # called unclaimed money on the root route.
+  # MEMOISED, AND MEASURED RATHER THAN ASSUMED. `AccountLedger#pot` is `#balance_of(main)`, and that
+  # method's entry term is NOT memoised in the ledger — it is two SUMs over the user's entries every
+  # time it is asked. The card asks three times (this figure, then #free_to_spend's `min`, then
+  # #free_cap_bound?'s comparison), which measured as six statements before this memo; the pin in
+  # `spec/presenters/home_presenter_spec.rb` holds it at two and then at none. `||=` is safe where
+  # `defined?` would be needed for a falsy answer: a zero pot is `BigDecimal("0")`, which is truthy.
+  def in_checking = @in_checking ||= account_ledger.pot
+
+  # ** THE ONE DERIVED NUMBER (spec §3): `min(pot, available − remaining_plan)`. **
   #
-  # THE EXACT LAW IS `projected_buffer.negative? ⟺ available.negative?`, and it falls out of the
-  # fill: `funded` is `remaining.clamp(0.to_d, needed)`, so with a non-negative root every row funds
-  # at most what is left and `Σ funded ≤ available`, while with a negative root every row funds
-  # exactly zero and this IS `available`. `home/_standing.html.erb` gates on that one condition
-  # rather than on this figure's own sign, so the band has one question to ask on either branch.
-  def projected_buffer = proposal.leftover
+  # `#available` IS THE PROPOSAL'S, POST-SWEEP, AND IT HAS TO BE THAT ONE. Spec §3 names
+  # `CategoryLedger#available`; this presenter's `#available` is that figure PLUS what the next
+  # distribution sweeps back, and `#remaining_plan` is the ask computed as if the sweep had ALREADY
+  # happened (see AllocationCalculator#ask_calculator_for, which exists for exactly that reason).
+  # Subtracting a post-sweep ask from a pre-sweep root charges the user for every swept dollar
+  # twice: the money is missing from the left-hand side while the right-hand side already assumes it
+  # is back. The two halves have to describe one moment, and this presenter's `#available` is the
+  # moment the rest of the screen is about.
+  #
+  # THE CAP AT THE POT IS RULED (spec §3): free money you would have to transfer out of savings
+  # before you could spend it is not free in the moment. #free_cap_bound? is which side won.
+  #
+  # NEVER CLAMPED. A period that has promised or spent more than it has renders a negative figure in
+  # red with a sentence that says why; rounding it up to zero would be the app telling the user they
+  # are fine. The `min` of two BigDecimals is a BigDecimal, and both operands carry their own type
+  # guarantee, so the fresh user gets `0.0` rather than an Integer.
+  def free_to_spend = [in_checking, unspoken_for].min
+
+  # DID THE CAP BIND — the subline's gate, and the reason it is a predicate rather than the view
+  # comparing the two figures itself: a screen that re-spelled the `min`'s condition could print
+  # "more is parked in other accounts" beside a figure the other branch produced.
+  #
+  # A STRICT `<`, so equality is not "parked somewhere else": with $1,000 in checking and exactly
+  # $1,000 unspoken for there is one pile of money, and the card would be inventing a second.
+  def free_cap_bound? = in_checking < unspoken_for
+
+  # WHERE WE ARE IN THE PERIOD — day X of Y, and the bar's own percentage (spec §2).
+  #
+  # Off `#period_range`, never a second window: that reader is `User#period_containing`, the one
+  # method that owns this arithmetic, and it is nil for a user who has declared no period. The card
+  # draws no bar there rather than inventing a calendar month — the same refusal the band this
+  # replaced made about the same reader.
+  def period_progress
+    range = period_range
+    return nil if range.nil?
+
+    Progress.new(first: range.first, last: range.last, day: (today - range.first).to_i + 1, days: range.count)
+  end
 
   # Sorted for the same reason #waterfall is, and by the same key: this is a rendered list, and the
   # order the user ranked their categories in is the order "what do I deal with" wants. #categories
@@ -404,15 +489,15 @@ class HomePresenter
       .sort_by { |budget, due_on| calculator_for_budget(budget).due_order(due_on) }
   end
 
-  # ── THE STANDING BAND'S TWO REMAINING READERS ──────────────────────────────────────────────────
+  # ── THE PERIOD, AND THE STRUCTURAL VERDICT ─────────────────────────────────────────────────────
 
-  # WHICH PERIOD THE STANDING BAND IS TALKING ABOUT, or nil for a user who has declared none.
+  # WHICH PERIOD THE SCREEN IS TALKING ABOUT, or nil for a user who has declared none.
   #
   # `User#period_containing`, the one method that owns this arithmetic — the same window
   # `DistributionPresenter#period` and `EntryImpactPresenter#period_ends_on` both read off, never
   # re-derived here. GATED ON THE DECLARATION rather than taken on trust: `period_containing` falls
   # back to the calendar month for an undeclared user, which is the right fallback for a normaliser
-  # and a lie on this band, since "Aug 1 – Aug 31" would state a boundary the user never set.
+  # and a lie on this card, since "Aug 1 – Aug 31" would state a boundary the user never set.
   def period_range
     return nil if user.period_cadence.blank? || user.period_anchor_date.blank?
 
@@ -422,7 +507,7 @@ class HomePresenter
   # DOES THE BUDGET FIT THE INCOME — a question about the shape of the rules, not about this
   # afternoon's cash.
   #
-  # `Budget.steady_need`, not `total_required`, which is THIS period's ask — catch-up on anything
+  # `Budget.steady_need`, not `remaining_plan`, which is THIS period's ask — catch-up on anything
   # behind, zero on anything already funded — and the two diverge in both directions on the same
   # budget. A period spent catching up on a slipped bill reported "your budget doesn't fit your
   # income" at someone whose rules fit it comfortably, and the period right after a distribution
@@ -502,6 +587,15 @@ class HomePresenter
   end
 
   private
+
+  # THE UNCAPPED HALF OF `#free_to_spend` — money with no job once the rest of this period's plan is
+  # paid for. Private and spelled once because BOTH public readers need it: #free_to_spend takes the
+  # `min` of it and the pot, #free_cap_bound? asks which of the two that was, and a second spelling
+  # of the subtraction is a card whose figure and whose subline could describe different arithmetic.
+  #
+  # Not memoised: both operands already are (`#available` on the proposal, `#remaining_plan` on the
+  # rows), so this is a subtraction of two memos and the card asks for it twice.
+  def unspoken_for = available - remaining_plan
 
   # ONE PHYSICAL LEDGER FOR THE SCREEN. Lazy, like everything else here: Home writes nothing, so
   # there is no write for the snapshot to fall the wrong side of, and the laziness is only so a

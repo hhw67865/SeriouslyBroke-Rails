@@ -1,0 +1,129 @@
+<%# THE HERO CARD — Home's first three answers (answers-first spec §§2-3).
+    Local: `presenter` (HomePresenter). It replaces `home/_standing.html.erb`.
+
+    ONE CARD IN EVERY STATE, and that is the design rather than a simplification of it. The band
+    this replaced opened with `if presenter.covered?` and had two headlines, two sublines and a
+    reconciliation clause that had to be reachable from both — and it still got the empty-budget
+    user wrong, printing "You're covered this period" over a $100 deficit it called unclaimed money.
+    There is no branch here that decides WHAT to say: every state says "In Checking", "Free to
+    spend" and where the period is, and a bad state is a red figure with a sentence, not a different
+    card. See spec §2, which rules the covered/uncovered question closed.
+
+    THE WORDS ARE THE USER'S (spec §3). In checking, free, set aside, spoken for. "Available" is the
+    mechanic's term and survives on Distribute and Budget; "buffer" and "unclaimed" are dead. %>
+<div class="bg-white border border-gray-200 rounded p-4 sm:p-6" data-hero>
+  <dl class="space-y-4">
+    <%# THE NUMBER THE BANK APP SHOWS. `#in_checking` is `AccountLedger#pot` — main's balance, not
+        the user's money everywhere — because that is the figure they can check against their phone.
+        RED WHEN IT IS BELOW ZERO (spec §2): a physical overdraft is the loudest fact on the screen,
+        and unlike every purpose-ledger figure it is money that has already gone. %>
+    <div class="flex items-baseline justify-between gap-4">
+      <dt class="text-sm font-medium text-gray-600">In Checking</dt>
+      <dd class="text-2xl font-semibold tabular-nums <%= presenter.in_checking.negative? ? "text-status-danger" : "text-gray-900" %>"
+          data-in-checking>
+        <%= number_to_currency(presenter.in_checking) %>
+      </dd>
+    </div>
+
+    <%# ONE PLAIN SENTENCE, modelled on the overdraft strip the standing band ended with. What
+        changes is the last clause: that strip said "none of the figures above count it", which was
+        true of a band whose figures were both purpose-ledger ones and is FALSE here — the figure it
+        sits under is the overdraft. The consequence takes its place, because a consequence is the
+        thing worth stating (principle 3). The strip's own copy survives verbatim below, for the
+        accounts it is still exactly true of. %>
+    <% if presenter.in_checking.negative? %>
+      <p class="-mt-2 text-sm text-status-danger" data-checking-overdrawn>
+        Your checking account is already spent past zero — nothing is free until money comes in.
+      </p>
+    <% end %>
+
+    <%# THE ONE DERIVED NUMBER: `min(pot, available − remaining_plan)` (spec §3). Larger than the
+        figure above because it is the question the user cannot answer from their bank app — the
+        pot they can. Never clamped: a negative free is rendered as a negative. %>
+    <div class="flex items-baseline justify-between gap-4">
+      <dt class="text-sm font-medium text-gray-600">Free to spend</dt>
+      <dd class="text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-gray-900" %>"
+          data-free-to-spend>
+        <%= number_to_currency(presenter.free_to_spend) %>
+      </dd>
+    </div>
+  </dl>
+
+  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns. The cap clause is gated on
+      the presenter's own predicate rather than on a comparison spelled here: a view re-deriving
+      which side of the `min` won could print "more is parked in other accounts" beside a figure the
+      other branch produced. %>
+  <p class="mt-2 text-sm text-gray-600" data-free-subline>
+    <% if presenter.free_to_spend.negative? %>
+      More is set aside or spoken for than you have. Anything you spend now takes you further under.
+    <% else %>
+      the rest is set aside or spoken for<% if presenter.free_cap_bound? %> — more is parked in
+      other accounts<% end %>.
+    <% end %>
+  </p>
+
+  <%# WHERE WE ARE IN THE PERIOD (spec §2), as a bar rather than a date range: "Aug 14 – Aug 27" is
+      a fact the reader has to do arithmetic on, and "7 days left" is the answer they wanted.
+
+      SILENT FOR AN UNDECLARED USER — `#period_progress` is nil, the same gate `#period_range` has
+      always applied. Inventing a calendar-month boundary nobody set would be a lie beside two
+      figures that are still true.
+
+      The track/fill pair is `categories/_partials/_category_card`'s, so the app's two bars are one
+      shape; `role="progressbar"` because a bar with no accessible value is decoration to a screen
+      reader, and the days-left sentence beside it is the value in words either way. %>
+  <% if progress = presenter.period_progress %>
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <div class="flex items-baseline justify-between gap-3 text-xs text-gray-500" data-period-range>
+        <span><%= progress.first.strftime("%b %-d") %></span>
+        <span><%= progress.last.strftime("%b %-d") %></span>
+      </div>
+      <div class="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden"
+           role="progressbar"
+           aria-valuenow="<%= progress.percent %>"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-label="Day <%= progress.day %> of <%= progress.days %> in this period"
+           data-period-progress="<%= progress.percent %>">
+        <div class="h-1.5 rounded-full bg-brand-dark" style="width: <%= progress.percent %>%;"></div>
+      </div>
+      <p class="mt-1.5 text-xs text-gray-500">
+        <%= pluralize(progress.days_left, "day") %> left
+      </p>
+    </div>
+  <% end %>
+
+  <%# AN ACCOUNT THAT IS NOT CHECKING, BELOW ZERO — the standing band's strip, kept verbatim for the
+      accounts its last clause is still true of. Main is excluded because its overdraft IS the red
+      figure at the top of this card, and printing the same debt twice with two different sentences
+      about what counts it is worse than printing it once.
+
+      `main?` rather than a comparison of this view's own: the presenter already owns that question
+      (and the model refuses a destroy on the same predicate), so a second spelling here could hide
+      a real debt or double-report one. %>
+  <% presenter.overdrawn_accounts.reject { |account| presenter.main?(account) }.each do |account| %>
+    <p class="mt-4 rounded bg-status-danger-light px-3 py-2 text-sm font-medium text-status-danger"
+       data-overdrawn-account="<%= account.name %>">
+      <%= account.name %> is overdrawn <%= number_to_currency(presenter.overdraft_for(account)) %> — already
+      spent, and none of the figures above count it.
+    </p>
+  <% end %>
+
+  <%# §9'S PERMANENT BUTTON, CARRIED OFF THE STANDING BAND UNCHANGED. It has no other home in the
+      answers-first plan: the trouble strip (spec §5) is for a physical overdraft, an overdrawn
+      category, an overdue bill and an undistributed period, and this is none of those — it is a
+      verdict about the SHAPE of the rules, which no reallocation can fix, which is exactly why §9
+      asked for it to be permanent rather than gated on this period's cash.
+
+      `structurally_underwater?` is gated on income AND cadence together and memoised for the false
+      case too, so this caller costs nothing. A recomputation here could say "your budget doesn't
+      fit your income" beside a /budget page that says it fits — and the route this button opens
+      refuses on exactly that reader's condition. %>
+  <% if presenter.structurally_underwater? %>
+    <%= link_to("Your budget doesn't fit your income",
+                sacrifice_path,
+                class: "mt-4 inline-flex items-center gap-2 px-4 py-2 rounded border " \
+                       "border-status-danger text-status-danger text-sm font-medium hover:bg-white",
+                data: { sacrifice_link: true }) %>
+  <% end %>
+</div>
