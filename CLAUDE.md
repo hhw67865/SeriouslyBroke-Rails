@@ -146,6 +146,10 @@ Procedure: confirm the machine is quiet; run the file 3× looking only at the fi
 
 **A third cause, rarer: the wall clock.** A fixture that reads `Date.current` lazily inside `travel_to` (a lazy `let` first evaluated inside the block counts, whatever its comment claims) can land money in the wrong period and fail only during the first hours of the UTC day. Its signature: the same examples by name fail at one hour and pass at another, on commits that never touched the code path. **Re-running at the same time of day cannot distinguish a regression from the clock** — before attributing a stable-by-name failure to a commit, shift the fixture's offsets (or wait out the window) and see if it survives, and check `git diff` actually touches the failing path.
 
+### Narrow-viewport tests: Chrome floors the window at 500px
+
+**Headless Chrome refuses to make a window narrower than 500px.** `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500` — measured — so every window-based spelling of a 375px test in this suite is really a 500px test wearing a 375 label, and a layout that breaks between the two passes. A true mobile layout viewport (the width CSS media queries actually read) needs CDP: `page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false)`. The worked idiom, with the measurements behind it, is in `spec/system/home/hero_spec.rb` — search for `setDeviceMetricsOverride`. Note also that a trailing `evaluate_script` in such an example leaves the session in a state Capybara's teardown does not survive here, which is the first cause above wearing a different last statement; prefer Selenium's own geometry (element rects) over JS for the assertion.
+
 ---
 
 ## Summary: Implementation Checklist

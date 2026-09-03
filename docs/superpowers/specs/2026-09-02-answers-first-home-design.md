@@ -1,6 +1,8 @@
 # Answers-First Home: Free to Spend, and the Period as Progress
 
-**Status:** APPROVED in chat (Henry, 2026-09-02) — "the mechanism is right but the UI hurts…
+**Status:** DELIVERED 2026-09-03 (`feature/envelope-budgeting`, commits `917ee35..` — see §10 for
+the as-built and the two design calls still open for Henry).
+**Was:** APPROVED in chat (Henry, 2026-09-02) — "the mechanism is right but the UI hurts…
 all people care about is how much is in their checking account (not total), how much of that is
 actually available free money that isn't helping a future payment or necessary for the period,
 where we currently are in the period, how much have we spent on each category."
@@ -117,3 +119,117 @@ state. The fix buttons survive on the strip.
 - Trouble strip: each trigger both directions; ABSENT when all is well.
 - Suggestion gating: day-old account sees zero drift/dead suggestions; 2+ periods unlocks.
 - Responsive: hero and bars at 375px; screenshots at 1440 and 375.
+
+## 10. As built
+
+Everything above shipped. What follows is where the delivered screen departs from the letter of
+this document, and why — plus the two design calls that are still Henry's to make.
+
+### 10.1 §3's `available` is the POST-SWEEP one
+
+§3 names `CategoryLedger#available`. `HomePresenter#free_to_spend` subtracts
+`AllocationCalculator#available` instead — the same root PLUS what the next distribution sweeps
+back. It has to be that one: `#remaining_plan` is the ask computed as if the sweep had already
+happened (`AllocationCalculator#ask_calculator_for` exists for exactly that reason), so subtracting
+a post-sweep ask from a pre-sweep root charges the user for every swept dollar twice — missing from
+the left-hand side while the right-hand side already assumes it is back. The two halves have to
+describe one moment. Ruled in Task 1; the invariant readers are untouched, this is presentation
+arithmetic. (For Ming's real data the two figures are equal — $224,001.81 — because nothing is
+sweeping this period, which is the ordinary case; the divergence only appears mid-sweep.)
+
+### 10.2 `remaining_plan` is a RENAME, not a new reader
+
+§3's one-spelling rule wanted the Budget page's and the waterfall's period ask. Grounding found
+that sum already existed on the presenter as `#total_required`, so the delivered change is a
+rename: `HomePresenter#remaining_plan = waterfall.sum(&:needed)`. The best possible outcome for the
+rule — nothing new to keep in step. The cross-entry-point pin reads the **waterfall**, deliberately
+NOT `Budget.steady_need`: `steady_need` is the STRUCTURAL question (what the rules claim from a
+TYPICAL period) and diverges from this one in both directions on the same budget.
+
+### 10.3 The WATERFALL BAND died with the attention band — §5's list gained it
+
+§5 lists what the trouble strip replaces; as built, that list is one item longer. Home's
+distribution waterfall ("where your money goes", the fill order, the cutoff) was the mechanic's
+view of the distribution, which is the thing §1 says Home stops showing, so it went with
+`_attention.html.erb` rather than surviving beside a card that answers four questions. §6's
+distribute call-to-action moved onto the strip's `:undistributed` arm, where it still is.
+
+**Reversion point, named:** the band's markup is `git show 19963aa^:app/views/home/_attention.html.erb`
+(i.e. as of `72278e8`); it was removed in `19963aa`. The three readers it was the only caller of —
+`#cutoff`, `#shortfall`, `#covered?` — were deleted a commit later in `3eababf` once that was
+measured rather than assumed; the presenter names where each question now lives (`Waterfall.cutoff`
+via `DistributionPresenter`, `waterfall.sum(&:short)`, the sign of `#free_to_spend`). Restoring the
+band means restoring those three too. The mechanic's view itself was not lost: it lives on Budget
+and Distribute, which is where §8 leaves those screens.
+
+### 10.4 The trouble strip has FIVE triggers, and `:overdraft` is NON-MAIN only
+
+§5 names four. The fifth is §9's sacrifice link, carried onto the strip from the hero when Task 2
+built it. And the overdraft arm fires only for accounts that are NOT main: main's overdraft is
+already the hero's red "In Checking" figure with its own sentence (§2), and a strip repeating it
+would be the same fact twice on one screen. **Live-confirmed in Task 4:** a throwaway account
+driven to a −$200.00 pot renders the red hero figure, "Your checking account is already spent past
+zero.", and NO strip at all.
+
+`#pool_problem_label` was deleted with the band; the strip renders `shared/_holding_status`, so
+that partial's forced-suffix property is structural now and its one documented exception is gone.
+
+### 10.5 §7's sidebar tokens, measured
+
+The gradient is not decoration — the wordmark, every nav item and the three section eyebrows are
+painted on it, and they were the worst-failing text in the app. The **70%-white eyebrow is the
+binding constraint**, not the wordmark: `rgba(255,255,255,0.7)` must clear 4.5:1 against the same
+background it is 70% of the way toward, a far smaller gap than solid white's.
+
+| Stop | white wordmark | 70%-white eyebrow |
+|---|---|---|
+| was `#C9C78B` (light end) | 1.75 ✗ | 1.49 ✗ |
+| was `#a9a76b` (dark end) | 2.49 ✗ | 1.96 ✗ |
+| **now `--color-sidebar-from: #56552B`** | **7.69** ✓ | **4.75** ✓ |
+| **now `--color-sidebar-to: #3A391D`** | **11.78** ✓ | **6.69** ✓ |
+
+Other foregrounds, at the light end (the worst case): hover `bg-white/5` → white **6.74**, eyebrow
+4.27; sign-out `bg-white/10` → 5.91, its `bg-white/20` hover → 4.60; the active nav item is a white
+pill carrying `--color-primary-darker` at 8.81, which the darker ground only sharpens. Every
+interior stop passes by construction — channel-wise interpolation is monotone in luminance, so no
+stop can be lighter than the light end.
+
+Both values are **HSL(58.4°, 34%)**, the brand sage's own hue and saturation; lightness alone moved
+(67%/54% → 25%/17%). Darkened, not rehued. The tokens are the sidebar's own, so `--color-primary`
+— a SURFACE everywhere else — was left alone.
+
+*(Three of those figures — 11.78, 6.69, 6.74 — were first written as 11.65, 6.63 and 6.71, a ~1%
+rounding slip corrected here and in `custom.css`. No verdict changed. `docs/design-standards.md`
+lists no colour values at all, only two prose contrast checklist items, so it gained nothing.)*
+
+### 10.6 §7's "without primary-button weight" clause is RETIRED
+
+The clause assumed self-disclaimed guesses would survive the occurrence gate and merely need
+demoting. They do not survive it: `bill_shape` returns nil below `BILL_MIN_OCCURRENCES = 2`, so
+`single_occurrence_shape`, `GUESSED_MIN_AMOUNT`, `GUESSED_INTERVAL_MONTHS` and the `detail[:guessed]`
+key on all four kinds are deleted, along with the view branch that printed "one payment is not a
+schedule…". **Deletion superseded demotion** — a key that is a constant `false` on a money screen is
+a branch waiting to be believed. Nothing self-disclaimed is left to render with any weight.
+
+Two figures moved as a result, both single-caused and both named: `seeds_spec` `dated_bill: 6 → 3`
+(three of the demo's "bills" were one-off spends) and `budget_page/suggestions_spec` 6 rows → 5.
+
+### 10.7 OPEN — two design calls for Henry
+
+1. **The waterfall band's departure (§10.3).** Home no longer shows where the money goes or where
+   it runs out; the strip's `:undistributed` arm links to Distribute instead. This is the biggest
+   single subtraction in the delivery and it was made on §1's authority, not asked for by name.
+   Reversion point above.
+2. **Two figures an inch apart, on purpose.** The house principle is that no two figures a reader
+   could add sit next to each other. The trouble strip breaks it deliberately: an at-risk category
+   prints its figure on the strip ("behind $102.68") and again on its own period row an inch below,
+   because the strip is a list of *things that need you* and the section is a list of *what you
+   spent* — the same category legitimately appears in both. Verified live on real data
+   (`mingguan0809`, two behind categories). If the repetition reads as an error rather than as two
+   answers, the fix is to drop the figure from the strip and leave the name.
+
+*A third observation from Task 4's browser pass, weaker than the two above but worth Henry's eye:*
+on a pure-overspend account — nothing set aside, nothing spoken for, simply spent past zero — the
+negative arm's subline reads "More is set aside or spoken for than you have." The branch logic is
+right (`unspoken_for` is negative) and pinned; the *sentence* is imprecise in that one corner,
+where the honest reading is "you have spent past what you had".

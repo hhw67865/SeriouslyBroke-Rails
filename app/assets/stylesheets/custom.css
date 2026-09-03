@@ -41,8 +41,13 @@
      (channel-wise interpolation is monotone in luminance, so no interior stop can be lighter than
      the light end):
 
-       #56552B  white 7.69:1   eyebrow 4.75:1   (+ hover white/5 → 6.71 / 4.27)
-       #3A391D  white 11.65:1  eyebrow 6.63:1
+       #56552B  white 7.69:1   eyebrow 4.75:1   (+ hover white/5 → 6.74 / 4.27)
+       #3A391D  white 11.78:1  eyebrow 6.69:1
+
+     (Those three were 6.71 / 11.65 / 6.63 as first written — a rounding slip of about 1%, found
+     and corrected when Task 4 recomputed them for the spec's as-built. The pass/fail verdicts
+     never changed; every figure here is the composited colour against the SAME background, which
+     is the only comparison a translucent foreground has.)
 
      The other foregrounds on this surface clear AA too: the sign-out button's `bg-white/10` reads
      5.91:1 under white and 4.60:1 at its `bg-white/20` hover, and the ACTIVE nav item is a white
