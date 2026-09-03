@@ -6,7 +6,14 @@
 
     THE REASON CLAUSE IS GONE WITH THE ORPHANS (two-ledger spec §5). It said why a rule was outside
     the fill order; every rule this page renders is owned by a category, and every category is in
-    the waterfall. %>
+    the waterfall.
+
+    ** WHAT THE RULE HOLDS RIGHT NOW (computed-claims spec §3.3; Task 2). ** Two figures, never
+    both: a rate rule is use-it-or-lose-it, so what it has is this period's unspent CLAIM and its
+    built-up is zero by definition; an accruing rule's whole point is the running total, so it says
+    what is BUILT UP. Printing "built up $0.00" over an envelope that carries nothing at all is
+    exactly the confusion `ClaimCalculator#built_up`'s own comment refuses. Both come off the page's
+    ONE `ClaimLedger`. %>
 <%# STACKS BELOW `sm` (design review H5): the name, "$1,200.00 every 6 months", "· next Mar 1" and
     an Edit link are four things, and at 375px the figure and its date wrapped into the name's
     column. %>
@@ -20,7 +27,40 @@
       <% if rule.anchored? %>
         <span class="text-gray-500">· next <%= rule.due_on.strftime("%b %-d") %></span>
       <% end %>
+      <% if rule.rate? %>
+        <span class="text-gray-500" data-rule-claim>· <%= number_to_currency(rule.claim) %> claimed</span>
+      <% else %>
+        <span class="text-gray-500" data-rule-built-up>· <%= number_to_currency(rule.built_up) %> built up</span>
+      <% end %>
       <%= link_to "Edit", edit_budget_path(rule.budget), class: "text-brand-dark hover:text-brand underline" %>
     </span>
   </div>
+
+  <%= render "adjust", rule: rule %>
+
+  <%# WHAT WAS ALREADY DONE TO THIS PERIOD, in date order, each with the door back out. The claim
+      above already counts every one of them — the list is what makes that figure explicable rather
+      than merely asserted, which is the whole argument for a dated delta over a silent override.
+
+      Silent when there are none: an empty list under every row would be a heading about nothing on
+      the widest per-rule screen in the app. %>
+  <% if rule.adjustments.any? %>
+    <ul class="mt-2 space-y-1" data-rule-changes>
+      <% rule.adjustments.each do |change| %>
+        <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
+          <span class="text-gray-500"><%= change.local_day.strftime("%b %-d") %></span>
+          <%# SIGNED, and `number_to_currency` prints a leading minus for a take-back — which is the
+              whole vocabulary of this table said in one character. %>
+          <span class="<%= change.amount.negative? ? "text-status-danger" : "text-gray-900" %>" data-change-amount>
+            <%= number_to_currency(change.amount) %>
+          </span>
+          <%= button_to "Remove",
+                        adjustment_path(change),
+                        method: :delete,
+                        form: { draggable: "false" },
+                        class: "text-brand-dark hover:text-brand underline" %>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
 </div>

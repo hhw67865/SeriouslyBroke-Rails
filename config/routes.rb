@@ -86,6 +86,21 @@ Rails.application.routes.draw do
   # Both actions redirect back to /budget, which is the only screen either is reachable from.
   resources :suggestion_dismissals, only: [:create, :destroy]
 
+  # SETTING MONEY ASIDE, TAKING IT BACK, TOPPING UP, REDUCING AND SKIPPING — one table and one
+  # route for all five (computed-claims spec §3.3). An adjustment is a dated, signed delta on ONE
+  # rule's accrual, so `create` writes a row and `destroy` deletes one and that is the whole of the
+  # resource — the same argument `suggestion_dismissals` above makes for being a resource rather
+  # than five verbs on `budget_page`.
+  #
+  # `rule_id`, `amount` and `date` arrive FLAT rather than nested under `adjustment[...]`, because
+  # one form on the rule row serves every one of the five doors and the button pressed is what
+  # decides the sign (`amount_sign`) or asks the server for the figure (`skip`). Nesting would name
+  # a record the user never says the word for — the UI says set aside, take back, top up, reduce
+  # and skip, and never "adjustment".
+  #
+  # Both actions come back to /budget, the only screen either is reachable from.
+  resources :adjustments, only: [:create, :destroy]
+
   # WHERE THE USER DECLARES THEIR PERIOD AND THEIR INCOME (spec §3, §8). The first and only
   # writer for `typical_income`, `period_cadence` and `period_anchor_date` anywhere in the app —
   # until this route the whole periods system ran on seed data, and §9's structural check was

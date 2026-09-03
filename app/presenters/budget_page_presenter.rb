@@ -15,8 +15,31 @@ class BudgetPagePresenter
   # the fill order, and the one reason left — a pool no account holds — is a fact about a layer that
   # no longer owns rules. A category-owned rule is always in the fill order; there is nothing left
   # for a row to have to excuse.
-  Rule = Data.define(:budget, :due_on) do
+  #
+  # ** THE CLAIM FIGURES RIDE ON THE ROW, FROM ONE LEDGER (computed-claims spec §3.3; Task 2). **
+  # Every one of the five comes off `ClaimLedger#calculator_for`, which the page builds ONCE over
+  # the user's whole rule set — the row does not hold a calculator and the partial does not build
+  # one. That is the same objection `Group#status` makes about the category header, said one level
+  # down: a partial free to ask for a claim of its own is a screen that costs a walk per row and
+  # can disagree with the figure the header above it printed.
+  #
+  # `shape` rather than two booleans, because §3.3 offers DIFFERENT WORDS per shape — a rate rule's
+  # envelope is topped up or reduced for this period, an accruing rule's fund is set aside into,
+  # taken back out of, or skipped — and `ClaimCalculator#shape` is the one place that classification
+  # lives.
+  #
+  # `adjustments` is THIS PERIOD's rows in date order, which is what the row lists and what the
+  # remove button deletes. The claim already counts them; they are listed so the figure above them
+  # is explicable rather than merely asserted.
+  Rule = Data.define(:budget, :due_on, :shape, :claim, :built_up, :planned_this_period, :adjustments) do
     def anchored? = due_on.present?
+
+    def rate? = shape == :rate
+
+    # WHETHER A SKIP IS OFFERABLE. A period that plans nothing has nothing to skip — a settled
+    # one-off, or a fund already at its target — and the button is hidden rather than rendered into
+    # a zero row `Adjustment` would refuse. `AdjustmentsController#amount_for` is the backstop.
+    def skippable? = !rate? && planned_this_period.positive?
   end
 
   # ONE CATEGORY AND THE RULES THAT FILL IT. `status` is a HoldingStatus, so the group header speaks
@@ -298,7 +321,55 @@ class BudgetPagePresenter
     @distribution_clock ||= DistributionClock.new(user: user, today: today)
   end
 
-  def build_rule(budget) = Rule.new(budget: budget, due_on: due_on_for(budget))
+  def build_rule(budget)
+    calculator = claim_ledger.calculator_for(budget)
+
+    Rule.new(
+      budget: budget,
+      due_on: due_on_for(budget),
+      shape: calculator.shape,
+      claim: calculator.claim,
+      built_up: calculator.built_up,
+      planned_this_period: calculator.planned_this_period,
+      adjustments: adjustments_this_period.fetch(budget.id, [])
+    )
+  end
+
+  # ONE CLAIM LEDGER FOR THE WHOLE PAGE (computed-claims spec §3.3) — three statements for the
+  # user's entire rule set, where a calculator per row would be two per rule. It is built over
+  # `Budget.for_user`, which is every rule this page can render including the ones in
+  # #unfilled_rules, so `#calculator_for` never has to be guarded against a row it does not know.
+  #
+  # LAZY, as `#ledger` is and for the same reason: this page writes nothing, so there is no deletion
+  # for a snapshot to fall the wrong side of.
+  #
+  # PINNED, not asserted: `budget_page_presenter_spec`'s "costs the same number of statements for
+  # five rules as for one" counts them, because a row that quietly grew a calculator of its own is
+  # invisible to every other example in that file.
+  def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
+
+  # THIS PERIOD'S DELTAS, BY RULE — one statement for the page, and the rows themselves rather than
+  # a sum, because the row lists each one with its date and a remove button.
+  #
+  # ONE DAY OF SLACK ON EITHER SIDE, THEN FILTERED IN RUBY, which is `ClaimLedger#window`'s idiom
+  # for the same reason: the bound is a UTC instant and the day it protects is the OWNER's, so the
+  # query is deliberately wide and `Adjustment#local_day` — the app's one re-zoning — decides
+  # membership. A bare timestamp range would drop a Tokyo evening's top-up from its own period.
+  #
+  # THE PRELOAD IS WHAT KEEPS `#local_day` FREE. It walks `rule → category → user` for the zone, so
+  # without it the filter above and the date the row prints are two lookups per delta — the very
+  # per-row cost `#claim_ledger` exists to avoid, arriving through the back door.
+  def adjustments_this_period
+    @adjustments_this_period ||= begin
+      period = user.period_containing(today)
+      Adjustment.where(rule_id: rules.map(&:id))
+        .includes(rule: { category: :user })
+        .dated_within((period.first - 1).beginning_of_day..(period.last + 1).end_of_day)
+        .order(:date, :created_at)
+        .select { |adjustment| period.cover?(adjustment.local_day) }
+        .group_by(&:rule_id)
+    end
+  end
 
   # THROUGH THE CALCULATOR, NEVER THE RAW ANCHOR. A recurring bill's `anchor_date` is its FIRST
   # occurrence — the demo's car insurance anchors in March and is due every six months — so

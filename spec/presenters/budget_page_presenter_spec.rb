@@ -377,4 +377,109 @@ RSpec.describe BudgetPagePresenter do
       end
     end
   end
+
+  # ── THE CLAIM FIGURES ON A ROW (computed-claims spec §3.3; Task 2) ────────────────────────────
+
+  describe "a rule's claim figures" do
+    # A $1,200 goal fed by a $150-a-period rule BORN JAN 6, on this file's biweekly grid anchored
+    # Feb 6. `created_at` is planted because a rule accrues from the later of its category's funding
+    # date and its OWN birth (computed-claims ruling of 2026-09-03) — a rule created at the wall
+    # clock would be born months after this file's `today` and hold nothing at all.
+    #
+    # BY HAND: the boundaries are Feb 6 minus multiples of 14, so the walk visits Dec 26–Jan 8,
+    # Jan 9–22, Jan 23–Feb 5 and Feb 6–19 — four periods at $150 each, which is $600 built up, with
+    # $150 planned for the period `today` is in and $1,200 still a long way off.
+    def goal_rule
+      create(
+        :budget,
+        :per_period_rate,
+        amount: 150,
+        created_at: today - 1.month,
+        category: holder("Vacation").tap { |c| c.update!(target_amount: 1_200) }
+      )
+    end
+
+    def row_for(name) = presenter.category_groups.find { |group| group.category.name == name }.rules.sole
+
+    it "carries the built-up, the planned share and the shape for an accruing rule", :aggregate_failures do
+      goal_rule
+
+      expect(row_for("Vacation")).to have_attributes(
+        shape: :target, built_up: BigDecimal("600"), planned_this_period: BigDecimal("150"), claim: BigDecimal("600")
+      )
+    end
+
+    # A RATE RULE'S BUILT-UP IS ZERO AND ITS CLAIM IS THE ENVELOPE — the pair, on one row, because
+    # the row picks which of the two to print off `#rate?` and a shape read the wrong way would
+    # print "$0.00 built up" over $400.
+    it "carries a claim and no built-up for a rate rule", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+
+      expect(row_for("Groceries")).to have_attributes(shape: :rate, claim: BigDecimal("400"), built_up: 0)
+      expect(row_for("Groceries")).to be_rate
+    end
+
+    # THIS PERIOD'S ROWS AND ONLY THIS PERIOD'S. The list under a row explains the figure beside it,
+    # and the figure is about this period — a delta from last month is already spent into the
+    # built-up and listing it would invite the user to remove a row that is not what they are
+    # looking at. Both directions on one fixture, because a filter that dropped everything would
+    # pass the negative half alone.
+    it "lists only the deltas dated inside the current period", :aggregate_failures do
+      rule = goal_rule
+      # `today` (Feb 6) opens a period that runs to Feb 19; Feb 3 is inside the one before it.
+      this_period = create(:adjustment, rule: rule, amount: 90, date: today + 2.days)
+      create(:adjustment, rule: rule, amount: 40, date: today - 3.days)
+
+      expect(row_for("Vacation").adjustments).to eq([this_period])
+    end
+
+    # ** ONE LEDGER FOR THE PAGE, AND THE COST IS PINNED IN THE HOUSE IDIOM. ** Five rules on one
+    # category must cost exactly what one costs: the categories, the statuses and the fill order are
+    # identical between the two measurements, so any difference at all is a per-ROW query — a
+    # partial that built a calculator of its own, or an `Adjustment#local_day` reaching for its
+    # rule's owner without a preload. Both are invisible to every other example in this file.
+    #
+    # The rules are ITEM-BACKED because a category may hold only one item-less rule
+    # (`Budget#category_may_hold_one_item_less_rule`), and the ledger's item lane is one statement
+    # for any number of them.
+    describe "what the page costs" do
+      def count_statements(&)
+        statements = 0
+        counter = ->(*, payload) { statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/) }
+        ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &)
+        statements
+      end
+
+      # A FRESH PRESENTER EACH TIME. Every reader on this class is memoised, so a second read
+      # through the same instance would answer out of memory and hide the statements this pins.
+      def read_every_row
+        described_class.new(user: user, today: today).category_groups.each do |group|
+          group.rules.each { |rule| [rule.claim, rule.built_up, rule.planned_this_period, rule.adjustments.size] }
+        end
+      end
+
+      # EACH RULE CARRIES A DELTA OF ITS OWN, and that half of the fixture is what catches the
+      # second per-row cost: `Adjustment#local_day` walks `rule → category → user` for the owner's
+      # zone, so a listing without the preload is three lookups PER DELTA. Measured: dropping
+      # `includes(rule: { category: :user })` takes the five-rule reading twelve statements past the
+      # one-rule reading, and this example is the only one in the suite that sees it.
+      def rule_with_a_delta(category, name, amount)
+        rule = create(:budget, :per_period_rate, category: category, item: lane(category, name), amount: amount)
+        create(:adjustment, rule: rule, amount: 25, date: today)
+        rule
+      end
+
+      it "costs the same for five rules on a category as for one", :aggregate_failures do
+        category = holder("Groceries")
+        rule_with_a_delta(category, "Bread", 100)
+
+        one_rule = count_statements { read_every_row }
+
+        4.times { |n| rule_with_a_delta(category, "Item #{n}", 50) }
+
+        expect(count_statements { read_every_row }).to eq(one_rule)
+        expect(one_rule).to be_positive
+      end
+    end
+  end
 end

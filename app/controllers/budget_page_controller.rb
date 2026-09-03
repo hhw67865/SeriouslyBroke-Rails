@@ -32,9 +32,23 @@ class BudgetPageController < ApplicationController
   # So the FIGURES read a clean reload of the row (what is actually true), and the FORM keeps the
   # dirty object (what the user typed, plus its errors) so nothing they entered is thrown away.
   # A separate instance rather than `current_user.reload`, which would discard both.
+  # ** THE CADENCE OFFER (computed-claims spec §3.5), AND IT SITS IN FRONT OF THE SAVE. ** A rate
+  # rule's amount is denominated in PERIODS, so moving from monthly to biweekly changes what "$400"
+  # means without changing a character of it. The app cannot know which the user meant, so it asks
+  # once — the list, the two buttons, and then `CadenceChange#apply` writes the cadence and their
+  # answer TOGETHER or writes neither. A user with no rate rules is never asked (`#offered?`).
+  #
+  # 422 ON THE CONFIRM STEP, and it is the same law every other refusal on this page follows:
+  # NOTHING WAS WRITTEN, so the page comes back as it stands with the question above it. It is also
+  # the only status Turbo will render a form response at without a redirect, so a 200 here would
+  # leave the user looking at their unchanged page with no question on it at all.
   def update
-    if current_user.update(declaration_params)
-      redirect_to budget_page_path, notice: "Your period and income are saved — every figure below is re-derived."
+    change = CadenceChange.new(user: current_user, declaration: declaration_params)
+
+    return offer_scaling(change) if change.offered? && scale_choice.nil?
+
+    if change.apply(scale: scale_choice)
+      redirect_to budget_page_path, notice: saved_notice
     else
       @presenter = BudgetPagePresenter.new(
         user: User.find(current_user.id),
@@ -83,6 +97,33 @@ class BudgetPageController < ApplicationController
   end
 
   private
+
+  # THE QUESTION, ON THIS PAGE, WITH NOTHING WRITTEN. `build_presenter` reads `current_user`
+  # unchanged — the declaration was never applied, so unlike the failure path below there is no
+  # dirty object here and every figure on the page is still true.
+  def offer_scaling(change)
+    @cadence_change = change
+    @presenter = build_presenter
+    render :show, status: :unprocessable_content
+  end
+
+  # THE USER'S ANSWER, or nil for "not asked yet". Three states and not two: a missing `scale` is
+  # what triggers the offer, and `"0"` is a real answer — "keep my amounts" — that must reach
+  # `#apply` as false rather than as absent, or the confirm would loop forever on the same screen.
+  def scale_choice
+    return nil if params[:scale].blank?
+
+    params[:scale] == "1"
+  end
+
+  # The original sentence on the ordinary path, so nothing that already reads for it moves; the
+  # scaled path says the second thing that happened, because a user who pressed "Scale them" needs
+  # the page to confirm that the amounts moved and not only the period.
+  def saved_notice
+    return "Your period and income are saved — every figure below is re-derived." unless scale_choice
+
+    "Your period is saved and your per-period amounts were scaled to it — every figure below is re-derived."
+  end
 
   # One refusal, one shape: nothing was written, so the page comes back as it stands with the
   # reason above it. 422 rather than a redirect, as a failed declaration is — there is nothing to

@@ -269,12 +269,21 @@ RSpec.describe "Budget page structural check", type: :system do
     # DECISION 6, and the reason the copy under the form says what it says: the same two rules,
     # the same income, a different period — and every figure moves. Under a monthly period the
     # $260-a-month rule claims its whole $260 and the $400-per-period rule is $400 of a month.
+    #
+    # ** THE SECOND SAVE NOW PASSES THROUGH §3.5'S OFFER (computed-claims Task 2), AND "KEEP
+    # AMOUNTS" IS WHAT THIS EXAMPLE MEANS. ** The first declaration is a FIRST cadence and is never
+    # asked about; the second moves a declared biweekly to monthly with a per-period rate rule on
+    # the page, which is exactly the state the app now asks about. Keeping the amounts is what makes
+    # this example's own claim true — the figures move because the PERIOD moved, with not a digit of
+    # either rule touched — so the answer is part of the subject rather than a step around it. The
+    # offer itself is pinned in `budget_page/adjustments_spec.rb`.
     it "re-derives every figure the moment the cadence changes" do
       declare(income: "2400", cadence: "Biweekly", anchor: Date.current.strftime("%Y-%m-%d"))
       within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
 
       select "Monthly", from: "How long is a period?"
       click_button "Save period and income"
+      click_button "Keep amounts"
 
       within(figure("rules-need")) { expect(page).to have_content("$660.00 a period") }
     end

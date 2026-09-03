@@ -14,6 +14,13 @@
                 actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
 
 <div class="space-y-6">
+  <%# §3.5'S ONE QUESTION, AT THE TOP OF THE PAGE BECAUSE NOTHING BELOW IT IS TRUE YET. The
+      declaration that produced it has not been written — the panel and the form both say so — and
+      the figures underneath are still computed on the OLD period. Rendered off an ivar rather than
+      through the presenter: the presenter is this page's reading of what IS, and this is a pending
+      submission that may never become one. See BudgetPageController#offer_scaling. %>
+  <%= render "cadence_confirm", change: @cadence_change if @cadence_change %>
+
   <% if @presenter.no_rules? %>
     <%= render "empty" %>
   <% else %>
