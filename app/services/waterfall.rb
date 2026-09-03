@@ -13,10 +13,15 @@
 # read: "a distribution is scoped to one account, so 'is anything short' is the whole question
 # there, while Home fills each account's own pot and can only draw one line when there is a single
 # account to draw it about." Both halves died with the accounts (two-ledger spec §2, Task 6): there
-# is ONE root, both screens fill it in one pass, and `HomePresenter#cutoff`'s `accounts.one?` leg is
-# deleted. Each presenter still answers "is anything short" for itself — `#covered?` on Home,
-# `#short?` on the distribution — because each reads its own rows, and neither may derive that from
-# the other's.
+# is ONE root and both screens filled it in one pass.
+#
+# ** THERE IS ONE CALLER NOW (answers-first Task 2), AND THE GATE PARAGRAPH IS ABOUT IT ALONE. **
+# `HomePresenter#cutoff` — and `#shortfall` and `#covered?` with it — are deleted: Home stopped
+# drawing the line when the waterfall band went (answers-first spec §1, "Home stops showing the
+# system"), so the only presenter that still answers "is anything short" for itself is the
+# distribution's `#short?`, off its own rows. The rule below is still shared in the sense that
+# matters — it is the one statement of where the line falls — and a second Home-side caller would
+# have to bring its own gate back with it.
 #
 # WHAT THIS MODULE IS FOR IS UNCHANGED BY THAT: the RULE below is the shared half, and it was the
 # half that could drift.

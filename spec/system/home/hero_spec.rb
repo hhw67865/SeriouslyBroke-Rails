@@ -114,8 +114,11 @@ RSpec.describe "Home Hero", type: :system do
     # headline that was actually wrong — not repeated here, which would only cost this example a
     # line without measuring a second thing.
     within("[data-hero]") do
-      expect(page).to have_no_content("available")
-      expect(page).to have_no_content("unclaimed")
+      # CASE-INSENSITIVE: `have_no_content("available")` is a substring match, so it passes over a
+      # card printing "Available" — which is the app's own spelling of the word
+      # (`ReallocationPresenter::Root#name`) and therefore the spelling that could slip in.
+      expect(page).to have_no_content(/available/i)
+      expect(page).to have_no_content(/unclaimed/i)
     end
   end
 
@@ -201,7 +204,7 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
     within("[data-hero]") do
-      expect(page).to have_no_content("unclaimed")
+      expect(page).to have_no_content(/unclaimed/i)
       expect(page).to have_no_content("You're covered")
     end
   end

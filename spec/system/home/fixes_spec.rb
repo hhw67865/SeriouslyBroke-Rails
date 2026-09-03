@@ -399,10 +399,14 @@ RSpec.describe "Home Fixes", type: :system do
         home = HomePresenter.new(user: user)
         proposal = AllocationCalculator.new(user: user, today: Date.current)
 
-        expect(home.shortfall).to eq(225)
-        expect(home.shortfall).to eq(proposal.rows.sum(&:short))
+        # `waterfall.sum(&:short)` WHERE THIS READ `#shortfall` (answers-first Task 2). That reader
+        # is deleted with the band that printed its figure, and the sum is character-for-character
+        # what it was — so the cross-pin below is unchanged, and the money-type guarantee it also
+        # carried is asserted here off the sum instead.
+        expect(home.waterfall.sum(&:short)).to eq(225)
+        expect(home.waterfall.sum(&:short)).to eq(proposal.rows.sum(&:short))
         expect(home.available).to eq(proposal.available)
-        expect(home.shortfall).to be_a(BigDecimal)
+        expect(home.waterfall.sum(0.to_d, &:short)).to be_a(BigDecimal)
       end
     end
 
@@ -451,9 +455,9 @@ RSpec.describe "Home Fixes", type: :system do
         home = HomePresenter.new(user: user)
         proposal = AllocationCalculator.new(user: user, today: Date.current)
 
-        expect(home.shortfall).to eq(250)
+        expect(home.waterfall.sum(&:short)).to eq(250)
         expect(home.available).to eq(150)
-        expect(home.shortfall).to eq(proposal.rows.sum(&:short))
+        expect(home.waterfall.sum(&:short)).to eq(proposal.rows.sum(&:short))
         expect(home.available).to eq(proposal.available)
       end
     end
@@ -504,8 +508,8 @@ RSpec.describe "Home Fixes", type: :system do
 
            expect(home.available).to eq(-200)
            expect(home.available).to eq(proposal.available)
-           expect(home.shortfall).to eq(400)
-           expect(home.shortfall).to eq(proposal.rows.sum(&:short))
+           expect(home.waterfall.sum(&:short)).to eq(400)
+           expect(home.waterfall.sum(&:short)).to eq(proposal.rows.sum(&:short))
          end
     end
   end

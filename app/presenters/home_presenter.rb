@@ -16,8 +16,10 @@
 # per-account pot map, `#cutoff`'s `accounts.one?` gate and `#projected_buffer`'s "cash in an account
 # with nothing left to fund" reading. Allocating money is an act of intention rather than of location
 # (§2), so there is no account for money to be stranded in and no second reason the standing band's
-# figures fail to subtract. #shortfall and `remaining_plan - available` now agree wherever available
-# is non-negative.
+# figures fail to subtract. #shortfall and `remaining_plan - available` agreed wherever available was
+# non-negative — and BOTH `#cutoff` and `#shortfall` are themselves deleted now (answers-first Task
+# 2), with the waterfall band that was their only caller. Their marker sits beside `#waterfall`,
+# which is the reader that survived.
 #
 # THE HERO CARD REPLACED THE STANDING BAND (answers-first spec §§2-3), and with it went the last of
 # that machinery: `#projected_buffer` is deleted and `#total_required` is `#remaining_plan`. Home
@@ -387,49 +389,40 @@ class HomePresenter
   # could not cross an account boundary; an allocation crosses nothing, so a single `remaining` is
   # the model rather than a simplification of it — and it is `AllocationCalculator#fill`'s own shape.
   #
-  # Memoised because #shortfall, #covered?, #free_to_spend and #covered_by_waterfall? all derive
-  # from these rows, so a Home render asks for them several times over.
+  # Memoised because #remaining_plan, #free_to_spend, #undistributed_period? and
+  # #covered_by_waterfall? all derive from these rows, so a Home render asks for them several times
+  # over. (#shortfall, #covered? and #cutoff were three more, and they are deleted — see below.)
   # ROWS ARE `AllocationCalculator::Row` NOW, not hashes this class fills itself (Task 7). They
   # answer #category, #needed, #funded and #short.
   #
   # `Struct#[]` ANSWERS THE FIRST THREE BY NAME AND RAISES ON THE FOURTH, which is worth writing
   # down because it decided which lines had to change: `category`, `needed` and `funded` are
-  # MEMBERS, so `home/_attention.html.erb`'s `row[:funded]` renders unchanged; `short` is a METHOD
-  # (`needed - funded`, so a fourth member would be a second place for one number to be wrong), and
-  # `row[:short]` raises `NameError: no member 'short' in struct`. Every reader of it here is
-  # `row.short` — measured, not reasoned about: #cutoff's block took the root route down until it
-  # was.
+  # MEMBERS, so the deleted `home/_attention.html.erb`'s `row[:funded]` rendered unchanged; `short`
+  # is a METHOD (`needed - funded`, so a fourth member would be a second place for one number to be
+  # wrong), and `row[:short]` raises `NameError: no member 'short' in struct`. Every reader of it is
+  # `row.short` — measured, not reasoned about: the deleted #cutoff's block took the root route down
+  # until it was, and `fixes_spec`'s cross-pins spell `sum(&:short)` for the same reason.
   def waterfall = proposal.rows
 
-  # WHERE THE MONEY RAN OUT, or nil when there is no such moment. The rule itself is Waterfall's —
-  # the distribution screen draws the same line off the same reader — and only the GATE is Home's.
+  # ── `#cutoff`, `#shortfall` AND `#covered?` ARE DELETED (answers-first Task 2), and the reason is
+  # that Home stopped asking their question rather than that nothing happened to call them.
   #
-  # THE `accounts.one?` HALF OF THAT GATE IS DELETED (Task 6). It existed because each account
-  # drained its own pot, so with several there was no single moment the money ran out. There is one
-  # root, so there is one moment, and a user with three accounts sees the line exactly as a user with
-  # one does.
+  # All three existed for the waterfall band: `#cutoff` drew "— ran out here —" between two groups of
+  # rows, `#shortfall` printed the figure inside that line, and `#covered?` was the band's gate and
+  # the standing band's headline branch. The band is gone (spec §1: Home stops showing the system),
+  # and so is the headline branch — the hero card renders in every state and a short period is simply
+  # a negative `#free_to_spend` (spec §2, which rules the covered/uncovered question closed).
   #
-  # `covered?` survives: the waterfall renders on a covered period too, and there the index finds
-  # nothing, falls back to `rows.length` and draws "ran out here · $0.00 unfunded" under the last row
-  # of a screen where nothing ran out at all.
-  def cutoff
-    return nil if covered?
-
-    Waterfall.cutoff(waterfall) { |row| [row.funded, row.short] }
-  end
-
-  # Derived from the waterfall rows, NOT from `remaining_plan - available`.
+  # NOTHING ELSE ASKED THEM. Grepped across `app/`: `#waterfall` has three live readers here
+  # (`#remaining_plan`, `#undistributed_period?`, `#covered_by_waterfall?`), and these three had
+  # none once the band went. They would have survived as readers kept alive by their own specs,
+  # which is the shape a comment cannot fix.
   #
-  # The two agree on every ordinary screen now — one root, no orphans — and they still part company
-  # on a NEGATIVE available, where the subtraction reports more than any distribution could be short
-  # by. Only the rows can say WHICH category is starved, which is the question a distribution acts
-  # on, so the rows stay the source.
-  #
-  # No `max` clamp is needed: every row's `short` is `needed - funded` where `funded` is clamped to
-  # at most `needed`, so no row can contribute a negative.
-  def shortfall = waterfall.sum(0.to_d, &:short)
-
-  def covered? = shortfall.zero?
+  # WHERE EACH QUESTION LIVES NOW: the cutoff RULE is `Waterfall.cutoff`, drawn by
+  # `DistributionPresenter#cutoff` on the screen the trouble strip's own Distribute button opens
+  # (pinned both directions in `spec/system/distributions/proposal_spec.rb` and `overrides_spec.rb`);
+  # the total gap is `waterfall.sum(&:short)`, which is what the cross-screen pins in
+  # `spec/system/home/fixes_spec.rb` compare against `AllocationCalculator` directly.
 
   # ── THE HERO CARD (answers-first spec §§2-3) ───────────────────────────────────────────────────
   #

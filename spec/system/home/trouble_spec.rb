@@ -27,11 +27,14 @@ require "rails_helper"
 #     `categories_spec.rb`, where its fixtures lived; the strip is the second place the clause has
 #     to read the same, so the pin lives here.
 #   * "shows an overdue category with the date that passed and the rule behind it", "shows a behind
-#     category with the rule it is behind on", "explains an overdrawn rate category by its rate",
-#     "says so plainly when an overdrawn category has no rules at all", "auto-expands a category
-#     that needs attention" → all five carried from `categories_spec.rb`. The rule detail they
-#     assert is re-housed here, which is where the auto-expand rule ("anything needing attention
-#     opens itself") describes the whole population.
+#     category with the rule it is behind on", "explains an overdrawn rate category by its rate" and
+#     "says so plainly when an overdrawn category has no rules at all" → all four carried from
+#     `categories_spec.rb`. The rule detail they assert is re-housed here, which is where the
+#     auto-expand rule ("anything needing attention opens itself") describes the whole population.
+#     `categories_spec`'s own "auto-expands a category that needs attention" is NOT among them and is
+#     DELETED (named in `this_period_spec.rb`): what it asserted was the `data-expanded` flag plus a
+#     non-empty detail box, and the flag has no shape left — every row here is expanded by
+#     construction — while the detail box is asserted by the four above.
 #
 # ── CARRIED FROM hero_spec.rb (the plan's Task 1 → Task 2 hand-over):
 #
@@ -57,6 +60,12 @@ require "rails_helper"
 #   * "draws the cutoff beneath the last category that got any money"
 #   * "the whole gap above, this period's share below" (two examples) — the bridge label existed to
 #     keep two bands on one screen from reading as two answers; there is one band now.
+#
+# ── THE COUNT, so the lists above stay auditable: 22 carried (6 from `attention_spec`, 9 from
+# `categories_spec`, 7 from `hero_spec`) and 5 new — the other direction of each of the two triggers
+# that had none ("leaves a bill the schedule can still reach out of the strip", "falls silent once
+# this period has been distributed", "asks nothing of a user whose rules ask for nothing"), the
+# distribute prompt itself, and the 375px pin.
 #
 # EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-trouble]`,
 # `[data-problem-category]`, `[data-overdrawn-account]`, `[data-undistributed]`,

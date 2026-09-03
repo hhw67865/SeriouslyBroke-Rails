@@ -158,7 +158,8 @@ RSpec.describe HomeHelper, type: :helper do
   # inches below. The trouble strip that replaced that band renders `shared/_holding_status`, which
   # threads BOTH suffixes off ONE `HomePresenter::Row`: a caller chooses which OBJECT to pass, not
   # which suffixes, and an object missing an answer raises at render. The two suffixes' own wording
-  # is pinned above, on `#pool_status_label`, which is where it always lived.
+  # is pinned above, on `#pool_status_label`, which is where it always lived. Seven examples replace
+  # the four.
 
   # THE SMALL CLAUSE AFTER A "THIS PERIOD" BAR (answers-first spec §4). Home's system specs reach the
   # attention arm and the two silent states; every arm is pinned here so the decision about what

@@ -451,15 +451,20 @@ RSpec.describe "Home This Period", type: :system do
 
   # THE WORDS HOME NO LONGER SAYS (spec §3), scoped to this section: the band it replaced headed
   # itself "available now" and the machinery words went with it.
-  it "says none of the machinery words", :aggregate_failures do
+  # CASE-INSENSITIVE, deliberately: `have_no_content("available")` is a substring match on the
+  # rendered text, so it passes over a section printing "Available" — which is exactly the spelling
+  # this app uses for the word (`ReallocationPresenter::Root#name`, the fix button's source), and
+  # therefore exactly the spelling that could slip in here. A regexp with `/i` is the only form that
+  # measures the rule the spec states.
+  it "says none of the machinery words, in any casing", :aggregate_failures do
     deposit(1_000)
     fund(envelope("Groceries", rate: 400), 100)
 
     visit root_path
 
-    expect(section).to have_no_content("available")
-    expect(section).to have_no_content("unclaimed")
-    expect(section).to have_no_content("buffer")
+    expect(section).to have_no_content(/available/i)
+    expect(section).to have_no_content(/unclaimed/i)
+    expect(section).to have_no_content(/buffer/i)
   end
 
   # ── THE NARROW BREAKPOINT (spec §9: "hero and bars at 375px") ──────────────────────────────────

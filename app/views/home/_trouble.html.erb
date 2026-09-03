@@ -7,11 +7,17 @@
     permanent box: the strip is absent when nothing is true, and the caller gates on
     `HomePresenter#trouble?` so there is one gate rather than four predicates OR'd in a view.
 
-    ** WHAT DIED WITH THE BAND: THE WATERFALL. ** "Where your money goes", the fill order and the
-    cutoff were the mechanic's view of the distribution — the system describing itself, which spec
-    §1 rules off this screen. The plan is still one click away and the :undistributed arm below is
-    the click; `/distributions/new` renders the same rows, from the same `AllocationCalculator`, with
-    room to change them. `HomePresenter#cutoff` and `#shortfall` keep their other readers.
+    ** WHAT DIED WITH THE BAND: THE WATERFALL, AND THREE PRESENTER READERS WITH IT. ** "Where your
+    money goes", the fill order and the cutoff were the mechanic's view of the distribution — the
+    system describing itself, which spec §1 rules off this screen. The plan is still one click away
+    and the :undistributed arm below is the click; `/distributions/new` renders the same rows, from
+    the same `AllocationCalculator`, with room to change them.
+
+    `HomePresenter#cutoff`, `#shortfall` and `#covered?` are DELETED, and that is stated here because
+    the first draft of this comment claimed they "keep their other readers" and a grep says they had
+    none — the band was their only caller. `#waterfall` is the one that survives, with three live
+    readers (`#remaining_plan`, `#undistributed_period?`, `#covered_by_waterfall?`). See that
+    presenter's own deletion note for where each deleted question lives now.
 
     FIVE ARMS, AND EACH IS A DIFFERENT KIND OF TROUBLE RATHER THAN THE SAME ONE FIVE WAYS. The types
     come off `HomePresenter#troubles`; a `case` on the kind is what keeps a new trigger from being

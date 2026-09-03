@@ -311,7 +311,7 @@ RSpec.describe HomePresenter do
     it "is a decimal zero, not an integer, for a user with no categories", :aggregate_failures do
       expect(presenter.remaining_plan).to eq(0)
       expect(presenter.remaining_plan).to be_a(BigDecimal)
-      expect(presenter.shortfall).to be_a(BigDecimal)
+      expect(presenter.waterfall).to be_empty
     end
 
     # ** THE ONE-SPELLING EXAMPLE (answers-first spec §3, the plan's binding constraint). ** The
@@ -382,10 +382,9 @@ RSpec.describe HomePresenter do
       expect(rows[2].short).to eq(150)
     end
 
-    it "reports the total gap", :aggregate_failures do
-      expect(presenter.shortfall).to eq(350)
-      expect(presenter).not_to be_covered
-    end
+    # ── DELETED (answers-first Task 2): "reports the total gap". It read `#shortfall`, which is
+    # deleted with the waterfall band that printed it, and its $350 is the sum of the three row
+    # shortfalls the example above already asserts one by one.
 
     it "records what each row asked for, funded or not", :aggregate_failures do
       rows = presenter.waterfall
@@ -408,7 +407,9 @@ RSpec.describe HomePresenter do
 
       expect(presenter.waterfall.map { |r| [r[:category].id, r[:needed], r[:funded]] })
         .to eq(proposal.rows.map { |row| [row.category.id, row.needed, row.funded] })
-      expect(presenter.shortfall).to eq(proposal.rows.sum(&:short))
+      # `waterfall.sum(&:short)` where this read `#shortfall` (Task 2): the reader is deleted with
+      # the band that printed it, and the sum is what it was. The cross-pin is unchanged.
+      expect(presenter.waterfall.sum(&:short)).to eq(proposal.rows.sum(&:short))
       expect(presenter.available).to eq(proposal.available)
     end
 
@@ -455,8 +456,6 @@ RSpec.describe HomePresenter do
       expect(presenter.available).to eq(-400)
       expect(rows.pluck(:funded)).to eq([0])
       expect(rows.map(&:short)).to eq([300])
-      expect(presenter.shortfall).to eq(300)
-      expect(presenter).not_to be_covered
     end
 
     # A negative ask is reachable — `HoldingCalculator#goal_required` returns `[rate, remaining].min`
@@ -488,7 +487,7 @@ RSpec.describe HomePresenter do
       expect(presenter.waterfall.map { |r| r[:category].name }).to eq(["Groceries"])
       expect(presenter.remaining_plan).to eq(400)
       expect(presenter.available).to eq(200)
-      expect(presenter.shortfall).to eq(200)
+      expect(presenter.waterfall.sum(&:short)).to eq(200)
       # WAS `projected_buffer.to eq(0)` (answers-first Task 1). That reader clamped itself to the
       # money actually handed out, so a short period always read $0 — which is what made it a poor
       # headline. `free_to_spend` subtracts what the plan still ASKS for, so the same fixture states
@@ -497,38 +496,18 @@ RSpec.describe HomePresenter do
     end
   end
 
-  describe "#cutoff" do
-    # THE `accounts.one?` GATE IS DELETED (Task 6). It existed because each account drained its own
-    # pot, so with several accounts there was no single moment the money ran out and the line was
-    # suppressed outright. There is one root now, so the line is drawn whatever the user banks with —
-    # which is what this example is about, and why it mints a second account it otherwise ignores.
-    it "draws the line for a user with several accounts", :aggregate_failures do
-      create(:pool, :account, user: user, name: "Ally")
-      rate(holder("Rent", priority: 1), 500)
-      rate(holder("Groceries", priority: 2), 400)
-      income(500)
-
-      expect(presenter.accounts.size).to eq(2)
-      expect(presenter.cutoff).to eq(1)
-    end
-
-    it "is nil on a covered period, where the index would find nothing and point past the last row" do
-      rate(holder("Rent", priority: 1), 100)
-      income(500)
-
-      expect(presenter.cutoff).to be_nil
-    end
-  end
-
-  describe "#covered?" do
-    it "is true when available meets the requirement", :aggregate_failures do
-      rate(holder("Groceries", priority: 1), 100)
-      income(500)
-
-      expect(presenter).to be_covered
-      expect(presenter.shortfall).to eq(0)
-    end
-  end
+  # ── DELETED WITH `#cutoff`, `#shortfall` AND `#covered?` (answers-first Task 2), three examples:
+  # "draws the line for a user with several accounts", "is nil on a covered period, where the index
+  # would find nothing and point past the last row", and "#covered? is true when available meets the
+  # requirement".
+  #
+  # All three were about the waterfall band's own line, and Home does not draw one — spec §1 rules
+  # the mechanic's view off this screen. THE RULINGS THEY PINNED STILL HAVE HOMES: Task 6's deletion
+  # of the `accounts.one?` gate is a fact about `Waterfall.cutoff`'s only remaining caller,
+  # `DistributionPresenter#cutoff`, and both directions of the line are pinned on that screen
+  # (`spec/system/distributions/proposal_spec.rb`'s "draws no cutoff on a period that never ran out"
+  # against `overrides_spec.rb`'s "ran out here · $200.00 unfunded"). "Is this period covered" is now
+  # the sign of `#free_to_spend`, which the hero describes assert in both directions.
 
   describe "#overdrawn_accounts" do
     let(:ally) { create(:pool, :account, user: user, name: "Ally") }
@@ -660,13 +639,15 @@ RSpec.describe HomePresenter do
     end
 
     # THE FIXTURE THE OLD BAND GOT WRONG (fix round 1 — MED-1), re-asked of the reader that
-    # replaces it. No holder categories at all, so nothing is short and `#covered?` is trivially
-    # true, while $100 of unbudgeted spending has drained the root. `projected_buffer` called that
+    # replaces it. No holder categories at all, so nothing is short — the waterfall has no rows at
+    # all — while $100 of unbudgeted spending has drained the root. `projected_buffer` called that
     # "-$100.00 still unclaimed"; free simply says -$100.00 is free, which is the honest sentence.
+    # (This read `expect(presenter).to be_covered` until Task 2 deleted that reader with the band
+    # whose headline branched on it; an empty waterfall is the same fact, said about rows.)
     it "is negative for a period whose spending has drained the root", :aggregate_failures do
       spend(create(:category, :expense, user: user, name: "Unbudgeted"), 100)
 
-      expect(presenter).to be_covered
+      expect(presenter.waterfall).to be_empty
       expect(presenter.remaining_plan).to eq(0)
       expect(presenter.free_to_spend).to eq(-100)
     end
@@ -834,6 +815,88 @@ RSpec.describe HomePresenter do
 
       expect(count_statements { read_the_hero }).to eq(2)
       expect(count_statements { read_the_hero }).to eq(0)
+    end
+  end
+
+  # THE "THIS PERIOD" SECTION'S QUERY COST, on the hero pin's own idiom (distribution_clock_spec,
+  # ledger_sharing_spec) — schema and transaction chatter excluded.
+  #
+  # IT IS PINNED BECAUSE THE SECTION IS THE ONE PART OF THIS SCREEN THAT ADDS QUERIES. Every other
+  # reader Task 2 introduced composes something already memoised; `spent this period` could not,
+  # because no reader anywhere splits a category's spending by period (see
+  # `#holder_spending_this_period`). The count below is the honest price of that, stated rather than
+  # left to be discovered.
+  describe "the This-period section's query cost" do
+    def count_statements(&block)
+      statements = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/)
+      end
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      statements
+    end
+
+    def read_the_section
+      presenter.period_rows
+      presenter.unbudgeted_rows
+    end
+
+    # EVERYTHING THE REST OF THE SCREEN HAS ALREADY READ by the time this section renders: the
+    # ledger's grouped terms and each category's status (the trouble strip above), the distribution
+    # clock's one timestamp, and the proposal's rows.
+    def warm_the_rest_of_the_screen
+      presenter.categories.each do |category|
+        presenter.status_for(category).state
+        presenter.changed_after_distributing?(category)
+      end
+      presenter.waterfall
+      presenter.available
+    end
+
+    def budgeted_row_with_spending
+      holder("Groceries", priority: 1).tap do |category|
+        rate(category, 400)
+        spend(category, 310)
+      end
+    end
+
+    # THREE, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
+    #
+    #   1. `#holder_spending_this_period` — ONE grouped sum over `CategoryLedger::ENTRY_CATEGORY_ID`
+    #      for every budgeted row on the screen, not one per row.
+    #   2. `#unbudgeted_spending_this_period` — the same expression read for its NULL answer, which
+    #      is the other half of the same partition.
+    #   3. `#unbudgeted_rows`' name-ordered fetch of the category records those ids name. It is the
+    #      CONDITIONAL one — see the example below, which is what makes this count three rather than
+    #      a magic number.
+    #
+    # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: all three are memoised, so a re-render of the
+    # section costs nothing, and a reader added here that opened a ledger or a calculator of its own
+    # would fail this and not the first.
+    it "costs three statements and then nothing at all", :aggregate_failures do
+      income(2_000)
+      budgeted_row_with_spending
+      spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
+      warm_the_rest_of_the_screen
+
+      expect(count_statements { read_the_section }).to eq(3)
+      expect(count_statements { read_the_section }).to eq(0)
+      expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Subscriptions"])
+    end
+
+    # THE THIRD STATEMENT IS THE UNBUDGETED FETCH, and this is what says so: the same warm-up and the
+    # same section over a screen with nothing unbudgeted spent on it costs TWO, because
+    # `#unbudgeted_rows` returns without querying for records nothing named.
+    it "costs two when nothing unbudgeted was spent this period", :aggregate_failures do
+      income(2_000)
+      budgeted_row_with_spending
+      warm_the_rest_of_the_screen
+
+      # AFTER the counts, deliberately: asking first would memoise the very fetch this example is
+      # about, and the count would fall to one for a reason that has nothing to do with the design.
+      expect(count_statements { read_the_section }).to eq(2)
+      expect(count_statements { read_the_section }).to eq(0)
+      expect(presenter.unbudgeted_rows).to be_empty
     end
   end
 
