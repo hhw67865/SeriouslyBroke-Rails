@@ -47,15 +47,15 @@ the cumulative form Henry named: `max(0, periods_since_start × rate − Σ spen
 
 ### 3.2 Dated / interval rule ("$5,000 every 2 years, next due …") — accrues toward the target
 ```
-saved         = Σ over periods since funded_since of (planned_accrual + Σ adjustments in that period) − spent_since_last_fulfilment
-saved         = clamp(saved, 0, target)
-claim         = saved
-planned_accrual(this period) = (target − saved_before_this_period) / periods_remaining_until_due
+built_up         = Σ over periods since funded_since of (planned_accrual + Σ adjustments in that period) − spent_since_last_fulfilment
+built_up         = clamp(built_up, 0, target)
+claim         = built_up
+planned_accrual(this period) = (target − built_up_before_this_period) / periods_remaining_until_due
 ```
 - The per-period accrual is the **catch-up formula**, recomputed every period from what is still
   owed and how many periods are left. Underfund one period and the next periods' accrual rises to
   land the target on time — automatically.
-- Once `saved == target` the claim stops growing; free stops being reduced; the money sits as a
+- Once `built_up == target` the claim stops growing; free stops being reduced; the money sits as a
   $5,000 label on checking until the expense happens.
 - **Fulfilment** = an expense on the rule's item (or, for an item-less dated rule, on the
   category) — the claim drops by the amount spent, and accrual restarts toward the next due date.
@@ -64,9 +64,10 @@ planned_accrual(this period) = (target − saved_before_this_period) / periods_r
   its rate if it has one, and otherwise only by positive adjustments (§3.3).
 
 ### 3.3 Adjustments — dated, signed, as many as you like (Henry, 2026-09-03)
-An **adjustment** is a record `(category, rule — nullable, date, signed amount)`: "on Sep 12,
-−$158 from the car fund"; "on Sep 20, +$100 into groceries"; "+$500 into Vacation" (a goal with no
-rule). It is a DELTA on the accrual of whatever period contains its date, not an override:
+An **adjustment** is a record `(rule, date, signed amount)`: "on Sep 12, −$158 from the car
+fund"; "on Sep 20, +$100 into groceries"; "+$500 into Vacation". **Every claim comes from a rule and
+every adjustment targets a rule** — a savings goal is a rule with a target (and optionally a rate).
+It is a DELTA on the accrual of whatever period contains its date, not an override:
 ```
 accrued(P) = planned(P) + Σ adjustments dated inside P
 ```
@@ -78,17 +79,17 @@ accrued(P) = planned(P) + Σ adjustments dated inside P
   on either grid. (Rate rules still need a human on a cadence change — see §3.5.)
 - Rate rules take the same delta: `claim = max(0, rate + Σ adjustments this period − spent)`.
 - This ONE table replaces the purpose-side `allocations` transfers (§5): set-asides and releases are
-  simply positive and negative adjustments on a category.
+  simply positive and negative adjustments on the goal's rule.
 
 ### 3.4 What a category shows
 - Budgeted (rate): `spent of rate` this period, over in red.
-- Dated: `saved of target · next due <date> · $X per period` — the bar is progress toward the
+- Dated: `built_up of target · next due <date> · $X per period` — the bar is progress toward the
   target.
 - Unbudgeted with spending: `spent $X` (unchanged).
 
 ### 3.5 Cadence changes
 Dated rules are time-proportional (the catch-up formula re-plans on whatever grid exists), so
-switching cadence leaves "saved so far" where it was. Rate rules are per-period by definition, so
+switching cadence leaves "built_up so far" where it was. Rate rules are per-period by definition, so
 on a cadence change the app OFFERS to scale every rate rule ("monthly → biweekly: halve these six
 amounts?") — one confirm, the user's choice.
 
@@ -118,7 +119,7 @@ and the `funded_since` stamp-on-allocation (rules and set-asides still stamp it 
 
 Existing `allocation`/`sweep` rows were distribution mechanics: DELETE them (their effect is now
 computed). Existing purpose-side `transfer` rows (set-asides/releases) are CONVERTED to adjustments
-(same category, same date, signed by direction); the `allocations` table is then dropped. Rules and
+(the category's rule — minting a target-only rule for a goal that has none — same date, signed by direction); the `allocations` table is then dropped. Rules and
 `funded_since` stay and become the accrual anchors. The physical invariant is verified unchanged
 before/after by raw SQL; the purpose side is verified by recomputing every category's claim from
 the formula on planted fixtures (the claim is a definition, not a conserved quantity).
