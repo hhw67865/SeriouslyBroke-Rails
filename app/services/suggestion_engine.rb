@@ -110,7 +110,7 @@ class SuggestionEngine
 
   attr_reader :user, :today
 
-  def initialize(user:, today: Date.current)
+  def initialize(user:, today: user.today)
     @user = user
     @today = today
   end

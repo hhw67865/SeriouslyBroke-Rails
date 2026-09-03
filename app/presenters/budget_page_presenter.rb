@@ -76,8 +76,9 @@ class BudgetPagePresenter
     def over? = over
 
     # A DATE THAT PASSED WITH THE MONEY STILL MISSING (§3.2). A member rather than a derivation,
-    # because the comparison is against the presenter's `today` and a Data object computing it would
-    # have to reach for `Date.current`.
+    # because the comparison is against the presenter's `today` — the OWNER's day (`User#today`, fix
+    # round 2 — LOW-1) — and a Data object computing it would reach for a clock of its own, in
+    # whatever zone happened to be ambient.
     def overdue? = overdue
 
     def trouble? = over? || overdue?
@@ -131,7 +132,7 @@ class BudgetPagePresenter
   # See BudgetPageController#update.
   attr_reader :declaration
 
-  def initialize(user:, today: Date.current, declaration: nil)
+  def initialize(user:, today: user.today, declaration: nil)
     @user = user
     @today = today
     @declaration = declaration || user

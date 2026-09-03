@@ -91,7 +91,7 @@ class HoldingCalculator
   # SAME `as_of` OR NOTHING. The ledger bounds its terms by `as_of` itself, so a caller handing
   # terms from one moment to a calculator asking about another gets a balance from neither. One
   # ledger per `as_of`; CategoryLedger carries its own for exactly this reason.
-  def initialize(category, as_of: nil, today: Date.current, adjustment: Adjustment.none, terms: nil)
+  def initialize(category, as_of: nil, today: category.today, adjustment: Adjustment.none, terms: nil)
     @category = category
     @as_of = as_of
     @today = today

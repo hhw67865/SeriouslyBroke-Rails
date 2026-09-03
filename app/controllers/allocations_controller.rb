@@ -137,7 +137,7 @@ class AllocationsController < ApplicationController
       to_category: party_from(:to_category_id),
       from_category: party_from(:from_category_id),
       amount: params[:amount],
-      today: Date.current
+      today: current_user.today
     )
   end
 

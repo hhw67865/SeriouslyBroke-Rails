@@ -24,7 +24,7 @@ class AdjustmentsController < BudgetPageController
   def create
     rule = scoped_rule
     form = AdjustmentForm.new(
-      rule: rule, params: params, name: helpers.budget_rule_name(rule), today: Date.current
+      rule: rule, params: params, name: helpers.budget_rule_name(rule), today: current_user.today
     )
 
     if form.save
@@ -93,7 +93,7 @@ class AdjustmentsController < BudgetPageController
     name = helpers.budget_rule_name(rule)
     negative = adjustment.amount.negative?
 
-    if rule.claim_calculator(today: Date.current).rate?
+    if rule.claim_calculator(today: current_user.today).rate?
       negative ? "Removed the #{money} reduction on #{name}." : "Removed the #{money} top-up on #{name}."
     else
       negative ? "Removed the #{money} taken back from #{name}." : "Removed the #{money} set aside for #{name}."

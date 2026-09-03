@@ -94,4 +94,77 @@ RSpec.describe "Home", type: :request do
     expect(response.body).not_to include("real balance today")
     expect(response.body).not_to include("Set #{checking.name}")
   end
+
+  # ** "TODAY" ON HOME IS THE OWNER'S CALENDAR DAY, NOT UTC'S (fix round 2 — LOW-1). **
+  #
+  # `ClaimCalculator#overdue?` is `next_due_on < today` and nothing else (fix round 1 — MED-1), so
+  # WHICH day `today` is now decides, on its own, whether a bill's row says `overdue · was Sep 2` or
+  # says nothing at all. A UTC evening is already tomorrow in Tokyo and still yesterday in Los
+  # Angeles, and the two owners below are frozen at instants nine hours apart that straddle Sep 2 —
+  # the one place a wrong reader is visible rather than merely wrong.
+  #
+  # THESE ARE REQUEST EXAMPLES BECAUSE THE ZONE IS A REQUEST FACT TWICE OVER: `HomeController` picks
+  # the day, and `ApplicationController`'s `around_action :use_user_timezone` is what a presenter
+  # built outside a request does not get. Only a real `get root_path` exercises both.
+  #
+  # NO LAZY `Date.current` IN THE FIXTURE. Every date here is a literal computed by hand from the
+  # frozen instant, and the rule is created INSIDE the example (under `travel_to`) because
+  # `ClaimCalculator#rule_born_on` re-zones `budgets.created_at` and would otherwise open the walk
+  # on a day the clock has not reached.
+  describe "the day a claim is read against", :aggregate_failures do
+    include ActiveSupport::Testing::TimeHelpers
+
+    # Sep 2, anchored monthly: the occurrence is unpaid, so `#next_due_on` is Sep 2 for both owners
+    # and only `today` differs between them.
+    let(:due) { Date.new(2026, 9, 2) }
+    let(:user) do
+      create(:user, timezone: zone, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+    end
+
+    before { travel_to now }
+
+    def plant_overdue_bill
+      income = create(:category, :income, user: user, name: "Pay")
+      create(:entry, item: create(:item, category: income), amount: 2_000, date: Time.utc(2026, 8, 1, 12, 0, 0))
+      utilities = create(
+        :category, :expense, user: user, name: "Utilities", priority: 1, funded_since: Date.new(2026, 1, 1)
+      )
+      create(:budget, category: utilities, amount: 1_200, interval_months: 1, anchor_date: due)
+    end
+
+    # 22:00 UTC on Sep 2 is 07:00 on Sep 3 in Tokyo. The owner's day has turned; the bill is a day
+    # past. Reading UTC's date here would keep the strip silent for the nine hours the user most
+    # needs it.
+    context "with an owner whose day has already turned" do
+      let(:zone) { "Asia/Tokyo" }
+      let(:now) { Time.utc(2026, 9, 2, 22, 0, 0) }
+
+      it "calls a bill due yesterday overdue" do
+        plant_overdue_bill
+
+        get root_path
+
+        expect(response.body).to include("overdue · was Sep 2")
+        expect(response.body).not_to include("next due Sep 2")
+      end
+    end
+
+    # THE OTHER DIRECTION, WHICH IS THE ONE THAT CRIES WOLF. 02:00 UTC on Sep 3 is 19:00 on Sep 2 in
+    # Los Angeles: the owner's day IS the due day, and a bill due today is a thing to do rather than
+    # a thing missed (`#overdue?` is strict). Reading UTC's date would call it overdue while the
+    # user's own calendar still says Sep 2.
+    context "with an owner whose day has not turned yet" do
+      let(:zone) { "America/Los_Angeles" }
+      let(:now) { Time.utc(2026, 9, 3, 2, 0, 0) }
+
+      it "leaves a bill due today out of the strip" do
+        plant_overdue_bill
+
+        get root_path
+
+        expect(response.body).to include("next due Sep 2")
+        expect(response.body).not_to include("overdue")
+      end
+    end
+  end
 end

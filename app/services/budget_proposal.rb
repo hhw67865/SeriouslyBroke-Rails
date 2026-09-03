@@ -22,15 +22,18 @@
 # item) and the model's is shape; this is the ORDER of two writes, which is neither.
 # `BudgetsController#create` calls #save and renders the same two outcomes it always did.
 #
-# `Date.current`, NOT the entry's date or the rule's anchor: the category starts holding money the
+# TODAY, NOT the entry's date or the rule's anchor: the category starts holding money the
 # moment the user says so, which is now. Earlier spending stays where it physically was — it drains
 # available, exactly as it did the day before — which is the same promise the panel's effect clause
 # makes before the click, and it is why an accepted rule cannot open a category overdrawn by its own
 # lifetime spend. (It could, and did, when the pool era re-pointed a category at a date-less
 # envelope; §1 of the main-account spec opens with that shape on real data at $46,739.63.)
 #
-# `ApplicationController` wraps every request in the owner's zone, so `Date.current` is the user's
-# own calendar day — the same day `CategoryLedger::ENTRY_CATEGORY_ID` compares against.
+# THAT DAY IS THE OWNER'S, and it is now read as one: `#start_holding` defaults to `Category#today`
+# → `User#today` (fix round 2 — LOW-1), which re-zones from the USER rather than from the ambient
+# `Time.zone`. `ApplicationController` wraps every request in the owner's zone, so the two agreed
+# here already; what changes is that they go on agreeing from a job, a console or a seed — and the
+# day is the same day `CategoryLedger::ENTRY_CATEGORY_ID` compares against either way.
 #
 # See docs/superpowers/specs/2026-08-21-two-ledger-design.md §3 and §4.
 class BudgetProposal

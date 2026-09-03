@@ -190,7 +190,7 @@ class ReallocationPresenter
   # satisfy an arity limit would put the amount and the parties in different places, which is exactly
   # how they come to disagree (see Candidate's own note on `requested`).
   # rubocop:disable Metrics/ParameterLists
-  def initialize(user:, to_category: nil, from_category: nil, amount: nil, today: Date.current, ledger: nil)
+  def initialize(user:, to_category: nil, from_category: nil, amount: nil, today: user.today, ledger: nil)
     # rubocop:enable Metrics/ParameterLists
     @user = user
     @to_category = to_category

@@ -49,7 +49,7 @@ class AccountFundingsController < HomeController
     AccountMovement.transaction do
       account.lock!
       movement = build_movement(account)
-      presenter = HomePresenter.new(user: current_user, today: Date.current)
+      presenter = HomePresenter.new(user: current_user, today: current_user.today)
 
       if !presenter.awaiting_funding?(account) && account != current_user.default_account
         movement.errors.add(:to_pool, "already holds money")
@@ -65,7 +65,7 @@ class AccountFundingsController < HomeController
       from_pool: current_user.default_account,
       to_pool: account,
       amount: funding_params[:amount],
-      date: Date.current,
+      date: current_user.today,
       kind: :transfer
     )
   end

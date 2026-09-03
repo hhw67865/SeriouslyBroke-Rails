@@ -53,7 +53,7 @@ class EntryImpactPresenter
 
   attr_reader :user, :category, :entry, :today
 
-  def initialize(user:, category:, amount: nil, entry: nil, today: Date.current)
+  def initialize(user:, category:, amount: nil, entry: nil, today: user.today)
     @user = user
     @category = category
     @raw_amount = amount

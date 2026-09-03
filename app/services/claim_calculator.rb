@@ -82,7 +82,7 @@ class ClaimCalculator
 
   attr_reader :rule, :today
 
-  def initialize(rule, today: Date.current, spending: nil, adjustments: nil)
+  def initialize(rule, today: rule.today, spending: nil, adjustments: nil)
     @rule = rule
     @today = today
     @spending = spending

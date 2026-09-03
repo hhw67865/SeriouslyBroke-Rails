@@ -6,7 +6,8 @@ class HomeController < ApplicationController
   # includes it, so a second include here would be a silent no-op — noise, nothing more.
   # The concern stays in the chain because shared/_date_selector calls its
   # `selected_month` / `selected_year` helpers on every page. Home itself is anchored to
-  # today rather than to that month scrubber, hence `Date.current` below.
+  # today rather than to that month scrubber, hence the `today:` below — and it is the OWNER's day
+  # (`User#today`, fix round 2 — LOW-1), not the ambient clock's.
   def index
     assign_home_state
   end
@@ -25,7 +26,7 @@ class HomeController < ApplicationController
   # `Pool.new`, not `current_user.pools.new` — the association form would append the unsaved
   # record to any loaded target for the rest of the request.
   def assign_home_state(rejected_movement: nil)
-    @presenter = HomePresenter.new(user: current_user, today: Date.current, rejected_movement: rejected_movement)
+    @presenter = HomePresenter.new(user: current_user, today: current_user.today, rejected_movement: rejected_movement)
     @new_bank_account = Pool.new(user: current_user, pool_type: :account)
   end
 end

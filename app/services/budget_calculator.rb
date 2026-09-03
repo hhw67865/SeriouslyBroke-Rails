@@ -5,7 +5,7 @@
 class BudgetCalculator
   attr_reader :budget, :today
 
-  def initialize(budget, today: Date.current)
+  def initialize(budget, today: budget.today)
     @budget = budget
     @today = today
   end

@@ -94,7 +94,7 @@
               hint: "When did this transaction occur?",
               input_html: {
                 type: "date",
-                value: entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d")
+                value: entry.date&.strftime("%Y-%m-%d") || current_user.today.strftime("%Y-%m-%d")
               } %>
         </div>
 

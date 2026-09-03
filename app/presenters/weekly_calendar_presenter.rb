@@ -4,7 +4,7 @@
 # Pre-computes entry groupings and weekly breakdown to minimize view complexity.
 #
 # Usage in controller:
-#   @presenter = WeeklyCalendarPresenter.new(user: current_user, date: Date.current)
+#   @presenter = WeeklyCalendarPresenter.new(user: current_user, date: current_user.today)
 #
 # Usage in view:
 #   @presenter.days.each { |day| day[:entries_by_type][:expense] }

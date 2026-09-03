@@ -285,7 +285,7 @@ class DistributionPresenter
   # all-clear density renders no rows at all (spec §5: headline, one line, one button), which is
   # right — and it also leaves someone who simply wants to put more into savings on a comfortable
   # period with nothing to type in. One more term in the density switch, not a second screen.
-  def initialize(user:, today: Date.current, overrides: {}, expanded: false)
+  def initialize(user:, today: user.today, overrides: {}, expanded: false)
     @user = user
     @today = today
     @overrides = overrides

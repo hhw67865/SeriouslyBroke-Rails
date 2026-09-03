@@ -34,7 +34,7 @@ class HoldingStatus
   # IT IS HERE BECAUSE THE MEASUREMENT PUT IT HERE on the pool side: a screen renders a status for
   # every holder it lists, each building a calculator of its own, and leaving this class out of the
   # batching would have batched only the cheaper half of every screen.
-  def initialize(category, today: Date.current, pending: HoldingProjection::Pending.none, terms: nil)
+  def initialize(category, today: category.today, pending: HoldingProjection::Pending.none, terms: nil)
     @category = category
     @today = today
     @pending = pending

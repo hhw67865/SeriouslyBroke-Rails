@@ -69,7 +69,7 @@ class AllocationCalculator
   # constructor keyword would have offered the same thing to every caller in the app on the strength
   # of a comment; #share_ledger is `protected`, so the offer is unreachable from outside instead of
   # merely discouraged.
-  def initialize(user:, today: Date.current, overrides: {})
+  def initialize(user:, today: user.today, overrides: {})
     @user = user
     @today = today
     @overrides = overrides.transform_keys(&:to_s)

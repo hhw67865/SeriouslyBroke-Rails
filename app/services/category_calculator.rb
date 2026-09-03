@@ -20,7 +20,7 @@
 class CategoryCalculator
   attr_reader :category, :date, :date_range, :period
 
-  def initialize(category, date = Date.current, period: :monthly)
+  def initialize(category, date = category.today, period: :monthly)
     @category = category
     @date = date
     @period = period

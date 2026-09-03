@@ -650,13 +650,29 @@ RSpec.describe HomePresenter do
       expect(Budget.for_user(user).count).to eq(2)
     end
 
+    # ** THE STRIP'S OWN READERS ARE IN THE LIST (fix round 2 — LOW-2). ** A cost pin is only as
+    # honest as the reader list it walks, and `_shortfall.html.erb` grew four readers across fix
+    # round 1 that this method did not name: `#shortfall` (HIGH-1's headline figure),
+    # `#other_accounts_total` (arm 3's "sitting outside checking" sentence), `#per_day_pace` (said on
+    # every arm) and `#uncovered_remainder` (LOW-1's last line). A reader the pin never calls is a
+    # reader free to open a ledger of its own without either figure moving.
+    #
+    # THE FIGURES DID NOT MOVE, AND THAT IS THE POINT — still 19 and 18. All four are pure over state
+    # the earlier lines have already fetched: `#shortfall` is `-free_to_spend`, `#uncovered_remainder`
+    # is that figure less the sum of a memoised list, `#per_day_pace` divides it by `#period_progress`
+    # (the user's own cadence columns, no query), and `#other_accounts_total` sums `#balance_of` over
+    # `#accounts` — the statement `#in_checking` has already run and the ledger has already memoised.
     def read_screen_for(other)
       other.in_checking
       other.free_to_spend
+      other.shortfall
+      other.other_accounts_total
+      other.per_day_pace
       other.period_rows
       other.unbudgeted_rows
       other.troubles
       other.uncovered_claims
+      other.uncovered_remainder
     end
 
     # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: every figure on this screen is composed from

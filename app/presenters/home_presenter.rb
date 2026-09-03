@@ -68,8 +68,10 @@ class HomePresenter
     # cycle rolls on payment, so an unpaid occurrence stays anchored where it was and goes on asking.
     #
     # A MEMBER RATHER THAN A DERIVATION, because the comparison is against the presenter's `today` and
-    # a Data object computing it would have to reach for `Date.current` — which is the one thing every
-    # reader on this screen is built to avoid.
+    # a Data object computing it would have to reach for a clock of its own — which is the one thing
+    # every reader on this screen is built to avoid. That day is the OWNER's (`User#today`, fix round
+    # 2 — LOW-1), so a Data object reaching for `Date.current` would not merely be a second clock: it
+    # would be a second clock in the wrong zone.
     def overdue? = overdue
 
     def trouble? = over? || overdue?
@@ -183,7 +185,7 @@ class HomePresenter
   # failure branch hands back the unsaved, invalid AccountMovement it tried to save, and
   # #funding_movement_for is how the ONE account it was for gets it back — every other account's card
   # renders a fresh, blank one.
-  def initialize(user:, today: Date.current, rejected_movement: nil)
+  def initialize(user:, today: user.today, rejected_movement: nil)
     @user = user
     @today = today
     @rejected_movement = rejected_movement

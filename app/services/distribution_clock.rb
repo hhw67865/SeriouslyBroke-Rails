@@ -58,7 +58,7 @@ class DistributionClock
   # asked it about a POOL — HomePresenter and CategoryBudgetPresenter — and both moved in this task.
   # There is ONE distribution per period per user now, because there is one root (two-ledger spec
   # §2), so there is one timestamp and no map to key it by.
-  def initialize(user:, today: Date.current)
+  def initialize(user:, today: user.today)
     @user = user
     @today = today
   end

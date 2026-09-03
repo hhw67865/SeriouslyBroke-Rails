@@ -24,6 +24,21 @@
 # read as a range of days — its own first day through today, in the owner's zone — and its header
 # carries why each bound is where it is.
 #
+# ** THE SPAN'S UPPER BOUND AND THE ROW'S OWN DAY ARE NOW THE SAME EXPRESSION (fix round 2 —
+# LOW-1). ** This class asks two questions about "today" and they have to have one answer, or a
+# submission left to the app can be dated on a day this class then refuses:
+#
+#   * the SPAN's end is the calculator's `today`, which defaults to `Budget#today` → `Category#today`
+#     → `User#today` — that is `user.local_day(Time.current)`;
+#   * the ROW's day is `Adjustment#local_day` of `#chosen_date`, and a blank date is `Time.current` —
+#     that is `user.local_day(Time.current)` too.
+#
+# One re-zoning (`User#local_day`), one instant (`Time.current`), so the bound and the day are equal
+# BY CONSTRUCTION rather than by luck. They agreed before this too, but only inside a request, where
+# `around_action :use_user_timezone` had made the ambient `Date.current` the owner's day; from a job
+# or a console the bound read UTC while the row read Tokyo, and a Tokyo user's own "today" could fall
+# a day past the span that was about to judge it.
+#
 # ONE CALCULATOR FOR THE WHOLE SUBMISSION, because three of the four questions this class asks are
 # about the same walk: what a skip is worth (§3.3), which days count, and which words the flash
 # uses. A second instance would be a second walk free to disagree with the first about the period
@@ -39,7 +54,7 @@ class AdjustmentForm
   # `BudgetPageHelper#budget_rule_name` (the item it pays, else the category it fills), and a
   # second spelling here would be free to name a rule one thing in a refusal and another in the
   # flash that follows the retry.
-  def initialize(rule:, params:, name:, today: Date.current)
+  def initialize(rule:, params:, name:, today: rule.today)
     @rule = rule
     @params = params
     @name = name
@@ -123,7 +138,7 @@ class AdjustmentForm
   # A RULE THE WALK HAS NOT REACHED. `ClaimCalculator#countable_span` is empty exactly when
   # `#walk_periods` visited nothing — a rule asked about a day before it was written — and
   # `Range#none?` answers that in one step for either shape, because a non-empty range is truthy at
-  # its first element. Unreachable from the page, whose `today` is `Date.current` and whose rules
+  # its first element. Unreachable from the page, whose `today` is the owner's own day and whose rules
   # cannot be created in the future; it is the honest answer to a hand-built request and to any
   # later caller that injects a `today:` of its own.
   def not_counting_yet = "#{name} hasn't started counting yet, so there's nothing to adjust."
@@ -175,7 +190,8 @@ class AdjustmentForm
   # `around_action :use_user_timezone` has already set to the owner's.
   #
   #   * blank — `Time.current`, the owner's now. A UTC evening is already tomorrow in Tokyo, and
-  #     `Date.current` here would be the same day by luck rather than by construction.
+  #     `Date.current` here would be the same day by luck rather than by construction — see the
+  #     header for why this arm and `#countable_span`'s upper bound are now one expression.
   #   * given — the string is assigned to the column and Rails' time-zone-aware attributes parse it
   #     in `Time.zone`, so "2026-09-02" is midnight in NEW YORK rather than at UTC — a difference of
   #     a whole calendar day. A `Time.zone.parse` of our own would be a second spelling of the cast

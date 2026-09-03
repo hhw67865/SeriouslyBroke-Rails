@@ -112,6 +112,29 @@ class User < ApplicationRecord
     moment.in_time_zone(timezone.presence || "UTC").to_date
   end
 
+  # ** THE DAY IT IS FOR THIS OWNER — the app's ONE spelling of "today", and the day every claim is
+  # read against (computed-claims Task 3, fix round 2 — LOW-1). **
+  #
+  # It is `#local_day` asked of the one instant nobody stored. Fix round 1 made
+  # `ClaimCalculator#overdue?` the DATE alone (`next_due_on < today`), which promoted `today` from a
+  # window bound to the sole trigger of a trouble row — so the difference between UTC's day and the
+  # owner's is now the difference between a bill that says `overdue · was Sep 2` and one that says
+  # nothing.
+  #
+  # WHY NOT `Date.current`. That reader takes its zone from the AMBIENT `Time.zone`, and `config.time_zone`
+  # is unset, so it is UTC's day by default. Inside a request the two agree — `ApplicationController`'s
+  # `around_action :use_user_timezone` sets `Time.zone` to this user's for the whole action, and
+  # `spec/requests/home_spec.rb`'s two owners pin that they agree there. What `Date.current` cannot do
+  # is answer for a user OUTSIDE a request: a job, a console, a seed, a rake task, or a presenter built
+  # in a spec gets whatever zone is ambient and reads UTC's day about a user in Tokyo. Taking the zone
+  # from the USER is what makes every reader in the claims stack — this, `#local_day`,
+  # `Adjustment#local_day`, `ClaimCalculator#rule_born_on` and `CategoryLedger::ENTRY_LOCAL_DAY`'s SQL —
+  # answer the same day wherever it runs, which is the same argument `#local_day` above is here for.
+  #
+  # `Category#today` and `Budget#today` reach this through their own owner and are the only two other
+  # spellings; nothing else in `app/` derives a day from the clock.
+  def today = local_day(Time.current)
+
   # Every period boundary in [from, to], ascending. Empty unless a period is configured.
   # A period is DECLARED by the user — it is not inferred from income, so multiple jobs
   # and irregular pay are simply not a question here.

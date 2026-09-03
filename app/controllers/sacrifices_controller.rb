@@ -24,7 +24,7 @@ class SacrificesController < ApplicationController
   # `notice` rather than `alert`: neither state is an error. Arriving here covered is what the app
   # wants for you, and arriving undeclared is a step not yet taken.
   def show
-    @presenter = SacrificePresenter.new(user: current_user, today: Date.current)
+    @presenter = SacrificePresenter.new(user: current_user, today: current_user.today)
     return if @presenter.underwater?
 
     redirect_to budget_page_path, notice: refusal_for(@presenter)

@@ -68,7 +68,7 @@ class DistributionsController < ApplicationController
   def presenter
     DistributionPresenter.new(
       user: current_user,
-      today: Date.current,
+      today: current_user.today,
       overrides: override_params,
       # The user asking for the full table on a period that does not need one. A bare presence check,
       # not a boolean cast: the link either carries the parameter or it does not, and `expand=0` is
@@ -80,7 +80,7 @@ class DistributionsController < ApplicationController
   # What the committer writes. `overrides` go on the PROPOSAL — the committer has no override path of
   # its own to disagree with this one.
   def proposal
-    AllocationCalculator.new(user: current_user, today: Date.current, overrides: override_params)
+    AllocationCalculator.new(user: current_user, today: current_user.today, overrides: override_params)
   end
 
   # The edits the user typed into the waterfall, exactly as AllocationCalculator consumes them:

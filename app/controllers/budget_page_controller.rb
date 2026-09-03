@@ -50,11 +50,13 @@ class BudgetPageController < ApplicationController
     if change.apply(scale: scale_choice)
       redirect_to budget_page_path, notice: saved_notice(change)
     else
-      @presenter = BudgetPagePresenter.new(
-        user: User.find(current_user.id),
-        today: Date.current,
-        declaration: current_user
-      )
+      # THE DAY COMES OFF THE SAME CLEAN ROW THE FIGURES DO (fix round 2 — LOW-1). `User#today` reads
+      # the owner's `timezone` column, and `current_user` in this branch is the DIRTY object — the one
+      # carrying what the user just typed and failed to save — which is exactly what the reload above
+      # exists to keep away from the figures. One `owner` local, so the two cannot be handed different
+      # rows.
+      owner = User.find(current_user.id)
+      @presenter = BudgetPagePresenter.new(user: owner, today: owner.today, declaration: current_user)
       render :show, status: :unprocessable_content
     end
   end
@@ -140,7 +142,7 @@ class BudgetPageController < ApplicationController
     render :show, status: :unprocessable_content
   end
 
-  def build_presenter = BudgetPagePresenter.new(user: current_user, today: Date.current)
+  def build_presenter = BudgetPagePresenter.new(user: current_user, today: current_user.today)
 
   # EXACTLY THREE PARAMS, and the list is the whole security boundary here. `current_user.update`
   # writes the signed-in user's own row, so ownership is never in question — but `User` carries

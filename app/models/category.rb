@@ -298,13 +298,13 @@ class Category < ApplicationRecord
   #
   # `today` IS THE DEFAULT AND THE CALLER MAY NAME IT, on `BudgetProposal`'s reasoning: a category
   # starts holding the moment the user says so, which is now, and earlier spending stays where it
-  # physically was. `ApplicationController` wraps every request in the owner's zone, so `Date.current`
-  # is the user's own calendar day — the same day `CategoryLedger::ENTRY_CATEGORY_ID` compares
-  # against.
+  # physically was. The default is `#today` — the OWNER's calendar day, re-zoned from the user rather
+  # than from the ambient clock (fix round 2 — LOW-1) — which is the same day
+  # `CategoryLedger::ENTRY_CATEGORY_ID` compares against.
   #
   # TRUE OR FALSE, like the `update` underneath it: a caller that needs to say why reads
   # `errors` off the record, which is what both callers do.
-  def start_holding(today: Date.current)
+  def start_holding(today: self.today)
     return true if funded_since.present?
 
     update(funded_since: today)
@@ -348,11 +348,11 @@ class Category < ApplicationRecord
   # UNBATCHED, DELIBERATELY, exactly as `Category#holding_calculator` is: one category is a handful
   # of queries whether they are grouped or not. A screen iterating categories builds a `ClaimLedger`,
   # which is the batched door and which pins itself against this one figure for figure.
-  def claim(today: Date.current)
+  def claim(today: self.today)
     budgets.sum(0.to_d) { |budget| budget.claim_calculator(today: today).claim }
   end
 
-  def calculator(date = Date.current, period: :monthly)
+  def calculator(date = today, period: :monthly)
     CategoryCalculator.new(self, date, period: period)
   end
 
@@ -376,7 +376,7 @@ class Category < ApplicationRecord
   # dashboard screens still ask on every render — and the two answer different questions about the
   # same record. Renaming that one is a change to screens this task does not touch; this reader
   # takes the name the whole stack is called by instead.
-  def holding_calculator(as_of: nil, today: Date.current, net_of_sweep: false,
+  def holding_calculator(as_of: nil, today: self.today, net_of_sweep: false,
                          pending: HoldingProjection::Pending.none, terms: nil)
     HoldingProjection.for(
       self, net_of_sweep: net_of_sweep, pending: pending, as_of: as_of, today: today, terms: terms
@@ -389,7 +389,18 @@ class Category < ApplicationRecord
   # ask "does this envelope still make it if I fund $200 instead of $500" in the app's own
   # vocabulary rather than inventing a second one. `terms:` threads down the same way and for the
   # same reason, and defaults to nothing here too.
-  def status(today: Date.current, pending: HoldingProjection::Pending.none, terms: nil)
+  # THE OWNER'S TODAY, reached the same way every other day on this record is (fix round 2 — LOW-1).
+  # `User#today` carries the whole argument for why this is not `Date.current`; what this reader adds
+  # is the OWNER-LESS arm, which it gets for free by going through the private `#local_day` — the
+  # same fallback to UTC that method already documents, rather than a second policy for an unsaved
+  # category.
+  #
+  # PUBLIC, THOUGH `#local_day` IS NOT: it is the default for every `today:` this class hands down
+  # (`#start_holding`, `#claim`, `#calculator`, `#holding_calculator`, `#status`) and it is what
+  # `Budget#today` reaches through, so a caller that names no day gets the owner's.
+  def today = local_day(Time.current)
+
+  def status(today: self.today, pending: HoldingProjection::Pending.none, terms: nil)
     HoldingStatus.new(self, today: today, pending: pending, terms: terms)
   end
 

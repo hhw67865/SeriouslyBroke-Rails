@@ -84,7 +84,16 @@ class Budget < ApplicationRecord
   # after a failed submission, and a rewound schema has no `category_id` for a rule to carry.
   def user = category_mode? ? category&.user : nil
 
-  def calculator(today: Date.current)
+  # THE OWNER'S TODAY (fix round 2 — LOW-1), through the category that knows who the owner is.
+  # `User#today` carries why this is not `Date.current`; `Category#today` carries the owner-less
+  # fallback. What is left here is the CATEGORY-less arm, which is the same state `#user` above is
+  # nil-safe for — a rule re-rendered from a failed form, which no calculator is built from.
+  #
+  # It is the default for both `today:`s this class hands down, so `#calculator` and
+  # `#claim_calculator` cannot be asked about two different days by the same caller.
+  def today = category&.today || Date.current
+
+  def calculator(today: self.today)
     BudgetCalculator.new(self, today: today)
   end
 
@@ -99,7 +108,7 @@ class Budget < ApplicationRecord
   # IT IS NOT `#calculator`, and that is a collision rather than a preference: that name is
   # `BudgetCalculator`'s — what this rule needs from the NEXT distribution — and Task 4 deletes it
   # along with the distribution. Until then the two answer different questions about the same row.
-  def claim_calculator(today: Date.current, spending: nil, adjustments: nil)
+  def claim_calculator(today: self.today, spending: nil, adjustments: nil)
     ClaimCalculator.new(self, today: today, spending: spending, adjustments: adjustments)
   end
 
@@ -162,8 +171,9 @@ class Budget < ApplicationRecord
   #
   # `today:` is not in the plan's sketch and is needed: the one-off shape amortises over the
   # periods between NOW and its due date, so a caller with a fixed clock (every calculator in
-  # this app takes one) must be able to hand its own down rather than have this reach for
-  # `Date.current` behind it.
+  # this app takes one) must be able to hand its own down rather than have this reach for a clock
+  # behind it. Unhanded, it reads the OWNER's day off the user it is already given (fix round 2 —
+  # LOW-1), not the ambient one.
   #
   # THIS DIVIDES A MONTHLY RULE BY `periods_per_year` WHILE ITS PERIOD STILL ENDS ON THE CALENDAR
   # MONTH, and the divergence is deliberate (plan 2d decision 5, recorded here and in
@@ -178,7 +188,7 @@ class Budget < ApplicationRecord
   # $130 in nine months of 2026 and $86.67 in the two holding a third boundary (see above), and
   # ending its period by `periods_per_year` instead would roll a monthly rule mid-month and fund it
   # twice inside one month.
-  def steady_ask(user, today: Date.current)
+  def steady_ask(user, today: user.today)
     case cadence
     when :per_period then amount.to_d
     when :one_off then one_off_steady_ask(today)
@@ -227,7 +237,7 @@ class Budget < ApplicationRecord
   # PINNED, not asserted: `budget_steady_ask_spec`'s "costs the same number of queries for five
   # dated rules as for one" counts the statements, because a preload that quietly stops covering a
   # lane is invisible to every other example in that file.
-  def self.steady_need(user, today: Date.current)
+  def self.steady_need(user, today: user.today)
     for_user(user)
       .includes(:item, category: :user)
       .sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }

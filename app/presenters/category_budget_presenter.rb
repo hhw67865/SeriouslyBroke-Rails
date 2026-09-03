@@ -35,12 +35,13 @@
 class CategoryBudgetPresenter
   attr_reader :category, :today
 
-  # `today` DEFAULTS TO Date.current AND IS NOT THE PAGE'S `selected_date`. The category page has a
+  # `today` DEFAULTS TO THE OWNER'S DAY (`Category#today` → `User#today`) AND IS NOT THE PAGE'S
+  # `selected_date`. The category page has a
   # period toggle and can be read for a month that is over; what a category HOLDS is a fact about
   # NOW (§4.1 — the time word cannot be dropped), and rendering last March's row vocabulary beside
   # a live "Rules on the Budget page" button would be the page disagreeing with the screen it links
   # to. The spending figures above this card are the ones the toggle is for.
-  def initialize(category:, today: Date.current)
+  def initialize(category:, today: category.today)
     @category = category
     @today = today
   end

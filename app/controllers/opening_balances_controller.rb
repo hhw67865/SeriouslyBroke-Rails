@@ -69,7 +69,7 @@ class OpeningBalancesController < HomeController
   def record_correction(main, actual)
     Category.transaction do
       main.lock!
-      presenter = HomePresenter.new(user: current_user, today: Date.current)
+      presenter = HomePresenter.new(user: current_user, today: current_user.today)
       next { alert: "Opening balance was already recorded." } unless presenter.awaiting_opening_balance?(main)
 
       # THE POT (two-ledger spec §2, Task 6) — `AccountLedger#pot`, which is main's balance and is
@@ -122,7 +122,7 @@ class OpeningBalancesController < HomeController
   end
 
   # THE DAY BEFORE THE USER'S EARLIEST ENTRY (Henry's ruling of 2026-08-20, from real use), and
-  # `Date.current` only for the user who has no entries at all.
+  # the owner's own today (`User#today`) only for the user who has no entries at all.
   #
   # `tracked: false` WAS NOT ENOUGH, AND THE REASON IS THAT IT ANSWERS A DIFFERENT SCREEN. The flag
   # keeps the correction out of the DASHBOARD's tracked-income and tracked-expense totals, which is
@@ -150,7 +150,7 @@ class OpeningBalancesController < HomeController
   def correction_date
     earliest = current_user.entries.minimum(:date)
 
-    earliest ? earliest.to_date - 1 : Date.current
+    earliest ? earliest.to_date - 1 : current_user.today
   end
 
   def opening_balance_params
