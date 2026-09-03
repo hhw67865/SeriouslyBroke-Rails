@@ -82,10 +82,16 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       end
     end
 
-    it "shows three legend amounts: available, envelope, left over" do
+    # THE CASING IS LOAD-BEARING (FINAL review — M-2): these two labels name the same two lanes the
+    # Expenses tab heads its sections with, and they read "Out of available" / "Out of an envelope"
+    # against that tab's "Out of Available" / "Out of an Envelope" — one phrase in two casings, one
+    # screen. `have_content` is a case-SENSITIVE substring match, so these three lines are what holds
+    # the register: the labels are asserted in exactly the casing the section headings use, and a
+    # revert to either lowercase spelling fails here rather than passing quietly.
+    it "shows three legend amounts: Available, Envelope, left over" do
       within money_flow_section do
-        expect(page).to have_content("Out of available $400.00")
-        expect(page).to have_content("Out of an envelope $200.00")
+        expect(page).to have_content("Out of Available $400.00")
+        expect(page).to have_content("Out of an Envelope $200.00")
         expect(page).to have_content("Left over $2,400.00")
       end
     end

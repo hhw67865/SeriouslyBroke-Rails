@@ -55,32 +55,56 @@
     </div>
   </dl>
 
-  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns — and THREE arms, not two
-      (fix round 1 — MED-1). A negative free has two causes and they need different sentences:
+  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns — and FIVE arms, because
+      every sentence here asserts a CAUSE and each one has to be gated on a predicate that
+      ESTABLISHES that cause (FINAL review — M-1). The signs of the two figures say which way the
+      arithmetic went and never why: `available − pot` is `moves out + swept − Σ holdings`, so a
+      cap-bound card gated on the signs alone told a SINGLE-account user their money was "sitting
+      outside checking" when what had actually happened was a category being overspent — a sentence
+      about savings above an accounts line with nothing in it.
 
-        THE PLAN OUTRUNS THE MONEY   `plan_outruns_the_money?` — there is genuinely nothing spare
-                                     anywhere, and spending takes the user further under.
-        THE MONEY IS ELSEWHERE       the cap is what made this negative: money that no rule has
-                                     claimed exists, it is simply not in checking. Measured: $1,000
-                                     in, $1,200 moved to savings, no rules at all — the old
-                                     two-armed version told that user "More is set aside or spoken
-                                     for than you have" with $0 set aside.
+      THE ARM TABLE IS IN THE PRESENTER, beside the four predicates these branches ask, written as
+      signs × causes. In order, the arms are:
 
-      BOTH GATES ARE THE PRESENTER'S OWN PREDICATES rather than comparisons spelled here. A view
-      re-deriving which side of the `min` won, or re-deriving the sign underneath it, could print a
-      sentence about arithmetic the figure beside it did not do. %>
+        the plan outruns the money   → and something IS set aside or spoken for, or (§10.7 #3) the
+                                       account is a pure overspend and neither noun is true of it.
+        free is negative, plan does  → and the money really is in other accounts, or there is no
+        not outrun (the cap bound      other account holding anything — in which case a negative pot
+        on a negative pot)             IS the whole of the user's cash and the plain sentence is the
+                                       true one. Its overdraft is already stated one line up.
+        free is fine, some of the    → "the rest is set aside or spoken for".
+        pot is claimed
+        free is fine, none of it is  → "none of it is set aside or spoken for", and the parked
+        claimed                        clause only where a second account actually holds money.
+                                       This is L-4's fresh signup, whose two figures are the same
+                                       number because nothing is funded — the card used to describe
+                                       a "rest" of $0.00 to them.
+
+      EVERY GATE IS THE PRESENTER'S OWN PREDICATE rather than a comparison spelled here. A view
+      re-deriving which side of the `min` won, or re-deriving whether another account holds money,
+      could print a sentence about arithmetic the figure beside it did not do. %>
   <p class="mt-2 text-sm text-gray-600" data-free-subline>
-    <% if !presenter.free_to_spend.negative? %>
-      the rest is set aside or spoken for<% if presenter.free_cap_bound? %> — more is parked in
-      other accounts<% end %>.
-    <% elsif presenter.plan_outruns_the_money? %>
-      More is set aside or spoken for than you have. Anything you spend now takes you further under.
-    <% else %>
+    <% if presenter.plan_outruns_the_money? %>
+      <% if presenter.anything_set_aside_or_spoken_for? %>
+        More is set aside or spoken for than you have. Anything you spend now takes you further under.
+      <% else %>
+        You have spent past what you had. Anything you spend now takes you further under.
+      <% end %>
+    <% elsif presenter.free_to_spend.negative? %>
       <%# NEITHER HALF ASSERTS AN ACCOUNT BY NAME, deliberately: `available` spans every account the
           user has, so "it is in savings" is a guess this card cannot make. What it can say is that
           the money is not spoken for and not here, which is the whole of what the cap means. %>
-      The money that isn't spoken for is sitting outside checking — nothing here is free until some
-      of it moves in.
+      <% if presenter.money_parked_elsewhere? %>
+        The money that isn't spoken for is sitting outside checking — nothing here is free until some
+        of it moves in.
+      <% else %>
+        Nothing here is free until money comes in.
+      <% end %>
+    <% elsif presenter.rest_in_checking? %>
+      the rest is set aside or spoken for.
+    <% else %>
+      none of it is set aside or spoken for<% if presenter.free_cap_bound? && presenter.money_parked_elsewhere? %> —
+      more is parked in other accounts<% end %>.
     <% end %>
   </p>
 

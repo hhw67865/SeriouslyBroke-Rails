@@ -739,6 +739,133 @@ RSpec.describe HomePresenter do
     end
   end
 
+  # ** THE THREE CAUSES THE SUBLINE ASSERTS (FINAL review — M-1). ** The signs of the two figures say
+  # WHICH WAY the arithmetic went and never WHY, and the cap's identity is where that bites:
+  #
+  #     available − pot = net moves out of main + what the next distribution sweeps back − Σ holdings
+  #
+  # The card's cap-bound sentences attributed the whole difference to the FIRST term. These three
+  # predicates are the causes, each measured against a fixture that establishes it and one that does
+  # not — because the failure the whole plan exists to kill is a sentence that is true-sounding
+  # rather than one that is missing.
+  describe "the subline's causes" do
+    describe "#money_parked_elsewhere?" do
+      # ** THE THIRD TERM ALONE IS ENOUGH TO BIND THE CAP, and this is the reviewer's worked fixture
+      # for it. ** $1,000 in, $900 into Groceries, $1,100 straight back out of Groceries: the holder
+      # is $200 overdrawn, so `available` ($100) sits $200 above the pot (-$100) with NOT ONE
+      # movement between accounts and no second account in existence. Every sign matches the
+      # money-is-in-savings fixture in `#plan_outruns_the_money?` above, and the cause is the
+      # opposite one — which is the whole of M-1.
+      #
+      # NO RULE ON GROCERIES, deliberately: a rule would ask for the money again the moment the
+      # balance went negative (`HoldingCalculator#allocated_balances` floors at it), `remaining_plan`
+      # would absorb the $100, and the state under test could not exist.
+      it "is false where the cap bound on an overspent category rather than on a transfer", :aggregate_failures do
+        groceries = holder("Groceries", priority: 1)
+        income(1_000)
+        allocate(groceries, 900)
+        spend(groceries, 1_100)
+
+        expect([presenter.in_checking, presenter.available, presenter.remaining_plan]).to eq([-100, 100, 0])
+        expect(presenter.free_to_spend).to eq(-100)
+        expect(presenter).to be_free_cap_bound
+        expect(presenter).not_to be_plan_outruns_the_money
+        expect(presenter).not_to be_money_parked_elsewhere
+      end
+
+      # AN ACCOUNT THAT IS ITSELF BELOW ZERO IS NOT SOMEWHERE MONEY IS PARKED, which is why the
+      # predicate is the TOTAL's sign and not `#other_accounts.any?`: Ally has walked $200 into
+      # checking and is $200 overdrawn, so it is a DEBT the strip names, not a place to transfer
+      # from. (An account holding exactly nothing never reaches the question — `#other_accounts`
+      # drops it as still awaiting funding.) The card has to agree with the accounts line below it.
+      it "is false for an account that is itself overdrawn", :aggregate_failures do
+        ally = create(:pool, :account, user: user, name: "Ally")
+        income(1_000)
+        create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
+
+        expect(presenter.other_accounts.map(&:name)).to eq(["Ally"])
+        expect(presenter.other_accounts_total).to eq(-200)
+        expect(presenter).not_to be_money_parked_elsewhere
+      end
+
+      it "is true once that account actually holds money", :aggregate_failures do
+        ally = create(:pool, :account, user: user, name: "Ally")
+        income(1_000)
+        create(:account_movement, from_pool: checking, to_pool: ally, amount: 600, date: today, kind: :transfer)
+
+        expect(presenter.other_accounts_total).to eq(600)
+        expect(presenter).to be_money_parked_elsewhere
+      end
+    end
+
+    describe "#anything_set_aside_or_spoken_for?" do
+      # §10.7 #3'S PURE OVERSPEND: no rule asks for anything, no category holds anything, the root is
+      # simply below zero. `#plan_outruns_the_money?` is TRUE here and always was — the branch was
+      # right and the sentence was not.
+      it "is false for an account that has only been spent past zero", :aggregate_failures do
+        spend(create(:category, :expense, user: user, name: "Unbudgeted"), 100)
+
+        expect(presenter.free_to_spend).to eq(-100)
+        expect(presenter).to be_plan_outruns_the_money
+        expect(presenter).not_to be_anything_set_aside_or_spoken_for
+      end
+
+      it "is true while a rule is still asking for money" do
+        rate(holder("Groceries", priority: 1), 400)
+
+        expect(presenter).to be_anything_set_aside_or_spoken_for
+      end
+
+      # THE OTHER NOUN, AND THE REASON THE TEST IS NOT `Σ holdings`. Groceries holds $1,000 against no
+      # rule at all, so nothing is SPOKEN FOR and $1,000 is unmistakably SET ASIDE — while the root
+      # is $500 in the red from unbudgeted spending. The sentence names two things and either one is
+      # enough for it to be true.
+      it "is true for money that is held with nothing asking for it", :aggregate_failures do
+        groceries = holder("Groceries", priority: 1)
+        income(1_000)
+        allocate(groceries, 1_000)
+        spend(create(:category, :expense, user: user, name: "Unbudgeted"), 500)
+
+        expect(presenter.remaining_plan).to eq(0)
+        expect(presenter).to be_plan_outruns_the_money
+        expect(presenter).to be_anything_set_aside_or_spoken_for
+      end
+    end
+
+    describe "#rest_in_checking?" do
+      it "is true when the pot holds more than the unspoken-for money", :aggregate_failures do
+        income(2_000)
+        rate(holder("Groceries", priority: 1), 400)
+
+        expect(presenter.free_to_spend).to eq(1_600)
+        expect(presenter).to be_rest_in_checking
+      end
+
+      # ** L-4'S IDENTITY CORNER. ** The fresh signup: money in, nothing funded, nothing asked for, so
+      # free IS the pot to the cent and there is no rest for a sentence to be about. NOT the negation
+      # of `#free_cap_bound?` — both are false here, and that is the state that needs its own words.
+      it "is false when free is the whole pot", :aggregate_failures do
+        income(1_000)
+
+        expect(presenter.free_to_spend).to eq(presenter.in_checking)
+        expect(presenter).not_to be_free_cap_bound
+        expect(presenter).not_to be_rest_in_checking
+      end
+
+      # The cap-bound direction: `pot − free` is zero in every one of these states, so "the rest" was
+      # $0.00 wherever the card appended "more is parked in other accounts" to it.
+      it "is false wherever the cap bound", :aggregate_failures do
+        ally = create(:pool, :account, user: user, name: "Ally")
+        income(2_000)
+        rate(holder("Groceries", priority: 1), 400)
+        create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
+
+        expect(presenter).to be_free_cap_bound
+        expect(presenter).not_to be_rest_in_checking
+      end
+    end
+  end
+
   describe "#period_progress" do
     # DAY X OF Y OFF `#period_range`, which is `User#period_containing` — the one window every
     # other screen reads. `today` is the presenter's, planted, so nothing here depends on the day
@@ -792,6 +919,10 @@ RSpec.describe HomePresenter do
       presenter.remaining_plan
       presenter.free_to_spend
       presenter.free_cap_bound?
+      presenter.plan_outruns_the_money?
+      presenter.rest_in_checking?
+      presenter.money_parked_elsewhere?
+      presenter.anything_set_aside_or_spoken_for?
       presenter.period_progress
     end
 
@@ -815,6 +946,49 @@ RSpec.describe HomePresenter do
 
       expect(count_statements { read_the_hero }).to eq(2)
       expect(count_statements { read_the_hero }).to eq(0)
+    end
+
+    # ** WHAT M-1's `#anything_set_aside_or_spoken_for?` COSTS, MEASURED RATHER THAN ASSERTED SAFE. **
+    # The example above never reaches it: a rule that still asks makes `#remaining_plan` positive and
+    # the disjunction short-circuits before the ledger is opened. THIS fixture is the other side — a
+    # holder with $400 in it and no rule asking for anything — so the card has to ask what the
+    # category is holding.
+    #
+    # SIX, AND EACH ONE IS NAMED. Two are the pot's, exactly as above (`AccountLedger#entry_side`'s
+    # income and expense sums). The other four are `CategoryLedger`'s whole term set, computed on the
+    # first `#terms_for` and memoised: the grouped expense sum, the two grouped allocation sums
+    # (in and out), and the funded-on MAX that rides along with them.
+    #
+    # THE SECOND COUNT IS THE CLAIM THAT MATTERS: it is the SAME ledger every holding status on this
+    # screen is built from (`#status_for` → `CategoryLedger#terms_for`), memoised per term, so
+    # whichever reader reaches it first pays and every one after it reads free. The card adds a query
+    # to itself, not to the page.
+    it "pays for the purpose ledger once, and every status below it then reads free", :aggregate_failures do
+      groceries = holder("Groceries", priority: 1)
+      income(1_000)
+      allocate(groceries, 400)
+      presenter.accounts.each { |account| presenter.balance_of(account) }
+      presenter.categories
+      presenter.waterfall
+      presenter.available
+
+      expect(presenter.remaining_plan).to eq(0)
+      expect(count_statements { read_the_hero }).to eq(6)
+      expect(count_statements { presenter.categories.each { |c| presenter.status_for(c) } }).to eq(0)
+    end
+
+    # THE THIRD DIRECTION: a user with NO holders at all reaches the same answer without opening
+    # anything. The `any?` runs over an empty array — the fresh-signup state the card renders for
+    # first, which must not pay for a purpose ledger it has no rows to read out of.
+    it "asks the purpose ledger nothing for a user with no holders", :aggregate_failures do
+      income(2_000)
+      presenter.accounts.each { |account| presenter.balance_of(account) }
+      presenter.waterfall
+      presenter.available
+      presenter.categories
+
+      expect(count_statements { read_the_hero }).to eq(2)
+      expect(presenter).not_to be_anything_set_aside_or_spoken_for
     end
   end
 

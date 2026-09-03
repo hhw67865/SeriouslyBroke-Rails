@@ -19,11 +19,14 @@ require "rails_helper"
 # Nine carried titles in all; Task 2 took seven of them onward to `trouble_spec.rb`, leaving the two
 # period-bar ones and the card's own figures.
 #
-# EVERY COPY ASSERTION IN THIS FILE IS SCOPED TO THE CARD — through a data hook
+# EVERY COPY ASSERTION IN THIS FILE BUT ONE IS SCOPED TO THE CARD — through a data hook
 # (`[data-in-checking]`, `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`,
 # `[data-period-range]`, `[data-period-progress]`, `[data-period-days-left]`,
-# `[data-overdrawn-account]`) or inside `within("[data-hero]")` for the two that assert a word is
-# ABSENT, which no hook can carry. The hooks exist to be asserted through, and a file that names
+# `[data-overdrawn-account]`) or inside `within("[data-hero]")` for the ones that assert a word is
+# ABSENT, which no hook can carry. The exception is the page-wide dead-words example (FINAL review —
+# L-6), which is page-wide on purpose: a word is dead when NOTHING on the screen says it, and every
+# other spelling of that rule in this suite is scoped to one region. The hooks exist to be asserted
+# through, and a file that names
 # half of them and matches the other half on page text leaves the unasserted ones looking
 # load-bearing when nothing holds them. `[data-period-days-left]` was added in Task 4 for the
 # sharper reason: `_this_period`'s heading prints the SAME "7 days left" sentence, so the page-wide
@@ -120,9 +123,36 @@ RSpec.describe "Home Hero", type: :system do
       # CASE-INSENSITIVE: `have_no_content("available")` is a substring match, so it passes over a
       # card printing "Available" — which is the app's own spelling of the word
       # (`ReallocationPresenter::Root#name`) and therefore the spelling that could slip in.
-      expect(page).to have_no_content(/available/i)
-      expect(page).to have_no_content(/unclaimed/i)
+      # ONE ALTERNATION, THREE WORDS: "buffer" joined the pair in the FINAL review (L-6) — it was the
+      # only one of spec §3's three dead words this card never asserted, and the one with a live
+      # presenter method still named after it (`DistributionPresenter#buffer_carried`), which is
+      # exactly the shape that reaches a view.
+      expect(page).to have_no_content(/available|unclaimed|buffer/i)
     end
+  end
+
+  # ** THE THREE DEAD WORDS OVER THE WHOLE PAGE (FINAL review — L-6). ** Every other assertion of
+  # this rule is scoped — to the card here, to the section in `this_period_spec` — and a word can
+  # only be dead if nothing on the screen says it. This is the one page-wide spelling, and it is the
+  # reason the header's "every copy assertion in this file is scoped to the card" now says "every
+  # assertion but one".
+  #
+  # THE FIXTURE IS SHAPED TO AVOID THE TWO RULED EXCEPTIONS rather than to dodge a failure, and both
+  # are recorded in the spec's §10: the trouble strip's fix button names AVAILABLE as a SOURCE
+  # (`ReallocationPresenter::Root#name`, the mechanic's term on the screen it opens), and the
+  # post-distribute flash says "stays available" in Distribute's own voice. So this user has money,
+  # one rule that is comfortably covered, no fix to offer and no flash — a Home with nothing wrong
+  # on it, which is the state the rule is actually about.
+  it "says none of the three dead words anywhere on Home", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(2_000)
+
+    visit root_path
+
+    expect(page).to have_css("[data-free-to-spend]", text: "$1,600.00")
+    expect(page).to have_no_content(/available/i)
+    expect(page).to have_no_content(/unclaimed/i)
+    expect(page).to have_no_content(/buffer/i)
   end
 
   # THE CAP AT THE POT, WHICH IS RULED (spec §3): money you would have to move out of another
@@ -140,6 +170,11 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_css("[data-in-checking]", text: "$300.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$300.00")
     expect(page).to have_css("[data-free-subline]", text: "more is parked in other accounts")
+    # AND NOT THE SENTENCE IT USED TO BE APPENDED TO (FINAL review — M-1). The two figures above are
+    # the SAME figure here, so the rest of the pot is $0.00 and "the rest is set aside or spoken for"
+    # was describing nothing at all.
+    expect(page).to have_css("[data-free-subline]", text: "none of it is set aside or spoken for")
+    expect(page).to have_no_css("[data-free-subline]", text: "the rest is set aside or spoken for")
   end
 
   # The other direction on the subline, so the gate cannot be satisfied by a card that simply always
@@ -151,6 +186,40 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
+  end
+
+  # ** THE CAP CAN BIND WITH NO SECOND ACCOUNT IN EXISTENCE (FINAL review — M-1). ** `available − pot`
+  # is `moves out + swept − Σ holdings`, and the THIRD term is enough on its own: Groceries was given
+  # $300 and $500 was spent out of it, so it holds -$200, `available` is $700 against a $500 pot, and
+  # the cap binds. There is nowhere for anything to be parked — one account, and the accounts line
+  # says so — and a card gated on the cap alone printed "more is parked in other accounts" here.
+  it "does not claim money is parked elsewhere when the cap bound on an overspent category", :aggregate_failures do
+    groceries = create(:category, :expense, user: user, name: "Groceries", funded_since: Date.current - 1.year)
+    deposit(1_000)
+    create(:allocation, kind: :allocation, to_category: groceries, amount: 300, date: Date.current)
+    create(:entry, item: create(:item, category: groceries), amount: 500, date: Date.current)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking]", text: "$500.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "$500.00")
+    expect(page).to have_css("[data-free-subline]", text: "none of it is set aside or spoken for")
+    expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
+  end
+
+  # ** L-4'S IDENTITY CORNER (FINAL review). ** The fresh signup: money in, nothing funded, nothing
+  # asked for — so free IS the pot, to the cent, and the card spent this whole plan telling that user
+  # "the rest is set aside or spoken for" about a rest of $0.00. Asserted both ways round, because
+  # the failure was a true-sounding sentence rather than a missing one.
+  it "does not describe a rest when free is the whole pot", :aggregate_failures do
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "$1,000.00")
+    expect(page).to have_css("[data-free-subline]", text: "none of it is set aside or spoken for")
+    expect(page).to have_no_css("[data-free-subline]", text: "the rest is set aside or spoken for")
   end
 
   # ── THE NEGATIVE STATES, WHICH ARE THE SAME CARD (spec §2) ─────────────────────────────────────
@@ -196,16 +265,53 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_no_css("[data-checking-overdrawn]", text: "until money comes in")
   end
 
+  # ** THE REVIEWER'S WORKED FIXTURE FOR M-1 (FINAL review), AND THE SINGLE-ACCOUNT HALF OF THE PAIR
+  # ABOVE. ** $1,000 in, $900 of it moved into Groceries, $1,100 spent out of Groceries. The purpose
+  # ledger has $100 with no job and no rule asking for it, so `unspoken_for` is +$100 and the cap
+  # binds at a -$100 pot — the same signs as the Ally fixture above, and a completely different
+  # cause: the missing money is a category's overdraft, not a transfer. There is ONE account, its
+  # line shows nothing parked, and the card used to print "sitting outside checking" over it.
+  #
+  # NO RULE ON GROCERIES, deliberately: a rule would ask for its money again the moment the category
+  # went negative (`HoldingCalculator#allocated_balances` floors at the balance), `remaining_plan`
+  # would swallow the $100, and the state under test — a cap that bound with nothing spoken for —
+  # could not exist. The envelope was funded and overspent, which is exactly the shape §10.7 #3 and
+  # this arm are both about.
+  it "does not send a single-account user looking for money outside checking", :aggregate_failures do
+    groceries = create(:category, :expense, user: user, name: "Groceries", funded_since: Date.current - 1.year)
+    deposit(1_000)
+    create(:allocation, kind: :allocation, to_category: groceries, amount: 900, date: Date.current)
+    create(:entry, item: create(:item, category: groceries), amount: 1_100, date: Date.current)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$100.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free-subline]", text: "Nothing here is free until money comes in")
+    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
+    # THE OTHER HALF OF THE CONTRADICTION was the accounts line, which had nothing in it to send the
+    # user to. One account, so the page says "other account" nowhere — which also carries the
+    # absence of the parked-elsewhere clause, whose every spelling contains it.
+    expect(page).to have_no_content("other account")
+  end
+
   # ** THE STATE THE OLD BAND GOT WRONG (fix round 1 — MED-1). ** No rules at all, so nothing is
   # short and the band said "You're covered this period" over "-$100.00 is still unclaimed after
   # this period" — a deficit called unclaimed money. There is no branch left to get wrong: the card
   # renders the same three lines and the free figure is simply -$100.00.
+  #
+  # IT IS ALSO §10.7 #3'S PURE OVERSPEND (FINAL review — M-1 folded it in): nothing is set aside,
+  # nothing is spoken for, and the account has simply been spent past zero — so "More is set aside or
+  # spoken for than you have" named two things that do not exist. The branch was always right; the
+  # sentence is now the honest reading the spec named.
   it "is honest when spending has drained the root", :aggregate_failures do
     spend_unbudgeted(100)
 
     visit root_path
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
+    expect(page).to have_no_css("[data-free-subline]", text: "More is set aside or spoken for than you have")
     within("[data-hero]") do
       expect(page).to have_no_content(/unclaimed/i)
       expect(page).to have_no_content("You're covered")

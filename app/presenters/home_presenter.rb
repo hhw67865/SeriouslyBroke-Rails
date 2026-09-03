@@ -496,6 +496,93 @@ class HomePresenter
   # own condition is how a figure and the sentence under it come to describe different arithmetic.
   def plan_outruns_the_money? = unspoken_for.negative?
 
+  # ── ** THE SUBLINE'S CAUSES, AND WHY THE SIGNS ALONE CANNOT ESTABLISH THEM (FINAL review — M-1).
+  #
+  # Every sentence on the free subline asserts a CAUSE, and until this fix three of them were gated
+  # on the SIGNS of `#free_to_spend` and `#unspoken_for` alone. The signs say WHICH WAY the arithmetic
+  # went; they do not say WHY, and the identity underneath the cap is the reason:
+  #
+  #     available − pot  =  net moves out of main  +  what the next distribution sweeps back
+  #                         −  Σ holdings
+  #
+  # THREE TERMS, AND THE OLD ARMS ATTRIBUTED THE WHOLE DIFFERENCE TO THE FIRST. A cap-bound card said
+  # "more is parked in other accounts" / "sitting outside checking" wherever `available > pot`, which
+  # the THIRD term makes true with no second account in existence: a SINGLE-account user whose holders
+  # are collectively overdrawn reads a sentence about savings above an accounts line with nothing in
+  # it. The reviewer's worked fixture — $1,000 in, $900 allocated to Groceries, $1,100 spent out of
+  # Groceries — is pot -$100, available $100, `remaining_plan` $0, so `unspoken_for` is +$100, the cap
+  # binds, and the money "sitting outside checking" is a category's overdraft.
+  #
+  # THE ARM TABLE. Rows are the signs; columns are the causes the sentence needs, each established by
+  # a predicate rather than inferred from the signs:
+  #
+  #   unspoken_for < 0        anything set aside or spoken for → "More is set aside or spoken for
+  #   (the plan outruns          (#anything_set_aside_or_spoken_for?)  than you have…"
+  #    the money; free is     nothing of either (§10.7 #3: pure     → "You have spent past what you
+  #    negative either way)      overspend, R = 0 and no holding)      had…"
+  #
+  #   free < 0, plan does     money really is in other accounts   → "…is sitting outside checking…"
+  #   not outrun (so the         (#money_parked_elsewhere?)
+  #    pot is negative and    no other account holds anything     → "Nothing here is free until money
+  #    the cap bound)            (the single-account corner)          comes in." — TRUE, and only
+  #                                                                   here: with nothing elsewhere,
+  #                                                                   a negative pot IS the whole of
+  #                                                                   the user's cash. The overdraft
+  #                                                                   itself is already stated on the
+  #                                                                   In Checking line above.
+  #
+  #   free ≥ 0, some of the   —                                   → "the rest is set aside or spoken
+  #    pot is claimed            (#rest_in_checking?)                 for."
+  #    (pot > unspoken_for)
+  #
+  #   free ≥ 0, none of it    cap bound AND money elsewhere       → "none of it is set aside or spoken
+  #    is claimed                (#free_cap_bound? +                  for — more is parked in other
+  #    (pot ≤ unspoken_for)       #money_parked_elsewhere?)           accounts."
+  #                           otherwise (L-4's fresh signup, and  → "none of it is set aside or spoken
+  #                             the single-account cap corner)       for."
+  #
+  # WHY "the rest" IS SAFE WHEREVER IT FIRES AND WAS NOT BEFORE. `rest = pot − free`, which is
+  # positive exactly when `pot > unspoken_for`, and expanding it with the identity above gives
+  # `Σ holdings + remaining_plan − moves out − swept`; both subtrahends are ≥ 0, so a positive rest
+  # is never larger than what is genuinely set aside plus what is genuinely spoken for. THE OTHER
+  # DIRECTION IS WHAT WAS BROKEN: `rest` is ZERO in every cap-bound state, and the card printed "the
+  # rest is set aside or spoken for" over it anyway — describing $0 to L-4's fresh signup, whose free
+  # and pot are the same figure because nothing is funded at all.
+  #
+  # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures: a card
+  # re-deriving "is there money in another account" from `#other_accounts_total` would be free to
+  # disagree with the accounts line that prints it.
+
+  # IS ANY OF THE POT CLAIMED — the gate on "the rest is set aside or spoken for", and the reason it
+  # is a predicate is `#free_cap_bound?`'s: `in_checking > free_to_spend` is the `min`'s own condition
+  # read backwards, and a view spelling it could print a sentence about a rest the figures did not
+  # leave. NOT the negation of `#free_cap_bound?` — at exact equality both are false, which is the
+  # fresh-signup corner and gets its own sentence.
+  def rest_in_checking? = in_checking > free_to_spend
+
+  # IS THERE MONEY IN ANOTHER ACCOUNT AT ALL — the cause both "parked" sentences assert, and the
+  # figure is `#other_accounts_total`: THE SAME SUM THE ACCOUNTS LINE PRINTS (§6), so the card cannot
+  # claim money the line below it shows as absent. `positive?` rather than `#other_accounts.any?`: an
+  # account that exists and holds nothing is exactly the empty accounts line the M-1 fixture read.
+  def money_parked_elsewhere? = other_accounts_total.positive?
+
+  # IS ANYTHING ACTUALLY SET ASIDE OR SPOKEN FOR — the two nouns of the negative arm's sentence, asked
+  # as the disjunction the sentence itself makes. "Spoken for" is `#remaining_plan`, what the rules
+  # still ask; "set aside" is a holder actually holding money, which is why the sum is not the test —
+  # `Σ holdings` can be zero with $1,000 held against a $1,000 overdraft, and both nouns would still
+  # be true of that user. §10.7 #3's pure-overspend account satisfies neither: no rule asks for
+  # anything, no category holds anything, and the root is simply below zero.
+  #
+  # COSTS THE PURPOSE LEDGER, which is what this fix adds to the card — and adds nothing to the PAGE:
+  # `#holding_of` reads `CategoryLedger#terms_for`, whose four terms are computed together on the
+  # first ask and memoised, and every holding status below (`#status_for`) reads the same four out of
+  # the same ledger. Whichever asks first pays. A user with no categories short-circuits on
+  # `#remaining_plan` and an empty `any?` without opening it at all. All three directions are
+  # measured in `spec/presenters/home_presenter_spec.rb`'s hero-cost block.
+  def anything_set_aside_or_spoken_for?
+    remaining_plan.positive? || categories.any? { |category| ledger.holding_of(category).positive? }
+  end
+
   # WHERE WE ARE IN THE PERIOD — day X of Y, and the bar's own percentage (spec §2).
   #
   # Off `#period_range`, never a second window: that reader is `User#period_containing`, the one
