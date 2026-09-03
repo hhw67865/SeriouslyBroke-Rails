@@ -63,17 +63,34 @@ planned_accrual(this period) = (target − saved_before_this_period) / periods_r
 - A dateless target (the old savings goal) is the same formula with no due date: it accrues by
   its rate if it has one, and otherwise only by explicit set-asides (§5).
 
-### 3.3 "Getting by" — period adjustments (the preserved ability)
-A **rule adjustment** is a small record `(rule, period, amount)` meaning "this period, accrue
-this much instead" — skip (0), reduce, or top up. The catch-up formula does the rest: reduce the
-car fund to $50 this period and every remaining period's accrual rises to keep the due date. This
-is the one new writer, and it is a plan edit, not a money movement.
+### 3.3 Adjustments — dated, signed, as many as you like (Henry, 2026-09-03)
+An **adjustment** is a record `(category, rule — nullable, date, signed amount)`: "on Sep 12,
+−$158 from the car fund"; "on Sep 20, +$100 into groceries"; "+$500 into Vacation" (a goal with no
+rule). It is a DELTA on the accrual of whatever period contains its date, not an override:
+```
+accrued(P) = planned(P) + Σ adjustments dated inside P
+```
+- Skip a period = an adjustment of −planned dated today. Reduce, top up, raid, set aside — same row.
+- A negative adjustment larger than the period's planned accrual dips into prior savings (that IS a
+  release); the catch-up formula raises later periods to recover the due date.
+- **Period-cadence changes are free**: an adjustment lives at a date, so on any grid it lands in the
+  period containing that date and sums with its neighbors; nothing is re-keyed and −$158 means −$158
+  on either grid. (Rate rules still need a human on a cadence change — see §3.5.)
+- Rate rules take the same delta: `claim = max(0, rate + Σ adjustments this period − spent)`.
+- This ONE table replaces the purpose-side `allocations` transfers (§5): set-asides and releases are
+  simply positive and negative adjustments on a category.
 
 ### 3.4 What a category shows
 - Budgeted (rate): `spent of rate` this period, over in red.
 - Dated: `saved of target · next due <date> · $X per period` — the bar is progress toward the
   target.
 - Unbudgeted with spending: `spent $X` (unchanged).
+
+### 3.5 Cadence changes
+Dated rules are time-proportional (the catch-up formula re-plans on whatever grid exists), so
+switching cadence leaves "saved so far" where it was. Rate rules are per-period by definition, so
+on a cadence change the app OFFERS to scale every rate rule ("monthly → biweekly: halve these six
+amounts?") — one confirm, the user's choice.
 
 ## 4. Free below zero
 
@@ -85,11 +102,9 @@ period at zero.
 
 ## 5. What survives as a movement
 
-Explicit **set-asides and releases**: "put $500 into Vacation" / "take $200 back from Car repair".
-These are the only routine purpose-side writes left (`Allocation kind: transfer`, both sides category
-or free) — the exception path, for goals without rules and for deliberate raids. A set-aside adds to
-the category's `saved`; a release subtracts. Income routing and account funding (physical) are
-untouched.
+Nothing on the purpose side moves. Set-asides and releases ARE adjustments (§3.3) — the
+`allocations` table has no purpose-side writer left and is dropped in the migration. Income routing
+and account funding (physical, `account_movements`) are untouched.
 
 ## 6. What dies
 
@@ -102,7 +117,8 @@ and the `funded_since` stamp-on-allocation (rules and set-asides still stamp it 
 ## 7. Migration (real data)
 
 Existing `allocation`/`sweep` rows were distribution mechanics: DELETE them (their effect is now
-computed). `transfer` rows (set-asides, routing mirrors on the physical side) stay. Rules and
+computed). Existing purpose-side `transfer` rows (set-asides/releases) are CONVERTED to adjustments
+(same category, same date, signed by direction); the `allocations` table is then dropped. Rules and
 `funded_since` stay and become the accrual anchors. The physical invariant is verified unchanged
 before/after by raw SQL; the purpose side is verified by recomputing every category's claim from
 the formula on planted fixtures (the claim is a definition, not a conserved quantity).
