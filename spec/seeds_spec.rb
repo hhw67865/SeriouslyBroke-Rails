@@ -145,6 +145,11 @@ RSpec.describe "db/seeds.rb" do
         users: 1,
         pools: 4,
         categories: 28,
+        # 25 RATHER THAN 24 SINCE THE VET ITEM (computed-claims rulings of 2026-09-03). Pet Care is
+        # the demo's MIXED case — a rate rule beside a dated bill — and both of those rulings land on
+        # it: a category may carry only ONE rule whose lane is the whole of it, so the vet bill has to
+        # name an item, and the lane PARTITION then keeps the bill's payments out of the rate rule's
+        # figure. The item is what makes both true.
         items: 25,
         entries: 75,
         budgets: 16,

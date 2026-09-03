@@ -158,7 +158,10 @@ class ClaimCalculator
   # THE FIRST DAY WHOSE SPENDING CAN MOVE THIS CLAIM — the open of the first period the walk visits.
   # `ClaimLedger` asks every rule for this before it queries, so one statement can cover a whole
   # user's lanes without pulling a history nothing will read. It costs no query of its own.
-  def window_start = periods.first.first
+  # `periods` IS EMPTY FOR A RULE NOT YET ALIVE ON `today` (see #walk_periods), and this reader has
+  # to answer anyway: `ClaimLedger` asks every rule for it before it queries. The current period's
+  # open is the honest floor — nothing before it can matter to a claim of zero.
+  def window_start = periods.first&.first || current_period.first
 
   private
 
@@ -236,10 +239,20 @@ class ClaimCalculator
   def anchor = rule.anchor_date
 
   # WHICH OCCURRENCE IS BEING SAVED FOR ON A GIVEN DAY, GIVEN WHAT HAS BEEN PAID INTO IT.
-  # `BudgetCalculator#due_date` re-derived against the walk's own running total instead of against a
-  # per-call `SUM` over the item's entries — the same rule ("the cycle rolls when the bill is PAID,
-  # not when the date passes"), asked once per period rather than once per query, which is what lets
-  # the whole walk cost no statements at all.
+  # `BudgetCalculator#due_date`'s headline rule — "the cycle rolls when the bill is PAID, not when
+  # the date passes" — re-derived against the walk's own running total instead of against a per-call
+  # `SUM` over the item's entries, asked once per period rather than once per query, which is what
+  # lets the whole walk cost no statements at all.
+  #
+  # ** IT DIVERGES FROM THAT CLASS ON THE ITEM-LESS RULE, DELIBERATELY, AND THIS READING IS THE LAW
+  # GOING FORWARD (review of 2026-09-03; `BudgetCalculator` dies in Task 4). ** That class has no
+  # fulfilment signal for a rule with no item, so it falls back to "assume every bill was paid on
+  # time" and rolls the due date on the CALENDAR: a $600 six-monthly rule anchored Jun 1 with nothing
+  # ever spent reports Dec 1 there and Jun 1 here. The computed model has a signal it did not have —
+  # an item-less rule's fulfilment is spending on the CATEGORY (§3.2), which this walk already sums —
+  # so "unpaid" is a fact rather than an absence, and a date that passed with the money never spent
+  # is exactly the state the user needs told. The claim stays at the target and the row reads overdue
+  # instead of silently re-aiming at an occurrence six months out.
   #
   # THE `min` KEEPS A PREPAYMENT FROM ROLLING A CYCLE THAT HAS NOT COME DUE, erring in the same
   # conservative direction as #elapsed_cycles itself.
@@ -277,6 +290,12 @@ class ClaimCalculator
 
   def current_period = @current_period ||= user.period_containing(today)
 
+  # ** AN EMPTY WALK IS AN ANSWER (review of 2026-09-03). ** This used to fall back to
+  # `[current_period]` when the loop visited nothing, and that fallback was a phantom: the only way
+  # to visit nothing is an accrual start AFTER `today` — a rule asked about a day before it was
+  # written, which is what every backdated `today:` on a fresh rule is — and inventing the current
+  # period there accrues a period the rule was not alive for. Zero is the honest built-up for a rule
+  # that did not yet exist. `#window_start` carries the nil arm this leaves it.
   def walk_periods
     visited = []
     cursor = user.period_containing(accrual_start)
@@ -284,7 +303,7 @@ class ClaimCalculator
       visited << cursor
       cursor = user.period_containing(cursor.last + 1)
     end
-    visited.presence || [current_period]
+    visited
   end
 
   # ACCRUAL STARTS WHEN THE CATEGORY STARTED HOLDING MONEY, AND NEVER BEFORE THE RULE ITSELF EXISTED
@@ -301,6 +320,13 @@ class ClaimCalculator
   # THE DAY IS THE OWNER'S, through `User#local_day`: `budgets.created_at` is an instant, and a rule
   # a Tokyo user writes on the evening of the 1st is stored on the 31st in UTC — which on a monthly
   # grid is a different period and therefore a different first accrual.
+  #
+  # ** A RULE BORN MID-PERIOD ACCRUES THAT WHOLE PERIOD, and the choice is deliberate (review of
+  # 2026-09-03). ** The start date only decides WHICH period the walk opens in; §3.2's "a period's
+  # accrual counts in FULL the day the period opens" then applies to that period like any other, so a
+  # rule written on the 31st of a calendar month holds the whole month's share, not a day of it.
+  # Pro-rating it would be a second, finer clock beside the period grid — the app has one — and it
+  # would make the figure a user sees depend on the hour they clicked Save.
   #
   # NIL ON EITHER ARM IS SIMPLY ABSENT, not zero: an unsaved rule has no `created_at` to be born on,
   # and a category with no funding date holds nothing at all — its spending drains available — so
@@ -337,17 +363,29 @@ class ClaimCalculator
     @adjustment_rows ||= @adjustments.nil? ? query_adjustments : @adjustments
   end
 
-  # THE LANE A FULFILMENT ARRIVES ON (§3.2): the rule's own item where it names one, and the whole
-  # category where it does not. `Entry.draining` is `CategoryLedger::ENTRY_CATEGORY_ID` narrowed to
-  # one category — the funded-since gate and the owner's calendar day included — so spending from
-  # before the category held money is absent here exactly as it is absent from every other reader.
+  # THE LANE A FULFILMENT ARRIVES ON (§3.1/§3.2): the rule's own item where it names one, and
+  # everything else in the category where it does not. `Entry.draining` is
+  # `CategoryLedger::ENTRY_CATEGORY_ID` narrowed to one category — the funded-since gate and the
+  # owner's calendar day included — so spending from before the category held money is absent here
+  # exactly as it is absent from every other reader.
+  #
+  # ** `Entry.on_unruled_items` IS THE PARTITION (ruling of 2026-09-03), AND IT IS NOT A REFINEMENT
+  # OF THE CATCH-ALL LANE — IT IS WHAT MAKES THE LANES ADD UP. ** Without it the catch-all's lane
+  # CONTAINS the item-backed rules' lanes, so one payment lowers two claims: Σ claims falls twice
+  # while the user's money falls once, and `free` RISES when a bill is paid. The scope's own header
+  # carries the measurement; what matters here is that this reader and `ClaimLedger`'s grouped
+  # statement compose the same scope rather than each stating the rule.
   #
   # ONE DAY OF SLACK ON THE WINDOW, because the bound is a UTC instant and the day it is protecting is
   # the OWNER's: no timezone on earth is more than 14 hours from UTC, so a day is enough to keep an
   # entry that belongs in the first period from being filtered out before it can be re-zoned.
   def query_spending
     scope = Entry.expenses.merge(Entry.draining(category))
-    scope = scope.where(item_id: rule.item_id) if rule.item_id.present?
+    scope = if rule.item_id.present?
+              scope.where(item_id: rule.item_id)
+            else
+              scope.merge(Entry.on_unruled_items)
+            end
     scope
       .where(entries: { date: (window_start - 1).beginning_of_day.. })
       .pluck(CategoryLedger::ENTRY_LOCAL_DAY, :amount)

@@ -40,6 +40,14 @@ RSpec.describe ClaimCalculator, type: :model do
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
+  # A $150-a-period goal on a category of its OWN, born on the moment given. A category may carry only
+  # one rule whose lane is the whole of it (`Budget#category_may_hold_one_item_less_rule`), so two
+  # birth dates need two categories.
+  def goal_born_on(name, moment)
+    goal = create(:category, :expense, user: user, name: name, funded_since: Date.new(2026, 1, 1), target_amount: 1_200)
+    create(:budget, :per_period_rate, category: goal, amount: 150, created_at: moment)
+  end
+
   # ===========================================================================================
   # §3.1 — the rate rule. `claim = max(0, rate + Σ adjustments this period − spent_this_period)`
   # ===========================================================================================
@@ -293,6 +301,39 @@ RSpec.describe ClaimCalculator, type: :model do
     # category are not a payment of the insurance premium, and the pair is asserted both ways so the
     # filter cannot be satisfied by a rule that counts nothing at all.
     describe "the lane a fulfilment has to arrive on" do
+      # ** THE PARTITION (§3.1/§3.2, ruling of 2026-09-03). ** A catch-all rule beside this
+      # item-backed one: the catch-all's lane is the category MINUS the items that carry a rule of
+      # their own, so paying the premium lowers the premium's fund and NOTHING else. Without the
+      # partition the two lanes overlap, one payment lowers two claims, and `free` rises when a bill
+      # is paid — the shape `claim_ledger_spec` prices in full.
+      it "keeps an item-backed rule's spending out of the catch-all rule's lane", :aggregate_failures do
+        catch_all = beside_the_premium
+        spend(300, on: Date.new(2026, 9, 2), item: premium)
+
+        expect(catch_all.spent_this_period).to eq(0)
+        expect(catch_all.claim).to eq(400)
+      end
+
+      # THE OTHER DIRECTION, and it is what keeps the partition from being a filter that excludes
+      # everything: an item nobody has written a rule for is the catch-all's business.
+      it "still counts an entry on an item that carries no rule of its own", :aggregate_failures do
+        catch_all = beside_the_premium
+        spend(150, on: Date.new(2026, 9, 2), item: create(:item, category: groceries, name: "Bread"))
+
+        expect(catch_all.spent_this_period).to eq(150)
+        expect(catch_all.claim).to eq(250)
+      end
+
+      # `rule` is referenced so the premium's own dated rule exists — it is what makes the Premium
+      # item a ruled one and therefore what the partition has to exclude.
+      def beside_the_premium
+        rule
+        described_class.new(
+          create(:budget, :per_period_rate, category: groceries, amount: 400),
+          today: Date.new(2026, 9, 3)
+        )
+      end
+
       it "ignores spending on another item of the same category" do
         spend(600, on: Date.new(2026, 6, 5), item: create(:item, category: groceries, name: "Bread"))
 
@@ -332,6 +373,42 @@ RSpec.describe ClaimCalculator, type: :model do
 
       it "still lands the whole target on the day it is due" do
         expect(calc(Date.new(2026, 6, 1)).built_up).to eq(600)
+      end
+    end
+
+    # ** AN ITEM-LESS BILL'S CYCLE ROLLS ON THE CATEGORY'S SPENDING, NOT ON THE CALENDAR (review of
+    # 2026-09-03), and this is the divergence from `BudgetCalculator#due_date` stated as a figure. **
+    # That class has no fulfilment signal for a rule with no item, so it assumes the bill was paid on
+    # time and reports Dec 1 here; the computed model reads the category's own spending, finds none,
+    # and says what is true — the bill is overdue and the fund is still holding the whole $600. This
+    # reading is the law going forward; `BudgetCalculator` dies in Task 4.
+    describe "an item-less bill nobody has paid" do
+      let(:rule) do
+        create(
+          :budget,
+          category: groceries,
+          amount: 600,
+          interval_months: 6,
+          anchor_date: Date.new(2026, 6, 1),
+          created_at: born
+        )
+      end
+
+      it "stays at the occurrence it was anchored on", :aggregate_failures do
+        september = calc(Date.new(2026, 9, 3))
+
+        expect(september.next_due_on).to eq(Date.new(2026, 6, 1))
+        expect(september.built_up).to eq(600)
+      end
+
+      # THE OTHER DIRECTION: spending on the category IS the fulfilment signal an item-less rule has,
+      # so once the money goes out the cycle rolls and the fund starts again.
+      it "rolls to the next occurrence once the category's own spending settles it", :aggregate_failures do
+        spend(600, on: Date.new(2026, 6, 5))
+        september = calc(Date.new(2026, 9, 3))
+
+        expect(september.next_due_on).to eq(Date.new(2026, 12, 1))
+        expect(september.built_up).to eq(300) # Jul, Aug, Sep at (600 − 0) / 6 a period
       end
     end
 
@@ -501,6 +578,55 @@ RSpec.describe ClaimCalculator, type: :model do
       first = create(:budget, :per_period_rate, category: fresh, amount: 150, created_at: Time.utc(2026, 6, 1, 9, 0))
 
       expect(calc(first, Date.new(2026, 9, 3)).built_up).to eq(600)
+    end
+
+    # ** A RULE BORN MID-PERIOD ACCRUES THAT WHOLE PERIOD. ** The birth date decides which period the
+    # walk OPENS in, and §3.2's "a period's accrual counts in FULL the day the period opens" then
+    # applies to it like any other. The pair varies only the day within one month — a rule written on
+    # the 1st and one written on the 31st hold the same $150 on the 31st — because pro-rating would be
+    # a second, finer clock beside the period grid and would make the figure depend on the hour the
+    # user clicked Save.
+    it "accrues the whole period it was written into, whichever day that was", :aggregate_failures do
+      opened = goal_born_on("Opened", Time.utc(2026, 8, 1, 9, 0))
+      closed = goal_born_on("Closed", Time.utc(2026, 8, 31, 21, 0))
+
+      expect(calc(opened, Date.new(2026, 8, 31)).built_up).to eq(150)
+      expect(calc(closed, Date.new(2026, 8, 31)).built_up).to eq(150)
+    end
+
+    # ** A RULE ASKED ABOUT A DAY BEFORE IT EXISTED HOLDS NOTHING. ** The walk visits no periods at
+    # all, and zero is the answer rather than the current period invented in its place — which is what
+    # the old `visited.presence || [current_period]` fallback did, accruing a period the rule was not
+    # alive for.
+    it "holds nothing on a day before it was written", :aggregate_failures do
+      backdated = calc(goal_born_on("Later", Time.utc(2026, 9, 1, 9, 0)), Date.new(2026, 8, 15))
+
+      expect(backdated.built_up).to eq(0)
+      expect(backdated.claim).to eq(0)
+      expect(backdated.planned_this_period).to eq(0)
+    end
+  end
+
+  # ===========================================================================================
+  # ** THE BIRTH DAY IS THE OWNER'S, NOT UTC'S — ruling 1's timezone arm. ** 15:00 UTC on Aug 31 is
+  # midnight on Sep 1 in Tokyo, so one instant opens the walk in two different months. A TARGET rule,
+  # so the walk actually runs: two periods against one, by Sep 3.
+  # ===========================================================================================
+  describe "a rule written at 15:00 UTC on the last day of August" do
+    def written_then = goal_born_on("Trip", Time.utc(2026, 8, 31, 15, 0))
+
+    it "opens the walk in August for an owner reading the clock in UTC" do
+      expect(described_class.new(written_then, today: Date.new(2026, 9, 3)).built_up).to eq(300)
+    end
+
+    context "when the owner lives in Tokyo" do
+      let(:user) do
+        create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1), timezone: "Asia/Tokyo")
+      end
+
+      it "opens it in September, the day the owner was living in" do
+        expect(described_class.new(written_then, today: Date.new(2026, 9, 3)).built_up).to eq(150)
+      end
     end
   end
 

@@ -50,7 +50,13 @@ so readers that guard against the shape (`SuggestionEngine#attributable_rate_rul
 claim = max(0, rate − spent_this_period)
 ```
 Overspending drives the claim to 0 and the excess reduces free directly — the category bar shows
-"over". At the period boundary the claim resets to `rate`. Nothing carries. (Roll-over, later, is
+"over". At the period boundary the claim resets to `rate`. Nothing carries.
+
+**`spent_this_period` is the category's spending MINUS the entries on items that carry their own
+rule** (ruling, 2026-09-03; the lane partition — see §3.2). The lanes a category's rules read have to
+PARTITION its spending, because the category's claim is their SUM: with the catch-all lane containing
+the item-backed lanes, one $300 payment lowered two claims, Σ claims fell twice while the user's money
+fell once, and `free` ROSE by $300 for having paid a bill. One spelling: `Entry.on_unruled_items`. (Roll-over, later, is
 the cumulative form Henry named: `max(0, periods_since_start × rate − Σ spent_since_start)`.)
 
 ### 3.2 Dated / interval rule ("$5,000 every 2 years, next due …") — accrues toward the target
@@ -66,8 +72,14 @@ planned_accrual(this period) = (target − built_up_before_this_period) / period
 - Once `built_up == target` the claim stops growing; free stops being reduced; the money sits as a
   $5,000 label on checking until the expense happens.
 - **Fulfilment** = an expense on the rule's item (or, for an item-less dated rule, on the
-  category) — the claim drops by the amount spent, and accrual restarts toward the next due date.
+  category MINUS the items that carry their own rule — the §3.1 partition) — the claim drops by the
+  amount spent, and accrual restarts toward the next due date.
   A fulfilment larger than the claim spills into free (the category shows "over").
+- **An item-less dated rule's cycle rolls on the category's spending, never on the calendar**
+  (ruling, 2026-09-03). The old `BudgetCalculator` had no fulfilment signal without an item and
+  assumed every bill was paid on time; the computed model reads the category's own lane, so an
+  occurrence whose money was never spent stays where it was anchored and the row reads overdue
+  rather than silently re-aiming six months out.
 - A dateless target (the old savings goal) is the same formula with no due date: it accrues by
   its rate if it has one, and otherwise only by positive adjustments (§3.3). **"No rate" is spelled
   as an amount of ZERO** (ruling, 2026-09-03; Task 1): every claim comes from a rule, so a goal fed
@@ -80,6 +92,10 @@ planned_accrual(this period) = (target − built_up_before_this_period) / period
   `funded_since` is stamped by a category's FIRST rule, so for that rule the two dates coincide and
   nothing changes; for a rule added later they do not, and walking from the category's date would
   report a fund as already built up the moment it was saved. A rule cannot accrue before it existed.
+  The birth day is read in the OWNER's zone, and a rule born mid-period accrues that WHOLE period —
+  the start date only decides which period the walk opens in, and "counts in full the day the period
+  opens" then applies to it like any other. A rule asked about a day before it was written walks no
+  periods at all and holds nothing.
 - **The accrual sum and the spending are measured over the SAME span.** Read literally — the accrual
   summed since `funded_since`, the spending only since the last fulfilment — a rule paid twice reads
   FULL the day after it was emptied. Subtracting each period's spending as the walk passes through it

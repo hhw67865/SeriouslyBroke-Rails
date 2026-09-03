@@ -51,6 +51,28 @@ class Entry < ApplicationRecord
             .where("#{CategoryLedger::ENTRY_CATEGORY_ID} = :id", id: category.id)
         }
 
+  # ** THE CATCH-ALL LANE (computed-claims spec §3.1/§3.2, ruling of 2026-09-03), AND THE ONE PLACE
+  # THE PARTITION IS SPELLED. ** A category's claim is the SUM of its rules' claims, so the lanes
+  # those rules read have to be a PARTITION of the category's spending rather than a set of
+  # overlapping views of it. An item-backed rule owns its item's spending exclusively; the category's
+  # one catch-all rule owns everything else.
+  #
+  # ** WHAT IT COSTS TO LEAVE OUT, MEASURED ON THE DEMO'S OWN Pet Care. ** A $200 catch-all rate rule
+  # beside a $600 vet bill on the Vet item, and a $300 payment of that bill: the payment lowered the
+  # bill's built-up by $300 AND the rate rule's claim by $300, so Σ claims fell by $600 while the
+  # user's total money fell by $300 — and `free`, which is `total − Σ claims`, ROSE by $300. Paying a
+  # bill made the app say there was more money to spend.
+  #
+  # A SUBQUERY OVER `budgets`, not a join: `entries.item_id` is NOT NULL and the inner
+  # `where.not(item_id: nil)` keeps a NULL out of the `NOT IN` list, which is the one shape that
+  # would silently match nothing. It is not scoped to a category because it does not need to be — a
+  # rule may only name an item OF the category it funds (`Budget#item_must_belong_to_category`), so
+  # an item that carries a rule carries its OWN category's rule.
+  #
+  # BOTH READERS COMPOSE IT: `ClaimCalculator`'s self-query for one rule and `ClaimLedger`'s grouped
+  # statement for a whole user, which is why it is a scope here rather than a clause in either.
+  scope :on_unruled_items, -> { where.not(item_id: Budget.where.not(item_id: nil).select(:item_id)) }
+
   # Define searchable fields using the DSL
   searchable :description, label: "Description"
   searchable :date, type: :date, label: "Date"

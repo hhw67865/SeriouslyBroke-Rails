@@ -144,16 +144,22 @@ class ClaimLedger
     end
   end
 
-  # STATEMENT 2 — the category lanes, for the rules that name no item. The WHERE and the GROUP BY are
+  # STATEMENT 2 — the catch-all lanes, for the rules that name no item. The WHERE and the GROUP BY are
   # the same expression, `CategoryLedger#grouped_entries`' own discipline: a row can only be counted
   # for the category the funding rule itself assigns it to.
+  #
+  # `Entry.on_unruled_items` IS THE PARTITION (§3.1/§3.2, ruling of 2026-09-03) and it is the SAME
+  # scope `ClaimCalculator#query_spending` composes for one rule — one spelling, because a batched
+  # lane and an unbatched one that disagreed about which entries a catch-all owns would put Home and
+  # the category page on two different figures. `claim_ledger_spec` pins the two against each other.
   def category_spending
     @category_spending ||= begin
       ids = rules.reject { |rule| rule.item_id.present? }.filter_map(&:category_id)
       if ids.empty?
         {}
       else
-        draining.where("#{CategoryLedger::ENTRY_CATEGORY_ID} IN (:ids)", ids: ids)
+        draining.merge(Entry.on_unruled_items)
+          .where("#{CategoryLedger::ENTRY_CATEGORY_ID} IN (:ids)", ids: ids)
           .pluck(CategoryLedger::ENTRY_CATEGORY_ID, CategoryLedger::ENTRY_LOCAL_DAY, :amount).group_by(&:first)
       end
     end

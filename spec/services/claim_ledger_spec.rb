@@ -166,6 +166,82 @@ RSpec.describe ClaimLedger, type: :model do
     end
   end
 
+  # ===========================================================================================
+  # ** THE LANE PARTITION, PRICED (§3.1/§3.2, ruling of 2026-09-03). ** The reviewer's scenario, in
+  # money: Groceries carries a $400 catch-all rate rule AND a $600 bill on its own Vet item, and $300
+  # of that bill is paid.
+  #
+  #   correct — the payment lowers the BILL's built-up by $300 and nothing else. Σ claims falls $300,
+  #             total money falls $300, and the two move together, so `total − Σ claims` is unchanged.
+  #   the bug — the catch-all's lane CONTAINED the Vet item, so the payment lowered both claims:
+  #             Σ claims fell twice while the money fell once, and paying a bill made the app report
+  #             MORE free money than before it was paid.
+  #
+  # The walk, so the literals are checkable: the bill is due Dec 1, the category has held since Jan 1
+  # and the rule was born with it, so the catch-up formula puts $50 a period into it —
+  # Jan (600−0)/12 = 50, Feb (600−50)/11 = 50, … eight periods to $400 by August, and September's
+  # (600−400)/4 = 50 takes it to $450 before any payment.
+  # ===========================================================================================
+  describe "a catch-all rule beside an item-backed one" do
+    # THE BILL EXISTS IN EVERY EXAMPLE HERE, including the two that never name it: `free` is a figure
+    # about the WHOLE rule set, so a fixture that planted the bill lazily would price a different
+    # user in the examples that only read the total.
+    before { vet_rule }
+
+    # $300 of the vet bill, paid on Sep 2 — the same day and the same period as the fixture's $250 of
+    # ordinary groceries, so nothing here is separated by the calendar.
+    def pay_the_vet_bill
+      create(:entry, item: vet_item, amount: 300, date: Date.new(2026, 9, 2))
+    end
+
+    def vet_item
+      @vet_item ||= create(:item, category: groceries, name: "Vet")
+    end
+
+    def vet_rule
+      @vet_rule ||= create(:budget, category: groceries, item: vet_item, amount: 600, interval_months: 12, anchor_date: Date.new(2026, 12, 1), created_at: born)
+    end
+
+    it "builds the bill up on its own item and leaves the catch-all rule alone", :aggregate_failures do
+      expect(ledger.calculator_for(vet_rule).built_up).to eq(450)
+      expect(ledger.claim_of(groceries_rule)).to eq(150) # $400 rate less the fixture's $250
+      expect(ledger.total_claims).to eq(1_800) # 150 + 1,200 Vacation + 450
+    end
+
+    # ** THE PAYMENT, PRICED. ** Only the bill's fund moves, and Σ claims and total money move
+    # together — which is the whole of what the partition buys.
+    it "lowers only the item rule's built-up when the bill is paid", :aggregate_failures do
+      pay_the_vet_bill
+
+      expect(ledger.calculator_for(vet_rule).built_up).to eq(150) # 450 − 300
+      expect(ledger.claim_of(groceries_rule)).to eq(150) # unchanged: the Vet item is not its lane
+      expect(ledger.total_claims).to eq(1_500) # 1,800 − 300
+      expect(ledger.total_money).to eq(2_450) # 2,750 − 300
+    end
+
+    # ** THE DISCRIMINATING HALF. ** Here the CLAIMS bind rather than the pot, so `free` is
+    # `total − Σ claims`: both fell by $300, so it does not move. Under the double-counted lane Σ
+    # claims fell by $450 against $300 of money and this read $1,100 — $150 MORE free for having paid
+    # a bill.
+    it "leaves free where it was, because the money and the claims fell together", :aggregate_failures do
+      expect(ledger.free).to eq(950) # min(1,750 pot, 2,750 − 1,800)
+      pay_the_vet_bill
+
+      expect(described_class.new(user, today: today).free).to eq(950) # min(1,450 pot, 2,450 − 1,500)
+    end
+
+    # ** THE POT-BOUND ARM, which is the ordinary shape: with another $1,000 parked in Ally the pot is
+    # the binding term, and paying $300 of a bill leaves exactly $300 less to spend out of checking. **
+    it "falls by exactly the payment when the pot is the binding term", :aggregate_failures do
+      create(:account_movement, from_pool: user.default_account, to_pool: ally, amount: 1_000, date: Time.utc(2026, 1, 7, 12))
+
+      expect(ledger.free).to eq(750) # min(750 pot, 2,750 − 1,800)
+      pay_the_vet_bill
+
+      expect(described_class.new(user, today: today).free).to eq(450) # min(450 pot, 2,450 − 1,500)
+    end
+  end
+
   # ** THREE STATEMENTS FOR A WHOLE USER, HOWEVER MANY RULES THERE ARE (the plan's interface). **
   # Counted per TABLE rather than as a total, because the rule load and its preloads are not what this
   # pins: what is pinned is that the two spending lanes and the delta table are read ONCE each, since
