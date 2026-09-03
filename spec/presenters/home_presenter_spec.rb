@@ -839,6 +839,23 @@ RSpec.describe HomePresenter do
 
         expect(presenter.free_to_spend).to eq(1_600)
         expect(presenter).to be_rest_in_checking
+        expect(presenter).to be_anything_set_aside_or_spoken_for
+      end
+
+      # ** IT SAYS A REST EXISTS AND NOTHING ABOUT WHAT IT IS (re-review round 2). ** `rest = Σ
+      # holdings + remaining_plan − moves out − swept` was read as a proof that a positive rest is
+      # covered by the two nouns, on the strength of both subtrahends being "≥ 0". `moves out` IS A
+      # NET: $200 walking out of an Ally that is $200 in the red raises the pot to $1,200 and leaves
+      # `available` at $1,000, so the rest is $200 with nothing held and nothing asked for. The arm
+      # asks BOTH predicates now, and this is the fixture that separates them.
+      it "is true for a rest that is neither set aside nor spoken for", :aggregate_failures do
+        ally = create(:pool, :account, user: user, name: "Ally")
+        income(1_000)
+        create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
+
+        expect([presenter.in_checking, presenter.available, presenter.free_to_spend]).to eq([1_200, 1_000, 1_000])
+        expect(presenter).to be_rest_in_checking
+        expect(presenter).not_to be_anything_set_aside_or_spoken_for
       end
 
       # ** L-4'S IDENTITY CORNER. ** The fresh signup: money in, nothing funded, nothing asked for, so
@@ -953,6 +970,11 @@ RSpec.describe HomePresenter do
     # the disjunction short-circuits before the ledger is opened. THIS fixture is the other side — a
     # holder with $400 in it and no rule asking for anything — so the card has to ask what the
     # category is holding.
+    #
+    # WHICH IS NOW THE COMMON PATH AS WELL AS THE NEGATIVE ONE (re-review round 2): the "the rest…"
+    # arm asks the same predicate, so a rendered Home reaches it in every state but the one where a
+    # rule is still asking. Both counts below are what that costs; neither moved when the arm gained
+    # the gate, because the ledger was already shared.
     #
     # SIX, AND EACH ONE IS NAMED. Two are the pot's, exactly as above (`AccountLedger#entry_side`'s
     # income and expense sums). The other four are `CategoryLedger`'s whole term set, computed on the

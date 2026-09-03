@@ -257,8 +257,20 @@ signs × causes, is the comment above `HomePresenter#rest_in_checking?`):
 | plan outruns the money, and neither noun is true of the account | the same, false (§10.7's third flag) | "You have spent past what you had. Anything you spend now takes you further under." |
 | free negative, plan does not outrun (the cap bound on a negative pot) | `#money_parked_elsewhere?` | "The money that isn't spoken for is sitting outside checking — nothing here is free until some of it moves in." |
 | the same, with no other account holding anything | the same, false | "Nothing here is free until money comes in." — true only here: with nothing elsewhere, a negative pot IS the whole of the user's cash |
-| free fine, some of the pot claimed | `#rest_in_checking?` | "the rest is set aside or spoken for." |
+| free fine, and there is a rest | `#rest_in_checking?` + `#anything_set_aside_or_spoken_for?` | "the rest is set aside or spoken for." |
+| the same, with neither noun true of the account | the second, false | "the rest isn't set aside or spoken for." |
 | free fine, none of it claimed | `#free_cap_bound?` + `#money_parked_elsewhere?` | "none of it is set aside or spoken for" — with "— more is parked in other accounts" only where a second account actually holds money |
+
+**"The rest" was the last arm gated on arithmetic, and it broke the same way** (re-review round 2).
+The claim was that a positive `rest` can never exceed what is set aside plus what is spoken for,
+because `rest` expands to `Σ holdings + remaining_plan − moves out − swept` with both subtrahends
+"≥ 0". `moves out` is a NET and goes negative: money walking INTO main raises the pot and leaves
+`available` alone. $1,000 of income plus $200 walked out of an Ally that is $200 in the red is a $200
+rest with nothing held and nothing asked for — and the card called it set aside. The arm asks
+`#anything_set_aside_or_spoken_for?` as well now, and the corner where that is false says "the rest
+isn't set aside or spoken for": the rest is there, it is not earmarked, and the card does not guess
+what it is. (By elimination it is money walked in from another account; the accounts line and the
+strip are where that account is named.)
 
 Two smaller corners closed with it. **The pure overspend** (§10.7's third flag) is the second row:
 nothing set aside, nothing spoken for, simply spent past zero. **The fresh signup** is the last: free

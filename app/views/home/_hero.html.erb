@@ -72,8 +72,10 @@
         not outrun (the cap bound      other account holding anything — in which case a negative pot
         on a negative pot)             IS the whole of the user's cash and the plain sentence is the
                                        true one. Its overdraft is already stated one line up.
-        free is fine, some of the    → "the rest is set aside or spoken for".
-        pot is claimed
+        free is fine and there IS a  → "the rest is set aside or spoken for", or — where neither noun
+        rest                           is true of the account — "the rest isn't set aside or spoken
+                                       for". A rest can be money walked in from another account,
+                                       which is why THIS arm needs a cause too (round 2).
         free is fine, none of it is  → "none of it is set aside or spoken for", and the parked
         claimed                        clause only where a second account actually holds money.
                                        This is L-4's fresh signup, whose two figures are the same
@@ -101,7 +103,15 @@
         Nothing here is free until money comes in.
       <% end %>
     <% elsif presenter.rest_in_checking? %>
-      the rest is set aside or spoken for.
+      <%# THE REST IS NOT SELF-EXPLAINING (re-review round 2). `pot − free` being positive says a rest
+          EXISTS and never what it is: money walked in from another account raises the pot without
+          touching `available`, so an Ally $200 in the red that walked $200 into checking leaves a
+          $200 rest that is neither set aside nor spoken for. The second gate is the cause. %>
+      <% if presenter.anything_set_aside_or_spoken_for? %>
+        the rest is set aside or spoken for.
+      <% else %>
+        the rest isn't set aside or spoken for.
+      <% end %>
     <% else %>
       none of it is set aside or spoken for<% if presenter.free_cap_bound? && presenter.money_parked_elsewhere? %> —
       more is parked in other accounts<% end %>.

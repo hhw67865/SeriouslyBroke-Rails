@@ -207,6 +207,28 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
   end
 
+  # ** A REST IS NOT SELF-EXPLAINING EITHER (re-review round 2), and this is the fixture that says so.
+  # ** The suite's own overdrawn-Ally shape: $1,000 of income and $200 walked out of an Ally that is
+  # $200 in the red. Money walking INTO main raises the pot and leaves `available` alone, so the pot
+  # is $1,200 against $1,000 free — a $200 rest with no holder holding anything and no rule asking for
+  # anything. The card said "the rest is set aside or spoken for" about it, which is M-1's own failure
+  # on the last arm that had been gated on arithmetic rather than on a cause.
+  #
+  # BOTH SENTENCES ASSERTED, because the two differ by one word and a pin on the new one alone would
+  # pass against a card printing both.
+  it "does not call a rest set aside when it walked in from another account", :aggregate_failures do
+    ally = create(:pool, :account, user: user, name: "Ally")
+    deposit(1_000)
+    create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: Date.current, kind: :transfer)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking]", text: "$1,200.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "$1,000.00")
+    expect(page).to have_css("[data-free-subline]", text: "the rest isn't set aside or spoken for")
+    expect(page).to have_no_css("[data-free-subline]", text: "the rest is set aside or spoken for")
+  end
+
   # ** L-4'S IDENTITY CORNER (FINAL review). ** The fresh signup: money in, nothing funded, nothing
   # asked for — so free IS the pot, to the cent, and the card spent this whole plan telling that user
   # "the rest is set aside or spoken for" about a rest of $0.00. Asserted both ways round, because

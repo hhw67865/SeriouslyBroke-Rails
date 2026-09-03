@@ -531,9 +531,11 @@ class HomePresenter
   #                                                                   itself is already stated on the
   #                                                                   In Checking line above.
   #
-  #   free ≥ 0, some of the   —                                   → "the rest is set aside or spoken
-  #    pot is claimed            (#rest_in_checking?)                 for."
-  #    (pot > unspoken_for)
+  #   free ≥ 0, there IS a    anything set aside or spoken for    → "the rest is set aside or spoken
+  #    rest                      (#rest_in_checking? +                for."
+  #    (pot > unspoken_for)       #anything_set_aside_or_spoken_for?)
+  #                           neither is true of the account      → "the rest isn't set aside or
+  #                             (the walked-in corner below)         spoken for."
   #
   #   free ≥ 0, none of it    cap bound AND money elsewhere       → "none of it is set aside or spoken
   #    is claimed                (#free_cap_bound? +                  for — more is parked in other
@@ -541,23 +543,45 @@ class HomePresenter
   #                           otherwise (L-4's fresh signup, and  → "none of it is set aside or spoken
   #                             the single-account cap corner)       for."
   #
-  # WHY "the rest" IS SAFE WHEREVER IT FIRES AND WAS NOT BEFORE. `rest = pot − free`, which is
-  # positive exactly when `pot > unspoken_for`, and expanding it with the identity above gives
-  # `Σ holdings + remaining_plan − moves out − swept`; both subtrahends are ≥ 0, so a positive rest
-  # is never larger than what is genuinely set aside plus what is genuinely spoken for. THE OTHER
-  # DIRECTION IS WHAT WAS BROKEN: `rest` is ZERO in every cap-bound state, and the card printed "the
-  # rest is set aside or spoken for" over it anyway — describing $0 to L-4's fresh signup, whose free
-  # and pot are the same figure because nothing is funded at all.
+  # ** "the rest" NEEDS THE SAME KIND OF GATE THE OTHER SENTENCES DO, AND AN ARITHMETIC ARGUMENT IS
+  # NOT ONE (re-review round 2). ** This comment carried a proof that a positive `rest` can never be
+  # larger than what is set aside plus what is spoken for: `rest = pot − free` expands, through the
+  # identity above, to `Σ holdings + remaining_plan − moves out − swept`, and both subtrahends are
+  # "≥ 0". THE FIRST OF THEM IS A NET AND GOES NEGATIVE. Money walking INTO main from another account
+  # raises the pot and does not touch `available`, so it lands in `rest` with nothing behind it.
+  #
+  # THE COUNTEREXAMPLE IS THE SUITE'S OWN OVERDRAWN-ALLY SHAPE: $1,000 of income and $200 walked out
+  # of an Ally that is $200 in the red. Pot $1,200, `available` $1,000, no holder holding anything and
+  # no rule asking — and the card said "the rest is set aside or spoken for" about $200 that is
+  # neither. M-1's exact failure mode, on the one arm that had been gated on arithmetic instead of on
+  # a cause.
+  #
+  # SO THE ARM ASKS #anything_set_aside_or_spoken_for? AS WELL, and the corner where that is false
+  # gets the sentence that survives: the rest is there, and it is not earmarked. (WHAT it is, in that
+  # corner, is money net-walked in from another account — with nothing set aside, nothing spoken for
+  # and `swept ≥ 0`, the identity leaves no other term that can carry a positive rest — and the
+  # accounts line and the trouble strip below are where that account is named. The card does not say
+  # so itself: naming it would be a THIRD sentence asserting a cause, and this one is established by
+  # elimination rather than by a reader.)
+  #
+  # THE OTHER DIRECTION WAS BROKEN TOO, and is what the "none of it" row is for: `rest` is ZERO in
+  # every cap-bound state, and the card printed "the rest is set aside or spoken for" over it anyway —
+  # describing $0.00 to L-4's fresh signup, whose free and pot are the same figure because nothing is
+  # funded at all.
   #
   # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures: a card
   # re-deriving "is there money in another account" from `#other_accounts_total` would be free to
   # disagree with the accounts line that prints it.
 
-  # IS ANY OF THE POT CLAIMED — the gate on "the rest is set aside or spoken for", and the reason it
-  # is a predicate is `#free_cap_bound?`'s: `in_checking > free_to_spend` is the `min`'s own condition
-  # read backwards, and a view spelling it could print a sentence about a rest the figures did not
-  # leave. NOT the negation of `#free_cap_bound?` — at exact equality both are false, which is the
+  # IS THERE A REST AT ALL — the gate on BOTH "the rest…" sentences, and the reason it is a predicate
+  # is `#free_cap_bound?`'s: `in_checking > free_to_spend` is the `min`'s own condition read
+  # backwards, and a view spelling it could print a sentence about a rest the figures did not leave.
+  # NOT the negation of `#free_cap_bound?` — at exact equality both are false, which is the
   # fresh-signup corner and gets its own sentence.
+  #
+  # IT SAYS THE REST EXISTS AND NOTHING ABOUT WHAT IT IS. `#anything_set_aside_or_spoken_for?` is the
+  # second half of that arm for the reason written in the table above: a rest can be money that walked
+  # in from another account, which is neither of the two nouns.
   def rest_in_checking? = in_checking > free_to_spend
 
   # IS THERE MONEY IN ANOTHER ACCOUNT AT ALL — the cause both "parked" sentences assert, and the
