@@ -190,6 +190,51 @@ RSpec.describe "Budget page adjustments", type: :system do
     end
   end
 
+  # ── §3.3, WHERE A DELTA MAY BE DATED ──────────────────────────────────────────────────────────
+
+  # ** THE PANEL SAYS WHERE THE RULE COUNTS, AND THE FIELD MEETS THE BOUND BEFORE THE 422 DOES
+  # (fix round 2, NEW-5). ** `AdjustmentForm` refuses a date outside `ClaimCalculator#countable_span`
+  # and that stays the law — but a user who learns the bound only from a refusal is typing into a
+  # field that never said what it would take, and the panel's hint used to state the opposite of the
+  # law outright ("It only changes this period", on a fund whose span reaches back to the day it was
+  # written). Both readings come off the row's own span, so the words and the attributes cannot
+  # disagree with the writer or with each other.
+  #
+  # THE TWO SHAPES HAVE DIFFERENT SPANS BY CONSTRUCTION: the fund was written last month, so its
+  # walk opens at the first of that month; the envelope carries nothing from last period and opens
+  # at the first of this one. A hint or a `min` derived from the current period alone would answer
+  # the same for both and fail one half.
+  describe "where a delta may be dated" do
+    before do
+      create(
+        :budget,
+        :per_period_rate,
+        category: holder("Vacation", priority: 1, target: 1_200),
+        amount: 150,
+        created_at: 1.month.ago
+      )
+      rate(holder("Groceries", priority: 2), 400)
+      visit budget_page_path
+    end
+
+    def date_field(name) = find("[data-adjust='#{name}'] input[name='date']")
+
+    it "words the hint per shape and bounds the date field by the same span", :aggregate_failures do
+      opened_on = 1.month.ago.to_date.beginning_of_month
+
+      open_adjust("Vacation")
+      expect(find("[data-adjust='Vacation'] [data-adjust-hint]"))
+        .to have_content("Counts from #{opened_on.strftime("%b %-d")} to today")
+      expect(date_field("Vacation")[:min]).to eq(opened_on.to_s)
+      expect(date_field("Vacation")[:max]).to eq(Date.current.to_s)
+
+      open_adjust("Groceries")
+      expect(find("[data-adjust='Groceries'] [data-adjust-hint]")).to have_content("This period only, up to today")
+      expect(date_field("Groceries")[:min]).to eq(Date.current.beginning_of_month.to_s)
+      expect(date_field("Groceries")[:max]).to eq(Date.current.to_s)
+    end
+  end
+
   # ── §3.5, THE CADENCE OFFER ───────────────────────────────────────────────────────────────────
 
   # $400 a period on a monthly grid is $4,800 a year; on a fortnightly one the same digits are

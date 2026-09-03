@@ -425,6 +425,22 @@ RSpec.describe BudgetPagePresenter do
       expect(after).not_to be_skippable
     end
 
+    # ** THE SPAN RIDES ON THE ROW, OFF THE PAGE'S ONE LEDGER (fix round 2, NEW-5). ** The panel's
+    # date field carries `min`/`max` and its hint says where the rule counts, and both must be the
+    # range `AdjustmentForm` refuses a date outside of — a second derivation in the view would be
+    # free to offer a bound the writer then rejects, which is a field that lies about what it takes.
+    #
+    # BOTH SHAPES ON ONE PRESENTER, because the two spans differ by exactly what the hint is about:
+    # the fund reaches back to the open of the period it was born in (Jan 6 sits in Dec 26 – Jan 8),
+    # the envelope carries nothing from last period and opens today.
+    it "carries the span a delta may be dated in, per shape", :aggregate_failures do
+      goal_rule
+      rate(holder("Groceries", priority: 2), 400)
+
+      expect(row_for("Vacation").countable_span).to eq(Date.new(2025, 12, 26)..today)
+      expect(row_for("Groceries").countable_span).to eq(today..today)
+    end
+
     # A RATE RULE'S BUILT-UP IS ZERO AND ITS CLAIM IS THE ENVELOPE — the pair, on one row, because
     # the row picks which of the two to print off `#rate?` and a shape read the wrong way would
     # print "$0.00 built up" over $400.

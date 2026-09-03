@@ -688,6 +688,44 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(described_class.new(rule, today: today).countable_span).to eq(Date.new(2026, 2, 1)..today)
       expect(described_class.new(rule, today: today).countable_span).not_to cover(Date.new(2026, 1, 31))
     end
+
+    # ** A RULE THAT HAS NOT STARTED COUNTING HAS AN EMPTY SPAN (fix round 2, NEW-4). ** The walk
+    # visits nothing for a rule asked about a day before it was written — which is what every
+    # backdated `today:` on a fresh rule is — and `#window_start` answers `current_period.first`
+    # there because `ClaimLedger` has to be told SOME day to query from. Reading that fallback as a
+    # span would invent the very period the walk itself stopped inventing: "pick a date between
+    # Aug 1 and Aug 15" for a rule that counts nothing dated anywhere. Empty is the honest answer
+    # and `AdjustmentForm` turns it into a sentence of its own.
+    it "is empty for a rule asked about a day before it was written", :aggregate_failures do
+      span = described_class.new(goal_born_on("Later", Time.utc(2026, 9, 1, 9, 0)), today: Date.new(2026, 8, 15)).countable_span
+
+      expect(span.none?).to be(true)
+      expect(span).not_to cover(Date.new(2026, 8, 15))
+      expect(span).not_to cover(Date.new(2026, 8, 1))
+    end
+
+    # ** THE SPAN CANNOT OUTRUN THE WALK (fix round 2, NEW-2). ** `PERIOD_WALK_LIMIT` stops the walk
+    # at 520 periods, which on the densest cadence this app offers is ten YEARS — so a fund funded
+    # in 2010 accrues from Jan 2010 to Dec 2019 and the walk never reaches today at all. A span
+    # closed at `today` would accept a row dated 2026 that `#adjustments_within` sums into none of
+    # the periods visited: written, counted nowhere, and invisible in the row's list, which is
+    # exactly the state the span exists to forbid.
+    #
+    # BY HAND: the 520th period opens 3,633 days after Jan 1 2010 (519 strides of seven) and closes
+    # six days later — Dec 13 to Dec 19, 2019.
+    describe "a fund on a weekly grid that has been building since 2010" do
+      let(:user) { create(:user, period_cadence: :weekly, period_anchor_date: Date.new(2010, 1, 1)) }
+
+      it "ends where the truncated walk stopped rather than at today", :aggregate_failures do
+        ark = create(:category, :expense, user: user, name: "Ark", funded_since: Date.new(2010, 1, 1), target_amount: 100_000)
+        rule = create(:budget, :per_period_rate, category: ark, amount: 5, created_at: Time.utc(2010, 1, 1, 9, 0))
+
+        span = described_class.new(rule, today: today).countable_span
+
+        expect(span).to eq(Date.new(2010, 1, 1)..Date.new(2019, 12, 19))
+        expect(span).not_to cover(today)
+      end
+    end
   end
 
   # ===========================================================================================

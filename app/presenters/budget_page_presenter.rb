@@ -31,8 +31,22 @@ class BudgetPagePresenter
   # `adjustments` is THIS PERIOD's rows in date order, which is what the row lists and what the
   # remove button deletes. The claim already counts them; they are listed so the figure above them
   # is explicable rather than merely asserted.
+  #
+  # `countable_span` IS WHERE THE RULE COUNTS (fix round 2, NEW-5) — `ClaimCalculator#countable_span`
+  # verbatim, and the panel reads it twice: the hint says it in words and the date field's
+  # `min`/`max` enforce it before the user can submit. `AdjustmentForm` refuses a date outside the
+  # same range at 422 and that stays the law; this is the field agreeing with it rather than a
+  # second derivation free to offer a bound the writer rejects.
   Rule = Data.define(
-    :budget, :due_on, :shape, :claim, :built_up, :planned_this_period, :accrued_this_period, :adjustments
+    :budget,
+    :due_on,
+    :shape,
+    :claim,
+    :built_up,
+    :planned_this_period,
+    :accrued_this_period,
+    :countable_span,
+    :adjustments
   ) do
     def anchored? = due_on.present?
 
@@ -338,6 +352,7 @@ class BudgetPagePresenter
       built_up: calculator.built_up,
       planned_this_period: calculator.planned_this_period,
       accrued_this_period: calculator.accrued_this_period,
+      countable_span: calculator.countable_span,
       adjustments: adjustments_this_period.fetch(budget.id, [])
     )
   end

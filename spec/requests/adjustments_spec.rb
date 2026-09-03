@@ -235,6 +235,20 @@ RSpec.describe "Adjustments", type: :request do
       expect(target_rule.adjustments.first.local_day).to eq(Date.new(2026, 9, 4))
     end
 
+    # ** THE DATE IS THE SERVER'S TOO, EXACTLY AS THE AMOUNT IS (fix round 2, NEW-3). ** The skip
+    # writes −THIS period's accrual, so a hand-built `skip=1` carrying a date is two periods in one
+    # row: August's accrual would fall by September's $150 while September — the period the flash
+    # says was skipped — would not move at all. The panel's skip is a bare button and posts no date;
+    # a date that arrives anyway names a period the figure was never computed from, so it is
+    # ignored. §3.3 states the act as "−planned dated TODAY" and this is that clause.
+    it "ignores a date on the wire and lands on the owner's today", :aggregate_failures do
+      adjust(rule_id: target_rule.id, skip: "1", date: "2026-08-15")
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(target_rule.adjustments.sole.local_day).to eq(Date.new(2026, 9, 4))
+      expect(target_rule.adjustments.sole.amount).to eq(-150)
+    end
+
     # ** A SECOND SKIP MUST NOT BE A RAID WEARING THE SKIP'S WORDS (fix round MED-2). **
     # `planned_this_period` is PRE-adjustment, so −planned on a period already carrying a +$50
     # top-up leaves $50 still accruing — and on a period already skipped it would take another

@@ -48,7 +48,7 @@ class BudgetPageController < ApplicationController
     return offer_scaling(change) if change.offered? && scale_choice.nil?
 
     if change.apply(scale: scale_choice)
-      redirect_to budget_page_path, notice: saved_notice
+      redirect_to budget_page_path, notice: saved_notice(change)
     else
       @presenter = BudgetPagePresenter.new(
         user: User.find(current_user.id),
@@ -119,8 +119,14 @@ class BudgetPageController < ApplicationController
   # The original sentence on the ordinary path, so nothing that already reads for it moves; the
   # scaled path says the second thing that happened, because a user who pressed "Scale them" needs
   # the page to confirm that the amounts moved and not only the period.
-  def saved_notice
-    return "Your period and income are saved — every figure below is re-derived." unless scale_choice
+  #
+  # ** IT BRANCHES ON WHAT `#apply` DID, NEVER ON `scale_choice` (fix round 2, NEW-1). ** The
+  # parameter is the user's ANSWER, and `#apply` acts on it only where the question would have been
+  # asked (`CadenceChange#offered?`) — so a crafted `scale=1` on a first cadence, and a real change
+  # on a user with no per-period rule, each saved the period, rewrote nothing, and were told "your
+  # per-period amounts were scaled to it". `#scaled?` is the write reporting itself.
+  def saved_notice(change)
+    return "Your period and income are saved — every figure below is re-derived." unless change.scaled?
 
     "Your period is saved and your per-period amounts were scaled to it — every figure below is re-derived."
   end

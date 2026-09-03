@@ -105,14 +105,58 @@ RSpec.describe "Budget page declaration", type: :request do
     # `name="scale"` on the same form, so this is the shape a real answer arrives in.
     def answer_scale(params) = patch(budget_page_user_path, params: { user: params, scale: "1" })
 
-    it "saves the first cadence and leaves every amount alone" do
-      rule = create(:budget, :per_period_rate, amount: 400, category: create(:category, :expense, :funded, user: user))
+    def holding_category = create(:category, :expense, :funded, user: user)
+
+    # A RULE THE CADENCE CANNOT CHANGE THE MEANING OF: "$1,200 every 6 months, next due Dec 1" names
+    # an OCCURRENCE, and the catch-up formula re-plans it on whatever grid exists.
+    def dated_bill
+      create(:budget, amount: 1_200, interval_months: 6, anchor_date: Date.new(2026, 12, 1), category: holding_category)
+    end
+
+    # ** AND THE FLASH SAYS ONLY WHAT WAS WRITTEN (fix round 2, NEW-1). ** The sentence used to
+    # branch on the PARAMETER rather than on what `#apply` did, so this same request — the cadence
+    # saved, not one amount touched — told the user "your per-period amounts were scaled to it".
+    # A flash claiming a rewrite that did not happen is worse than no flash: the user has no reason
+    # to check, and the rules they would have checked are the ones the sentence is about.
+    it "saves the first cadence, leaves every amount alone, and does not claim a scaling", :aggregate_failures do
+      rule = create(:budget, :per_period_rate, amount: 400, category: holding_category)
 
       answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
 
       expect(response).to redirect_to(budget_page_path)
       expect(user.reload.period_cadence).to eq("biweekly")
       expect(rule.reload.amount).to eq(400)
+      expect(flash[:notice]).to eq("Your period and income are saved — every figure below is re-derived.")
+    end
+
+    # THE SECOND UNTRUE CASE, and it is a REAL cadence change: monthly to biweekly on a user whose
+    # only rule is a dated bill. `#offered?` is false because there is nothing denominated in
+    # periods to scale — the confirm was never rendered and there was nothing for it to list — so
+    # `#apply` scales nothing and the sentence must not say it did.
+    it "says nothing about scaling on a real change with no per-period rule", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      bill = dated_bill
+
+      answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
+
+      expect(user.reload.period_cadence).to eq("biweekly")
+      expect(bill.reload.amount).to eq(1_200)
+      expect(flash[:notice]).to eq("Your period and income are saved — every figure below is re-derived.")
+    end
+
+    # THE TRUE CASE, on the same route and with the same parameter, so the two sentences are pinned
+    # against each other rather than one of them alone: a real change with a per-period rule to
+    # scale writes $400 × 12 ÷ 26 = $184.62 and says so.
+    it "says the amounts were scaled where they actually were", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      rule = create(:budget, :per_period_rate, amount: 400, category: holding_category)
+
+      answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
+
+      expect(rule.reload.amount).to eq(BigDecimal("184.62"))
+      expect(flash[:notice]).to eq(
+        "Your period is saved and your per-period amounts were scaled to it — every figure below is re-derived."
+      )
     end
   end
 

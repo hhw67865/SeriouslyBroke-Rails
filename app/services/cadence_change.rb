@@ -112,8 +112,20 @@ class CadenceChange
       lines.each { |line| line.rule.update!(amount: line.scaled_amount) } if scaling
     end
 
+    @scaled = scaling && saved
     saved
   end
+
+  # ** DID THE AMOUNTS ACTUALLY MOVE (fix round 2, NEW-1)? ** The flash used to branch on the
+  # PARAMETER, which is the user's ANSWER and not the act: a crafted `scale=1` on a first cadence,
+  # or a real change on a user with no per-period rule, both saved the period, touched nothing, and
+  # said "your per-period amounts were scaled to it". A sentence claiming a rewrite that did not
+  # happen is worse than silence — the user has no reason to go and check the rules it is about.
+  # `#apply` is the only thing that knows, so it is what answers.
+  #
+  # FALSE BEFORE `#apply` HAS RUN, because nothing has been written yet — the same reading a
+  # rolled-back save gets, and for the same reason.
+  def scaled? = @scaled.present?
 
   private
 

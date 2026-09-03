@@ -45,7 +45,24 @@ class AdjustmentForm
     @name = name
     @today = today
     @calculator = rule.claim_calculator(today: today)
-    @adjustment = rule.adjustments.new(amount: amount, date: chosen_date)
+
+    # ** THE CALCULATOR IS READ BEFORE THE ROW IS BUILT, AND THE ORDER IS THE CONSTRAINT (fix round
+    # 2, NEW-6b). ** `#amount` asks the calculator what this period has accrued, and the calculator
+    # answers by mapping `rule.adjustments` — the association `.new` APPENDS the unsaved row to. So
+    # the row this class builds is inside the collection the figure is summed from, and the memo has
+    # to be taken while that collection is still only what the database holds. Two locals rather
+    # than two arguments, so the order is a statement rather than a fact about how Ruby happens to
+    # evaluate an argument list.
+    #
+    # MEASURED: reordering these two statements changes no answer TODAY, because a row built before
+    # its amount is known carries nil and `nil.to_d` is zero. That is an accident of bigdecimal, not
+    # a design — any spelling that knows the amount before the row is appended reads its own $150
+    # back as $0 and writes the zero `Adjustment` refuses. `adjustment_form_spec` pins the invariant
+    # and says the same thing about what the pin can and cannot catch.
+    written_amount = amount
+    written_date = chosen_date
+
+    @adjustment = rule.adjustments.new(amount: written_amount, date: written_date)
   end
 
   def save
@@ -71,7 +88,7 @@ class AdjustmentForm
     adjustment.errors.empty?
   end
 
-  # THREE REFUSALS IN THE ORDER A USER MEETS THEM.
+  # FOUR REFUSALS IN THE ORDER A USER MEETS THEM.
   #
   # THE SKIP IS CHECKED FIRST because its amount is the server's own: "Amount must be other than 0"
   # is the record's honest complaint about a figure the user never typed and could not act on.
@@ -79,15 +96,37 @@ class AdjustmentForm
   # THE SPAN IS CHECKED LAST, AFTER `#valid?`, for two reasons — `valid?` CLEARS the error list, so
   # anything added before it would be wiped, and a date the column could not hold casts to nil,
   # which `#local_day` cannot re-zone. The record's own `presence` refusal gets there first.
+  #
+  # AN EMPTY SPAN GETS ITS OWN SENTENCE AND MUST BEAT `#out_of_reach` (fix round 2, NEW-4): a rule
+  # whose walk has not opened counts nothing dated anywhere, so "pick a date between Sep 1 and
+  # Sep 3" would be a remedy for a refusal no date can lift.
   def add_refusal
     return adjustment.errors.add(:base, nothing_to_skip_sentence) if nothing_to_skip?
     return unless adjustment.valid?
+
+    refusal = date_refusal
+    adjustment.errors.add(:base, refusal) if refusal
+  end
+
+  # THE TWO WAYS A DAY CAN FAIL TO COUNT, and nil for the one way it can. Split out from
+  # `#add_refusal` so that method reads as the ORDER of the checks and this one as the date's own
+  # question; between them they are the same four returns.
+  def date_refusal
+    return not_counting_yet if countable_span.none?
     return if countable_span.cover?(adjustment.local_day)
 
-    adjustment.errors.add(:base, out_of_reach)
+    out_of_reach
   end
 
   def nothing_to_skip_sentence = "#{name} isn't accruing anything this period, so there's nothing to skip."
+
+  # A RULE THE WALK HAS NOT REACHED. `ClaimCalculator#countable_span` is empty exactly when
+  # `#walk_periods` visited nothing — a rule asked about a day before it was written — and
+  # `Range#none?` answers that in one step for either shape, because a non-empty range is truthy at
+  # its first element. Unreachable from the page, whose `today` is `Date.current` and whose rules
+  # cannot be created in the future; it is the honest answer to a hand-built request and to any
+  # later caller that injects a `today:` of its own.
+  def not_counting_yet = "#{name} hasn't started counting yet, so there's nothing to adjust."
 
   # A PERIOD ACCRUING NOTHING HAS NOTHING TO SKIP, and both halves of "nothing" matter: at exactly
   # zero the row would be the zero `Adjustment` refuses, and BELOW zero a −accrued is a POSITIVE
@@ -145,5 +184,15 @@ class AdjustmentForm
   # AN UNPARSEABLE VALUE CASTS TO nil AND IS REFUSED BY THE MODEL, never raised: `date` is
   # `presence`-validated, so garbage arrives as the same 422 every other bad field does — and it
   # arrives BEFORE `#countable_span` is asked to cover a day that does not exist.
-  def chosen_date = @params[:date].presence || Time.current
+  #
+  # ** A SKIP IS ALWAYS TODAY, AND A DATE ON THE WIRE IS IGNORED THERE (fix round 2, NEW-3). ** Its
+  # amount is −`accrued_this_period` — a figure about THIS period and no other — so a date landing
+  # it in a past one would take September's accrual out of August, leaving the period the flash says
+  # was skipped exactly where it was. The panel's skip posts a bare button and no date; the date is
+  # the server's on that door for the same reason the amount is.
+  def chosen_date
+    return Time.current if skip?
+
+    @params[:date].presence || Time.current
+  end
 end

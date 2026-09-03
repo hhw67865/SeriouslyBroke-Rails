@@ -9,12 +9,13 @@
     ONE FORM AND ONE AMOUNT FIELD, WITH THE DIRECTION ON THE BUTTON. Two forms would ask the user to
     read two identical inputs and choose one; a signed field would ask them to type a minus. A
     browser submits only the button that was pressed, so `amount_sign` carries the direction and
-    `AdjustmentsController#amount_for` applies it to the magnitude.
+    `AdjustmentForm#amount` applies it to the magnitude.
 
-    SKIP CARRIES NO FIGURE. It posts `skip=1` and the server computes −planned, because the planned
-    share moves the moment another delta lands and a hidden field rendered before that would skip
-    the wrong amount. Offered only where the period plans something (`Rule#skippable?`) — a fund
-    already at its target plans nothing, and a skip there would be a zero row the model refuses.
+    SKIP CARRIES NO FIGURE AND NO DATE. It posts `skip=1` alone and the server computes
+    −`accrued_this_period` dated today, because the accrual moves the moment another delta lands and
+    a hidden field rendered before that would skip the wrong amount (fix round MED-2/NEW-3). Offered
+    only while the period is still accruing something (`Rule#skippable?`) — a fund at its target, or
+    one already skipped, accrues nothing, and a skip there would be a zero row the model refuses.
 
     `<details>` RATHER THAN A STIMULUS CONTROLLER, the idiom `_suggestions` already uses on this
     page: the whole interaction is "open this", the browser has it, and there is no JavaScript here
@@ -58,10 +59,21 @@
 
         <%# LEFT BLANK ON PURPOSE, and the hint says so. "Today" has exactly one spelling in this
             app — the controller's, read in the owner's zone — and a value rendered here would be a
-            second one, free to disagree with it on a page left open overnight. %>
+            second one, free to disagree with it on a page left open overnight.
+
+            BOUNDED BY THE ROW'S OWN SPAN (fix round 2, NEW-5). `AdjustmentForm` refuses a date the
+            rule's walk cannot count, and that 422 stays the law — a browser's `min`/`max` is not a
+            guard, since nothing stops a hand-built request. What it is is the user meeting the
+            bound before the refusal instead of after it, off the SAME `countable_span` the writer
+            reads, so the field cannot offer a day the door then rejects. %>
         <div>
           <%= label_tag "adjust-date-#{rule.budget.id}", "On", class: "block text-xs text-gray-600 mb-1" %>
-          <%= date_field_tag :date, nil, id: "adjust-date-#{rule.budget.id}", class: "form-input" %>
+          <%= date_field_tag :date,
+                             nil,
+                             id: "adjust-date-#{rule.budget.id}",
+                             min: rule.countable_span.first,
+                             max: rule.countable_span.last,
+                             class: "form-input" %>
         </div>
       </div>
 
@@ -78,7 +90,20 @@
                        class: "btn btn-secondary" %>
       </div>
 
-      <p class="text-xs text-gray-500">Today unless you pick a day. It only changes this period.</p>
+      <%# WHERE THIS RULE COUNTS, IN ITS OWN SHAPE'S WORDS (fix round 2, NEW-5). "It only changes
+          this period" was true of an envelope and FALSE of a fund: §3.2's walk sums every delta
+          from the day the rule was written, so a date months back is counted and the sentence told
+          the user it would not be. The two clauses are the same two `AdjustmentForm#reach_clause`
+          refuses in, said before the refusal rather than after it, and the date beside the accruing
+          one is `countable_span`'s own open — the same value the field's `min` carries. %>
+      <p class="text-xs text-gray-500" data-adjust-hint>
+        Today unless you pick a day.
+        <% if rule.rate? %>
+          This period only, up to today.
+        <% else %>
+          Counts from <%= rule.countable_span.first.strftime("%b %-d") %> to today.
+        <% end %>
+      </p>
     <% end %>
 
     <% if rule.skippable? %>

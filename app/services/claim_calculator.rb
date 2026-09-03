@@ -175,11 +175,29 @@ class ClaimCalculator
   # whole of February and a delta dated Feb 1 IS summed. Refusing it would be refusing a date this
   # class counts. One derivation, `#accrual_start`'s, read through the periods it produced.
   #
-  # THE END IS `today` AND NOT THE PERIOD'S END, and the difference only shows on a rate rule: a
-  # delta dated the 20th of a period running to the 30th would be summed by `#adjustments_within`,
-  # but the walk stops at the period containing today and money moved on a day that has not
-  # happened is not money this claim has. Both bounds are the OWNER's days, because `today` is.
-  def countable_span = window_start..today
+  # THE END IS THE EARLIER OF `today` AND THE LAST VISITED PERIOD'S CLOSE, and each half of that
+  # `min` answers a different way the span could outrun the walk:
+  #
+  #   * `today` is the bound on a rate rule, whose one period runs past it — a delta dated the 20th
+  #     of a period running to the 30th would be summed by `#adjustments_within`, but money moved on
+  #     a day that has not happened is not money this claim has;
+  #   * THE LAST PERIOD'S CLOSE is the bound when `PERIOD_WALK_LIMIT` TRUNCATED the walk (fix round
+  #     2, NEW-2). 520 periods is ten years of weekly ones, so a fund funded in 2010 stops accruing
+  #     in Dec 2019 while `today` runs on to 2026 — and a row dated 2026 would land in no period the
+  #     walk visited, counting nowhere under a flash saying it counted.
+  #
+  # AN EMPTY WALK IS AN EMPTY SPAN (fix round 2, NEW-4), and it is read off `#periods` rather than
+  # off `#window_start` for exactly that case: that reader falls back to the current period's open
+  # because `ClaimLedger` must be handed SOME day to query from, and a span built on the fallback
+  # would offer dates inside a period the rule was not alive for — the phantom `#walk_periods` gave
+  # up inventing. `AdjustmentForm` reads the emptiness and says so in its own words.
+  #
+  # Both bounds are the OWNER's days, because `today` is.
+  def countable_span
+    return (today...today) if periods.empty?
+
+    window_start..[today, periods.last.last].min
+  end
 
   private
 
