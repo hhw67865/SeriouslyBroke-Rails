@@ -172,7 +172,7 @@ RSpec.describe "Distributions", type: :request do
       post distributions_path
 
       expect(response).to redirect_to(root_path)
-      expect(flash[:notice]).to eq("Distributed $400.00 into 1 envelope. $600.00 stays in your buffer.")
+      expect(flash[:notice]).to eq("Distributed $400.00 into 1 envelope. $600.00 stays available.")
       expect(Allocation.kind_allocation.pluck(:amount)).to eq([400])
     end
 
@@ -229,7 +229,7 @@ RSpec.describe "Distributions", type: :request do
       post distributions_path
 
       expect(flash[:notice]).to eq(
-        "Replaced this period's split — distributed $400.00 into 1 envelope. $600.00 stays in your buffer."
+        "Replaced this period's split — distributed $400.00 into 1 envelope. $600.00 stays available."
       )
       expect(Allocation.kind_allocation.pluck(:amount)).to eq([400])
     end

@@ -4,7 +4,7 @@ require "rails_helper"
 
 # THE EXPENSES TAB AFTER DECISION 6 (plan 3, task 4).
 #
-# The two sections are the two lanes spending comes out of: "Out of the Buffer" (a category that
+# The two sections are the two lanes spending comes out of: "Out of Available" (a category that
 # holds no money of its own — nothing reserved it, so it drains AVAILABLE) and "Out of an Envelope"
 # (a category that holds its own money). The FIGURES are unchanged from the bridge Task 3 left; the
 # words "Monthly Budget", "Budgeted" and "Pool-Covered" are not.
@@ -29,12 +29,12 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before { visit reports_path(tab: "expenses") }
 
     it "shows empty messages for both lanes" do
-      expect(page).to have_content("No buffer spending")
+      expect(page).to have_content("No spending out of available")
       expect(page).to have_content("No envelope spending")
     end
   end
 
-  describe "buffer vs envelope split", :aggregate_failures do
+  describe "available vs envelope split", :aggregate_failures do
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
 
@@ -47,8 +47,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows the buffer section with only the categories that hold nothing" do
-      within buffer_section do
+    it "shows the available section with only the categories that hold nothing" do
+      within available_section do
         expect(page).to have_link("Groceries")
         expect(page).to have_content("$150.00")
         expect(page).not_to have_link("Car Repair")
@@ -64,8 +64,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "keeps each lane's spending out of the other lane's totals" do
-      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$150.00") }
-      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Tracked Available Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Total Available Spending") { expect(page).to have_content("$150.00") }
       within_stat_card("Tracked Envelope Spending") { expect(page).to have_content("$200.00") }
       within_stat_card("Total Envelope Spending") { expect(page).to have_content("$200.00") }
     end
@@ -112,16 +112,16 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
       visit reports_path(tab: "expenses")
     end
 
-    it "shows tracked and total buffer stats with category links" do
-      within_stat_card("Tracked Buffer Spending") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Buffer Spending") { expect(page).to have_content("$450.00") }
+    it "shows tracked and total available stats with category links" do
+      within_stat_card("Tracked Available Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Available Spending") { expect(page).to have_content("$450.00") }
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_link("Groceries", href: category_path(groceries))
       expect(page).to have_link("Dining", href: category_path(dining))
     end
   end
 
-  describe "rows in the buffer section", :aggregate_failures do
+  describe "rows in the available section", :aggregate_failures do
     let!(:groceries) { create(:category, :expense, user: user, name: "Groceries") }
     let!(:groceries_item) { create(:item, category: groceries, name: "Weekly Shopping") }
     let!(:utilities) { create(:category, :expense, user: user, name: "Utilities") }
@@ -135,10 +135,10 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     # A name and a figure, exactly — no "$650.00 / $500.00" pair, no "+$150.00 over" / "$120.00
-    # left" clause, and no column total under the list (the "Tracked Buffer Spending" card above
+    # left" clause, and no column total under the list (the "Tracked Available Spending" card above
     # it is the one reader of that figure).
     it "prints a name and a figure per row, highest first, and closes the list there" do
-      within buffer_section do
+      within available_section do
         rows = all("div.space-y-3 > div").map { |row| row.text.split("\n") }
         expect(rows).to eq([["Groceries", "$650.00"], ["Utilities", "$80.00"]])
         expect(page).to have_no_css("div.border-t")
@@ -157,9 +157,9 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "carries the YTD prefix into the chart heading and the stat cards", :aggregate_failures do
-      expect(page).to have_content("YTD Buffer Spending")
-      within_stat_card("YTD Tracked Buffer Spending") { expect(page).to have_content("$220.00") }
-      within_stat_card("YTD Total Buffer Spending") { expect(page).to have_content("$220.00") }
+      expect(page).to have_content("YTD Available Spending")
+      within_stat_card("YTD Tracked Available Spending") { expect(page).to have_content("$220.00") }
+      within_stat_card("YTD Total Available Spending") { expect(page).to have_content("$220.00") }
     end
 
     it "shows no YTD Budget card" do
@@ -169,8 +169,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
 
   private
 
-  def buffer_section
-    find("h2", text: "Out of the Buffer").ancestor("section")
+  def available_section
+    find("h2", text: "Out of Available").ancestor("section")
   end
 
   def envelope_section

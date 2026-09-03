@@ -57,7 +57,7 @@
 
     <%# WHERE THE MONEY WENT, once. With TWO OR MORE rows edited this replaces the per-row
         destination sentences entirely, because per-row answers are each true against their own
-        counterfactual and do not sum — they overstate the buffer and, worse, silently miss a row
+        counterfactual and do not sum — they overstate what is left available and, worse, silently miss a row
         that either edit alone would have funded. One decomposition against the untouched
         proposal names every recipient exactly once and adds up. With one edit it is nil and the
         row carries its own sentence instead. See DistributionPresenter::Redirect. %>
@@ -205,9 +205,9 @@
       <%= render "cutoff", presenter: presenter if cutoff == rows.length %>
     </ol>
 
-    <%# The buffer line, the waterfall's last row: what is left once every envelope above has
+    <%# The available line, the waterfall's last row: what is left once every envelope above has
         taken what it could. Two moments, arrow between them, because the LEVEL matters less than
-        the direction (spec §7.1) — a buffer falling every period is the slow bleed this line
+        the direction (spec §7.1) — available falling every period is the slow bleed this line
         exists to catch. Negative is a true statement about a root in trouble and is printed
         as one rather than floored at zero.
 
@@ -216,7 +216,7 @@
         That is `available + Σ holdings` shown before it is written. %>
     <div id="distribution-buffer" class="flex items-baseline justify-between gap-4 px-6 py-3 bg-gray-50">
       <span class="text-sm font-medium text-gray-900">
-        Stays in buffer
+        Stays available
       </span>
       <span class="tabular-nums text-sm <%= presenter.leftover.negative? ? "text-status-danger" : "text-gray-900" %>">
         <%= number_to_currency(presenter.buffer_carried) %> → <%= number_to_currency(presenter.leftover) %>

@@ -134,9 +134,14 @@ module DistributionsHelper
       "to #{distribution_party(redirect.recipients.first.first)}"
   end
 
-  # A `nil` category is the buffer. It is a party to a shift like any other — money can land there or
+  # A `nil` category is AVAILABLE. It is a party to a shift like any other — money can land there or
   # come out of it — rather than the residual it is in the other two modes.
-  def distribution_party(category) = category ? category.name : "your buffer"
+  #
+  # `ReallocationPresenter::ROOT.name` and not a string of its own: the app has ONE name for the
+  # money no category holds, and `AllocationsHelper#allocation_party_name` already prints it in the
+  # confirmation the user reads one screen later. (It was "your buffer" until the answers-first Home
+  # spec §3 retired the word.)
+  def distribution_party(category) = category&.name || ReallocationPresenter::ROOT.name
 
   # "That" for one row's own edit, "Your edits" for the aggregate above the table. The subject is
   # the only thing that changes: the arithmetic underneath is the same subtraction, taken against
@@ -148,18 +153,18 @@ module DistributionsHelper
     "#{subject} take#{"s" unless redirect.aggregate?} #{number_to_currency(-redirect.moved)} more"
   end
 
-  # The answer said as an answer rather than as a list of one. "$300.00 to your buffer" restates
+  # The answer said as an answer rather than as a list of one. "$300.00 to Available" restates
   # the lead and leaves out the half that matters — that nothing below was waiting for it — and
   # a user told only the first half concludes the money vanished.
   def distribution_redirect_buffer_only(redirect)
-    return "#{distribution_redirect_lead(redirect)}, out of your buffer." unless redirect.freed?
+    return "#{distribution_redirect_lead(redirect)}, out of what was available." unless redirect.freed?
 
     subject = redirect.aggregate? ? "them" : "it"
     "#{distribution_redirect_lead(redirect)}, and nothing below #{subject} was waiting — " \
-      "it stays in your buffer."
+      "it stays available."
   end
 
-  # The buffer is always named last and never truncated: it is where the money stops, and a
+  # Available is always named last and never truncated: it is where the money stops, and a
   # sentence that trails off before reaching it has not answered the question.
   #
   # Every figure here carries its own number, and it can: there is exactly ONE of these sentences
@@ -171,7 +176,7 @@ module DistributionsHelper
 
     parts = named.map { |category, amount| "#{number_to_currency(amount)} #{preposition} #{category.name}" }
     parts << "#{number_to_currency(rest.sum(0.to_d, &:last))} across #{pluralize(rest.size, "other")}" if rest.any?
-    parts << "#{number_to_currency(redirect.buffer)} #{preposition} your buffer" if redirect.buffer?
+    parts << "#{number_to_currency(redirect.buffer)} #{preposition} #{ReallocationPresenter::ROOT.name}" if redirect.buffer?
     parts
   end
 

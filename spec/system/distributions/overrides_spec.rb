@@ -136,7 +136,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "200"
       click_on "Update figures"
 
-      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries and $100.00 to your buffer.")
+      expect_redirect("Rent", "That frees $300.00: $200.00 to Groceries and $100.00 to Available.")
       expect_edited_split
     end
 
@@ -163,7 +163,7 @@ RSpec.describe "Distribution Overrides", type: :system do
 
       within("[data-redirect='Groceries']") do
         expect(page).to have_content(
-          "That frees $150.00, and nothing below it was waiting — it stays in your buffer.",
+          "That frees $150.00, and nothing below it was waiting — it stays available.",
           normalize_ws: true
         )
       end
@@ -403,7 +403,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Groceries", with: "0"
       click_on "Update figures"
 
-      expect_redirect("Groceries", "That frees $400.00: $200.00 to Rent and $200.00 to your buffer.")
+      expect_redirect("Groceries", "That frees $400.00: $200.00 to Rent and $200.00 to Available.")
       expect_rent_funded_in_full
       expect(page).to have_no_css("[data-redirect='Rent']")
     end
@@ -460,7 +460,7 @@ RSpec.describe "Distribution Overrides", type: :system do
 
       within("#distribution-redirect") do
         expect(page).to have_content(
-          "Your edits free $250.00: $200.00 to Groceries and $50.00 to your buffer.",
+          "Your edits free $250.00: $200.00 to Groceries and $50.00 to Available.",
           normalize_ws: true
         )
       end
@@ -559,7 +559,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Dentist", with: "250"
       click_on "Update figures"
 
-      expect_aggregate("Your edits free $250.00, and nothing below them was waiting — it stays in your buffer.")
+      expect_aggregate("Your edits free $250.00, and nothing below them was waiting — it stays available.")
       within("#distribution-buffer") { expect(page).to have_content("$500.00 → $250.00", normalize_ws: true) }
     end
   end
@@ -626,13 +626,13 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Utilities", with: "100"
       click_on "Update figures"
 
-      expect_aggregate("Your edits free $600.00: $100.00 to Dining Out and $500.00 to your buffer.")
+      expect_aggregate("Your edits free $600.00: $100.00 to Dining Out and $500.00 to Available.")
       within("[data-row-amount='Dining Out']") { expect(page).to have_content("$200.00") }
       within("#distribution-buffer") { expect(page).to have_content("$0.00 → $500.00", normalize_ws: true) }
     end
 
     # The over-claim half, asserted as an absence with the aggregate beside it: two per-row lines
-    # printed "$300.00 ... your buffer" apiece against a $500 move, and each claimed nothing below
+    # printed "$300.00 ... Available" apiece against a $500 move, and each claimed nothing below
     # was waiting while Dining Out gained $100 on the same screen.
     it "prints one line rather than two that do not sum" do
       fill_in "Amount for Rent", with: "100"
@@ -652,7 +652,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Rent", with: "100"
       click_on "Update figures"
 
-      expect_redirect("Rent", "That frees $300.00: $100.00 to Dining Out and $200.00 to your buffer.")
+      expect_redirect("Rent", "That frees $300.00: $100.00 to Dining Out and $200.00 to Available.")
       expect(page).to have_no_css("#distribution-redirect")
     end
   end

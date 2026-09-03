@@ -5,10 +5,13 @@
     screen proposing to move $2,867 has to answer, and the three lines are the only place the
     swept money is visible as having come out of a category rather than out of thin air.
 
-    "BUFFER" IS AVAILABLE HERE AND EVERYWHERE ON THIS SCREEN (two-ledger spec §2). Spec §7.1's
-    buffer is "the money no envelope has claimed", which is exactly the purpose ledger's root; the
-    pool era kept it in an account, and this one keeps it nowhere at all. See
-    DistributionPresenter#buffer_carried. %>
+    THE WORD IS "AVAILABLE" HERE AND EVERYWHERE ON THIS SCREEN (two-ledger spec §2; answers-first
+    Home spec §3, which retires "buffer" as a user-facing word app-wide). Spec §7.1's buffer was
+    "the money no envelope has claimed", which is exactly the purpose ledger's root; the pool era
+    kept it in an account, and this one keeps it nowhere at all — so the screen names the ledger
+    the user can see rather than a container that no longer exists. The READER is still
+    `DistributionPresenter#buffer_carried`: renaming the presenter's methods is mechanism churn
+    this sweep deliberately left alone, and the sweep is about what the screen says. %>
 <div class="bg-white border border-gray-200 rounded p-6">
   <% if presenter.available.positive? %>
     <h2 class="text-2xl font-semibold text-gray-900">
@@ -21,27 +24,28 @@
         still prints the figure. %>
     <h2 class="text-2xl font-semibold text-status-danger">Nothing to distribute</h2>
     <%# The red sentence is about an OVERDRAFT, so it fires on `negative?` and not on the
-        headline's `!positive?`. A buffer sitting at exactly zero was reading "your buffer is
-        $0.00 in the red" — a debt of nothing, stated in the loudest colour the app has. An empty
-        buffer is empty; it is not in trouble. %>
+        headline's `!positive?`. Available sitting at exactly zero was reading "available is
+        $0.00 in the red" — a debt of nothing, stated in the loudest colour the app has. Empty
+        is empty; it is not in trouble. %>
     <% if presenter.available.negative? %>
       <p class="mt-1 text-sm text-status-danger">
-        Your buffer is <%= number_to_currency(-presenter.available) %> in the red,
+        Available is <%= number_to_currency(-presenter.available) %> in the red,
         sweeps included — nothing can be funded until money arrives.
       </p>
     <% else %>
       <p class="mt-1 text-sm text-gray-600">
-        Your buffer has no unallocated money — nothing can be funded until money arrives.
+        You have no available money — nothing can be funded until money arrives.
       </p>
     <% end %>
   <% end %>
 
   <dl id="distribution-sources" class="mt-4 max-w-md space-y-1 text-sm">
-    <%# Coloured on the same rule as Available and as the buffer line: a negative buffer is the
-        one figure here that is a statement about being in trouble, and it was rendering in the
-        same grey as the healthy ones while the two figures either side of it turned red. %>
+    <%# Coloured on the same rule as the Available total below and as the waterfall's last row: a
+        negative carry-over is the one figure here that is a statement about being in trouble, and
+        it was rendering in the same grey as the healthy ones while the two figures either side of
+        it turned red. %>
     <div class="flex justify-between gap-4">
-      <dt class="text-gray-600">Buffer carried over</dt>
+      <dt class="text-gray-600">Available carried over</dt>
       <dd class="tabular-nums <%= presenter.buffer_carried.negative? ? "text-status-danger" : "text-gray-900" %>">
         <%= number_to_currency(presenter.buffer_carried) %>
       </dd>
@@ -50,7 +54,7 @@
       <dt class="text-gray-600">Income this period</dt>
       <dd class="tabular-nums text-gray-900"><%= number_to_currency(presenter.income_this_period) %></dd>
     </div>
-    <%# Money that left (or came back to) the buffer inside this period by some route other than
+    <%# Money that left (or came back to) available inside this period by some route other than
         a distribution: spending that no category holds money for, and hand moves. Dropped when it is zero, which
         is the ordinary shape — a line reading "$0.00" invites the reader to look for a cause
         that is not there. %>
@@ -81,7 +85,7 @@
   </dl>
 
   <%# The all-clear density's ONE summary line. The waterfall does not render at all on this
-      branch, so this sentence is the whole of what the screen has to say — hence the buffer
+      branch, so this sentence is the whole of what the screen has to say — hence the leftover
       figure in it, which the expanded branch prints as the waterfall's last row instead.
       `expanded?` and not `covered?`: the two densities are one decision, and keying the summary
       on a second predicate is how a screen ends up showing both or neither. %>
@@ -93,14 +97,14 @@
         <%= pluralize(presenter.lines.size, "envelope") %> funded in full,
         <%= number_to_currency(presenter.total_allocated) %> out —
       <% end %>
-      <%= number_to_currency(presenter.leftover) %> stays in your buffer.
+      <%= number_to_currency(presenter.leftover) %> stays available.
     </p>
     <%# THE WAY IN on a period that does not need the table (spec §5's "every line is editable",
         which the all-clear density otherwise has no line to offer). Nothing is remembered: the
         link carries the request, a fresh visit collapses again, so the density is still chosen by
         the data everywhere except where the user has explicitly asked otherwise. %>
     <%# NOT on the "nothing is asking for money" branch: that period has no rows at all, so the
-        link would open a waterfall with an empty table and a buffer line. There is nothing to
+        link would open a waterfall with an empty table and a leftover line. There is nothing to
         edit, which is a different answer from "there is nothing you need to do". %>
     <% if presenter.lines.any? %>
       <p class="mt-3">

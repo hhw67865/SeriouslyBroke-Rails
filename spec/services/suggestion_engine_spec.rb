@@ -142,7 +142,6 @@ RSpec.describe SuggestionEngine do
       {
         interval_months: 3,
         occurrences: 2,
-        guessed: false,
         category_name: "Bills",
         starts_holding: true,
         last_seen_on: Date.new(2026, 1, 15),
@@ -208,24 +207,29 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:dated_bill).map(&:subject)).to eq([near])
     end
 
-    it "guesses a yearly interval for a single occurrence of $100 or more", :aggregate_failures do
+    # THE OCCURRENCE GATE (answers-first Home spec §7). A single payment used to be proposed as a
+    # yearly bill with the guess admitted in the row itself; the shape is deleted, not demoted, so
+    # the size that used to qualify it ($100, and $999 for good measure) buys nothing. The pair
+    # below discriminates on the count alone: same item, same category, one payment then two.
+    it "does not fire on a single occurrence, however large", :aggregate_failures do
       dentist = item("Dentist", in_category: category("Health bills"))
-      spend(dentist, 100, on: Date.new(2025, 11, 20))
+      spend(dentist, 999, on: Date.new(2025, 11, 20))
+
+      expect(of_kind(:dated_bill)).to be_empty
+      expect(suggestions.map(&:kind)).not_to include(:dated_bill)
+    end
+
+    it "fires as soon as the second occurrence lands", :aggregate_failures do
+      dentist = item("Dentist", in_category: category("Health bills"))
+      spend(dentist, 999, on: Date.new(2025, 11, 20))
+      spend(dentist, 999, on: Date.new(2025, 12, 20))
 
       suggestion = of_kind(:dated_bill).sole
 
-      expect(suggestion.amount).to eq(100)
-      expect(suggestion.detail[:interval_months]).to eq(12)
-      expect(suggestion.detail[:occurrences]).to eq(1)
-      expect(suggestion.detail[:guessed]).to be(true)
-      expect(suggestion.detail[:due_on]).to eq(Date.new(2026, 11, 20))
-    end
-
-    it "does not guess for a single occurrence under $100" do
-      dentist = item("Dentist", in_category: category("Health bills"))
-      spend(dentist, 99.99, on: Date.new(2025, 11, 20))
-
-      expect(of_kind(:dated_bill)).to be_empty
+      expect(suggestion.amount).to eq(999)
+      expect(suggestion.detail[:occurrences]).to eq(2)
+      expect(suggestion.detail[:interval_months]).to eq(1)
+      expect(suggestion.detail).not_to have_key(:guessed)
     end
 
     # The correction the demo measurement forced: verbatim this proposes a due date already in the
@@ -313,7 +317,11 @@ RSpec.describe SuggestionEngine do
     # Item 11: the panel leads with the claim that costs the most per period, not the largest
     # sticker. A $1,600 bill once a year is $61.54 a period; $1,500 every month is $692.31.
     it "ranks bills by what they cost a period, not by the size of the bill", :aggregate_failures do
+      # TWO YEARS APART, because a yearly bill needs two occurrences to be one at all now
+      # (#BILL_MIN_OCCURRENCES) and the older of them is still inside #HISTORY_YEARS. It used to
+      # be a single payment wearing a guessed annual interval, which is the shape spec §7 deleted.
       annual = item("Tax bill", in_category: category("Tax"))
+      spend(annual, 1_600, on: Date.new(2024, 11, 20))
       spend(annual, 1_600, on: Date.new(2025, 11, 20))
       rent = item("Rent", in_category: category("Home"))
       spend(rent, 1_500, on: Date.new(2025, 11, 20))
@@ -338,7 +346,7 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(coffee)
       expect(suggestion.amount).to eq(120)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expected = { periods_present: 3, periods_measured: 3, periods_window: 6, observed_total: 360, first_seen_on: Date.new(2025, 12, 30), per_period_cost: 120, starts_holding: true, guessed: false }
+      expected = { periods_present: 3, periods_measured: 3, periods_window: 6, observed_total: 360, first_seen_on: Date.new(2025, 12, 30), per_period_cost: 120, starts_holding: true }
 
       expect(suggestion.detail).to eq(expected)
     end
@@ -465,6 +473,16 @@ RSpec.describe SuggestionEngine do
       [category, create(:budget, :per_period_rate, category: category, amount: amount)]
     end
 
+    # A USER WHO HAS BEEN HERE, in a category no drift fixture below touches. The gate (spec §7,
+    # and the `describe "the history gate"` block that pins it both ways) is about the USER's
+    # record, not the lane's, so the two fixtures that plant NO spending — the ones whose whole
+    # point is a rule over a silent category — have to attach their rule to a user the engine has
+    # a history for, or they would pass for the gate's reason rather than their own. P2, so the
+    # count is four; one $20 entry proposes nothing itself.
+    def history_of_their_own
+      spend(item("Bus", in_category: category("Transit")), 20, on: Date.new(2025, 12, 20))
+    end
+
     it "reports a rule the spending has outgrown", :aggregate_failures do
       _category, rule, food = rate_category("Groceries", 100)
       in_drift_window(food, 150)
@@ -474,7 +492,7 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(rule)
       expect(suggestion.amount).to eq(150)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expected = { rule_amount: 100, observed: 150, periods: 4, direction: :up, category_name: "Groceries", basis: "per_period", per_period_cost: 150, guessed: false }
+      expected = { rule_amount: 100, observed: 150, periods: 4, direction: :up, category_name: "Groceries", basis: "per_period", per_period_cost: 150 }
 
       expect(suggestion.detail).to eq(expected)
       expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 150 })
@@ -612,6 +630,7 @@ RSpec.describe SuggestionEngine do
     # $400 grocery rule the panel then asked the user to zero. The lane that cannot record is a
     # category that holds nothing now, and its $0.00 is a fact about the start-date rule.
     it "is silent on a rule whose category holds nothing, whose silence is not about spend" do
+      history_of_their_own
       unfunded_rule("Groceries", 400)
 
       expect(of_kind(:drift)).to be_empty
@@ -620,6 +639,7 @@ RSpec.describe SuggestionEngine do
     # The lane that silence used to swallow. The two fixtures differ ONLY in whether the category
     # holds money; nothing is spent in either.
     it "reports $0.00 drift on a category that does hold money and nothing was spent out of", :aggregate_failures do
+      history_of_their_own
       _category, rule, _food = rate_category("Groceries", 400)
 
       suggestion = of_kind(:drift).sole
@@ -664,7 +684,7 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.subject).to eq(rule)
       expect(suggestion.amount).to eq(75)
       expect(suggestion.amount).to be_a(BigDecimal)
-      expected = { last_seen_on: Date.new(2025, 11, 20), periods_empty: 3, rule_amount: 75, item_name: backed.name, category_name: "Netflix", per_period_cost: 75, guessed: false }
+      expected = { last_seen_on: Date.new(2025, 11, 20), periods_empty: 3, rule_amount: 75, item_name: backed.name, category_name: "Netflix", per_period_cost: 75 }
 
       expect(suggestion.detail).to eq(expected)
       expect(suggestion.prefill).to eq(id: rule.id)
@@ -696,6 +716,7 @@ RSpec.describe SuggestionEngine do
     end
 
     it "does not fire on an item that never had an entry — that rule is new, not dead" do
+      spend(item("Bus", in_category: category("Transit")), 20, on: Date.new(2025, 12, 20))
       claimed_item("Netflix", category: funded_category("Netflix"), amount: 75, basis: :per_period, interval_months: nil)
 
       expect(of_kind(:dead_rule)).to be_empty
@@ -707,6 +728,64 @@ RSpec.describe SuggestionEngine do
       spend(item("Fillings", in_category: dentist), 75, on: Date.new(2025, 11, 20))
 
       expect(of_kind(:dead_rule)).to be_empty
+    end
+  end
+
+  # THE HISTORY GATE (answers-first Home spec §7). Every window in this file is cut from
+  # `#periods`, which is the CALENDAR's complete periods: the fixture user is anchored on today, so
+  # six of them exist before a single entry does. Drift and dead-rule additionally require
+  # #MIN_HISTORY_PERIODS complete periods of the USER's own, counted from the period their earliest
+  # entry fell in — P4 opening on 2026-01-09 is two (P4 and P5), P5 opening on 2026-01-23 is one.
+  #
+  # The three examples are one fixture at three ages, so nothing but the date of the history entry
+  # differs between the silence and the sentence.
+  describe "the history gate" do
+    # The drift shape the gate exists for: a category that HOLDS money, a rate rule on it, and no
+    # spending in the window — which #drift_suggestion reports as the starkest drift there is
+    # ("averaged $0.00 for 4 periods, your rule says $400"). Correct for a user with a record;
+    # a claim about nothing for a user without one.
+    def silent_rule
+      groceries = funded_category("Groceries")
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+    end
+
+    def history_on(date) = spend(item("Bus", in_category: category("Transit")), 20, on: date)
+
+    # A DAY OLD, with both backward-looking shapes present in kind: a rule over a holder category,
+    # and an item-backed rule. Today's spending is in the CURRENT period, which is in no window, so
+    # the account's whole history is a period that has not closed.
+    #
+    # The drift half is what the gate removes — verbatim, before it, this fixture drew "$0.00 for 4
+    # periods" on the user's first day. The dead-rule half is asserted because the ruling covers
+    # both kinds, and it is honest about being over-determined: an item spent today is not silent,
+    # so that detector would have said nothing here anyway.
+    it "says nothing backward-looking to an account whose whole history is today", :aggregate_failures do
+      silent_rule
+      netflix = funded_category("Netflix")
+      backed = claimed_item("Netflix", category: netflix, amount: 75, basis: :per_period, interval_months: nil)
+      spend(backed, 75, on: today)
+      spend(item("Food", in_category: funded_category("Dining")), 30, on: today)
+
+      expect(of_kind(:drift)).to be_empty
+      expect(of_kind(:dead_rule)).to be_empty
+    end
+
+    it "is still silent with one full period behind it" do
+      silent_rule
+      history_on(Date.new(2026, 1, 26))
+
+      expect(of_kind(:drift)).to be_empty
+    end
+
+    it "speaks once a second full period has passed", :aggregate_failures do
+      silent_rule
+      history_on(Date.new(2026, 1, 12))
+
+      suggestion = of_kind(:drift).sole
+
+      expect(suggestion.amount).to eq(0)
+      expect(suggestion.detail[:rule_amount]).to eq(400)
+      expect(suggestion.detail[:periods]).to eq(4)
     end
   end
 
@@ -754,10 +833,14 @@ RSpec.describe SuggestionEngine do
       expect(described_class::Suggestion.members).to eq([:kind, :subject, :amount, :detail, :prefill])
     end
 
-    it "carries `guessed:` and `per_period_cost:` on every kind, not only on the kinds that need them", :aggregate_failures do
+    # `per_period_cost:` IS ON EVERY KIND because #ordered sorts on it and `fetch`es it. `guessed:`
+    # was on every kind for the same reason — one member the panel could read without branching on
+    # the kind — and it is on NONE now: the only shape that ever set it true is deleted (spec §7),
+    # and a key that is a constant `false` on a money screen is a branch waiting to be believed.
+    it "carries `per_period_cost:` on every kind, and `guessed:` on none of them", :aggregate_failures do
       one_of_each
 
-      expect(suggestions.map { |suggestion| suggestion.detail.key?(:guessed) }).to eq([true, true, true, true])
+      expect(suggestions.map { |suggestion| suggestion.detail.key?(:guessed) }).to eq([false, false, false, false])
       expect(suggestions.map { |suggestion| suggestion.detail[:per_period_cost] }).to all(be_a(BigDecimal))
     end
   end

@@ -93,7 +93,7 @@ RSpec.describe "Budget page structural check", type: :system do
     it "prints the three lines from the spec" do
       within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
       within(figure("typical-income")) { expect(page).to have_content("$2,400.00 a period") }
-      within(figure("leftover")) { expect(page).to have_content("$1,880.00 → buffer") }
+      within(figure("leftover")) { expect(page).to have_content("$1,880.00 → available") }
     end
 
     it "shows no sacrifice button and does not call the budget underwater" do
@@ -124,7 +124,7 @@ RSpec.describe "Budget page structural check", type: :system do
 
     it "reads zero with no explanation to give" do
       within(figure("rules-need")) { expect(page).to have_content("$0.00 a period") }
-      within(figure("leftover")) { expect(page).to have_content("$2,400.00 → buffer") }
+      within(figure("leftover")) { expect(page).to have_content("$2,400.00 → available") }
       expect(page).to have_no_css("[data-caps-note]")
     end
 

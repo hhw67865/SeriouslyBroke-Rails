@@ -32,9 +32,10 @@
             <%= number_to_currency(presenter.typical_income) %> a period
           </dd>
         </div>
-        <%# THE THIRD LINE SAYS WHICH WAY IT WENT. §8 prints "Left over $732 → buffer" on a budget
-            that fits; the same row on one that does not would print "Left over -$468", which is a
-            sum, not a sentence. The underwater wording is §9's own ("$468 underwater every
+        <%# THE THIRD LINE SAYS WHICH WAY IT WENT. §8 printed "Left over $732 → buffer" on a budget
+            that fits — the destination is spelled "available" here, and everywhere, since the
+            answers-first Home spec §3 retired the older word; the same row on one that does not fit
+            would print "Left over -$468", which is a sum, not a sentence. The underwater wording is §9's own ("$468 underwater every
             period") so the block and the button beneath it name one thing. %>
         <div class="flex justify-between items-baseline gap-4 pt-2 border-t border-gray-100"
              data-figure="leftover">
@@ -46,7 +47,7 @@
           <% else %>
             <dt class="text-gray-600">Left over</dt>
             <dd class="font-semibold text-status-success tabular-nums">
-              <%= number_to_currency(presenter.leftover) %> → buffer
+              <%= number_to_currency(presenter.leftover) %> → available
             </dd>
           <% end %>
         </div>

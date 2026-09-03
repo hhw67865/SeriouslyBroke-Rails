@@ -48,7 +48,7 @@ class DistributionsController < ApplicationController
 
   private
 
-  # The buffer figure is read HERE, after the write, and that is the whole reason it is
+  # The available figure is read HERE, after the write, and that is the whole reason it is
   # trustworthy: `CategoryLedger` is a snapshot memoised at first read, so the proposal's own ledger
   # has been stale since the first allocation saved. A fresh one reads the ledger the user is about
   # to see on Home, so the flash and Home cannot disagree.
@@ -59,7 +59,7 @@ class DistributionsController < ApplicationController
       # Saying "distributed" afterwards would contradict the banner the user just consented to.
       # #replaced is what the committer actually deleted, not a re-derived guess.
       replaced: committer.replaced.any?,
-      buffer: CategoryLedger.new(current_user.categories.expenses.to_a, user: current_user).available
+      available: CategoryLedger.new(current_user.categories.expenses.to_a, user: current_user).available
     )
   end
 

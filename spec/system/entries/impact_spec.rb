@@ -151,13 +151,13 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).to have_css("[data-figure='bar'][style*='width: 80%']")
     end
 
-    it "keeps the ordinary submit label and stays quiet about the buffer", :aggregate_failures do
+    it "keeps the ordinary submit label and stays quiet about available", :aggregate_failures do
       fill_in "Amount", with: "55"
 
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
       expect(page).to have_button("Create Entry")
       expect(page).not_to have_button("Save anyway")
-      expect(page).not_to have_text("your buffer covers the difference")
+      expect(page).not_to have_text("your available money covers the difference")
     end
 
     # `parseFloat("10*5")` is 10 and Dentaku says 50 on save. Neither belongs on the card, so it
@@ -177,12 +177,12 @@ RSpec.describe "Entry impact card", type: :system do
       select_category("Groceries")
     end
 
-    it "shows the envelope going negative, says the buffer covers it, and does not block", :aggregate_failures do
+    it "shows the envelope going negative, says available covers it, and does not block", :aggregate_failures do
       fill_in "Amount", with: "300"
 
       within(card) do
         expect(figure("balance-after")).to have_text("-$60.00")
-        expect(figure("buffer")).to have_text("This envelope goes negative — your buffer covers the difference.")
+        expect(figure("buffer")).to have_text("This envelope goes negative — your available money covers the difference.")
       end
       expect(page).to have_button("Save anyway")
       expect(page).not_to have_button("Create Entry")
@@ -200,7 +200,7 @@ RSpec.describe "Entry impact card", type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
       expect(page).to have_button("Create Entry")
       expect(page).not_to have_button("Save anyway")
-      expect(page).not_to have_text("your buffer covers the difference")
+      expect(page).not_to have_text("your available money covers the difference")
     end
 
     # THE SACRIFICE DIAL'S SHIPPED BUG, in the one place it is reachable here: spending an envelope

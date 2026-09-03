@@ -7,9 +7,10 @@
     the same event. Strip both untruths out and the two bars are one fact — income, the two lanes
     the spending came out of, and what is left — so it is drawn once.
 
-    `:all_v10` — the cache key's version, bumped so nothing rendered under the old shape survives.
+    `:all_v11` — the cache key's version, bumped so nothing rendered under the old shape survives
+    (this time for the legend's noun: "out of the buffer" is "out of available", spec §3).
 %>
-<% cache [current_user, selected_date, current_period, :all_v10] do %>
+<% cache [current_user, selected_date, current_period, :all_v11] do %>
 <% income = @presenter.total_tracked_income %>
 <% expenses = @presenter.total_tracked_expenses %>
 <% buffer_spending = @presenter.total_tracked_buffer_expenses %>
@@ -56,7 +57,7 @@
       <div class="flex flex-wrap gap-4 mt-3 text-xs">
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-terracotta"></span>
-          <span class="text-gray-600">Out of the buffer <%= number_to_currency(buffer_spending) %></span>
+          <span class="text-gray-600">Out of available <%= number_to_currency(buffer_spending) %></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-dusty-teal"></span>

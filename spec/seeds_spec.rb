@@ -222,6 +222,13 @@ RSpec.describe "db/seeds.rb" do
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
 
+    # `dated_bill: 3` WAS 6 (answers-first Home spec §7, the occurrence gate). Three of the six
+    # were one-off spends — the Body Shop repair, the quarterly tax estimate — that the engine read
+    # as annual bills and disclaimed as guesses in their own rows; that shape is deleted, so the
+    # three MEASURED utility bills are what is left. The other three figures are unmoved, which is
+    # the second half of what this example now says: the demo's history runs back far enough that
+    # the new history gate on drift and dead-rule changes nothing for it.
+    #
     # EVERY DETECTOR FED, AND `drift: 4` IS THE FIGURE THIS EXAMPLE WAS INVERTED AGAINST. While the
     # seeds planted pools, a seeded rule named no category, `CategoryLedger::ENTRY_CATEGORY_ID` could
     # not attribute a penny of spending to it, and the demo's four drifting envelopes read as four
@@ -238,7 +245,7 @@ RSpec.describe "db/seeds.rb" do
       kinds = SuggestionEngine.new(user: user, today: today).suggestions.group_by(&:kind)
         .transform_values(&:length)
 
-      expect(kinds).to eq(dated_bill: 6, rate: 4, drift: 4, dead_rule: 1)
+      expect(kinds).to eq(dated_bill: 3, rate: 4, drift: 4, dead_rule: 1)
     end
   end
 

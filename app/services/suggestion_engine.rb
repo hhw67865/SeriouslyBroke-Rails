@@ -27,6 +27,13 @@
 # a panel that proposed a per-period rule to someone with no period would be proposing in units the
 # app cannot yet compute.
 #
+# AND A USER WITH NO HISTORY GETS NOTHING BACKWARD-LOOKING (answers-first Home spec §7). The
+# windows above are cut from the CALENDAR's complete periods, which fill for an account that is a
+# day old, so drift and dead-rule additionally require #MIN_HISTORY_PERIODS complete periods of the
+# user's own — and a dated bill requires #BILL_MIN_OCCURRENCES of the item, which is what deleted
+# the one-occurrence guess this class used to propose and disclaim in the same sentence. Both are
+# the same ruling: a suggestion is a claim about a pattern, and a pattern needs a record.
+#
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8, which is the committed record of
 # this design and the one a reader can actually open. (It was worked out in
 # `.superpowers/sdd/2026-08-16-budget-page/task-6-brief.md` — a gitignored working ledger, named
@@ -61,6 +68,13 @@ class SuggestionEngine
   DRIFT_MIN_FRACTION = 0.10.to_d
   DRIFT_MIN_AMOUNT = 10.to_d
 
+  # TWO OCCURRENCES OR NOTHING, and this is a gate rather than a threshold to tune (answers-first
+  # Home spec §7). One payment is not a schedule: the engine used to propose a single purchase of
+  # $100 or more as a yearly bill and SAY SO in the row ("one payment is not a schedule, so every
+  # 12 months is a guess"), which put three of the demo's ten bills on the panel as self-disclaimed
+  # guesses. A row that argues against itself is one the user has to adjudicate; the panel is
+  # better with it absent. The guessed shape is DELETED rather than demoted — with it goes
+  # `detail[:guessed]`, which no kind can set now.
   BILL_MIN_OCCURRENCES = 2
   # Amounts "within 25% of each other": the largest is at most 1.25× the smallest. A utility bill
   # that swings wider than that is the seasonal case spec §11 puts out of scope.
@@ -70,8 +84,19 @@ class SuggestionEngine
   # checked against real calendar arithmetic (`date >> months`) within ±7 days, so no figure this
   # class reports is ever computed from it.
   DAYS_PER_MONTH = 30.44
-  GUESSED_MIN_AMOUNT = 100.to_d
-  GUESSED_INTERVAL_MONTHS = 12
+
+  # HOW MUCH OF A RECORD THE TWO BACKWARD-LOOKING DETECTORS NEED (answers-first Home spec §7).
+  #
+  # Drift and dead-rule are claims about a PATTERN — "your spending has outgrown this rule", "this
+  # bill stopped arriving" — and both of their windows are cut from `#periods`, which is the
+  # CALENDAR's complete periods and not the user's. A monthly user who signed up yesterday with an
+  # anchor date three months old has four complete periods by construction, so a rule written this
+  # morning over a category that has yet to record anything drew "Groceries has averaged $0.00 for
+  # 4 periods, your rule says $400" on day one. The window was full; the history was empty.
+  #
+  # TWO, counted as "the period their first entry fell in, plus at least one complete one after
+  # it" — see #periods_of_history.
+  MIN_HISTORY_PERIODS = 2
 
   # How far back the entry history is read. A dated bill can be annual, so two occurrences of one
   # need two years; three is one more than that and keeps a very old, long-dead item out of the
@@ -195,6 +220,36 @@ class SuggestionEngine
     window.index { |period| period.cover?(date) }
   end
 
+  # WHERE THIS USER'S HISTORY STARTS: the opening boundary of the period their earliest entry fell
+  # in, or nil for a user with no entries at all.
+  #
+  # `User#period_containing` and NOT a second piece of period arithmetic here — it is the app's one
+  # reader of a period's edges, and this class already leans on its sibling `#period_boundaries`
+  # for `#periods`. Anchoring on the entry's PERIOD rather than on the entry's date is what makes
+  # the count below a count of periods: measured from a bare date, "two full periods" would mean
+  # two periods and whatever fragment the first entry happened to land in.
+  #
+  # `entry_rows` is ordered by date and bounded at #HISTORY_YEARS, so this is the earliest expense
+  # the engine can see — which is exactly the history the detectors measure in. It costs no query.
+  def history_start
+    return @history_start if defined?(@history_start)
+
+    earliest = entry_rows.first
+    @history_start = earliest && user.period_containing(earliest.last.to_date).first
+  end
+
+  # HOW MANY COMPLETE PERIODS OF THEIR OWN THIS USER HAS. `#periods` is the calendar's last six
+  # complete periods; a period that closed before this user recorded anything is one they were not
+  # here for, and counting it would let the calendar vouch for a history nobody lived.
+  #
+  # The period their first entry fell in COUNTS as one of them — history began when it opened — so
+  # #MIN_HISTORY_PERIODS of 2 means "the period you arrived in, and at least one whole one since".
+  def periods_of_history
+    @periods_of_history ||= history_start ? periods.count { |period| period.first >= history_start } : 0
+  end
+
+  def enough_history? = periods_of_history >= MIN_HISTORY_PERIODS
+
   # ---------------------------------------------------------------------------------------------
   # Shared reads — one query each, for every detector that needs them
   # ---------------------------------------------------------------------------------------------
@@ -264,9 +319,10 @@ class SuggestionEngine
   # ---------------------------------------------------------------------------------------------
 
   # TWO OR MORE OCCURRENCES OF SIMILAR SIZE, A WHOLE NUMBER OF MONTHS APART, ON AN ITEM WITH NO
-  # RULE — or one occurrence big enough to be a bill, whose interval is then a GUESS and is said to
-  # be one. The amount is the HIGHEST observed, per spec §8: a rule that over-reserves leaves money
-  # in an envelope, and a rule that under-reserves leaves a bill unpaid.
+  # RULE. (There was a second shape — one occurrence of $100 or more, proposed with a guessed
+  # yearly interval — and it is deleted; see #BILL_MIN_OCCURRENCES.) The amount is the HIGHEST
+  # observed, per spec §8: a rule that over-reserves leaves money in an envelope, and a rule that
+  # under-reserves leaves a bill unpaid.
   # Memoised because the rate detector reads it too (see #category_spend_by_period), and a second
   # pass over the whole entry history to answer the same question would be paid for nothing.
   def dated_bills
@@ -281,26 +337,19 @@ class SuggestionEngine
     end
   end
 
-  # nil unless the occurrences look like a bill. Two shapes, and the second is deliberately narrow:
-  # a single small purchase is not a bill, so only one of $100 or more — on an item with NOTHING
-  # else against it — is proposed at all, and it is proposed as a guess.
+  # nil unless the occurrences look like a bill: enough of them to be a schedule, similar in size,
+  # and a whole number of months apart.
   def bill_shape(occurrences)
+    return nil if occurrences.size < BILL_MIN_OCCURRENCES
+
     amounts = occurrences.map(&:first)
     dates = occurrences.map(&:last)
-
-    return single_occurrence_shape(amounts, dates) if occurrences.size < BILL_MIN_OCCURRENCES
     return nil unless amounts.max <= amounts.min * BILL_AMOUNT_FACTOR
 
     gaps = whole_month_gaps(dates)
     return nil if gaps.blank?
 
-    { amount: amounts.max, interval_months: median(gaps), last_seen_on: dates.last, occurrences: occurrences.size, guessed: false }
-  end
-
-  def single_occurrence_shape(amounts, dates)
-    return nil if amounts.first < GUESSED_MIN_AMOUNT
-
-    { amount: amounts.first, interval_months: GUESSED_INTERVAL_MONTHS, last_seen_on: dates.first, occurrences: 1, guessed: true }
+    { amount: amounts.max, interval_months: median(gaps), last_seen_on: dates.last, occurrences: occurrences.size }
   end
 
   # The months between each pair of consecutive occurrences, or nil if ANY gap is not a whole
@@ -547,8 +596,7 @@ class SuggestionEngine
         # categories with no `funded_since`, so accepting one always starts it holding. The key is
         # carried anyway so the panel's effect clause reads one member on both proposing kinds
         # rather than branching on the kind to decide which question to ask.
-        starts_holding: starts_holding?(category),
-        guessed: false
+        starts_holding: starts_holding?(category)
       },
       prefill: { budget: { amount: amount, basis: "per_period", category_id: category.id } }
     )
@@ -571,7 +619,14 @@ class SuggestionEngine
   # FOUR COMPLETE PERIODS ARE REQUIRED, not "up to four": an average over the two periods a new
   # user has is a sample, and reporting it as drift would tell them to rewrite a rule on a
   # fortnight's evidence.
+  #
+  # AND FOUR CALENDAR PERIODS ARE NOT FOUR PERIODS OF THIS USER'S (#MIN_HISTORY_PERIODS). The
+  # window above is cut from the calendar, so it fills for a user who signed up this morning; the
+  # gate is the second half of the same sentence, and without it the zero-guard below reports the
+  # starkest drift there is over a history that does not exist.
   def drifts
+    return [] unless enough_history?
+
     window = periods.last(DRIFT_WINDOW_PERIODS)
     return [] if window.size < DRIFT_WINDOW_PERIODS
 
@@ -681,8 +736,7 @@ class SuggestionEngine
       direction: observed > rule_amount ? :up : :down,
       category_name: rule.category.name,
       basis: rule.basis,
-      per_period_cost: observed,
-      guessed: false
+      per_period_cost: observed
     }
   end
 
@@ -713,7 +767,19 @@ class SuggestionEngine
   # stop. AN ITEM THAT NEVER HAD AN ENTRY IS NEW, NOT DEAD: a rule written today for a bill that
   # has not arrived yet is the ordinary way one is created, and reporting it as dead would fire on
   # every rule the panel's own dated-bill suggestion just produced.
+  #
+  # THE HISTORY GATE (#MIN_HISTORY_PERIODS) IS STATED HERE AND IS REDUNDANT TODAY — deliberately,
+  # and the redundancy is worth being explicit about rather than leaning on. A rule can only be
+  # dead if its item HAS an entry and that entry fell before a three-period window, and an entry
+  # that old is itself three periods of history, so nothing this detector can produce is ever
+  # gated. That is an accident of two constants (#DEAD_WINDOW_PERIODS ≥ #MIN_HISTORY_PERIODS) and
+  # of where history is measured from, not a property of the detector: shorten the window or move
+  # the anchor and it stops holding. A precondition a detector depends on should be written where
+  # the detector is, not inferred from a neighbour's arithmetic — and the two backward-looking
+  # detectors say the same sentence about history because it is one ruling (spec §7).
   def dead_rules
+    return [] unless enough_history?
+
     window = periods.last(DEAD_WINDOW_PERIODS)
     return [] if window.size < DEAD_WINDOW_PERIODS
 
@@ -753,8 +819,7 @@ class SuggestionEngine
         # key; that branch is now always taken, and it is left standing because a partial reading a
         # detail hash defensively costs nothing and is not what this deletion is about.
         category_name: rule.category.name,
-        per_period_cost: per_period,
-        guessed: false
+        per_period_cost: per_period
       },
       prefill: { id: rule.id }
     )

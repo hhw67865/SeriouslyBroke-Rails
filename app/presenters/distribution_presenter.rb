@@ -403,15 +403,18 @@ class DistributionPresenter
   # WHAT HAD NO JOB YET THE MOMENT THIS PERIOD OPENED — the left-hand side of the buffer line's
   # `$382 → $1,419`, and the first line of the sources breakdown.
   #
-  # "BUFFER" IS AVAILABLE, AND THE WORD IS KEPT ON PURPOSE. Spec §7.1's buffer is "the money no
-  # envelope has claimed", which is exactly what the purpose ledger's root is (§2: money with no
-  # job yet) — the pool era happened to keep it in an account. Every reader on this screen that
-  # says buffer now means `CategoryLedger#available`; Task 7 re-words the screens if it wants to.
+  # "BUFFER" IS AVAILABLE, AND THE WORD SURVIVES ONLY IN THE METHOD NAME. Spec §7.1's buffer is
+  # "the money no envelope has claimed", which is exactly what the purpose ledger's root is (§2:
+  # money with no job yet) — the pool era happened to keep it in an account. Every reader on this
+  # screen that says buffer means `CategoryLedger#available`. THE SCREENS SAY "AVAILABLE" (the
+  # answers-first Home spec §3 sweep): the row this feeds reads "Available carried over", and these
+  # method names were left alone deliberately, because renaming a reader is mechanism churn and the
+  # sweep was over what the user reads.
   #
   # MEASURED with an `as_of` ledger, not derived by subtracting the other lines from #available.
   # It was derived at first, which made the breakdown add up by construction and made this line
   # a bin for everything the other lines did not name: on the demo data it printed
-  # "Buffer carried over -$2,270.00" over a buffer holding $330, because $2,000 of category
+  # "carried over -$2,270.00" over an available holding $330, because $2,000 of category
   # funding and spending that happened DURING the period had nowhere else to go. A figure whose
   # only guarantee is that it makes the column add up is not an answer to "where did this money
   # come from", which is the one question this band exists for.

@@ -163,8 +163,9 @@ module HomeHelper
   #
   # `fix.source.name` IS THE CANDIDATE'S OWN NAME, and that is the whole of the naming problem now.
   # It went through `PoolMovementsHelper#reallocation_pool_name` because a pool needed a noun for
-  # the money inside it — an account stood in for its buffer, so the button had to read "Checking
-  # buffer" rather than "Checking", which would have named the envelopes too. Nothing contains
+  # the money inside it — an account stood in for the cash no envelope had claimed, so the button
+  # had to name that remainder rather than read "Checking", which would have named the envelopes
+  # too. Nothing contains
   # anything on the purpose ledger: a source is a category or it is AVAILABLE, and
   # `ReallocationPresenter::Root#name` answers "Available" for exactly the reason that class is a
   # null object rather than a `nil`.

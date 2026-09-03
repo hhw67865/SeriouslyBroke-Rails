@@ -45,10 +45,12 @@
 #     left to spend     Groceries           — $400 held against a $400-a-period rule
 #
 #   THE FOUR SUGGESTION DETECTORS, and the categories that feed each:
-#     dated_bill (6)  the utility items carrying no rule of their own (Phone, Internet, Water),
-#                     each offering to JOIN the Utilities category — the reuse branch — plus the
-#                     one-off spends the engine reads as annual bills, the Body Shop repair and the
-#                     quarterly tax estimate among them
+#     dated_bill (3)  the utility items carrying no rule of their own (Phone, Internet, Water),
+#                     each offering to JOIN the Utilities category — the reuse branch.
+#                     IT WAS SIX (answers-first Home spec §7): the one-off spends the engine used
+#                     to read as annual bills — the Body Shop repair and the quarterly tax estimate
+#                     among them — are single occurrences, and a single payment is no longer a
+#                     schedule. The spends are still planted; they simply propose nothing now.
 #     rate (4)        Transportation, Shopping, Personal Care, Entertainment — the categories that
 #                     hold nothing, so their spending reads straight against available
 #     drift (4)       Groceries (the one UPWARD suggestion, $460 spent against a $400 rule),

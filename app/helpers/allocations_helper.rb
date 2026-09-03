@@ -156,7 +156,8 @@ module AllocationsHelper
   end
 
   # A nil side is AVAILABLE (two-ledger spec §2), and this is the one place that is spelled — the
-  # same job `PoolMovementsHelper#reallocation_pool_name` did for an account standing in as its own
-  # buffer.
+  # same job `PoolMovementsHelper#reallocation_pool_name` did for an account standing in for the
+  # money no envelope had claimed. `DistributionsHelper#distribution_party` names the same party
+  # through the same constant.
   def allocation_party_name(category) = category&.name || ReallocationPresenter::ROOT.name
 end

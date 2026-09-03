@@ -7,7 +7,7 @@ require "rails_helper"
 # WHAT WENT, AND WHAT THE EXAMPLES THAT READ IT WERE PINNING:
 #
 # * the "Expense Sources" bar — "$200.00 came from savings", "From Income $400.00 / From Savings
-#   $200.00". Three examples. The split it drew is the buffer/envelope split, which the one
+#   $200.00". Three examples. The split it drew is the available/envelope split, which the one
 #   remaining bar now draws under names that are true; a second bar of the same two figures was
 #   the duplicate decision 6 forbids, and "came from savings" was the untruth itself.
 # * the "Savings Contrib" segment — one example's legend assertion. It summed savings-typed
@@ -82,9 +82,9 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       end
     end
 
-    it "shows three legend amounts: buffer, envelope, left over" do
+    it "shows three legend amounts: available, envelope, left over" do
       within money_flow_section do
-        expect(page).to have_content("Out of the buffer $400.00")
+        expect(page).to have_content("Out of available $400.00")
         expect(page).to have_content("Out of an envelope $200.00")
         expect(page).to have_content("Left over $2,400.00")
       end

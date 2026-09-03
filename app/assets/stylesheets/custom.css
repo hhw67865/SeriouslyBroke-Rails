@@ -22,11 +22,38 @@
   --color-primary-dark: #63612F;
   /* The hover partner for the above, and the fill white button labels sit on: 8.81:1 on white. */
   --color-primary-darker: #4E4C24;
-  /* THE OLD `--color-primary-dark`, KEPT FOR THE ONE JOB IT WAS GOOD AT. The sidebar gradient
-     ends here (`.to-brand-dark`) and a gradient is decoration with no foreground of its own, so
-     it is the one place the un-darkened olive is still honest — and swapping it for #63612F
-     would have turned a subtle wash into a hard vignette for no accessibility gain. */
-  --color-primary-mid: #a9a76b;
+  /* ── THE SIDEBAR GRADIENT IS THE ONE SURFACE WITH A FOREGROUND OF ITS OWN ──
+     The palette sweep above left this pair alone on the reasoning that "a gradient is decoration
+     with no foreground": #C9C78B → #a9a76b. It is not decoration. The wordmark, every nav item and
+     the three section eyebrows are painted ON it, and they were the worst-failing text in the app:
+
+       white wordmark   on #C9C78B  1.75:1    on #a9a76b  2.49:1
+       70%-white eyebrow on #C9C78B 1.49:1    on #a9a76b  1.96:1
+
+     THE EYEBROW IS THE BINDING CONSTRAINT and it is why the light end had to move this far.
+     `--color-text-on-primary-light` is `rgba(255,255,255,0.7)`, so its effective colour is 70% of
+     the way from the background to white and the pair it must clear 4.5:1 against is that same
+     background — a much smaller gap than solid white's. #63612F, the readable olive from the sweep
+     above, gives the wordmark 6.40:1 and the eyebrow only 4.11:1; the crossover is at ≈#5A5829.
+
+     THE HUE AND SATURATION ARE THE BRAND SAGE'S, UNCHANGED — HSL(58.4°, 34%), lightness alone
+     taken from 67%/54% down to 25%/17%. Measured, at both ends and therefore at every stop between
+     (channel-wise interpolation is monotone in luminance, so no interior stop can be lighter than
+     the light end):
+
+       #56552B  white 7.69:1   eyebrow 4.75:1   (+ hover white/5 → 6.71 / 4.27)
+       #3A391D  white 11.65:1  eyebrow 6.63:1
+
+     The other foregrounds on this surface clear AA too: the sign-out button's `bg-white/10` reads
+     5.91:1 under white and 4.60:1 at its `bg-white/20` hover, and the ACTIVE nav item is a white
+     pill carrying `--color-primary-darker` (8.81:1), which the darker ground only sharpens.
+
+     THE TOKENS ARE THE SIDEBAR'S OWN and `.from-brand`/`.to-brand-dark` are gone with
+     `--color-primary-mid`. `--color-primary` is a SURFACE elsewhere — cards, borders, the
+     marketing hero — and darkening it to fix one screen's text would have repainted the brand
+     everywhere it is doing no harm. */
+  --color-sidebar-from: #56552B;
+  --color-sidebar-to: #3A391D;
 
   /* Accent Colors */
   --color-terracotta: #C4977A;
@@ -60,8 +87,8 @@
 
   /* THE FOCUS RING (design review M3). Near-black rather than brand olive, because this one
      colour has to be visible on white cards, on gray-50 strips AND on the olive sidebar — no
-     single olive clears 3:1 against both #C9C78B and #63612F. The ring is drawn with a white
-     halo beneath it (see the `:focus-visible` rule at the foot of this file) so its adjacent
+     single olive clears 3:1 against both #ffffff and the sidebar's own dark olive. The ring is
+     drawn with a white halo beneath it (see the `:focus-visible` rule at the foot of this file) so its adjacent
      colour is always #ffffff, 15.36:1, whatever it is sitting on. */
   --color-focus-ring: #26251F;
 
@@ -141,13 +168,14 @@
   border-color: var(--color-primary);
 }
 
-.from-brand {
-  --tw-gradient-from: var(--color-primary);
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(201, 199, 139, 0));
+/* The sidebar's two stops, named for the one surface they paint (see the tokens above). */
+.from-sidebar {
+  --tw-gradient-from: var(--color-sidebar-from);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(86, 85, 43, 0));
 }
 
-.to-brand-dark {
-  --tw-gradient-to: var(--color-primary-mid);
+.to-sidebar {
+  --tw-gradient-to: var(--color-sidebar-to);
 }
 
 /* Status Colors */

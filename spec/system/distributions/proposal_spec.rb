@@ -44,7 +44,7 @@ RSpec.describe "Distributions Proposal", type: :system do
       expect(page).to have_css("h2", text: "Distribute $2,900.00")
 
       within("#distribution-sources") do
-        expect(page).to have_content("Buffer carried over $415.00", normalize_ws: true)
+        expect(page).to have_content("Available carried over $415.00", normalize_ws: true)
         expect(page).to have_content("Income this period $2,400.00", normalize_ws: true)
         expect(page).to have_content("Swept back from Groceries $85.00", normalize_ws: true)
         expect(page).to have_content("Available $2,900.00", normalize_ws: true)
@@ -117,7 +117,7 @@ RSpec.describe "Distributions Proposal", type: :system do
         # THE ` · you wanted $4,000.00` CLAUSE IS DELETED (Task 7) with `buffer_target` — the last
         # pool read on this screen, and one about the POT while every figure beside it is about
         # AVAILABLE.
-        expect(page).to have_content("$2,250.00 stays in your buffer.", normalize_ws: true)
+        expect(page).to have_content("$2,250.00 stays available.", normalize_ws: true)
         expect(page).to have_no_content("you wanted")
       end
 
@@ -198,12 +198,12 @@ RSpec.describe "Distributions Proposal", type: :system do
 
     it "prints the negative rather than a zero" do
       expect(page).to have_css("h2", text: "Nothing to distribute")
-      expect(page).to have_content("Your buffer is $200.00 in the red")
+      expect(page).to have_content("Available is $200.00 in the red")
 
       within("#distribution-sources") do
         # The overdraft is the SPENDING line's, not the carried-over line's: the root opened
         # the period holding nothing, took $100 in and paid $300 out.
-        expect(page).to have_content("Buffer carried over $0.00", normalize_ws: true)
+        expect(page).to have_content("Available carried over $0.00", normalize_ws: true)
         expect(page).to have_content("Spent and moved this period -$300.00", normalize_ws: true)
         expect(page).to have_content("Available -$200.00", normalize_ws: true)
       end

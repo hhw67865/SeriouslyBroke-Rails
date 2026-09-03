@@ -61,11 +61,11 @@ RSpec.describe "Distribution Confirm", type: :system do
     context "when it has been pressed" do
       before do
         click_on "Confirm distribution"
-        await("stays in your buffer")
+        await("stays available")
       end
 
       it "lands on Home and says what it did" do
-        expect(page).to have_content("Distributed $1,900.00 into 2 envelopes. $500.00 stays in your buffer.")
+        expect(page).to have_content("Distributed $1,900.00 into 2 envelopes. $500.00 stays available.")
         expect(page).to have_css("h1", text: "Home")
       end
 
@@ -124,12 +124,12 @@ RSpec.describe "Distribution Confirm", type: :system do
     context "when confirmed as proposed" do
       before do
         click_on "Confirm distribution"
-        await("stays in your buffer")
+        await("stays available")
       end
 
       it "names the sweep in what it says it did" do
         expect(page).to have_content(
-          "Distributed $2,900.00 into 2 envelopes, $85.00 swept back first. $0.00 stays in your buffer."
+          "Distributed $2,900.00 into 2 envelopes, $85.00 swept back first. $0.00 stays available."
         )
       end
 
@@ -192,7 +192,7 @@ RSpec.describe "Distribution Confirm", type: :system do
       before do
         fill_in "Amount for Car", with: "1000"
         click_on "Confirm distribution"
-        await("stays in your buffer")
+        await("stays available")
       end
 
       # WITHDRAWN with its Home rows: "shows the envelope the edit paid for" read `$1,000.00 left`
@@ -200,7 +200,7 @@ RSpec.describe "Distribution Confirm", type: :system do
       # figures, read out of the ledger.
       it "writes the figure in the box, and the cascade it caused" do
         expect(page).to have_content(
-          "Distributed $1,550.00 into 3 envelopes, $85.00 swept back first. $1,350.00 stays in your buffer."
+          "Distributed $1,550.00 into 3 envelopes, $85.00 swept back first. $1,350.00 stays available."
         )
         expect(Allocation.kind_allocation.pluck(:amount)).to contain_exactly(400, 1_000, 150)
         expect([holding_of("Car"), holding_of("Vacation"), buffer]).to eq([1_000, 150, 1_350])
@@ -220,12 +220,12 @@ RSpec.describe "Distribution Confirm", type: :system do
       before do
         fill_in "Amount for Groceries", with: "5000"
         click_on "Confirm distribution"
-        await("stays in your buffer")
+        await("stays available")
       end
 
       it "hands out what there is and no more" do
         expect(page).to have_content(
-          "Distributed $2,900.00 into 1 envelope, $85.00 swept back first. $0.00 stays in your buffer."
+          "Distributed $2,900.00 into 1 envelope, $85.00 swept back first. $0.00 stays available."
         )
         expect(holding_of("Groceries")).to eq(2_900)
         expect(holding_of("Car")).to eq(0)
@@ -253,7 +253,7 @@ RSpec.describe "Distribution Confirm", type: :system do
         visit new_distribution_path
         await("You've already distributed this period")
         click_on "Confirm distribution"
-        await("stays in your buffer")
+        await("stays available")
       end
 
       # Amendment D: the screen said this replaces the previous split, so the sentence afterwards
@@ -295,7 +295,7 @@ RSpec.describe "Distribution Confirm", type: :system do
 
     it "says nothing could be funded and leaves the ledger empty" do
       click_on "Confirm distribution"
-      expect(page).to have_content("Nothing could be funded. -$300.00 stays in your buffer.")
+      expect(page).to have_content("Nothing could be funded. -$300.00 stays available.")
       expect(page).to have_no_content("Distributed $")
       expect(Allocation.count).to eq(0)
       expect(holding_of("Quarterly Taxes")).to eq(0)

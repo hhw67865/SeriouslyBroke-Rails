@@ -40,18 +40,22 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # BOTH DIRECTIONS ON ONE SCREEN. A single-occurrence item is proposed with a GUESSED interval
-    # (§8), and if a guessed row read the same as a measured one the panel's evidence would be
-    # indistinguishable from its arithmetic.
-    it "says 'guess' on the guessed interval and not on the measured one" do
-      within(suggestion(:dated_bill, concert)) do
-        expect(page).to have_content("every 12 months is a guess")
-      end
+    # BOTH DIRECTIONS ON ONE SCREEN, and the direction has REVERSED (answers-first Home spec §7).
+    # A single payment used to be proposed with a guessed yearly interval and disclaimed in its own
+    # second line ("one payment is not a schedule, so every 12 months is a guess"); the shape is
+    # deleted rather than demoted, so the page renders a measured bill and nothing at all for the
+    # one-off — planted here beside it, on the same screen, so the absence is a fact about this
+    # render and not about a fixture that was never built.
+    it "renders the measured bill and no row at all for a single payment", :aggregate_failures do
       within(suggestion(:dated_bill, phone)) { expect(page).to have_no_content("guess") }
+
+      expect(page).to have_no_css("[data-suggestion='dated_bill:#{concert.id}']")
+      expect(page).to have_no_content("is a guess")
     end
 
     # §8: `Coffee — $35 a period for 6 months, currently comes out of your buffer`, with the second
-    # half re-anchored on what replaced the buffer. The divisor is named too: the amount is the
+    # half re-anchored on what replaced that model and re-worded to the one surviving noun
+    # (answers-first Home spec §3 — "buffer" is a dead word; this screen says available). The divisor is named too: the amount is the
     # total over periods LIVED THROUGH, not over appearances.
     it "states a detected rate, its window and that nothing holds it" do
       within(suggestion(:rate, groceries)) do
@@ -84,9 +88,15 @@ RSpec.describe "Budget page suggestions", type: :system do
 
     # Everything the engine returns, in the engine's order (kind, then per-period cost) — nothing
     # truncated, nothing re-sorted here.
+    #
+    # FIVE, WHERE IT WAS SIX (answers-first Home spec §7). The row that left is the Concert — one
+    # $200 payment, which the engine used to propose as a guessed yearly bill and no longer
+    # proposes at all. Every count below moves with it and for that reason alone; the drift and
+    # dead-rule rows are untouched, because this fixture's history runs back two months and clears
+    # the new history gate.
     it "renders every suggestion the engine returns, in its order" do
       expect(rendered_keys).to eq(SuggestionEngine.new(user: user).suggestions.map { |s| "#{s.kind}:#{s.subject.id}" })
-      expect(rendered_keys.size).to eq(6)
+      expect(rendered_keys.size).to eq(5)
     end
 
     # THE INDEX (Task 7's review): the panel runs to about 5,000px on the demo and §8 forbids both
@@ -97,7 +107,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # defect: a strip promising three bills over a list of two.
     it "agrees with the rows the panel is actually showing" do
       expect(rendered_keys.map { |key| key.split(":").first }.tally)
-        .to eq("dated_bill" => 3, "rate" => 1, "drift" => 1, "dead_rule" => 1)
+        .to eq("dated_bill" => 2, "rate" => 1, "drift" => 1, "dead_rule" => 1)
     end
 
     # THE WORDING IS PINNED AS LITERALS, not rebuilt from `pluralize` here — an expectation that
@@ -105,7 +115,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # singular on the screen: three of the four kinds are at one on this fixture, and "1 rates" is
     # the copy nobody notices until it ships.
     it "names each kind with its count" do
-      expect(index_link(:dated_bill).text).to eq("3 bills")
+      expect(index_link(:dated_bill).text).to eq("2 bills")
       expect(index_link(:rate).text).to eq("1 rate")
       expect(index_link(:drift).text).to eq("1 drifting")
       expect(index_link(:dead_rule).text).to eq("1 dead")
@@ -117,7 +127,7 @@ RSpec.describe "Budget page suggestions", type: :system do
       indexed = page.all("[data-suggestions-index-link]").sum { |link| link.text.to_i }
 
       expect(indexed).to eq(rendered_keys.size)
-      expect(indexed).to eq(6)
+      expect(indexed).to eq(5)
     end
 
     # THE ANCHOR HAS TO LAND, and on something that says what it is: a bare `<span id>` would be a
@@ -136,7 +146,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # Each heading sits directly above its own run, which is what makes the jump useful — the
     # engine sorts by kind first, so the runs are contiguous and the heading is not a filter.
     it "heads each run with its kind and its count", :aggregate_failures do
-      expect(find("#suggestions-dated_bill")).to have_content("Dated bills · 3")
+      expect(find("#suggestions-dated_bill")).to have_content("Dated bills · 2")
       expect(find("#suggestions-rate")).to have_content("Rates · 1")
       expect(find("#suggestions-dead_rule")).to have_content("Rules that look dead · 1")
     end
@@ -146,8 +156,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     # exactly this affordance. It is inverted rather than deleted because the fact worth pinning is
     # the same one: whether the panel can hide a row. It can now, on every row, and on purpose.
     it "offers a way to hide every one of them" do
-      expect(page.all("[data-suggestion]").size).to eq(6)
-      expect(page.all("[data-suggestion] button", text: "Hide").size).to eq(6)
+      expect(page.all("[data-suggestion]").size).to eq(5)
+      expect(page.all("[data-suggestion] button", text: "Hide").size).to eq(5)
     end
 
     # NOTHING IS HIDDEN UNTIL THE USER HIDES IT. The foot section is state, so its absence on a
@@ -629,7 +639,9 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   def expected_due_on = (Date.current - 1.month) >> 1
 
-  # ONE payment, and big enough to be a bill at all ($100 floor) — the guessed shape.
+  # ONE payment, and big enough that the deleted guessed shape would have proposed it ($100 floor).
+  # It is still planted, because "no row" is only worth asserting over a fixture that would once
+  # have produced one — see the rendering block's dated-bill example.
   def concert
     @concert ||= create(:item, category: create(:category, :expense, user: user, name: "Fun"), name: "Concert").tap do |item|
       create(:entry, item: item, amount: 200, date: Date.current - 20.days)

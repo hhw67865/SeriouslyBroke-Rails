@@ -11,21 +11,26 @@
     spending with a cap. Each read `CategoryCalculator#monthly_budget_rate`, which read
     `budgets.category_id` — nil on every row.
 
-    `:expenses_v11` — bumped so nothing cached under the old shape survives.
-%>
-<% cache [current_user, selected_date, current_period, show_total, :expenses_v11] do %>
+    "OUT OF THE BUFFER" IS "OUT OF AVAILABLE" (answers-first Home spec §3, which retires "buffer"
+    as a user-facing word). The lane is unchanged — a category holding nothing sends its every
+    entry to AVAILABLE, which is what the subtitle already said in longhand — only the noun moves.
+    The presenter's readers keep their names; the sweep is over what the screen says.
 
-<%# === OUT OF THE BUFFER === %>
+    `:expenses_v12` — bumped so nothing cached under the old shape survives.
+%>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v12] do %>
+
+<%# === OUT OF AVAILABLE === %>
 <section class="mb-12">
   <div class="border-l-4 border-terracotta pl-4 mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Out of the Buffer</h2>
+    <h2 class="text-xl font-semibold text-gray-900">Out of Available</h2>
     <p class="text-sm text-gray-500">Spending from categories with no envelope — nothing reserved this money before you spent it</p>
   </div>
 
   <%# Running-total chart %>
   <div class="mb-8">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Buffer Spending" : "Buffer Spending" %></h3>
+      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Available Spending" : "Available Spending" %></h3>
       <%= link_to reports_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
           class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>
         <%= heroicon show_total ? "eye-slash" : "eye", options: { class: "h-3.5 w-3.5" } %>
@@ -40,24 +45,24 @@
             prefix: "$ ",
             colors: @presenter.expenses_chart_colors %>
       <% else %>
-        <p class="text-gray-500 text-center py-8">No buffer spending <%= period_time_label %></p>
+        <p class="text-gray-500 text-center py-8">No spending out of available <%= period_time_label %></p>
       <% end %>
     </div>
   </div>
 
-  <%# Buffer stats %>
+  <%# Available stats %>
   <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Buffer Spending" : "Tracked Buffer Spending" %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Available Spending" : "Tracked Available Spending" %></p>
       <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_buffer_expenses) %></p>
     </div>
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Buffer Spending" : "Total Buffer Spending" %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Available Spending" : "Total Available Spending" %></p>
       <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_buffer_expenses) %></p>
     </div>
   </div>
 
-  <%# Buffer breakdown %>
+  <%# Available breakdown %>
   <% buffer_categories = @presenter.buffer_categories_breakdown %>
   <% if buffer_categories.any? %>
     <div class="space-y-3">
@@ -69,7 +74,7 @@
       <% end %>
     </div>
   <% else %>
-    <p class="text-gray-500 text-sm">No buffer spending <%= period_time_label %></p>
+    <p class="text-gray-500 text-sm">No spending out of available <%= period_time_label %></p>
   <% end %>
 </section>
 

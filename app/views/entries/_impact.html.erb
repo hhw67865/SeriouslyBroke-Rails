@@ -25,8 +25,8 @@
         app's one Ruby mirror of the ledger's own rule.
 
         IT USED TO BE TWO SHAPES said as one sentence — no pool at all, and a pool that IS an
-        account — because an account was the buffer (§7.1) and nothing reserved money sitting in
-        one. The pool has gone and the date has arrived: a category can hold money and still send
+        account — because an account was where the unclaimed money sat (§7.1) and nothing reserved
+        money sitting in one. The pool has gone and the date has arrived: a category can hold money and still send
         THIS receipt to available.
 
         THE REGISTER IS THE BUDGET PAGE'S OWN — its rate suggestion says a category's spending
@@ -90,7 +90,7 @@
       <%# The bar carries no colour vocabulary: one brand fill on a grey track, at
           balance-after ÷ what the envelope is for, clamped 0..1. An overdrawn envelope simply has
           no bar left — the figure above says so, signed and in red, which is the same way the
-          account header prints a negative buffer. %>
+          account header prints a negative balance. %>
       <%# OMITTED ENTIRELY when the envelope has no rules on it (see #bar?): an empty track drawn
           beside "$240.00 left" would say "nothing left" an inch under a figure saying otherwise. %>
       <% if impact.bar? %>
@@ -102,7 +102,9 @@
         </div>
       <% end %>
 
-      <%# §6: "Overdrawing shows the envelope going negative and says the buffer can cover it."
+      <%# §6: "Overdrawing shows the envelope going negative and says the buffer can cover it" —
+          and the word §6 called the buffer is AVAILABLE, here as everywhere (answers-first Home
+          spec §3). The `buffer` target name below is the JavaScript hook, not the copy.
           BOTH STATES ARE RENDERED BY THE SERVER and the browser only toggles `hidden`, so the
           sentence a user sees after typing is the same one the server would have printed for the
           same figure — there is no second author of this copy. Nothing blocks: the button below
@@ -111,7 +113,7 @@
          data-app--entry--impact-target="buffer"
          data-figure="buffer"
          <%= "hidden" unless impact.overdrawn? %>>
-        This <%= impact.noun %> goes negative — your buffer covers the difference.
+        This <%= impact.noun %> goes negative — your available money covers the difference.
       </p>
     </div>
   <% end %>
