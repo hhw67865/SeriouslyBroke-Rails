@@ -15,13 +15,17 @@ require "rails_helper"
 #                 ledger, which this plan does not touch. Both examples carried whole, copy verbatim.
 #   :shortfall  — NEW (§4). `free < 0` is the signal, and the strip states the figure, walks the
 #                 uncovered claims in REVERSE PRIORITY (the give-way order) and names the per-day pace
-#                 that lands the period at zero.
+#                 that lands the period at zero. ** ITS HEADLINE IS THE HERO'S ARM TABLE (fix round 1
+#                 — HIGH-1): three arms, each gated on the predicate that establishes its cause, and
+#                 the give-way list on only one of them. See "the three arms" below.
 #   :over       — a rule spent past what it had (§3.1). It REPLACES `overdrawn`, which measured a
 #                 category's HOLDING going negative; there are no holdings.
-#   :overdue    — a due date passed with the fund still short (§3.2). It REPLACES `overdue` and
-#                 `won't make it` together, and it is narrower than either: the catch-up formula fills
-#                 a fund whose date has passed in ONE period, so a bill that is merely unpaid reads
-#                 full and is NOT trouble. Both directions are pinned, because that is the ruling.
+#   :overdue    — an occurrence past its date that nobody has settled (§3.2). It REPLACES `overdue`
+#                 and `won't make it` together. ** IT FIRES ON THE DATE ALONE (fix round 1 — MED-1). **
+#                 It was gated on `built_up < target` as well, which silenced the ordinary case: the
+#                 catch-up formula fills an unpaid fund in ONE period, so the WHOLE fund is the usual
+#                 shape of a bill past its date, not the exception. The fund state splits the
+#                 SENTENCE ("the fund is short $X" / "the money is set aside"), and both are pinned.
 #   :structural — UNCHANGED. `Budget.steady_need` against declared income reads the rules and the
 #                 calendar and nothing else. All six examples carried.
 #
@@ -46,6 +50,16 @@ require "rails_helper"
 #   * "fits a problem row and its fix button inside a 375px viewport" — CONVERTED, not deleted: the
 #     fix buttons are gone (a fix was a purpose-side MOVE), so the narrow pin measures the widest
 #     thing the strip still holds, which is the shortfall arm's uncovered list.
+#
+# ** `spec/system/home/fixes_spec.rb` (638 lines) WAS DELETED WHOLE WITH THE FIX APPARATUS, AND THIS
+# FILE IS WHERE THAT IS RECORDED (fix round 1 — LOW-3). ** It was the only file naming those examples
+# and it left no successor saying so, which is the one way a deletion in this codebase goes unnoticed.
+# Every example in it asserted an ALLOCATION — "Take $300.00 from Rent", the candidate list, the
+# amount it proposed, the /allocations/new form it opened — and §5 leaves the purpose side with no
+# movements at all: there is nothing to take money FROM, because no claim is money sitting anywhere.
+# The behaviour that replaced them all is one sentence and one door, pinned here as "sends the user to
+# the rules rather than offering to move money". `ReallocationPresenter` and `/allocations/new` are
+# untouched and still serve the reallocation screen until Task 4.
 #
 # EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-trouble]`,
 # `[data-problem-category]`, `[data-problem-state]`, `[data-problem-detail]`,
@@ -204,6 +218,118 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_no_css("[data-trouble]")
   end
 
+  # ── THE THREE ARMS OF `free < 0`, WHICH ARE THE HERO'S (fix round 1 — HIGH-1) ──────────────────
+  #
+  # The strip said "Your rules claim more than you have" on `#short?` alone, and `free < 0` is a SIGN
+  # that carries no cause: an inch above, the hero card was already splitting the same negative three
+  # ways on predicates that establish one. The three examples below are the three FALSE states the
+  # review found, each converted from the answers-first fixture that named it, and each asserting the
+  # wrong sentence ABSENT as well as the right one present — the failure was a strip printing a
+  # true-sounding sentence, not a missing one.
+
+  # ** ARM 1: THE CLAIMS REALLY DO OUTRUN THE MONEY, ** which is the one arm the give-way walk belongs
+  # to. The three-rule fixture above, asked for its headline: $1,600 claimed against $1,340.
+  it "heads the shortfall with the rules where the claims outrun the money", :aggregate_failures do
+    deposit(1_340)
+    three_rules
+
+    visit root_path
+
+    expect(find("[data-shortfall-headline]")).to have_content("Your rules claim more than you have")
+    expect(page).to have_no_css("[data-shortfall-elsewhere]")
+    expect(page).to have_css("[data-uncovered]")
+  end
+
+  # ** ARM 3: THE MONEY IS IN THE WRONG ACCOUNT. ** `hero_spec`'s own measured fixture — $1,000 of
+  # income, $1,200 walked over to Ally, NOT ONE RULE. Total money is still $1,000 and nothing is
+  # claimed, so `unclaimed` is $1,000 (the claims do NOT outrun) and the CAP took `free` to the pot's
+  # **−$200.00**. The card says the money is outside checking; the strip used to say the rules claim
+  # too much, about a user with no rules. What this user needs is a TRANSFER.
+  it "says the money is outside checking rather than blaming rules that do not exist", :aggregate_failures do
+    deposit(1_000)
+    move_out(1_200)
+
+    visit root_path
+
+    expect(find("[data-shortfall-headline]")).to have_content("Checking is short")
+    expect(find("[data-shortfall-amount]")).to have_content("short $200.00")
+    expect(find("[data-shortfall-elsewhere]"))
+      .to have_content("$1,200.00 of your money is sitting outside checking — move some into checking")
+    expect(strip).to have_no_content("Your rules claim more than you have")
+    expect(page).to have_no_css("[data-uncovered]")
+    # THE PACE SURVIVES EVERY ARM: spending less lands the figure at zero whichever way it got there.
+    expect(page).to have_css("[data-shortfall-pace]")
+  end
+
+  # ** ARM 2: THE PURE OVERSPEND. ** `hero_spec`'s "is honest when spending has drained the root",
+  # asked of the strip. PLANTED: $100 spent on a funded category carrying NO rule and no income at
+  # all — Σ claims is $0.00, total money is −$100.00, so `unclaimed` is −$100 (the claims DO outrun,
+  # vacuously) and `free = min(−100, −100)` is −$100.00. "Your rules claim more than you have" would
+  # name something that does not exist, and there is nothing for a give-way walk to list.
+  it "says the account was spent past zero when no rule claims a penny", :aggregate_failures do
+    spend(holder("Groceries"), 100)
+
+    visit root_path
+
+    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(find("[data-shortfall-headline]")).to have_content("You have spent past what you had")
+    expect(find("[data-shortfall-amount]")).to have_content("short $100.00")
+    expect(strip).to have_no_content("Your rules claim more than you have")
+    expect(page).to have_no_css("[data-uncovered]")
+    # One account, and the money was SPENT rather than moved: there is nowhere to send this user.
+    expect(page).to have_no_css("[data-shortfall-elsewhere]")
+  end
+
+  # ** ARM 3 AGAIN, WITH CLAIMS THAT THE SAVINGS COVER — the give-way list's own false state. **
+  # PLANTED: $800 of income, $1,000 walked to Ally, one $500-a-period rule with nothing spent (claim
+  # **$500.00**). Total money is $800, so `unclaimed = 800 − 500` = $300.00 — every claim IS covered
+  # by money this user owns — while the pot is −$200.00 and `free = min(−200, 300)` is −$200.00. The
+  # walk used to run on the shortfall regardless and name Groceries as uncovered, with the account
+  # holding its money printed two inches below.
+  it "names no uncovered claim when the money for it is in another account", :aggregate_failures do
+    deposit(800)
+    move_out(1_000)
+    envelope("Groceries", 500)
+
+    visit root_path
+
+    expect(find("[data-shortfall-amount]")).to have_content("short $200.00")
+    expect(find("[data-shortfall-elsewhere]")).to have_content("$1,000.00 of your money is sitting outside")
+    expect(page).to have_no_css("[data-uncovered-claim='Groceries']")
+    expect(page).to have_no_css("[data-uncovered]")
+  end
+
+  # ** THE PART OF THE SHORTFALL NO CLAIM ACCOUNTS FOR (fix round 1 — LOW-1). ** The walk runs out of
+  # claims and the list then sums to LESS than the headline, with nothing naming the difference.
+  #
+  # PLANTED: $400 spent on a funded category with no rule and no income, beside a $500-a-period rule
+  # with nothing spent. Σ claims $500.00 against −$400.00 of money → `unclaimed = −400 − 500` =
+  # −$900.00 and `free = min(−400, −900)` is −$900.00. Groceries' whole $500 goes; `900 − 500` =
+  # **$400.00** is past every claim there is.
+  it "names the part of the shortfall that is past every claim", :aggregate_failures do
+    spend(holder("Coffee", priority: 3), 400)
+    envelope("Groceries", 500, priority: 2)
+
+    visit root_path
+
+    expect(find("[data-shortfall-amount]")).to have_content("short $900.00")
+    expect(uncovered("Groceries")).to have_content("nothing covers its $500.00")
+    expect(find("[data-uncovered-remainder]")).to have_content("$400.00 past everything the rules claim")
+  end
+
+  # THE OTHER DIRECTION: a shortfall the claims absorb leaves no remainder, and a line about $0.00
+  # past everything would report nothing. The three-rule fixture's $260 is split inside the list.
+  it "says nothing about a remainder when the claims absorb the shortfall", :aggregate_failures do
+    deposit(1_340)
+    three_rules
+
+    visit root_path
+
+    expect(find("[data-shortfall-amount]")).to have_content("short $260.00")
+    expect(page).to have_css("[data-uncovered]")
+    expect(page).to have_no_css("[data-uncovered-remainder]")
+  end
+
   # NO DECLARED PERIOD, NO PACE — the same refusal `#period_range` makes about the same reader, since
   # there is no "rest of the period" to spread a shortfall over. The figure and the list survive,
   # because both are true whatever calendar the user keeps.
@@ -269,14 +395,14 @@ RSpec.describe "Home Trouble", type: :system do
 
   # ── TRIGGER: A DUE DATE PASSED WITH THE FUND SHORT (§3.2) ──────────────────────────────────────
 
-  # ** OVERDUE IS THE DATE PAST **AND** THE FUND SHORT, and the second half is the ruling. **
+  # ** OVERDUE IS THE DATE (fix round 1 — MED-1), AND THE FUND STATE IS THE INSTRUCTION. **
   #
   # PLANTED: a $1,200 monthly bill anchored ten days ago, with $500 of the category's spending inside
   # this period. §3.2's catch-up formula — `planned = (target − built_up) ÷ periods_left`, and
   # `periods_left` floors at 1 for a date already past — accrues the whole $1,200 in this period; the
   # walk then settles the period's spending, so `raw = 1,200 − 500` and `built_up` is **$700.00**.
   # $500 is less than one cycle, so `cycles_paid_by` stays at 0 and the occurrence does not roll: the
-  # date is still ten days ago and the fund is $500 short of it.
+  # date is still ten days ago and the fund is `1,200 − 700` = **$500.00** short of it.
   it "names a bill whose date has passed while its fund is short", :aggregate_failures do
     deposit(2_000)
     due = Date.current - 10.days
@@ -287,18 +413,33 @@ RSpec.describe "Home Trouble", type: :system do
     expect(problem_row("Utilities").find("[data-problem-state]"))
       .to have_content("overdue · was #{due.strftime("%b %-d")}")
     expect(problem_row("Utilities").find("[data-problem-detail]"))
-      .to have_content("$700.00 built up of $1,200.00")
-    expect(problem_row("Utilities")).to have_content("this needs paying")
+      .to have_content("$700.00 built up of $1,200.00 — the fund is short $500.00 — this needs paying")
   end
 
-  # ** THE OTHER DIRECTION, AND IT IS THE HALF THAT STATES THE RULING. ** The same bill with nothing
-  # spent: the catch-up formula fills it to the full $1,200 in one period, so the fund is WHOLE and
-  # the occurrence is waiting to be PAID rather than to be saved into. That is not trouble — it is a
-  # bill on the user's desk — and `#overdue?`'s `built_up < target` half is the whole of the
-  # distinction. A strip that fired on the date alone would flag every bill the user is on top of.
-  it "leaves a bill whose fund is whole out of the strip", :aggregate_failures do
+  # ** THE HALF THAT USED TO BE SILENT, AND IT IS THE ORDINARY CASE. ** The same bill with nothing
+  # spent: the catch-up formula floors `periods_left` at 1 for a date already past, so the fund fills
+  # to the full $1,200 in ONE period. Under the old `built_up < target` gate that user — who had
+  # saved every penny and simply not paid the bill — got SILENCE, and their row printed `next due`
+  # over a date ten days gone. The bill still has to be paid; what changes is the sentence.
+  it "names a bill whose date has passed even with the fund whole", :aggregate_failures do
     deposit(2_000)
-    accumulating("Utilities", amount: 1_200, due: Date.current - 10.days)
+    due = Date.current - 10.days
+    accumulating("Utilities", amount: 1_200, due: due)
+
+    visit root_path
+
+    expect(problem_row("Utilities").find("[data-problem-state]"))
+      .to have_content("overdue · was #{due.strftime("%b %-d")}")
+    expect(problem_row("Utilities").find("[data-problem-detail]"))
+      .to have_content("$1,200.00 built up of $1,200.00 — the money is set aside — pay it and the fund starts again")
+    expect(problem_row("Utilities")).to have_no_content("the fund is short")
+  end
+
+  # THE OTHER DIRECTION, WHICH IS NOW THE DATE'S: a bill still ahead of its date is a fund SAVING,
+  # which is what the catch-up formula is for and is not trouble. Silence is the good state.
+  it "leaves a bill whose date is still ahead out of the strip", :aggregate_failures do
+    deposit(2_000)
+    accumulating("Utilities", amount: 1_200, due: Date.current + 10.days)
 
     visit root_path
 

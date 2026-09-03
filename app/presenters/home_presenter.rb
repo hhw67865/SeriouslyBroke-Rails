@@ -74,6 +74,16 @@ class HomePresenter
 
     def trouble? = over? || overdue?
 
+    # ** IS THE MONEY FOR THIS OCCURRENCE THERE, OR NOT (fix round 1 — MED-1)? ** It used to be half
+    # of `#overdue?` and it is the wrong half to gate a trigger on (see `ClaimCalculator#overdue?`) —
+    # a bill nobody paid needs a human whether or not the fund is whole. What it is exactly right for
+    # is which SENTENCE the strip says about it: "the fund is short $200.00 — this needs paying" is a
+    # different instruction from "the money is set aside — pay it and the fund starts again", and only
+    # this pair can tell them apart.
+    def fund_short? = built_up < target
+
+    def fund_gap = target - built_up
+
     # WHAT THE BAR MEASURES: spending against the rate for an envelope, the running total against the
     # target for a fund (§3.4). One pair of readers rather than a signed number, because the two
     # halves are read by different parts of the row.
@@ -510,9 +520,17 @@ class HomePresenter
   #
   # `break` RATHER THAN A `take_while`, because the boundary claim is IN the list with a REDUCED
   # amount — a filter can only decide whether the whole row belongs.
+  #
+  # ** IT RUNS ONLY WHERE THE CLAIMS ACTUALLY OUTRUN THE MONEY (fix round 1 — HIGH-1). ** `free < 0`
+  # has two causes and this walk is about one of them. Where the CAP bound on a negative pot —
+  # `unclaimed ≥ 0`, which is `total_money ≥ Σ claims` — every claim the user has IS covered by money
+  # they own; it is merely sitting outside checking. Walking there named Groceries as uncovered while
+  # the savings account holding its money was two inches further down the same screen. The gate is
+  # `#claims_outrun_the_money?` — the SAME predicate the hero's arm table branches on — so the strip
+  # and the card cannot come to two different accounts of one negative figure.
   def uncovered_claims
     @uncovered_claims ||= begin
-      remaining = shortfall
+      remaining = claims_outrun_the_money? ? shortfall : 0.to_d
       list = []
       give_way_order.each do |line|
         break unless remaining.positive?
@@ -524,6 +542,22 @@ class HomePresenter
       end
       list
     end
+  end
+
+  # ** WHAT THE SHORTFALL IS PAST EVERY CLAIM THERE IS (fix round 1 — LOW-1). ** The walk above stops
+  # when it runs out of claims, so on a screen whose spending has gone further than the rules ever
+  # asked for, the list sums to LESS than the headline — $900 short over a list totalling $500, with
+  # nothing naming the other $400. It is the headline minus the list, by construction, so the strip's
+  # figures add up to the figure above them.
+  #
+  # ZERO WHERE THE LIST IS EMPTY, and that is a refusal rather than an arithmetic accident: with no
+  # claims walked there is no "past everything the rules claim" to say — the two arms that reach that
+  # state (nothing claimed at all, and the money sitting in another account) are already carrying the
+  # sentence that names their own cause.
+  def uncovered_remainder
+    return 0.to_d if uncovered_claims.empty?
+
+    shortfall - uncovered_claims.sum(0.to_d, &:amount)
   end
 
   # ** THE PACE THAT LANDS THE PERIOD AT ZERO (§4): `shortfall ÷ days left`. ** No new date

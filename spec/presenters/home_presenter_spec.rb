@@ -873,23 +873,51 @@ RSpec.describe HomePresenter do
       expect(presenter).to be_trouble
     end
 
-    # AN OVERDUE BILL IS A DATE PAST **AND** A FUND SHORT (§3.2). PLANTED: a $600 bill anchored Jan 2
-    # 2026 on a category funded and ruled since Jan 2025 — the catch-up formula fills it long before
-    # the date arrives, so with nothing spent it is WHOLE and waiting to be PAID, which is not
-    # trouble. Spend $200 of it inside this period and `raw = 600 − 200` leaves $400 against a date
-    # that has passed, which is.
-    it "fires the overdue trigger only where the fund is short", :aggregate_failures do
+    # ** AN OVERDUE BILL IS A DATE PAST, FUND OR NO FUND (fix round 1 — MED-1). ** This pinned the
+    # opposite — "only where the fund is short" — and that was the finding: §3.2's catch-up formula
+    # floors `periods_left` at 1 for a date already gone, so an unpaid bill's fund fills in ONE period
+    # and the WHOLE fund is the ordinary shape of an overdue bill. The user with $600 saved for a bill
+    # they never paid got silence.
+    #
+    # PLANTED: a $600 bill anchored Jan 2 2026 on a category funded and ruled since Jan 2025, against
+    # $2,000 of income so nothing else is true. Nothing spent → the fund is whole at **$600.00**, the
+    # occurrence does not roll (`cycles_paid_by` needs a whole cycle) and Jan 2 is a month behind
+    # `today` (Feb 6). Spend $200 and `raw = 600 − 200` leaves **$400.00** against the same date: the
+    # SAME trigger, and only the strip's sentence changes.
+    def unpaid_bill
+      income(2_000)
+      holder("Utilities", priority: 1).tap do |utilities|
+        rolling(utilities, amount: 600, anchor: Date.new(2026, 1, 2), every: 6)
+      end
+    end
+
+    it "fires the overdue trigger on a date past with the fund whole", :aggregate_failures do
+      unpaid_bill
+
+      expect(presenter.troubles.map(&:kind)).to eq([:overdue])
+      expect(presenter.troubles.sole.subject.built_up).to eq(600)
+      expect(presenter.troubles.sole.subject).not_to be_fund_short
+    end
+
+    # THE SAME TRIGGER WITH THE FUND SHORT, and only `#fund_short?` — the strip's sentence — differs.
+    it "fires the same trigger with the fund short, and says the gap", :aggregate_failures do
+      spend(unpaid_bill, 200)
+
+      expect(presenter.troubles.map(&:kind)).to eq([:overdue])
+      expect(presenter.troubles.sole.subject.built_up).to eq(400)
+      expect(presenter.troubles.sole.subject).to be_fund_short
+      expect(presenter.troubles.sole.subject.fund_gap).to eq(200)
+    end
+
+    # THE OTHER DIRECTION, WHICH IS NOW THE DATE'S: the same bill anchored a month AHEAD of `today` is
+    # a fund still saving, and saving is not trouble. Silence is the good state.
+    it "leaves a bill whose date is still ahead out of the list", :aggregate_failures do
       income(2_000)
       utilities = holder("Utilities", priority: 1)
-      rolling(utilities, amount: 600, anchor: Date.new(2026, 1, 2), every: 6)
+      rolling(utilities, amount: 600, anchor: Date.new(2026, 3, 2), every: 6)
 
       expect(presenter.troubles.map(&:kind)).to eq([])
-
-      spend(utilities, 200)
-      fresh = described_class.new(user: user, today: today)
-
-      expect(fresh.troubles.map(&:kind)).to eq([:overdue])
-      expect(fresh.troubles.sole.subject.built_up).to eq(400)
+      expect(presenter).not_to be_trouble
     end
 
     # MAIN'S OVERDRAFT IS THE HERO'S RED FIGURE, so the strip must not repeat it: printing the same
@@ -963,6 +991,76 @@ RSpec.describe HomePresenter do
 
       expect(presenter.shortfall).to eq(260)
       expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] }).to eq([["Groceries", 260]])
+    end
+
+    # ** NOTHING IS UNCOVERED WHEN THE MONEY IS SIMPLY IN THE WRONG ACCOUNT (fix round 1 — HIGH-1). **
+    # `free < 0` has two causes and only ONE of them is a claim going unmet: where the CAP bound on a
+    # negative pot, every claim is covered by money the user has — it is just not in checking. The walk
+    # ran on `#shortfall` regardless and named claims the savings cover, which is the strip asserting a
+    # cause it never established.
+    #
+    # PLANTED: $800 of income, $1,000 walked over to Ally, one $500-a-period rule with nothing spent.
+    # Σ claims $500.00; total money is still $800, so `unclaimed = 800 − 500` = **$300.00** — the
+    # claims do NOT outrun the money — while the pot is `800 − 1,000` = −$200.00 and
+    # `free = min(−200, 300)` is −$200.00. The shortfall is real and the list is empty.
+    it "names nothing when the money is in another account rather than short", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income(800)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_000, date: today, kind: :transfer)
+      rate(holder("Groceries", priority: 1), 500)
+
+      expect(presenter.shortfall).to eq(200)
+      expect(presenter).not_to be_claims_outrun_the_money
+      expect(presenter.uncovered_claims).to be_empty
+      expect(presenter.uncovered_remainder).to eq(0)
+    end
+
+    # ** THE SHORTFALL CAN OUTLAST THE CLAIMS, AND THE REMAINDER HAS TO BE NAMED (fix round 1 —
+    # LOW-1). ** The walk runs out of claims and the list then sums to LESS than the headline, with
+    # nothing on the screen saying where the difference went.
+    #
+    # PLANTED: $400 spent on an unbudgeted category with no income at all, so the pot and the total
+    # are both −$400.00, beside one $500-a-period rule with nothing spent (claim **$500.00**).
+    # `unclaimed = −400 − 500` = −$900.00 and `free = min(−400, −900)` is −$900.00. The walk takes
+    # Groceries' whole $500 and stops; `900 − 500` = **$400.00** is past every claim there is — which
+    # is the money already spent past zero.
+    it "names what the shortfall is past every claim", :aggregate_failures do
+      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 400)
+      rate(holder("Groceries", priority: 1), 500)
+
+      expect(presenter.shortfall).to eq(900)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] }).to eq([["Groceries", 500]])
+      expect(presenter.uncovered_remainder).to eq(400)
+    end
+
+    # THE OTHER DIRECTION: a shortfall the claims absorb leaves no remainder, and a sentence about
+    # $0.00 past everything would be a line reporting nothing.
+    it "has no remainder while the claims absorb the shortfall", :aggregate_failures do
+      income(1_340)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+      rate(holder("Fun", priority: 3), 200)
+
+      expect(presenter.uncovered_remainder).to eq(0)
+    end
+
+    # ** A PRIORITY TIE IS BROKEN BY NAME, AND THE WALK REVERSES THAT (fix round 1 — LOW-2). **
+    # `#budgeted_categories` sorts on `[priority, name]` — `Category.in_fill_order`'s own key, because
+    # priority alone is not a total order — and the give-way walk reads it BACKWARDS. So at one
+    # priority the LATER name gives way FIRST, which is what this pins: the order is a fact about the
+    # screen rather than whatever the database returned this morning.
+    #
+    # PLANTED: two $300-a-period rules at priority 2 against $200 of income. Σ claims $600.00,
+    # `unclaimed = 200 − 600` = −$400.00, `free = min(200, −400)` = −$400.00. Zed's whole $300 goes
+    # first and Alpha is split at the remaining **$100.00**.
+    it "gives way in reverse name order where two categories share a priority", :aggregate_failures do
+      income(200)
+      rate(holder("Alpha", priority: 2), 300)
+      rate(holder("Zed", priority: 2), 300)
+
+      expect(presenter.shortfall).to eq(400)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] })
+        .to eq([["Zed", 300], ["Alpha", 100]])
     end
   end
 

@@ -207,26 +207,45 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(calc(Date.new(2026, 8, 15)).planned_this_period).to eq(0)
     end
 
-    # ** `#overdue?` IS A DATE PAST **AND** A FUND SHORT (§4's trigger; Task 3), and the second half
-    # is what this pair is for. ** The cycle rolls on PAYMENT rather than on the calendar, so an
-    # occurrence nobody paid stays anchored at Jun 1 and `#next_due_on` goes on naming it — which
-    # means a FULL fund reads "in the past" too. That one is waiting to be PAID, not to be saved
-    # into, and a screen that flagged it would flag every bill the user is on top of.
+    # ** `#overdue?` IS THE DATE AND ONLY THE DATE (§3.2; fix round 1 — MED-1), AND THE `built_up <
+    # target` HALF IS DELETED. ** It read "a date past AND a fund short", which silenced the ordinary
+    # overdue bill: §3.2's catch-up formula floors `periods_left` at 1 for a date already past, so an
+    # unpaid bill's fund fills to its target in ONE period and the WHOLE fund is the common state of a
+    # date that has gone by. A $600 premium due Jun 1, fully saved and never paid, was silent on the
+    # strip and its row printed `next due Jun 1` — a past date under the word "next". §3.2 is explicit:
+    # "an occurrence whose money was never spent stays where it was anchored and the row reads
+    # overdue". So the trigger is the unfulfilled occurrence, and the FUND STATE is what the copy
+    # splits on rather than what the predicate gates on (`_trouble.html.erb`, pinned in `trouble_spec`).
     #
-    # AUG 15, WITH NOTHING SPENT: the walk filled the fund to its $600 target back in June and holds
-    # it there (the two examples above), so the date has passed and the fund is whole.
-    it "is not overdue while the fund is whole", :aggregate_failures do
-      august = calc(Date.new(2026, 8, 15))
+    # FOUR PINS: the date both sides of `today`, and — on the past side — the fund both whole and
+    # short, which is the pair the old predicate collapsed.
 
-      expect(august.next_due_on).to eq(Date.new(2026, 6, 1))
-      expect(august.built_up).to eq(600)
-      expect(august).not_to be_overdue
+    # ON the due date is not past it. The bill is due TODAY, which is a thing to do rather than a
+    # thing missed, and a strict `<` is the whole of that distinction.
+    it "is not overdue on the day the bill falls due", :aggregate_failures do
+      june = calc(Date.new(2026, 6, 1))
+
+      expect(june.next_due_on).to eq(Date.new(2026, 6, 1))
+      expect(june.built_up).to eq(600)
+      expect(june).not_to be_overdue
     end
 
-    # THE OTHER DIRECTION, AND THE ARITHMETIC IS §3.2'S SETTLE ORDER: a $200 part payment in August
-    # lands AFTER that period's accrual, so `raw = 600 − 200` leaves **$400.00**; $200 is less than
-    # one whole cycle, so `cycles_paid_by` stays at 0 and the occurrence does not roll. Date past,
-    # fund $200 short.
+    # THE DAY AFTER, WITH THE FUND WHOLE — the state the old predicate called healthy. Nothing was
+    # spent, so `cycles_paid_by` stays at 0, the occurrence does not roll and Jun 1 is a date that
+    # went by with the bill unpaid.
+    it "is overdue the day after its date even with the fund whole", :aggregate_failures do
+      second = calc(Date.new(2026, 6, 2))
+
+      expect(second.next_due_on).to eq(Date.new(2026, 6, 1))
+      expect(second.built_up).to eq(600)
+      expect(second).to be_overdue
+    end
+
+    # THE SAME DATE WITH THE FUND SHORT, and the arithmetic is §3.2'S SETTLE ORDER: a $200 part
+    # payment in August lands AFTER that period's accrual, so `raw = 600 − 200` leaves **$400.00**;
+    # $200 is less than one whole cycle, so `cycles_paid_by` stays at 0 and the occurrence does not
+    # roll. Date past, fund $200 short — and the verdict is the same one as above, because the
+    # predicate no longer reads the fund.
     it "is overdue once part of the bill has been paid out of the fund", :aggregate_failures do
       spend(200, on: Date.new(2026, 8, 10), item: premium)
       august = calc(Date.new(2026, 8, 15))
@@ -234,6 +253,17 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(august.next_due_on).to eq(Date.new(2026, 6, 1))
       expect(august.built_up).to eq(400)
       expect(august).to be_overdue
+    end
+
+    # THE OTHER SIDE OF THE DATE, WITH THE FUND SHORT — March holds $300 of $600 against a date three
+    # months out. A fund that is behind is not overdue; it is saving, which is what the catch-up
+    # formula is for.
+    it "is not overdue while the date is still ahead and the fund is short", :aggregate_failures do
+      march = calc(Date.new(2026, 3, 15))
+
+      expect(march.next_due_on).to eq(Date.new(2026, 6, 1))
+      expect(march.built_up).to eq(300)
+      expect(march).not_to be_overdue
     end
 
     # AND A RULE WITH NO DATE AT ALL IS NEVER OVERDUE — `#next_due_on` is nil for a rate rule, and a
@@ -436,6 +466,9 @@ RSpec.describe ClaimCalculator, type: :model do
 
         expect(september.next_due_on).to eq(Date.new(2026, 6, 1))
         expect(september.built_up).to eq(600)
+        # AND THE ROW READS OVERDUE, which is §3.2's own sentence about this shape and what the
+        # comment above has always claimed. Under the old `built_up < target` half it did not.
+        expect(september).to be_overdue
       end
 
       # THE OTHER DIRECTION: spending on the category IS the fulfilment signal an item-less rule has,

@@ -100,15 +100,26 @@ module HomeHelper
     "#{number_to_currency(line.built_up)} built up of #{number_to_currency(line.target)}"
   end
 
-  # THE SCHEDULE CLAUSE UNDER AN ACCRUING ROW (§3.4): `next due Mar 1 · $200.00 per period`. nil for a
-  # rate rule, which has neither — use-it-or-lose-it accrues toward nothing and is due on no day — and
-  # nil for a fund already full, whose per-period share is zero and which is waiting to be spent
-  # rather than saved into. The view renders no element at all where this is nil.
+  # THE SCHEDULE CLAUSE UNDER AN ACCRUING ROW (§3.4): `next due Mar 1 · $200.00 per period`.
+  #
+  # ** THE TENSE IS THE DATE'S OWN (fix round 1 — MED-1). ** A $600 bill due Aug 15, saved in full and
+  # never paid, keeps its occurrence anchored where it was (§3.2) — so on Sep 3 this row printed
+  # `next due Aug 15`, a date already gone under a word that promises a future one. `was due` is what
+  # a past occurrence gets, and the side of `today` it falls on is read off `#overdue?` rather than
+  # compared here: that predicate IS `next_due_on < today` (`ClaimCalculator#overdue?`), stated once,
+  # so this clause and the trouble label above it cannot disagree about one date on one afternoon.
+  #
+  # ** WHAT DROPS AND WHAT SURVIVES (fix round 1 — MED-2, a comment that misstated its own code). **
+  # It said "nil for a fund already full". It is not, and never was: a full fund's per-period SHARE is
+  # zero, so that half of the clause drops and the DATE is printed alone (`was due Aug 15`) — which is
+  # exactly the row a user with an unpaid bill needs. nil is returned for a RATE rule only, which has
+  # neither half: use-it-or-lose-it accrues toward nothing and is due on no day. The view renders no
+  # element at all where this is nil.
   def claim_schedule(line)
     return nil if line.rate?
 
     [
-      line.next_due_on && "next due #{line.next_due_on.strftime("%b %-d")}",
+      line.next_due_on && "#{line.overdue? ? "was due" : "next due"} #{line.next_due_on.strftime("%b %-d")}",
       line.per_period.positive? && "#{number_to_currency(line.per_period)} per period"
     ].select { |clause| clause.is_a?(String) }.join(" · ").presence
   end

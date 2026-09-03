@@ -135,18 +135,30 @@ class ClaimCalculator
   # because a date that passes unpaid has not been dealt with and must go on asking.
   def next_due_on = dated? ? due_on(today, walk.paid) : nil
 
-  # ** A DATE THAT PASSED WITH THE MONEY STILL MISSING (§4's trigger; Task 3). ** Not merely a date
-  # in the past: the cycle rolls on PAYMENT rather than on the calendar (see #due_on), so an
-  # occurrence nobody paid stays anchored where it was and `#next_due_on` goes on naming it — which
-  # means a FULL fund reads "in the past" too, and that one is waiting to be paid rather than to be
-  # saved into. `built_up < target` is what tells the two apart, and it is the difference between a
-  # bill the user must find money for and one they must simply pay.
+  # ** AN OCCURRENCE THAT IS PAST ITS DATE AND STILL UNFULFILLED (§3.2/§4's trigger). ** The cycle
+  # rolls on PAYMENT rather than on the calendar (see #due_on), so `#next_due_on` names the occurrence
+  # nobody has settled yet: a date in its past is therefore a date that WENT BY with the bill unpaid,
+  # which is §3.2 verbatim — "an occurrence whose money was never spent stays where it was anchored
+  # and the row reads overdue".
+  #
+  # ** IT NO LONGER READS THE FUND, AND THE HALF THAT LEFT WAS SILENCING THE ORDINARY CASE (fix round
+  # 1 — MED-1). ** This was `… && built_up < target`, on the reasoning that a whole fund is waiting to
+  # be PAID rather than to be saved into. But §3.2's catch-up formula floors `periods_left` at 1 for a
+  # date already past, so an unpaid bill's fund fills to its target in ONE period — the whole fund IS
+  # the ordinary shape of an overdue bill, not the exception. A $600 premium due Aug 15, saved in full
+  # and never paid, was absent from the trouble strip on Sep 3 while its row read "next due Aug 15".
+  # A bill nobody has paid is a thing the user must DO, whether or not the money for it is sitting
+  # there; the fund state is what the strip's SENTENCE splits on (`home/_trouble.html.erb`) and what
+  # the row's tense reads (`HomeHelper#claim_schedule`), not what the trigger gates on.
+  #
+  # A STRICT `<`, so a bill due TODAY is not overdue: it is a thing to do today rather than a thing
+  # missed, and the row says "next due" until the day is out.
   #
   # HERE RATHER THAN ON THE TWO PRESENTERS THAT ASK, because both would have to compare against a
   # `today` of their own and this class already holds the only one that matters. It is also the one
-  # place the pair is stated, so Home's trouble strip and the Budget page's rule row cannot come to
+  # place the test is stated, so Home's trouble strip and the Budget page's rule row cannot come to
   # different verdicts about one rule on one afternoon.
-  def overdue? = next_due_on.present? && next_due_on < today && built_up < target
+  def overdue? = next_due_on.present? && next_due_on < today
 
   # HOW MANY PERIODS ARE LEFT TO FILL THE FUND, THIS ONE INCLUDED (§3.2: the accrual counts in full
   # the day the period opens). Nil where there is no due date. Floors at 1, so an overdue bill asks

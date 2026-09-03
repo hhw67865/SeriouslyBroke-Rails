@@ -94,6 +94,30 @@ RSpec.describe "Budget page rules", type: :system do
     end
   end
 
+  # ** A DATE THAT HAS GONE BY IS NOT "NEXT" (fix round 1 — MED-1). ** The row above prints
+  # `next due Nov 30` for a date ahead; this is the other tense, and it was the finding. A $1,200 bill
+  # due ten days ago that nobody has paid keeps its occurrence anchored where it was (§3.2 — the cycle
+  # rolls on PAYMENT, not on the calendar), so the row printed `next due` over a date already gone,
+  # under a rule the strip was silent about because `#overdue?` also demanded a short fund.
+  #
+  # PLANTED: `periods_left` floors at 1 for a date already past, so one walked period accrues the
+  # whole **$1,200.00** and the per-period share falls to $0.00 — the schedule is the DATE alone,
+  # which is exactly the row a user with an unpaid bill needs. Both halves of the row are asserted:
+  # the tense on the schedule, and the trouble line that now fires beside it.
+  it "puts a rule whose date has passed in the past tense", :aggregate_failures do
+    due = Date.current - 10.days
+    rolling(holder("Utilities"), amount: 1_200, anchor: due, every: 1)
+
+    visit budget_page_path
+
+    within(rule_row("Utilities")) do
+      expect(page).to have_css("[data-rule-schedule]", text: "was due #{due.strftime("%b %-d")}")
+      expect(page).to have_no_content("next due")
+      expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 built up of $1,200.00")
+      expect(page).to have_css("[data-rule-trouble]", text: "overdue · was #{due.strftime("%b %-d")}")
+    end
+  end
+
   # ── THE ORPHAN BAND IS DELETED OUTRIGHT (two-ledger spec §5, Task 5) ──────────────────────────
   # Its three examples went in plan 3 task 6 when `Pool#account_matches_pool_type` made the fixture
   # unbuildable, and the apparatus they had covered — `BudgetPagePresenter#orphan_rules`,

@@ -182,11 +182,18 @@ RSpec.describe HomeHelper, type: :helper do
         spent: spent,
         accrued: accrued,
         over?: over,
+        overdue?: false,
         next_due_on: nil
       )
     end
 
-    def accruing_line(built_up:, target:, per_period:, next_due_on: nil, over: false)
+    # `overdue:` IS THE TENSE OF THE DATE (fix round 1 — MED-1), and it is the LINE's own answer
+    # rather than a comparison the helper makes: `ClaimCalculator#overdue?` is exactly
+    # `next_due_on < today`, and `today` is the one thing a view has no business holding.
+    # `over?` IS HARD-FALSE HERE and is not a parameter: an accruing rule that has been overspent is
+    # the `:over` trouble, whose label reads `spent − accrued` off a RATE line's members — so no
+    # example in this group has ever passed one, and a sixth keyword would be a knob with no caller.
+    def accruing_line(built_up:, target:, per_period:, next_due_on: nil, overdue: false)
       instance_double(
         HomePresenter::ClaimLine,
         rate?: false,
@@ -194,7 +201,8 @@ RSpec.describe HomeHelper, type: :helper do
         target: target,
         per_period: per_period,
         next_due_on: next_due_on,
-        over?: over,
+        over?: false,
+        overdue?: overdue,
         spent: 0.to_d,
         accrued: 0.to_d
       )
@@ -233,10 +241,31 @@ RSpec.describe HomeHelper, type: :helper do
       end
 
       # A FULL FUND ACCRUES NOTHING MORE, so "$0.00 per period" would be a line reporting nothing.
+      # THE DATE SURVIVES ALONE — the clause is not nil here, which is what the method's own comment
+      # used to claim (fix round 1 — MED-2).
       it "drops the share on a fund that is already full" do
         line = accruing_line(built_up: 1_200, target: 1_200, per_period: 0, next_due_on: Date.new(2026, 3, 1))
 
         expect(helper.claim_schedule(line)).to eq("next due Mar 1")
+      end
+
+      # ** A DATE THAT HAS GONE BY IS NOT "NEXT" (fix round 1 — MED-1). ** A $600 bill due Aug 15,
+      # fully built up and never paid, kept its occurrence anchored where it was (§3.2) and the row
+      # printed `next due Aug 15` on Sep 3 — a past date under a word that promises a future one. The
+      # tense comes off `#overdue?`, which IS `next_due_on < today`, so the row and the trouble strip
+      # cannot disagree about which side of today a date is on.
+      it "puts a date that has passed in the past tense" do
+        line = accruing_line(built_up: 600, target: 600, per_period: 0, next_due_on: Date.new(2026, 8, 15), overdue: true)
+
+        expect(helper.claim_schedule(line)).to eq("was due Aug 15")
+      end
+
+      # BOTH TENSES CARRY THE SHARE, so the fund still saving toward a date it has already missed
+      # reads as one sentence rather than losing half of it to the tense.
+      it "keeps the per-period share beside a date that has passed" do
+        line = accruing_line(built_up: 400, target: 600, per_period: 200, next_due_on: Date.new(2026, 8, 15), overdue: true)
+
+        expect(helper.claim_schedule(line)).to eq("was due Aug 15 · $200.00 per period")
       end
 
       # A RATE RULE HAS NEITHER — use-it-or-lose-it accrues toward nothing and is due on no day — so

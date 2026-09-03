@@ -63,15 +63,25 @@
             <%= claim_trouble_label(trouble.subject) %>
           </span>
         </div>
+        <%# ** THE OVERDUE ARM SAYS WHICH KIND OF OVERDUE IT IS (fix round 1 — MED-1). ** The trigger
+            is the DATE (`ClaimCalculator#overdue?`), because a bill nobody paid needs a human whether
+            or not the money for it is there — §3.2's catch-up formula fills an unpaid fund in ONE
+            period, so the WHOLE fund is the ordinary shape of an overdue bill and gating on
+            `built_up < target` silenced exactly the user who had done everything right except pay.
+            What the fund state decides is the INSTRUCTION: find $200 more, or write the cheque. %>
         <p class="mt-1 text-sm text-gray-600" data-problem-detail>
           <%= pool_rule_label(trouble.subject.rule) %> ·
           <% if trouble.kind == :over %>
             <%= number_to_currency(trouble.subject.spent) %> spent of <%= number_to_currency(trouble.subject.accrued) %>
             — the excess comes straight out of what is free.
+          <% elsif trouble.subject.fund_short? %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up of
+            <%= number_to_currency(trouble.subject.target) %> — the fund is short
+            <%= number_to_currency(trouble.subject.fund_gap) %> — this needs paying.
           <% else %>
             <%= number_to_currency(trouble.subject.built_up) %> built up of
-            <%= number_to_currency(trouble.subject.target) %> — this needs paying, and the fund goes on
-            asking until it is.
+            <%= number_to_currency(trouble.subject.target) %> — the money is set aside — pay it and the
+            fund starts again.
           <% end %>
         </p>
       </div>

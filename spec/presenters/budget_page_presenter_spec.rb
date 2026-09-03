@@ -206,22 +206,28 @@ RSpec.describe BudgetPagePresenter do
     # PLANTED: a $1,200 six-monthly bill anchored Sep 1 2025, its rule born the same day, nothing
     # ever spent. §3.2's catch-up formula — `planned(P) = (target − built_up) ÷ periods_left`, and
     # `periods_left` floors at 1 for a date already past — fills the fund in its first walked period,
-    # so `built_up` is **$1,200.00** and the occurrence is NOT overdue: it is waiting to be PAID, not
-    # to be saved into. `#overdue?`'s `built_up < target` half is exactly this distinction.
-    it "is the occurrence the claim is still saving for, unpaid", :aggregate_failures do
+    # so `built_up` is **$1,200.00** while the occurrence stays anchored at Sep 1 2025.
+    #
+    # ** AND THE ROW READS OVERDUE (fix round 1 — MED-1). ** This pinned the opposite. `#overdue?`
+    # carried a `built_up < target` half, on the reasoning that a whole fund is waiting to be PAID
+    # rather than saved into — but the floor at 1 above means a whole fund is the ORDINARY shape of a
+    # bill past its date, so the gate silenced the common case rather than a corner of it: five months
+    # after the date, this row printed `next due Sep 1` with no trouble line at all. The trigger is
+    # the unfulfilled occurrence; the fund state splits the strip's SENTENCE, not the verdict.
+    it "is overdue on a date that has passed, with the fund whole", :aggregate_failures do
       car_insurance
       rule = presenter.category_groups.first.rules.first
 
       expect(rule.next_due_on).to eq(Date.new(2025, 9, 1))
       expect(rule.built_up).to eq(1_200)
       expect(rule).to be_anchored
-      expect(rule).not_to be_overdue
+      expect(rule).to be_overdue
     end
 
-    # OVERDUE IS THE DATE PAST **AND** THE FUND SHORT. Planted: the same bill, $500 paid inside this
-    # period. §3.2's walk settles the period AFTER the accrual — `raw = 1,200 − 500` = **$700.00** —
-    # and $500 is less than one whole cycle, so `cycles_paid_by` stays at 0 and the occurrence does
-    # NOT roll. Date past, fund $500 short: the one shape §4 calls trouble.
+    # THE SAME VERDICT WITH THE FUND SHORT, which is what says the predicate stopped reading the fund.
+    # Planted: the same bill, $500 paid inside this period. §3.2's walk settles the period AFTER the
+    # accrual — `raw = 1,200 − 500` = **$700.00** — and $500 is less than one whole cycle, so
+    # `cycles_paid_by` stays at 0 and the occurrence does NOT roll.
     it "is overdue where the date has passed and the fund is short", :aggregate_failures do
       pay(car_insurance, 500)
       rule = presenter.category_groups.first.rules.first

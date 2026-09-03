@@ -4,15 +4,33 @@
     a figure, a list and a pace — inlined, the `case` that dispatches the four kinds would be
     unreadable and a fifth kind would be added below the wrong `end`.
 
-    ** THREE THINGS, IN THE ORDER §4 NAMES THEM. ** The shortfall; then, in REVERSE PRIORITY, which
-    claims it eats — priority keeps its job as the GIVE-WAY order, so the category that would have
-    been funded last is the one that goes without first; then the per-day pace that lands the period
-    at zero.
+    ** THE STRIP MIRRORS THE HERO'S ARM TABLE, AND THAT IS THE FIX (fix round 1 — HIGH-1). ** This
+    said "Your rules claim more than you have" on `#short?` alone — `free < 0` — which is a SIGN, and
+    a sign never carries a cause. An inch above it the hero card was already splitting that same
+    negative three ways on predicates that ESTABLISH one, so the two panels could contradict each
+    other on the same afternoon and did, in three fixtures the answers-first review had already
+    written: money walked to a savings account with no rule in existence (card: it is outside
+    checking; strip: your rules claim too much), a plain overspend with nothing claimed (same), and
+    claims a savings account covers in full (the give-way list naming categories whose money is
+    sitting one panel further down). The arms below are `_hero.html.erb`'s, said as instructions:
 
-    THE WALK IS THE PRESENTER'S (`#uncovered_claims`), not this file's. It takes each claim in turn
-    until the shortfall is absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is
+      the claims outrun the money, → "Your rules claim more than you have", the give-way walk, the
+      and something IS claimed        remainder if the shortfall outlasts it, the pace
+      the claims outrun the money, → "You have spent past what you had". Σ claims is zero, so the
+      and nothing is claimed          walk has nothing to list and does not run
+      free < 0, the claims do NOT  → "Checking is short", and the money is in another account —
+      outrun (the cap bound on a     which is a TRANSFER, not a rule change. Nothing is uncovered:
+      negative pot)                  `unclaimed ≥ 0` IS "the user's money covers every claim"
+
+    THE WALK IS THE PRESENTER'S (`#uncovered_claims`), not this file's, and it is gated there on the
+    same `#claims_outrun_the_money?` the first two arms branch on. It takes each claim in turn until
+    the shortfall is absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is
     short $120" is a different sentence from "Car repair is uncovered", and only the walk can tell
     them apart.
+
+    THE PACE IS SAID ON EVERY ARM, deliberately: spending less for the rest of the period lands the
+    figure at zero whichever way it got there, which is the one remedy §4 names that does not depend
+    on which cause it was.
 
     ** NO FIX BUTTON, AND THE DOOR IS THE BUDGET PAGE. ** §4: "The remedy is spending less for the
     rest of the period or editing/adjusting a rule." There is nothing to move money FROM — no claim is
@@ -20,11 +38,36 @@
     app no longer has. %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
   <div class="flex justify-between items-baseline gap-4">
-    <span class="font-medium text-gray-900">Your rules claim more than you have</span>
+    <%# THE HEADLINE IS THE CAUSE, AND EVERY BRANCH IS A PRESENTER PREDICATE. A view re-deriving which
+        side of the `min` won could name the wrong one of the two negatives. %>
+    <span class="font-medium text-gray-900" data-shortfall-headline>
+      <% if presenter.claims_outrun_the_money? %>
+        <%= presenter.anything_claimed? ? "Your rules claim more than you have" : "You have spent past what you had" %>
+      <% else %>
+        Checking is short
+      <% end %>
+    </span>
     <span class="text-sm font-medium text-status-danger tabular-nums" data-shortfall-amount>
       short <%= number_to_currency(presenter.shortfall) %>
     </span>
   </div>
+
+  <%# ** THE CAP-BOUND ARM'S OWN INSTRUCTION, AND ITS CAUSE IS ESTABLISHED BY REACHING IT. ** The
+      cap's identity has two terms — `unclaimed − pot = Σ other accounts − Σ claims` — so this arm
+      requires `free < 0` with `unclaimed ≥ 0`, which forces `pot < 0` and therefore
+      `Σ other accounts ≥ Σ claims − pot > 0`. Another account IS holding money whenever this renders,
+      which is why there is no else branch here and none on the hero's matching arm: an unreachable
+      branch on a money screen is a sentence waiting to be believed.
+
+      THE FIGURE IS `#other_accounts_total`, THE SAME SUM THE ACCOUNTS LINE PRINTS (answers-first §6),
+      so the strip cannot claim money the line below it shows as absent. It names no account, because
+      the total spans all of them and "it is in savings" is a guess this panel cannot make. %>
+  <% unless presenter.claims_outrun_the_money? %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-elsewhere>
+      <%= number_to_currency(presenter.other_accounts_total) %> of your money is sitting outside
+      checking — move some into checking to spend it.
+    </p>
+  <% end %>
 
   <%# THE PACE. Nil for a user who has declared no period — there is no "rest of the period" to
       spread a shortfall over — and the strip simply says one sentence fewer there. %>
@@ -36,7 +79,8 @@
 
   <%# WHO GIVES WAY. Reverse priority, and the figure is what THIS claim is short by after everything
       below it in the order has already given way — which is why the last row in the list is usually
-      partial and says so. %>
+      partial and says so. Empty on the two arms above that have nothing uncovered, so this renders
+      nothing there rather than being gated a second way. %>
   <% if presenter.uncovered_claims.any? %>
     <ul class="mt-2 space-y-1" data-uncovered>
       <% presenter.uncovered_claims.each do |uncovered| %>
@@ -53,6 +97,16 @@
         </li>
       <% end %>
     </ul>
+
+    <%# ** THE PART OF THE SHORTFALL NO CLAIM ACCOUNTS FOR (fix round 1 — LOW-1). ** The walk stops
+        when it runs out of claims, so a user who has spent further than their rules ever asked for
+        read a headline of $900 over a list totalling $500. The list plus this line is the headline,
+        by construction. %>
+    <% if presenter.uncovered_remainder.positive? %>
+      <p class="mt-1 text-sm text-gray-600" data-uncovered-remainder>
+        …and <%= number_to_currency(presenter.uncovered_remainder) %> past everything the rules claim.
+      </p>
+    <% end %>
   <% end %>
 
   <p class="mt-2 text-sm text-gray-600">
