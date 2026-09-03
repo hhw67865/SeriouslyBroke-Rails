@@ -228,8 +228,96 @@ Two figures moved as a result, both single-caused and both named: `seeds_spec` `
    (`mingguan0809`, two behind categories). If the repetition reads as an error rather than as two
    answers, the fix is to drop the figure from the strip and leave the name.
 
-*A third observation from Task 4's browser pass, weaker than the two above but worth Henry's eye:*
-on a pure-overspend account — nothing set aside, nothing spoken for, simply spent past zero — the
-negative arm's subline reads "More is set aside or spoken for than you have." The branch logic is
-right (`unspoken_for` is negative) and pinned; the *sentence* is imprecise in that one corner,
-where the honest reading is "you have spent past what you had".
+*The third observation from Task 4's browser pass — the pure-overspend subline — is **CLOSED**, by
+the fix in §10.8 below. It was one corner of a larger fault and was fixed with it, not separately.*
+
+### 10.8 The hero's sublines assert CAUSES, and every gate now establishes one
+
+The FINAL whole-plan review found the class of bug this plan existed to kill, still alive on the
+card that replaced the band: three of the subline's sentences named a CAUSE and were gated on the
+SIGNS of two figures, which do not carry one. The cap's identity is why:
+
+```
+available − pot  =  net moves out of main  +  what the next distribution sweeps back  −  Σ holdings
+```
+
+The cap-bound arms attributed the whole difference to the FIRST term. The third makes it true with
+no second account in existence: a single-account user whose holders are collectively overdrawn read
+*"The money that isn't spoken for is sitting outside checking"* above a trouble strip naming the
+overdrawn category and an accounts line with nothing in it. Worked fixture: $1,000 in, $900 into
+Groceries, $1,100 straight out of Groceries — pot −$100, `available` $100, nothing spoken for, cap
+bound.
+
+**As built, five arms, each gated on a predicate that establishes its sentence** (the full table,
+signs × causes, is the comment above `HomePresenter#rest_in_checking?`):
+
+| State | Cause established by | Sentence |
+|---|---|---|
+| plan outruns the money | `#anything_set_aside_or_spoken_for?` | "More is set aside or spoken for than you have. Anything you spend now takes you further under." |
+| plan outruns the money, and neither noun is true of the account | the same, false (§10.7's third flag) | "You have spent past what you had. Anything you spend now takes you further under." |
+| free negative, plan does not outrun (the cap bound on a negative pot) | `#money_parked_elsewhere?` | "The money that isn't spoken for is sitting outside checking — nothing here is free until some of it moves in." |
+| the same, with no other account holding anything | the same, false | "Nothing here is free until money comes in." — true only here: with nothing elsewhere, a negative pot IS the whole of the user's cash |
+| free fine, some of the pot claimed | `#rest_in_checking?` | "the rest is set aside or spoken for." |
+| free fine, none of it claimed | `#free_cap_bound?` + `#money_parked_elsewhere?` | "none of it is set aside or spoken for" — with "— more is parked in other accounts" only where a second account actually holds money |
+
+Two smaller corners closed with it. **The pure overspend** (§10.7's third flag) is the second row:
+nothing set aside, nothing spoken for, simply spent past zero. **The fresh signup** is the last: free
+and the pot are the same figure because nothing is funded, so the card was describing a "rest" of
+$0.00 — as it was on every cap-bound state, where the rest is always zero. `#money_parked_elsewhere?`
+is `#other_accounts_total.positive?`, the SAME sum the accounts line prints, so the card cannot claim
+money the line below it shows as absent.
+
+Cost: the card now reads the purpose ledger (`#anything_set_aside_or_spoken_for?` asks each holder
+what it is holding) when no rule is asking — four grouped aggregates, memoised, and the same four
+every holding status on the screen reads. Whichever asks first pays. Pinned three ways in
+`spec/presenters/home_presenter_spec.rb`'s hero-cost block.
+
+### 10.9 §3's "only on Distribute and Budget" is three screens, and Home has two ruled exceptions
+
+**Reports is the third.** `dashboard/_expenses_tab` heads its two lanes "Out of Available" / "Out of
+an Envelope" and labels its stat cards "Tracked Available Spending". This is not drift: it is where
+§3's own sweep put the word — the lane used to be "out of the buffer", and "buffer" is the word §3
+retires. Reports is the mechanic's screen in the same sense Distribute is, so the noun stays; §3's
+sentence is the one that was too narrow.
+
+**The register on Reports, made one** (the review's M-2): the All tab's legend read "Out of
+available" / "Out of an envelope" beside the Expenses tab's Title-Cased headings for the same two
+lanes — one pair of phrases, two casings, one screen. The legend is Title-Cased to match, because it
+is a LABEL beside a swatch and Reports Title-Cases every label it has. Inside a SENTENCE the word
+stays lowercase — "No spending out of available", which is Budget's own convention ("Left over →
+available"). Held by `spec/system/dashboard/index/all_tab_spec.rb`, whose `have_content` is
+case-sensitive.
+
+**Home says the word twice, both ruled, neither a leak:**
+
+1. The trouble strip's fix button names AVAILABLE as a **source** — "Take $300.00 from Available" is
+   `ReallocationPresenter::Root#name`, the mechanic's term on the screen that button opens, not Home
+   describing the user's money. Ruled in Task 2 and carried through Task 3's sweep.
+2. The post-distribute **flash** prints "$600.00 stays available."
+   (`DistributionConfirmationHelper`). It lands on Home because that is where Distribute redirects,
+   but it is Distribute's voice reporting what it just did — the same reason the fix button keeps its
+   noun. Deliberate; recorded here rather than swept.
+
+Both are why the page-wide dead-words pin in `hero_spec.rb` is shaped the way it is: a comfortable
+user with no fix to offer and no flash. The scoped pins (the card, the "This period" section) carry
+the rule everywhere else.
+
+### 10.10 Open, recorded, not fixed
+
+Four findings from the FINAL review that are real and were left alone, so the next reader finds them
+written down rather than rediscovering them:
+
+1. **Home's "free" and Distribute's "available" are different numbers on purpose, and nothing says
+   so.** Home caps free at the pot (§3's ruled cap); Distribute hands out the whole root. A user with
+   money in savings reads a smaller number on Home than the screen it links to offers to distribute.
+   The cap explains it; no copy on either screen does.
+2. **No whole-page query pin.** The hero and the "This period" section are each pinned; nothing pins
+   what a Home render costs end to end, so a reader added to a third band would pass both.
+3. **The trouble strip can name a holder the "This period" section hides.** A category overdrawn in a
+   PRIOR period appears on the strip (with its "· last period" suffix) while the section, which is
+   about this period, does not list it. This is the mirror of §10.7 #2: the same category legitimately
+   appearing in one list and not the other, and it reads as a missing row rather than as two answers.
+4. **The entry impact card says "your available money covers the difference"**
+   (`entries/_impact.html.erb`) without reading a root, and it predates this plan. The rename
+   sharpened it rather than caused it: "available" is now a word Home itself never says, so this card
+   is the one place in the entry flow still using it in the old sense.
