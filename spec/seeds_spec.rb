@@ -145,7 +145,7 @@ RSpec.describe "db/seeds.rb" do
         users: 1,
         pools: 4,
         categories: 28,
-        items: 24,
+        items: 25,
         entries: 75,
         budgets: 16,
         movements: 8,

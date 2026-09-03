@@ -58,6 +58,87 @@ RSpec.describe Budget, type: :model do
         expect(build(:budget, amount: 0)).not_to be_valid
       end
     end
+
+    # ** ZERO IS LEGAL FOR EXACTLY ONE SHAPE (computed-claims spec §3.2, ruling of 2026-09-03): a
+    # goal fed only by hand. ** Every claim comes from a rule, so a savings goal with no standing
+    # contribution has to BE a rule, and "no rate" is spelled with an amount of zero.
+    #
+    # THREE REFUSALS BESIDE THE ONE PERMISSION, each varying ONE column of the permitted shape, so
+    # the exemption cannot be satisfied by a validation that simply stopped checking.
+    describe "the set-aside-only goal" do
+      let(:goal) { create(:category, :expense, :funded, target_amount: 2_400) }
+
+      it "takes a zero amount when the category names a target and the rule names no schedule" do
+        expect(build(:budget, :per_period_rate, category: goal, amount: 0)).to be_valid
+      end
+
+      it "refuses a zero amount on a category with no target" do
+        plain = create(:category, :expense, :funded)
+
+        expect(build(:budget, :per_period_rate, category: plain, amount: 0)).not_to be_valid
+      end
+
+      it "refuses a zero amount on a rule with a due date" do
+        expect(build(:budget, category: goal, amount: 0, interval_months: nil, anchor_date: Date.new(2026, 6, 1)))
+          .not_to be_valid
+      end
+
+      it "refuses a zero amount on a rule with an interval" do
+        expect(build(:budget, :rate, category: goal, amount: 0)).not_to be_valid
+      end
+
+      it "still refuses a negative amount there" do
+        expect(build(:budget, :per_period_rate, category: goal, amount: -1)).not_to be_valid
+      end
+    end
+  end
+
+  # ** ONE CATEGORY, ONE BUDGET LINE (two-ledger spec §3), NOW THAT THE LINE IS A CLAIM (ruling of
+  # 2026-09-03). ** An item-less rule's spending lane is the whole category, so two of them on one
+  # category subtract the same entries twice — and `Category#claim` sums them, so neither rule is
+  # wrong on its own.
+  describe "one item-less rule per category" do
+    let(:groceries) { create(:category, :expense, :funded, name: "Groceries") }
+
+    before { create(:budget, :per_period_rate, category: groceries, amount: 400) }
+
+    it "refuses a second rule that covers the whole category", :aggregate_failures do
+      second = build(:budget, :per_period_rate, category: groceries, amount: 75)
+
+      expect(second).not_to be_valid
+      expect(second.errors[:base]).to include(/already has a rule covering all of its spending/)
+    end
+
+    # ITEM-BACKED RULES ARE UNTOUCHED: their lanes are disjoint by construction, so a category may
+    # carry one catch-all rule and as many dated bills as it has items.
+    it "takes any number of rules that each name their own item", :aggregate_failures do
+      expect(on_its_own_item("Phone", 75)).to be_valid
+      expect(on_its_own_item("Water", 30)).to be_valid
+    end
+
+    def on_its_own_item(name, amount)
+      build(
+        :budget,
+        :per_period_rate,
+        category: groceries,
+        amount: amount,
+        item: create(:item, category: groceries, name: name)
+      )
+    end
+
+    # AN EDIT DOES NOT COLLIDE WITH ITSELF — `where.not(id: id)`, the same guard
+    # `#item_must_not_be_claimed` carries.
+    it "lets the one item-less rule it already has be edited" do
+      standing = groceries.budgets.sole
+
+      expect(standing.update(amount: 500)).to be(true)
+    end
+
+    it "leaves another category's catch-all rule alone" do
+      elsewhere = create(:category, :expense, :funded, name: "Transport")
+
+      expect(build(:budget, :per_period_rate, category: elsewhere, amount: 75)).to be_valid
+    end
   end
 
   # ONE OWNER, AND IT IS A CATEGORY (two-ledger spec §3, Task 8). `#exactly_one_owner` policed a

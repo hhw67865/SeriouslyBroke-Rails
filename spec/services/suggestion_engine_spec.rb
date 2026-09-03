@@ -617,9 +617,16 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:drift).sole.amount).to eq(400)
     end
 
+    # ** THE SHAPE IS NO LONGER WRITABLE, AND THE GUARD IS STILL LOAD-BEARING. **
+    # `Budget#category_may_hold_one_item_less_rule` (computed-claims ruling of 2026-09-03) refuses a
+    # second rule whose lane is the whole category, so this fixture is planted PAST the model. It is
+    # not a shape this engine can stop meeting: rows written before that validation existed are in
+    # real databases, and `#attributable_rate_rules` reads whatever rows are there. Giving the second
+    # rule an ITEM instead would not preserve the example — `#rate_shape?` is item-less by
+    # construction, so the category would be back to one attributable rate rule and drift would fire.
     it "is silent on a category carrying two rate rules, whose spend cannot be attributed" do
       groceries, _rule, food = rate_category("Groceries", 100)
-      create(:budget, :per_period_rate, category: groceries, amount: 40)
+      build(:budget, :per_period_rate, category: groceries, amount: 40).save(validate: false)
       in_drift_window(food, 300)
 
       expect(of_kind(:drift)).to be_empty

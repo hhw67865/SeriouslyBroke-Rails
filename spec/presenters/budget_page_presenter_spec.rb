@@ -22,10 +22,19 @@ RSpec.describe BudgetPagePresenter do
     create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
+  def lane(category, name) = create(:item, category: category, name: name)
+
   # A rule that rolls: its due date moves with the cycles gone by, which is what makes it
   # answer something other than its own anchor.
-  def rolling(category, amount:, anchor:, every: 1)
-    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
+  #
+  # `item:` because a category may carry only ONE item-less rule
+  # (`Budget#category_may_hold_one_item_less_rule`, computed-claims ruling of 2026-09-03), and the
+  # due-order examples below need two rules on one category. It is passed for BOTH rules where it is
+  # passed at all: a rule with an item has its cycle rolled by PAYMENTS rather than by the calendar,
+  # so giving only one of a pair an item would settle the order on the item rather than on the key
+  # the example is about.
+  def rolling(category, amount:, anchor:, every: 1, item: nil)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor, item: item)
   end
 
   # `#orphan_rules`, `#orphan_reason`, `Rule#reason` AND THE `_orphans` PARTITION ARE ALL DELETED
@@ -74,8 +83,8 @@ RSpec.describe BudgetPagePresenter do
     # $100 rule first, so a sort that fell through to it would pass a bare "both rules render".
     it "orders rules within a category by due order, larger amount first on a tie", :aggregate_failures do
       category = holder("Pet Care")
-      small = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1))
-      large = rolling(category, amount: 500, anchor: Date.new(2026, 3, 1))
+      small = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1), item: lane(category, "Small"))
+      large = rolling(category, amount: 500, anchor: Date.new(2026, 3, 1), item: lane(category, "Large"))
 
       expect(names(presenter.category_groups.first.rules)).to eq([large.id, small.id])
       expect(small.created_at).to be < large.created_at
@@ -83,8 +92,8 @@ RSpec.describe BudgetPagePresenter do
 
     it "orders an earlier due date ahead of a larger amount" do
       category = holder("Pet Care")
-      later = rolling(category, amount: 900, anchor: Date.new(2026, 4, 1))
-      sooner = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1))
+      later = rolling(category, amount: 900, anchor: Date.new(2026, 4, 1), item: lane(category, "Later"))
+      sooner = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1), item: lane(category, "Sooner"))
 
       expect(names(presenter.category_groups.first.rules)).to eq([sooner.id, later.id])
     end

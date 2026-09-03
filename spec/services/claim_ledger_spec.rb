@@ -15,6 +15,10 @@ require "rails_helper"
 # asserted EQUAL to the per-rule one, rule by rule, on a fixture that exercises both spending lanes
 # and both directions of the adjustment sign.
 RSpec.describe ClaimLedger, type: :model do
+  # A RULE ACCRUES FROM THE LATER OF ITS CATEGORY'S FUNDING DATE AND ITS OWN CREATION (§3.2), so a
+  # fixture whose fund has been building since January has to say the rule existed in January.
+  def born = Time.utc(2026, 1, 1, 9, 0)
+
   let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
   let(:today) { Date.new(2026, 9, 3) } # the period is Sep 1 – Sep 30
   let(:ally) { create(:pool, :account, user: user, name: "Ally") }
@@ -30,7 +34,7 @@ RSpec.describe ClaimLedger, type: :model do
     )
   end
   let(:groceries_rule) { create(:budget, :per_period_rate, category: groceries, amount: 400) }
-  let(:vacation_rule) { create(:budget, :per_period_rate, category: vacation, amount: 150) }
+  let(:vacation_rule) { create(:budget, :per_period_rate, category: vacation, amount: 150, created_at: born) }
   let(:ledger) { described_class.new(user, today: today) }
 
   # $3,000 in on Jan 5, $1,000 of it moved to Ally, $250 of groceries on Sep 2.
@@ -118,7 +122,8 @@ RSpec.describe ClaimLedger, type: :model do
         item: item,
         amount: 600,
         interval_months: 6,
-        anchor_date: Date.new(2026, 6, 1)
+        anchor_date: Date.new(2026, 6, 1),
+        created_at: born
       )
       spend(groceries, 300, on: Date.new(2026, 6, 5), item: item)
       [groceries_rule, vacation_rule, premium]
@@ -154,7 +159,7 @@ RSpec.describe ClaimLedger, type: :model do
     # the user is $1,100 short.
     it "goes negative rather than clamping when the claims outrun the money", :aggregate_failures do
       car = create(:category, :expense, user: user, name: "Car", funded_since: Date.new(2026, 9, 1))
-      create(:budget, category: car, amount: 5_000, interval_months: nil, anchor_date: Date.new(2026, 10, 1))
+      create(:budget, category: car, amount: 5_000, interval_months: nil, anchor_date: Date.new(2026, 10, 1), created_at: Time.utc(2026, 9, 1, 9, 0))
 
       expect(ledger.total_claims).to eq(3_850)
       expect(ledger.free).to eq(-1_100)

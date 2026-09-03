@@ -242,6 +242,7 @@ restaurants = dining.items.create!(name: "Restaurants")
 supermarket = groceries.items.create!(name: "Supermarket")
 cleaning = supplies.items.create!(name: "Cleaning & Paper Goods")
 pet_food = pet_care.items.create!(name: "Pet Food")
+vet = pet_care.items.create!(name: "Vet")
 transit_pass = commuter.items.create!(name: "Transit Pass")
 
 # ON TRACK — the rent, held in full, ten days before it is due. ITEM-BACKED, so the rule is
@@ -293,7 +294,11 @@ Budget.create!(category: groceries, amount: 400, basis: :per_period)
 # vet's reserve where it is.
 Budget.create!(category: supplies, amount: 120, basis: :per_period)
 Budget.create!(category: pet_care, amount: 50, basis: :per_period)
-Budget.create!(category: pet_care, amount: 180, anchor_date: today + 20)
+# ITEM-BACKED, because a category may carry only ONE rule whose lane is the whole category
+# (`Budget#category_may_hold_one_item_less_rule`, computed-claims ruling of 2026-09-03) and the
+# rate rule above is it. The vet bill naming the Vet item is the shape the app has always meant
+# by a dated bill anyway; its due date is in the future either way, so no demo state moves.
+Budget.create!(category: pet_care, item: vet, amount: 180, anchor_date: today + 20)
 
 # A RULE STILL FUNDING SOMETHING THAT STOPPED — detector 4's only subject on this demo, and the
 # one shape the other three cannot report. The household stopped buying the fortnightly transit

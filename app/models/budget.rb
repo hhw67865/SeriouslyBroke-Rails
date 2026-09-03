@@ -46,12 +46,22 @@ class Budget < ApplicationRecord
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
-  validates :amount, presence: true, numericality: { greater_than: 0 }
+  #
+  # ** ZERO IS LEGAL FOR EXACTLY ONE SHAPE (computed-claims spec §3.2, Henry's ruling of
+  # 2026-09-03). ** "A dateless target … accrues by its rate if it has one, and OTHERWISE ONLY BY
+  # POSITIVE ADJUSTMENTS" — a goal somebody feeds by hand and never on a schedule. Under the computed
+  # model every claim comes from a rule (§3.3), so that goal has to BE a rule, and the only honest
+  # way to say "no standing rate" is an amount of zero. See #set_aside_only? for the exact shape;
+  # everywhere else "demands nothing" still means "delete it".
+  validates :amount, presence: true
+  validates :amount, numericality: { greater_than: 0 }, unless: :set_aside_only?
+  validates :amount, numericality: { greater_than_or_equal_to: 0 }, if: :set_aside_only?
   validates :interval_months, numericality: { greater_than: 0 }, allow_nil: true
 
   validate :must_have_a_category
   validate :category_must_be_an_expense, if: :category_mode?
   validate :item_must_belong_to_category, if: :category_mode?
+  validate :category_may_hold_one_item_less_rule, if: :category_mode?
   # UNGATED, BOTH OF THEM: `#shape_must_be_valid` is about the three columns that spell a cadence
   # and `#item_must_not_be_claimed` is about one item having one rule, so neither has ever needed
   # to know who owns the rule.
@@ -318,6 +328,58 @@ class Budget < ApplicationRecord
     return if item.blank?
 
     errors.add(:item, "must belong to this category") unless item.category == category
+  end
+
+  # ** ONE CATEGORY, ONE BUDGET LINE (two-ledger spec §3), NOW THAT THE LINE IS A CLAIM (Henry's
+  # ruling of 2026-09-03). ** An ITEM-LESS rule's spending lane is the WHOLE category — that is
+  # computed-claims §3.2's own sentence, "an expense on the rule's item, or, for an item-less rule,
+  # on the category" — and `Category#claim` is the SUM of its rules' claims. So two item-less rules
+  # on one category each subtract the same entries: $250 of groceries comes off a $400 rate rule and
+  # off a $75 one beside it, and the category reports $225 claimed when the honest figure is $475
+  # less one $250. Neither rule is wrong on its own, which is what makes it invisible.
+  #
+  # ITEM-BACKED RULES STAY PER-ITEM and are untouched: their lanes are disjoint by construction, and
+  # `#item_must_not_be_claimed` below already keeps two rules off one item. A category may therefore
+  # carry one catch-all rule and as many dated bills as it has items, which is exactly the demo's
+  # shape and Ming's.
+  #
+  # ON `:base`, with `#must_have_a_category`'s reasoning: it is a fact about the whole record rather
+  # than about one control, and `budgets/_form` renders `errors[:base]` in its own notification. The
+  # sentence names both ways out, because both are things the user can actually do on that form.
+  #
+  # `where.not(id: id)` for `#item_must_not_be_claimed`'s reason: it renders as `id IS NOT NULL` on
+  # an unsaved record, so a new rule is compared against every persisted one, and an edit does not
+  # collide with itself.
+  def category_may_hold_one_item_less_rule
+    return if item_id.present?
+    return unless Budget.where(category_id: category_id, item_id: nil).where.not(id: id).exists?
+
+    errors.add(
+      :base,
+      "this category already has a rule covering all of its spending — change that one instead, " \
+      "or point this rule at a single item"
+    )
+  end
+
+  # THE ONE SHAPE THAT MAY DEMAND NOTHING (computed-claims spec §3.2): a goal fed only by hand. The
+  # CATEGORY names a figure to reach, the rule names no deadline and no interval to reach it by, and
+  # so it has no schedule for a rate to be the rate OF — every penny it ever holds arrives as a
+  # positive adjustment (§3.3's "set aside"). `ClaimCalculator` reads exactly this shape as a target
+  # rule whose per-period accrual is its amount, so a zero amount accrues zero and the adjustments
+  # are the whole of it.
+  #
+  # ALL THREE COLUMNS, AND THE THIRD IS NOT REDUNDANT: `#shape_must_be_valid` refuses a
+  # monthly-basis rule with neither an anchor nor an interval, so "no anchor and no interval" is the
+  # per-period shape — but stating it positively is what keeps this from silently widening if that
+  # rule ever changes.
+  #
+  # BEHIND `#category_mode?`, like every other reader of the column: `categories.target_amount` and
+  # `budgets.category_id` arrived in the same migration, so a schema rewound past it has neither and
+  # this must not reach for either.
+  def set_aside_only?
+    return false unless category_mode?
+
+    anchor_date.blank? && interval_months.blank? && category&.target_amount.present?
   end
 
   # `where.not(id: nil)` renders as `id IS NOT NULL`, so an unsaved budget still

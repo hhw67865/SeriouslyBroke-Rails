@@ -19,13 +19,25 @@ RSpec.describe Budget, type: :model do
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: today) }
   let(:owner) { create(:category, :expense, :funded, user: user, name: "Car") }
 
-  def rate(amount) = create(:budget, :per_period_rate, category: owner, amount: amount)
+  # ** A CATEGORY MAY CARRY ONLY ONE ITEM-LESS RULE (`Budget#category_may_hold_one_item_less_rule`,
+  # computed-claims ruling of 2026-09-03), and every helper here plants on the SAME `owner`. ** So
+  # the second and later catch-all rules get an item of their own. `#steady_ask` never reads the item
+  # on any of these three shapes — only its one-off branch does, and `#one_off` below takes its item
+  # from the caller — so this is fixture plumbing and not a change of subject.
+  def rate(amount) = plant(:per_period_rate, amount: amount)
 
-  def monthly(amount) = create(:budget, :rate, category: owner, amount: amount)
+  def monthly(amount) = plant(:rate, amount: amount)
 
   def every(months, amount:, anchor:)
-    create(:budget, category: owner, amount: amount, interval_months: months, anchor_date: anchor)
+    plant(amount: amount, interval_months: months, anchor_date: anchor)
   end
+
+  def plant(trait = nil, **attrs)
+    attrs = attrs.merge(item: create(:item, category: owner, name: "Lane #{Budget.count}")) if second_catch_all?
+    create(:budget, *Array(trait), category: owner, **attrs)
+  end
+
+  def second_catch_all? = Budget.exists?(category_id: owner.id, item_id: nil)
 
   def one_off(amount, anchor:, item: nil)
     create(:budget, category: owner, amount: amount, interval_months: nil, anchor_date: anchor, item: item)

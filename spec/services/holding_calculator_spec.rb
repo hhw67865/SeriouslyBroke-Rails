@@ -30,8 +30,23 @@ RSpec.describe HoldingCalculator, type: :model do
 
   # EVERY RULE IN THIS FILE BELONGS TO A CATEGORY, which is the only owner a rule has — said once
   # here rather than on every line.
+  # ** A CATEGORY MAY CARRY ONLY ONE ITEM-LESS RULE (`Budget#category_may_hold_one_item_less_rule`,
+  # computed-claims ruling of 2026-09-03): two rules whose lane is the whole category would each
+  # subtract the same spending. ** So the SECOND catch-all rule this file plants on a category is
+  # given an item of its own, and only then — every single-rule fixture below is untouched, and the
+  # item is plumbing rather than a change of subject, since these examples are about the waterfall's
+  # order and the sweep's partiality and never about item-lessness.
   def rule(category, trait = nil, **attrs)
+    attrs = attrs.merge(item: fresh_item(category)) if second_catch_all?(category, attrs)
     create(:budget, *Array(trait), category: category, **attrs)
+  end
+
+  def second_catch_all?(category, attrs)
+    attrs[:item].nil? && attrs[:item_id].nil? && Budget.exists?(category_id: category.id, item_id: nil)
+  end
+
+  def fresh_item(category)
+    create(:item, category: category, name: "Lane #{Budget.where(category_id: category.id).count}")
   end
 
   # A GOAL'S BALANCE, FUNDED THE WAY A GOAL IS FUNDED (spec §3): contributing is available →
@@ -722,9 +737,14 @@ RSpec.describe HoldingCalculator, type: :model do
     # LIVE rate rule's allocation. #free_amount asks "what does no rule currently claim",
     # #sweepable_amount asks "what belongs to a period that is over".
     it "sweeps the whole balance once the anchored rule beside the rate rule is fulfilled", :aggregate_failures do
+      # THE SETTLED RULE IS PLANTED FIRST, AND THE ORDER IS THE SUBJECT. `#rule` gives the second
+      # catch-all rule on a category an item of its own (see its header), and an item is exactly what
+      # decides how `BudgetCalculator#fulfilled?` reads a one-off: with one it wants the bill PAID,
+      # without one it settles on the date alone. This example is about a rule settled by its date,
+      # so the one-off has to be the rule that keeps the category-wide lane.
       car = envelope(name: "Car")
-      rate = rule(car, :per_period_rate, amount: 100)
       settled = rule(car, :one_time, amount: 500)
+      rate = rule(car, :per_period_rate, amount: 100)
       fund(car, 900, on: last_period)
 
       expect(calc(car).allocated_balances[settled]).to eq(0)

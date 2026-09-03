@@ -27,9 +27,18 @@ RSpec.describe Category, type: :model do
     let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
     let(:groceries) { create(:category, :expense, user: user, name: "Groceries", funded_since: Date.new(2026, 1, 1)) }
 
+    # ONE CATCH-ALL RULE AND ONE ITEM-BACKED ONE, which is the only way a category carries two:
+    # `Budget#category_may_hold_one_item_less_rule` refuses a second rule whose lane is the whole
+    # category, precisely because their claims would both subtract the same entries.
     it "adds up every rule it carries" do
       create(:budget, :per_period_rate, category: groceries, amount: 400)
-      create(:budget, :per_period_rate, category: groceries, amount: 75)
+      create(
+        :budget,
+        :per_period_rate,
+        category: groceries,
+        amount: 75,
+        item: create(:item, category: groceries, name: "Coffee")
+      )
 
       expect(groceries.claim(today: Date.new(2026, 9, 3))).to eq(475)
     end

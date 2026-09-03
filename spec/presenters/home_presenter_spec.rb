@@ -42,8 +42,14 @@ RSpec.describe HomePresenter do
     create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
-  def bill(category, amount:, due:)
-    create(:budget, :one_time, category: category, amount: amount, anchor_date: due)
+  def lane(category, name) = create(:item, category: category, name: name)
+
+  # `item:` because a category may carry only ONE item-less rule
+  # (`Budget#category_may_hold_one_item_less_rule`, computed-claims ruling of 2026-09-03), and the
+  # dated-rule listing needs two bills on one category. A one-off's due date is its anchor whether or
+  # not it names an item, so the dates these examples print do not move.
+  def bill(category, amount:, due:, item: nil)
+    create(:budget, :one_time, category: category, amount: amount, anchor_date: due, item: item)
   end
 
   # A rule that rolls: its due date moves with the cycles that have gone by, which is what makes it
@@ -186,8 +192,8 @@ RSpec.describe HomePresenter do
     # its own sentence instead of an empty box.
     it "returns the anchored rules earliest due first, and nothing else", :aggregate_failures do
       utilities = holder("Utilities", priority: 1)
-      electric = bill(utilities, amount: 90, due: Date.new(2026, 3, 1))
-      water = bill(utilities, amount: 40, due: Date.new(2026, 2, 20))
+      electric = bill(utilities, amount: 90, due: Date.new(2026, 3, 1), item: lane(utilities, "Electric"))
+      water = bill(utilities, amount: 40, due: Date.new(2026, 2, 20), item: lane(utilities, "Water"))
       rate(utilities, 25)
 
       expect(presenter.dated_rules_for(utilities)).to eq(

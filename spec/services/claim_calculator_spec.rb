@@ -24,6 +24,14 @@ RSpec.describe ClaimCalculator, type: :model do
   # so in its own heading.
   let(:groceries) { create(:category, :expense, user: user, name: "Groceries", funded_since: Date.new(2026, 1, 1)) }
 
+  # ** EVERY ACCRUING RULE BELOW IS BORN ON JAN 1 TOO, AND THE `created_at:` IS NOT BOOKKEEPING. **
+  # A rule accrues from the LATER of its category's funding date and its own creation (§3.2, Henry's
+  # ruling of 2026-09-03), so a fixture that says "this fund has been building since January" has to
+  # say the rule existed in January — a rule created by the factory a moment ago would honestly walk
+  # one period, not nine. The pair of examples that vary it are in "a rule younger than its
+  # category" below.
+  def born = Time.utc(2026, 1, 1, 9, 0)
+
   def spend(amount, on:, item: nil)
     create(:entry, item: item || create(:item, category: groceries), amount: amount, date: on)
   end
@@ -146,7 +154,15 @@ RSpec.describe ClaimCalculator, type: :model do
     # $600 every six months, next due Jun 1, paid out of the Insurance item.
     let(:premium) { create(:item, category: groceries, name: "Premium") }
     let(:rule) do
-      create(:budget, category: groceries, item: premium, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 6, 1))
+      create(
+        :budget,
+        category: groceries,
+        item: premium,
+        amount: 600,
+        interval_months: 6,
+        anchor_date: Date.new(2026, 6, 1),
+        created_at: born
+      )
     end
 
     def calc(on) = described_class.new(rule, today: on)
@@ -285,7 +301,14 @@ RSpec.describe ClaimCalculator, type: :model do
 
       # AN ITEM-LESS DATED RULE TAKES THE CATEGORY, which is §3.2's other arm.
       it "takes the whole category when the rule names no item" do
-        item_less = create(:budget, category: groceries, amount: 600, interval_months: 6, anchor_date: Date.new(2026, 6, 1))
+        item_less = create(
+          :budget,
+          category: groceries,
+          amount: 600,
+          interval_months: 6,
+          anchor_date: Date.new(2026, 6, 1),
+          created_at: born
+        )
         spend(600, on: Date.new(2026, 6, 5), item: create(:item, category: groceries, name: "Bread"))
 
         expect(described_class.new(item_less, today: Date.new(2026, 6, 15)).built_up).to eq(0)
@@ -315,7 +338,17 @@ RSpec.describe ClaimCalculator, type: :model do
     # A ONE-TIME RULE NEVER ROLLS — it has no interval, so its due date is its anchor forever, and
     # paying it empties the fund and leaves it empty.
     describe "a one-time bill" do
-      let(:rule) { create(:budget, category: groceries, item: premium, amount: 600, interval_months: nil, anchor_date: Date.new(2026, 6, 1)) }
+      let(:rule) do
+        create(
+          :budget,
+          category: groceries,
+          item: premium,
+          amount: 600,
+          interval_months: nil,
+          anchor_date: Date.new(2026, 6, 1),
+          created_at: born
+        )
+      end
 
       it "keeps its anchor as the due date after it is settled", :aggregate_failures do
         spend(600, on: Date.new(2026, 6, 5), item: premium)
@@ -342,7 +375,7 @@ RSpec.describe ClaimCalculator, type: :model do
         target_amount: 1_200
       )
     end
-    let(:rule) { create(:budget, :per_period_rate, category: vacation, amount: 150) }
+    let(:rule) { create(:budget, :per_period_rate, category: vacation, amount: 150, created_at: born) }
 
     def calc(on) = described_class.new(rule, today: on)
 
@@ -399,6 +432,75 @@ RSpec.describe ClaimCalculator, type: :model do
       withdraw(300, on: Date.new(2026, 3, 10))
 
       expect(calc(Date.new(2026, 3, 20)).built_up).to eq(150) # 450 accrued, 300 taken
+    end
+
+    # ** A GOAL FED ONLY BY HAND (§3.2's "otherwise only by positive adjustments"). ** A target rule
+    # with an amount of ZERO is the shape that says "no standing rate": it accrues nothing on its own
+    # and every penny it holds arrived as a set-aside. Both directions — the rate arm is the group
+    # above, and this arm is the same walk with the rate taken out.
+    describe "with no rate at all" do
+      let(:rule) { create(:budget, :per_period_rate, category: vacation, amount: 0, created_at: born) }
+
+      it "accrues nothing of its own" do
+        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(0)
+      end
+
+      it "builds up out of its set-asides and nothing else", :aggregate_failures do
+        adjust(rule, 400, on: Time.utc(2026, 2, 10, 12))
+        adjust(rule, 250, on: Time.utc(2026, 3, 10, 12))
+
+        expect(calc(Date.new(2026, 2, 20)).built_up).to eq(400)
+        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(650)
+      end
+
+      it "still stops at the target the category names" do
+        adjust(rule, 5_000, on: Time.utc(2026, 2, 10, 12))
+
+        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(1_200)
+      end
+    end
+  end
+
+  # ===========================================================================================
+  # §3.2 — a rule cannot accrue before it existed. `funded_since` is stamped by a category's FIRST
+  # rule, so for that rule the two dates coincide; for every rule added afterwards they do not.
+  # ===========================================================================================
+  describe "a rule younger than its category" do
+    let(:vacation) do
+      create(
+        :category,
+        :expense,
+        user: user,
+        name: "Vacation",
+        funded_since: Date.new(2024, 9, 1),
+        target_amount: 1_200
+      )
+    end
+
+    def calc(rule, on) = described_class.new(rule, today: on)
+
+    # The category has held money for two years. A rule written on Sep 1 this year has not, so it
+    # walks ONE period and holds one period's rate — not the two years the category could show.
+    it "starts on the day the rule was written, not on the day the category was funded" do
+      born_today = create(
+        :budget,
+        :per_period_rate,
+        category: vacation,
+        amount: 150,
+        created_at: Time.utc(2026, 9, 1, 9, 0)
+      )
+
+      expect(calc(born_today, Date.new(2026, 9, 3)).built_up).to eq(150)
+    end
+
+    # THE OTHER DIRECTION, and it is what says the ruling did not simply replace one date with the
+    # other: the FIRST rule on a category is written the day the category starts holding, so the two
+    # dates coincide and the whole history is walked. Four periods of $150 from a June start.
+    it "starts on the funding date for the rule that put it there" do
+      fresh = create(:category, :expense, user: user, name: "Trip", funded_since: Date.new(2026, 6, 1), target_amount: 1_200)
+      first = create(:budget, :per_period_rate, category: fresh, amount: 150, created_at: Time.utc(2026, 6, 1, 9, 0))
+
+      expect(calc(first, Date.new(2026, 9, 3)).built_up).to eq(600)
     end
   end
 

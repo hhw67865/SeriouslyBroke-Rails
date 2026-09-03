@@ -37,6 +37,14 @@ purpose side stops being a conserved partition: claims are derived, so the old
 
 ## 3. How a claim is computed
 
+**One category, one catch-all rule** (ruling, 2026-09-03; Task 1). An ITEM-LESS rule's spending lane
+is the whole category (§3.2), and a category's money is the SUM of its rules' claims — so two
+item-less rules on one category each subtract the same entries, and neither is wrong on its own. A
+category may therefore carry at most ONE rule that names no item, beside as many item-backed rules as
+it has items, whose lanes are disjoint by construction. Enforced by
+`Budget#category_may_hold_one_item_less_rule`. Rows written before this rule exist in real databases,
+so readers that guard against the shape (`SuggestionEngine#attributable_rate_rules`) keep their guard.
+
 ### 3.1 Rate rule ("$400 per period on Groceries") — use-it-or-lose-it
 ```
 claim = max(0, rate − spent_this_period)
@@ -61,7 +69,27 @@ planned_accrual(this period) = (target − built_up_before_this_period) / period
   category) — the claim drops by the amount spent, and accrual restarts toward the next due date.
   A fulfilment larger than the claim spills into free (the category shows "over").
 - A dateless target (the old savings goal) is the same formula with no due date: it accrues by
-  its rate if it has one, and otherwise only by positive adjustments (§3.3).
+  its rate if it has one, and otherwise only by positive adjustments (§3.3). **"No rate" is spelled
+  as an amount of ZERO** (ruling, 2026-09-03; Task 1): every claim comes from a rule, so a goal fed
+  only by hand has to BE a rule, and zero is the only honest way to say it has no standing
+  contribution. `Budget` permits a zero amount for exactly that shape — the category names a target
+  and the rule names neither an anchor nor an interval — and refuses it everywhere else.
+
+**As built (Task 1), three clauses made precise:**
+- **A rule accrues from the LATER of `funded_since` and its own creation** (ruling, 2026-09-03).
+  `funded_since` is stamped by a category's FIRST rule, so for that rule the two dates coincide and
+  nothing changes; for a rule added later they do not, and walking from the category's date would
+  report a fund as already built up the moment it was saved. A rule cannot accrue before it existed.
+- **The accrual sum and the spending are measured over the SAME span.** Read literally — the accrual
+  summed since `funded_since`, the spending only since the last fulfilment — a rule paid twice reads
+  FULL the day after it was emptied. Subtracting each period's spending as the walk passes through it
+  is the same sentence with the two spans made equal, and it is what makes the other two clauses true
+  at once: the built-up "drops by the amount spent" (a $200 part payment leaves $400, not zero) and
+  the accrual "restarts toward the next due date" because the cycle rolls on payment.
+- **The clamp at zero is applied per period, not only to the final figure.** Overpaying a $600 bill
+  by $100 must not put the user $100 further behind next cycle: the fund had $600 and never had
+  $700, so the excess spills into free (the money left checking) and the next period starts from
+  zero. The figure BEFORE that clamp is what says a category is "over".
 
 ### 3.3 Adjustments — dated, signed, as many as you like (Henry, 2026-09-03)
 An **adjustment** is a record `(rule, date, signed amount)`: "on Sep 12, −$158 from the car

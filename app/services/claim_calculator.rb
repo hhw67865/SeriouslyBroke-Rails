@@ -287,11 +287,31 @@ class ClaimCalculator
     visited.presence || [current_period]
   end
 
-  # ACCRUAL STARTS WHEN THE CATEGORY STARTED HOLDING MONEY AND NEVER BEFORE (§3.2: "dated rules
-  # accrue from `funded_since`, never retroactively"). A category with no funding date holds nothing
-  # at all — its spending drains available — so there is no history to walk and the current period is
-  # the whole of it.
-  def accrual_start = category&.funded_since || today
+  # ACCRUAL STARTS WHEN THE CATEGORY STARTED HOLDING MONEY, AND NEVER BEFORE THE RULE ITSELF EXISTED
+  # (§3.2: "never retroactively"; Henry's ruling of 2026-09-03).
+  #
+  # ** THE LATER OF THE TWO, AND THE SECOND ARM IS THE RULING. ** `funded_since` is stamped by a
+  # category's FIRST rule (`Category#start_holding`), so for that rule the two dates coincide and
+  # nothing changes. For every rule added afterwards they do not: a $500 target rule written today on
+  # a category funded two years ago would otherwise walk two years of periods and report itself
+  # already built up the moment it was saved — money the user never set aside, shown as money they
+  # have. A rule cannot accrue before it existed, which is the same sentence "never retroactively"
+  # says about the category, asked of the rule.
+  #
+  # THE DAY IS THE OWNER'S, through `User#local_day`: `budgets.created_at` is an instant, and a rule
+  # a Tokyo user writes on the evening of the 1st is stored on the 31st in UTC — which on a monthly
+  # grid is a different period and therefore a different first accrual.
+  #
+  # NIL ON EITHER ARM IS SIMPLY ABSENT, not zero: an unsaved rule has no `created_at` to be born on,
+  # and a category with no funding date holds nothing at all — its spending drains available — so
+  # with neither there is no history to walk and the current period is the whole of it.
+  def accrual_start = [category&.funded_since, rule_born_on].compact.max || today
+
+  def rule_born_on
+    return nil if rule.created_at.blank?
+
+    user ? user.local_day(rule.created_at) : rule.created_at.to_date
+  end
 
   def periods_left_from(from, due)
     [user.period_boundaries(from: from, to: due).count, 1].max

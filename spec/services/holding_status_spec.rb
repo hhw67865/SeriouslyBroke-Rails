@@ -29,8 +29,23 @@ RSpec.describe HoldingStatus, type: :model do
     create(:allocation, to_category: category, amount: amount)
   end
 
+  # ** A CATEGORY MAY CARRY ONLY ONE ITEM-LESS RULE (`Budget#category_may_hold_one_item_less_rule`,
+  # computed-claims ruling of 2026-09-03): two rules whose lane is the whole category would each
+  # subtract the same spending. ** So the SECOND catch-all rule this file plants on a category is
+  # given an item of its own, and only then — every single-rule fixture below is untouched, and the
+  # item is plumbing rather than a change of subject, since these examples are about the waterfall's
+  # order and the sweep's partiality and never about item-lessness.
   def rule(category, trait = nil, **attrs)
+    attrs = attrs.merge(item: fresh_item(category)) if second_catch_all?(category, attrs)
     create(:budget, *Array(trait), category: category, **attrs)
+  end
+
+  def second_catch_all?(category, attrs)
+    attrs[:item].nil? && attrs[:item_id].nil? && Budget.exists?(category_id: category.id, item_id: nil)
+  end
+
+  def fresh_item(category)
+    create(:item, category: category, name: "Lane #{Budget.where(category_id: category.id).count}")
   end
 
   def spend(category, amount, name: "Something")

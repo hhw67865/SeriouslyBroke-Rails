@@ -114,6 +114,30 @@ RSpec.describe "Budgets", type: :request do
     # Kept after the drop because the payload is what a tampered POST would actually send — a client
     # written against the pool era — and the answer must be a 422 rather than an UnknownAttribute
     # 500.
+    # ** ONE CATEGORY, ONE CATCH-ALL RULE, ON THE WIRE (two-ledger spec §3; computed-claims ruling of
+    # 2026-09-03). ** `groceries` already carries the file's `let!(:rule)` — an item-less $200 rate —
+    # so a second rule naming no item is the shape whose claim would double-count the category's own
+    # spending. The model answers on `:base`, which is where `budgets/_form` prints it, and the
+    # controller turns that into the same 422 every other shape refusal gets.
+    it "refuses a second rule covering the whole of one category", :aggregate_failures do
+      expect { post budgets_path, params: { budget: { amount: "40.00", category_id: groceries.id, basis: "per_period" } } }
+        .not_to change(Budget, :count)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("already has a rule covering all of its spending")
+    end
+
+    # THE OTHER DIRECTION, on the same category and through the same POST: a rule that names an ITEM
+    # has a lane of its own and is written.
+    it "writes a second rule on the same category when it names an item", :aggregate_failures do
+      phone = create(:item, category: groceries, name: "Phone")
+
+      expect do
+        post budgets_path,
+             params: { budget: { amount: "40.00", category_id: groceries.id, basis: "per_period", item_id: phone.id } }
+      end.to change(Budget, :count).by(1)
+      expect(response).to redirect_to(budget_page_path)
+    end
+
     it "ignores a pool_id entirely and writes no rule", :aggregate_failures do
       expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: SecureRandom.uuid } } }
         .not_to change(Budget, :count)
