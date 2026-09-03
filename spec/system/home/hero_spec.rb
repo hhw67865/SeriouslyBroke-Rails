@@ -19,12 +19,15 @@ require "rails_helper"
 # Nine carried titles in all; Task 2 took seven of them onward to `trouble_spec.rb`, leaving the two
 # period-bar ones and the card's own figures.
 #
-# EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-in-checking]`,
-# `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`, `[data-period-range]`,
-# `[data-period-progress]`, `[data-overdrawn-account]`. The hooks exist to be asserted through, and
-# a file that names half of them and matches the other half on page text leaves the unasserted ones
-# looking load-bearing when nothing holds them. Page-wide `have_content` survives only where the
-# assertion is deliberately about the WHOLE page rather than the card.
+# EVERY COPY ASSERTION IN THIS FILE IS SCOPED TO THE CARD — through a data hook
+# (`[data-in-checking]`, `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`,
+# `[data-period-range]`, `[data-period-progress]`, `[data-period-days-left]`,
+# `[data-overdrawn-account]`) or inside `within("[data-hero]")` for the two that assert a word is
+# ABSENT, which no hook can carry. The hooks exist to be asserted through, and a file that names
+# half of them and matches the other half on page text leaves the unasserted ones looking
+# load-bearing when nothing holds them. `[data-period-days-left]` was added in Task 4 for the
+# sharper reason: `_this_period`'s heading prints the SAME "7 days left" sentence, so the page-wide
+# spelling of that assertion passed whether or not the card rendered a bar at all.
 #
 # ── DELETED WITH THE STANDING BAND (answers-first spec §2: "this REPLACES the old 'You're covered /
 # Nothing is set aside yet' branch question entirely"). Every one of these asserted a branch that no
@@ -248,7 +251,7 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-period-range]", text: "Aug 14")
     expect(page).to have_css("[data-period-range]", text: "Aug 27")
-    expect(page).to have_content("7 days left")
+    expect(page).to have_css("[data-period-days-left]", text: "7 days left")
     expect(page).to have_css("[data-period-progress='50']")
   end
 
@@ -259,7 +262,7 @@ RSpec.describe "Home Hero", type: :system do
 
     travel_to(Date.new(2026, 8, 26)) { visit root_path }
 
-    expect(page).to have_content("1 day left")
+    expect(page).to have_css("[data-period-days-left]", text: "1 day left")
   end
 
   # CARRIED UNCHANGED: no declared period, no invented bar. `User#period_containing` falls back to

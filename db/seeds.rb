@@ -425,8 +425,9 @@ buffer_flows.each do |item, amounts|
   end
 end
 
-# ONE occurrence, over $100, on an item with nothing else against it: the dated-bill detector's
-# GUESSED arm, which proposes an annual interval and says in the sentence that it is a guess.
+# ONE occurrence, over $100, on an item with nothing else against it — and therefore NO dated-bill
+# suggestion: one payment is not a schedule, so the detector stays silent below its two-occurrence
+# floor (SuggestionEngine::BILL_MIN_OCCURRENCES). It is seeded to hold that silence honest.
 log.call(body_shop, 530, periods_ago[3] + 6, "Rear bumper repair")
 
 # A DAY-OF spend inside the CURRENT period, so the sources breakdown's "Spent and moved this
@@ -502,7 +503,7 @@ contributions = [[emergency_fund, 100], [vacation, 50], [house_fund, 150], [new_
 end
 
 # A weekend of the trip already booked, out of the money set aside for it — and the spending the
-# Vacation rule above is measured against.
+# Vacation rule above is measured against. Single-occurrence too, so no dated bill comes of it.
 log.call(vacation_costs, 180, periods_ago[3] + 5, "Flight deposit")
 
 # THE TWO CATEGORIES THAT ARE SPENT AT EXACTLY THE RATE THEY CLAIM. One period's worth in and one
@@ -575,8 +576,8 @@ invoices = side_gig_income.items.create!(name: "Client Invoice")
 deposit.call(invoices, 900, periods_ago[2], "Invoice #114 paid", side_gig)
 deposit.call(invoices, 400, today, "Invoice #117 paid", side_gig)
 
-# THE TAX BILL ITSELF — an expense out of what's available, on a category that holds nothing, which
-# is also the demo's second GUESSED dated bill for the suggestion engine.
+# THE TAX BILL ITSELF — an expense out of what's available, on a category that holds nothing. Like
+# the bumper repair above it is a single occurrence, so the dated-bill detector says nothing of it.
 estimated_taxes = lane.call("Estimated Taxes", :expense, "#78909C")
 log.call(estimated_taxes.items.create!(name: "Federal Estimate"), 1_600, today - 3, "Q3 estimated tax payment")
 move.call(side_gig, checking, 1_600, today - 3)

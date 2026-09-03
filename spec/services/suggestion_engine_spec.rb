@@ -787,6 +787,26 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.detail[:rule_amount]).to eq(400)
       expect(suggestion.detail[:periods]).to eq(4)
     end
+
+    # THE ZERO-ENTRY PATH, WHICH IS NOT THE DAY-OLD PATH. Above, `history_start` is a real date and
+    # the count is small; here there are no entries at all, so it is NIL and #periods_of_history
+    # short-circuits to 0 rather than comparing a period edge against nothing. This is the state a
+    # user is actually in the moment they finish onboarding — a period declared, an income figure,
+    # rules written, and not one thing spent yet — and it reaches every detector, so the example
+    # asserts the whole panel is empty and simply does not raise.
+    it "says nothing at all to an account that has rules and income but has never spent", :aggregate_failures do
+      user.update!(typical_income: 3_000)
+      silent_rule
+      claimed_item("Netflix", category: funded_category("Netflix"), amount: 75, basis: :per_period, interval_months: nil)
+
+      expect { suggestions }.not_to raise_error
+      expect(suggestions).to be_empty
+
+      # And the fixture is not vacuous: the very same rules speak the moment a record exists.
+      history_on(Date.new(2026, 1, 12))
+
+      expect(of_kind(:drift)).not_to be_empty
+    end
   end
 
   describe "order" do

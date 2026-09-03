@@ -117,7 +117,7 @@ RSpec.describe "Distributions Proposal", type: :system do
         # THE ` · you wanted $4,000.00` CLAUSE IS DELETED (Task 7) with `buffer_target` — the last
         # pool read on this screen, and one about the POT while every figure beside it is about
         # AVAILABLE.
-        expect(page).to have_content("$2,250.00 stays available.", normalize_ws: true)
+        expect(page).to have_content("$2,250.00 stays in Available.", normalize_ws: true)
         expect(page).to have_no_content("you wanted")
       end
 

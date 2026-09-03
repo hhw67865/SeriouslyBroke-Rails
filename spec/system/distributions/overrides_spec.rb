@@ -163,7 +163,7 @@ RSpec.describe "Distribution Overrides", type: :system do
 
       within("[data-redirect='Groceries']") do
         expect(page).to have_content(
-          "That frees $150.00, and nothing below it was waiting — it stays available.",
+          "That frees $150.00, and nothing below it was waiting — it stays in Available.",
           normalize_ws: true
         )
       end
@@ -559,7 +559,7 @@ RSpec.describe "Distribution Overrides", type: :system do
       fill_in "Amount for Dentist", with: "250"
       click_on "Update figures"
 
-      expect_aggregate("Your edits free $250.00, and nothing below them was waiting — it stays available.")
+      expect_aggregate("Your edits free $250.00, and nothing below them was waiting — it stays in Available.")
       within("#distribution-buffer") { expect(page).to have_content("$500.00 → $250.00", normalize_ws: true) }
     end
   end

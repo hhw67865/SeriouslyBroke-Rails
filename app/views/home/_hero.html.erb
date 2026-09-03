@@ -109,7 +109,10 @@
            data-period-progress="<%= progress.percent %>">
         <div class="h-1.5 rounded-full bg-brand-dark" style="width: <%= progress.percent %>%;"></div>
       </div>
-      <p class="mt-1.5 text-xs text-gray-500">
+      <%# HOOKED, because the SAME sentence is printed by `_this_period`'s heading: a page-wide
+          `have_content("7 days left")` in hero_spec passes off the section below without the card
+          rendering anything at all. %>
+      <p class="mt-1.5 text-xs text-gray-500" data-period-days-left>
         <%= pluralize(progress.days_left, "day") %> left
       </p>
     </div>

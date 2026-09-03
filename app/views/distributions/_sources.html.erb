@@ -34,7 +34,7 @@
       </p>
     <% else %>
       <p class="mt-1 text-sm text-gray-600">
-        You have no available money — nothing can be funded until money arrives.
+        Available has no money — nothing can be funded until money arrives.
       </p>
     <% end %>
   <% end %>
@@ -97,7 +97,7 @@
         <%= pluralize(presenter.lines.size, "envelope") %> funded in full,
         <%= number_to_currency(presenter.total_allocated) %> out —
       <% end %>
-      <%= number_to_currency(presenter.leftover) %> stays available.
+      <%= number_to_currency(presenter.leftover) %> stays in Available.
     </p>
     <%# THE WAY IN on a period that does not need the table (spec §5's "every line is editable",
         which the all-clear density otherwise has no line to offer). Nothing is remembered: the

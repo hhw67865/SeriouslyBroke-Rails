@@ -156,12 +156,19 @@ module DistributionsHelper
   # The answer said as an answer rather than as a list of one. "$300.00 to Available" restates
   # the lead and leaves out the half that matters — that nothing below was waiting for it — and
   # a user told only the first half concludes the money vanished.
+  #
+  # ONE REGISTER FOR THE PARTY, and it is the proper noun. Its sibling above prints "$300.00 to
+  # Available" through #distribution_party, and Available is a place with a balance on this screen
+  # — the sources table's own row, the waterfall's last row, "Available is $200.00 in the red". A
+  # sentence that lowercases it describes a STATE instead of naming where the money went, which is
+  # the ambiguity the two-ledger design removed. (Home's confirmation flash keeps the lowercase
+  # adjective: spec §3 lets only Distribute and Budget name the mechanic's party.)
   def distribution_redirect_buffer_only(redirect)
-    return "#{distribution_redirect_lead(redirect)}, out of what was available." unless redirect.freed?
+    return "#{distribution_redirect_lead(redirect)}, out of Available." unless redirect.freed?
 
     subject = redirect.aggregate? ? "them" : "it"
     "#{distribution_redirect_lead(redirect)}, and nothing below #{subject} was waiting — " \
-      "it stays available."
+      "it stays in Available."
   end
 
   # Available is always named last and never truncated: it is where the money stops, and a
