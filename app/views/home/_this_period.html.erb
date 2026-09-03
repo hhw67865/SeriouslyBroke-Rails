@@ -1,0 +1,108 @@
+<%# "THIS PERIOD" — SPENDING AS PROGRESS (answers-first spec §4). Local: `presenter` (HomePresenter).
+    It replaces `home/_categories.html.erb`, and with it `home/_holding_row.html.erb`.
+
+    ** THE INVERSE OF THE BAND IT REPLACES, NOT A DIFFERENT READING OF THE LEDGER. ** The categories
+    band printed `$90.00 left` off `HoldingStatus#amount`; this section prints `$310.00 of $400.00`,
+    which is the same $90 said from the other end. Every figure is composed from readers the app
+    already owned — see `HomePresenter#holder_spending_this_period` (the period-bounded expense
+    read, whose two shared readers are named there) and `#planned_this_period` (the impact card's
+    own denominator rule). No date arithmetic is spelled anywhere on this screen.
+
+    THE `data-expanded` CHEVRON IS GONE with `_holding_row`. It existed so trouble was never hidden;
+    a category needing attention is now IN the trouble strip above, with its rules under it, and one
+    that does not is not — so there is nothing left for a chevron to hide.
+
+    THE WORDS ARE THE USER'S (spec §3): spent, of, set aside. The band's own header said "available
+    now", which is the mechanic's term and survives on Distribute and Budget alone. %>
+<section class="bg-white border border-gray-200 rounded" data-this-period>
+  <div class="px-6 py-3 border-b border-gray-200">
+    <%# THE HERO'S OWN PERIOD READER, so the days-left figure here and the one under the hero's bar
+        cannot come from two different windows. Silent for a user who has declared no period — the
+        same refusal `#period_progress` makes about the same reader — because "18 days left" would
+        state a boundary nobody set. %>
+    <h3 class="text-sm font-semibold text-gray-900" data-this-period-heading>
+      This period<% if progress = presenter.period_progress %> · <%= pluralize(progress.days_left, "day") %> left<% end %>
+    </h3>
+  </div>
+
+  <% presenter.period_rows.each do |row| %>
+    <%# `data-period-row` IS THE HOOK EVERY COPY ASSERTION GOES THROUGH, named by the category so a
+        two-row screen cannot be satisfied by one row's figures. %>
+    <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-period-row="<%= row.category.name %>">
+      <div class="flex justify-between items-baseline gap-4">
+        <span class="font-medium text-gray-900"><%= row.category.name %></span>
+
+        <%# THE FIGURE. A goal says what is SET ASIDE of its target — the word matters, because the
+            whole reason the seventh state exists is that a savings balance must never read as money
+            to spend — and an envelope says what was SPENT of its plan. Red when the spending has
+            passed the plan (spec §4), which is false for a goal by construction. %>
+        <span class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+              data-period-figure>
+          <% if row.goal? %>
+            set aside <%= number_to_currency(row.held) %> of <%= number_to_currency(row.planned) %>
+          <% elsif row.bar? %>
+            <%= number_to_currency(row.spent) %> of <%= number_to_currency(row.planned) %>
+          <% else %>
+            <%# NO PLAN TO BE A FRACTION OF — a holder carrying no rule and no target. The fact,
+                said the way an unbudgeted row says it, because it is the same fact. %>
+            spent <%= number_to_currency(row.spent) %>
+          <% end %>
+        </span>
+      </div>
+
+      <%# THE TRACK AND THE FILL ARE `_hero`'S AND `categories/_partials/_category_card`'S, so the
+          app's bars are one shape. `role="progressbar"` because a bar with no accessible value is
+          decoration to a screen reader, and the figure beside it is the value in words either way.
+          `aria-label` names which category, since a page of bars is otherwise a page of "50%".
+
+          THE PERCENT RIDES ON THE TRACK AND THE COLOUR ON THE FILL, deliberately: a 0% fill has no
+          width, so Capybara does not consider it visible, and a hook on it would be unassertable on
+          exactly the row a bar most needs pinning — the one nobody has spent from. %>
+      <% if row.bar? %>
+        <div class="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden"
+             role="progressbar"
+             aria-valuenow="<%= row.percent %>"
+             aria-valuemin="0"
+             aria-valuemax="100"
+             aria-label="<%= row.category.name %>"
+             data-period-bar="<%= row.percent %>">
+          <div class="h-1.5 rounded-full <%= row.over? ? "bg-status-danger" : "bg-brand-dark" %>"
+               style="width: <%= row.percent %>%;"
+               data-period-fill></div>
+        </div>
+      <% end %>
+
+      <%# THE ROW VOCABULARY, WHERE IT EARNS ITS PLACE (spec §4). nil on the two states the bar has
+          already said, so the element is absent rather than empty — see HomeHelper
+          #period_row_clause, which owns the whole decision and the date that rides on it. %>
+      <% if clause = period_row_clause(row) %>
+        <p class="mt-1 text-sm <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-500" %>"
+           data-period-clause>
+          <%= clause %>
+        </p>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# UNBUDGETED CATEGORIES WITH SPENDING (spec §4): the fact, no bar, no pressure. Their receipts
+      drain AVAILABLE rather than a category (§4's start-date rule), so there is nothing for a bar to
+      be a fraction of and a denominator here would be inventing the pressure. Zero-spend ones are
+      absent by construction — the Categories page remains the full index. %>
+  <% presenter.unbudgeted_rows.each do |row| %>
+    <div class="px-6 py-3 border-b border-gray-100 last:border-b-0 flex justify-between items-baseline gap-4"
+         data-unbudgeted-row="<%= row.category.name %>">
+      <span class="font-medium text-gray-900"><%= row.category.name %></span>
+      <span class="text-sm text-gray-700 tabular-nums">spent <%= number_to_currency(row.spent) %></span>
+    </div>
+  <% end %>
+
+  <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
+      something that failed to load. The door is the Budget page, which is where a rule — the thing
+      that gives a category a plan to be measured against — is written. %>
+  <% if presenter.period_rows.empty? && presenter.unbudgeted_rows.empty? %>
+    <p class="px-6 py-3 text-sm text-gray-500">
+      Nothing is budgeted yet, and nothing has been spent this period.
+      <%= link_to "Give a category a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    </p>
+  <% end %>
+</section>

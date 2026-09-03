@@ -308,7 +308,16 @@ RSpec.describe "Home Fixes", type: :system do
 
     before { sign_in user, scope: :user }
 
-    def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
+    # ** WAS `find("div[aria-labelledby='waterfall-heading']")` (answers-first Task 2). ** Home no
+    # longer RENDERS the waterfall — "Where your money goes", the fill order and the cutoff were the
+    # system describing itself, which spec §1 rules off this screen — but the ROWS are still the ones
+    # `HomePresenter#remaining_plan` and the fix branches are derived from, and they are exactly what
+    # this describe is pinning against `AllocationCalculator`. So the figures are read off the
+    # presenter instead of off markup, at the same planted literals, and the cross-screen comparison
+    # in each block is untouched.
+    def waterfall_row(name)
+      HomePresenter.new(user: user).waterfall.find { |row| row.category.name == name }
+    end
 
     def deposit(amount)
       category = create(:category, :income, user: user)
@@ -345,16 +354,26 @@ RSpec.describe "Home Fixes", type: :system do
         visit root_path
       end
 
-      it "asks for the whole rule, because the leftover is about to be taken back" do
-        expect(waterfall_section).to have_content("Groceries")
-        expect(waterfall_section).to have_content("$285.00 of $400.00")
-        expect(waterfall_section).to have_no_content("of $315.00")
+      it "asks for the whole rule, because the leftover is about to be taken back", :aggregate_failures do
+        # THE WAITING ASSERTION FIRST, and it is load-bearing rather than decorative (CLAUDE.md's
+        # first `InvalidSessionIdError` cause): every other assertion in this example reads Postgres
+        # through the presenter, which does not wait on the browser, so without one Capybara-side
+        # expectation the example ends mid-request and `reset_sessions!` navigates the renderer away
+        # underneath it. Measured: these examples failed exactly this way when the band they used to
+        # read markup from was removed.
+        expect(page).to have_css("[data-this-period]")
+        expect(waterfall_row("Groceries").funded).to eq(285)
+        expect(waterfall_row("Groceries").needed).to eq(400)
+        # The live-holding reading, asserted absent: $400 less the $85 it is still sitting on.
+        expect(waterfall_row("Groceries").needed).not_to eq(315)
       end
 
-      it "leaves a category whose period is still open reading its live ask" do
+      it "leaves a category whose period is still open reading its live ask", :aggregate_failures do
+        expect(page).to have_css("[data-this-period]")
         # $150 rate less the $40 it is holding. Same reader, no sweep, unchanged figure.
-        expect(waterfall_section).to have_content("$0.00 of $110.00")
-        expect(waterfall_section).to have_no_content("of $150.00")
+        expect(waterfall_row("Gas").funded).to eq(0)
+        expect(waterfall_row("Gas").needed).to eq(110)
+        expect(waterfall_row("Gas").needed).not_to eq(150)
       end
 
       # THE INVARIANCE, and it holds here: required rose by $85 (315 → 400) and available rose by the
@@ -376,7 +395,7 @@ RSpec.describe "Home Fixes", type: :system do
       # different question. Home's rows are categories now and the two answer one question again, at
       # the same figures. Three of these were withdrawn in this file; all three are back.
       it "agrees with the distribution screen it is offering", :aggregate_failures do
-        expect(page).to have_content("Where your money goes")
+        expect(page).to have_css("[data-this-period]")
         home = HomePresenter.new(user: user)
         proposal = AllocationCalculator.new(user: user, today: Date.current)
 
@@ -419,14 +438,16 @@ RSpec.describe "Home Fixes", type: :system do
       # The pre-sweep reading gave Coffee no row at all: it held $150 against a $100 rule, so it
       # asked for nothing and the fill rejects a zero-need row. Rendering $0 for a category that is
       # about to hand $150 back was the same defect class in the other direction.
-      it "gives the closed category a row, asking for its whole rate" do
-        expect(waterfall_section).to have_content("Coffee")
-        expect(waterfall_section).to have_content("$0.00 of $100.00")
+      it "gives the closed category a row, asking for its whole rate", :aggregate_failures do
+        expect(page).to have_css("[data-this-period]")
+        expect(waterfall_row("Coffee")).to be_present
+        expect(waterfall_row("Coffee").funded).to eq(0)
+        expect(waterfall_row("Coffee").needed).to eq(100)
       end
 
       # THE SECOND RESTORED CROSS-SCREEN PIN, on the shape where the shortfall legitimately MOVES.
       it "still agrees with the distribution screen", :aggregate_failures do
-        expect(page).to have_content("Where your money goes")
+        expect(page).to have_css("[data-this-period]")
         home = HomePresenter.new(user: user)
         proposal = AllocationCalculator.new(user: user, today: Date.current)
 
@@ -459,8 +480,11 @@ RSpec.describe "Home Fixes", type: :system do
       end
 
       it "funds nothing, because the swept money lands inside the hole", :aggregate_failures do
-        expect(waterfall_section).to have_content("$0.00 of $300.00")
-        expect(waterfall_section).to have_content("$0.00 of $100.00")
+        expect(page).to have_css("[data-this-period]")
+        expect(waterfall_row("Rent").funded).to eq(0)
+        expect(waterfall_row("Rent").needed).to eq(300)
+        expect(waterfall_row("Coffee").funded).to eq(0)
+        expect(waterfall_row("Coffee").needed).to eq(100)
         # The POT is $200 down — income $150 against $350 of spending. The allocation into Coffee
         # moved nothing physical, which is why the account is not $350 down as it was in the pool era.
         #
@@ -474,7 +498,7 @@ RSpec.describe "Home Fixes", type: :system do
       # is now stated rather than clamped, and it is stated identically on both screens.
       it "states a negative available rather than clamping it, exactly as the distribution does",
          :aggregate_failures do
-           expect(page).to have_content("Where your money goes")
+           expect(page).to have_css("[data-this-period]")
            home = HomePresenter.new(user: user)
            proposal = AllocationCalculator.new(user: user, today: Date.current)
 
@@ -519,7 +543,11 @@ RSpec.describe "Home Fixes", type: :system do
 
     def problem_row(name) = find("[data-problem-category='#{name}']")
 
-    def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
+    # The presenter's rows rather than the deleted waterfall band's markup — see the same helper in
+    # "the post-sweep view" above for why.
+    def waterfall_row(name)
+      HomePresenter.new(user: user).waterfall.find { |row| row.category.name == name }
+    end
 
     def deposit(amount)
       category = create(:category, :income, user: user)
@@ -559,7 +587,8 @@ RSpec.describe "Home Fixes", type: :system do
         expect(page).to have_no_link(text: /\ATake/)
         expect(page).to have_no_content("This has to come from money you already have.")
       end
-      expect(waterfall_section).to have_content("$300.00 of $300.00")
+      expect(waterfall_row("Dentist").funded).to eq(300)
+      expect(waterfall_row("Dentist").needed).to eq(300)
     end
 
     it "keeps the button on a category the waterfall funds only in part", :aggregate_failures do
@@ -568,7 +597,8 @@ RSpec.describe "Home Fixes", type: :system do
         expect(page).to have_link("Take $500.00 from Cushion")
         expect(page).to have_no_content("the next distribution funds this in full")
       end
-      expect(waterfall_section).to have_content("$100.00 of $500.00")
+      expect(waterfall_row("Roof").funded).to eq(100)
+      expect(waterfall_row("Roof").needed).to eq(500)
     end
 
     # ** THE FOURTH RESTORED CROSS-SCREEN PIN. ** This branch reads Home's own waterfall, and the

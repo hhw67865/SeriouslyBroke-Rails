@@ -196,10 +196,13 @@ RSpec.describe "Budget page structural check", type: :system do
     end
   end
 
-  # HOME'S STANDING BAND, both directions. The branch has been unreachable in production since it
+  # HOME'S TROUBLE STRIP, both directions. The branch has been unreachable in production since it
   # was written — there was no writer for `typical_income` — so this is the first time it renders
-  # against a real user.
-  describe "Home's standing band", :aggregate_failures do
+  # against a real user. It has moved twice since: the standing band became the hero card
+  # (answers-first Task 1) and the button moved on to the trouble strip (Task 2), which is the right
+  # home for a verdict that is only shown when it is true. The copy and the gate are unchanged, which
+  # is why these two examples are untouched by either move.
+  describe "Home's trouble strip", :aggregate_failures do
     it "warns when the budget does not fit" do
       declared_user(2_400)
       rate(holder("Rent"), 3_000)

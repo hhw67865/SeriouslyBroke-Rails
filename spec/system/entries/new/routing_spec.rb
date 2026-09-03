@@ -68,6 +68,11 @@ RSpec.describe "Entries New Routing", type: :system do
   # envelopes inside it, and the word "buffer" moved to AVAILABLE on the purpose side.
   def expect_home_buffers(checking:, ally:)
     visit root_path
+    # THE CARDS ARE INSIDE THE ACCOUNTS LINE'S EXPANSION (answers-first spec §6): Home collapses the
+    # accounts to one quiet line and this opens it. An account still mid-onboarding surfaces
+    # top-level and is not inside the `<details>` at all, so the click is guarded rather than
+    # assumed — `spec/system/home/accounts_spec.rb` owns which accounts land on which side.
+    find("[data-accounts-line]").click if page.has_css?("[data-accounts-line]")
 
     within("[data-account-group='Checking']") { expect(page).to have_content("balance now #{checking}") }
     within("[data-account-group='Ally']") { expect(page).to have_content("balance now #{ally}") }

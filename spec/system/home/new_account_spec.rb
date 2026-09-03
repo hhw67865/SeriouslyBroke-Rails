@@ -57,6 +57,10 @@ RSpec.describe "Home NewAccount", type: :system do
       fund_account(section, "1200.50")
 
       expect(page).to have_content("Ally Savings funded with $1,200.50.")
+      # THE CARD LEAVES THE TOP LEVEL THE MOMENT IT IS FUNDED (answers-first Task 2): onboarding
+      # cards surface, finished accounts collapse into the accounts line (spec §6). Opening the line
+      # is how the card is reached now, and `accounts_spec.rb` pins the move itself.
+      find("[data-accounts-line]").click
       within(section) do
         expect(page).to have_content("balance now $1,200.50")
         expect(page).not_to have_field("Real balance today")

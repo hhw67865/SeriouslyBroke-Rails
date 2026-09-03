@@ -13,15 +13,17 @@
     comment, not a design. The list is now exhaustive against that grep, and re-running it is the
     whole maintenance instruction.
 
-    ONE EXCEPTION, and it COMPOSES the label into a longer sentence, which is the one thing a span
-    cannot do:
+    THE LAST EXCEPTION IS GONE (answers-first Task 2), which is why this list is now all deletions:
 
-      - `HomeHelper#pool_problem_label` (Home's attention band) forces `period_closed:` internally
-        rather than accepting it, deliberately, so that no caller of the band can omit it. Forcing
-        it through here would mean giving this partial a composition seam so that one caller can
-        wrap the output, which buys nothing and costs the property the file exists for. (Its
-        `orphan:` keyword and the two clauses it wrapped the label in are DELETED with the concept
-        — Task 6.)
+      - `HomeHelper#pool_problem_label` (Home's attention band) forced `period_closed:` internally
+        rather than accepting it, so that no caller of the band could omit it. The trouble strip that
+        replaced that band renders THIS partial instead — the row object carries both suffixes, which
+        is the same property obtained by construction — so the method has no caller and is deleted.
+        (Its `orphan:` keyword and the two clauses it wrapped the label in went earlier, Task 6.)
+        Home's other caller, the "This period" bars, is NOT an exception either: it prints a
+        deliberately DIFFERENT clause (`HomeHelper#period_row_clause` — the state word without the
+        money, because the bar beside it has already printed money), which is a different sentence
+        rather than this one composed into a longer one.
 
       - the standing band's overdraft line was a second and it is GONE (the band itself is now
         `home/_hero.html.erb`, answers-first Task 1): it labelled an
@@ -61,7 +63,7 @@
     differently from the screen next to it. That defect shipped twice: once between Home and
     /budget (`budget_page/_pool_group`, since renamed `_category_group`, passed `period_closed:`
     alone) and once between Home's OWN two bands
-    (`pool_problem_label` passed `changed_after_distributing:` alone). Both were caught in review,
+    (the deleted `pool_problem_label` passed `changed_after_distributing:` alone). Both were caught in review,
     neither by a test, because there is nothing to fail — the assertion has to already suspect the
     missing clause.
 
@@ -71,7 +73,8 @@
     consistent" and "structurally hard to drift".
 
     THE INDENTATION BELOW IS LOAD-BEARING and deliberately does not read as nested markup. This
-    partial replaced the identical span that stood in `home/_holding_row` (then `home/_pool_row`) and
+    partial replaced the identical span that stood in `home/_holding_row` (then `home/_pool_row`, and
+    since answers-first Task 2 `home/_trouble_category`) and
     `budget_page/_pool_group`, and the refactor's contract was byte-identical rendering on both
     screens — so the literal whitespace those two files emitted lives here now, at the column each
     caller's own render line puts it. THOSE TWO render this from four spaces in; that is why the

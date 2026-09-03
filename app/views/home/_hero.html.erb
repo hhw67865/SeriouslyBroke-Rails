@@ -115,37 +115,17 @@
     </div>
   <% end %>
 
-  <%# AN ACCOUNT THAT IS NOT CHECKING, BELOW ZERO — the standing band's strip, kept verbatim for the
-      accounts its last clause is still true of. Main is excluded because its overdraft IS the red
-      figure at the top of this card, and printing the same debt twice with two different sentences
-      about what counts it is worse than printing it once.
+  <%# ** TWO THINGS THAT WERE PARKED HERE AND ARE NOW GONE (answers-first Task 2). ** Task 1 kept
+      both on this card because the trouble strip did not exist yet, and named them as a carry:
 
-      `main?` rather than a comparison of this view's own: the presenter already owns that question
-      (and the model refuses a destroy on the same predicate), so a second spelling here could hide
-      a real debt or double-report one. %>
-  <% presenter.overdrawn_accounts.reject { |account| presenter.main?(account) }.each do |account| %>
-    <p class="mt-4 rounded bg-status-danger-light px-3 py-2 text-sm font-medium text-status-danger"
-       data-overdrawn-account="<%= account.name %>">
-      <%= account.name %> is overdrawn <%= number_to_currency(presenter.overdraft_for(account)) %> — already
-      spent, and none of the figures above count it.
-    </p>
-  <% end %>
+        THE NON-MAIN OVERDRAFT STRIP — `Ally is overdrawn $200.00 — already spent, and none of the
+          figures above count it`. It is spec §5's "physical overdraft" trigger, so it belongs on
+          the strip, and its copy is verbatim there. Main's own overdraft never moved: it IS the red
+          figure at the top of this card, with the sentence above.
+        §9'S PERMANENT SACRIFICE BUTTON — "Your budget doesn't fit your income". A strip that renders
+          only when something is true is the right home for a verdict that is only rendered when it
+          is true, and it is the one kind of trouble no reallocation can fix.
 
-  <%# §9'S PERMANENT BUTTON, CARRIED OFF THE STANDING BAND UNCHANGED. It has no other home in the
-      answers-first plan: the trouble strip (spec §5) is for a physical overdraft, an overdrawn
-      category, an overdue bill and an undistributed period, and this is none of those — it is a
-      verdict about the SHAPE of the rules, which no reallocation can fix, which is exactly why §9
-      asked for it to be permanent rather than gated on this period's cash.
-
-      `structurally_underwater?` is gated on income AND cadence together and memoised for the false
-      case too, so this caller costs nothing. A recomputation here could say "your budget doesn't
-      fit your income" beside a /budget page that says it fits — and the route this button opens
-      refuses on exactly that reader's condition. %>
-  <% if presenter.structurally_underwater? %>
-    <%= link_to("Your budget doesn't fit your income",
-                sacrifice_path,
-                class: "mt-4 inline-flex items-center gap-2 px-4 py-2 rounded border " \
-                       "border-status-danger text-status-danger text-sm font-medium hover:bg-white",
-                data: { sacrifice_link: true }) %>
-  <% end %>
+      Said here rather than deleted silently, because a card that used to carry two features and now
+      carries none of them is exactly where a later reader would assume they were dropped. %>
 </div>

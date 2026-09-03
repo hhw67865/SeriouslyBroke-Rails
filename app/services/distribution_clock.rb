@@ -74,6 +74,22 @@ class DistributionClock
     distributed_at.present? && holder.budgets.any? { |budget| budget.updated_at > distributed_at }
   end
 
+  # HAS THIS PERIOD'S MONEY BEEN HANDED OUT AT ALL — the same one query above compares against, read
+  # for its own answer instead of as the left-hand side of a comparison.
+  #
+  # HOME'S TROUBLE STRIP ASKS IT (answers-first spec §5: "a distribute that hasn't happened this
+  # period"), and it asks THIS class rather than spelling `Allocation.distributed` inside a period
+  # window a second time. That is the whole reason this class exists one level up: the alternative
+  # to one reader is the period-bounded query copied into a presenter, free to disagree with the
+  # clause above it and with `AllocationCommitter#previous_distribution` about which distribution is
+  # "this period's".
+  #
+  # A REDISTRIBUTION IS STILL A DISTRIBUTION. `#latest_for_user` takes the newest row inside the
+  # window, and a period the user has confirmed twice has rows from the second confirm alone (the
+  # committer deletes before it writes) — so this stays true across a replace rather than blinking
+  # off between the delete and the insert of a transaction nobody outside can observe.
+  def distributed_this_period? = latest_for_user.present?
+
   private
 
   # THE ONE QUERY: the newest moment this user's distribution wrote anything

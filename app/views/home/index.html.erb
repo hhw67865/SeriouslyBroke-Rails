@@ -2,16 +2,23 @@
 
 <%= page_header(title: "Home", subtitle: "Where your money stands") %>
 
-<%# ANSWERS FIRST (answers-first spec §1). The hero card leads because the two questions a user
-    actually opens this screen with — how much is in my checking, how much of it is free — are its
-    two figures; everything below it is the working. The remaining bands are still the two-ledger
-    ones (spec §2) and Task 2 replaces them: the attention band becomes the trouble strip, the
-    categories band becomes spent-of-planned bars, and the accounts collapse to one line. %>
+<%# ANSWERS FIRST (answers-first spec §1). Home asks four questions in order and this is the order:
+    the hero answers "how much is in checking, how much of it is free, where are we in the period";
+    the trouble strip interrupts — and ONLY when something real needs a human (§5), which is why it
+    is gated rather than rendered with an empty state; "This period" answers "what have I spent on
+    each category" (§4); and everything else demotes to one line (§6).
+
+    THE ONBOARDING CARDS STAY TOP-LEVEL AND STAY LAST. They are the setup that has not finished, not
+    an answer to any of the four questions, so they sit below the answers — but outside the accounts
+    line, because a door behind a chevron is a door a first-time user does not find. %>
 <div class="space-y-6">
   <%= render "hero", presenter: @presenter %>
-  <%= render "attention", presenter: @presenter %>
-  <%= render "categories", presenter: @presenter %>
-  <% @presenter.accounts.each do |account| %>
+  <% if @presenter.trouble? %>
+    <%= render "trouble", presenter: @presenter %>
+  <% end %>
+  <%= render "this_period", presenter: @presenter %>
+  <%= render "accounts_line", presenter: @presenter %>
+  <% @presenter.onboarding_accounts.each do |account| %>
     <%= render "account", presenter: @presenter, account: account %>
   <% end %>
   <%= render "new_account", bank_account: @new_bank_account %>

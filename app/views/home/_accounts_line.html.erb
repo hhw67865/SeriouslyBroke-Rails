@@ -1,0 +1,46 @@
+<%# THE ACCOUNTS, DEMOTED TO ONE LINE (answers-first spec §6). Local: `presenter` (HomePresenter).
+
+    ** WHAT THE LINE ANSWERS AND WHAT THE EXPANSION IS FOR, because they are two different jobs. **
+    The line answers "how much of my money is somewhere other than checking" — main is deliberately
+    out of the figure, because main's balance IS the hero's "In Checking" number and printing it
+    again here would answer one question twice. The expansion is the accounts INDEX: Home carries
+    rename and delete since `pools/index` and `pools/show` were deleted, so every finished account's
+    card has to stay reachable, main's included.
+
+    `<details>`/`<summary>` RATHER THAN A STIMULUS CONTROLLER — the house idiom, and
+    `budget_page/_suggestions.html.erb` states its reason where the same choice was made: the whole
+    interaction is "show me the rest", it needs no JavaScript, and it survives a Turbo navigation.
+    The SUMMARY carries the figure, always visible, because the figure is the answer.
+
+    ONBOARDING IS NOT IN HERE. An account still awaiting its funding card, and main still awaiting
+    its opening balance, render top-level (see `index.html.erb`) — a door behind a chevron is a door
+    a first-time user does not find. `HomePresenter#collapsed_accounts` is the one place that split
+    is made, so the two lists cannot both claim an account and render its card twice. %>
+<% accounts = presenter.collapsed_accounts %>
+<% others = presenter.other_accounts %>
+<% if accounts.any? %>
+  <details class="bg-white border border-gray-200 rounded" data-accounts>
+    <summary class="px-6 py-3 text-sm text-gray-700 cursor-pointer hover:text-gray-900" data-accounts-line>
+      <% if others.any? %>
+        <strong class="tabular-nums"><%= number_to_currency(presenter.other_accounts_total) %></strong>
+        across <%= pluralize(others.size, "other account") %>
+      <% else %>
+        <%# NOTHING IS ELSEWHERE, so there is no total to state — "$0.00 across 0 other accounts"
+            would be the app inventing an absence. The line still exists, because the cards behind it
+            do and this is the only door to them. %>
+        Your accounts
+      <% end %>
+    </summary>
+
+    <%# A TRAY RATHER THAN A CONTINUATION OF THE CARD: `_account` renders its own bordered section,
+        so the expansion is given a recessed ground to sit them on instead of a second set of
+        borders butted against this one. %>
+    <div class="border-t border-gray-200 bg-gray-50 p-3 space-y-3">
+      <%# TODAY'S ACCOUNT CARDS, UNCHANGED. `_account` is the same partial it was — the balance the
+          bank says, the main-account note, rename and (off main) delete. %>
+      <% accounts.each do |account| %>
+        <%= render "account", presenter: presenter, account: account %>
+      <% end %>
+    </div>
+  </details>
+<% end %>

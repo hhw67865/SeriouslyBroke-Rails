@@ -65,9 +65,14 @@ RSpec.describe "Home Navigation", type: :system do
       visit root_path
     end
 
-    def waterfall_section = find("div[aria-labelledby='waterfall-heading']")
+    # WAS `find("div[aria-labelledby='waterfall-heading']")` (answers-first Task 2). The waterfall
+    # band died with the attention band — Home stops showing the system (spec §1) — and the
+    # Distribute call-to-action moved onto the trouble strip's :undistributed arm (spec §6), which
+    # is where a user who has not handed this period's money out actually needs it. The fixture
+    # above already produces that state: a $400 rule, $100 of income and no distribution.
+    def distribute_prompt = find("[data-undistributed]")
 
-    # `exact_text` because Capybara.exact is unset and Home's own band link reads "Distribute
+    # `exact_text` because Capybara.exact is unset and Home's own strip link reads "Distribute
     # this period" — a bare "Distribute" matches both, and the click below would be ambiguous.
     def nav_link = find_link("Distribute", exact_text: true)
 
@@ -83,11 +88,10 @@ RSpec.describe "Home Navigation", type: :system do
       expect(page).to have_content("Where your money goes")
     end
 
-    # The band that has just told the user where this period's money goes is the other place the
-    # action belongs — a user reading "the next distribution funds this in full" is one click away
-    # from performing it.
-    it "offers the same action from the band that describes it", :aggregate_failures do
-      within(waterfall_section) { click_link "Distribute this period" }
+    # The strip that has just told the user this period has not been distributed is the other place
+    # the action belongs — a user reading the problem is one click away from performing the fix.
+    it "offers the same action from the strip that describes it", :aggregate_failures do
+      within(distribute_prompt) { click_link "Distribute this period" }
 
       expect(page).to have_current_path(new_distribution_path)
       expect(page).to have_css("h1", text: "Distribution")
@@ -100,8 +104,8 @@ RSpec.describe "Home Navigation", type: :system do
     # left unmarked is the whole hazard back.
     it "keeps turbo from prefetching either link", :aggregate_failures do
       expect(nav_link["data-turbo-prefetch"]).to eq("false")
-      band_link = within(waterfall_section) { find_link("Distribute this period") }
-      expect(band_link["data-turbo-prefetch"]).to eq("false")
+      strip_link = within(distribute_prompt) { find_link("Distribute this period") }
+      expect(strip_link["data-turbo-prefetch"]).to eq("false")
     end
   end
 end

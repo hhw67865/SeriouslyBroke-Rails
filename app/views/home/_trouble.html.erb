@@ -1,0 +1,86 @@
+<%# THE TROUBLE STRIP — rendered ONLY when something real needs a human (answers-first spec §5).
+    Local: `presenter` (HomePresenter). It replaces `home/_attention.html.erb`.
+
+    ** SILENCE IS THE GOOD STATE, AND THAT IS THE WHOLE DESIGN CHANGE. ** The band this replaces
+    rendered on every page load with one of three headings, two of which said nothing needed doing —
+    "Nothing needs you" and "Nothing is flagged, but you're still short". Spec §5 rules out the
+    permanent box: the strip is absent when nothing is true, and the caller gates on
+    `HomePresenter#trouble?` so there is one gate rather than four predicates OR'd in a view.
+
+    ** WHAT DIED WITH THE BAND: THE WATERFALL. ** "Where your money goes", the fill order and the
+    cutoff were the mechanic's view of the distribution — the system describing itself, which spec
+    §1 rules off this screen. The plan is still one click away and the :undistributed arm below is
+    the click; `/distributions/new` renders the same rows, from the same `AllocationCalculator`, with
+    room to change them. `HomePresenter#cutoff` and `#shortfall` keep their other readers.
+
+    FIVE ARMS, AND EACH IS A DIFFERENT KIND OF TROUBLE RATHER THAN THE SAME ONE FIVE WAYS. The types
+    come off `HomePresenter#troubles`; a `case` on the kind is what keeps a new trigger from being
+    added to the list and forgotten in the markup. %>
+<section class="bg-white border border-gray-200 rounded" data-trouble aria-labelledby="trouble-heading">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <%# The count is the heading, because the count is the news. Sentence case, not the `uppercase`
+        treatment this codebase gives short labels: that renders a whole sentence as a shout. %>
+    <h3 id="trouble-heading" class="text-sm font-semibold text-gray-900">
+      <%= pluralize(presenter.troubles.size, "thing") %> need<%= "s" if presenter.troubles.one? %> you
+    </h3>
+  </div>
+
+  <% presenter.troubles.each do |trouble| %>
+    <% case trouble.kind %>
+    <% when :overdraft %>
+      <%# A NON-MAIN ACCOUNT BELOW ZERO — the standing band's strip, claimed off the hero card (the
+          plan's Task 1 → Task 2 hand-over) with its praised copy verbatim. Main is excluded by
+          `HomePresenter#overdrawn_other_accounts`, because main's overdraft IS the hero's red "In
+          Checking" figure and its last clause is exactly true of the accounts left here.
+
+          NO BUTTON, AND THAT IS A RULING RATHER THAN AN OMISSION (Task 6). The fix beside a problem
+          row is an ALLOCATION, and an allocation moves nothing physical (two-ledger §2) — offering
+          one against a bank overdraft would be a real mistake proposed to fix a problem it cannot
+          reach. What went away is the button, not the debt. %>
+      <p class="px-6 py-3 border-b border-gray-100 last:border-b-0 bg-status-danger-light text-sm font-medium text-status-danger"
+         data-overdrawn-account="<%= trouble.subject.name %>">
+        <%= trouble.subject.name %> is overdrawn <%= number_to_currency(presenter.overdraft_for(trouble.subject)) %> —
+        already spent, and none of the figures above count it.
+      </p>
+
+    <% when :category %>
+      <%= render "trouble_category", presenter: presenter, category: trouble.subject %>
+
+    <% when :undistributed %>
+      <%# §6: "The distribute call-to-action lives on the trouble strip when undistributed, not as a
+          band." `turbo_prefetch: false` because this GET takes write locks — see
+          shared/_nav_section.html.erb, where the same link says why at length.
+
+          STACKS BELOW `sm` (the waterfall band's own design-review finding, carried): at 375px the
+          sentence and a 38px button cannot share a row, and the copy is the thing that must stay
+          whole, so the button drops beneath it and goes full-width there. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-3 sm:gap-4"
+           data-undistributed>
+        <p class="text-sm text-gray-700">
+          This period hasn't been distributed yet — your rules are asking for money nobody has handed out.
+        </p>
+        <%= link_to "Distribute this period",
+                    new_distribution_path,
+                    class: "btn btn-secondary w-full sm:w-auto shrink-0",
+                    data: { turbo_prefetch: false } %>
+      </div>
+
+    <% when :structural %>
+      <%# §9'S PERMANENT BUTTON, CLAIMED OFF THE HERO CARD. It is a verdict about the SHAPE of the
+          rules, which no reallocation can fix — which is exactly why it belongs on a strip about
+          things that need a human rather than beside this period's cash.
+
+          `structurally_underwater?` is gated on income AND cadence together and memoised for the
+          false case too, so this costs nothing on the screens that do not render it. A
+          recomputation here could say "your budget doesn't fit your income" beside a /budget page
+          that says it fits — and the route this button opens refuses on exactly that reader. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0">
+        <%= link_to("Your budget doesn't fit your income",
+                    sacrifice_path,
+                    class: "inline-flex items-center gap-2 px-4 py-2 rounded border " \
+                           "border-status-danger text-status-danger text-sm font-medium hover:bg-status-danger-light",
+                    data: { sacrifice_link: true }) %>
+      </div>
+    <% end %>
+  <% end %>
+</section>

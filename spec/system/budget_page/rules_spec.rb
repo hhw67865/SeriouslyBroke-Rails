@@ -190,17 +190,20 @@ RSpec.describe "Budget page rules", type: :system do
       end
     end
 
-    # THE CROSS-SCREEN PIN. The same two categories, the same afternoon, read off Home's categories
-    # band — and compared to the SAME LITERALS rather than to the Budget page's own rendering, so a
-    # label that lost its amount fails here instead of agreeing with itself about nothing.
-    it "reads exactly as Home reads for the same categories" do
+    # THE CROSS-SCREEN PIN, WITH ONE STATED CORRECTION (answers-first Task 2). Home's categories band
+    # is now the "This period" section, and it prints the INVERSE of `$400.00 left` — `$0.00 of
+    # $400.00`, the same money from the other end — with the state word suppressed because the bar
+    # has already said it. What must NOT differ between the two screens is the period marker, which
+    # is a fact about the MONEY rather than about how the category is doing: a Home row silent about
+    # it is a user surprised by the next distribution taking $400 back. So the pin is on that marker,
+    # still compared to a literal on both sides and still for the same pair on the same afternoon.
+    it "reads exactly as Home reads for the same categories", :aggregate_failures do
       visit root_path
 
-      within("[data-holding-name='Swept']") { expect(page).to have_content("$400.00 left · last period") }
-      within("[data-holding-name='Live']") do
-        expect(page).to have_content("$400.00 left")
-        expect(page).to have_no_content("last period")
-      end
+      expect(find("[data-period-row='Swept'] [data-period-figure]")).to have_content("$0.00 of $400.00")
+      expect(find("[data-period-row='Swept'] [data-period-clause]")).to have_content("last period")
+      expect(find("[data-period-row='Live'] [data-period-figure]")).to have_content("$0.00 of $400.00")
+      expect(page).to have_no_css("[data-period-row='Live'] [data-period-clause]")
     end
   end
 
@@ -287,7 +290,9 @@ RSpec.describe "Budget page rules", type: :system do
     # label has no amount at all, so the `all(match(...))` above is what reports it.
     def behind_figure(node) = node.text[/behind (\$[\d,]+\.\d\d)/, 1]
 
-    def home_row(name) = find("[data-holding-name='#{name}']")
+    # WAS `[data-holding-name]`, the categories band's row (answers-first Task 2). The clause is the
+    # part this pin is about, and on the "This period" section it has an element of its own.
+    def home_row(name) = find("[data-period-row='#{name}'] [data-period-clause]")
   end
 
   # The link is in the sidebar, which every signed-in page renders — so it is asserted from two

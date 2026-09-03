@@ -866,6 +866,171 @@ RSpec.describe HomePresenter do
     # went away.
   end
 
+  # ── "THIS PERIOD" (answers-first spec §4) ──────────────────────────────────────────────────────
+  #
+  # The bars themselves are pinned in `spec/system/home/this_period_spec.rb`, on the screen. What is
+  # here is what a browser cannot reach cheaply: the WINDOW both directions, the partition between a
+  # budgeted row and an unbudgeted one, and the sort key.
+  describe "#period_rows" do
+    # THE WINDOW, BOTH DIRECTIONS, ON ONE CATEGORY. The period containing Feb 6 on a biweekly cadence
+    # anchored Feb 6 is Feb 6–19, so the Feb 10 receipt is inside it and the Feb 2 one is not — while
+    # BOTH drain the category's holding, which is exactly why "spent this period" cannot be read off
+    # `HoldingCalculator#balance`.
+    it "counts the spending inside this period and no other", :aggregate_failures do
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      allocate(groceries, 400)
+      spend(groceries, 310, on: Date.new(2026, 2, 10))
+      spend(groceries, 50, on: Date.new(2026, 2, 2))
+
+      row = presenter.period_rows.sole
+
+      expect(row.spent).to eq(310)
+      expect(row.planned).to eq(400)
+      # The cumulative reading, asserted absent — and asserted to be genuinely different on this
+      # fixture, so the first expectation is pinning the window rather than passing by coincidence.
+      expect(groceries.holding_calculator(today: today).balance).to eq(40)
+    end
+
+    # THE PLAN IS THE PER-PERIOD NORMALISER, not the sticker price: `Budget#steady_ask` turns a
+    # $600-a-month rule into $276.92 of a biweekly period (26 periods a year against 12 months), and
+    # a bar denominated in the monthly figure would draw a full envelope as under half of one.
+    # Pinned to the literal, so a denominator that reverted to `amount` fails rather than agreeing
+    # with whatever the normaliser happens to return.
+    it "denominates a monthly rule in what it claims from one period", :aggregate_failures do
+      rent = holder("Rent", priority: 1)
+      create(:budget, category: rent, amount: 600, interval_months: 1, anchor_date: Date.new(2026, 3, 1))
+
+      expect(presenter.period_rows.sole.planned).to eq(276.92)
+      expect(presenter.period_rows.sole.planned).not_to eq(600)
+    end
+
+    # A GOAL MEASURES AGAINST ITS TARGET (spec §4: "savings goals keep their target bars"), and
+    # #filled is its HOLDING rather than its spending — which is what keeps the row from reading as
+    # money to spend.
+    it "measures a goal against its target and fills the bar with what it holds", :aggregate_failures do
+      goal = savings_goal("Vacation", priority: 1, target: 2_400)
+      allocate(goal, 424)
+
+      row = presenter.period_rows.sole
+
+      expect(row).to be_goal
+      expect(row.planned).to eq(2_400)
+      expect(row.filled).to eq(424)
+      expect(row.percent).to eq(18)
+    end
+
+    # TROUBLE FIRST, THEN FILL ORDER. Three categories in fill order 1-2-3 with the LAST in trouble:
+    # both halves are asserted at once, because either alone passes against a list that was simply
+    # reversed.
+    it "sorts trouble first and keeps fill order behind it" do
+      rate(holder("Rent", priority: 1), 400)
+      rate(holder("Groceries", priority: 2), 400)
+      spend(holder("Dining Out", priority: 3), 80)
+
+      expect(presenter.period_rows.map { |row| row.category.name }).to eq(["Dining Out", "Rent", "Groceries"])
+    end
+  end
+
+  describe "#unbudgeted_rows" do
+    # ZERO-SPEND ROWS ARE ABSENT BY CONSTRUCTION — they never appear in the grouped sum — which is
+    # the rule stated as a query rather than as a filter somebody could forget.
+    it "lists only the unbudgeted categories with spending in this period", :aggregate_failures do
+      spender = create(:category, :expense, user: user, name: "Subscriptions")
+      create(:entry, item: create(:item, category: spender), amount: 32, date: today)
+      create(:category, :expense, user: user, name: "Someday")
+      stale = create(:category, :expense, user: user, name: "Old")
+      create(:entry, item: create(:item, category: stale), amount: 99, date: Date.new(2026, 2, 2))
+
+      expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Subscriptions"])
+      expect(presenter.unbudgeted_rows.sole.spent).to eq(32)
+    end
+
+    # ** THE PARTITION'S ONE HARD EDGE. ** A category funded PART-WAY THROUGH this period drains
+    # available for the receipts dated before its `funded_since` and itself for the ones after — so
+    # the same category appears on both sides of `ENTRY_CATEGORY_ID`. It belongs in the budgeted list
+    # with its bar, once; its pre-funding spending is available's, which the hero's figures carry.
+    it "never lists a budgeted category as unbudgeted as well", :aggregate_failures do
+      groceries = holder("Groceries", priority: 1, funded_since: Date.new(2026, 2, 8))
+      rate(groceries, 400)
+      spend(groceries, 20, on: Date.new(2026, 2, 7))
+      spend(groceries, 30, on: Date.new(2026, 2, 9))
+
+      expect(presenter.unbudgeted_rows).to be_empty
+      # And the bar counts only what the category itself drained, on the ledger's own rule.
+      expect(presenter.period_rows.sole.spent).to eq(30)
+    end
+  end
+
+  describe "#troubles" do
+    # EACH KIND FROM AN EXISTING READER, and the list is what the strip renders from — so a trigger
+    # added to the presenter and forgotten in the view, or the reverse, shows up here as a count.
+    it "types each trigger and orders them money-gone-first", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
+      income(1_000)
+      bill(holder("Dentist", priority: 1), amount: 300, due: Date.new(2026, 2, 14))
+
+      expect(presenter.troubles.map(&:kind)).to eq([:overdraft, :category, :undistributed])
+      expect(presenter.troubles.first.subject).to eq(ally)
+      expect(presenter.troubles.second.subject.name).to eq("Dentist")
+      expect(presenter).to be_trouble
+    end
+
+    # MAIN'S OVERDRAFT IS THE HERO'S RED FIGURE, so the strip must not repeat it: printing the same
+    # debt twice with two different sentences about what counts it is worse than printing it once.
+    it "leaves main's own overdraft out of the list", :aggregate_failures do
+      spend(create(:category, :expense, user: user, name: "Overspend"), 400)
+
+      expect(presenter.in_checking).to eq(-400)
+      expect(presenter.troubles.map(&:kind)).to eq([])
+      expect(presenter).not_to be_trouble
+    end
+
+    # A USER WITH NOTHING TO DISTRIBUTE IS NOT IN TROUBLE. Every fresh account has an undistributed
+    # period by definition, and a strip that fired on it would greet every new user with a demand
+    # they cannot act on.
+    it "asks nothing of a user whose rules ask for nothing", :aggregate_failures do
+      income(1_000)
+
+      expect(presenter.waterfall).to be_empty
+      expect(presenter).not_to be_undistributed_period
+      expect(presenter).not_to be_trouble
+    end
+
+    # THE OTHER DIRECTION OF THE SAME TRIGGER: one `Allocation.distributed` row inside the window and
+    # the clock reports the period handed out. Read through `DistributionClock` rather than a second
+    # `Allocation.distributed` query of this class's own.
+    it "falls silent on the distribute trigger once this period has been distributed", :aggregate_failures do
+      income(1_000)
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      allocate(groceries, 400)
+
+      expect(presenter.waterfall).to be_empty
+      expect(DistributionClock.new(user: user, today: today)).to be_distributed_this_period
+    end
+  end
+
+  # ── THE ACCOUNTS LINE (answers-first spec §6) ──────────────────────────────────────────────────
+  describe "#other_accounts" do
+    # MAIN IS OUT OF THE FIGURE because its balance IS the hero's "In Checking" number; an onboarding
+    # account is out because its card renders top-level, and a figure in the line for a card sitting
+    # above it reads as two accounts.
+    it "totals the finished accounts that are not main", :aggregate_failures do
+      create(:category, :expense, user: user, name: "Opening Balance")
+      income(1_000)
+      ally = create(:pool, :account, user: user, name: "Ally")
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: today, kind: :transfer)
+      create(:pool, :account, user: user, name: "Fresh")
+
+      expect(presenter.other_accounts).to eq([ally])
+      expect(presenter.other_accounts_total).to eq(400)
+      expect(presenter.onboarding_accounts.map(&:name)).to eq(["Fresh"])
+      expect(presenter.collapsed_accounts).to eq([ally, checking])
+    end
+  end
+
   describe "#fix_for" do
     # THE DESTINATION EVERY EXAMPLE HERE IS ABOUT: $300 due Feb 14, inside the current period
     # (Feb 6–19), with no boundary left between tomorrow and the due date — so it is :wont_make_it

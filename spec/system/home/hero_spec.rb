@@ -11,13 +11,13 @@ require "rails_helper"
 #   * "names the period beside the standing sentence"      → "draws the period as a bar"
 #   * "shows no period range before a period is declared"   → unchanged in substance
 #   * "names an overdrawn account beside the figures that exclude it" → split in two: the POT's own
-#     overdraft is now the red "In Checking" figure (§2), and a non-main account keeps the old strip
-#     and its copy verbatim, because "none of the figures above count it" is still exactly true of it.
-#   * all six sacrifice-link examples, unchanged. §9's permanent button has no new home in this
-#     plan — the trouble strip (spec §5) lists physical overdraft, overdrawn category, overdue bill
-#     and an undistributed period, and not this — so it stays on the card that replaced its band.
+#     overdraft is the red "In Checking" figure (§2) and stays here; the NON-MAIN half moved on to
+#     the trouble strip in Task 2, with its copy verbatim (see the marker below).
+#   * all six sacrifice-link examples were carried here by Task 1 and MOVED ON in Task 2, to the
+#     strip that did not exist when Task 1 ran. See the marker at the foot of this file.
 #
-# Nine carried titles in all, six of them the sacrifice-link group.
+# Nine carried titles in all; Task 2 took seven of them onward to `trouble_spec.rb`, leaving the two
+# period-bar ones and the card's own figures.
 #
 # EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-in-checking]`,
 # `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`, `[data-period-range]`,
@@ -105,10 +105,11 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
     expect(page).to have_css("[data-free-subline]", text: "the rest is set aside or spoken for")
     # THE WORDS THIS CARD NO LONGER SAYS (spec §3), asserted rather than assumed: the band it
-    # replaced printed all three. SCOPED TO THE CARD, deliberately — the categories band below it
-    # still prints "available now" and the attention band still branches on covered, and both are
-    # Task 2's to sweep. A page-wide assertion here would fail for a reason that is not this task's
-    # and would go green later for a reason that is not this card's.
+    # replaced printed all three. STILL SCOPED TO THE CARD after Task 2, and for a NEW reason: the
+    # bands that printed "available now" are gone (`this_period_spec.rb` asserts the section says
+    # none of the machinery words), but the trouble strip's fix button names AVAILABLE as a SOURCE
+    # ("Take $300.00 from Available") — which is `ReallocationPresenter::Root#name`, the mechanic's
+    # term on the screen that button opens, and deliberately not Home describing the user's money.
     # "You're covered" is asserted absent in the drained-root example below, where it is the
     # headline that was actually wrong — not repeated here, which would only cost this example a
     # line without measuring a second thing.
@@ -223,22 +224,10 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
   end
 
-  # CARRIED FROM standing_spec's overdrawn-account example, on the half of it that survives whole: a
-  # NON-MAIN account's overdraft is excluded from every figure on this card, so the old strip and
-  # its copy are still exactly true and still needed.
-  it "names a non-main account that has gone below zero", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
-    deposit(1_000)
-    create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: Date.current, kind: :transfer)
-
-    visit root_path
-
-    expect(page).to have_css("[data-overdrawn-account='Ally']", text: "Ally is overdrawn $200.00")
-    expect(page).to have_content("none of the figures above count it")
-    # The pot is fine — $1,000 of income plus the $200 that walked in — so the figure it is beside
-    # must not have turned red as well.
-    expect(page).to have_no_css("[data-in-checking].text-status-danger")
-  end
+  # ── MOVED TO THE TROUBLE STRIP (answers-first Task 2): "names a non-main account that has gone
+  # below zero". It is spec §5's "physical overdraft" trigger, and Task 1 only kept it here because
+  # the strip did not exist yet. Its copy is verbatim in `trouble_spec.rb`, which also pins the other
+  # direction — main's own overdraft staying on THIS card and not being repeated there.
 
   # ── THE PERIOD AS A BAR (spec §2) ──────────────────────────────────────────────────────────────
 
@@ -344,73 +333,14 @@ RSpec.describe "Home Hero", type: :system do
     end
   end
 
-  # ── §9'S PERMANENT BUTTON, CARRIED WHOLE ───────────────────────────────────────────────────────
-
-  # The href is asserted, not just the label: a button that says the budget does not fit and goes
-  # nowhere is the state this replaced, and it looked identical.
-  it "shows the structural warning only when rules exceed typical income", :aggregate_failures do
-    envelope("Rent", 3_000)
-
-    visit root_path
-
-    expect(page).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
-    expect(page).to have_css("[data-sacrifice-link]")
-  end
-
-  it "hides the structural warning when the budget fits", :aggregate_failures do
-    envelope("Groceries", 400)
-
-    visit root_path
-
-    expect(page).to have_no_link("Your budget doesn't fit your income")
-    expect(page).to have_no_css("[data-sacrifice-link]")
-  end
-
-  # THE BUTTON AND THE ROUTE ARE THE SAME CONDITION READ TWICE. Home shows it on
-  # `structurally_underwater?` and /sacrifice refuses on the same test, so a button that rendered
-  # where the route refuses would open a redirect straight back. Followed rather than merely
-  # asserted, because only following it can tell the two apart.
-  it "opens the sacrifice view when followed", :aggregate_failures do
-    envelope("Rent", 3_000)
-
-    visit root_path
-    click_link "Your budget doesn't fit your income"
-
-    expect(page).to have_current_path(sacrifice_path)
-    expect(page).to have_content("$600.00 underwater every period")
-  end
-
-  # THE CARD AND THE BUTTON ANSWER DIFFERENT QUESTIONS, which is why §9 asks for the button to be
-  # permanent. This period's cash is fine — the money is in the account — and the budget still does
-  # not fit the income.
-  it "keeps the button up on a period whose cash is comfortable", :aggregate_failures do
-    envelope("Rent", 3_000)
-    deposit(5_000)
-
-    visit root_path
-
-    expect(page).to have_css("[data-free-to-spend]", text: "$2,000.00")
-    expect(page).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
-  end
-
-  it "shows no structural warning before an income is declared" do
-    user.update!(typical_income: nil)
-    envelope("Rent", 3_000)
-
-    visit root_path
-
-    expect(page).to have_no_css("[data-sacrifice-link]")
-  end
-
-  # INCOME WITHOUT A CADENCE IS REACHABLE — the declaration form offers "Not set" for the period —
-  # and `Budget.steady_need` still answers there, against a period the user has not agreed to. The
-  # gate is both halves, and this is the half that only fails when one of them is dropped.
-  it "shows no structural warning before a period is declared" do
-    user.update!(period_cadence: nil, period_anchor_date: nil)
-    envelope("Rent", 3_000)
-
-    visit root_path
-
-    expect(page).to have_no_css("[data-sacrifice-link]")
-  end
+  # ── §9'S PERMANENT BUTTON MOVED TO THE TROUBLE STRIP (answers-first Task 2), and all six of its
+  # examples went with it: "shows the structural warning only when rules exceed typical income",
+  # "hides the structural warning when the budget fits", "opens the sacrifice view when followed",
+  # "keeps the button up on a period whose cash is comfortable", "shows no structural warning before
+  # an income is declared" and "shows no structural warning before a period is declared".
+  #
+  # Task 1 parked the button here because §5's trigger list did not name it and there was no strip to
+  # put it on. There is one now, and a strip that renders ONLY when something is true is the right
+  # home for a verdict that is only shown when it is true — it is the one kind of trouble no
+  # reallocation can fix, which is exactly why §9 asked for it. See `trouble_spec.rb`.
 end

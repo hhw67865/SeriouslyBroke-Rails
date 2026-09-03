@@ -32,11 +32,11 @@ module HomeHelper
   # it was over the waterfall band's tense.
   #
   # WHICH CALLERS PASS THIS CLAUSE, and it is not all of them. The three that say how a pool STANDS
-  # RIGHT NOW pass it — Home's pools band, Home's attention band (through #pool_problem_label) and
-  # the Budget page's group header — because those three render the same envelope on the same
-  # afternoon and a clause on one of them alone reads as the app disagreeing with itself. It was
-  # missing from two of the three at different times, once between Home and /budget and once
-  # between Home's own two bands.
+  # RIGHT NOW pass it — Home's "This period" bars (through #period_row_clause), Home's trouble strip
+  # (through `shared/_holding_status`) and the Budget page's group header — because those three
+  # render the same category on the same afternoon and a clause on one of them alone reads as the app
+  # disagreeing with itself. It was missing from two of the three at different times, once between
+  # Home and /budget and once between Home's own two bands.
   #
   # The distribution and reallocation screens pass `period_closed:` and NOT this, deliberately.
   # Their rows describe a move that has not happened — `AllocationsHelper`'s sentences are
@@ -75,6 +75,57 @@ module HomeHelper
     else "#{number_to_currency(status.amount)} · on track"
     end
   end
+
+  # THE STATES A "THIS PERIOD" BAR HAS ALREADY SAID (answers-first spec §4). `left to spend` IS the
+  # bar read backwards — `$90.00 left` is the $310-of-$400 row's own remainder — and `saving` is the
+  # goal bar's own two figures (`$424.00 of $2,400.00`), so printing either beside the bar would be
+  # the screen answering one question twice in two denominations. That is the exact defect the
+  # inverted presentation was adopted to remove, so the silence is the design rather than a tidy-up.
+  PERIOD_ROW_SILENT_STATES = [:left_to_spend, :saving].freeze
+
+  # THE SMALL CLAUSE AFTER A "THIS PERIOD" BAR — the row vocabulary surviving "where it earns its
+  # place" (spec §4). nil where it earns none, and the view renders no element at all there.
+  #
+  # THREE ANSWERS, AND THEY ARE THREE DIFFERENT SENTENCES RATHER THAN ONE SAID THREE WAYS:
+  #
+  #   NOTHING for the two states the bar has already stated (see the constant above) — except that
+  #     ` · last period` SURVIVES THERE ALONE. Which period the money belongs to is a fact about the
+  #     MONEY rather than about how the category is doing, the bar cannot carry it, and it is the one
+  #     thing standing between a quiet row and a user surprised by the next distribution taking $400
+  #     back. It is also what keeps the cross-screen pin honest: /budget prints `$400.00 left · last
+  #     period` for the same category on the same afternoon, and a Home row silent about the period
+  #     would be the two screens disagreeing about the same money.
+  #   `on track`, THE WORD WITHOUT THE MONEY, for the one quiet state that is genuinely additional:
+  #     whether a dated bill is on schedule is not a fact the bar carries. `pool_state_label` would
+  #     print `$2,000.00 · on track`, and that amount is the HOLDING while the bar's is the
+  #     SPENDING — two money figures from two different questions, an inch apart, which is the pair
+  #     this screen has already shipped once under one noun.
+  #   THE WHOLE LABEL, BOTH SUFFIXES, for a state that needs attention. Here the figure IS the news
+  #     (`overdrawn $80.00`, `behind $385.00`) and it is not the bar's figure, so nothing is said
+  #     twice — and this row renders inches from the trouble strip's row about the same category, so
+  #     the two must read identically or the screen disagrees with itself. `pool_status_label` with
+  #     both suffixes threaded off the ONE row object is what makes that structural.
+  #
+  # THE DATE RIDES ON THE QUIET ARM ALONE, which is `HomePresenter::Row#due_marker?`'s rule re-housed
+  # for the row type that replaced it: an attention row has already printed its date inside the
+  # label, and `overdrawn $50.00 · Oct 17` would date a debt with a deadline belonging to something
+  # else.
+  def period_row_clause(row)
+    status = row.status
+    return quiet_period_marker(status) if PERIOD_ROW_SILENT_STATES.include?(status.state)
+    return ["on track", status.due_on&.strftime("%b %-d")].compact.join(" · ") unless row.needs_attention?
+
+    pool_status_label(
+      status,
+      period_closed: status.period_closed?,
+      changed_after_distributing: row.changed_after_distributing?
+    )
+  end
+
+  # The whole of what a bar-silent row still has to say. nil is the ordinary answer; `last period` is
+  # `pool_status_label`'s own suffix standing on its own, because there is no state word in front of
+  # it to hang off.
+  def quiet_period_marker(status) = status.period_closed? ? "last period" : nil
 
   # What an expanded row calls one of a pool's rules.
   #
@@ -136,56 +187,11 @@ module HomeHelper
     "Nothing has #{number_to_currency(fix.amount)} spare to move."
   end
 
-  # BOTH SUFFIXES TRAVEL THROUGH rather than stopping here, and they travel for one reason: the
-  # attention band and the pools band render the SAME pool inches apart on one screen — a `behind`
-  # envelope is in both by construction, and so is an overdrawn one — so a suffix on one band and
-  # not the other reads as the two bands disagreeing about the same pool.
-  #
-  # `changed_after_distributing:` arrives from the caller because it is a question about the
-  # SCREEN's period (see HomePresenter#changed_after_distributing?), which a status cannot answer.
-  # `period_closed:` is NOT a keyword here and deliberately so: it is a fact about this pool's own
-  # money, `PoolStatus#period_closed?` already carries it off the calculator the status was built
-  # from, and a keyword would give a caller the option of omitting it. That option is exactly what
-  # went wrong — this method used to pass one suffix and not the other, so one Home render printed
-  # `overdrawn $80.00 · last period` in the pools band and `overdrawn $80.00` in the attention band
-  # a few inches above it.
-  #
-  # THE ARGUMENT DOES NOT CARRY UP TO #pool_status_label, AND THE REASON IS NOT A RAISE.
-  # CORRECTED (2d task 2): this comment used to say the other screens hand #pool_status_label
-  # statuses built `net_of_sweep: true`, so asking them would raise NetOfSweepError. That shape does
-  # not exist and never did — neither `Pool#status` nor `PoolStatus` takes a `net_of_sweep:`
-  # keyword, so no status anywhere carries a sweep and `status.period_closed?` cannot raise on any
-  # screen. An unreachable hazard is the worst kind of reason to keep a design, because the next
-  # person reads it as a constraint.
-  #
-  # The real reason the keyword stays one level up is that #pool_status_label's other callers do not
-  # hold something that can answer it, and must not ask the thing they do hold:
-  #
-  #   - The distribution screen passes a `Standing` — a VALUE read down to four members inside the
-  #     open transaction (see DistributionPresenter::Standing) — which has no #period_closed? to
-  #     ask. It computes the marker off a separate PLAIN calculator and hands it in.
-  #   - The reallocation screen passes a `Candidate` carrying the marker as its own member, again
-  #     off the plain calculator it already built for the row.
-  #   - The statuses on those screens that COULD be asked are PROJECTED ones (`pending:`), and there
-  #     the answer would be about money that has not moved: a pending funding dated today makes the
-  #     rate period look live, so ` · last period` would appear or vanish on the strength of an
-  #     unwritten distribution. Both screens omit the marker on those (see `AllocationsHelper
-  #     #allocation_damage_sentence`'s `becomes …` clause and DistributionsHelper's consequence
-  #     line). `PoolMovementsHelper` was the pool-era name and is deleted with its screen (Task 6).
-  #
-  # It is safe HERE because the only caller is Home's attention band, whose statuses come from
-  # HomePresenter#status_for: plain, unprojected, and about money that is actually in the category.
-  #
-  # THE `orphan:` KEYWORD AND ITS TWO CLAUSES ARE DELETED (Task 6). They prefixed `no account · ` to
-  # the label, and replaced it outright with "no account — nothing can fund it" when the orphan was
-  # otherwise quiet. A category belongs to no account and needs none — allocating money moves
-  # nothing physical (two-ledger spec §2) — so there is no such state to name. What remains is the
-  # forced `period_closed:`, which is the reason this method exists at all.
-  def pool_problem_label(status, changed_after_distributing: false)
-    pool_status_label(
-      status,
-      period_closed: status.period_closed?,
-      changed_after_distributing: changed_after_distributing
-    )
-  end
+  # ── `#pool_problem_label` IS DELETED (answers-first Task 2), and the property it existed for is
+  # not lost — it became structural. It forced `period_closed:` off the status so that Home's
+  # attention band could not omit the suffix the categories band printed inches below; the strip
+  # that replaced that band renders `shared/_holding_status` instead, which threads BOTH suffixes off
+  # ONE row object (`HomePresenter::Row`). A caller no longer chooses which suffixes to pass, it
+  # chooses which OBJECT to pass, and an object missing an answer raises at render. That partial's
+  # own header carried this method as its ONE documented exception; the exception is gone with it.
 end
