@@ -28,12 +28,18 @@
     <%# ONE PLAIN SENTENCE, modelled on the overdraft strip the standing band ended with. What
         changes is the last clause: that strip said "none of the figures above count it", which was
         true of a band whose figures were both purpose-ledger ones and is FALSE here — the figure it
-        sits under is the overdraft. The consequence takes its place, because a consequence is the
-        thing worth stating (principle 3). The strip's own copy survives verbatim below, for the
-        accounts it is still exactly true of. %>
+        sits under is the overdraft. The strip's own copy survives verbatim below, for the accounts
+        it is still exactly true of.
+
+        THE FACT ALONE, AND NO CONSEQUENCE (fix round 1 — MED-1). This ended "— nothing is free
+        until money comes in", which is a lie for the user whose money is simply in the wrong
+        account: $1,000 of income with $1,200 walked over to savings puts the pot at -$200 with
+        $1,000 unspoken for, and what that user needs is a transfer, not income. Being spent past
+        zero is true in BOTH negative-pot states; which of the two it is belongs to the subline,
+        which is the one place on this card that knows. %>
     <% if presenter.in_checking.negative? %>
       <p class="-mt-2 text-sm text-status-danger" data-checking-overdrawn>
-        Your checking account is already spent past zero — nothing is free until money comes in.
+        Your checking account is already spent past zero.
       </p>
     <% end %>
 
@@ -49,16 +55,32 @@
     </div>
   </dl>
 
-  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns. The cap clause is gated on
-      the presenter's own predicate rather than on a comparison spelled here: a view re-deriving
-      which side of the `min` won could print "more is parked in other accounts" beside a figure the
-      other branch produced. %>
+  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns — and THREE arms, not two
+      (fix round 1 — MED-1). A negative free has two causes and they need different sentences:
+
+        THE PLAN OUTRUNS THE MONEY   `plan_outruns_the_money?` — there is genuinely nothing spare
+                                     anywhere, and spending takes the user further under.
+        THE MONEY IS ELSEWHERE       the cap is what made this negative: money that no rule has
+                                     claimed exists, it is simply not in checking. Measured: $1,000
+                                     in, $1,200 moved to savings, no rules at all — the old
+                                     two-armed version told that user "More is set aside or spoken
+                                     for than you have" with $0 set aside.
+
+      BOTH GATES ARE THE PRESENTER'S OWN PREDICATES rather than comparisons spelled here. A view
+      re-deriving which side of the `min` won, or re-deriving the sign underneath it, could print a
+      sentence about arithmetic the figure beside it did not do. %>
   <p class="mt-2 text-sm text-gray-600" data-free-subline>
-    <% if presenter.free_to_spend.negative? %>
-      More is set aside or spoken for than you have. Anything you spend now takes you further under.
-    <% else %>
+    <% if !presenter.free_to_spend.negative? %>
       the rest is set aside or spoken for<% if presenter.free_cap_bound? %> — more is parked in
       other accounts<% end %>.
+    <% elsif presenter.plan_outruns_the_money? %>
+      More is set aside or spoken for than you have. Anything you spend now takes you further under.
+    <% else %>
+      <%# NEITHER HALF ASSERTS AN ACCOUNT BY NAME, deliberately: `available` spans every account the
+          user has, so "it is in savings" is a guess this card cannot make. What it can say is that
+          the money is not spoken for and not here, which is the whole of what the cap means. %>
+      The money that isn't spoken for is sitting outside checking — nothing here is free until some
+      of it moves in.
     <% end %>
   </p>
 

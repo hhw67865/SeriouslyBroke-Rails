@@ -207,7 +207,7 @@ RSpec.describe "Home Attention", type: :system do
     # NON-main account, which `spec/system/home/hero_spec.rb` covers — what this example is about is
     # the attention band staying quiet, and that is unchanged.
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$400.00")
-    expect(page).to have_content("already spent past zero")
+    expect(page).to have_css("[data-checking-overdrawn]", text: "already spent past zero")
     within(attention_section) do
       expect(page).to have_content("Nothing needs you")
       expect(page).to have_no_content("overdrawn")

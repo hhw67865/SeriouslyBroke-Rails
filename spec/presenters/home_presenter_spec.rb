@@ -688,6 +688,64 @@ RSpec.describe HomePresenter do
     end
   end
 
+  # ** WHICH KIND OF NEGATIVE (fix round 1 — MED-1). ** `#free_to_spend` goes below zero for two
+  # unrelated reasons and the card was telling both of them the same story. The three examples below
+  # are the three combinations that exist, and the third is the one that makes this a separate
+  # predicate rather than a synonym for `#free_cap_bound?`.
+  describe "#plan_outruns_the_money?" do
+    # THE REVIEWER'S MEASURED FIXTURE. $1,000 of income, $1,200 walked over to a savings account,
+    # and NOT ONE RULE — so the pot is -$200 while $1,000 is unspoken for. Nothing is set aside,
+    # nothing is spoken for, and the money is one transfer away: every part of "more is set aside or
+    # spoken for than you have" and "nothing is free until money comes in" was false here.
+    it "is false when the money is simply in another account", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income(1_000)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_200, date: today, kind: :transfer)
+
+      expect(presenter.in_checking).to eq(-200)
+      expect(presenter.available).to eq(1_000)
+      expect(presenter.remaining_plan).to eq(0)
+      expect(presenter.free_to_spend).to eq(-200)
+      expect(presenter).to be_free_cap_bound
+      expect(presenter).not_to be_plan_outruns_the_money
+    end
+
+    # THE OTHER DIRECTION on the same fixture shape: $150 in, $300 spent with no rules to hold it,
+    # and a $400 rule still asking. The root is -$150 and the plan wants $400 more, so there is
+    # genuinely nothing anywhere — and the cap is NOT what made free negative.
+    it "is true when every account together is short of the plan", :aggregate_failures do
+      income(150)
+      rate(holder("Groceries", priority: 1), 400)
+      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 300)
+
+      expect(presenter.in_checking).to eq(-150)
+      expect(presenter.free_to_spend).to eq(-550)
+      expect(presenter).not_to be_free_cap_bound
+      expect(presenter).to be_plan_outruns_the_money
+    end
+
+    # ** THE COMBINATION THAT FORBIDS SPELLING THIS AS `#free_cap_bound?`. ** A pot of -$500 against
+    # an unspoken-for -$100 is cap-bound AND genuinely out of money: $1,000 in, $1,500 moved to
+    # savings, and $1,100 of rules still asking. Both predicates are true, they are answering
+    # different questions, and a card that had used the cap as a proxy for the cause would print the
+    # money-is-elsewhere sentence at a user whose budget does not fit.
+    it "is true even where the cap binds, because they are different questions", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income(1_000)
+      rate(holder("Groceries", priority: 1), 1_100)
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
+
+      expect(presenter.in_checking).to eq(-500)
+      expect(presenter.available - presenter.remaining_plan).to eq(-100)
+      expect(presenter).to be_free_cap_bound
+      expect(presenter).to be_plan_outruns_the_money
+    end
+
+    it "is false for a fresh user, whose plan asks for nothing at all" do
+      expect(presenter).not_to be_plan_outruns_the_money
+    end
+  end
+
   describe "#free_cap_bound?" do
     # THE BOUNDARY THE `<` SITS ON. Money exactly equal to what the pot holds is not "parked
     # somewhere else", so the subline must not fire: $1,000 in checking against $1,000 of

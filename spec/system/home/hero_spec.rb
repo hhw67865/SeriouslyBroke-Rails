@@ -13,9 +13,18 @@ require "rails_helper"
 #   * "names an overdrawn account beside the figures that exclude it" → split in two: the POT's own
 #     overdraft is now the red "In Checking" figure (§2), and a non-main account keeps the old strip
 #     and its copy verbatim, because "none of the figures above count it" is still exactly true of it.
-#   * all five sacrifice-link examples, unchanged. §9's permanent button has no new home in this
+#   * all six sacrifice-link examples, unchanged. §9's permanent button has no new home in this
 #     plan — the trouble strip (spec §5) lists physical overdraft, overdrawn category, overdue bill
 #     and an undistributed period, and not this — so it stays on the card that replaced its band.
+#
+# Nine carried titles in all, six of them the sacrifice-link group.
+#
+# EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-in-checking]`,
+# `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`, `[data-period-range]`,
+# `[data-period-progress]`, `[data-overdrawn-account]`. The hooks exist to be asserted through, and
+# a file that names half of them and matches the other half on page text leaves the unasserted ones
+# looking load-bearing when nothing holds them. Page-wide `have_content` survives only where the
+# assertion is deliberately about the WHOLE page rather than the card.
 #
 # ── DELETED WITH THE STANDING BAND (answers-first spec §2: "this REPLACES the old 'You're covered /
 # Nothing is set aside yet' branch question entirely"). Every one of these asserted a branch that no
@@ -94,7 +103,7 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
-    expect(page).to have_content("the rest is set aside or spoken for")
+    expect(page).to have_css("[data-free-subline]", text: "the rest is set aside or spoken for")
     # THE WORDS THIS CARD NO LONGER SAYS (spec §3), asserted rather than assumed: the band it
     # replaced printed all three. SCOPED TO THE CARD, deliberately — the categories band below it
     # still prints "available now" and the attention band still branches on covered, and both are
@@ -123,7 +132,7 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$300.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$300.00")
-    expect(page).to have_content("more is parked in other accounts")
+    expect(page).to have_css("[data-free-subline]", text: "more is parked in other accounts")
   end
 
   # The other direction on the subline, so the gate cannot be satisfied by a card that simply always
@@ -134,7 +143,7 @@ RSpec.describe "Home Hero", type: :system do
 
     visit root_path
 
-    expect(page).to have_no_content("more is parked in other accounts")
+    expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
   end
 
   # ── THE NEGATIVE STATES, WHICH ARE THE SAME CARD (spec §2) ─────────────────────────────────────
@@ -150,7 +159,34 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$250.00")
     expect(page).to have_css("[data-free-to-spend].text-status-danger")
-    expect(page).to have_content("More is set aside or spoken for than you have")
+    expect(page).to have_css("[data-free-subline]", text: "More is set aside or spoken for than you have")
+    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
+  end
+
+  # ** THE REVIEWER'S MEASURED FIXTURE (fix round 1 — MED-1), AND THE OTHER KIND OF NEGATIVE. **
+  # $1,000 of income, $1,200 walked over to Ally, and NOT ONE RULE. The pot is -$200 so free is
+  # -$200, and every word the card used to say about that was false: "More is set aside or spoken
+  # for than you have" ($0 is set aside, $0 is spoken for) and "nothing is free until money comes
+  # in" (a transfer away from $1,000). Nothing about this user's budget is wrong; their money is in
+  # the wrong account.
+  #
+  # BOTH SENTENCES ARE ASSERTED ABSENT as well as the right one present, because the failure this
+  # example exists for was a card printing a TRUE-sounding sentence, not a missing one.
+  it "says the money is elsewhere rather than gone when the pot is what capped free", :aggregate_failures do
+    ally = create(:pool, :account, user: user, name: "Ally")
+    deposit(1_000)
+    create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_200, date: Date.current, kind: :transfer)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$200.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "-$200.00")
+    expect(page).to have_css("[data-free-subline]", text: "sitting outside checking")
+    expect(page).to have_no_css("[data-free-subline]", text: "More is set aside or spoken for than you have")
+    # The overdraft line states the fact and stops: the clause that used to follow it ("nothing is
+    # free until money comes in") is what this user's transfer disproves.
+    expect(page).to have_css("[data-checking-overdrawn]", text: "Your checking account is already spent past zero.")
+    expect(page).to have_no_css("[data-checking-overdrawn]", text: "until money comes in")
   end
 
   # ** THE STATE THE OLD BAND GOT WRONG (fix round 1 — MED-1). ** No rules at all, so nothing is
@@ -171,6 +207,10 @@ RSpec.describe "Home Hero", type: :system do
 
   # A PHYSICAL OVERDRAFT (spec §2): the "In Checking" figure itself goes red, with one plain
   # sentence. It takes SPENDING to reach — money a category has claimed has not left the bank.
+  #
+  # THE OTHER DIRECTION OF THE MED-1 PAIR: an overdrawn pot where the money really is gone. Nothing
+  # was moved anywhere, so there is no other account for the "sitting outside checking" sentence to
+  # be about, and the card must say the plain thing instead.
   it "turns the checking figure red when the account is overdrawn", :aggregate_failures do
     groceries = envelope("Groceries", 400)
     create(:entry, item: create(:item, category: groceries), amount: 400, date: Date.current)
@@ -178,7 +218,9 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$400.00")
-    expect(page).to have_content("already spent past zero")
+    expect(page).to have_css("[data-checking-overdrawn]", text: "already spent past zero")
+    expect(page).to have_css("[data-free-subline]", text: "More is set aside or spoken for than you have")
+    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
   end
 
   # CARRIED FROM standing_spec's overdrawn-account example, on the half of it that survives whole: a
@@ -243,6 +285,63 @@ RSpec.describe "Home Hero", type: :system do
     # The rest of the card is unconditional, and this is where that matters most: a user who has
     # declared nothing still gets both answers.
     expect(page).to have_css("[data-free-to-spend]")
+  end
+
+  # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
+
+  # THE CARD AT 375px (spec §9: "hero and bars at 375px").
+  #
+  # ** NO `evaluate_script`, AND THAT IS A DIAGNOSIS RATHER THAN A STYLE CHOICE. ** This example was
+  # first written as three `have_css`es and a JS `scrollWidth <= clientWidth` check, and it failed
+  # intermittently with `InvalidSessionIdError: session deleted as the browser has closed the
+  # connection`, raised out of Capybara's own `reset_sessions!` with ZERO assertion failures — on
+  # this example and no other in the file, which passed around it as its own control.
+  #
+  # FIVE MEASUREMENTS, EACH ON A QUIET MACHINE (`pgrep -f "[r]spec"`), AND THE FIRST THREE WERE
+  # WRONG DIAGNOSES. The narrowing looked guilty because it was the new thing: `resize_to` +
+  # `maximize` failed 3 of 3; `resize_to` + `resize_to(1400, 1400)` failed 1 of 2 (killing "maximize
+  # is the problem"); `resize_to` with no restore failed 2 of 3 (killing "the restore is the
+  # problem"); a purpose-built 375-wide DRIVER, never resized at all, failed 3 of 5 (killing "the
+  # resize is the problem"). The measurement that located it was removing the narrowing ENTIRELY and
+  # keeping the body — still 3 of 5. The window was never involved. A trailing `evaluate_script`
+  # leaves the session in a state Capybara's teardown navigation does not survive here, which is
+  # CLAUDE.md's first cause wearing a different last statement than `click_*`. Without it: 5 of 5.
+  #
+  # WHAT REPLACES IT IS A BETTER ASSERTION ANYWAY. `scrollWidth <= clientWidth` is a fact about the
+  # document; what this example is about is the CARD, and Selenium's own geometry says it directly
+  # and without running a line of JS: the hero's right edge inside the viewport, and the free figure
+  # — the widest thing on it — inside the hero. Both figures being merely "visible" would be
+  # satisfied by a card that had pushed the page sideways, which is exactly what a label-and-amount
+  # row does when it cannot wrap.
+  describe "on a narrow screen" do
+    # A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE. Chrome refuses to make a
+    # headless window narrower than 500px — `--window-size=375,667` and
+    # `resize_to(375, 667)` alike report `width=500`, measured — so every window-based spelling of
+    # this test is really a 500px test wearing a 375 label. `Emulation.setDeviceMetricsOverride`
+    # sets the LAYOUT viewport instead of the window, which is what CSS media queries read, so this
+    # is the width the spec asked for rather than the nearest width Chrome would allow.
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    it "fits the card and its figures inside a 375px viewport", :aggregate_failures do
+      envelope("Groceries", 400)
+      deposit(1_000)
+
+      visit root_path
+
+      expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
+      expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
+      expect(page).to have_css("[data-period-progress]")
+
+      hero = page.find("[data-hero]").native.rect
+      figure = page.find("[data-free-to-spend]").native.rect
+
+      expect(hero.x + hero.width).to be <= 375
+      expect(figure.x + figure.width).to be <= hero.x + hero.width
+    end
   end
 
   # ── §9'S PERMANENT BUTTON, CARRIED WHOLE ───────────────────────────────────────────────────────

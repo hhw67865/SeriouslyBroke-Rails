@@ -402,6 +402,28 @@ class HomePresenter
   # $1,000 unspoken for there is one pile of money, and the card would be inventing a second.
   def free_cap_bound? = in_checking < unspoken_for
 
+  # ** WHICH KIND OF NEGATIVE THIS IS, AND IT IS A REAL BRANCH RATHER THAN A SHADE OF ONE (fix
+  # round 1 — MED-1). ** `#free_to_spend` goes below zero for two completely different reasons and
+  # the card was telling both of them the same story:
+  #
+  #   THE PLAN OUTRUNS THE MONEY — this is true. Every rule this period wants more than the root
+  #     holds, so there genuinely is nothing spare anywhere and spending goes further under.
+  #   THE MONEY IS IN THE WRONG ACCOUNT — this is NOT that. Measured: $1,000 of income with $1,200
+  #     walked over to a savings account and nothing budgeted at all leaves the pot at -$200 while
+  #     $1,000 is unspoken for. The card said "More is set aside or spoken for than you have" — $0
+  #     is set aside — and "nothing is free until money comes in", one transfer away from $1,000.
+  #     Two false sentences about a user who is not in trouble.
+  #
+  # THE SIGN OF `unspoken_for`, WHICH IS `#free_to_spend` BEFORE THE POT CAPS IT, is the only thing
+  # that tells them apart: the capped figure cannot, because the cap is exactly what erases the
+  # difference. `#free_cap_bound?` is NOT this question and must not be used for it — a pot of
+  # -$500 against an unspoken-for -$100 is cap-bound AND genuinely out of money.
+  #
+  # WHAT THE VIEW IS ALLOWED TO DO WITH IT: branch. The card asks this and #free_cap_bound?; it
+  # never compares `#in_checking` against anything itself, because a second spelling of the `min`'s
+  # own condition is how a figure and the sentence under it come to describe different arithmetic.
+  def plan_outruns_the_money? = unspoken_for.negative?
+
   # WHERE WE ARE IN THE PERIOD — day X of Y, and the bar's own percentage (spec §2).
   #
   # Off `#period_range`, never a second window: that reader is `User#period_containing`, the one
@@ -589,9 +611,10 @@ class HomePresenter
   private
 
   # THE UNCAPPED HALF OF `#free_to_spend` — money with no job once the rest of this period's plan is
-  # paid for. Private and spelled once because BOTH public readers need it: #free_to_spend takes the
-  # `min` of it and the pot, #free_cap_bound? asks which of the two that was, and a second spelling
-  # of the subtraction is a card whose figure and whose subline could describe different arithmetic.
+  # paid for. Private and spelled once because ALL THREE public readers need it: #free_to_spend
+  # takes the `min` of it and the pot, #free_cap_bound? asks which of the two that was,
+  # #plan_outruns_the_money? asks for its sign, and a second spelling of the subtraction is a card
+  # whose figure and whose subline could describe different arithmetic.
   #
   # Not memoised: both operands already are (`#available` on the proposal, `#remaining_plan` on the
   # rows), so this is a subtraction of two memos and the card asks for it twice.
