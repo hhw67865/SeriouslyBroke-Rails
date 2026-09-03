@@ -25,7 +25,7 @@ require "rails_helper"
 #                 It was gated on `built_up < target` as well, which silenced the ordinary case: the
 #                 catch-up formula fills an unpaid fund in ONE period, so the WHOLE fund is the usual
 #                 shape of a bill past its date, not the exception. The fund state splits the
-#                 SENTENCE ("the fund is short $X" / "the money is set aside"), and both are pinned.
+#                 SENTENCE ("the fund is short $X" / "it's all there"), and both are pinned.
 #   :structural — UNCHANGED. `Budget.steady_need` against declared income reads the rules and the
 #                 calendar and nothing else. All six examples carried.
 #
@@ -431,7 +431,7 @@ RSpec.describe "Home Trouble", type: :system do
     expect(problem_row("Utilities").find("[data-problem-state]"))
       .to have_content("overdue · was #{due.strftime("%b %-d")}")
     expect(problem_row("Utilities").find("[data-problem-detail]"))
-      .to have_content("$1,200.00 built up of $1,200.00 — the money is set aside — pay it and the fund starts again")
+      .to have_content("$1,200.00 built up of $1,200.00 — it's all there — pay it and the fund starts again")
     expect(problem_row("Utilities")).to have_no_content("the fund is short")
   end
 
