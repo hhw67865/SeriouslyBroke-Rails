@@ -83,6 +83,40 @@ RSpec.describe "Budget page adjustments", type: :system do
       expect(user.all_budgets.first.adjustments.sole.amount).to eq(-150)
     end
 
+    # ** SKIP MEANS "ACCRUE NOTHING THIS PERIOD", SO ONCE IT HAS THE BUTTON IS GONE (fix round
+    # MED-2). ** A second press could only be a raid on the fund's prior savings wearing the skip's
+    # words, and the panel is where that has to be refused: the flash still says "skipped" whatever
+    # the row does. The panel is REOPENED after the redirect — `<details>` closes on navigation —
+    # and the amount field beside it is asserted still there, so an example that simply failed to
+    # find an open panel would not pass this.
+    it "offers no skip once the period accrues nothing", :aggregate_failures do
+      open_adjust("Vacation")
+      find("[data-adjust='Vacation'] [data-adjust-skip]").click
+      expect(page).to have_content("Skipped this period for Vacation")
+
+      open_adjust("Vacation")
+
+      expect(page).to have_css("[data-adjust='Vacation'] input[name='amount']")
+      expect(page).to have_no_css("[data-adjust='Vacation'] [data-adjust-skip]")
+    end
+
+    # ** THE SKIP TAKES BACK THE WHOLE ACCRUAL AND NOT THE PLAN (fix round MED-2). ** $150 planned
+    # plus $250 set aside is $400 going in this period; a skip of −$150 would leave $250 still
+    # accruing under a flash saying the period was skipped. The row's own figure is the assertion:
+    # $400.00 built up before, $0.00 after, and one −$400.00 delta to explain it.
+    it "skips a period that has already been topped up by taking back the whole accrual", :aggregate_failures do
+      change_by("Vacation", 250, "Set aside")
+      expect(page).to have_css("[data-rule-built-up]", text: "$400.00 built up")
+
+      open_adjust("Vacation")
+      find("[data-adjust='Vacation'] [data-adjust-skip]").click
+
+      within(rule_row("Vacation")) do
+        expect(page).to have_css("[data-rule-built-up]", text: "$0.00 built up")
+        expect(page).to have_css("[data-change-amount]", text: "-$400.00")
+      end
+    end
+
     # THE POSITIVE HALF, in the words this shape uses. $150 built up plus $250 set aside is $400,
     # which is under the $1,200 target — so the figure is the sum and not the cap.
     it "sets money aside and the fund holds it", :aggregate_failures do
@@ -148,7 +182,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       within(rule_row("Groceries")) { click_button "Remove" }
 
-      expect(page).to have_content("Removed $50.00 from Groceries")
+      expect(page).to have_content("Removed the $50.00 top-up on Groceries")
       within(rule_row("Groceries")) do
         expect(page).to have_css("[data-rule-claim]", text: "$400.00 claimed")
         expect(page).to have_no_css("[data-rule-changes]")
@@ -217,6 +251,49 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       expect(page).to have_css("[data-cadence-line='Groceries']")
       expect(page).to have_no_css("[data-cadence-line='Phone']")
+    end
+  end
+
+  # ** EVERY RULE DENOMINATED PER PERIOD SCALES, WHATEVER ITS CATEGORY'S SHAPE (fix round MED-3). **
+  # The offer used to require `ClaimCalculator#rate?`, which is a question about the CATEGORY — a
+  # $150-a-period rule on a $1,200 goal is shape `:target`, so it was silently left behind while
+  # the identical rule on a category with no target was scaled. `Budget#steady_ask` is what settles
+  # this: its `:per_period` branch takes the amount VERBATIM per period, so the grid is exactly
+  # what that rule's cost depends on. A dated bill on the same screen is not offered — it names an
+  # occurrence, and the catch-up formula re-plans it on whatever grid exists — so a confirm that
+  # simply listed every rule would fail this too.
+  #
+  # $150 × 12 ÷ 26 = $69.2307…, which rounds to $69.23.
+  describe "changing the period with a per-period rule on a goal beside a dated bill" do
+    before do
+      rate(holder("Vacation", priority: 1, target: 1_200), 150)
+      create(
+        :budget,
+        category: holder("Car Insurance", priority: 2),
+        amount: 1_200,
+        interval_months: 6,
+        anchor_date: Date.current + 3.months
+      )
+      visit budget_page_path
+
+      select "Biweekly", from: "How long is a period?"
+      click_button "Save period and income"
+    end
+
+    it "offers the goal's per-period rule and not the dated bill", :aggregate_failures do
+      within("[data-cadence-line='Vacation']") do
+        expect(page).to have_css("[data-cadence-now]", text: "$150.00")
+        expect(page).to have_css("[data-cadence-scaled]", text: "$69.23")
+      end
+      expect(page).to have_no_css("[data-cadence-line='Car Insurance']")
+    end
+
+    it "scales it and leaves the dated bill's amount alone", :aggregate_failures do
+      click_button "Scale them"
+
+      expect(page).to have_content("your per-period amounts were scaled to it")
+      expect(user.all_budgets.find_by(basis: :per_period).amount).to eq(BigDecimal("69.23"))
+      expect(user.all_budgets.find_by(interval_months: 6).amount).to eq(1_200)
     end
   end
 

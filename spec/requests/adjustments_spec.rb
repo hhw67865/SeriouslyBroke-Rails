@@ -106,9 +106,14 @@ RSpec.describe "Adjustments", type: :request do
   end
 
   # THE OTHER DIRECTION, WHICH IS THE ONE A NAIVE CAST GETS WRONG. Assigning the string
-  # "2026-09-12" to a datetime column casts it at UTC midnight; re-zoned to New York that is
-  # Sep 11 20:00 — the delta lands in the period BEFORE the one the user picked. Parsing it in the
-  # owner's zone is what puts it on Sep 12, and only a negative offset can tell the two apart.
+  # "2026-09-02" to a datetime column casts it at UTC midnight; re-zoned to New York that is
+  # Sep 1 20:00 — the delta lands on the day BEFORE the one the user picked. Parsing it in the
+  # owner's zone is what puts it on Sep 2, and only a negative offset can tell the two apart.
+  #
+  # THE DAY IS SEP 2 AND NOT SEP 12 (fix round MED-1). The frozen instant is Sep 3 18:00 in New
+  # York, so Sep 12 is a week in this user's future and is now refused before its zone is ever the
+  # question — a date the walk has not reached counts toward nothing. Sep 2 sits one day inside the
+  # span and exercises the same UTC-midnight cast the original literal did.
   describe "a date the user picked", :aggregate_failures do
     let(:user) do
       create(
@@ -120,9 +125,9 @@ RSpec.describe "Adjustments", type: :request do
     end
 
     it "is read in the owner's zone rather than at UTC midnight" do
-      adjust(rule_id: rule.id, amount: "100", date: "2026-09-12")
+      adjust(rule_id: rule.id, amount: "100", date: "2026-09-02")
 
-      expect(rule.adjustments.first.local_day).to eq(Date.new(2026, 9, 12))
+      expect(rule.adjustments.sole.local_day).to eq(Date.new(2026, 9, 2))
     end
 
     # A DATE THE COLUMN CANNOT HOLD IS A 422, NOT A 500. The cast answers nil and `Adjustment`'s
@@ -136,9 +141,80 @@ RSpec.describe "Adjustments", type: :request do
     end
   end
 
-  # SKIPPING IS A SERVER-COMPUTED −PLANNED (§3.3: "skip a period = an adjustment of −planned dated
-  # today"). The figure is NOT carried in a hidden field, and that is the point: a page rendered
-  # before another delta landed would skip the wrong amount, and the planned share is a fact the
+  # ** A DATE THE RULE CANNOT COUNT IS REFUSED (fix round MED-1). ** `accrued(P) = planned(P) + Σ
+  # adjustments dated inside P` sums only over the periods the walk VISITS, so a row dated outside
+  # that span moves no figure on any screen: it is written, invisible in the row's list (which
+  # shows this period), and therefore unremovable. A 302 and a success flash over a claim that
+  # never moved is the worst of the three possible answers, and this group is what forbids it.
+  #
+  # THE SPAN IS `ClaimCalculator#countable_span` — the walk's own first day through today, in the
+  # OWNER's zone. Every literal below is computed by hand from the frozen instant: Sep 3 22:00 UTC
+  # is Sep 4 07:00 in Tokyo, so the owner's today is SEP 4 and the monthly period anchored Jan 1
+  # runs Sep 1 – Sep 30.
+  describe "a date the rule cannot count" do
+    # A RATE RULE COUNTS THIS PERIOD ONLY (§3.1: use-it-or-lose-it, nothing carries), so the walk
+    # visits one period and August is outside it — the row would sum into nothing.
+    it "refuses a past period on a rate rule, and names the span in the user's words", :aggregate_failures do
+      adjust(rule_id: rule.id, amount: "100", date: "2026-08-20")
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("Groceries counts this period only, up to today")
+      expect(response.body).to include("pick a date between Sep 1 and Sep 4")
+      expect(rule.adjustments.count).to eq(0)
+    end
+
+    # THE FIRST DAY OF THE SPAN IS INSIDE IT, and this is the half that stops the guard from being
+    # satisfied by a class that refuses everything.
+    it "accepts the first day of the current period on a rate rule", :aggregate_failures do
+      adjust(rule_id: rule.id, amount: "100", date: "2026-09-01")
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(rule.adjustments.sole.local_day).to eq(Date.new(2026, 9, 1))
+    end
+
+    # ** TOMORROW IS REFUSED TOO, AND THE OWNER'S ZONE IS WHAT DECIDES WHICH DAY THAT IS. ** Sep 5
+    # is still inside the period Sep 1 – Sep 30, so a bound taken from the period alone would let
+    # this through; the walk stops at the period containing TODAY, and money moved on a day that
+    # has not happened is not money this claim has.
+    it "refuses tomorrow in the owner's zone even though it is inside the period", :aggregate_failures do
+      adjust(rule_id: rule.id, amount: "100", date: "2026-09-05")
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(rule.adjustments.count).to eq(0)
+    end
+
+    # AN ACCRUING RULE REACHES BACK TO ITS OWN BIRTH AND NO FURTHER (§3.2: "never retroactively";
+    # the accrual start is the later of the category's funding date and the rule's own creation).
+    # The rule below was born Aug 1, so July is before the walk opens.
+    describe "on a fund that has been building since Aug 1" do
+      let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 1_200) }
+      let(:target_rule) do
+        create(:budget, :per_period_rate, category: goal, amount: 150, created_at: Time.utc(2026, 8, 1, 9))
+      end
+
+      it "refuses a date before it started building", :aggregate_failures do
+        adjust(rule_id: target_rule.id, amount: "100", date: "2026-07-31")
+
+        expect(response).to have_http_status(:unprocessable_content)
+        expect(response.body).to include("Vacation counts dates from when it started building")
+        expect(response.body).to include("pick a date between Aug 1 and Sep 4")
+        expect(target_rule.adjustments.count).to eq(0)
+      end
+
+      # THE OTHER SIDE OF THE SAME BOUNDARY, one day later: a fund reaches back further than a rate
+      # rule does, and this is what says the span is read off the RULE rather than off the period.
+      it "accepts the day it started building" do
+        adjust(rule_id: target_rule.id, amount: "100", date: "2026-08-01")
+
+        expect(target_rule.adjustments.sole.local_day).to eq(Date.new(2026, 8, 1))
+      end
+    end
+  end
+
+  # SKIPPING IS A SERVER-COMPUTED −ACCRUED (§3.3: "skip a period = an adjustment of −planned dated
+  # today", read as the ruling of the fix round states it — the skip's job is to leave the period
+  # accruing NOTHING). The figure is NOT carried in a hidden field, and that is the point: a page
+  # rendered before another delta landed would skip the wrong amount, and the share is a fact the
   # calculator owns.
   #
   # THE FIXTURE'S ARITHMETIC, BY HAND: a $1,200 target on the category and a $150-a-period rule
@@ -159,15 +235,47 @@ RSpec.describe "Adjustments", type: :request do
       expect(target_rule.adjustments.first.local_day).to eq(Date.new(2026, 9, 4))
     end
 
-    # A PERIOD WITH NOTHING PLANNED HAS NOTHING TO SKIP, and the model's own refusal is the backstop
-    # for a button the page hides. Asserted rather than assumed, because "skip" is the one door
-    # whose amount the user never types.
+    # ** A SECOND SKIP MUST NOT BE A RAID WEARING THE SKIP'S WORDS (fix round MED-2). **
+    # `planned_this_period` is PRE-adjustment, so −planned on a period already carrying a +$50
+    # top-up leaves $50 still accruing — and on a period already skipped it would take another
+    # −$150 out of the fund's prior savings under a flash that says "skipped". The amount is
+    # whatever lands `accrued_this_period` at exactly zero: −($150 planned + $50 topped up) = −$200.
+    it "writes minus the whole accrual, not minus the plan, when a top-up is already there", :aggregate_failures do
+      create(:adjustment, rule: target_rule, amount: 50, date: Time.utc(2026, 9, 2, 12))
+
+      adjust(rule_id: target_rule.id, skip: "1")
+
+      # BY VALUE AND NOT BY `created_at`: the clock is frozen, so both rows carry the same instant
+      # and "the last one written" is not a question the column can answer.
+      expect(target_rule.adjustments.pluck(:amount)).to contain_exactly(50, -200)
+      expect(target_rule.reload.claim_calculator(today: Date.new(2026, 9, 4)).accrued_this_period).to eq(0)
+    end
+
+    # A PERIOD WITH NOTHING LEFT TO ACCRUE HAS NOTHING TO SKIP, and the model's own refusal is the
+    # backstop for a button the page hides. Asserted rather than assumed, because "skip" is the one
+    # door whose amount the user never types.
     #
     # A $1,050 top-up dated Aug 15 takes August to `min($0 + $150 + $1,050, $1,200)` = the target,
     # so September's gap is $0 and its planned share is $0 — a fund that is already full plans
     # nothing, and a skip there would be a zero row.
     it "is refused where the period plans nothing, rather than writing a zero" do
       create(:adjustment, rule: target_rule, amount: 1_050, date: Time.utc(2026, 8, 15))
+
+      adjust(rule_id: target_rule.id, skip: "1")
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(target_rule.adjustments.count).to eq(1)
+      # THE SENTENCE IS THE SKIP'S OWN, not "Amount must be other than 0" — the amount is the
+      # SERVER's, so the record's honest complaint about it names a figure the user never typed
+      # and cannot act on.
+      expect(response.body).to include("Vacation isn&#39;t accruing anything this period")
+    end
+
+    # THE SAME REFUSAL FROM THE OTHER SIDE: the plan is $150 and a −$150 is already dated inside
+    # the period, so the accrual is zero and a second skip would write another zero row. This is
+    # the shape the pre-adjustment reading got wrong — there it would have written −$150 again.
+    it "is refused where the period has already been skipped", :aggregate_failures do
+      create(:adjustment, rule: target_rule, amount: -150, date: Time.utc(2026, 9, 2, 12))
 
       adjust(rule_id: target_rule.id, skip: "1")
 
@@ -186,6 +294,31 @@ RSpec.describe "Adjustments", type: :request do
 
       expect(response).to redirect_to(budget_page_path)
       expect(Adjustment.where(id: adjustment.id)).to be_empty
+    end
+
+    # ** THE FLASH SAYS WHAT WAS REMOVED IN THE SAME FIVE WORDS THAT WROTE IT (fix round LOW-2). **
+    # The amount is a MAGNITUDE and the direction is a word, exactly as it is on the four writing
+    # flashes — `number_to_currency` of a signed row printed "Removed -$150.00 from Vacation", a
+    # minus sign doing the work of a verb on the one screen where the user has just pressed
+    # "Remove".
+    it "names the direction of a removed take-back rather than printing a minus", :aggregate_failures do
+      goal = create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 1_200)
+      goal_rule = create(:budget, :per_period_rate, category: goal, amount: 150)
+      adjustment = create(:adjustment, rule: goal_rule, amount: -150, date: now)
+
+      delete(adjustment_path(adjustment))
+
+      expect(flash[:notice]).to eq("Removed the $150.00 taken back from Vacation.")
+    end
+
+    # The positive half, on the other shape, so a sentence built from the sign alone would fail one
+    # of the two.
+    it "names a removed top-up on a rate rule" do
+      adjustment = create(:adjustment, rule: rule, amount: 50, date: now)
+
+      delete(adjustment_path(adjustment))
+
+      expect(flash[:notice]).to eq("Removed the $50.00 top-up on Groceries.")
     end
 
     it "cannot delete a row on somebody else's rule" do

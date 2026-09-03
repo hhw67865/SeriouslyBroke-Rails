@@ -163,6 +163,24 @@ class ClaimCalculator
   # open is the honest floor — nothing before it can matter to a claim of zero.
   def window_start = periods.first&.first || current_period.first
 
+  # ** THE DAYS AN ADJUSTMENT CAN LAND ON AND STILL BE COUNTED (§3.3; fix round MED-1). ** It is
+  # #periods read as one range of DAYS rather than as a list of periods, and `AdjustmentForm` is
+  # its only caller: `accrued(P) = planned(P) + Σ adjustments dated inside P` sums over the periods
+  # this walk VISITS, so a row dated outside them moves no figure on any screen — written, unlisted
+  # (the row lists this period's deltas) and therefore unremovable.
+  #
+  # THE START IS #window_start, WHICH IS THE WALK'S OWN FIRST DAY and not #accrual_start itself.
+  # The two differ for a rule born mid-period: §3.2's "a period's accrual counts in full the day
+  # the period opens" applies to the first period like any other, so a rule born Feb 10 walks the
+  # whole of February and a delta dated Feb 1 IS summed. Refusing it would be refusing a date this
+  # class counts. One derivation, `#accrual_start`'s, read through the periods it produced.
+  #
+  # THE END IS `today` AND NOT THE PERIOD'S END, and the difference only shows on a rate rule: a
+  # delta dated the 20th of a period running to the 30th would be summed by `#adjustments_within`,
+  # but the walk stops at the period containing today and money moved on a day that has not
+  # happened is not money this claim has. Both bounds are the OWNER's days, because `today` is.
+  def countable_span = window_start..today
+
   private
 
   def category = rule.category

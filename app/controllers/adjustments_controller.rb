@@ -16,28 +16,34 @@
 # adjustment free to be written and deleted without ever putting the two ledgers out of step.
 class AdjustmentsController < BudgetPageController
   # POST /adjustments
+  #
+  # `AdjustmentForm` OWNS WHAT THE SUBMISSION MEANS — which amount the three spellings come to,
+  # which day it lands on, and whether the rule's own walk can count that day (fix round MED-1).
+  # This action owns only the two things a controller owns: whose rule it is, and which sentence
+  # the user reads afterwards.
   def create
     rule = scoped_rule
-    adjustment = rule.adjustments.new(amount: amount_for(rule), date: chosen_date)
+    form = AdjustmentForm.new(
+      rule: rule, params: params, name: helpers.budget_rule_name(rule), today: Date.current
+    )
 
-    if adjustment.save
-      redirect_to budget_page_path, notice: confirmation(rule, adjustment)
+    if form.save
+      redirect_to budget_page_path, notice: confirmation(form)
     else
-      # The RECORD's own sentence, and the page comes back at 422 with nothing written — the shape
-      # every refusal on this screen takes (see BudgetPageController#refuse). A zero amount is the
-      # one this can actually be: `Adjustment` refuses it in Ruby and the database refuses it again.
-      refuse(adjustment.errors.full_messages.to_sentence)
+      # The FORM's sentence — the record's own where a column is at fault, its own where the date
+      # is out of the rule's reach — and the page comes back at 422 with nothing written, the shape
+      # every refusal on this screen takes (see BudgetPageController#refuse).
+      refuse(form.error_sentence)
     end
   end
 
   # DELETE /adjustments/1
   def destroy
     adjustment = scoped_adjustment
+    rule = adjustment.rule
     adjustment.destroy
 
-    redirect_to budget_page_path,
-                notice: "Removed #{helpers.number_to_currency(adjustment.amount)} " \
-                        "from #{helpers.budget_rule_name(adjustment.rule)} this period."
+    redirect_to budget_page_path, notice: removal(adjustment, rule)
   end
 
   private
@@ -53,51 +59,44 @@ class AdjustmentsController < BudgetPageController
     Adjustment.where(rule_id: Budget.for_user(current_user).select(:id)).find(params[:id])
   end
 
-  # WHAT THE ROW IS WORTH, and the three ways a submission can say it:
-  #
-  #   * `skip` — the server computes it. §3.3's "skip a period = an adjustment of −planned dated
-  #     today", and the planned share is a fact `ClaimCalculator` owns: carrying it in a hidden
-  #     field would let a page rendered before another delta landed skip the wrong amount. A period
-  #     that plans nothing yields a zero, which `Adjustment` refuses — the view hides the button
-  #     there, and this is the backstop.
-  #   * `amount_sign` — the form types a MAGNITUDE and the button pressed says the direction, which
-  #     is what lets one input serve "top up" and "reduce" without asking the user to type a minus.
-  #   * a bare signed `amount` — the route's own contract, which the buttons are one spelling of.
-  def amount_for(rule)
-    return -rule.claim_calculator(today: Date.current).planned_this_period if params[:skip].present?
-    return -params[:amount].to_s.to_d.abs if params[:amount_sign].to_i.negative?
-
-    params[:amount]
-  end
-
-  # THE DAY THE DELTA LANDS ON, IN THE OWNER'S ZONE (§3.3: it applies to the period CONTAINING its
-  # date), and BOTH ARMS GET THERE THROUGH `Time.zone` — which `ApplicationController`'s
-  # `around_action :use_user_timezone` has already set to the owner's.
-  #
-  #   * blank — `Time.current`, the owner's now. A UTC evening is already tomorrow in Tokyo, and
-  #     `Date.current` here would be the same day by luck rather than by construction.
-  #   * given — the string is assigned to the column and Rails' time-zone-aware attributes parse it
-  #     in `Time.zone`, so "2026-09-12" is midnight in NEW YORK rather than at UTC. A `Time.zone
-  #     .parse` of our own would be a second spelling of the cast that is already happening, and
-  #     `adjustments_spec`'s New York example pins the behaviour either way.
-  #
-  # AN UNPARSEABLE VALUE CASTS TO nil AND IS REFUSED BY THE MODEL, never raised: `date` is
-  # `presence`-validated, so garbage arrives as the same 422 every other bad field does.
-  def chosen_date = params[:date].presence || Time.current
-
   # THE USER'S OWN FIVE WORDS, chosen by the sign and by what the rule IS — a rate rule's envelope
   # is topped up or reduced for this period, an accruing rule's fund is set aside into or taken back
   # out of. The word "adjustment" appears nowhere a user can read it; it is the table's name and the
   # spec's, not the app's.
-  def confirmation(rule, adjustment)
+  #
+  # THE FIGURE IS A MAGNITUDE AND THE DIRECTION IS A WORD, on all five — `.abs` and a verb, never a
+  # minus sign left to do a verb's work.
+  def confirmation(form)
+    money = helpers.number_to_currency(form.adjustment.amount.abs)
+    name = form.name
+    negative = form.adjustment.amount.negative?
+    return "Skipped this period for #{name} — #{money} less set aside." if form.skip?
+
+    if form.rate?
+      negative ? "Reduced #{name} by #{money} this period." : "Topped up #{name} by #{money} this period."
+    else
+      negative ? "Took back #{money} from #{name}." : "Set aside #{money} for #{name}."
+    end
+  end
+
+  # ** THE SAME FIVE WORDS SAID BACKWARD (fix round LOW-2). ** The destroy flash printed
+  # `number_to_currency` of the SIGNED amount — "Removed -$150.00 from Vacation this period" — a
+  # minus doing a verb's work on the one screen where the user has just pressed Remove, and on the
+  # one row where the sign is the whole meaning. It now names the direction in the vocabulary the
+  # four writing flashes use, off the same two facts they branch on: the rule's shape and the sign.
+  #
+  # `rule` IS CAPTURED BEFORE THE DESTROY, not read back off the frozen record.
+  # `ClaimCalculator#rate?` reads `anchor_date` and the category's `target_amount` and no more, so
+  # asking the shape here costs no statement.
+  def removal(adjustment, rule)
     money = helpers.number_to_currency(adjustment.amount.abs)
     name = helpers.budget_rule_name(rule)
-    return "Skipped this period for #{name} — #{money} less set aside." if params[:skip].present?
+    negative = adjustment.amount.negative?
 
     if rule.claim_calculator(today: Date.current).rate?
-      adjustment.amount.negative? ? "Reduced #{name} by #{money} this period." : "Topped up #{name} by #{money} this period."
+      negative ? "Removed the #{money} reduction on #{name}." : "Removed the #{money} top-up on #{name}."
     else
-      adjustment.amount.negative? ? "Took back #{money} from #{name}." : "Set aside #{money} for #{name}."
+      negative ? "Removed the #{money} taken back from #{name}." : "Removed the #{money} set aside for #{name}."
     end
   end
 end

@@ -409,6 +409,22 @@ RSpec.describe BudgetPagePresenter do
       )
     end
 
+    # ** THE SKIP IS OFFERED OFF THE ACCRUAL, NEVER OFF THE PLAN (fix round MED-2). ** A period
+    # planning $150 with a −$150 already dated inside it accrues nothing, so there is nothing left
+    # to skip — and the button rendered there would write a SECOND −$150, a raid on the fund's
+    # prior savings under a flash saying the period was skipped. Both directions on one fixture:
+    # the same rule is skippable before the delta and not after, so a reader that always answered
+    # either way would fail one half.
+    it "offers a skip while the period still accrues, and stops once it does not", :aggregate_failures do
+      rule = goal_rule
+      expect(row_for("Vacation")).to be_skippable
+
+      create(:adjustment, rule: rule, amount: -150, date: today)
+
+      after = described_class.new(user: user, today: today).category_groups.sole.rules.sole
+      expect(after).not_to be_skippable
+    end
+
     # A RATE RULE'S BUILT-UP IS ZERO AND ITS CLAIM IS THE ENVELOPE — the pair, on one row, because
     # the row picks which of the two to print off `#rate?` and a shape read the wrong way would
     # print "$0.00 built up" over $400.

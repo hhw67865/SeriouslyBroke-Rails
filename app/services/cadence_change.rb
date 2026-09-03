@@ -13,13 +13,21 @@
 # the amounts afterwards leaves a failed second half as a budget stated in the wrong unit — every
 # figure on the page halved or doubled, with no message saying so. `#apply` writes both or neither.
 #
-# ** ONLY `per_period` RATE RULES ARE SCALED, and the exclusion is arithmetic rather than taste. **
-# A rule stated in CALENDAR time — "$260 a month" — already means the same thing on every grid, and
-# `Budget#steady_ask` is what divides it by `periods_per_year`. Scaling it here would apply the
-# ratio twice: $260 a month would be rewritten to $120 and then divided again to $55 a fortnight,
-# which is 8 cents in the dollar of what the user said. The shape test is
-# `ClaimCalculator#shape` — the app's one classification of what a rate rule IS — narrowed to the
-# rules whose amount is denominated in periods.
+# ** WHAT SCALES IS WHAT IS DENOMINATED PER PERIOD, and the test is `Budget#cadence` (fix round
+# MED-3). ** A rule stated in CALENDAR time — "$260 a month" — already means the same thing on
+# every grid, and `Budget#steady_ask` is what divides it by `periods_per_year`. Scaling it here
+# would apply the ratio twice: $260 a month would be rewritten to $120 and then divided again to
+# $55 a fortnight, which is 8 cents in the dollar of what the user said. A DATED rule — "$5,000
+# every 2 years, next due Jun 1" — names an occurrence rather than a period, and the catch-up
+# formula re-plans it on whatever grid exists. Neither is `:per_period`, which is exactly the
+# `#steady_ask` branch that takes an amount VERBATIM as a period's cost.
+#
+# ** THE CATEGORY'S SHAPE IS IRRELEVANT, and that was the defect. ** This used to require
+# `ClaimCalculator#rate?`, which is a question about the CATEGORY: a $150-a-period rule on a
+# category carrying a `target_amount` is shape `:target`, so the identical rule was scaled on a
+# plain envelope and silently left behind on a goal — and it is just as grid-dependent, because
+# `Budget#steady_ask` hands `Budget.steady_need` its amount verbatim either way. The question is
+# what the AMOUNT is denominated in, and `#cadence` is the app's one answer to it.
 class CadenceChange
   # ONE RULE'S OFFER: what it says now and what it would say after. The rule travels with the pair
   # so the confirm screen and the write are looking at the same record rather than at a name.
@@ -78,14 +86,30 @@ class CadenceChange
   #
   # `raise ActiveRecord::Rollback` RATHER THAN `return`: returning out of a transaction block
   # COMMITS it in Rails 7 and later, which would write the cadence the model had just rejected.
+  #
+  # ** THE ANSWER IS ONLY ACTED ON WHERE THE QUESTION WOULD HAVE BEEN ASKED (fix round LOW-1). **
+  # `scale` arrives as a top-level parameter, so a hand-built request carries it whether or not the
+  # confirm was ever rendered. On a FIRST cadence `#changing?` is false — the amounts were
+  # denominated in the 12-a-year fallback, an assumption the app made rather than anything the user
+  # said — and scaling against it rewrote $400 to $184.62, 46 cents in the dollar of what they had
+  # typed. `#offered?` is the same predicate the offer is gated on, so the write and the question
+  # cannot disagree about which rules a cadence change means something for.
+  #
+  # ASKED BEFORE THE TRANSACTION OPENS, because `#changing?` compares the declaration against
+  # `user.period_cadence` — reading it after `user.update` would compare the new cadence with
+  # itself and answer false for every real change. `#lines` memoises on the same reading.
+  #
+  # THE CADENCE STILL SAVES EITHER WAY: nothing was wrong with the declaration, only with the
+  # answer to a question nobody asked.
   def apply(scale: nil)
+    scaling = scale && offered?
     saved = false
 
     ActiveRecord::Base.transaction do
       saved = user.update(declaration)
       raise ActiveRecord::Rollback unless saved
 
-      lines.each { |line| line.rule.update!(amount: line.scaled_amount) } if scale
+      lines.each { |line| line.rule.update!(amount: line.scaled_amount) } if scaling
     end
 
     saved
@@ -105,13 +129,15 @@ class CadenceChange
 
   def scaled(amount) = [(amount * periods_per_year_before / periods_per_year).round(2), SMALLEST_RATE].max
 
-  # `ClaimCalculator#shape`, WHICH COSTS NOTHING TO ASK: it reads `rule.anchor_date` and
-  # `category.target_amount` and no more, so a probe calculator here runs no query. Spelling the
-  # two-column test again would be a second classification free to drift from the one every claim
-  # on the page is computed by.
+  # `Budget#cadence`, WHICH IS THE APP'S ONE CLASSIFICATION OF WHAT AN AMOUNT IS PER — the same
+  # symbol `#steady_ask` switches on, so the rules listed here are exactly the rules whose
+  # per-period cost IS their amount. `:one_off`, `:monthly` and `:every_n` all reach `#steady_ask`'s
+  # dividing branches and are already grid-independent; `:per_period` is the only one the cadence
+  # can change the meaning of. It reads three columns off the loaded row and asks nothing.
+  #
+  # `includes(:category)` IS FOR THE CONFIRM SCREEN, not for this test: `budget_rule_name` falls
+  # back to the category's name for every item-less rule the panel lists.
   def scalable_rules
-    Budget.for_user(user).includes(:category).select do |rule|
-      rule.basis_per_period? && rule.claim_calculator.rate?
-    end
+    Budget.for_user(user).includes(:category).select { |rule| rule.cadence == :per_period }
   end
 end

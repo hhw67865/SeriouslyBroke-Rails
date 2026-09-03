@@ -85,7 +85,12 @@
       <%= form_with url: adjustments_path, method: :post do %>
         <%= hidden_field_tag :rule_id, rule.budget.id %>
         <%= hidden_field_tag :skip, "1" %>
-        <%= button_tag "Skip this period (−#{number_to_currency(rule.planned_this_period)})",
+        <%# THE BUTTON NAMES WHAT IT WILL WRITE, WHICH IS −ACCRUED AND NOT −PLANNED (fix round
+            MED-2): a skip leaves the period accruing nothing, so on a period already topped up by
+            $50 it takes back $200 and says so. The line above says what the RULE plans and the
+            list in the row below says what has already been done to it — three figures answering
+            three questions, each labelled. %>
+        <%= button_tag "Skip this period (−#{number_to_currency(rule.accrued_this_period)})",
                        type: :submit,
                        class: "btn btn-secondary",
                        data: { adjust_skip: true } %>

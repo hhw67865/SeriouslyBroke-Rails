@@ -91,6 +91,31 @@ RSpec.describe "Budget page declaration", type: :request do
     end
   end
 
+  # ** `scale` IS ON THE WIRE, SO THE GUARD HAS TO BE AT THE WRITE (fix round LOW-1). ** The offer
+  # is only made for a cadence that is really MOVING — a FIRST cadence is not a change, because
+  # until the user names a period their per-period amounts are denominated in the 12-a-year
+  # FALLBACK, an assumption the app made rather than anything they said. `CadenceChange#offered?`
+  # says so, but `#offered?` gates the QUESTION; a `scale=1` typed by hand never passes through it.
+  #
+  # Unguarded, this request scales $400 by 12/26 against that fallback and writes $184.62 — the
+  # user's only rule rewritten to 46 cents in the dollar by a parameter the page never rendered.
+  # The cadence itself still saves, because there was never anything wrong with the declaration.
+  describe "a scale answer to a question that was never asked", :aggregate_failures do
+    # `scale` RIDES BESIDE `user[...]`, not inside it — the confirm's two buttons are
+    # `name="scale"` on the same form, so this is the shape a real answer arrives in.
+    def answer_scale(params) = patch(budget_page_user_path, params: { user: params, scale: "1" })
+
+    it "saves the first cadence and leaves every amount alone" do
+      rule = create(:budget, :per_period_rate, amount: 400, category: create(:category, :expense, :funded, user: user))
+
+      answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(user.reload.period_cadence).to eq("biweekly")
+      expect(rule.reload.amount).to eq(400)
+    end
+  end
+
   describe "a signed-out request", :aggregate_failures do
     it "is sent to sign in rather than writing anything" do
       sign_out user

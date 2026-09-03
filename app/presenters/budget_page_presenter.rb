@@ -17,7 +17,7 @@ class BudgetPagePresenter
   # for a row to have to excuse.
   #
   # ** THE CLAIM FIGURES RIDE ON THE ROW, FROM ONE LEDGER (computed-claims spec §3.3; Task 2). **
-  # Every one of the five comes off `ClaimLedger#calculator_for`, which the page builds ONCE over
+  # Every one of the figures comes off `ClaimLedger#calculator_for`, which the page builds ONCE over
   # the user's whole rule set — the row does not hold a calculator and the partial does not build
   # one. That is the same objection `Group#status` makes about the category header, said one level
   # down: a partial free to ask for a claim of its own is a screen that costs a walk per row and
@@ -31,15 +31,21 @@ class BudgetPagePresenter
   # `adjustments` is THIS PERIOD's rows in date order, which is what the row lists and what the
   # remove button deletes. The claim already counts them; they are listed so the figure above them
   # is explicable rather than merely asserted.
-  Rule = Data.define(:budget, :due_on, :shape, :claim, :built_up, :planned_this_period, :adjustments) do
+  Rule = Data.define(
+    :budget, :due_on, :shape, :claim, :built_up, :planned_this_period, :accrued_this_period, :adjustments
+  ) do
     def anchored? = due_on.present?
 
     def rate? = shape == :rate
 
-    # WHETHER A SKIP IS OFFERABLE. A period that plans nothing has nothing to skip — a settled
-    # one-off, or a fund already at its target — and the button is hidden rather than rendered into
-    # a zero row `Adjustment` would refuse. `AdjustmentsController#amount_for` is the backstop.
-    def skippable? = !rate? && planned_this_period.positive?
+    # ** WHETHER A SKIP IS OFFERABLE, AND IT IS THE ACCRUAL THAT DECIDES (fix round MED-2). ** A
+    # skip means "accrue nothing this period", so the button has a job only while the period is
+    # still accruing SOMETHING — and `accrued_this_period` is the post-adjustment figure
+    # (`planned + Σ this period's deltas`) while `planned_this_period` is not. Read off the plan,
+    # this offered a second skip on a period already skipped, whose −planned would have been a raid
+    # on the fund's prior savings under a flash saying the period was skipped. `AdjustmentForm` is
+    # the backstop for a submission that arrives anyway.
+    def skippable? = !rate? && accrued_this_period.positive?
   end
 
   # ONE CATEGORY AND THE RULES THAT FILL IT. `status` is a HoldingStatus, so the group header speaks
@@ -331,6 +337,7 @@ class BudgetPagePresenter
       claim: calculator.claim,
       built_up: calculator.built_up,
       planned_this_period: calculator.planned_this_period,
+      accrued_this_period: calculator.accrued_this_period,
       adjustments: adjustments_this_period.fetch(budget.id, [])
     )
   end

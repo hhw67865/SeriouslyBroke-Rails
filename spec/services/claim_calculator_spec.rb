@@ -659,6 +659,38 @@ RSpec.describe ClaimCalculator, type: :model do
   end
 
   # ===========================================================================================
+  # §3.3 — WHICH DAYS AN ADJUSTMENT CAN LAND ON AND STILL BE COUNTED. `#countable_span` is the
+  # walk read as a range of days, and `AdjustmentForm` is its only caller: a row dated outside it
+  # sums into nothing, so writing one is a claim that never moves under a flash that says it did.
+  # ===========================================================================================
+  describe "#countable_span" do
+    let(:today) { Date.new(2026, 9, 3) }
+
+    # A RATE RULE WALKS ONE PERIOD, so its span is that period — closed at TODAY and not at the
+    # period's end. Sep 30 is inside the period and outside the span: `#adjustments_within` would
+    # sum a row dated then, but it is money moved on a day that has not happened, and every figure
+    # this class answers is a figure for today.
+    it "is the current period up to today for a rate rule", :aggregate_failures do
+      rule = create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      expect(described_class.new(rule, today: today).countable_span).to eq(Date.new(2026, 9, 1)..today)
+      expect(described_class.new(rule, today: today).countable_span).not_to cover(Date.new(2026, 9, 30))
+    end
+
+    # AN ACCRUING RULE REACHES BACK TO WHERE ITS WALK OPENS, which is the FIRST DAY OF THE PERIOD
+    # CONTAINING its accrual start rather than that date itself — §3.2's "a period's accrual counts
+    # in full the day the period opens" applies to the first period like any other, so a delta
+    # dated Feb 1 on a rule born Feb 10 is summed by the walk. The span is what the walk counts,
+    # and refusing a date the walk would count would be a false refusal.
+    it "reaches back to the open of the period the rule was born in", :aggregate_failures do
+      rule = goal_born_on("Vacation", Time.utc(2026, 2, 10, 9, 0))
+
+      expect(described_class.new(rule, today: today).countable_span).to eq(Date.new(2026, 2, 1)..today)
+      expect(described_class.new(rule, today: today).countable_span).not_to cover(Date.new(2026, 1, 31))
+    end
+  end
+
+  # ===========================================================================================
   # The injection seam — the same figures whether the calculator queries for itself or a ledger
   # hands it the rows, which is the contract `ClaimLedger` is built on.
   # ===========================================================================================
