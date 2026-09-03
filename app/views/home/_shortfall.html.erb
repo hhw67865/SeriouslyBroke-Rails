@@ -1,0 +1,62 @@
+<%# FREE BELOW ZERO — THE SIGNAL (computed-claims spec §4). Local: `presenter` (HomePresenter).
+
+    Split out of `_trouble` because the strip's other three arms are one element each and this one is
+    a figure, a list and a pace — inlined, the `case` that dispatches the four kinds would be
+    unreadable and a fifth kind would be added below the wrong `end`.
+
+    ** THREE THINGS, IN THE ORDER §4 NAMES THEM. ** The shortfall; then, in REVERSE PRIORITY, which
+    claims it eats — priority keeps its job as the GIVE-WAY order, so the category that would have
+    been funded last is the one that goes without first; then the per-day pace that lands the period
+    at zero.
+
+    THE WALK IS THE PRESENTER'S (`#uncovered_claims`), not this file's. It takes each claim in turn
+    until the shortfall is absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is
+    short $120" is a different sentence from "Car repair is uncovered", and only the walk can tell
+    them apart.
+
+    ** NO FIX BUTTON, AND THE DOOR IS THE BUDGET PAGE. ** §4: "The remedy is spending less for the
+    rest of the period or editing/adjusting a rule." There is nothing to move money FROM — no claim is
+    money sitting anywhere — so a button offering to take $300 from Rent would be proposing an act the
+    app no longer has. %>
+<div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
+  <div class="flex justify-between items-baseline gap-4">
+    <span class="font-medium text-gray-900">Your rules claim more than you have</span>
+    <span class="text-sm font-medium text-status-danger tabular-nums" data-shortfall-amount>
+      short <%= number_to_currency(presenter.shortfall) %>
+    </span>
+  </div>
+
+  <%# THE PACE. Nil for a user who has declared no period — there is no "rest of the period" to
+      spread a shortfall over — and the strip simply says one sentence fewer there. %>
+  <% if pace = presenter.per_day_pace %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-pace>
+      Spending <%= number_to_currency(pace) %> a day less for the rest of this period lands it at zero.
+    </p>
+  <% end %>
+
+  <%# WHO GIVES WAY. Reverse priority, and the figure is what THIS claim is short by after everything
+      below it in the order has already given way — which is why the last row in the list is usually
+      partial and says so. %>
+  <% if presenter.uncovered_claims.any? %>
+    <ul class="mt-2 space-y-1" data-uncovered>
+      <% presenter.uncovered_claims.each do |uncovered| %>
+        <li class="flex justify-between items-baseline gap-4 text-sm text-gray-600"
+            data-uncovered-claim="<%= uncovered.category.name %>">
+          <span><%= uncovered.category.name %> · <%= pool_rule_label(uncovered.line.rule) %></span>
+          <span class="tabular-nums">
+            <% if uncovered.whole? %>
+              nothing covers its <%= number_to_currency(uncovered.claim) %>
+            <% else %>
+              short <%= number_to_currency(uncovered.amount) %> of <%= number_to_currency(uncovered.claim) %>
+            <% end %>
+          </span>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <p class="mt-2 text-sm text-gray-600">
+    <%= link_to "Change a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    if this period's plan is the thing that has to give.
+  </p>
+</div>

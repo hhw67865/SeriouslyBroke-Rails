@@ -33,8 +33,33 @@ RSpec.describe BudgetPagePresenter do
   # passed at all: a rule with an item has its cycle rolled by PAYMENTS rather than by the calendar,
   # so giving only one of a pair an item would settle the order on the item rather than on the key
   # the example is about.
-  def rolling(category, amount:, anchor:, every: 1, item: nil)
-    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor, item: item)
+  #
+  # `created_at:` IS PLANTED WHEREVER A FUND IS SUPPOSED TO HAVE BEEN BUILDING (computed-claims
+  # ruling of 2026-09-03): a rule accrues from the LATER of its category's `funded_since` and its own
+  # birthday, so a rule created by the factory "now" — which is after this file's `today` — walks no
+  # periods at all and holds nothing. Left alone where the example is about a rule that has only just
+  # been written.
+  def rolling(category, amount:, anchor:, every: 1, **plant)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor, **plant)
+  end
+
+  # THE THREE DUE-DATE EXAMPLES SHARE ONE FIXTURE: a $1,200 six-monthly bill anchored Sep 1 2025 whose
+  # rule was written the same day, on a category that has held money since. What differs between them
+  # is only what has been PAID into it, which is the whole subject.
+  def car_insurance
+    holder("Car Insurance").tap do |category|
+      rolling(
+        category,
+        amount: 1_200,
+        anchor: Date.new(2025, 9, 1),
+        every: 6,
+        created_at: Time.zone.local(2025, 9, 1)
+      )
+    end
+  end
+
+  def pay(category, amount)
+    create(:entry, item: create(:item, category: category), amount: amount, date: today)
   end
 
   # `#orphan_rules`, `#orphan_reason`, `Rule#reason` AND THE `_orphans` PARTITION ARE ALL DELETED
@@ -109,26 +134,59 @@ RSpec.describe BudgetPagePresenter do
     end
   end
 
+  # ** `Group#balance` AND `Group#status` ARE DELETED (computed-claims Task 3), and the two examples
+  # that asserted them are converted below rather than dropped. ** Both read a `HoldingStatus` over a
+  # `CategoryLedger` — what had been ALLOCATED into the category — and nothing is allocated any more
+  # (spec §5). The figure a category has is `Σ its rules' claims` (§3), which is what `free`
+  # subtracted on Home and what the header prints. The `:left_to_spend` state that the first example
+  # asserted is the same $150 said the other way round, and is now the row's own `$250.00 of $400.00`.
   describe "a group's own reading" do
-    it "reports the category's holdings and its status against the ledger", :aggregate_failures do
+    # PLANTED: a $400-a-period rate rule with $250 spent inside the period. §3.1 —
+    # `claim = max(0, rate + Σ adjustments − spent)` = max(0, 400 + 0 − 250) = **$150.00**, and
+    # `Group#claim` is Σ over the category's rules, which is that one rule.
+    it "reports the sum of its rules' claims", :aggregate_failures do
       category = holder("Groceries")
       rate(category, 400)
-      create(:allocation, to_category: category, amount: 250, date: today)
+      create(:entry, item: create(:item, category: category), amount: 250, date: today)
       group = presenter.category_groups.first
 
-      expect(group.balance).to eq(250)
-      expect(group.balance).to be_a(BigDecimal)
-      expect(group.status.state).to eq(:left_to_spend)
+      expect(group.claim).to eq(150)
+      expect(group.claim).to be_a(BigDecimal)
     end
 
-    # A category with no money in any term must not turn a money figure into an Integer: the empty
+    # A category no money has moved through must not turn a money figure into an Integer: the empty
     # `sum(:amount)` calls each answer the literal 0, and this page divides nothing but prints
-    # everything.
-    it "reports a decimal zero for an untouched category", :aggregate_failures do
+    # everything. Untouched, the whole $400 rate is claimed.
+    it "reports a decimal claim for an untouched category", :aggregate_failures do
       rate(holder("Groceries"), 400)
 
-      expect(presenter.category_groups.first.balance).to eq(0)
-      expect(presenter.category_groups.first.balance).to be_a(BigDecimal)
+      expect(presenter.category_groups.first.claim).to eq(400)
+      expect(presenter.category_groups.first.claim).to be_a(BigDecimal)
+    end
+
+    # TWO RULES, TWO DENOMINATIONS, ONE HEADER. §3.4 gives a rate rule and a dated one different
+    # sentences, so the header cannot print either of them — it prints the SUM, which is exactly what
+    # `free` subtracted. Planted: $400 rate, nothing spent → $400; a $1,200 bill whose accrual has not
+    # started (its rule is younger than `today`, see the file header) → $0.
+    it "sums across shapes, because that is what free subtracted" do
+      category = holder("Pet Care")
+      rate(category, 400)
+      rolling(category, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6, item: lane(category, "Vet"))
+
+      expect(presenter.category_groups.first.claim).to eq(400)
+    end
+
+    # RED WHERE A RULE UNDER IT NEEDS A HUMAN, and quiet where none does — the same two facts Home's
+    # trouble strip fires on, asked of the same rows.
+    it "needs attention only where one of its rules does", :aggregate_failures do
+      quiet = holder("Groceries")
+      rate(quiet, 400)
+      loud = holder("Dining", priority: 2)
+      rate(loud, 180)
+      create(:entry, item: create(:item, category: loud), amount: 220, date: today)
+
+      expect(presenter.category_groups.first).not_to be_needs_attention
+      expect(presenter.category_groups.last).to be_needs_attention
     end
 
     it "states the category's priority position" do
@@ -139,25 +197,59 @@ RSpec.describe BudgetPagePresenter do
   end
 
   describe "a rule's due date" do
-    # THE NEXT OCCURRENCE, NOT THE ANCHOR. A recurring bill's anchor is its FIRST occurrence —
-    # printing the column would show a date in the past as the next thing to pay.
-    it "is the calculator's next occurrence for a recurring rule", :aggregate_failures do
-      category = holder("Car Insurance")
-      budget = rolling(category, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6)
+    # ** THE CLAIM'S OWN READING, NOT `BudgetCalculator#due_date`'S (Task 3). ** This example used to
+    # assert Mar 1 2026 — that class rolls an item-less rule's cycle on the CALENDAR, because it has
+    # no fulfilment signal without an item and assumes every bill was paid on time. The computed model
+    # has the signal (§3.2: an item-less rule's lane is the category), finds nothing spent, and leaves
+    # the occurrence anchored where it was so the row can read overdue. That is the law going forward
+    # (ruling of 2026-09-03), and the page now ORDERS on the same date it PRINTS.
+    # PLANTED: a $1,200 six-monthly bill anchored Sep 1 2025, its rule born the same day, nothing
+    # ever spent. §3.2's catch-up formula — `planned(P) = (target − built_up) ÷ periods_left`, and
+    # `periods_left` floors at 1 for a date already past — fills the fund in its first walked period,
+    # so `built_up` is **$1,200.00** and the occurrence is NOT overdue: it is waiting to be PAID, not
+    # to be saved into. `#overdue?`'s `built_up < target` half is exactly this distinction.
+    it "is the occurrence the claim is still saving for, unpaid", :aggregate_failures do
+      car_insurance
       rule = presenter.category_groups.first.rules.first
 
-      expect(rule.due_on).to eq(Date.new(2026, 3, 1))
-      expect(rule.due_on).not_to eq(budget.anchor_date)
+      expect(rule.next_due_on).to eq(Date.new(2025, 9, 1))
+      expect(rule.built_up).to eq(1_200)
       expect(rule).to be_anchored
+      expect(rule).not_to be_overdue
     end
 
-    # An anchorless rate rule is never due. BudgetCalculator#due_date answers the end of the
-    # period for one, which is a real number for the maths and a lie on screen.
+    # OVERDUE IS THE DATE PAST **AND** THE FUND SHORT. Planted: the same bill, $500 paid inside this
+    # period. §3.2's walk settles the period AFTER the accrual — `raw = 1,200 − 500` = **$700.00** —
+    # and $500 is less than one whole cycle, so `cycles_paid_by` stays at 0 and the occurrence does
+    # NOT roll. Date past, fund $500 short: the one shape §4 calls trouble.
+    it "is overdue where the date has passed and the fund is short", :aggregate_failures do
+      pay(car_insurance, 500)
+      rule = presenter.category_groups.first.rules.first
+
+      expect(rule.next_due_on).to eq(Date.new(2025, 9, 1))
+      expect(rule.built_up).to eq(700)
+      expect(rule).to be_overdue
+    end
+
+    # THE OTHER DIRECTION: paid in full, the cycle rolls, and the row reads the NEXT occurrence rather
+    # than the anchor. $1,200 of category spending settles the September occurrence, so the
+    # six-monthly rule re-aims at Mar 1 2026.
+    it "rolls to the next occurrence once the bill has been paid", :aggregate_failures do
+      pay(car_insurance, 1_200)
+      rule = presenter.category_groups.first.rules.first
+
+      expect(rule.next_due_on).to eq(Date.new(2026, 3, 1))
+      expect(rule).not_to be_overdue
+    end
+
+    # An anchorless rate rule is never due. `BudgetCalculator#due_date` answers the end of the period
+    # for one, which is a real number for the maths and a lie on screen; `ClaimCalculator#next_due_on`
+    # answers nil, which is the fact.
     it "is nil for an anchorless rate rule", :aggregate_failures do
       rate(holder("Groceries"), 400)
       rule = presenter.category_groups.first.rules.first
 
-      expect(rule.due_on).to be_nil
+      expect(rule.next_due_on).to be_nil
       expect(rule).not_to be_anchored
     end
   end

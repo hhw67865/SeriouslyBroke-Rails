@@ -1,19 +1,23 @@
-<%# "THIS PERIOD" — SPENDING AS PROGRESS (answers-first spec §4). Local: `presenter` (HomePresenter).
-    It replaces `home/_categories.html.erb`, and with it `home/_holding_row.html.erb`.
+<%# "THIS PERIOD" — SPENDING AS PROGRESS, ON THE CLAIM (answers-first spec §4, computed-claims
+    §3.4). Local: `presenter` (HomePresenter).
 
-    ** THE INVERSE OF THE BAND IT REPLACES, NOT A DIFFERENT READING OF THE LEDGER. ** The categories
-    band printed `$90.00 left` off `HoldingStatus#amount`; this section prints `$310.00 of $400.00`,
-    which is the same $90 said from the other end. Every figure is composed from readers the app
-    already owned — see `HomePresenter#holder_spending_this_period` (the period-bounded expense
-    read, whose two shared readers are named there) and `#planned_this_period` (the impact card's
-    own denominator rule). No date arithmetic is spelled anywhere on this screen.
+    ** EVERY FIGURE HERE IS A CLAIM NOW, AND NOT A HOLDING. ** The rows used to read a
+    `HoldingCalculator` — what had been ALLOCATED into a category, less what was spent out of it — and
+    a per-period plan derived from `Budget#steady_ask`. Nothing moves any more (spec §5), so there is
+    nothing allocated to read: each line comes off ONE `ClaimCalculator`, from the page's ONE
+    `ClaimLedger`, and says the one sentence §3.4 gives its shape.
 
-    THE `data-expanded` CHEVRON IS GONE with `_holding_row`. It existed so trouble was never hidden;
-    a category needing attention is now IN the trouble strip above, with its rules under it, and one
-    that does not is not — so there is nothing left for a chevron to hide.
+      RATE      $310.00 of $400.00                     spent of this period's rate, over in red
+      ACCRUING  $450.00 built up of $1,200.00          the running total against the target,
+                next due Mar 1 · $200.00 per period      with the schedule underneath
+      UNRULED   spent $32.00                           the fact, no bar, no pressure
 
-    THE WORDS ARE THE USER'S (spec §3): spent, of, set aside. The band's own header said "available
-    now", which is the mechanic's term and survives on Distribute and Budget alone. %>
+    ** A ROW PER CATEGORY, A LINE PER RULE (the ruling — see HomePresenter::PeriodRow). ** §3.4's
+    sentences are per RULE and `Category#claim` is a SUM, so a category carrying a rate rule beside an
+    item-backed bill cannot honestly print one figure: the two are denominated in different things.
+    Where a category has exactly one rule — the ordinary shape — the row renders as it always did.
+
+    THE WORDS ARE THE USER'S: spent, of, built up. "Set aside" is gone with the movements it named. %>
 <section class="bg-white border border-gray-200 rounded" data-this-period>
   <div class="px-6 py-3 border-b border-gray-200">
     <%# THE HERO'S OWN PERIOD READER, so the days-left figure here and the one under the hero's bar
@@ -29,65 +33,80 @@
     <%# `data-period-row` IS THE HOOK EVERY COPY ASSERTION GOES THROUGH, named by the category so a
         two-row screen cannot be satisfied by one row's figures. %>
     <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-period-row="<%= row.category.name %>">
-      <div class="flex justify-between items-baseline gap-4">
-        <span class="font-medium text-gray-900"><%= row.category.name %></span>
+      <% if row.budgeted? %>
+        <% row.lines.each_with_index do |line, index| %>
+          <div class="flex justify-between items-baseline gap-4 <%= "mt-2" unless index.zero? %>">
+            <%# THE NAME IS THE CATEGORY'S ON THE FIRST LINE AND THE RULE'S ON EVERY OTHER. One rule
+                is the ordinary shape and its row reads as a category; a second line is an exception
+                carved out of the same category (§3.1's lane partition), so it names the rule that
+                carved it — `pool_rule_label`, the app's one answer to what a rule is called. %>
+            <span class="<%= index.zero? ? "font-medium text-gray-900" : "text-sm text-gray-600 pl-4" %>">
+              <%= index.zero? ? row.category.name : pool_rule_label(line.rule) %>
+            </span>
 
-        <%# THE FIGURE. A goal says what is SET ASIDE of its target — the word matters, because the
-            whole reason the seventh state exists is that a savings balance must never read as money
-            to spend — and an envelope says what was SPENT of its plan. Red when the spending has
-            passed the plan (spec §4), which is false for a goal by construction. %>
-        <span class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
-              data-period-figure>
-          <% if row.goal? %>
-            set aside <%= number_to_currency(row.held) %> of <%= number_to_currency(row.planned) %>
-          <% elsif row.bar? %>
-            <%= number_to_currency(row.spent) %> of <%= number_to_currency(row.planned) %>
-          <% else %>
-            <%# NO PLAN TO BE A FRACTION OF — a holder carrying no rule and no target. The fact,
-                said the way an unbudgeted row says it, because it is the same fact. %>
-            spent <%= number_to_currency(row.spent) %>
+            <%# THE FIGURE (§3.4). Red when the spending has passed what the rule had — `over?` off
+                the calculator, which reads the figure BEFORE the clamp at zero and is the only
+                reader that can tell "spent it exactly" from "spent more than there was". %>
+            <span class="text-sm tabular-nums <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                  data-period-figure="<%= pool_rule_label(line.rule) %>">
+              <%= claim_figure(line) %>
+            </span>
+          </div>
+
+          <%# THE TRACK AND THE FILL ARE `_hero`'S AND `categories/_partials/_category_card`'S, so the
+              app's bars are one shape. `role="progressbar"` because a bar with no accessible value is
+              decoration to a screen reader, and the figure beside it is the value in words either
+              way. `aria-label` names which category, since a page of bars is otherwise a page of
+              "50%".
+
+              THE PERCENT RIDES ON THE TRACK AND THE COLOUR ON THE FILL, deliberately: a 0% fill has
+              no width, so Capybara does not consider it visible, and a hook on it would be
+              unassertable on exactly the row a bar most needs pinning — the one nobody has spent
+              from. %>
+          <% if line.bar? %>
+            <div class="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                 role="progressbar"
+                 aria-valuenow="<%= line.percent %>"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 aria-label="<%= row.category.name %>"
+                 data-period-bar="<%= line.percent %>">
+              <div class="h-1.5 rounded-full <%= line.over? ? "bg-status-danger" : "bg-brand-dark" %>"
+                   style="width: <%= line.percent %>%;"
+                   data-period-fill></div>
+            </div>
           <% end %>
-        </span>
-      </div>
 
-      <%# THE TRACK AND THE FILL ARE `_hero`'S AND `categories/_partials/_category_card`'S, so the
-          app's bars are one shape. `role="progressbar"` because a bar with no accessible value is
-          decoration to a screen reader, and the figure beside it is the value in words either way.
-          `aria-label` names which category, since a page of bars is otherwise a page of "50%".
-
-          THE PERCENT RIDES ON THE TRACK AND THE COLOUR ON THE FILL, deliberately: a 0% fill has no
-          width, so Capybara does not consider it visible, and a hook on it would be unassertable on
-          exactly the row a bar most needs pinning — the one nobody has spent from. %>
-      <% if row.bar? %>
-        <div class="mt-1.5 h-1.5 bg-gray-200 rounded-full overflow-hidden"
-             role="progressbar"
-             aria-valuenow="<%= row.percent %>"
-             aria-valuemin="0"
-             aria-valuemax="100"
-             aria-label="<%= row.category.name %>"
-             data-period-bar="<%= row.percent %>">
-          <div class="h-1.5 rounded-full <%= row.over? ? "bg-status-danger" : "bg-brand-dark" %>"
-               style="width: <%= row.percent %>%;"
-               data-period-fill></div>
+          <%# THE CLAUSE UNDER THE BAR, WHERE IT EARNS ITS PLACE. Two kinds, and never both: what is
+              WRONG (over by $X, or an overdue date) takes the line in red, because that is the news
+              and it is the same string the trouble strip prints about this rule inches above; the
+              SCHEDULE otherwise (`next due Mar 1 · $200.00 per period`), which is the half of §3.4's
+              accruing row that the figure has no room for. A rate rule in good standing has neither
+              and renders no element at all. %>
+          <% if line.trouble? %>
+            <p class="mt-1 text-sm text-status-danger font-medium" data-period-clause>
+              <%= claim_trouble_label(line) %>
+            </p>
+          <% elsif schedule = claim_schedule(line) %>
+            <p class="mt-1 text-sm text-gray-500" data-period-clause><%= schedule %></p>
+          <% end %>
+        <% end %>
+      <% else %>
+        <%# A HOLDER WITH NO RULE AT ALL. Nothing claims this money, so there is nothing for a bar to
+            be a fraction of — the fact, said the way an unbudgeted row says it, because it IS the
+            same fact. %>
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="font-medium text-gray-900"><%= row.category.name %></span>
+          <span class="text-sm text-gray-700 tabular-nums" data-period-figure>spent <%= number_to_currency(row.spent) %></span>
         </div>
-      <% end %>
-
-      <%# THE ROW VOCABULARY, WHERE IT EARNS ITS PLACE (spec §4). nil on the two states the bar has
-          already said, so the element is absent rather than empty — see HomeHelper
-          #period_row_clause, which owns the whole decision and the date that rides on it. %>
-      <% if clause = period_row_clause(row) %>
-        <p class="mt-1 text-sm <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-500" %>"
-           data-period-clause>
-          <%= clause %>
-        </p>
       <% end %>
     </div>
   <% end %>
 
-  <%# UNBUDGETED CATEGORIES WITH SPENDING (spec §4): the fact, no bar, no pressure. Their receipts
-      drain AVAILABLE rather than a category (§4's start-date rule), so there is nothing for a bar to
-      be a fraction of and a denominator here would be inventing the pressure. Zero-spend ones are
-      absent by construction — the Categories page remains the full index. %>
+  <%# UNBUDGETED CATEGORIES WITH SPENDING (answers-first §4): the fact, no bar, no pressure. No rule
+      claims their receipts, so there is nothing for a bar to be a fraction of and a denominator here
+      would be inventing the pressure. Zero-spend ones are absent by construction — the Categories
+      page remains the full index. %>
   <% presenter.unbudgeted_rows.each do |row| %>
     <div class="px-6 py-3 border-b border-gray-100 last:border-b-0 flex justify-between items-baseline gap-4"
          data-unbudgeted-row="<%= row.category.name %>">
@@ -98,7 +117,7 @@
 
   <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
       something that failed to load. The door is the Budget page, which is where a rule — the thing
-      that gives a category a plan to be measured against — is written. %>
+      that gives a category a claim — is written. %>
   <% if presenter.period_rows.empty? && presenter.unbudgeted_rows.empty? %>
     <p class="px-6 py-3 text-sm text-gray-500">
       Nothing is budgeted yet, and nothing has been spent this period.

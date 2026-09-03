@@ -2,9 +2,31 @@
 
 require "rails_helper"
 
-# HOME, ON BOTH LEDGERS (two-ledger spec §2). This file was pool-shaped in every example: it planted
-# envelopes inside accounts, filled one pot per account, and asserted an orphan apparatus. Task 6
-# converted it whole, and the deletions are named at the describe blocks they used to sit in.
+# HOME, ON THE PHYSICAL LEDGER AND THE CLAIMS COMPUTED OVER IT (computed-claims spec §§2-4). This
+# file was pool-shaped once and allocation-shaped until Task 3; every figure below now comes from
+# §3's formulas, re-derived by hand with the working written beside it.
+#
+# ── DELETED WITH THE READERS THEY ASSERTED (Task 3). Every one of them measured money that had been
+# MOVED into a category, and nothing moves any more (§5). The old readers are still ALIVE for the
+# Distribute screen until Task 4; HOME simply stopped asking them:
+#
+#   * `#available` (7 examples) — `AllocationCalculator#available`, the distribution's post-sweep
+#     root. `free` is `min(pot, total_money − Σ claims)` now, which needs no root at all.
+#   * `#remaining_plan` (4) — Σ over the waterfall's rows of what each category still asked for. A
+#     claim is not an ask against a balance; it IS the figure.
+#   * `#waterfall` and its three sibling describes (9) — the fill, the ties, the red root, the
+#     asks-for-nothing row. There is no fill.
+#   * `#plan_outruns_the_money?` (4) — CONVERTED to `#claims_outrun_the_money?` below, at its own
+#     fixtures where they survive the change of readers.
+#   * `#anything_set_aside_or_spoken_for?` (3) — CONVERTED to `#anything_claimed?`. Its two nouns
+#     were a HOLDING and a distribution's remaining ask.
+#   * `#status_for` (3) and `#dated_rules_for` (4) — `HoldingStatus` and `BudgetCalculator` per row.
+#     What a row says is now one `ClaimCalculator` per rule, off the page's one `ClaimLedger`.
+#   * `#attention_categories` (2) — the strip's population is `#troubles`, which is asserted whole.
+#   * `#fix_for` (7) — the whole fix apparatus. A fix was an ALLOCATION.
+#
+# ── NEW, BECAUSE THE MODEL IS (§4): `#shortfall`, `#uncovered_claims` (the give-way walk) and
+# `#per_day_pace`.
 RSpec.describe HomePresenter do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -28,104 +50,108 @@ RSpec.describe HomePresenter do
     create(:category, :expense, user: user, name: name, priority: priority, funded_since: funded_since)
   end
 
-  # A GOAL IS A HOLDER WITH A TARGET (spec §3). `Category#savings?` additionally wants no rule, which
-  # is the DISPLAY question; the examples below that hang a rate rule on one are asking the FUNDING
-  # question, and `HoldingCalculator#dateless_goal?` answers it off the target alone.
+  # A GOAL IS A HOLDER WITH A TARGET, and under computed claims it is also a RULE with one (§3.2):
+  # every claim comes from a rule, so a goal fed only by hand is a rule whose amount is zero.
   def savings_goal(name, priority:, target: 1_200)
     holder(name, priority: priority).tap { |category| category.update!(target_amount: target) }
   end
 
-  # A flat per-period rule: the catch-all shape, and the one that makes `required` exactly the amount
-  # asked for. A rule belongs to the thing that holds the money now — the budget factory's owner
-  # is a funded category (two-ledger spec §3).
+  # THE RULE A HAND-FED GOAL IS (§3.2's "no rate" spelled as a zero amount), with its birthday planted
+  # for the reason `#bill` states: a rule younger than `today` walks no periods and holds nothing,
+  # however many set-asides are dated inside them.
+  def goal_rule(category, created_at: Time.zone.local(2025, 1, 1))
+    create(:budget, :per_period_rate, category: category, amount: 0, created_at: created_at)
+  end
+
+  # A flat per-period rule: the catch-all shape, and the one whose claim is exactly `rate − spent`.
   def rate(category, amount)
     create(:budget, :per_period_rate, category: category, amount: amount)
   end
 
   def lane(category, name) = create(:item, category: category, name: name)
 
+  # ** `created_at:` IS PLANTED ON EVERY ACCRUING RULE IN THIS FILE (the ruling of 2026-09-03). ** A
+  # rule accrues from the LATER of its category's `funded_since` and its own birthday, and this
+  # file's `today` is Feb 2026 while the factory writes rules at real-now — so a rule left alone
+  # walks NO periods and holds nothing, whatever its anchor says. Rate rules are unaffected: their
+  # walk is this period and no other by construction (§3.1).
+  #
   # `item:` because a category may carry only ONE item-less rule
-  # (`Budget#category_may_hold_one_item_less_rule`, computed-claims ruling of 2026-09-03), and the
-  # dated-rule listing needs two bills on one category. A one-off's due date is its anchor whether or
-  # not it names an item, so the dates these examples print do not move.
-  def bill(category, amount:, due:, item: nil)
-    create(:budget, :one_time, category: category, amount: amount, anchor_date: due, item: item)
+  # (`Budget#category_may_hold_one_item_less_rule`), and some examples need two bills on one category.
+  def bill(category, amount:, due:, item: nil, created_at: Time.zone.local(2025, 1, 1))
+    create(
+      :budget,
+      :one_time,
+      category: category,
+      amount: amount,
+      anchor_date: due,
+      item: item,
+      created_at: created_at
+    )
   end
 
-  # A rule that rolls: its due date moves with the cycles that have gone by, which is what makes it
-  # depend on which day the calculator is asked about.
-  def rolling(category, amount:, anchor:)
-    create(:budget, category: category, amount: amount, interval_months: 1, anchor_date: anchor)
+  # A rule that rolls: its due date moves with the cycles that have gone by and with what has been
+  # paid into it.
+  def rolling(category, amount:, anchor:, every: 1, created_at: Time.zone.local(2025, 1, 1))
+    create(
+      :budget,
+      category: category,
+      amount: amount,
+      interval_months: every,
+      anchor_date: anchor,
+      created_at: created_at
+    )
   end
 
-  # INCOME RAISES BOTH LEDGERS AT ONCE (§2): the pot, and available. It lands in the user's main
-  # account, which is the only place income may land.
+  # INCOME RAISES THE POT (§2). It lands in the user's main account, which is the only place income
+  # may land.
   def income(amount, on: today)
     category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
-  # SPENDING LOWERS THE POT ALWAYS, and lowers the CATEGORY when the category counts that day —
-  # otherwise it lowers available (§4's start-date rule).
+  # SPENDING LOWERS THE POT ALWAYS, and lowers a CLAIM when the category counts that day.
   def spend(category, amount, on: today)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
-  # A BILL THAT ROLLS ONCE A YEAR: its whole face value falls due inside the current period, which
-  # is what makes `remaining_plan` and `Budget.steady_need` diverge.
+  # A BILL THAT ROLLS ONCE A YEAR: its whole face value falls due inside the current period, which is
+  # what makes `Σ claims` and `Budget.steady_need` diverge.
   def annual(category, amount:, due:)
-    create(:budget, category: category, amount: amount, interval_months: 12, anchor_date: due)
+    create(
+      :budget,
+      category: category,
+      amount: amount,
+      interval_months: 12,
+      anchor_date: due,
+      created_at: Time.zone.local(2025, 1, 1)
+    )
   end
 
-  # A DATED BILL THE USER ACTUALLY PAYS: an item is the only fulfilment signal BudgetCalculator
-  # accepts, and therefore the only way a rule can be overdue rather than merely settled by its date.
-  def payable(name, amount:, due:, priority: 1)
-    holder(name, priority: priority).tap do |category|
-      item = create(:item, category: category, name: "#{name} Bill")
-      create(:budget, :one_time, category: category, item: item, amount: amount, anchor_date: due)
-    end
-  end
-
-  # AVAILABLE → A CATEGORY. The purpose ledger's only writer besides entries.
-  def allocate(category, amount, on: today)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
+  # ** `allocate` IS DELETED (Task 3), and with it every `create(:allocation, …)` in this file. **
+  # Money into a category was the purpose ledger's writer; there is none. What puts money behind a
+  # rule now is the rule itself (it accrues) or a DATED ADJUSTMENT (§3.3), which is this.
+  def set_aside(rule, amount, on: today)
+    create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
   describe "#accounts" do
     it "returns only this user's accounts, by name", :aggregate_failures do
-      # `checking` is forced FIRST so insertion order is Checking, Ally — the reverse of the expected
-      # answer. With Ally created first the rows come back alphabetically already, and dropping
-      # `.order(:name)` would still pass.
-      checking
+      zebra = create(:pool, :account, user: user, name: "Zebra")
       ally = create(:pool, :account, user: user, name: "Ally")
-      holder("Groceries", priority: 1)
-      create(:pool, :account, user: create(:user), name: "Someone Else")
+      create(:pool, :account, user: create(:user), name: "Stranger")
 
-      expect(presenter.accounts).to eq([ally, checking])
-      expect(presenter.accounts.map(&:name)).to eq(["Ally", "Checking"])
+      expect(presenter.accounts).to eq([ally, checking, zebra])
     end
   end
-
-  # ── DELETED (Task 6): the whole `#orphan_pools`, `#orphan_pools_owed`, `#orphan_required` and
-  # `#pools_for` group, and the "#waterfall across accounts" describe (four examples: "funds each
-  # envelope only from its own account", "is not covered when the money is in an account with no
-  # envelopes", "drains each account's pot independently", "does not spend down the cash it reports
-  # as available" — the last is re-asked below, because a single pot can still be spent down).
-  #
-  # ALL SIX READERS ARE GONE, and so is the shape every one of them was about. A category belongs to
-  # no account and cannot be an orphan; allocating money moves nothing physical (§2), so there is no
-  # per-account pot for money to be stranded in and nothing for `#pools_for` to nest.
 
   describe "#balance_of" do
     it "is what the bank says, and for main that is the pot", :aggregate_failures do
       income(1_000)
-      groceries = holder("Groceries", priority: 1)
-      allocate(groceries, 400)
+      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 250)
 
-      # The allocation moves nothing physical, so the pot is untouched by it — which is the whole
-      # of §2's "any account's money can back any category".
-      expect(presenter.balance_of(checking)).to eq(1_000)
-      expect(AccountLedger.new(user).pot).to eq(1_000)
+      expect(presenter.balance_of(checking)).to eq(750)
+      expect(presenter.in_checking).to eq(750)
     end
 
     it "is movements only on an account that is not main", :aggregate_failures do
@@ -144,376 +170,31 @@ RSpec.describe HomePresenter do
 
   describe "#categories" do
     it "returns the holders in fill order and nothing else", :aggregate_failures do
-      # Reverse alphabetical at a shared priority, so the name tie-break is visible; and two shapes
-      # that are NOT holders — an income category, and an expense one that has never been funded.
-      zoo = holder("Zoo", priority: 1)
-      apples = holder("Apples", priority: 1)
-      later = holder("Later", priority: 2)
-      create(:category, :expense, user: user, name: "Never Funded", priority: 0)
+      second = holder("Zebra", priority: 1)
+      first = holder("Apples", priority: 1)
+      create(:category, :expense, user: user, name: "Never Funded", funded_since: nil)
       create(:category, :income, user: user, name: "Salary")
 
-      expect(presenter.categories).to eq([apples, zoo, later])
+      expect(presenter.categories).to eq([first, second])
     end
   end
 
-  describe "#status_for" do
-    let(:dentist) do
-      holder("Dentist", priority: 1).tap { |category| bill(category, amount: 300, due: Date.new(2026, 2, 14)) }
-    end
+  # ** EVERY CATEGORY WITH A ROW, WHICH IS WIDER THAN THE FILL ORDER. ** `ClaimLedger` counts every
+  # rule's claim into `free`, including a rule on a category whose `funded_since` was cleared after
+  # the fact — so a claim with no row would be money missing from the hero's figure with nothing on
+  # the screen to explain it.
+  describe "#budgeted_categories" do
+    it "adds a ruled category that is not a holder, in priority order", :aggregate_failures do
+      funded = holder("Groceries", priority: 1)
+      rate(funded, 400)
+      stranded = create(:category, :expense, user: user, name: "Coffee", priority: 2, funded_since: nil)
+      rate(stranded, 35)
 
-    # The whole reason this method exists. Asserted in BOTH directions: the second expectation proves
-    # a bare `category.status` genuinely disagrees on this data, so the first is pinning the injected
-    # day rather than passing by coincidence.
-    it "computes against the injected day, not Date.current", :aggregate_failures do
-      travel_to(Date.new(2026, 2, 20)) do
-        expect(presenter.status_for(dentist).state).to eq(:wont_make_it)
-        expect(dentist.status.state).not_to eq(:wont_make_it)
-      end
-    end
-
-    it "memoises per category so a row does not rebuild its status" do
-      first_call = presenter.status_for(dentist)
-
-      expect(presenter.status_for(dentist)).to be(first_call)
-    end
-
-    it "keeps distinct categories on distinct statuses", :aggregate_failures do
-      quiet = holder("Groceries", priority: 2)
-      rate(quiet, 100)
-
-      expect(presenter.status_for(dentist)).not_to be(presenter.status_for(quiet))
-      expect(presenter.status_for(quiet).state).not_to eq(:wont_make_it)
+      expect(presenter.categories.map(&:name)).to eq(["Groceries"])
+      expect(presenter.budgeted_categories.map(&:name)).to eq(["Groceries", "Coffee"])
+      expect(presenter.period_rows.map { |row| row.category.name }).to eq(["Groceries", "Coffee"])
     end
   end
-
-  describe "#dated_rules_for" do
-    # An expanded row prints one line per dated rule, earliest first. An anchorless rule has no date
-    # to print, so it is not one of these lines — and a row whose rules are ALL anchorless renders
-    # its own sentence instead of an empty box.
-    it "returns the anchored rules earliest due first, and nothing else", :aggregate_failures do
-      utilities = holder("Utilities", priority: 1)
-      electric = bill(utilities, amount: 90, due: Date.new(2026, 3, 1), item: lane(utilities, "Electric"))
-      water = bill(utilities, amount: 40, due: Date.new(2026, 2, 20), item: lane(utilities, "Water"))
-      rate(utilities, 25)
-
-      expect(presenter.dated_rules_for(utilities)).to eq(
-        [
-          [water, Date.new(2026, 2, 20)],
-          [electric, Date.new(2026, 3, 1)]
-        ]
-      )
-    end
-
-    it "is empty for a category funded only at a rate" do
-      groceries = holder("Groceries", priority: 1)
-      rate(groceries, 400)
-
-      expect(presenter.dated_rules_for(groceries)).to be_empty
-    end
-
-    # The same hazard as #status_for, one level down. Asserted in BOTH directions — the second
-    # expectation proves a bare `budget.calculator` genuinely disagrees on this data.
-    it "dates a rolling rule against the injected day, not Date.current", :aggregate_failures do
-      utilities = holder("Utilities", priority: 1)
-      rule = rolling(utilities, amount: 120, anchor: Date.new(2026, 1, 1))
-
-      travel_to(Date.new(2026, 6, 9)) do
-        expect(presenter.dated_rules_for(utilities)).to eq([[rule, Date.new(2026, 3, 1)]])
-        expect(rule.calculator.due_date).to eq(Date.new(2026, 7, 1))
-      end
-    end
-
-    it "memoises per category so a row does not rebuild its rules" do
-      utilities = holder("Utilities", priority: 1)
-      bill(utilities, amount: 90, due: Date.new(2026, 3, 1))
-      first_call = presenter.dated_rules_for(utilities)
-
-      expect(presenter.dated_rules_for(utilities)).to be(first_call)
-    end
-  end
-
-  describe "#available" do
-    it "is money with no job yet" do
-      income(2_400)
-
-      expect(presenter.available).to eq(2_400)
-    end
-
-    it "drops what has been allocated to a category", :aggregate_failures do
-      income(2_400)
-      groceries = holder("Groceries", priority: 1)
-      allocate(groceries, 400)
-
-      expect(presenter.available).to eq(2_000)
-      expect(CategoryLedger.new(presenter.categories, user: user).holding_of(groceries)).to eq(400)
-    end
-
-    # ONE ROOT, SO NO CLAMP (Task 6). The pool era clamped each account's pot at zero before summing,
-    # because an overdrawn account cancelling a healthy one's surplus reports a number true about net
-    # worth and false about what can be allocated. There is no sibling to cancel against now, so a
-    # root that has been given out past what came in says so — exactly as AllocationCalculator#
-    # available leaves it, and the two are now the same expression.
-    it "states a negative root rather than rounding it up to nothing", :aggregate_failures do
-      income(100)
-      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 500)
-
-      expect(presenter.available).to eq(-400)
-      expect(presenter.available).to eq(AllocationCalculator.new(user: user, today: today).available)
-    end
-
-    # THE SWEEP IS PART OF IT, and it is the half that keeps this screen and the distribute screen
-    # naming one figure: a closed rate category's leftover is on its way back to the root, so a
-    # headline that ignored it would understate what the button below is about to hand out.
-    it "includes what the next distribution sweeps back", :aggregate_failures do
-      groceries = holder("Groceries", priority: 1)
-      rate(groceries, 400)
-      income(60, on: today - 25.days)
-      allocate(groceries, 60, on: today - 20.days)
-
-      # The $60 went out of the root last period and the rate period it belongs to has ended, so it
-      # is on its way back: available reads $0 as the ledger stands and $60 as the button would find
-      # it.
-      expect(CategoryLedger.new(presenter.categories, user: user).available).to eq(0)
-      expect(presenter.available).to eq(60)
-      expect(presenter.available).to eq(AllocationCalculator.new(user: user, today: today).available)
-    end
-
-    it "is a decimal zero, not an integer, for a user with nothing", :aggregate_failures do
-      expect(presenter.available).to eq(0)
-      expect(presenter.available).to be_a(BigDecimal)
-    end
-
-    # A USER WITH NO HOLDERS AT ALL still has an available, and it is the first screen a new user
-    # sees. `CategoryLedger` raises `NoSingleOwner` read off an empty category set, which is why the
-    # presenter names the user when it builds one.
-    it "answers for a user whose holder set is empty", :aggregate_failures do
-      income(300)
-
-      expect(presenter.categories).to be_empty
-      expect(presenter.available).to eq(300)
-    end
-  end
-
-  # ── RENAMED (answers-first Task 1): this was `describe "#total_required"`, and every example in
-  # it is carried unchanged. The reader did not change and must not — Home's word for the figure
-  # did ("spoken for"), and two names for one sum is exactly the drift the one-spelling rule
-  # (answers-first spec §3) is written against. `#total_required` no longer exists.
-  describe "#remaining_plan" do
-    it "sums what every holder needs this period" do
-      rate(holder("Groceries", priority: 1), 400)
-      rate(holder("Gas", priority: 2), 80)
-
-      expect(presenter.remaining_plan).to eq(480)
-    end
-
-    it "counts savings goals alongside spending categories", :aggregate_failures do
-      rate(holder("Groceries", priority: 1), 400)
-      rate(savings_goal("Vacation", priority: 2), 150)
-
-      expect(presenter.remaining_plan).to eq(550)
-      expect(presenter.waterfall.map { |r| r[:category].name }).to eq(["Groceries", "Vacation"])
-    end
-
-    it "is a decimal zero, not an integer, for a user with no categories", :aggregate_failures do
-      expect(presenter.remaining_plan).to eq(0)
-      expect(presenter.remaining_plan).to be_a(BigDecimal)
-      expect(presenter.waterfall).to be_empty
-    end
-
-    # ** THE ONE-SPELLING EXAMPLE (answers-first spec §3, the plan's binding constraint). ** The
-    # figure `free_to_spend` subtracts is read through BOTH entry points on ONE fixture: this
-    # presenter, and the waterfall the Distribute screen actually renders. They are the same sum of
-    # the same per-row `needed` — `HoldingCalculator#required` on AllocationCalculator's
-    # net-of-sweep calculator — and the only way this example can fail is if somebody writes a
-    # second period-ask arithmetic on Home.
-    #
-    # THE FIXTURE IS DELIBERATELY MIXED, because a flat pair of rate rules would agree under almost
-    # any re-derivation: a partly-allocated envelope (`#required` nets the allocation off), a dated
-    # bill (catch-up, not a steady rate) and a savings goal (`goal_required`'s `min(rate,
-    # remaining)`) each exercise a different arm of the ask.
-    #
-    # NOT `Budget.steady_need`, which is the Budget page's STRUCTURAL check and is deliberately a
-    # different question — see `#structurally_underwater?` below, where the two diverge in both
-    # directions on the same budget.
-    #
-    # ** THE ALLOCATION IS DATED INTO THE PREVIOUS PERIOD, AND IT HAS TO BE. ** Measured while
-    # writing this: with the $100 dated `today` the two entry points disagreed by exactly that $100,
-    # and the disagreement is CORRECT rather than a drift. `DistributionPresenter` describes what
-    # re-running THIS period's distribution would do, so it deletes this period's allocation rows
-    # and re-derives against a world without them (see its #snapshot); Home describes what is still
-    # owed given what has already been given. Two screens, two questions — and comparing them
-    # requires a fixture with no distribution inside the window, or the example would be pinning the
-    # delete-and-rollback rather than the ask. A DATED bill is what lets the fixture keep its
-    # part-funded arm anyway: it holds its $100 across the boundary because a category with no rate
-    # rule never sweeps (`HoldingCalculator#compute_period_closed`).
-    it "is the same figure the distribute waterfall asks for", :aggregate_failures do
-      income(1_000)
-      rate(holder("Groceries", priority: 1), 400)
-      dentist = payable("Dentist", amount: 300, due: Date.new(2026, 2, 14), priority: 2)
-      allocate(dentist, 100, on: Date.new(2026, 1, 17))
-      rate(savings_goal("Vacation", priority: 3, target: 1_200), 150)
-
-      waterfall_ask = DistributionPresenter.new(user: user, today: today).lines.sum(0.to_d, &:needed)
-
-      # Planted, so the example fails loudly if the fixture stops exercising all three arms rather
-      # than merely agreeing with itself: the whole $400 rate, $200 of the part-funded bill, $150 of
-      # the goal's own rate.
-      expect(presenter.remaining_plan).to eq(750)
-      expect(presenter.remaining_plan).to eq(waterfall_ask)
-    end
-  end
-
-  describe "#waterfall" do
-    before do
-      rate(holder("Rent", priority: 1), 500)
-      rate(holder("Groceries", priority: 2), 400)
-      rate(holder("Vacation", priority: 3), 150)
-      income(700)
-    end
-
-    it "fills top-down by priority out of ONE root", :aggregate_failures do
-      rows = presenter.waterfall
-
-      expect(rows.map { |r| r[:category].name }).to eq(["Rent", "Groceries", "Vacation"])
-      expect(rows[0][:funded]).to eq(500)
-      expect(rows[1][:funded]).to eq(200)
-      expect(rows[2][:funded]).to eq(0)
-    end
-
-    it "records each row's shortfall", :aggregate_failures do
-      rows = presenter.waterfall
-
-      expect(rows[0].short).to eq(0)
-      expect(rows[1].short).to eq(200)
-      expect(rows[2].short).to eq(150)
-    end
-
-    # ── DELETED (answers-first Task 2): "reports the total gap". It read `#shortfall`, which is
-    # deleted with the waterfall band that printed it, and its $350 is the sum of the three row
-    # shortfalls the example above already asserts one by one.
-
-    it "records what each row asked for, funded or not", :aggregate_failures do
-      rows = presenter.waterfall
-
-      expect(rows.pluck(:needed)).to eq([500, 400, 150])
-      # `needed` is the ask, never the outcome: the cut-off row must still state its full
-      # requirement, or the screen cannot show what running out actually cost.
-      #
-      # `.short` RATHER THAN `[:short]` (Task 7): the rows are `AllocationCalculator::Row` structs
-      # now, and `short` is a METHOD (`needed - funded`) rather than a member — `Struct#[]` raises
-      # `no member 'short' in struct`. `[:needed]` and `[:funded]` are members and still answer.
-      expect(rows.map { |r| r[:needed] - r[:funded] }).to eq(rows.map(&:short))
-    end
-
-    # THE FILL IS AllocationCalculator'S, ASSERTED AS AN IDENTITY rather than as two matching lists
-    # of literals: Home renders the proposal the distribute button would act on, and a screen that
-    # disagreed with its own action is the defect this whole band is arranged to prevent.
-    it "agrees with the proposal the distribute screen would render", :aggregate_failures do
-      proposal = AllocationCalculator.new(user: user, today: today)
-
-      expect(presenter.waterfall.map { |r| [r[:category].id, r[:needed], r[:funded]] })
-        .to eq(proposal.rows.map { |row| [row.category.id, row.needed, row.funded] })
-      # `waterfall.sum(&:short)` where this read `#shortfall` (Task 2): the reader is deleted with
-      # the band that printed it, and the sum is what it was. The cross-pin is unchanged.
-      expect(presenter.waterfall.sum(&:short)).to eq(proposal.rows.sum(&:short))
-      expect(presenter.available).to eq(proposal.available)
-    end
-
-    it "does not spend down the cash it reports as available", :aggregate_failures do
-      # The pot is spent down as the waterfall fills, so a `remaining` leaked into a memo would
-      # leave #available summing the leftovers. Waterfall FIRST, then the headline.
-      expect(presenter.waterfall.pluck(:funded)).to eq([500, 200, 0])
-      expect(presenter.available).to eq(700)
-      expect(presenter.waterfall.pluck(:funded)).to eq([500, 200, 0])
-    end
-  end
-
-  # Separate from the block above because that one's `before` fixes three distinct priorities, which
-  # is exactly the shape that cannot see a tie-break at all.
-  describe "#waterfall priority ties" do
-    it "breaks a tie by name so the same data funds the same category every load", :aggregate_failures do
-      # Written in reverse alphabetical order on purpose: `Category.in_fill_order` orders
-      # `[priority, name]`, and a sort on priority alone would fund Zoo first for no reason the user
-      # can see — random UUID bytes deciding where the money goes.
-      rate(holder("Zoo", priority: 1), 300)
-      rate(holder("Apples", priority: 1), 300)
-      income(300)
-
-      rows = presenter.waterfall
-
-      expect(rows.map { |r| r[:category].name }).to eq(["Apples", "Zoo"])
-      # Keyed by name rather than by row index: the tie is not cosmetic, it decides which category
-      # the money actually reaches, and a positional assertion would hold with the two swapped.
-      expect(rows.to_h { |r| [r[:category].name, r[:funded]] }).to eq("Apples" => 300, "Zoo" => 0)
-    end
-  end
-
-  describe "#waterfall with a root in the red" do
-    # `remaining.clamp(0.to_d, needed)` is the guard: with `remaining` negative the clamp returns the
-    # zero LOW bound rather than raising, which is what keeps a user whose root is overdrawn — the
-    # user most in need of reading this screen — off a 500.
-    it "funds nothing and still states every ask", :aggregate_failures do
-      income(100)
-      spend(create(:category, :expense, user: user, name: "Unbudgeted"), 500)
-      rate(holder("Rent", priority: 1), 300)
-
-      rows = presenter.waterfall
-
-      expect(presenter.available).to eq(-400)
-      expect(rows.pluck(:funded)).to eq([0])
-      expect(rows.map(&:short)).to eq([300])
-    end
-
-    # A negative ask is reachable — `HoldingCalculator#goal_required` returns `[rate, remaining].min`
-    # — and `clamp(0, negative)` raises ArgumentError, which on the ROOT route takes out the whole
-    # app rather than one screen. Written through `update_column` past Budget's validation, exactly
-    # as AllocationCalculator's own example does.
-    it "floors a negative ask rather than raising on the clamp", :aggregate_failures do
-      goal = savings_goal("Vacation", priority: 1, target: 1_200)
-      rule = rate(goal, 150)
-      rule.update_column(:amount, -150) # rubocop:disable Rails/SkipsModelValidations
-      income(500)
-
-      expect(presenter.waterfall).to be_empty
-      expect(presenter.remaining_plan).to eq(0)
-    end
-  end
-
-  # A category that asks for nothing is not a row, and the reason is what it looked like on a screen:
-  # "$0.00 of $0.00", below the red "ran out here" line, which reads as "this got nothing because the
-  # money ran out" when the truth is "this needed nothing".
-  describe "#waterfall with a category that asks for nothing" do
-    it "leaves it out of the rows and out of the gap", :aggregate_failures do
-      income(500)
-      settled = holder("Rent", priority: 1)
-      rate(settled, 300)
-      allocate(settled, 300)
-      rate(holder("Groceries", priority: 2), 400)
-
-      expect(presenter.waterfall.map { |r| r[:category].name }).to eq(["Groceries"])
-      expect(presenter.remaining_plan).to eq(400)
-      expect(presenter.available).to eq(200)
-      expect(presenter.waterfall.sum(&:short)).to eq(200)
-      # WAS `projected_buffer.to eq(0)` (answers-first Task 1). That reader clamped itself to the
-      # money actually handed out, so a short period always read $0 — which is what made it a poor
-      # headline. `free_to_spend` subtracts what the plan still ASKS for, so the same fixture states
-      # the $200 gap instead of hiding it: $200 available less a $400 ask, capped at the $500 pot.
-      expect(presenter.free_to_spend).to eq(-200)
-    end
-  end
-
-  # ── DELETED WITH `#cutoff`, `#shortfall` AND `#covered?` (answers-first Task 2), three examples:
-  # "draws the line for a user with several accounts", "is nil on a covered period, where the index
-  # would find nothing and point past the last row", and "#covered? is true when available meets the
-  # requirement".
-  #
-  # All three were about the waterfall band's own line, and Home does not draw one — spec §1 rules
-  # the mechanic's view off this screen. THE RULINGS THEY PINNED STILL HAVE HOMES: Task 6's deletion
-  # of the `accounts.one?` gate is a fact about `Waterfall.cutoff`'s only remaining caller,
-  # `DistributionPresenter#cutoff`, and both directions of the line are pinned on that screen
-  # (`spec/system/distributions/proposal_spec.rb`'s "draws no cutoff on a period that never ran out"
-  # against `overrides_spec.rb`'s "ran out here · $200.00 unfunded"). "Is this period covered" is now
-  # the sign of `#free_to_spend`, which the hero describes assert in both directions.
 
   describe "#overdrawn_accounts" do
     let(:ally) { create(:pool, :account, user: user, name: "Ally") }
@@ -532,46 +213,23 @@ RSpec.describe HomePresenter do
       expect(presenter.overdrawn_accounts).to be_empty
     end
 
-    # THE WHOLE REASON THIS READER EXISTS, and the two-ledger version of it is sharper than the pool
-    # era's: the purpose ledger can be perfectly in order while the BANK is overdrawn. Every dollar
-    # of income was allocated, then the category was overspent — so available is $0, nothing is
-    # short, and $500 of real debt renders nowhere unless a band asks for it by name.
-    it "reports a debt no purpose-ledger figure contains", :aggregate_failures do
+    # THE WHOLE REASON THIS READER EXISTS: the purpose side can be perfectly in order while the BANK
+    # is overdrawn. PLANTED — a $1,000-a-period rule with $1,500 spent claims `max(0, 1,000 − 1,500)`
+    # = $0.00 (§3.1), so nothing is claimed at all, and $500 of real debt renders nowhere unless a
+    # reader asks for it by name.
+    it "reports a debt no claim figure contains", :aggregate_failures do
       income(1_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 1_000)
-      allocate(groceries, 1_000)
       spend(groceries, 1_500)
 
-      expect(presenter.available).to eq(0)
+      expect(presenter.total_claims).to eq(0)
       expect(presenter.balance_of(checking)).to eq(-500)
       expect(presenter.overdrawn_accounts.map(&:name)).to eq(["Checking"])
     end
-
-    # ── DELETED (Task 6): the assertion that an overdrawn account's `status_for` is `:overdrawn`.
-    # `#status_for` takes a CATEGORY now, and an account has no rules to be on track with — a status
-    # is a reading of what a holder holds against what fills it. The standing band prints the figure
-    # directly, through `#overdraft_for`, instead of borrowing the row vocabulary.
   end
 
-  # ── DELETED (answers-first Task 1): the whole `#projected_buffer` describe, four examples.
-  #
-  #   * "is what stays unclaimed once every holder is funded"
-  #   * "is zero when the period is short, where the two figures agree"
-  #   * "is negative exactly when the root is, which a covered period reaches"
-  #   * "cannot go below zero while the root is in the black"
-  #
-  # THE READER IS GONE AND SO IS THE SENTENCE IT EXISTED FOR. `projected_buffer` was `available − Σ
-  # FUNDED`, so it clamped itself to what the waterfall actually handed out and read $0 on every
-  # short period — which is why the last two examples above are about its SIGN rather than about a
-  # figure. `free_to_spend` subtracts what the plan still ASKS for (`Σ needed`), so it states the
-  # gap those examples had to describe in the negative, and the two archetypes below are their
-  # successors: "states the gap rather than reporting nothing left" carries the short period, and
-  # "is negative for a period whose spending has drained the root" carries the covered-with-a-
-  # deficit fixture the MED-1 review measured. The word "unclaimed" dies with the reader
-  # (answers-first spec §3).
-
-  # ── THE HERO CARD'S FOUR READERS (answers-first spec §§2-3) ──────────────────────────────────
+  # ── THE HERO CARD'S READERS (answers-first §§2-3, on computed-claims' terms) ───────────────────
 
   describe "#in_checking" do
     # THE NUMBER THE BANK APP SHOWS, and it is `AccountLedger#pot` rather than a sum of accounts:
@@ -593,8 +251,8 @@ RSpec.describe HomePresenter do
   end
 
   describe "#free_to_spend" do
-    # ARCHETYPE 1 (spec §9): the fresh user. Nothing in, nothing planned — and the card still
-    # renders, so every figure on it has to be a real zero rather than a nil the view guards.
+    # ARCHETYPE 1: the fresh user. Nothing in, nothing claimed — and the card still renders, so every
+    # figure on it has to be a real zero rather than a nil the view guards.
     it "is a decimal zero all the way down for a fresh user", :aggregate_failures do
       expect(presenter.free_to_spend).to eq(0)
       expect(presenter.free_to_spend).to eq(presenter.in_checking)
@@ -602,40 +260,38 @@ RSpec.describe HomePresenter do
       expect(presenter).not_to be_free_cap_bound
     end
 
-    # ARCHETYPE 2, FIRST DIRECTION (spec §9): the `min` chooses the SUBTRACTION. Planted both ways
-    # round — $2,000 in, $400 still asked for, so $1,600 is free and the pot is nowhere near
-    # binding.
-    it "is available less the remaining plan when the money is all in checking", :aggregate_failures do
+    # ARCHETYPE 2, FIRST DIRECTION: the `min` chooses the SUBTRACTION. PLANTED — $2,000 in, one
+    # $400-a-period rule with nothing spent, so `claim = max(0, 400 − 0)` = $400.00 (§3.1) and
+    # `free = min(2,000, 2,000 − 400)` = **$1,600.00**. The pot is nowhere near binding.
+    it "is the money less the claims when it is all in checking", :aggregate_failures do
       income(2_000)
       rate(holder("Groceries", priority: 1), 400)
 
       expect(presenter.in_checking).to eq(2_000)
-      expect(presenter.available).to eq(2_000)
-      expect(presenter.remaining_plan).to eq(400)
+      expect(presenter.total_claims).to eq(400)
       expect(presenter.free_to_spend).to eq(1_600)
       expect(presenter).not_to be_free_cap_bound
     end
 
-    # ARCHETYPE 2, SECOND DIRECTION: the `min` chooses the POT, which is the ruled cap (spec §3) —
-    # money you would have to move out of savings first is not free in the moment. THE SAME FIXTURE
-    # as above with $1,500 walked over to Ally: the purpose ledger has not moved at all (an account
-    # movement allocates nothing), so `available − remaining_plan` is still $1,600 and only the cap
-    # brings the answer down. A reader that had quietly dropped the `min` would still read $1,600
-    # here, which is what makes this the example that catches it.
-    it "is capped at the pot when the unspoken-for money is parked elsewhere", :aggregate_failures do
+    # ARCHETYPE 2, SECOND DIRECTION: the `min` chooses the POT, which is the ruled cap (§2) — money
+    # you would have to move out of savings first is not free in the moment. THE SAME FIXTURE with
+    # $1,500 walked over to Ally: an account movement claims nothing, so `total_money − Σ claims` is
+    # still $1,600 and only the cap brings the answer down to the $500 the pot holds. A reader that
+    # had quietly dropped the `min` would still read $1,600 here.
+    it "is capped at the pot when the unclaimed money is parked elsewhere", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       income(2_000)
       rate(holder("Groceries", priority: 1), 400)
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
 
       expect(presenter.in_checking).to eq(500)
-      expect(presenter.available - presenter.remaining_plan).to eq(1_600)
+      expect(presenter.total_claims).to eq(400)
       expect(presenter.free_to_spend).to eq(500)
       expect(presenter).to be_free_cap_bound
     end
 
-    # ARCHETYPE 3 (spec §9): free below zero, NEVER clamped. $150 in against a $400 rule — the plan
-    # asks for $250 more than exists, and the card has to say so.
+    # ARCHETYPE 3: free below zero, NEVER clamped (§4: a signal, not a refusal). $150 in against a
+    # $400 claim — the rules ask for $250 more than exists, and the card has to say so.
     it "states the gap rather than reporting nothing left", :aggregate_failures do
       income(150)
       rate(holder("Groceries", priority: 1), 400)
@@ -644,63 +300,69 @@ RSpec.describe HomePresenter do
       expect(presenter).not_to be_free_cap_bound
     end
 
-    # THE FIXTURE THE OLD BAND GOT WRONG (fix round 1 — MED-1), re-asked of the reader that
-    # replaces it. No holder categories at all, so nothing is short — the waterfall has no rows at
-    # all — while $100 of unbudgeted spending has drained the root. `projected_buffer` called that
-    # "-$100.00 still unclaimed"; free simply says -$100.00 is free, which is the honest sentence.
-    # (This read `expect(presenter).to be_covered` until Task 2 deleted that reader with the band
-    # whose headline branched on it; an empty waterfall is the same fact, said about rows.)
-    it "is negative for a period whose spending has drained the root", :aggregate_failures do
+    # THE PURE OVERSPEND. No rules at all, so nothing is claimed, while $100 of spending has taken the
+    # pot below zero. `free` is simply -$100.00 — the honest sentence, with no branch to get wrong.
+    it "is negative for a period whose spending has taken the pot under", :aggregate_failures do
       spend(create(:category, :expense, user: user, name: "Unbudgeted"), 100)
 
-      expect(presenter.waterfall).to be_empty
-      expect(presenter.remaining_plan).to eq(0)
+      expect(presenter.total_claims).to eq(0)
       expect(presenter.free_to_spend).to eq(-100)
     end
 
-    # ARCHETYPE 4 (spec §9): the physical overdraft. The pot is the smaller of the two here as well,
-    # so the cap is NOT what makes this negative — every dollar of income was allocated and then
-    # overspent. Both figures are pinned because the card colours them separately.
+    # ARCHETYPE 4: the physical overdraft, with a claim still standing beside it. PLANTED — $1,000 in,
+    # a $1,000-a-period rule, $600 spent on it: `claim = max(0, 1,000 − 600)` = **$400.00**, total
+    # money is `1,000 − 600` = **$400.00**, so `unclaimed` is $0.00 and `free = min(400, 0)` = $0.00.
+    # Spend $200 more and both go under together, which is the next example's job.
+    it "counts the spending against the claim as well as against the pot", :aggregate_failures do
+      income(1_000)
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 1_000)
+      spend(groceries, 600)
+
+      expect(presenter.in_checking).to eq(400)
+      expect(presenter.total_claims).to eq(400)
+      expect(presenter.free_to_spend).to eq(0)
+    end
+
+    # THE SAME SHAPE PAST THE END: $1,500 spent against a $1,000 rule. The claim clamps to $0.00 and
+    # the $500 excess reduces `free` directly (§3.1) rather than sitting anywhere — pot and free are
+    # both **−$500.00**, and a claim that had gone negative instead would read −$1,000 here.
     it "is negative beside a negative pot", :aggregate_failures do
       income(1_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 1_000)
-      allocate(groceries, 1_000)
       spend(groceries, 1_500)
 
       expect(presenter.in_checking).to eq(-500)
-      expect(presenter.available).to eq(0)
-      expect(presenter.remaining_plan).to eq(1_000)
-      expect(presenter.free_to_spend).to eq(-1_000)
+      expect(presenter.total_claims).to eq(0)
+      expect(presenter.free_to_spend).to eq(-500)
     end
   end
 
-  # ** WHICH KIND OF NEGATIVE (fix round 1 — MED-1). ** `#free_to_spend` goes below zero for two
-  # unrelated reasons and the card was telling both of them the same story. The three examples below
-  # are the three combinations that exist, and the third is the one that makes this a separate
-  # predicate rather than a synonym for `#free_cap_bound?`.
-  describe "#plan_outruns_the_money?" do
-    # THE REVIEWER'S MEASURED FIXTURE. $1,000 of income, $1,200 walked over to a savings account,
-    # and NOT ONE RULE — so the pot is -$200 while $1,000 is unspoken for. Nothing is set aside,
-    # nothing is spoken for, and the money is one transfer away: every part of "more is set aside or
-    # spoken for than you have" and "nothing is free until money comes in" was false here.
+  # ** WHICH KIND OF NEGATIVE. ** `#free_to_spend` goes below zero for two unrelated reasons and the
+  # card was telling both of them the same story. The four examples below are the combinations that
+  # exist, and the third is what makes this a separate predicate rather than a synonym for
+  # `#free_cap_bound?`.
+  describe "#claims_outrun_the_money?" do
+    # THE MEASURED FIXTURE. $1,000 of income, $1,200 walked over to a savings account, and NOT ONE
+    # RULE — total money is still $1,000 and nothing is claimed, so `unclaimed` is +$1,000 while the
+    # pot is −$200 and the CAP is what took free under. Nothing about this user's budget is wrong.
     it "is false when the money is simply in another account", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       income(1_000)
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_200, date: today, kind: :transfer)
 
       expect(presenter.in_checking).to eq(-200)
-      expect(presenter.available).to eq(1_000)
-      expect(presenter.remaining_plan).to eq(0)
+      expect(presenter.total_claims).to eq(0)
       expect(presenter.free_to_spend).to eq(-200)
       expect(presenter).to be_free_cap_bound
-      expect(presenter).not_to be_plan_outruns_the_money
+      expect(presenter).not_to be_claims_outrun_the_money
     end
 
-    # THE OTHER DIRECTION on the same fixture shape: $150 in, $300 spent with no rules to hold it,
-    # and a $400 rule still asking. The root is -$150 and the plan wants $400 more, so there is
-    # genuinely nothing anywhere — and the cap is NOT what made free negative.
-    it "is true when every account together is short of the plan", :aggregate_failures do
+    # THE OTHER DIRECTION: $150 in, $300 spent with no rule to claim it, and a $400 rule still
+    # claiming. Total money is `150 − 300` = −$150 and Σ claims is $400, so `unclaimed` is −$550 and
+    # `free = min(−150, −550)` is −$550 — genuinely nothing anywhere, and the cap is NOT what did it.
+    it "is true when every account together is short of the claims", :aggregate_failures do
       income(150)
       rate(holder("Groceries", priority: 1), 400)
       spend(create(:category, :expense, user: user, name: "Unbudgeted"), 300)
@@ -708,14 +370,14 @@ RSpec.describe HomePresenter do
       expect(presenter.in_checking).to eq(-150)
       expect(presenter.free_to_spend).to eq(-550)
       expect(presenter).not_to be_free_cap_bound
-      expect(presenter).to be_plan_outruns_the_money
+      expect(presenter).to be_claims_outrun_the_money
     end
 
-    # ** THE COMBINATION THAT FORBIDS SPELLING THIS AS `#free_cap_bound?`. ** A pot of -$500 against
-    # an unspoken-for -$100 is cap-bound AND genuinely out of money: $1,000 in, $1,500 moved to
-    # savings, and $1,100 of rules still asking. Both predicates are true, they are answering
-    # different questions, and a card that had used the cap as a proxy for the cause would print the
-    # money-is-elsewhere sentence at a user whose budget does not fit.
+    # ** THE COMBINATION THAT FORBIDS SPELLING THIS AS `#free_cap_bound?`. ** $1,000 in, $1,500 moved
+    # to savings and a $1,100 rule still claiming: total money $1,000, `unclaimed` −$100, pot −$500.
+    # The cap binds (−500 < −100) AND the claims outrun the money. Both predicates are true, they are
+    # answering different questions, and a card that used the cap as a proxy for the cause would tell
+    # this user their money is merely in the wrong account.
     it "is true even where the cap binds, because they are different questions", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       income(1_000)
@@ -723,20 +385,20 @@ RSpec.describe HomePresenter do
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
 
       expect(presenter.in_checking).to eq(-500)
-      expect(presenter.available - presenter.remaining_plan).to eq(-100)
+      expect(presenter.total_claims).to eq(1_100)
       expect(presenter).to be_free_cap_bound
-      expect(presenter).to be_plan_outruns_the_money
+      expect(presenter).to be_claims_outrun_the_money
     end
 
-    it "is false for a fresh user, whose plan asks for nothing at all" do
-      expect(presenter).not_to be_plan_outruns_the_money
+    it "is false for a fresh user, whose rules claim nothing at all" do
+      expect(presenter).not_to be_claims_outrun_the_money
     end
   end
 
   describe "#free_cap_bound?" do
-    # THE BOUNDARY THE `<` SITS ON. Money exactly equal to what the pot holds is not "parked
-    # somewhere else", so the subline must not fire: $1,000 in checking against $1,000 of
-    # unspoken-for money is one pile, and the card would be inventing a second.
+    # THE BOUNDARY THE `<` SITS ON. Money exactly equal to what the pot holds is not "parked somewhere
+    # else", so the subline must not fire: $1,000 in checking against $1,000 unclaimed is one pile,
+    # and the card would be inventing a second.
     it "is false when the two sides of the min are equal", :aggregate_failures do
       income(1_000)
 
@@ -745,45 +407,38 @@ RSpec.describe HomePresenter do
     end
   end
 
-  # ** THE THREE CAUSES THE SUBLINE ASSERTS (FINAL review — M-1). ** The signs of the two figures say
-  # WHICH WAY the arithmetic went and never WHY, and the cap's identity is where that bites:
+  # ** THE CAUSES THE SUBLINE ASSERTS. ** The signs of the two figures say WHICH WAY the arithmetic
+  # went and never WHY, and the cap's identity is where that bites:
   #
-  #     available − pot = net moves out of main + what the next distribution sweeps back − Σ holdings
+  #     unclaimed − pot  =  Σ other accounts  −  Σ claims
   #
-  # The card's cap-bound sentences attributed the whole difference to the FIRST term. These three
-  # predicates are the causes, each measured against a fixture that establishes it and one that does
-  # not — because the failure the whole plan exists to kill is a sentence that is true-sounding
-  # rather than one that is missing.
+  # Two terms where the allocation era had three. Each predicate below is measured against a fixture
+  # that establishes it and one that does not, because the failure this discipline exists to kill is
+  # a sentence that is true-SOUNDING rather than one that is missing.
   describe "the subline's causes" do
     describe "#money_parked_elsewhere?" do
-      # ** THE THIRD TERM ALONE IS ENOUGH TO BIND THE CAP, and this is the reviewer's worked fixture
-      # for it. ** $1,000 in, $900 into Groceries, $1,100 straight back out of Groceries: the holder
-      # is $200 overdrawn, so `available` ($100) sits $200 above the pot (-$100) with NOT ONE
-      # movement between accounts and no second account in existence. Every sign matches the
-      # money-is-in-savings fixture in `#plan_outruns_the_money?` above, and the cause is the
-      # opposite one — which is the whole of M-1.
-      #
-      # NO RULE ON GROCERIES, deliberately: a rule would ask for the money again the moment the
-      # balance went negative (`HoldingCalculator#allocated_balances` floors at it), `remaining_plan`
-      # would absorb the $100, and the state under test could not exist.
-      it "is false where the cap bound on an overspent category rather than on a transfer", :aggregate_failures do
+      # ** THE SINGLE-ACCOUNT CAP CORNER IS NOW STRUCTURALLY IMPOSSIBLE, and this is what says so. **
+      # The answers-first review's M-1 fixture lived in the identity's THIRD term (a category
+      # overdrawn by $200 made the root exceed the pot with no second account in existence). A claim
+      # can never be negative, so with one account `unclaimed − pot = −Σ claims ≤ 0` and the cap
+      # cannot bind at all. PLANTED at the same shape: $1,000 in, a $900 rate rule, $1,100 spent —
+      # `claim = max(0, 900 − 1,100)` = $0.00, pot and total money both −$100.
+      it "is false where a category was overspent on a single account", :aggregate_failures do
         groceries = holder("Groceries", priority: 1)
         income(1_000)
-        allocate(groceries, 900)
+        rate(groceries, 900)
         spend(groceries, 1_100)
 
-        expect([presenter.in_checking, presenter.available, presenter.remaining_plan]).to eq([-100, 100, 0])
+        expect([presenter.in_checking, presenter.total_claims]).to eq([-100, 0])
         expect(presenter.free_to_spend).to eq(-100)
-        expect(presenter).to be_free_cap_bound
-        expect(presenter).not_to be_plan_outruns_the_money
+        expect(presenter).not_to be_free_cap_bound
+        expect(presenter).to be_claims_outrun_the_money
         expect(presenter).not_to be_money_parked_elsewhere
       end
 
       # AN ACCOUNT THAT IS ITSELF BELOW ZERO IS NOT SOMEWHERE MONEY IS PARKED, which is why the
       # predicate is the TOTAL's sign and not `#other_accounts.any?`: Ally has walked $200 into
-      # checking and is $200 overdrawn, so it is a DEBT the strip names, not a place to transfer
-      # from. (An account holding exactly nothing never reaches the question — `#other_accounts`
-      # drops it as still awaiting funding.) The card has to agree with the accounts line below it.
+      # checking and is $200 overdrawn, so it is a DEBT the strip names, not a place to transfer from.
       it "is false for an account that is itself overdrawn", :aggregate_failures do
         ally = create(:pool, :account, user: user, name: "Ally")
         income(1_000)
@@ -804,69 +459,81 @@ RSpec.describe HomePresenter do
       end
     end
 
-    describe "#anything_set_aside_or_spoken_for?" do
-      # §10.7 #3'S PURE OVERSPEND: no rule asks for anything, no category holds anything, the root is
-      # simply below zero. `#plan_outruns_the_money?` is TRUE here and always was — the branch was
-      # right and the sentence was not.
+    # IT REPLACES `#anything_set_aside_or_spoken_for?`, whose two nouns were a HOLDING and a
+    # distribution's remaining ask. `Σ claims` is one figure the ledger has already computed for
+    # `free`, so this costs the card nothing it was not already paying.
+    describe "#anything_claimed?" do
+      # THE PURE OVERSPEND: no rule claims anything and the pot is simply below zero.
+      # `#claims_outrun_the_money?` is TRUE here — the branch was always right, and this is the
+      # predicate that keeps its sentence from naming something that does not exist.
       it "is false for an account that has only been spent past zero", :aggregate_failures do
         spend(create(:category, :expense, user: user, name: "Unbudgeted"), 100)
 
         expect(presenter.free_to_spend).to eq(-100)
-        expect(presenter).to be_plan_outruns_the_money
-        expect(presenter).not_to be_anything_set_aside_or_spoken_for
+        expect(presenter).to be_claims_outrun_the_money
+        expect(presenter).not_to be_anything_claimed
       end
 
-      it "is true while a rule is still asking for money" do
+      it "is true while a rule claims anything at all" do
         rate(holder("Groceries", priority: 1), 400)
 
-        expect(presenter).to be_anything_set_aside_or_spoken_for
+        expect(presenter).to be_anything_claimed
       end
 
-      # THE OTHER NOUN, AND THE REASON THE TEST IS NOT `Σ holdings`. Groceries holds $1,000 against no
-      # rule at all, so nothing is SPOKEN FOR and $1,000 is unmistakably SET ASIDE — while the root
-      # is $500 in the red from unbudgeted spending. The sentence names two things and either one is
-      # enough for it to be true.
-      it "is true for money that is held with nothing asking for it", :aggregate_failures do
+      # ** A RATE RULE SPENT FLAT CLAIMS NOTHING, and that is not a bug in this predicate. ** §3.1 is
+      # use-it-or-lose-it: the envelope has been used, so there is no money left for it to claim, and
+      # a card saying "more is claimed than you have" over it would be naming a claim of $0.00.
+      it "is false for a rate rule that has been spent to nothing", :aggregate_failures do
+        income(400)
         groceries = holder("Groceries", priority: 1)
-        income(1_000)
-        allocate(groceries, 1_000)
-        spend(create(:category, :expense, user: user, name: "Unbudgeted"), 500)
+        rate(groceries, 400)
+        spend(groceries, 400)
 
-        expect(presenter.remaining_plan).to eq(0)
-        expect(presenter).to be_plan_outruns_the_money
-        expect(presenter).to be_anything_set_aside_or_spoken_for
+        expect(presenter.total_claims).to eq(0)
+        expect(presenter).not_to be_anything_claimed
+      end
+
+      # THE ACCRUING SIDE, so the predicate is not a fact about rate rules alone. PLANTED: a $1,200
+      # goal fed by a single dated adjustment of $400 (§3.3) on a zero-amount target rule — its period
+      # accrues `min(rate 0, gap 1,200)` = $0 plus the $400 delta, capped at the target and with
+      # nothing spent, so `built_up` and the claim are **$400.00**.
+      it "is true for a fund built up out of set-asides alone", :aggregate_failures do
+        goal = savings_goal("Vacation", priority: 1, target: 1_200)
+        set_aside(goal_rule(goal), 400)
+
+        expect(presenter.total_claims).to eq(400)
+        expect(presenter).to be_anything_claimed
       end
     end
 
     describe "#rest_in_checking?" do
-      it "is true when the pot holds more than the unspoken-for money", :aggregate_failures do
+      it "is true when the pot holds more than the unclaimed money", :aggregate_failures do
         income(2_000)
         rate(holder("Groceries", priority: 1), 400)
 
         expect(presenter.free_to_spend).to eq(1_600)
         expect(presenter).to be_rest_in_checking
-        expect(presenter).to be_anything_set_aside_or_spoken_for
+        expect(presenter).to be_anything_claimed
       end
 
-      # ** IT SAYS A REST EXISTS AND NOTHING ABOUT WHAT IT IS (re-review round 2). ** `rest = Σ
-      # holdings + remaining_plan − moves out − swept` was read as a proof that a positive rest is
-      # covered by the two nouns, on the strength of both subtrahends being "≥ 0". `moves out` IS A
-      # NET: $200 walking out of an Ally that is $200 in the red raises the pot to $1,200 and leaves
-      # `available` at $1,000, so the rest is $200 with nothing held and nothing asked for. The arm
-      # asks BOTH predicates now, and this is the fixture that separates them.
-      it "is true for a rest that is neither set aside nor spoken for", :aggregate_failures do
+      # ** IT SAYS A REST EXISTS AND NOTHING ABOUT WHAT IT IS. ** `pot − free` is
+      # `Σ claims − Σ other accounts`, so with nothing claimed a positive rest is an OTHER ACCOUNT IN
+      # THE RED: $1,000 of income and $200 walked out of an Ally that is $200 overdrawn leaves the pot
+      # at $1,200 against $1,000 of total money. The arm asks BOTH predicates, and this is the fixture
+      # that separates them.
+      it "is true for a rest that nothing claims", :aggregate_failures do
         ally = create(:pool, :account, user: user, name: "Ally")
         income(1_000)
         create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
 
-        expect([presenter.in_checking, presenter.available, presenter.free_to_spend]).to eq([1_200, 1_000, 1_000])
+        expect([presenter.in_checking, presenter.free_to_spend]).to eq([1_200, 1_000])
         expect(presenter).to be_rest_in_checking
-        expect(presenter).not_to be_anything_set_aside_or_spoken_for
+        expect(presenter).not_to be_anything_claimed
       end
 
-      # ** L-4'S IDENTITY CORNER. ** The fresh signup: money in, nothing funded, nothing asked for, so
-      # free IS the pot to the cent and there is no rest for a sentence to be about. NOT the negation
-      # of `#free_cap_bound?` — both are false here, and that is the state that needs its own words.
+      # ** THE FRESH SIGNUP'S IDENTITY CORNER. ** Money in, nothing claimed, so free IS the pot to the
+      # cent and there is no rest for a sentence to be about. NOT the negation of `#free_cap_bound?` —
+      # both are false here, and that is the state that needs its own words.
       it "is false when free is the whole pot", :aggregate_failures do
         income(1_000)
 
@@ -890,9 +557,9 @@ RSpec.describe HomePresenter do
   end
 
   describe "#period_progress" do
-    # DAY X OF Y OFF `#period_range`, which is `User#period_containing` — the one window every
-    # other screen reads. `today` is the presenter's, planted, so nothing here depends on the day
-    # the suite runs (CLAUDE.md's third flake cause).
+    # DAY X OF Y OFF `#period_range`, which is `User#period_containing` — the one window every other
+    # screen reads. `today` is the presenter's, planted, so nothing here depends on the day the suite
+    # runs (CLAUDE.md's third flake cause).
     it "counts today into the declared period", :aggregate_failures do
       progress = described_class.new(user: user, today: Date.new(2026, 2, 12)).period_progress
 
@@ -913,8 +580,8 @@ RSpec.describe HomePresenter do
     end
 
     # Nil for a user who has declared no period, the same gate `#period_range` already applies:
-    # `User#period_containing` falls back to the calendar month, which is right for a normaliser and
-    # a lie on a card that would print a boundary nobody set.
+    # `User#period_containing` falls back to the calendar month, which is right for a normaliser and a
+    # lie on a card that would print a boundary nobody set.
     it "is nil before a period is declared" do
       user.update!(period_cadence: nil, period_anchor_date: nil)
 
@@ -922,12 +589,9 @@ RSpec.describe HomePresenter do
     end
   end
 
-  # THE HERO ADDS NO QUERY TO A SCREEN THAT HAS ALREADY DRAWN ITS ACCOUNTS AND ITS WATERFALL, which
-  # is the whole claim behind composing it out of readers the presenter already memoises: `pot` is
-  # `#balance_of` on the ledger the accounts band builds, and `remaining_plan` is a sum over the
-  # rows the attention band already holds. The house idiom (distribution_clock_spec,
-  # ledger_sharing_spec) — schema and transaction chatter excluded.
-  describe "the hero's query cost" do
+  # ** ONE `ClaimLedger` PER RENDER (computed-claims §3.3), PINNED BY STRICT EQUALITY. ** The house
+  # idiom (distribution_clock_spec, ledger_sharing_spec) — schema and transaction chatter excluded.
+  describe "the screen's query cost" do
     def count_statements(&block)
       statements = 0
       counter = lambda do |_name, _start, _finish, _id, payload|
@@ -935,271 +599,226 @@ RSpec.describe HomePresenter do
       end
       ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
       statements
+    end
+
+    # EVERYTHING A RENDERED HOME ASKS FOR, in the order the page asks it — the hero's own readers,
+    # then the three panels below it. Split in two because one method asking twelve questions of one
+    # object is past rubocop's ABC limit, not because the halves mean anything separately.
+    def read_the_screen
+      read_the_hero
+      read_screen_for(presenter)
     end
 
     def read_the_hero
-      presenter.in_checking
-      presenter.remaining_plan
-      presenter.free_to_spend
       presenter.free_cap_bound?
-      presenter.plan_outruns_the_money?
+      presenter.claims_outrun_the_money?
       presenter.rest_in_checking?
       presenter.money_parked_elsewhere?
-      presenter.anything_set_aside_or_spoken_for?
+      presenter.anything_claimed?
       presenter.period_progress
     end
 
-    # TWO STATEMENTS AND THEN NONE, and the shape of the pair is the whole point.
+    # ONE CATEGORY, `count` PER-PERIOD RATE RULES: the first names no item (the catch-all lane) and
+    # the rest name one each (the item lane), so BOTH of the claim ledger's two spending statements
+    # run at every size and the comparison is not measuring a lane appearing.
     #
-    # THE TWO ARE `AccountLedger#entry_side`'s income and expense SUMs — the pot's own term, which
-    # that class does not memoise (its movement totals it does, and the warm-up above pays those).
-    # MEASURED, NOT REASONED ABOUT: this read SIX before `#in_checking` was memoised, because the
-    # card asks for the pot three times over — the figure, the `min`, and the cap predicate — and
-    # each ask ran both sums again.
-    #
-    # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: every figure on this card is composed from
+    # PER-PERIOD AND NOT DATED, deliberately: `Budget.steady_need` — which the :structural trouble
+    # reads — builds a `BudgetCalculator` per ONE-OFF rule and runs a SUM inside it, which is a
+    # per-rule cost this task did not introduce and cannot fix from here. A per-period rule's
+    # `#steady_ask` is its own amount, so the pin measures what it is about.
+    def rules_on_one_category(count)
+      category = holder("Pet Care", priority: 1)
+      rate(category, 400)
+      (count - 1).times { |n| create(:budget, :per_period_rate, category: category, amount: 50, item: lane(category, "Lane #{n}")) }
+      category
+    end
+
+    # ** 1-vs-N: SIX RULES COST EXACTLY WHAT TWO COST. ** Same categories, same accounts, same
+    # spending — so any difference at all is PER-RULE, which is what a second `ClaimLedger`, or a
+    # calculator built inside a row, would produce. Strict equality, not "no more than": a pin that
+    # allowed slack would not notice the ledger being rebuilt once per rule.
+    def cost_of(count)
+      Category.find_by(name: "Pet Care")&.destroy!
+      rules_on_one_category(count)
+      count_statements { read_screen_for(described_class.new(user: user, today: today)) }
+    end
+
+    it "costs the same for six rules on one category as for two", :aggregate_failures do
+      income(2_000)
+
+      expect(cost_of(6)).to eq(cost_of(2))
+      expect(Budget.for_user(user).count).to eq(2)
+    end
+
+    def read_screen_for(other)
+      other.in_checking
+      other.free_to_spend
+      other.period_rows
+      other.unbudgeted_rows
+      other.troubles
+      other.uncovered_claims
+    end
+
+    # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: every figure on this screen is composed from
     # readers the presenter already holds, so once anything has been read, reading all of it costs
     # nothing. A reader added here that opened a ledger of its own would fail this and not the first.
-    it "costs two statements for the pot and nothing at all thereafter", :aggregate_failures do
+    it "reads the whole screen a second time for nothing at all", :aggregate_failures do
       income(2_000)
-      rate(holder("Groceries", priority: 1), 400)
-      presenter.accounts.each { |account| presenter.balance_of(account) }
-      presenter.waterfall
-      presenter.available
-
-      expect(count_statements { read_the_hero }).to eq(2)
-      expect(count_statements { read_the_hero }).to eq(0)
-    end
-
-    # ** WHAT M-1's `#anything_set_aside_or_spoken_for?` COSTS, MEASURED RATHER THAN ASSERTED SAFE. **
-    # The example above never reaches it: a rule that still asks makes `#remaining_plan` positive and
-    # the disjunction short-circuits before the ledger is opened. THIS fixture is the other side — a
-    # holder with $400 in it and no rule asking for anything — so the card has to ask what the
-    # category is holding.
-    #
-    # WHICH IS NOW THE COMMON PATH AS WELL AS THE NEGATIVE ONE (re-review round 2): the "the rest…"
-    # arm asks the same predicate, so a rendered Home reaches it in every state but the one where a
-    # rule is still asking. Both counts below are what that costs; neither moved when the arm gained
-    # the gate, because the ledger was already shared.
-    #
-    # SIX, AND EACH ONE IS NAMED. Two are the pot's, exactly as above (`AccountLedger#entry_side`'s
-    # income and expense sums). The other four are `CategoryLedger`'s whole term set, computed on the
-    # first `#terms_for` and memoised: the grouped expense sum, the two grouped allocation sums
-    # (in and out), and the funded-on MAX that rides along with them.
-    #
-    # THE SECOND COUNT IS THE CLAIM THAT MATTERS: it is the SAME ledger every holding status on this
-    # screen is built from (`#status_for` → `CategoryLedger#terms_for`), memoised per term, so
-    # whichever reader reaches it first pays and every one after it reads free. The card adds a query
-    # to itself, not to the page.
-    it "pays for the purpose ledger once, and every status below it then reads free", :aggregate_failures do
       groceries = holder("Groceries", priority: 1)
-      income(1_000)
-      allocate(groceries, 400)
-      presenter.accounts.each { |account| presenter.balance_of(account) }
-      presenter.categories
-      presenter.waterfall
-      presenter.available
-
-      expect(presenter.remaining_plan).to eq(0)
-      expect(count_statements { read_the_hero }).to eq(6)
-      expect(count_statements { presenter.categories.each { |c| presenter.status_for(c) } }).to eq(0)
-    end
-
-    # THE THIRD DIRECTION: a user with NO holders at all reaches the same answer without opening
-    # anything. The `any?` runs over an empty array — the fresh-signup state the card renders for
-    # first, which must not pay for a purpose ledger it has no rows to read out of.
-    it "asks the purpose ledger nothing for a user with no holders", :aggregate_failures do
-      income(2_000)
-      presenter.accounts.each { |account| presenter.balance_of(account) }
-      presenter.waterfall
-      presenter.available
-      presenter.categories
-
-      expect(count_statements { read_the_hero }).to eq(2)
-      expect(presenter).not_to be_anything_set_aside_or_spoken_for
-    end
-  end
-
-  # THE "THIS PERIOD" SECTION'S QUERY COST, on the hero pin's own idiom (distribution_clock_spec,
-  # ledger_sharing_spec) — schema and transaction chatter excluded.
-  #
-  # IT IS PINNED BECAUSE THE SECTION IS THE ONE PART OF THIS SCREEN THAT ADDS QUERIES. Every other
-  # reader Task 2 introduced composes something already memoised; `spent this period` could not,
-  # because no reader anywhere splits a category's spending by period (see
-  # `#holder_spending_this_period`). The count below is the honest price of that, stated rather than
-  # left to be discovered.
-  describe "the This-period section's query cost" do
-    def count_statements(&block)
-      statements = 0
-      counter = lambda do |_name, _start, _finish, _id, payload|
-        statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/)
-      end
-      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
-      statements
-    end
-
-    def read_the_section
-      presenter.period_rows
-      presenter.unbudgeted_rows
-    end
-
-    # EVERYTHING THE REST OF THE SCREEN HAS ALREADY READ by the time this section renders: the
-    # ledger's grouped terms and each category's status (the trouble strip above), the distribution
-    # clock's one timestamp, and the proposal's rows.
-    def warm_the_rest_of_the_screen
-      presenter.categories.each do |category|
-        presenter.status_for(category).state
-        presenter.changed_after_distributing?(category)
-      end
-      presenter.waterfall
-      presenter.available
-    end
-
-    def budgeted_row_with_spending
-      holder("Groceries", priority: 1).tap do |category|
-        rate(category, 400)
-        spend(category, 310)
-      end
-    end
-
-    # THREE, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
-    #
-    #   1. `#holder_spending_this_period` — ONE grouped sum over `CategoryLedger::ENTRY_CATEGORY_ID`
-    #      for every budgeted row on the screen, not one per row.
-    #   2. `#unbudgeted_spending_this_period` — the same expression read for its NULL answer, which
-    #      is the other half of the same partition.
-    #   3. `#unbudgeted_rows`' name-ordered fetch of the category records those ids name. It is the
-    #      CONDITIONAL one — see the example below, which is what makes this count three rather than
-    #      a magic number.
-    #
-    # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: all three are memoised, so a re-render of the
-    # section costs nothing, and a reader added here that opened a ledger or a calculator of its own
-    # would fail this and not the first.
-    it "costs three statements and then nothing at all", :aggregate_failures do
-      income(2_000)
-      budgeted_row_with_spending
+      rate(groceries, 400)
+      spend(groceries, 310)
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
-      warm_the_rest_of_the_screen
 
-      expect(count_statements { read_the_section }).to eq(3)
-      expect(count_statements { read_the_section }).to eq(0)
-      expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Subscriptions"])
+      expect(count_statements { read_the_screen }).to be_positive
+      expect(count_statements { read_the_screen }).to eq(0)
     end
 
-    # THE THIRD STATEMENT IS THE UNBUDGETED FETCH, and this is what says so: the same warm-up and the
-    # same section over a screen with nothing unbudgeted spent on it costs TWO, because
-    # `#unbudgeted_rows` returns without querying for records nothing named.
-    it "costs two when nothing unbudgeted was spent this period", :aggregate_failures do
+    # NINETEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
+    #
+    #    1-2. `AccountLedger#entry_side`'s income and expense SUMs — the pot's own term, memoised in
+    #         that class as of this task (it ran three times over before, once for the hero's figure,
+    #         once inside `#total_money` and once for the overdraft walk).
+    #    3-4. its two grouped movement sums, in and out.
+    #      5. `ClaimLedger#total_money`'s fetch of the user's accounts.
+    #      6. `ClaimLedger#rules` — every rule the user owns …
+    #    7-8. … and its `:item, category: :user` preload, one statement each.
+    #      9. the claim ledger's CATCH-ALL spending lane. (The ITEM lane is absent here: no rule on
+    #         this fixture names one, and the ledger does not query for an empty id list.)
+    #     10. its adjustment lane.
+    #     11. `#accounts` — the user's accounts by name, for the accounts line and the overdraft walk.
+    #     12. `#categories` — the holders in fill order …
+    #     13. … and its `:budgets` preload.
+    #     14. `#holder_spending_this_period` — ONE grouped sum for every row on the screen.
+    #     15. `#unbudgeted_spending_this_period` — the same expression read for its NULL answer.
+    #     16. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
+    #  17-19. `Budget.steady_need` and its own preload, for the :structural trouble.
+    it "costs nineteen statements for a whole render" do
       income(2_000)
-      budgeted_row_with_spending
-      warm_the_rest_of_the_screen
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      spend(groceries, 310)
+      spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
 
-      # AFTER the counts, deliberately: asking first would memoise the very fetch this example is
-      # about, and the count would fall to one for a reason that has nothing to do with the design.
-      expect(count_statements { read_the_section }).to eq(2)
-      expect(count_statements { read_the_section }).to eq(0)
-      expect(presenter.unbudgeted_rows).to be_empty
+      expect(count_statements { read_the_screen }).to eq(19)
+    end
+
+    # THE UNBUDGETED FETCH IS CONDITIONAL, and this is what says so: the same screen with nothing
+    # unbudgeted spent on it costs one fewer, because `#unbudgeted_rows` returns without querying for
+    # records nothing named.
+    it "costs one fewer when nothing unbudgeted was spent this period" do
+      income(2_000)
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      spend(groceries, 310)
+
+      expect(count_statements { read_the_screen }).to eq(18)
     end
   end
 
-  describe "#attention_categories" do
-    it "returns only categories whose status needs attention" do
-      quiet = holder("Groceries", priority: 1)
-      rate(quiet, 100)
-      allocate(quiet, 100)
-
-      bill(holder("Dentist", priority: 2), amount: 300, due: Date.new(2026, 2, 14))
-
-      expect(presenter.attention_categories.map(&:name)).to eq(["Dentist"])
-    end
-
-    it "lists them by priority, then name" do
-      # Created in the reverse of the expected order, so insertion order alone cannot produce the
-      # answer: `Category.in_fill_order` is what puts them right.
-      [["Zoo", 2], ["Apples", 2], ["Urgent", 1]].each do |name, priority|
-        bill(holder(name, priority: priority), amount: 300, due: Date.new(2026, 2, 14))
-      end
-
-      expect(presenter.attention_categories.map(&:name)).to eq(["Urgent", "Apples", "Zoo"])
-    end
-
-    # ── DELETED (Task 6): an overdrawn ACCOUNT is no longer one of these, and it never was one of
-    # these — it reached the attention band through `home/_attention`'s own `overdrawn_accounts`
-    # term, which is gone. The fix beside a problem row is an ALLOCATION, and an allocation cannot
-    # touch the physical ledger, so offering one against a bank overdraft would propose a mistake to
-    # fix a problem it cannot reach. `#overdrawn_accounts` still reports the debt; only the button
-    # went away.
-  end
-
-  # ── "THIS PERIOD" (answers-first spec §4) ──────────────────────────────────────────────────────
+  # ── "THIS PERIOD" (answers-first §4, computed-claims §3.4) ────────────────────────────────────
   #
   # The bars themselves are pinned in `spec/system/home/this_period_spec.rb`, on the screen. What is
   # here is what a browser cannot reach cheaply: the WINDOW both directions, the partition between a
-  # budgeted row and an unbudgeted one, and the sort key.
+  # budgeted row and an unbudgeted one, the per-rule lines, and the sort key.
   describe "#period_rows" do
     # THE WINDOW, BOTH DIRECTIONS, ON ONE CATEGORY. The period containing Feb 6 on a biweekly cadence
-    # anchored Feb 6 is Feb 6–19, so the Feb 10 receipt is inside it and the Feb 2 one is not — while
-    # BOTH drain the category's holding, which is exactly why "spent this period" cannot be read off
-    # `HoldingCalculator#balance`.
+    # anchored Feb 6 is Feb 6–19, so the Feb 10 receipt is inside it and the Feb 2 one is not — and a
+    # rate claim counts THIS period alone (§3.1), which is why the line reads $310 and not $360.
     it "counts the spending inside this period and no other", :aggregate_failures do
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 400)
-      allocate(groceries, 400)
       spend(groceries, 310, on: Date.new(2026, 2, 10))
       spend(groceries, 50, on: Date.new(2026, 2, 2))
 
-      row = presenter.period_rows.sole
+      line = presenter.period_rows.sole.lines.sole
 
-      expect(row.spent).to eq(310)
-      expect(row.planned).to eq(400)
-      # The cumulative reading, asserted absent — and asserted to be genuinely different on this
-      # fixture, so the first expectation is pinning the window rather than passing by coincidence.
-      expect(groceries.holding_calculator(today: today).balance).to eq(40)
+      expect(line.spent).to eq(310)
+      expect(line.accrued).to eq(400)
+      expect(line.claim).to eq(90)
     end
 
-    # THE PLAN IS THE PER-PERIOD NORMALISER, not the sticker price: `Budget#steady_ask` turns a
-    # $600-a-month rule into $276.92 of a biweekly period (26 periods a year against 12 months), and
-    # a bar denominated in the monthly figure would draw a full envelope as under half of one.
-    # Pinned to the literal, so a denominator that reverted to `amount` fails rather than agreeing
-    # with whatever the normaliser happens to return.
-    it "denominates a monthly rule in what it claims from one period", :aggregate_failures do
+    # THE DENOMINATOR IS THE PER-PERIOD NORMALISER, not the sticker price: `Budget#steady_ask` turns a
+    # $600-a-month rule into $276.92 of a biweekly period (26 periods a year against 12 months). This
+    # rule has an anchor, so it takes §3.2's catch-up formula instead — and the figure the row prints
+    # is the TARGET, which for a dated rule is the bill itself.
+    it "measures a dated rule against the bill and not against a period's share", :aggregate_failures do
       rent = holder("Rent", priority: 1)
-      create(:budget, category: rent, amount: 600, interval_months: 1, anchor_date: Date.new(2026, 3, 1))
+      rolling(rent, amount: 600, anchor: Date.new(2026, 3, 1))
+      line = presenter.period_rows.sole.lines.sole
 
-      expect(presenter.period_rows.sole.planned).to eq(276.92)
-      expect(presenter.period_rows.sole.planned).not_to eq(600)
+      expect(line).not_to be_rate
+      expect(line.target).to eq(600)
+      expect(line.next_due_on).to eq(Date.new(2026, 3, 1))
     end
 
-    # A GOAL MEASURES AGAINST ITS TARGET (spec §4: "savings goals keep their target bars"), and
-    # #filled is its HOLDING rather than its spending — which is what keeps the row from reading as
-    # money to spend.
-    it "measures a goal against its target and fills the bar with what it holds", :aggregate_failures do
+    # A GOAL MEASURES AGAINST ITS TARGET (§3.4), and #filled is what it has BUILT UP rather than its
+    # spending — which is what keeps the row from reading as money to spend. PLANTED: a $2,400 goal on
+    # a zero-amount rule with a single $424 set-aside (§3.3), so `built_up` is $424.00 and the bar is
+    # `round(424 / 2,400 × 100)` = **18%**.
+    it "measures a goal against its target and fills the bar with what it has built up", :aggregate_failures do
       goal = savings_goal("Vacation", priority: 1, target: 2_400)
-      allocate(goal, 424)
+      set_aside(goal_rule(goal), 424)
+      line = presenter.period_rows.sole.lines.sole
 
-      row = presenter.period_rows.sole
-
-      expect(row).to be_goal
-      expect(row.planned).to eq(2_400)
-      expect(row.filled).to eq(424)
-      expect(row.percent).to eq(18)
+      expect(line).not_to be_rate
+      expect(line.target).to eq(2_400)
+      expect(line.filled).to eq(424)
+      expect(line.percent).to eq(18)
     end
 
-    # TROUBLE FIRST, THEN FILL ORDER. Three categories in fill order 1-2-3 with the LAST in trouble:
+    # ** A ROW PER CATEGORY, A LINE PER RULE — THE RULING (see HomePresenter::PeriodRow). ** A rate
+    # rule beside an item-backed bill cannot honestly print one figure: `spent of rate` and `built up
+    # of target` are denominated in different things and summing them would state a number that is
+    # true of neither. PLANTED: $400 rate with $150 spent on an UN-ruled item → claim $250; a $600
+    # bill on the Vet item, accruing since Jan 2025 against a Feb 14 2026 due date. The due date sits
+    # INSIDE the current period, so §3.2's `periods_left` is 1 there and the catch-up formula closes
+    # the gap exactly — `built_up` is the whole **$600.00**. The two lanes partition (§3.1), which is
+    # why the rate rule's spending is $150 and not $150 plus whatever the bill's item took.
+    it "gives a category with two rules one line each", :aggregate_failures do
+      pet_care = holder("Pet Care", priority: 1)
+      rate(pet_care, 400)
+      bill(pet_care, amount: 600, due: Date.new(2026, 2, 14), item: lane(pet_care, "Vet"))
+      spend(pet_care, 150)
+
+      lines = presenter.period_rows.sole.lines
+
+      expect(lines.map(&:shape)).to eq([:rate, :dated])
+      expect(lines.first.spent).to eq(150)
+      expect(lines.first.claim).to eq(250)
+      expect(lines.second.built_up).to eq(600)
+      expect(presenter.total_claims).to eq(850)
+    end
+
+    # TROUBLE FIRST, THEN PRIORITY. Three categories in priority order 1-2-3 with the LAST in trouble:
     # both halves are asserted at once, because either alone passes against a list that was simply
-    # reversed.
-    it "sorts trouble first and keeps fill order behind it" do
+    # reversed. PLANTED: $80 spent against a $50 rate is over by $30 (§3.1).
+    it "sorts trouble first and keeps priority order behind it" do
       rate(holder("Rent", priority: 1), 400)
       rate(holder("Groceries", priority: 2), 400)
-      spend(holder("Dining Out", priority: 3), 80)
+      dining = holder("Dining Out", priority: 3)
+      rate(dining, 50)
+      spend(dining, 80)
 
       expect(presenter.period_rows.map { |row| row.category.name }).to eq(["Dining Out", "Rent", "Groceries"])
+    end
+
+    # A HOLDER WITH NO RULE STATES ITS SPENDING AND NOTHING ELSE, and one with neither is absent —
+    # `spent $0.00` under a name is a row that reports nothing.
+    it "keeps a rule-less holder only while it has spending", :aggregate_failures do
+      spend(holder("Car Repairs", priority: 1), 45)
+      holder("Someday Fund", priority: 2)
+
+      rows = presenter.period_rows
+
+      expect(rows.map { |row| row.category.name }).to eq(["Car Repairs"])
+      expect(rows.sole.lines).to be_empty
+      expect(rows.sole.spent).to eq(45)
     end
   end
 
   describe "#unbudgeted_rows" do
-    # ZERO-SPEND ROWS ARE ABSENT BY CONSTRUCTION — they never appear in the grouped sum — which is
-    # the rule stated as a query rather than as a filter somebody could forget.
+    # ZERO-SPEND ROWS ARE ABSENT BY CONSTRUCTION — they never appear in the grouped sum — which is the
+    # rule stated as a query rather than as a filter somebody could forget.
     it "lists only the unbudgeted categories with spending in this period", :aggregate_failures do
       spender = create(:category, :expense, user: user, name: "Subscriptions")
       create(:entry, item: create(:item, category: spender), amount: 32, date: today)
@@ -1212,9 +831,9 @@ RSpec.describe HomePresenter do
     end
 
     # ** THE PARTITION'S ONE HARD EDGE. ** A category funded PART-WAY THROUGH this period drains
-    # available for the receipts dated before its `funded_since` and itself for the ones after — so
-    # the same category appears on both sides of `ENTRY_CATEGORY_ID`. It belongs in the budgeted list
-    # with its bar, once; its pre-funding spending is available's, which the hero's figures carry.
+    # nothing for the receipts dated before its `funded_since` and itself for the ones after — so the
+    # same category appears on both sides of `ENTRY_CATEGORY_ID`. It belongs in the budgeted list with
+    # its bar, once; its pre-funding spending is nobody's claim.
     it "never lists a budgeted category as unbudgeted as well", :aggregate_failures do
       groceries = holder("Groceries", priority: 1, funded_since: Date.new(2026, 2, 8))
       rate(groceries, 400)
@@ -1222,62 +841,177 @@ RSpec.describe HomePresenter do
       spend(groceries, 30, on: Date.new(2026, 2, 9))
 
       expect(presenter.unbudgeted_rows).to be_empty
-      # And the bar counts only what the category itself drained, on the ledger's own rule.
-      expect(presenter.period_rows.sole.spent).to eq(30)
+      expect(presenter.period_rows.sole.lines.sole.spent).to eq(30)
     end
   end
 
   describe "#troubles" do
     # EACH KIND FROM AN EXISTING READER, and the list is what the strip renders from — so a trigger
     # added to the presenter and forgotten in the view, or the reverse, shows up here as a count.
+    #
+    # PLANTED, four kinds on one screen: Ally has walked $200 into checking and is $200 overdrawn
+    # (:overdraft); a $3,000-a-period rule against $1,000 of money leaves `unclaimed` at −$2,000
+    # (:shortfall, and it also makes the rules exceed the $2,400 declared income → :structural); and
+    # $80 spent against a $50 rate is over by $30 (:over).
+    def overspend(name, rate_amount, spent)
+      holder(name, priority: 2).tap do |category|
+        rate(category, rate_amount)
+        spend(category, spent)
+      end
+    end
+
     it "types each trigger and orders them money-gone-first", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
-      income(1_000)
-      bill(holder("Dentist", priority: 1), amount: 300, due: Date.new(2026, 2, 14))
+      income(800)
+      rate(holder("Rent", priority: 1), 3_000)
+      overspend("Dining Out", 50, 80)
 
-      expect(presenter.troubles.map(&:kind)).to eq([:overdraft, :category, :undistributed])
+      expect(presenter.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :structural])
       expect(presenter.troubles.first.subject).to eq(ally)
-      expect(presenter.troubles.second.subject.name).to eq("Dentist")
+      expect(presenter.troubles.third.subject.category.name).to eq("Dining Out")
       expect(presenter).to be_trouble
+    end
+
+    # AN OVERDUE BILL IS A DATE PAST **AND** A FUND SHORT (§3.2). PLANTED: a $600 bill anchored Jan 2
+    # 2026 on a category funded and ruled since Jan 2025 — the catch-up formula fills it long before
+    # the date arrives, so with nothing spent it is WHOLE and waiting to be PAID, which is not
+    # trouble. Spend $200 of it inside this period and `raw = 600 − 200` leaves $400 against a date
+    # that has passed, which is.
+    it "fires the overdue trigger only where the fund is short", :aggregate_failures do
+      income(2_000)
+      utilities = holder("Utilities", priority: 1)
+      rolling(utilities, amount: 600, anchor: Date.new(2026, 1, 2), every: 6)
+
+      expect(presenter.troubles.map(&:kind)).to eq([])
+
+      spend(utilities, 200)
+      fresh = described_class.new(user: user, today: today)
+
+      expect(fresh.troubles.map(&:kind)).to eq([:overdue])
+      expect(fresh.troubles.sole.subject.built_up).to eq(400)
     end
 
     # MAIN'S OVERDRAFT IS THE HERO'S RED FIGURE, so the strip must not repeat it: printing the same
     # debt twice with two different sentences about what counts it is worse than printing it once.
+    # (`free` is −$400 here too, so the :shortfall arm IS true — which is the point of asserting the
+    # whole list rather than just the absence of :overdraft.)
     it "leaves main's own overdraft out of the list", :aggregate_failures do
       spend(create(:category, :expense, user: user, name: "Overspend"), 400)
 
       expect(presenter.in_checking).to eq(-400)
-      expect(presenter.troubles.map(&:kind)).to eq([])
-      expect(presenter).not_to be_trouble
+      expect(presenter.troubles.map(&:kind)).to eq([:shortfall])
     end
 
-    # A USER WITH NOTHING TO DISTRIBUTE IS NOT IN TROUBLE. Every fresh account has an undistributed
-    # period by definition, and a strip that fired on it would greet every new user with a demand
-    # they cannot act on.
-    it "asks nothing of a user whose rules ask for nothing", :aggregate_failures do
-      income(1_000)
+    # SILENCE IS THE GOOD STATE (answers-first §5). $400 in against a $400 claim leaves free at
+    # exactly zero, which is not negative, so nothing at all is true.
+    it "asks nothing of a user whose claims fit", :aggregate_failures do
+      income(400)
+      rate(holder("Groceries", priority: 1), 400)
 
-      expect(presenter.waterfall).to be_empty
-      expect(presenter).not_to be_undistributed_period
+      expect(presenter.free_to_spend).to eq(0)
+      expect(presenter.troubles).to be_empty
       expect(presenter).not_to be_trouble
-    end
-
-    # THE OTHER DIRECTION OF THE SAME TRIGGER: one `Allocation.distributed` row inside the window and
-    # the clock reports the period handed out. Read through `DistributionClock` rather than a second
-    # `Allocation.distributed` query of this class's own.
-    it "falls silent on the distribute trigger once this period has been distributed", :aggregate_failures do
-      income(1_000)
-      groceries = holder("Groceries", priority: 1)
-      rate(groceries, 400)
-      allocate(groceries, 400)
-
-      expect(presenter.waterfall).to be_empty
-      expect(DistributionClock.new(user: user, today: today)).to be_distributed_this_period
     end
   end
 
-  # ── THE ACCOUNTS LINE (answers-first spec §6) ──────────────────────────────────────────────────
+  # ── FREE BELOW ZERO — THE SIGNAL (computed-claims §4) ──────────────────────────────────────────
+  describe "#uncovered_claims" do
+    # ** THE GIVE-WAY WALK, AND THE SPLIT IS WHAT MAKES IT A WALK. ** PLANTED, every figure from §3.1:
+    #   Rent      priority 1, $1,000 a period, nothing spent → claim $1,000.00
+    #   Groceries priority 2,   $400 a period, nothing spent → claim   $400.00
+    #   Fun       priority 3,   $200 a period, nothing spent → claim   $200.00
+    #   Σ claims $1,600.00 against $1,340 of money → `unclaimed` −$260.00, so the shortfall is $260.
+    #
+    # REVERSE PRIORITY: Fun gives way first and gives its whole $200; $60 is left, so GROCERIES IS
+    # SPLIT at $60 of its $400 and RENT — first in priority — is never reached.
+    it "walks the claims in reverse priority until the shortfall is absorbed", :aggregate_failures do
+      income(1_340)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+      rate(holder("Fun", priority: 3), 200)
+
+      expect(presenter.shortfall).to eq(260)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] })
+        .to eq([["Fun", 200], ["Groceries", 60]])
+      expect(presenter.uncovered_claims.map(&:whole?)).to eq([true, false])
+    end
+
+    # THE OTHER DIRECTION: nothing is uncovered when the claims fit, and the list is empty rather than
+    # full of zeroes.
+    it "is empty while free is not negative" do
+      income(1_800)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+
+      expect(presenter.uncovered_claims).to be_empty
+    end
+
+    # A CLAIM OF ZERO IS SKIPPED rather than listed as covered: a rate rule spent flat claims nothing,
+    # and a row saying "$0.00 of it is uncovered" reports nothing. PLANTED: Fun's $200 rate is spent
+    # flat, so its claim is `max(0, 200 − 200)` = $0.00 and Σ claims is $1,400. The $200 left checking
+    # too, so total money is `1,340 − 200` = $1,140, `unclaimed` is −$260.00 and the shortfall is the
+    # same **$260.00** as the example above — the walk passes over Fun and takes all of it out of
+    # Groceries.
+    it "passes over a rule that claims nothing", :aggregate_failures do
+      income(1_340)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+      fun = holder("Fun", priority: 3)
+      rate(fun, 200)
+      spend(fun, 200)
+
+      expect(presenter.shortfall).to eq(260)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] }).to eq([["Groceries", 260]])
+    end
+  end
+
+  describe "#per_day_pace" do
+    # `shortfall ÷ days left`, and the days come from `Progress#days_left` — `User#period_containing`,
+    # the one reader that owns this calendar. PLANTED: $260 short on Feb 6, day 1 of the Feb 6–19
+    # period, so 13 days remain and `260 ÷ 13` = **$20.00**.
+    it "spreads the shortfall over the days that are left" do
+      income(1_340)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+      rate(holder("Fun", priority: 3), 200)
+
+      expect(presenter.per_day_pace).to eq(20)
+    end
+
+    # ** THE CLOSING DAY, WHERE `days_left` IS ZERO. ** The floor at one is the day the user is
+    # standing in rather than a guard against a bad number — dividing by zero would raise on the one
+    # afternoon the sentence matters most. Feb 19 is day 14 of 14, so the whole $260 lands on today.
+    it "puts the whole shortfall on today when the period closes today" do
+      income(1_340)
+      rate(holder("Rent", priority: 1), 1_000)
+      rate(holder("Groceries", priority: 2), 400)
+      rate(holder("Fun", priority: 3), 200)
+
+      expect(described_class.new(user: user, today: Date.new(2026, 2, 19)).per_day_pace).to eq(260)
+    end
+
+    it "is nil while free is not negative" do
+      income(2_000)
+      rate(holder("Groceries", priority: 1), 400)
+
+      expect(presenter.per_day_pace).to be_nil
+    end
+
+    # NO DECLARED PERIOD, NO PACE — there is no "rest of the period" to spread a shortfall over, and
+    # inventing a calendar month would state a boundary nobody set.
+    it "is nil before a period is declared", :aggregate_failures do
+      user.update!(period_cadence: nil, period_anchor_date: nil)
+      income(150)
+      rate(holder("Groceries", priority: 1), 400)
+      fresh = described_class.new(user: user, today: today)
+
+      expect(fresh.shortfall).to eq(250)
+      expect(fresh.per_day_pace).to be_nil
+    end
+  end
+
+  # ── THE ACCOUNTS LINE (answers-first §6) ──────────────────────────────────────────────────────
   describe "#other_accounts" do
     # MAIN IS OUT OF THE FIGURE because its balance IS the hero's "In Checking" number; an onboarding
     # account is out because its card renders top-level, and a figure in the line for a card sitting
@@ -1296,128 +1030,6 @@ RSpec.describe HomePresenter do
     end
   end
 
-  describe "#fix_for" do
-    # THE DESTINATION EVERY EXAMPLE HERE IS ABOUT: $300 due Feb 14, inside the current period
-    # (Feb 6–19), with no boundary left between tomorrow and the due date — so it is :wont_make_it
-    # and its funding gap is the whole $300.
-    def dentist
-      @dentist ||= holder("Dentist", priority: 2).tap do |category|
-        bill(category, amount: 300, due: Date.new(2026, 2, 14))
-      end
-    end
-
-    it "offers AVAILABLE first, because idle money costs nothing to move", :aggregate_failures do
-      # Rent takes the whole root in the waterfall, so Dentist is genuinely short — and the $500 is
-      # nonetheless sitting unclaimed RIGHT NOW, which is what the reallocation screen would show.
-      rate(holder("Rent", priority: 1), 500)
-      dentist
-      income(500)
-
-      fix = presenter.fix_for(dentist)
-
-      expect(presenter.status_for(dentist).state).to eq(:wont_make_it)
-      expect(fix.amount).to eq(300)
-      expect(fix.source.name).to eq("Available")
-      expect(fix.source.id).to eq("available")
-    end
-
-    # A CATEGORY IS A SOURCE, and the gate is `free_amount` — holding less what every rule holds —
-    # rather than the balance the reallocation screen allows a USER to move against. Two thresholds
-    # for two different acts: there the app STATES the damage, here the app is PROPOSING, so it must
-    # not propose robbing a category that is counting on the money.
-    it "falls through to a holder with free money when available has none", :aggregate_failures do
-      rent = holder("Rent", priority: 1)
-      rate(rent, 500)
-      allocate(rent, 800)
-      dentist
-      income(800)
-
-      fix = presenter.fix_for(dentist)
-
-      expect(presenter.available).to eq(0)
-      expect(fix.source.name).to eq("Rent")
-      expect(fix.candidate.damage.balance_before).to eq(800)
-      expect(fix.candidate.damage.balance_after).to eq(500)
-    end
-
-    it "offers no source when nothing has that much spare", :aggregate_failures do
-      rent = holder("Rent", priority: 1)
-      rate(rent, 500)
-      allocate(rent, 500)
-      dentist
-      income(500)
-
-      fix = presenter.fix_for(dentist)
-
-      expect(fix.needs_money?).to be(true)
-      expect(fix.source).to be_nil
-      expect(fix.candidate).to be_nil
-    end
-
-    # A category that is itself behind is not a source: proposing to rob it is not a fix.
-    it "refuses a source whose own status needs attention", :aggregate_failures do
-      troubled = holder("Car Insurance", priority: 1)
-      bill(troubled, amount: 900, due: Date.new(2026, 2, 14))
-      allocate(troubled, 400)
-      dentist
-      income(400)
-
-      expect(presenter.status_for(troubled).needs_attention?).to be(true)
-      expect(presenter.fix_candidates_for(dentist)).to be_empty
-    end
-
-    # THE NEXT DISTRIBUTION ALREADY SOLVES THIS, so the band does not talk the user into a move they
-    # do not need to make. Read off the SAME waterfall the band below renders, so the two cannot
-    # contradict each other in two adjacent inches of one screen.
-    it "says the money is coming when the waterfall funds the whole ask", :aggregate_failures do
-      dentist
-      income(500)
-
-      fix = presenter.fix_for(dentist)
-
-      expect(presenter.waterfall.map { |r| [r.category.name, r.short] }).to eq([["Dentist", 0]])
-      expect(fix).to be_covered
-      expect(fix.source).to be_nil
-    end
-
-    # RULING 4, and the one state where #funding_gap and #amount part company: an overdue bill whose
-    # category holds every penny of it needs PAYING, not funding. `#amount` there is the bill's
-    # unpaid remainder, and offering to move it in would leave the category holding double.
-    # `#payable` gives the rule an ITEM, because that is the app's only signal that a bill was PAID —
-    # `BudgetCalculator#fulfilled?` reads `today >= anchor_date` for an item-less one-time rule, so
-    # such a rule can never be overdue at all.
-    #
-    # The two figures part company here and nowhere else: the ROW prints the bill's unpaid
-    # remainder, and the ACTION would close nothing at all.
-    it "asks for nothing on an overdue bill the category already holds the money for", :aggregate_failures do
-      insurance = payable("Renters Insurance", amount: 180, due: Date.new(2026, 2, 1))
-      income(500)
-      allocate(insurance, 180, on: Date.new(2026, 1, 20))
-
-      fix = presenter.fix_for(insurance)
-
-      expect(presenter.status_for(insurance).state).to eq(:overdue)
-      expect(presenter.status_for(insurance).amount).to be_positive
-      expect(fix.amount).to eq(0)
-      expect(fix.needs_money?).to be(false)
-    end
-
-    # ── DELETED (Task 6): "answers nil outright for a pool with no account". `#fix_for` returned nil
-    # for an orphan because no account's money could reach it and `PoolStatus#amount` would have
-    # named the pool's own BALANCE as the size of its problem. There is no orphan.
-
-    it "rounds the amount so the button, the link and the preview name one figure", :aggregate_failures do
-      car = holder("Car Insurance", priority: 1)
-      create(:budget, category: car, amount: 7_200, interval_months: 12, anchor_date: Date.new(2026, 8, 1))
-      income(1)
-
-      fix = presenter.fix_for(car)
-
-      expect(fix.amount).to eq(fix.amount.round(2))
-      expect(fix.amount_param).to eq(format("%.2f", fix.amount))
-    end
-  end
-
   describe "#structurally_underwater?" do
     it "is true when the rules need more than typical income" do
       rate(holder("Rent", priority: 1), 3_000)
@@ -1432,11 +1044,11 @@ RSpec.describe HomePresenter do
     end
 
     # The boundary the `>` sits on. Rules that consume the declared income exactly are not a
-    # structural problem — there is nothing reallocation could not still fix — so this must not fire.
+    # structural problem, so this must not fire.
     it "is false when the rules land exactly on typical income", :aggregate_failures do
       rate(holder("Rent", priority: 1), 2_400)
 
-      expect(presenter.remaining_plan).to eq(user.typical_income)
+      expect(presenter.total_claims).to eq(user.typical_income)
       expect(presenter).not_to be_structurally_underwater
     end
 
@@ -1461,9 +1073,9 @@ RSpec.describe HomePresenter do
       expect(described_class.new(user: user, today: today)).not_to be_structurally_underwater
     end
 
-    # THE MEMO, asserted by counting the sum rather than by trusting the spelling. `false` is the
-    # case that needs the assertion: a `||=` memo re-runs its body every time the answer is falsey,
-    # so the memo would be silently absent for exactly the population it was written for.
+    # THE MEMO, asserted by counting the sum rather than by trusting the spelling. `false` is the case
+    # that needs the assertion: a `||=` memo re-runs its body every time the answer is falsey, so the
+    # memo would be silently absent for exactly the population it was written for.
     it "computes the sum once for a budget that does not fit" do
       rate(holder("Rent", priority: 1), 3_000)
       allow(Budget).to receive(:steady_need).and_call_original
@@ -1482,27 +1094,28 @@ RSpec.describe HomePresenter do
       expect(Budget).to have_received(:steady_need).once
     end
 
-    # THE CASE THE OLD READER GOT WRONG. `remaining_plan` is THIS period's ask, catch-up included: a
-    # $5,200 annual premium falling due inside the current period asks for all $5,200 now, so it
-    # clears the declared $2,400 twice over and the band said "your budget doesn't fit your income"
-    # at a user whose rules cost $200 a period.
+    # ** THE STRUCTURAL QUESTION IS NOT Σ CLAIMS, AND THE DIVERGENCE SURVIVED THE CHANGE OF READERS. **
+    # A $5,200 annual premium falling due inside the current period accrues its whole face value now
+    # (§3.2's catch-up floors `periods_left` at 1), so Σ claims clears the declared $2,400 twice over
+    # while the rules cost $200 a period. A verdict read off this period's claims would tell that user
+    # their budget does not fit.
     it "is false in a catch-up period whose rules still fit the income", :aggregate_failures do
       annual(holder("Car Insurance", priority: 1), amount: 5_200, due: today + 3.days)
 
-      expect(presenter.remaining_plan).to be > user.typical_income
+      expect(presenter.total_claims).to be > user.typical_income
       expect(Budget.steady_need(user, today: today)).to eq(200)
       expect(presenter).not_to be_structurally_underwater
     end
 
-    # The other half of the divergence, and the dangerous one: a period in which everything has
-    # already been funded asks for nothing, so the old reader read $0 against $2,400 and stayed
-    # silent on a budget that cannot be made to work at any distribution.
-    it "is true on a fully funded period whose rules do not fit", :aggregate_failures do
+    # The other half of the divergence, and the dangerous one: a rate rule spent flat claims NOTHING
+    # this period, so a verdict read off Σ claims would read $0 against $2,400 and stay silent on a
+    # budget that cannot be made to work at any spending.
+    it "is true on a period whose claims have been spent flat", :aggregate_failures do
       rent = holder("Rent", priority: 1)
       rate(rent, 3_000)
-      allocate(rent, 3_000)
+      spend(rent, 3_000)
 
-      expect(presenter.remaining_plan).to eq(0)
+      expect(presenter.total_claims).to eq(0)
       expect(presenter).to be_structurally_underwater
     end
   end

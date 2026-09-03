@@ -10,6 +10,13 @@ require "rails_helper"
 # the other end. Every figure carried below is the figure the categories-band example asserted, in
 # the inverted shape — a bar that stopped subtracting fails here rather than agreeing with itself.
 #
+# ** AND THE FIGURES ARE CLAIMS NOW (computed-claims Task 3). ** Nothing is allocated into a category
+# any more (§5), so every `fund(...)` in this file is gone and the money that was moved is written the
+# way the model actually puts it there: a rule that accrues, or a dated adjustment (§3.3). The
+# spent-of-rate figures did not move at all — spending was never an allocation — and the two rows that
+# read a HOLDING (the goal's $424, the anchor-dated goal) are re-derived from §3's formulas with the
+# working beside them. Two examples are DELETED rather than converted, each named at its own site.
+#
 # ── CARRIED FROM categories_spec.rb (figures preserved, presentation inverted):
 #
 #   * "heads the band with available and the accounts with their own balances" → split: the
@@ -28,14 +35,14 @@ require "rails_helper"
 #     category has no rules at all" → the rule detail they assert moved to the trouble strip with
 #     the auto-expand; see `trouble_spec.rb`. Their SPENDING figures are carried here as the over
 #     state ($180 spent of a $150 rate).
-#   * "marks a rate category whose period has ended, and only that one" → carried whole: the
-#     ` · last period` suffix rides on the clause.
+#   * "marks a rate category whose period has ended, and only that one" → DELETED at the body, with
+#     the ` · last period` suffix it asserted (computed-claims Task 3); the reason is written there.
 #   * "says so plainly when no category holds money yet" → carried, with the section's own copy.
-#   * "a quiet category's due date" (both examples) → carried: the date clause rides on
-#     `HomeHelper#period_row_clause`, which is `HomePresenter::Row#due_marker?`'s rule re-housed.
-#   * the "changed a rule after distributing" group → its clause is asserted here on the row and in
-#     the strip in `trouble_spec.rb`; the group's own fixtures live in `trouble_spec.rb`, which is
-#     where the two-places-one-sentence pin belongs now that the strip is the other place.
+#   * "a quiet category's due date" (both examples) → carried as "an accruing row's clause": the date
+#     rides on §3.4's schedule line now, and what displaces it is the claim's own trouble label.
+#   * the "changed a rule after distributing" group → DELETED with the distribution (Task 3). The
+#     clause compared a category's rules against the moment its last split was written; there is no
+#     split.
 #
 # ── MOVED, NOT DELETED — the rule detail and the account cards found new homes:
 #
@@ -103,10 +110,40 @@ RSpec.describe "Home This Period", type: :system do
     end
   end
 
-  # A bill that accumulates toward a date — the shape that reads `on track` while it is on schedule.
-  def accumulating(name, amount:, due:, priority: 1, every: 1)
-    holder(name, priority: priority).tap do |category|
-      create(:budget, category: category, amount: amount, interval_months: every, anchor_date: due)
+  # A bill that accrues toward a date (computed-claims §3.2) — the shape whose row reads
+  # `built up of target · next due · $X per period`.
+  #
+  # `created_at:` IS PLANTED WHEREVER THE WALK HAS TO REACH BACK (the ruling of 2026-09-03): a rule
+  # accrues from the LATER of its category's `funded_since` and its own birthday, so a rule the
+  # factory writes at real-now walks nothing at all inside a `travel_to` that has gone backwards.
+  # Omitted where the example's `today` is the real one, which is every example without a `travel_to`.
+  def accumulating(name, amount:, due:, priority: 1, **plant)
+    rule = plant.extract!(:created_at)
+    holder(name, priority: priority, **plant).tap do |category|
+      create(:budget, category: category, amount: amount, interval_months: 1, anchor_date: due, **rule)
+    end
+  end
+
+  # THE FIXED GRID THREE EXAMPLES BELOW SHARE: biweekly anchored Aug 14 2026, `today` Aug 20, and a
+  # rule born on that boundary so §3.2's walk opens there and every figure they plant is derivable.
+  # `periods_left` from Aug 14 to the Oct 9 due date counts Aug 14, Aug 28, Sep 11, Sep 25, Oct 9 = 5.
+  def on_the_fixed_grid(name, amount:)
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+    accumulating(
+      name,
+      amount: amount,
+      due: Date.new(2026, 10, 9),
+      funded_since: Date.new(2026, 8, 14),
+      created_at: Time.zone.local(2026, 8, 14)
+    )
+  end
+
+  # A GOAL IS A RULE WITH A TARGET (computed-claims §3.2), and a goal fed only by hand is a rule with
+  # a target and an amount of ZERO — "no rate" spelled as a figure, because every claim comes from a
+  # rule and zero is the only honest way to say a rule has no standing contribution.
+  def goal(name, target:, priority: 1)
+    holder(name, priority: priority, target_amount: target).tap do |category|
+      create(:budget, :per_period_rate, category: category, amount: 0)
     end
   end
 
@@ -115,9 +152,13 @@ RSpec.describe "Home This Period", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  # MONEY INTO A CATEGORY IS AN ALLOCATION OUT OF AVAILABLE, and it moves nothing physical (§2).
-  def fund(category, amount, on: Time.zone.now)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
+  # ** `fund` IS DELETED (computed-claims Task 3), AND WITH IT EVERY `create(:allocation, …)` IN THIS
+  # FILE. ** An allocation was money MOVED into a category; a claim is computed from the rule, the
+  # calendar, the spending and the dated adjustments (§3), so an allocation moves no figure on this
+  # screen at all. Where an example needed money to BE in a category, it now writes what actually puts
+  # it there: a rule that accrues, or a dated adjustment (§3.3).
+  def set_aside(category, amount, on: Date.current)
+    create(:adjustment, rule: category.budgets.first, amount: amount, date: on)
   end
 
   # SPENDING DRAINS THE CATEGORY and the pot at once.
@@ -134,7 +175,6 @@ RSpec.describe "Home This Period", type: :system do
   it "prints spent of planned for a budgeted category", :aggregate_failures do
     deposit(1_000)
     groceries = envelope("Groceries", rate: 400)
-    fund(groceries, 400)
     spend(groceries, 310)
 
     visit root_path
@@ -161,7 +201,6 @@ RSpec.describe "Home This Period", type: :system do
   it "turns the bar and the figure red when the category is spent past its plan", :aggregate_failures do
     deposit(200)
     dining = envelope("Dining Out", rate: 150)
-    fund(dining, 100)
     spend(dining, 180)
 
     visit root_path
@@ -170,7 +209,7 @@ RSpec.describe "Home This Period", type: :system do
     expect(figure("Dining Out")[:class]).to include("text-status-danger")
     expect(row("Dining Out")).to have_css("[data-period-bar='100']")
     expect(row("Dining Out")).to have_css("[data-period-fill].bg-status-danger")
-    expect(clause("Dining Out")).to have_content("overdrawn $80.00")
+    expect(clause("Dining Out")).to have_content("over by $30.00")
   end
 
   # The other direction of the over state, on a category that spent to the penny: exactly the plan
@@ -178,7 +217,6 @@ RSpec.describe "Home This Period", type: :system do
   it "leaves a category that spent exactly its plan in the quiet colour", :aggregate_failures do
     deposit(400)
     groceries = envelope("Groceries", rate: 400)
-    fund(groceries, 400)
     spend(groceries, 400)
 
     visit root_path
@@ -195,7 +233,6 @@ RSpec.describe "Home This Period", type: :system do
     user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
     groceries = envelope("Groceries", rate: 400)
     deposit(1_000)
-    fund(groceries, 400, on: Date.new(2026, 8, 15))
     spend(groceries, 310, on: Date.new(2026, 8, 20))
     spend(groceries, 50, on: Date.new(2026, 8, 10))
 
@@ -205,58 +242,69 @@ RSpec.describe "Home This Period", type: :system do
     expect(figure("Groceries")).to have_no_content("$360.00")
   end
 
-  # SAVINGS GOALS KEEP THEIR TARGET BARS (spec §4), and the figure is what is SET ASIDE rather than
-  # what was spent: "$424.00 of $2,400.00" is the row the categories band printed, and the word
-  # "left" must stay off it for the reason the seventh state exists at all.
+  # SAVINGS GOALS KEEP THEIR TARGET BARS (answers-first §4), and the figure is what is BUILT UP
+  # rather than what was spent: "$424.00 of $2,400.00" is the row the categories band printed, at the
+  # same two figures, and the word "left" must stay off it for the reason that state exists at all.
+  #
+  # ** THE $424 IS AN ADJUSTMENT NOW, NOT AN ALLOCATION (computed-claims §3.3). ** A goal fed by hand
+  # is a zero-amount rule with a target, and a set-aside is a dated `+$424` on it. PLANTED: §3.2's
+  # walk over one period — `planned = min(rate 0, gap 2,400) = 0`, `accrued = 0 + 424`, capped at the
+  # target and with nothing spent — so `built_up` is **$424.00** and the bar is
+  # `round(424 / 2,400 × 100)` = **18%**, both unchanged from the allocation era.
   it "keeps a savings goal's target bar", :aggregate_failures do
-    goal = holder("Vacation", target_amount: 2_400)
     deposit(500)
-    fund(goal, 424)
+    set_aside(goal("Vacation", target: 2_400), 424)
 
     visit root_path
 
-    expect(figure("Vacation")).to have_content("set aside $424.00 of $2,400.00")
+    expect(figure("Vacation")).to have_content("$424.00 built up of $2,400.00")
     expect(row("Vacation")).to have_no_content("left")
     expect(row("Vacation")).to have_no_content("spent")
     expect(row("Vacation")).to have_css("[data-period-bar='18']")
   end
 
-  # ** THE TWO-LEVEL CLASSIFICATION, ON ONE ROW — carried with one correction stated. ** The
-  # categories band's version of this example asserted `have_no_content("of $2,400.00")` on the whole
-  # row, because the only thing the row printed was its STATUS and an anchor-dated goal's status is
-  # its schedule rather than `saving`. This section prints a BAR as well, and the bar is drawn at the
-  # CHROME level — `HoldingCalculator#saving_toward_a_target?`, holder + target, "a goal is a goal
-  # whatever refills it" — which is the same predicate the impact card, the holdings card and the
-  # categories index card all ask about this same category. So the target figure is on the row now,
-  # deliberately, and the assertion moves to where the old one's point actually lived: the CLAUSE
-  # reads the schedule and never `saving`.
-  it "reads an anchor-dated goal by its schedule rather than as saving", :aggregate_failures do
-    category = holder("House Deposit", target_amount: 2_400)
-    create(:budget, category: category, amount: 300, interval_months: 1, anchor_date: Date.current + 2.months)
-    deposit(1_000)
-    fund(category, 600)
+  # ** AN ANCHOR-DATED GOAL READS BY ITS SCHEDULE, AND THE ANCHOR WINS OVER THE TARGET (§3's shape
+  # rule). ** The categories band's version of this example asserted `have_no_content("of $2,400.00")`
+  # on the whole row, because an anchor-dated goal's status was its schedule rather than `saving`. The
+  # computed model makes that structural rather than a matter of wording: a rule with an anchor is
+  # DATED, and a dated rule accrues toward ITS OWN amount by ITS OWN deadline — the category's $2,400
+  # target belongs to whatever rule has no anchor, and this row never mentions it.
+  #
+  # PLANTED, on a fixed grid so no figure here moves with the wall clock. Biweekly anchored Aug 14
+  # 2026, `today` Aug 20, the rule born on the boundary it accrues from, a $300 bill due Oct 9.
+  # §3.2's catch-up: `periods_left` counts the boundaries from Aug 14 through Oct 9 inclusive —
+  # Aug 14, Aug 28, Sep 11, Sep 25, Oct 9 = **5** — so `planned = 300 ÷ 5` = **$60.00**, one period is
+  # walked, and `built_up` is **$60.00**.
+  it "reads an anchor-dated goal by its schedule, toward the bill and not the target", :aggregate_failures do
+    on_the_fixed_grid("House Deposit", amount: 300).update!(target_amount: 2_400)
 
-    visit root_path
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
 
-    expect(clause("House Deposit")).to have_content("on track")
-    expect(clause("House Deposit")).to have_no_content("of $2,400.00")
-    expect(figure("House Deposit")).to have_content("set aside $600.00 of $2,400.00")
+    expect(figure("House Deposit")).to have_content("$60.00 built up of $300.00")
+    expect(clause("House Deposit")).to have_content("next due Oct 9 · $60.00 per period")
+    expect(row("House Deposit")).to have_no_content("$2,400.00")
   end
 
   # ── THE CLAUSE (spec §4: the status vocabulary "where it earns its place") ─────────────────────
 
-  # CARRIED FROM "shows a balance on an on-track category". The state word survives; the AMOUNT
-  # beside it does not, because the bar has already printed the money and printing it twice in two
-  # different denominations is the two-answers-on-one-row defect this design set out to remove.
-  it "keeps the status vocabulary as a small clause without repeating the money", :aggregate_failures do
+  # ** `on track` IS DELETED, AND THE SCHEDULE IS WHAT REPLACES IT (computed-claims Task 3). ** The
+  # old clause was `HoldingStatus`'s word for "this category holds what the rule has asked for so
+  # far", and there is no holding to compare an ask against. §3.4 gives the accruing row its own
+  # second line instead — `next due Mar 1 · $200.00 per period` — which says the same thing with the
+  # two facts that make it checkable rather than with a verdict.
+  #
+  # PLANTED, on the same fixed grid: biweekly anchored Aug 14 2026, `today` Aug 20, a $2,000 bill due
+  # Oct 9, the rule born Aug 14. `periods_left` = 5 (Aug 14 … Oct 9), so `planned = 2,000 ÷ 5` =
+  # **$400.00** and one walked period leaves `built_up` at **$400.00**.
+  it "gives an accruing row the schedule as its clause", :aggregate_failures do
     deposit(2_000)
-    rent = accumulating("Rent", amount: 2_000, due: Date.current + 2.months)
-    fund(rent, 2_000)
+    on_the_fixed_grid("Rent", amount: 2_000)
 
-    visit root_path
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
 
-    expect(clause("Rent")).to have_content("on track")
-    expect(clause("Rent")).to have_no_content("$2,000.00")
+    expect(figure("Rent")).to have_content("$400.00 built up of $2,000.00")
+    expect(clause("Rent")).to have_content("next due Oct 9 · $400.00 per period")
+    expect(clause("Rent")).to have_no_content("on track")
   end
 
   # NO CLAUSE ON A ROW THAT HAS NOTHING TO ADD. `left to spend` IS the bar, said backwards, so
@@ -264,7 +312,6 @@ RSpec.describe "Home This Period", type: :system do
   it "leaves the clause off a quiet envelope", :aggregate_failures do
     deposit(400)
     groceries = envelope("Groceries", rate: 400)
-    fund(groceries, 400)
     spend(groceries, 100)
 
     visit root_path
@@ -274,66 +321,40 @@ RSpec.describe "Home This Period", type: :system do
     expect(row("Groceries")).to have_no_content("left")
   end
 
-  # CARRIED WHOLE from "marks a rate category whose period has ended, and only that one". Both
-  # categories on ONE screen, at the identical holding and the identical rule, differing only in
-  # which side of a period boundary their money arrived on — split into two examples the negative
-  # half would pass against a view that never says "last period" at all.
-  it "marks a rate category whose period has ended, and only that one", :aggregate_failures do
-    deposit(1_000)
-    overspend_on_both_sides_of_a_boundary
+  # ** "marks a rate category whose period has ended, and only that one" IS DELETED (computed-claims
+  # Task 3), with the ` · last period` suffix it asserted. ** That suffix said "this money belongs to
+  # a period that has closed, and the next distribution will sweep it back" — a fact about ALLOCATED
+  # money awaiting a movement. A rate claim is use-it-or-lose-it and resets at the boundary by
+  # definition (§3.1): there is no leftover to belong to a past period and nothing to sweep. Its
+  # fixture helper `overspend_on_both_sides_of_a_boundary` goes with it, and so does the
+  # `changed_after_distributing` clause the file's header names — there is no distribution to have
+  # changed a rule after.
 
-    visit root_path
+  # CARRIED FROM "a quiet category's due date", and the question is the same one: does the row keep
+  # the date that is the only thing its figure cannot say? What changed is which clause displaces it —
+  # it used to be a status that needed attention, and it is now the claim's own trouble label.
+  describe "an accruing row's clause" do
+    # THE QUIET DIRECTION: the schedule, with the date on it. Same fixed grid; a $300 bill due Oct 9,
+    # `periods_left` 5, so `planned = 300 ÷ 5` = **$60.00** and one walked period leaves $60 built up.
+    it "prints the next due date while nothing is wrong", :aggregate_failures do
+      on_the_fixed_grid("Old Goal", amount: 300)
 
-    expect(clause("Swept")).to have_content("overdrawn $120.00 · last period")
-    expect(clause("Live")).to have_content("overdrawn $120.00")
-    expect(clause("Live")).to have_no_content("last period")
-  end
+      travel_to(Date.new(2026, 8, 20)) { visit root_path }
 
-  # Two rate categories at the identical holding and the identical rule, differing only in which side
-  # of a period boundary their money arrived on. Twenty days back on a biweekly cadence anchored
-  # today, so the swept one's rate period — measured from `last_funded_on` — closed before today.
-  def overspend_on_both_sides_of_a_boundary
-    swept = envelope("Swept", rate: 400, priority: 1)
-    live = envelope("Live", rate: 400, priority: 2)
-    fund(swept, 60, on: Date.current - 20.days)
-    fund(live, 60, on: Date.current)
-    spend(swept, 180)
-    spend(live, 180)
-  end
-
-  # CARRIED FROM "a quiet category's due date". The date clause gates on the STATUS being quiet, not
-  # on the row being quiet, and the two were briefly the same question — a category reading
-  # `on track` lost the only date on its line.
-  describe "a quiet category's due date", :aggregate_failures do
-    def goal_with_rule(name, amount:, due:)
-      holder(name, target_amount: 5_000).tap do |category|
-        create(:budget, category: category, amount: amount, interval_months: 1, anchor_date: due)
-      end
+      expect(clause("Old Goal")).to have_content("next due Oct 9 · $60.00 per period")
     end
 
-    it "prints it when the category's own status is quiet" do
-      due = Date.current + 2.months
-      category = goal_with_rule("Old Goal", amount: 300, due: due)
-      deposit(500)
-      fund(category, 300)
+    # THE OTHER DIRECTION, on a rule that is over: the trouble label takes the clause, because that is
+    # the news and a schedule beside it would bury it. PLANTED: a $150 rate rule with $180 spent —
+    # `over by 180 − 150` = **$30.00** — and no date anywhere on the row, because a rate rule has none.
+    it "gives the line to the trouble label where something is wrong", :aggregate_failures do
+      dining = envelope("Dining Out", rate: 150)
+      spend(dining, 180)
 
       visit root_path
 
-      expect(clause("Old Goal")).to have_content("on track")
-      expect(clause("Old Goal")).to have_content(due.strftime("%b %-d"))
-    end
-
-    # The other direction, on a category whose OWN status needs attention: "overdrawn $50.00 ·
-    # Oct 17" would date a debt with a deadline that belongs to something else.
-    it "leaves it off when the category's own status needs attention" do
-      due = Date.current + 2.months
-      category = goal_with_rule("Late Goal", amount: 300, due: due)
-      spend(category, 50)
-
-      visit root_path
-
-      expect(clause("Late Goal")).to have_content("overdrawn $50.00")
-      expect(clause("Late Goal")).to have_no_content(due.strftime("%b %-d"))
+      expect(clause("Dining Out")).to have_content("over by $30.00")
+      expect(clause("Dining Out")).to have_no_content("next due")
     end
   end
 
@@ -401,8 +422,8 @@ RSpec.describe "Home This Period", type: :system do
   # against a section that simply reversed the list.
   it "sorts trouble first and keeps fill order behind it" do
     deposit(2_000)
-    fund(envelope("Rent", rate: 400, priority: 1), 400)
-    fund(envelope("Groceries", rate: 400, priority: 2), 400)
+    envelope("Rent", rate: 400, priority: 1)
+    envelope("Groceries", rate: 400, priority: 2)
     spend(envelope("Dining Out", rate: 150, priority: 3), 180)
 
     visit root_path
@@ -458,7 +479,7 @@ RSpec.describe "Home This Period", type: :system do
   # measures the rule the spec states.
   it "says none of the machinery words, in any casing", :aggregate_failures do
     deposit(1_000)
-    fund(envelope("Groceries", rate: 400), 100)
+    spend(envelope("Groceries", rate: 400), 100)
 
     visit root_path
 
@@ -489,7 +510,6 @@ RSpec.describe "Home This Period", type: :system do
     it "fits a bar and its figures inside a 375px viewport", :aggregate_failures do
       deposit(2_000)
       groceries = envelope("Groceries", rate: 1_500)
-      fund(groceries, 1_500)
       spend(groceries, 1_234.56)
 
       visit root_path

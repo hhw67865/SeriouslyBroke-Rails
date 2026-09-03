@@ -76,23 +76,42 @@ class ClaimLedger
     @total_money ||= user.pools.accounts.sum(0.to_d) { |account| account_ledger.balance_of(account) }
   end
 
-  delegate :pot, to: :account_ledger
+  # MEMOISED, AND MEASURED RATHER THAN ASSUMED (Task 3). `AccountLedger#pot` is `#balance_of(main)`
+  # and that method's entry term is NOT memoised inside the ledger — it is two SUMs over the user's
+  # entries every time it is asked. Home asks three times over (the "In Checking" figure, `#free`'s
+  # `min` and `#free_cap_bound?`'s comparison), which measured as six statements before this memo.
+  # `||=` is safe where `defined?` would be needed for a falsy answer: a zero pot is
+  # `BigDecimal("0")`, which is truthy.
+  def pot = @pot ||= account_ledger.pot
+
+  # ** THE UNCAPPED HALF OF `#free`, SPELLED ONCE. ** Three readers need it — `#free` takes the `min`
+  # of it and the pot, `#free_cap_bound?` asks which of the two that was, and the hero's
+  # `HomePresenter#claims_outrun_the_money?` asks for its SIGN, which is the one thing the capped
+  # figure cannot answer (the cap is exactly what erases the difference). A second spelling of the
+  # subtraction is a screen whose figure and whose subline describe different arithmetic.
+  def unclaimed = total_money - total_claims
 
   # MONEY WITH NO JOB — and BELOW ZERO IT IS A SIGNAL, NEVER A REFUSAL (§4). Nothing here clamps: a
   # negative `free` is exactly the fact the trouble strip exists to report, and hiding it behind a
   # `max(0, …)` would leave the app telling a user they have nothing free when what is true is that
   # they are $120 short.
-  def free = [pot, total_money - total_claims].min
+  def free = [pot, unclaimed].min
 
   # WHICH TERM IS DOING THE WORK. True when the money is spoken for by WHERE IT IS rather than by
   # what it is for — the claims leave room, but the room is in a savings account rather than in
   # checking. False when the claims themselves are the binding constraint, which is the state §4's
   # per-day pace is about.
-  def free_cap_bound? = pot < total_money - total_claims
+  def free_cap_bound? = pot < unclaimed
+
+  # THE PHYSICAL LEDGER THIS ONE IS CAPPED BY, and it is PUBLIC so a screen reading both sides reads
+  # ONE snapshot (Task 3). Home prints every account's balance beside a `free` whose cap is main's,
+  # and an `AccountLedger` of the presenter's own would be a second reading of the same two SUMs —
+  # free, on a screen that writes nothing, to disagree with the pot the hero prints. Handing it out is
+  # safe for exactly that reason: this class writes nothing either, so there is no write for the
+  # shared snapshot to fall the wrong side of.
+  def account_ledger = @account_ledger ||= AccountLedger.new(user)
 
   private
-
-  def account_ledger = @account_ledger ||= AccountLedger.new(user)
 
   def calculators
     @calculators ||= rules.index_with do |rule|

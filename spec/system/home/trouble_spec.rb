@@ -2,74 +2,55 @@
 
 require "rails_helper"
 
-# HOME'S TROUBLE STRIP — rendered ONLY when something real needs a human (answers-first spec §5).
-# This file is `spec/system/home/attention_spec.rb`'s successor.
+# HOME'S TROUBLE STRIP — rendered ONLY when something real needs a human (answers-first spec §5,
+# computed-claims §4). This file is `spec/system/home/attention_spec.rb`'s successor, converted onto
+# claims by computed-claims Task 3.
 #
-# ** SILENCE IS THE GOOD STATE. ** The band this replaces rendered on every page load with one of
-# three headings, two of which said nothing needed doing; there is no permanent "Nothing needs you"
-# box any more, so the absence of the strip IS the good news and every trigger below is asserted in
-# BOTH directions.
+# ** SILENCE IS THE GOOD STATE. ** There is no permanent "Nothing needs you" box, so the absence of
+# the strip IS the good news and every trigger below is asserted in BOTH directions.
 #
-# ── CARRIED FROM attention_spec.rb:
+# ── THE TRIGGERS, AND WHAT HAPPENED TO EACH ONE (Task 3):
 #
-#   * "lists a category that can't be funded in time" → carried whole (`won't make it`, Dentist).
-#   * "says nothing needs you when every category is quiet" → INVERTED into "renders nothing at all
-#     when nothing is wrong": the same fixture, and the strip is absent rather than reassuring.
-#   * "names an overdrawn account without counting it as something that needs you" → the pot half is
-#     the hero's (`hero_spec`); the strip half survives as the :overdraft trigger, which is now a
-#     NON-MAIN account (see below).
-#   * "renders when a rule's amount is negative" → carried whole. Home is the root route, so this
-#     took out the whole app rather than one screen.
-#   * the "overdrawn category whose period has ended" pair → carried: the ` · last period` suffix on
-#     the strip's row, and the same-sentence-in-both-places pin now compares the strip against the
-#     "This period" section's clause.
-#   * the "changed a rule after distributing" group (five examples) → carried whole from
-#     `categories_spec.rb`, where its fixtures lived; the strip is the second place the clause has
-#     to read the same, so the pin lives here.
-#   * "shows an overdue category with the date that passed and the rule behind it", "shows a behind
-#     category with the rule it is behind on", "explains an overdrawn rate category by its rate" and
-#     "says so plainly when an overdrawn category has no rules at all" → all four carried from
-#     `categories_spec.rb`. The rule detail they assert is re-housed here, which is where the
-#     auto-expand rule ("anything needing attention opens itself") describes the whole population.
-#     `categories_spec`'s own "auto-expands a category that needs attention" is NOT among them and is
-#     DELETED (named in `this_period_spec.rb`): what it asserted was the `data-expanded` flag plus a
-#     non-empty detail box, and the flag has no shape left — every row here is expanded by
-#     construction — while the detail box is asserted by the four above.
+#   :overdraft  — a non-main bank account below zero. UNCHANGED: it is a fact about the PHYSICAL
+#                 ledger, which this plan does not touch. Both examples carried whole, copy verbatim.
+#   :shortfall  — NEW (§4). `free < 0` is the signal, and the strip states the figure, walks the
+#                 uncovered claims in REVERSE PRIORITY (the give-way order) and names the per-day pace
+#                 that lands the period at zero.
+#   :over       — a rule spent past what it had (§3.1). It REPLACES `overdrawn`, which measured a
+#                 category's HOLDING going negative; there are no holdings.
+#   :overdue    — a due date passed with the fund still short (§3.2). It REPLACES `overdue` and
+#                 `won't make it` together, and it is narrower than either: the catch-up formula fills
+#                 a fund whose date has passed in ONE period, so a bill that is merely unpaid reads
+#                 full and is NOT trouble. Both directions are pinned, because that is the ruling.
+#   :structural — UNCHANGED. `Budget.steady_need` against declared income reads the rules and the
+#                 calendar and nothing else. All six examples carried.
 #
-# ── CARRIED FROM hero_spec.rb (the plan's Task 1 → Task 2 hand-over):
+# ── DELETED WITH THE DISTRIBUTION (computed-claims §§5-6). Each asserted a fact about money that had
+# been MOVED, and nothing moves:
 #
-#   * "names a non-main account that has gone below zero" — the strip claims it, copy verbatim.
-#   * all six sacrifice-link examples. §9's permanent button is a fifth trigger here: a strip that
-#     renders only when something is true cannot carry a button that renders always, and "your
-#     budget doesn't fit your income" is the most permanent true thing on the screen.
-#
-# ── DELETED WITH THE ATTENTION BAND (nine titles). The band held a WATERFALL — "Where your money
-# goes", the fill order and the cutoff — and spec §1 rules that Home stops showing the system. The
-# plan it drew is the mechanic's view of the distribution and lives on `/distributions/new`, which
-# the strip's own Distribute button opens.
-#
-#   * "shows no waterfall when there is no gap to explain"
-#   * "shows where the money goes when a category needs you on a covered period" — its $700 free
-#     figure survives in `hero_spec`; the waterfall half goes.
-#   * "leaves a category that asks for nothing out of the waterfall"
-#   * "shows no plan when the problem has no waterfall row"
-#   * "never says nothing needs you while the money runs out" — the heading it pinned is gone. The
-#     state it was about (short with nothing flagged) is now the hero's negative free figure, and
-#     the strip's :undistributed trigger is what asks the user to act on it.
-#   * "shows the waterfall with a cutoff when short"
-#   * "draws the cutoff beneath the last category that got any money"
-#   * "the whole gap above, this period's share below" (two examples) — the bridge label existed to
-#     keep two bands on one screen from reading as two answers; there is one band now.
-#
-# ── THE COUNT, so the lists above stay auditable: 22 carried (6 from `attention_spec`, 9 from
-# `categories_spec`, 7 from `hero_spec`) and 5 new — the other direction of each of the two triggers
-# that had none ("leaves a bill the schedule can still reach out of the strip", "falls silent once
-# this period has been distributed", "asks nothing of a user whose rules ask for nothing"), the
-# distribute prompt itself, and the 375px pin.
+#   * "asks the user to distribute when this period's money has not been handed out", "falls silent
+#     once this period has been distributed", "asks nothing of a user whose rules ask for nothing" —
+#     the :undistributed trigger. There is nothing to hand out; the state it was really about (rules
+#     asking for more than there is) is the :shortfall arm, which asks for something a user can
+#     actually do.
+#   * "shows a category that can't be funded in time" / "leaves a bill the schedule can still reach
+#     out of the strip" — `won't make it` compared a category's holding against a catch-up rate. See
+#     :overdue above for the pair that replaces them.
+#   * "shows a behind category with the rule it is behind on" — `behind` was "holds less than the
+#     rules have asked for so far", which is the gap between an ask and an allocation.
+#   * the "overdrawn category whose period has ended" pair — ` · last period` named money awaiting a
+#     sweep. A rate claim resets at the boundary by definition (§3.1); there is no leftover.
+#   * the whole "a category that went behind because a rule was changed" group (five examples) —
+#     `DistributionClock` compares a rule's `updated_at` against the moment this period's split was
+#     written, and there is no split.
+#   * "fits a problem row and its fix button inside a 375px viewport" — CONVERTED, not deleted: the
+#     fix buttons are gone (a fix was a purpose-side MOVE), so the narrow pin measures the widest
+#     thing the strip still holds, which is the shortfall arm's uncovered list.
 #
 # EVERY COPY ASSERTION IN THIS FILE GOES THROUGH A DATA HOOK — `[data-trouble]`,
-# `[data-problem-category]`, `[data-overdrawn-account]`, `[data-undistributed]`,
-# `[data-sacrifice-link]`, `[data-role='holding-detail']`.
+# `[data-problem-category]`, `[data-problem-state]`, `[data-problem-detail]`,
+# `[data-overdrawn-account]`, `[data-shortfall]`, `[data-shortfall-amount]`,
+# `[data-shortfall-pace]`, `[data-uncovered-claim]`, `[data-sacrifice-link]`.
 RSpec.describe "Home Trouble", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
@@ -87,6 +68,8 @@ RSpec.describe "Home Trouble", type: :system do
   def strip = find("[data-trouble]")
 
   def problem_row(name) = find("[data-problem-category='#{name}']")
+
+  def uncovered(name) = find("[data-uncovered-claim='#{name}']")
 
   def holder(name, priority: 1, **attrs)
     create(
@@ -111,64 +94,38 @@ RSpec.describe "Home Trouble", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  def fund(category, amount, on: Time.zone.now)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
-  end
-
   def spend(category, amount, on: Date.current)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
-  # A dated bill the user actually pays: an item is the only fulfilment signal BudgetCalculator
-  # accepts, and therefore the only way a rule can be overdue rather than settled by its own date.
-  def payable(name, amount:, due:, interval: 1, priority: 1)
-    holder(name, priority: priority).tap do |category|
-      item = create(:item, category: category, name: "#{name} Bill")
-      create(
-        :budget,
-        category: category,
-        item: item,
-        amount: amount,
-        interval_months: interval,
-        anchor_date: due
-      )
-    end
-  end
-
-  # A bill that accumulates toward a date — the shape that reads `behind` when it is off schedule.
+  # A bill that accrues toward a date (§3.2). Item-less, so its fulfilment lane is the whole category
+  # — which is what lets `spend` above settle it.
   def accumulating(name, amount:, due:, priority: 1, every: 1)
     holder(name, priority: priority).tap do |category|
       create(:budget, category: category, amount: amount, interval_months: every, anchor_date: due)
     end
   end
 
-  # A MOVE ON THE PHYSICAL LEDGER, out of Checking and into a second account. It is the only way to
-  # put one account in the red while every category and available stay healthy.
+  # A MOVE ON THE PHYSICAL LEDGER. `move_out` puts CHECKING in the red; `move_in` is its mirror and is
+  # the only way to put a NON-main account below zero while every claim stays healthy.
   def move_out(amount)
     ally = create(:pool, :account, user: user, name: "Ally")
-    create(
-      :account_movement,
-      from_pool: checking,
-      to_pool: ally,
-      amount: amount,
-      date: Date.current,
-      kind: :transfer
-    )
+    create(:account_movement, from_pool: checking, to_pool: ally, amount: amount, date: Date.current, kind: :transfer)
   end
 
-  # THE DISTRIBUTION THAT SILENCES THE :undistributed TRIGGER — one `Allocation.distributed` row
-  # inside this period, which is exactly what `DistributionClock` looks for.
-  def distribute(category, amount)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: Time.zone.now)
+  def move_in(amount)
+    ally = create(:pool, :account, user: user, name: "Ally")
+    create(:account_movement, from_pool: ally, to_pool: checking, amount: amount, date: Date.current, kind: :transfer)
   end
 
-  # ── THE STRIP'S ABSENCE, WHICH IS THE DESIGN (spec §5) ─────────────────────────────────────────
+  # ── THE STRIP'S ABSENCE, WHICH IS THE DESIGN (answers-first §5) ────────────────────────────────
 
-  # INVERTED FROM "says nothing needs you when every category is quiet": the same fixture, and now
-  # there is no box at all. A permanent placeholder is exactly what §5 rules out.
+  # A permanent placeholder is exactly what §5 rules out. PLANTED: a $400 rate rule and $400 of
+  # income — `claim = max(0, 400 − 0)` = $400, `free = min(400, 400 − 400)` = $0.00, which is not
+  # negative, so nothing at all is true.
   it "renders nothing at all when nothing is wrong", :aggregate_failures do
     deposit(400)
-    distribute(envelope("Groceries", 400), 400)
+    envelope("Groceries", 400)
 
     visit root_path
 
@@ -178,132 +135,184 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_no_content("needs you")
   end
 
-  # ── TRIGGER 1: AN OVERDUE OR UNREACHABLE BILL ──────────────────────────────────────────────────
+  # ── TRIGGER: FREE BELOW ZERO (computed-claims §4) ──────────────────────────────────────────────
 
-  # CARRIED WHOLE from "lists a category that can't be funded in time". The token distribution is
-  # what keeps the count at ONE: without it this period is also undistributed, and the singular
-  # heading — which is the thing a plural bug shows up in — would never be reachable here.
-  it "shows a category that can't be funded in time", :aggregate_failures do
-    dentist = holder("Dentist")
-    create(:budget, :one_time, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
-    distribute(dentist, 10)
-
-    visit root_path
-
-    expect(strip).to have_content("won't make it")
-    expect(problem_row("Dentist")).to have_content("Dentist")
-    expect(strip).to have_content("1 thing needs you")
+  # THE FIXTURE THE SHORTFALL EXAMPLES SHARE: three rate rules in priority order 1-2-3, claiming
+  # $1,000, $400 and $200 with nothing spent — Σ claims $1,600.00 (§3.1).
+  def three_rules
+    envelope("Rent", 1_000, priority: 1)
+    envelope("Groceries", 400, priority: 2)
+    envelope("Fun", 200, priority: 3)
   end
 
-  # THE OTHER DIRECTION: the same category funded in time is not in the strip at all.
-  it "leaves a bill the schedule can still reach out of the strip", :aggregate_failures do
-    deposit(2_000)
-    dentist = holder("Dentist")
-    create(:budget, :one_time, category: dentist, amount: 300, anchor_date: Date.current + 3.days)
-    distribute(dentist, 300)
+  # ** THE GIVE-WAY WALK, PINNED WITH THREE RULES AND A SHORTFALL THAT SPLITS ONE CLAIM. **
+  #
+  # PLANTED, and every figure re-derived from §3's formulas:
+  #   Rent      priority 1, $1,000 a period, nothing spent → claim `max(0, 1,000 − 0)` = $1,000.00
+  #   Groceries priority 2,   $400 a period, nothing spent → claim   $400.00
+  #   Fun       priority 3,   $200 a period, nothing spent → claim   $200.00
+  #   Σ claims = $1,600.00; total money = the $1,340 deposit; pot = the same.
+  #   unclaimed = 1,340 − 1,600 = −$260.00; free = min(1,340, −260) = **−$260.00**; shortfall $260.00.
+  #
+  # THE WALK RUNS IN REVERSE PRIORITY — priority is the GIVE-WAY order (§4), so the category that
+  # would have been funded LAST goes without FIRST. Fun's whole $200 is uncovered; $60 of the $260 is
+  # left, so GROCERIES IS SPLIT — short $60 of its $400 — and RENT, first in priority, is not reached
+  # at all. The split is the reason this is a walk rather than a filter.
+  #
+  # THE PACE: the period is biweekly anchored today, so today is day 1 of 14 and `days_left` is 13.
+  # `260 ÷ 13` = **$20.00** a day.
+  it "states the shortfall, who gives way, and the pace that lands the period at zero", :aggregate_failures do
+    deposit(1_340)
+    three_rules
 
     visit root_path
 
-    expect(page).to have_no_css("[data-problem-category='Dentist']")
+    expect(page).to have_css("[data-free-to-spend]", text: "-$260.00")
+    expect(find("[data-shortfall-amount]")).to have_content("short $260.00")
+    expect(find("[data-shortfall-pace]")).to have_content("Spending $20.00 a day less")
+    expect(uncovered("Fun")).to have_content("nothing covers its $200.00")
+    expect(uncovered("Groceries")).to have_content("short $60.00 of $400.00")
+    expect(page).to have_no_css("[data-uncovered-claim='Rent']")
+    # THE ORDER IS THE WALK'S, and asserting the list's text catches a strip that found the right two
+    # claims by luck and printed them highest-priority-first.
+    expect(find("[data-uncovered]").text).to match(/Fun.*Groceries/m)
+  end
+
+  # THE REMEDY IS A RULE, NOT A MOVE (§4). There is nothing to take money FROM — no claim is money
+  # sitting anywhere — so the arm carries a door to the Budget page and no fix button at all.
+  it "sends the user to the rules rather than offering to move money", :aggregate_failures do
+    deposit(100)
+    envelope("Rent", 1_000)
+
+    visit root_path
+
+    expect(find("[data-shortfall]")).to have_link("Change a rule on the Budget page", href: budget_page_path)
+    expect(strip).to have_no_content(/take .* from/i)
+    expect(strip).to have_no_content(/available/i)
+  end
+
+  # THE OTHER DIRECTION: the same three rules against enough money. `1,800 − 1,600` = $200 free, which
+  # is not negative, so there is no shortfall arm and no strip at all.
+  it "says nothing about a shortfall when the claims fit", :aggregate_failures do
+    deposit(1_800)
+    three_rules
+
+    visit root_path
+
+    expect(page).to have_css("[data-free-to-spend]", text: "$200.00")
+    expect(page).to have_no_css("[data-shortfall]")
     expect(page).to have_no_css("[data-trouble]")
   end
 
-  # CARRIED FROM categories_spec: the two states that render a date the user has to act on, seen
-  # through a real row — which is where the date and the rule beneath it actually meet.
-  it "shows an overdue category with the date that passed and the rule behind it", :aggregate_failures do
-    payable("Utilities", amount: 120, due: Date.current - 10.days)
+  # NO DECLARED PERIOD, NO PACE — the same refusal `#period_range` makes about the same reader, since
+  # there is no "rest of the period" to spread a shortfall over. The figure and the list survive,
+  # because both are true whatever calendar the user keeps.
+  #
+  # PLANTED: one $1,000-a-period rule against $100 of income. `unclaimed = 100 − 1,000` = −$900.00, so
+  # the shortfall is $900 and the single claim is SPLIT by it — short $900 of its $1,000, not wholly
+  # uncovered, which is the walk's `min(claim, remaining)` said on one row.
+  it "states the shortfall without a pace before a period is declared", :aggregate_failures do
+    user.update!(period_cadence: nil, period_anchor_date: nil)
+    deposit(100)
+    envelope("Rent", 1_000)
 
     visit root_path
 
-    expect(problem_row("Utilities"))
-      .to have_content("overdue · was #{(Date.current - 10.days).strftime("%b %-d")}")
-    expect(problem_row("Utilities")).to have_css("[data-role='holding-detail']")
-    expect(problem_row("Utilities")).to have_content("Utilities Bill")
-    expect(problem_row("Utilities")).to have_content("$120.00 · #{(Date.current - 10.days).strftime("%b %-d")}")
+    expect(find("[data-shortfall-amount]")).to have_content("short $900.00")
+    expect(uncovered("Rent")).to have_content("short $900.00 of $1,000.00")
+    expect(page).to have_no_css("[data-shortfall-pace]")
   end
 
-  # CARRIED FROM categories_spec. The lag is a function of how many boundaries fall inside the
-  # cycle, so the figure is matched by shape rather than pinned to date arithmetic this example
-  # does not own.
-  it "shows a behind category with the rule it is behind on", :aggregate_failures do
-    accumulating("Car Insurance", amount: 1_200, due: Date.current + 3.months, every: 6)
+  # ── TRIGGER: A RULE SPENT PAST WHAT IT HAD (§3.1) ──────────────────────────────────────────────
+
+  # PLANTED: a $150-a-period rate rule with $180 spent. §3.1 — the claim is `max(0, 150 − 180)` =
+  # $0.00 and `#over?` reads the figure BEFORE that clamp, so the row says the excess: `180 − 150` =
+  # **$30.00**. The $1,000 deposit keeps `free` positive so this is the ONLY thing on the strip.
+  it "names a rule that has been spent past what it had", :aggregate_failures do
+    deposit(1_000)
+    spend(envelope("Dining Out", 150), 180)
 
     visit root_path
 
-    expect(problem_row("Car Insurance")).to have_content(/behind \$\d[\d,]*\.\d\d/)
-    expect(problem_row("Car Insurance")).to have_content("Every 6 months")
-    expect(problem_row("Car Insurance"))
-      .to have_content("$1,200.00 · #{(Date.current + 3.months).strftime("%b %-d")}")
+    expect(strip).to have_content("1 thing needs you")
+    expect(problem_row("Dining Out").find("[data-problem-state]")).to have_content("over by $30.00")
+    expect(problem_row("Dining Out").find("[data-problem-detail]"))
+      .to have_content("$180.00 spent of $150.00")
+    expect(problem_row("Dining Out")).to have_content("comes straight out of what is free")
   end
 
-  # ── TRIGGER 2: AN OVERDRAWN CATEGORY ───────────────────────────────────────────────────────────
-
-  # CARRIED FROM categories_spec, both halves. `rules.empty?` does NOT imply a rate rule exists: a
-  # category with no rules at all and a negative holding reaches :overdrawn — the only state guarded
-  # on the balance alone — so the fallback sentence has to be true of what is actually there.
-  it "explains an overdrawn rate category by its rate", :aggregate_failures do
-    deposit(200)
-    dining = envelope("Dining Out", 150)
-    fund(dining, 100)
-    spend(dining, 180)
+  # THE OTHER DIRECTION, on a category that spent to the penny: exactly the rate is the tidiest
+  # outcome there is, and reading it as trouble would be the same lie as `-$0.00`. `#over?` is a
+  # strict comparison for exactly this reason.
+  it "leaves a rule spent exactly to its rate out of the strip", :aggregate_failures do
+    deposit(1_000)
+    spend(envelope("Dining Out", 150), 150)
 
     visit root_path
 
-    expect(problem_row("Dining Out")).to have_content("overdrawn $80.00")
-    expect(problem_row("Dining Out")).to have_content("refills at its rate")
-    expect(problem_row("Dining Out")).to have_no_content("nothing fills it")
+    expect(page).to have_no_css("[data-problem-category='Dining Out']")
+    expect(page).to have_no_css("[data-trouble]")
   end
 
-  it "says so plainly when an overdrawn category has no rules at all", :aggregate_failures do
-    mystery = holder("Mystery")
-    spend(mystery, 80)
+  # THE STRIP AND THE SECTION RENDER THE SAME RULE INCHES APART, and an over rule is in both by
+  # construction. One string, one helper (`HomeHelper#claim_trouble_label`), so the screen cannot
+  # disagree with itself about the same $30.
+  it "reads the same in the strip as in the period section", :aggregate_failures do
+    deposit(1_000)
+    spend(envelope("Dining Out", 150), 180)
 
     visit root_path
 
-    expect(problem_row("Mystery")).to have_content("overdrawn $80.00")
-    expect(problem_row("Mystery")).to have_content("nothing fills it")
-    expect(problem_row("Mystery")).to have_no_content("refills at its rate")
+    expect(problem_row("Dining Out").find("[data-problem-state]")).to have_content("over by $30.00")
+    expect(find("[data-period-row='Dining Out'] [data-period-clause]")).to have_content("over by $30.00")
   end
 
-  # WHICH PERIOD THE FIGURE BELONGS TO, and the pair is the point: two rate categories with the SAME
-  # rule, the SAME spending and therefore the same `overdrawn $80.00`, differing only in which side
-  # of a period boundary their money arrived on.
-  describe "an overdrawn category whose period has ended" do
-    before do
-      deposit(2_000)
-      swept = envelope("Swept", 400, priority: 1)
-      live = envelope("Live", 400, priority: 2)
-      fund(swept, 100, on: Date.current - 21.days)
-      fund(live, 100, on: Date.current)
-      spend(swept, 180)
-      spend(live, 180)
-      visit root_path
-    end
+  # ── TRIGGER: A DUE DATE PASSED WITH THE FUND SHORT (§3.2) ──────────────────────────────────────
 
-    it "marks the closed period on the problem row, and only on that one", :aggregate_failures do
-      expect(problem_row("Swept")).to have_content("overdrawn $80.00 · last period")
-      expect(problem_row("Live")).to have_content("overdrawn $80.00")
-      expect(problem_row("Live")).to have_no_content("last period")
-    end
+  # ** OVERDUE IS THE DATE PAST **AND** THE FUND SHORT, and the second half is the ruling. **
+  #
+  # PLANTED: a $1,200 monthly bill anchored ten days ago, with $500 of the category's spending inside
+  # this period. §3.2's catch-up formula — `planned = (target − built_up) ÷ periods_left`, and
+  # `periods_left` floors at 1 for a date already past — accrues the whole $1,200 in this period; the
+  # walk then settles the period's spending, so `raw = 1,200 − 500` and `built_up` is **$700.00**.
+  # $500 is less than one cycle, so `cycles_paid_by` stays at 0 and the occurrence does not roll: the
+  # date is still ten days ago and the fund is $500 short of it.
+  it "names a bill whose date has passed while its fund is short", :aggregate_failures do
+    deposit(2_000)
+    due = Date.current - 10.days
+    spend(accumulating("Utilities", amount: 1_200, due: due), 500)
 
-    # THE TWO SECTIONS RENDER THE SAME CATEGORY INCHES APART, and an overdrawn one is in both by
-    # construction. Compared to a literal on both sides rather than to each other, so a clause that
-    # lost its amount fails here rather than agreeing with itself about nothing.
-    it "reads the same in the strip as in the period section", :aggregate_failures do
-      expect(problem_row("Swept")).to have_content("overdrawn $80.00 · last period")
-      expect(find("[data-period-row='Swept'] [data-period-clause]"))
-        .to have_content("overdrawn $80.00 · last period")
-      expect(problem_row("Live")).to have_no_content("last period")
-      expect(find("[data-period-row='Live'] [data-period-clause]")).to have_no_content("last period")
-    end
+    visit root_path
+
+    expect(problem_row("Utilities").find("[data-problem-state]"))
+      .to have_content("overdue · was #{due.strftime("%b %-d")}")
+    expect(problem_row("Utilities").find("[data-problem-detail]"))
+      .to have_content("$700.00 built up of $1,200.00")
+    expect(problem_row("Utilities")).to have_content("this needs paying")
   end
 
-  # ── TRIGGER 3: A PHYSICAL OVERDRAFT ────────────────────────────────────────────────────────────
+  # ** THE OTHER DIRECTION, AND IT IS THE HALF THAT STATES THE RULING. ** The same bill with nothing
+  # spent: the catch-up formula fills it to the full $1,200 in one period, so the fund is WHOLE and
+  # the occurrence is waiting to be PAID rather than to be saved into. That is not trouble — it is a
+  # bill on the user's desk — and `#overdue?`'s `built_up < target` half is the whole of the
+  # distinction. A strip that fired on the date alone would flag every bill the user is on top of.
+  it "leaves a bill whose fund is whole out of the strip", :aggregate_failures do
+    deposit(2_000)
+    accumulating("Utilities", amount: 1_200, due: Date.current - 10.days)
 
-  # CLAIMED FROM THE HERO CARD (the plan's Task 1 → Task 2 hand-over), copy verbatim. It is a
-  # NON-MAIN account: main's overdraft IS the red "In Checking" figure with its own sentence (spec
-  # §2), and printing the same debt twice with two different sentences about what counts it is worse
-  # than printing it once.
+    visit root_path
+
+    expect(page).to have_no_css("[data-problem-category='Utilities']")
+    expect(page).to have_no_css("[data-trouble]")
+    expect(find("[data-period-row='Utilities'] [data-period-figure]"))
+      .to have_content("$1,200.00 built up of $1,200.00")
+  end
+
+  # ── TRIGGER: A PHYSICAL OVERDRAFT (answers-first §5) ───────────────────────────────────────────
+
+  # CARRIED WHOLE, copy verbatim. It is a NON-MAIN account: main's overdraft IS the red "In Checking"
+  # figure with its own sentence (§2), and printing the same debt twice with two different sentences
+  # about what counts it is worse than printing it once.
   it "names a non-main account that has gone below zero", :aggregate_failures do
     deposit(1_000)
     move_in(200)
@@ -312,23 +321,9 @@ RSpec.describe "Home Trouble", type: :system do
 
     expect(strip).to have_css("[data-overdrawn-account='Ally']", text: "Ally is overdrawn $200.00")
     expect(strip).to have_content("none of the figures above count it")
-    # The pot is fine — $1,000 of income plus the $200 that walked in — so the hero's figure must
-    # not have turned red as well.
+    # The pot is fine — $1,000 of income plus the $200 that walked in — so the hero's figure must not
+    # have turned red as well.
     expect(page).to have_no_css("[data-in-checking].text-status-danger")
-  end
-
-  # THE MIRROR OF #move_out: a second account paying INTO checking, which is the only way to put a
-  # NON-main account below zero while every category and available stay healthy.
-  def move_in(amount)
-    ally = create(:pool, :account, user: user, name: "Ally")
-    create(
-      :account_movement,
-      from_pool: ally,
-      to_pool: checking,
-      amount: amount,
-      date: Date.current,
-      kind: :transfer
-    )
   end
 
   # THE OTHER DIRECTION, and it is the one that keeps the debt from being reported twice: main is
@@ -336,7 +331,6 @@ RSpec.describe "Home Trouble", type: :system do
   it "leaves main's own overdraft to the hero", :aggregate_failures do
     deposit(500)
     move_out(900)
-    distribute(envelope("Groceries", 400), 400)
 
     visit root_path
 
@@ -345,46 +339,7 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_no_css("[data-overdrawn-account='Checking']")
   end
 
-  # ── TRIGGER 4: A PERIOD NOBODY HAS DISTRIBUTED ─────────────────────────────────────────────────
-
-  # §6: "The distribute call-to-action lives on the trouble strip when undistributed, not as a
-  # band." The link is asserted with its href, because a call to action that goes nowhere looks
-  # identical to one that works.
-  it "asks the user to distribute when this period's money has not been handed out", :aggregate_failures do
-    deposit(1_000)
-    envelope("Groceries", 400)
-
-    visit root_path
-
-    expect(find("[data-undistributed]")).to have_content("This period hasn't been distributed yet")
-    expect(find("[data-undistributed]"))
-      .to have_link("Distribute this period", href: new_distribution_path)
-  end
-
-  # THE OTHER DIRECTION: one distributed allocation inside the period, and the trigger falls silent.
-  it "falls silent once this period has been distributed", :aggregate_failures do
-    deposit(1_000)
-    distribute(envelope("Groceries", 400), 400)
-
-    visit root_path
-
-    expect(page).to have_no_css("[data-undistributed]")
-    expect(page).to have_no_link("Distribute this period")
-  end
-
-  # A USER WITH NOTHING TO DISTRIBUTE IS NOT IN TROUBLE. Every fresh account has an undistributed
-  # period by definition, and a strip that fired on it would greet every new user with a demand they
-  # cannot act on.
-  it "asks nothing of a user whose rules ask for nothing", :aggregate_failures do
-    deposit(1_000)
-
-    visit root_path
-
-    expect(page).to have_no_css("[data-undistributed]")
-    expect(page).to have_no_css("[data-trouble]")
-  end
-
-  # ── TRIGGER 5: THE BUDGET DOES NOT FIT THE INCOME (§9's permanent button, claimed from the hero) ─
+  # ── TRIGGER: THE BUDGET DOES NOT FIT THE INCOME (§9's permanent button) ────────────────────────
 
   # The href is asserted, not just the label: a button that says the budget does not fit and goes
   # nowhere is the state this replaced, and it looked identical.
@@ -399,7 +354,7 @@ RSpec.describe "Home Trouble", type: :system do
 
   it "hides the structural warning when the budget fits", :aggregate_failures do
     deposit(1_000)
-    distribute(envelope("Groceries", 400), 400)
+    envelope("Groceries", 400)
 
     visit root_path
 
@@ -409,8 +364,8 @@ RSpec.describe "Home Trouble", type: :system do
 
   # THE BUTTON AND THE ROUTE ARE THE SAME CONDITION READ TWICE. Home shows it on
   # `structurally_underwater?` and /sacrifice refuses on the same test, so a button that rendered
-  # where the route refuses would open a redirect straight back. Followed rather than merely
-  # asserted, because only following it can tell the two apart.
+  # where the route refuses would open a redirect straight back. Followed rather than merely asserted,
+  # because only following it can tell the two apart.
   it "opens the sacrifice view when followed", :aggregate_failures do
     envelope("Rent", 3_000)
 
@@ -422,12 +377,11 @@ RSpec.describe "Home Trouble", type: :system do
   end
 
   # THE HERO AND THE BUTTON ANSWER DIFFERENT QUESTIONS, which is why §9 asks for the button to be
-  # permanent. This period's cash is fine — the money is in the account — and the budget still does
-  # not fit the income.
+  # permanent. This period's cash is fine — `5,000 − 3,000` leaves $2,000 free — and the budget still
+  # does not fit the income ($3,000 a period against $2,400).
   it "keeps the button up on a period whose cash is comfortable", :aggregate_failures do
-    rent = envelope("Rent", 3_000)
+    envelope("Rent", 3_000)
     deposit(5_000)
-    distribute(rent, 3_000)
 
     visit root_path
 
@@ -456,15 +410,17 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_no_css("[data-sacrifice-link]")
   end
 
-  # ── THE FIX, AND THE SCREEN THAT MUST NOT FALL OVER ────────────────────────────────────────────
+  # ── THE SCREEN THAT MUST NOT FALL OVER ────────────────────────────────────────────────────────
 
-  # CARRIED WHOLE. A rule whose amount is negative took out the ROOT ROUTE rather than one screen:
-  # `HoldingCalculator#goal_required` returns `[rate, remaining].min`, so a goal carrying a negative
-  # rule asks for a negative figure and the waterfall's `remaining.clamp(0.to_d, needed)` raises.
+  # CARRIED, AND THE GUARD MOVED. A rule whose amount is negative took out the ROOT ROUTE rather than
+  # one screen, through the waterfall's `remaining.clamp(0.to_d, needed)`. There is no waterfall; what
+  # holds the line now is §3.2's PER-PERIOD CLAMP AT ZERO, and this example is what says so.
   #
-  # BOTH SIDES OF THE GUARD, and they are independent: the raw reader is still negative (that is the
-  # input), while the SCREEN renders and #remaining_plan counts the bad rule as zero rather than
-  # subtracting $150 from what the user owes.
+  # PLANTED: a $2,400 goal whose only rule carries −$150, beside a $400 rate rule, against $100 of
+  # income. The goal's period accrues `min(−150, gap 2,400)` = −$150, and the clamp takes its
+  # `built_up` to **$0.00** rather than letting a negative claim ADD to what is free — Σ claims is the
+  # $400 rate rule alone, `unclaimed = 100 − 400` = −$300.00, and free is that. A missing clamp reads
+  # −$150 here and the figure would be −$150.00.
   it "renders when a rule's amount is negative", :aggregate_failures do
     vacation = holder("Vacation", priority: 2, target_amount: 2_400)
     create(:budget, :per_period_rate, category: vacation, amount: 150)
@@ -475,130 +431,16 @@ RSpec.describe "Home Trouble", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$300.00")
-    expect(Category.find(vacation.id).holding_calculator.required).to eq(-150)
-    expect(HomePresenter.new(user: user).remaining_plan).to eq(400)
-  end
-
-  # ── SPEC §8'S ONE ROUGH EDGE, CARRIED FROM categories_spec ─────────────────────────────────────
-  #
-  # Rule changes apply immediately, so raising a rule the day after a distribution flips its
-  # category from `on track` to `behind` with no money missing and nothing having gone wrong. The
-  # row says which of the two kinds of `behind` it is.
-  #
-  # `travel_to` only around the WRITES, never around `visit`: the whole clause is a comparison of
-  # two timestamps, and without a controlled clock the rule and the allocation are written
-  # milliseconds apart and this is a coin toss.
-  describe "a category that went behind because a rule was changed" do
-    include_context "with a rule changed after the money went out"
-
-    def accumulating_rule(name, amount:, priority:)
-      category = holder(name, priority: priority)
-      rule = create(
-        :budget,
-        category: category,
-        amount: amount,
-        interval_months: 6,
-        anchor_date: today + 3.months
-      )
-      [category, rule]
-    end
-
-    # THE PAIR THE CLAUSE HAS TO TELL APART: two categories with the same shape of rule, the same
-    # distribution and the same `behind` state, differing only in which side of that distribution
-    # their rule was last edited on.
-    def plant_pair
-      deposit(2_000)
-      raised = raised_rule = steady = nil
-
-      before_distributing do
-        raised, raised_rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1)
-        steady, = accumulating_rule("Property Tax", amount: 1_200, priority: 2)
-      end
-
-      [raised, steady].each { |category| allocate(category, 10) }
-      after_distributing { raised_rule.update!(amount: 1_800) }
-    end
-
-    # BOTH DIRECTIONS ON ONE SCREEN, and that is the point rather than a convenience.
-    it "says so on that row and on no other", :aggregate_failures do
-      plant_pair
-
-      visit root_path
-
-      expect(problem_row("Car Insurance")).to have_content("behind")
-      expect(problem_row("Car Insurance")).to have_content("you changed a rule here after distributing")
-      expect(problem_row("Property Tax")).to have_content("behind")
-      expect(problem_row("Property Tax")).to have_no_content("you changed a rule here after distributing")
-    end
-
-    # THE TWO SECTIONS RENDER THE SAME CATEGORY INCHES APART, and a `behind` category is in both by
-    # construction. One explaining the state while the other did not would read as the screen
-    # disagreeing with itself about why.
-    it "says the same thing in the period section" do
-      plant_pair
-
-      visit root_path
-
-      expect(find("[data-period-row='Car Insurance'] [data-period-clause]"))
-        .to have_content("you changed a rule here after distributing")
-    end
-
-    # THE CASE THAT WOULD HAVE MADE THE OLD COPY A LIE. `updated_at` records WHEN a rule moved and
-    # nothing about which way: the rule below goes DOWN, from $1,800 to $1,200, and the category is
-    # still behind against the smaller requirement.
-    it "says a rule changed, not raised, when the rule went down", :aggregate_failures do
-      deposit(2_000)
-      category = rule = nil
-
-      before_distributing { category, rule = accumulating_rule("Car Insurance", amount: 1_800, priority: 1) }
-      allocate(category, 10)
-      after_distributing { rule.update!(amount: 1_200) }
-
-      visit root_path
-
-      expect(problem_row("Car Insurance")).to have_content("behind")
-      expect(problem_row("Car Insurance")).to have_content("you changed a rule here after distributing")
-      expect(problem_row("Car Insurance")).to have_no_content("raised")
-    end
-
-    # NO DISTRIBUTION, NO CLAUSE. A rule changed on a period nobody has distributed yet has not been
-    # changed "after distributing".
-    it "stays silent when nothing has been distributed this period", :aggregate_failures do
-      deposit(2_000)
-      rule = nil
-
-      before_distributing { _, rule = accumulating_rule("Car Insurance", amount: 1_200, priority: 1) }
-      after_distributing { rule.update!(amount: 1_800) }
-
-      visit root_path
-
-      expect(problem_row("Car Insurance")).to have_content("behind")
-      expect(problem_row("Car Insurance")).to have_no_content("you changed a rule here after distributing")
-    end
-
-    # THE CLAUSE BELONGS TO `behind` AND TO NOTHING ELSE. An overdue bill is overdue because it was
-    # not paid; an edited rule has nothing to do with it, and the aside would be unexplained noise
-    # on the loudest row on the screen.
-    it "stays off a row in another state", :aggregate_failures do
-      deposit(2_000)
-      category = payable("Utilities", amount: 120, due: Date.current - 10.days)
-      rule = category.budgets.first
-
-      allocate(category, 10)
-      after_distributing { rule.update!(amount: 180) }
-
-      visit root_path
-
-      expect(problem_row("Utilities")).to have_content("overdue")
-      expect(problem_row("Utilities")).to have_no_content("you changed a rule here after distributing")
-    end
+    expect(page).to have_css("[data-shortfall-amount]", text: "short $300.00")
+    expect(page).to have_no_css("[data-uncovered-claim='Vacation']")
   end
 
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
   #
   # A TRUE 375px LAYOUT VIEWPORT via CDP — `hero_spec.rb`'s mechanism, copied deliberately: Chrome
   # refuses a headless window narrower than 500px, so `resize_to(375, …)` is really a 500px test.
-  # No `evaluate_script` anywhere in the example, for that file's measured reason.
+  # No `evaluate_script` anywhere in the example, for that file's measured reason: Selenium's own
+  # geometry says what this example is about without running a line of JS.
   describe "on a narrow screen" do
     before do
       page.driver.browser.execute_cdp(
@@ -606,24 +448,23 @@ RSpec.describe "Home Trouble", type: :system do
       )
     end
 
-    # RENT TAKES THE ROOT FIRST, which is what keeps Dentist's button on the screen at all: a
-    # category the next distribution funds in full is deliberately offered no move (see
-    # `HomePresenter#covered_by_waterfall?`), and the button is the widest thing this row can hold.
-    it "fits a problem row and its fix button inside a 375px viewport", :aggregate_failures do
-      deposit(2_000)
-      envelope("Rent", 1_500, priority: 0)
-      dentist = holder("Dentist", priority: 1)
-      create(:budget, :one_time, category: dentist, amount: 1_500, anchor_date: Date.current + 3.days)
+    # THE WIDEST THING THE STRIP HOLDS IS AN UNCOVERED ROW — a category name, its rule and a
+    # two-figure sentence on one line — now that the fix buttons are gone. Four-figure amounts, so the
+    # row is as wide as this design can make it.
+    it "fits the shortfall arm and its uncovered list inside a 375px viewport", :aggregate_failures do
+      deposit(1_000)
+      envelope("Rent", 1_500, priority: 1)
+      envelope("Groceries", 1_200, priority: 2)
 
       visit root_path
 
-      expect(problem_row("Dentist")).to have_link("Take $1,500.00 from Available")
+      expect(uncovered("Groceries")).to have_content("nothing covers its $1,200.00")
 
       panel = page.find("[data-trouble]").native.rect
-      button = problem_row("Dentist").find_link("Take $1,500.00 from Available").native.rect
+      claim = uncovered("Groceries").native.rect
 
       expect(panel.x + panel.width).to be <= 375
-      expect(button.x + button.width).to be <= panel.x + panel.width
+      expect(claim.x + claim.width).to be <= panel.x + panel.width
     end
   end
 end

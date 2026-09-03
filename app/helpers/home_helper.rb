@@ -76,56 +76,58 @@ module HomeHelper
     end
   end
 
-  # THE STATES A "THIS PERIOD" BAR HAS ALREADY SAID (answers-first spec §4). `left to spend` IS the
-  # bar read backwards — `$90.00 left` is the $310-of-$400 row's own remainder — and `saving` is the
-  # goal bar's own two figures (`$424.00 of $2,400.00`), so printing either beside the bar would be
-  # the screen answering one question twice in two denominations. That is the exact defect the
-  # inverted presentation was adopted to remove, so the silence is the design rather than a tidy-up.
-  PERIOD_ROW_SILENT_STATES = [:left_to_spend, :saving].freeze
+  # ── ** THE CLAIM VOCABULARY (computed-claims spec §3.4). ** ────────────────────────────────────
+  #
+  # `#period_row_clause`, `#quiet_period_marker` and `PERIOD_ROW_SILENT_STATES` ARE DELETED (Task 3),
+  # and the deletion is that Home stopped asking their question rather than that nothing called them.
+  # All three read a `HoldingStatus`, whose seven states describe what was MOVED into a category —
+  # `left to spend`, `behind`, `· last period`, `— you changed a rule here after distributing`. There
+  # are no movements on the purpose side any more (§5), so there is no "last period" money awaiting a
+  # sweep, no distribution to have edited a rule after, and nothing "behind" that a transfer could
+  # catch up. A claim is a FUNCTION, and the three things it can be is: under its rate, over it, or
+  # accruing toward a date. Those are the three sentences below.
+  #
+  # THE STATUS VOCABULARY ITSELF IS NOT DELETED — the distribute, reallocation and category screens
+  # still speak it, and Task 4 is what retires it with them. Home simply stopped.
 
-  # THE SMALL CLAUSE AFTER A "THIS PERIOD" BAR — the row vocabulary surviving "where it earns its
-  # place" (spec §4). nil where it earns none, and the view renders no element at all there.
-  #
-  # THREE ANSWERS, AND THEY ARE THREE DIFFERENT SENTENCES RATHER THAN ONE SAID THREE WAYS:
-  #
-  #   NOTHING for the two states the bar has already stated (see the constant above) — except that
-  #     ` · last period` SURVIVES THERE ALONE. Which period the money belongs to is a fact about the
-  #     MONEY rather than about how the category is doing, the bar cannot carry it, and it is the one
-  #     thing standing between a quiet row and a user surprised by the next distribution taking $400
-  #     back. It is also what keeps the cross-screen pin honest: /budget prints `$400.00 left · last
-  #     period` for the same category on the same afternoon, and a Home row silent about the period
-  #     would be the two screens disagreeing about the same money.
-  #   `on track`, THE WORD WITHOUT THE MONEY, for the one quiet state that is genuinely additional:
-  #     whether a dated bill is on schedule is not a fact the bar carries. `pool_state_label` would
-  #     print `$2,000.00 · on track`, and that amount is the HOLDING while the bar's is the
-  #     SPENDING — two money figures from two different questions, an inch apart, which is the pair
-  #     this screen has already shipped once under one noun.
-  #   THE WHOLE LABEL, BOTH SUFFIXES, for a state that needs attention. Here the figure IS the news
-  #     (`overdrawn $80.00`, `behind $385.00`) and it is not the bar's figure, so nothing is said
-  #     twice — and this row renders inches from the trouble strip's row about the same category, so
-  #     the two must read identically or the screen disagrees with itself. `pool_status_label` with
-  #     both suffixes threaded off the ONE row object is what makes that structural.
-  #
-  # THE DATE RIDES ON THE QUIET ARM ALONE, which is `HomePresenter::Row#due_marker?`'s rule re-housed
-  # for the row type that replaced it: an attention row has already printed its date inside the
-  # label, and `overdrawn $50.00 · Oct 17` would date a debt with a deadline belonging to something
-  # else.
-  def period_row_clause(row)
-    status = row.status
-    return quiet_period_marker(status) if PERIOD_ROW_SILENT_STATES.include?(status.state)
-    return ["on track", status.due_on&.strftime("%b %-d")].compact.join(" · ") unless row.needs_attention?
+  # THE FIGURE ON A "THIS PERIOD" ROW (§3.4): `spent of rate` for an envelope, `built up of target`
+  # for a fund. ONE method for both because the two are the same shape said about different money,
+  # and the caller must not choose the noun — a row that printed "spent" over a fund's running total
+  # would be the money screen's oldest lie, that savings are money to spend.
+  def claim_figure(line)
+    return "#{number_to_currency(line.spent)} of #{number_to_currency(line.accrued)}" if line.rate?
 
-    pool_status_label(
-      status,
-      period_closed: status.period_closed?,
-      changed_after_distributing: row.changed_after_distributing?
-    )
+    "#{number_to_currency(line.built_up)} built up of #{number_to_currency(line.target)}"
   end
 
-  # The whole of what a bar-silent row still has to say. nil is the ordinary answer; `last period` is
-  # `pool_status_label`'s own suffix standing on its own, because there is no state word in front of
-  # it to hang off.
-  def quiet_period_marker(status) = status.period_closed? ? "last period" : nil
+  # THE SCHEDULE CLAUSE UNDER AN ACCRUING ROW (§3.4): `next due Mar 1 · $200.00 per period`. nil for a
+  # rate rule, which has neither — use-it-or-lose-it accrues toward nothing and is due on no day — and
+  # nil for a fund already full, whose per-period share is zero and which is waiting to be spent
+  # rather than saved into. The view renders no element at all where this is nil.
+  def claim_schedule(line)
+    return nil if line.rate?
+
+    [
+      line.next_due_on && "next due #{line.next_due_on.strftime("%b %-d")}",
+      line.per_period.positive? && "#{number_to_currency(line.per_period)} per period"
+    ].select { |clause| clause.is_a?(String) }.join(" · ").presence
+  end
+
+  # WHAT IS WRONG WITH A CLAIM, IN THE TWO SHAPES §4 SAYS ARE WORTH A HUMAN. The strip and the "This
+  # period" row print the SAME string about the same rule inches apart, which is why it is one method:
+  # the two said it differently once already, under the status vocabulary this replaces.
+  #
+  # `over by` IS THE PRE-CLAMP FIGURE — `spent − accrued`, the excess that reduced `free` directly
+  # (§3.1). The claim itself is zero in this state, so a figure taken from the claim would print
+  # `over by $0.00` on every overspend.
+  #
+  # `overdue · was Mar 1` KEEPS THE STATUS VOCABULARY'S OWN WORDING for the one state that survives
+  # the change of readers unchanged in meaning: a date has passed and the money is not there.
+  def claim_trouble_label(line)
+    return "over by #{number_to_currency(line.spent - line.accrued)}" if line.over?
+
+    "overdue · was #{line.next_due_on.strftime("%b %-d")}"
+  end
 
   # What an expanded row calls one of a pool's rules.
   #
@@ -159,34 +161,13 @@ module HomeHelper
     "#{number_to_currency(status.amount)} of #{number_to_currency(status.target)}"
   end
 
-  # THE FIX BUTTON'S OWN LABEL — spec §4.2's `[ Take $300 from Rent ]`.
-  #
-  # `fix.source.name` IS THE CANDIDATE'S OWN NAME, and that is the whole of the naming problem now.
-  # It went through `PoolMovementsHelper#reallocation_pool_name` because a pool needed a noun for
-  # the money inside it — an account stood in for the cash no envelope had claimed, so the button
-  # had to name that remainder rather than read "Checking", which would have named the envelopes
-  # too. Nothing contains
-  # anything on the purpose ledger: a source is a category or it is AVAILABLE, and
-  # `ReallocationPresenter::Root#name` answers "Available" for exactly the reason that class is a
-  # null object rather than a `nil`.
-  def fix_button_label(fix)
-    "Take #{number_to_currency(fix.amount)} from #{fix.source.name}"
-  end
-
-  # WHY THIS PROBLEM HAS NO BUTTON, and never merely that it has none (amendment C). A row that
-  # falls silent here reads as a rendering that failed rather than as an answer.
-  #
-  # Every other party was asked — AVAILABLE and every holder category — and none of them has this
-  # much spare, which is worth saying with the figure so the reader can see what would have had to
-  # be there.
-  #
-  # NO CONTAINER TO NAME (Task 6). This read "Nothing in Checking has $300.00 spare", because a move
-  # could not leave the account the envelope sat in. An allocation crosses nothing (two-ledger spec
-  # §2), so the set that was asked is the whole of what the user has, and naming an account would
-  # narrow a sentence that is no longer narrow.
-  def fix_gap_sentence(fix)
-    "Nothing has #{number_to_currency(fix.amount)} spare to move."
-  end
+  # ── `#fix_button_label` AND `#fix_gap_sentence` ARE DELETED (computed-claims Task 3), with the
+  # whole fix apparatus they labelled. A "fix" was an ALLOCATION — money moved from one category, or
+  # from AVAILABLE, into the one that was short — and §5 leaves the purpose side with no movements at
+  # all. There is nothing left to take money FROM, because nothing holds any: a claim is computed, and
+  # the only things that change one are a rule, an adjustment (§3.3) or spending less. The strip says
+  # so and its one door is the Budget page. `/allocations/new` and the sentences these labelled are
+  # still alive for the reallocation screen until Task 4 deletes it.
 
   # ── `#pool_problem_label` IS DELETED (answers-first Task 2), and the property it existed for is
   # not lost — it became structural. It forced `period_closed:` off the status so that Home's

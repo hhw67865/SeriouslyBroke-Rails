@@ -61,7 +61,9 @@ RSpec.describe "Budget page adjustments", type: :system do
     end
 
     it "says what it has built up and what is going in this period", :aggregate_failures do
-      within(rule_row("Vacation")) { expect(page).to have_css("[data-rule-built-up]", text: "$150.00 built up") }
+      within(rule_row("Vacation")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$150.00 built up of $1,200.00")
+      end
       open_adjust("Vacation")
       expect(find("[data-adjust='Vacation'] [data-adjust-planned]")).to have_content("$150.00 going in this period")
     end
@@ -76,7 +78,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       expect(page).to have_content("Skipped this period for Vacation")
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-built-up]", text: "$0.00 built up")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 built up of $1,200.00")
         expect(page).to have_css("[data-change-amount]", text: "-$150.00")
         expect(page).to have_content(Date.current.strftime("%b %-d"))
       end
@@ -106,13 +108,13 @@ RSpec.describe "Budget page adjustments", type: :system do
     # $400.00 built up before, $0.00 after, and one −$400.00 delta to explain it.
     it "skips a period that has already been topped up by taking back the whole accrual", :aggregate_failures do
       change_by("Vacation", 250, "Set aside")
-      expect(page).to have_css("[data-rule-built-up]", text: "$400.00 built up")
+      expect(page).to have_css("[data-rule-figure]", text: "$400.00 built up of $1,200.00")
 
       open_adjust("Vacation")
       find("[data-adjust='Vacation'] [data-adjust-skip]").click
 
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-built-up]", text: "$0.00 built up")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 built up of $1,200.00")
         expect(page).to have_css("[data-change-amount]", text: "-$400.00")
       end
     end
@@ -123,7 +125,9 @@ RSpec.describe "Budget page adjustments", type: :system do
       change_by("Vacation", 250, "Set aside")
 
       expect(page).to have_content("Set aside $250.00 for Vacation")
-      within(rule_row("Vacation")) { expect(page).to have_css("[data-rule-built-up]", text: "$400.00 built up") }
+      within(rule_row("Vacation")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$400.00 built up of $1,200.00")
+      end
     end
 
     # THE NEGATIVE HALF, and it is NOT the same click as a skip: $50 taken back leaves $100, where a
@@ -133,7 +137,9 @@ RSpec.describe "Budget page adjustments", type: :system do
       change_by("Vacation", 50, "Take back")
 
       expect(page).to have_content("Took back $50.00 from Vacation")
-      within(rule_row("Vacation")) { expect(page).to have_css("[data-rule-built-up]", text: "$100.00 built up") }
+      within(rule_row("Vacation")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$100.00 built up of $1,200.00")
+      end
     end
   end
 
@@ -145,14 +151,16 @@ RSpec.describe "Budget page adjustments", type: :system do
       visit budget_page_path
     end
 
-    # A RATE RULE SAYS CLAIMED, NEVER BUILT UP — use-it-or-lose-it means nothing is ever built up,
-    # and printing "$0.00 built up" over an envelope carrying $400 is the confusion
+    # A RATE RULE SAYS SPENT-OF-RATE, NEVER BUILT UP (§3.4) — use-it-or-lose-it means nothing is ever
+    # built up, and printing "$0.00 built up" over an envelope carrying $400 is the confusion
     # `ClaimCalculator#built_up` refuses. The negative half is asserted, so a row that printed both
-    # would fail.
+    # would fail. (Task 3 replaced Task 2's `$400.00 claimed` with the §3.4 row it named as the
+    # successor; the CLAIM is the difference between the two figures, and nothing spent makes it the
+    # whole $400.)
     it "says what it claims this period and offers no skip", :aggregate_failures do
       within(rule_row("Groceries")) do
-        expect(page).to have_css("[data-rule-claim]", text: "$400.00 claimed")
-        expect(page).to have_no_css("[data-rule-built-up]")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
+        expect(page).to have_no_content("built up")
       end
       open_adjust("Groceries")
       expect(page).to have_no_css("[data-adjust='Groceries'] [data-adjust-skip]")
@@ -162,14 +170,14 @@ RSpec.describe "Budget page adjustments", type: :system do
       change_by("Groceries", 50, "Top up this period")
 
       expect(page).to have_content("Topped up Groceries by $50.00 this period")
-      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-claim]", text: "$450.00 claimed") }
+      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $450.00") }
     end
 
     it "lowers it by exactly the reduction", :aggregate_failures do
       change_by("Groceries", 50, "Reduce this period")
 
       expect(page).to have_content("Reduced Groceries by $50.00 this period")
-      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-claim]", text: "$350.00 claimed") }
+      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $350.00") }
     end
 
     # ** REMOVING ONE PUTS THE FIGURE BACK EXACTLY. ** A delta is a row and nothing else — there is
@@ -178,13 +186,13 @@ RSpec.describe "Budget page adjustments", type: :system do
     # that had moved back would be the two disagreeing.
     it "restores the claim when the row is removed", :aggregate_failures do
       change_by("Groceries", 50, "Top up this period")
-      expect(page).to have_css("[data-rule-claim]", text: "$450.00 claimed")
+      expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $450.00")
 
       within(rule_row("Groceries")) { click_button "Remove" }
 
       expect(page).to have_content("Removed the $50.00 top-up on Groceries")
       within(rule_row("Groceries")) do
-        expect(page).to have_css("[data-rule-claim]", text: "$400.00 claimed")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
         expect(page).to have_no_css("[data-rule-changes]")
       end
     end

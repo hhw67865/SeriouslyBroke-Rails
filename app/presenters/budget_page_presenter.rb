@@ -6,10 +6,11 @@
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
 # docs/superpowers/specs/2026-08-21-two-ledger-design.md §3
 class BudgetPagePresenter
-  # ONE RULE ON THE PAGE. `due_on` is nil for an anchorless rule and that nil is information, not
-  # a gap: BudgetCalculator#due_date answers `period_end` for a rule with no anchor, which is a
-  # real number for the maths and a lie on screen — "due Aug 31" printed against a rate rule that
-  # is never due. The row prints a date only where one exists.
+  # ONE RULE ON THE PAGE. `next_due_on` is nil for an anchorless rule and that nil is information,
+  # not a gap — a rate rule is never "due" — so the row prints a date only where one exists. It is
+  # `ClaimCalculator#next_due_on` rather than `BudgetCalculator#due_date`, which answers `period_end`
+  # for an anchorless rule (a real number for the maths and a lie on screen) and diverges from the
+  # computed reading on an item-less one (see #rule_order).
   #
   # `reason` IS GONE WITH THE ORPHANS (two-ledger spec §5, Task 5). It said WHY a rule was outside
   # the fill order, and the one reason left — a pool no account holds — is a fact about a layer that
@@ -37,20 +38,49 @@ class BudgetPagePresenter
   # `min`/`max` enforce it before the user can submit. `AdjustmentForm` refuses a date outside the
   # same range at 422 and that stays the law; this is the field agreeing with it rather than a
   # second derivation free to offer a bound the writer rejects.
+  # ** §3.4'S ROW, AND IT IS THE SAME OBJECT SHAPE HOME'S IS (Task 3). ** `HomeHelper#claim_figure`
+  # and `#claim_schedule` render this Data and `HomePresenter::ClaimLine` alike — they ask #rate?,
+  # #spent, #accrued, #built_up, #target, #next_due_on and #per_period and nothing else — so the two
+  # screens print ONE sentence about one rule rather than two that have to be kept in step. Task 2
+  # left `$X claimed` / `$X built up` here as a minimum and named the replacement; this is it, and it
+  # REPLACES those hooks rather than standing beside them, or the row would say the same money twice.
   Rule = Data.define(
     :budget,
-    :due_on,
     :shape,
     :claim,
-    :built_up,
-    :planned_this_period,
+    :spent,
     :accrued_this_period,
+    :built_up,
+    :target,
+    :next_due_on,
+    :planned_this_period,
+    :over,
+    :overdue,
     :countable_span,
     :adjustments
   ) do
-    def anchored? = due_on.present?
+    def anchored? = next_due_on.present?
 
     def rate? = shape == :rate
+
+    # THE THREE ALIASES THE SHARED §3.4 HELPERS ASK FOR. `accrued_this_period` and
+    # `planned_this_period` are the writer's names — `AdjustmentForm` skips one and the panel prints
+    # the other — and `accrued`/`per_period` are the reader's. Two names, one member, rather than two
+    # members that could hold different figures.
+    def accrued = accrued_this_period
+
+    def per_period = planned_this_period
+
+    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, the pre-clamp figure, which is the only
+    # reader that can tell "spent it exactly" from "spent more than there was".
+    def over? = over
+
+    # A DATE THAT PASSED WITH THE MONEY STILL MISSING (§3.2). A member rather than a derivation,
+    # because the comparison is against the presenter's `today` and a Data object computing it would
+    # have to reach for `Date.current`.
+    def overdue? = overdue
+
+    def trouble? = over? || overdue?
 
     # ** WHETHER A SKIP IS OFFERABLE, AND IT IS THE ACCRUAL THAT DECIDES (fix round MED-2). ** A
     # skip means "accrue nothing this period", so the button has a job only while the period is
@@ -62,48 +92,29 @@ class BudgetPagePresenter
     def skippable? = !rate? && accrued_this_period.positive?
   end
 
-  # ONE CATEGORY AND THE RULES THAT FILL IT. `status` is a HoldingStatus, so the group header speaks
-  # the app's existing row vocabulary through `pool_status_label` rather than a second one of its
-  # own, and its #balance is the category's holdings — the same object, so the header's state and
-  # its figure cannot disagree, and the page does not build a second calculator to ask.
+  # ONE CATEGORY AND THE RULES THAT FILL IT.
   #
-  # THE MEMBER NAMES THE VOCABULARY READS ARE UNCHANGED, and deliberately so: `shared/_holding_status`
-  # renders `HomePresenter::Row`, this and `CategoryBudgetPresenter` off ONE set of questions
-  # (#status, #needs_attention?, #period_closed?, #changed_after_distributing?, #due_marker?,
-  # #balance_clause?), and Home does not move onto categories until Task 6. Renaming the shared
-  # partial is that task's; what this one owes is to keep answering.
+  # ** THE HEADER STOPPED READING A HOLDING (computed-claims Task 3). ** It was a `HoldingStatus`
+  # rendered through `shared/_holding_status` — `$400.00 left · last period — you changed a rule here
+  # after distributing`, every clause of which is about money that was MOVED into the category and
+  # about the distribution that moved it. Nothing moves (§5), so there is no balance to read, no
+  # swept period for `· last period` to name and no distribution for the second suffix to compare
+  # against. What a category has is `Σ its rules' claims` (`Category#claim`, §3), which is what the
+  # header prints and what `free` subtracted.
   #
-  # `changed_after_distributing` rides on the group rather than being asked in the partial, for the
-  # same reason `status` does: it compares this category's rules against THIS period's latest
-  # distribution, and which period that is depends on the presenter's `today`. It is the second
-  # half of the row vocabulary — `period_closed?` is the first — and this page carries BOTH because
-  # a suffix on Home and not here is two screens describing one envelope differently on the same
-  # afternoon. That the Budget page is where rules are EDITED makes the clause more nearly a
-  # caption for what the user just did here than anywhere else in the app.
-  Group = Data.define(:category, :rules, :status, :changed_after_distributing) do
-    delegate :balance, to: :status
+  # THE STATUS VOCABULARY IS NOT DELETED — the categories, distribute and reallocation screens still
+  # speak it, and Task 4 retires it with them. This page simply stopped.
+  Group = Data.define(:category, :rules) do
     delegate :priority, to: :category
 
-    # THE ROW VOCABULARY'S FOUR QUESTIONS, so this Data and `HomePresenter::Row` answer the same
-    # set and `shared/_holding_status` can render either without asking which screen it is on. These
-    # two rode straight off `status` in the partial before; through the group they are the group's,
-    # which is what stops a caller threading one suffix and forgetting the other (see
-    # HomePresenter::Row's header for the two times that happened).
-    delegate :needs_attention?, :period_closed?, to: :status
+    # WHAT THIS CATEGORY CLAIMS — `Category#claim`'s definition (Σ over its rules), summed off the
+    # rows this group already built rather than re-asked of the model, so the header and the rules
+    # under it cannot come from two readings.
+    def claim = rules.sum(0.to_d, &:claim)
 
-    # A PREDICATE, matching `Rule#anchored?` above and the two neighbours the partial reads beside
-    # it — `status.needs_attention?` and `status.period_closed?`. The header prints
-    # `period_closed?` and this one on adjacent lines, and one of the two answering without a `?`
-    # reads as a different kind of thing.
-    def changed_after_distributing? = changed_after_distributing
-
-    # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE. `· holds $X` on the three states whose figure
-    # is a bill's shortfall rather than this category's money — `pool_balance_clause` owns which —
-    # and never a date: every rule's own date is printed in the rows below this header, so a date up
-    # here would be one of them repeated without saying which. The mirror of
-    # `HomePresenter::Row#due_marker?`, where the screen is missing the opposite thing.
-    def balance_clause? = true
-    def due_marker? = false
+    # DOES ANYTHING UNDER THIS HEADER NEED A HUMAN — the same two facts Home's strip fires on (§4),
+    # asked of the same rows, so the two screens agree about one category on one afternoon.
+    def needs_attention? = rules.any?(&:trouble?)
   end
 
   attr_reader :user, :today
@@ -174,11 +185,13 @@ class BudgetPagePresenter
   # shows nothing has to be told where the $500 went.
   #
   # Ordered by owner name then by the groups' own `#rule_order`, because `all_budgets` carries no
-  # ORDER BY and a plain UPDATE relocates a row in the heap.
+  # ORDER BY and a plain UPDATE relocates a row in the heap. BUILT BEFORE IT IS SORTED, because the
+  # key now reads the CLAIM's due date (see #rule_order) and that is a fact about the row rather than
+  # about the record — one ordering for both lists, off the date both of them print.
   def unfilled_rules
     @unfilled_rules ||= (rules - grouped_rules)
-      .sort_by { |budget| [owner_name(budget), *rule_order(budget)] }
       .map { |budget| build_rule(budget) }
+      .sort_by { |rule| [owner_name(rule.budget), *rule_order(rule)] }
   end
 
   # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user
@@ -216,8 +229,9 @@ class BudgetPagePresenter
 
   # §9's gate, and the ONE state the sacrifice button renders in.
   #
-  # Steady need against declared income, never `HomePresenter#remaining_plan` against it — see
-  # Budget#steady_ask.
+  # Steady need against declared income, never THIS period's Σ claims against it — the structural
+  # question is what the rules ask of a TYPICAL period, and the two diverge in both directions on the
+  # same budget. See Budget#steady_ask and HomePresenter#structurally_underwater?.
   #
   # `declared?` AND NOT `typical_income.present?`, WHICH IS THIS FIX ROUND'S CORRECTION. The gate
   # used to ask only about the income, and it was unreachable in the wrong state only because the
@@ -289,15 +303,15 @@ class BudgetPagePresenter
   # EVERY RULE THE USER OWNS. `user.all_budgets` is `Budget.for_user`, the app's one answer to
   # which rules are a user's.
   #
-  # `category: [:user, :budgets]` is the whole preload and it replaces four pool-shaped ones.
-  # `:budgets` because `HoldingStatus` reads `category.budgets` for every anchored rule it ranks and
-  # `DistributionClock#changed_after_distributing?` reads it again — without it every group header
-  # is one SELECT per category, on the widest per-rule screen in the app. `:user` because
-  # `Budget#user` walks the owner and `BudgetCalculator#periods_until_due` asks it for every dated
-  # rule on the page; measured on the demo seeds in the pool era, eleven `SELECT users WHERE id = ?`
-  # for one user.
+  # `category: :user` is the whole preload. `:user` because `Budget#user` walks the owner and every
+  # claim on the page asks it for the period grid and for the owner's calendar day; measured on the
+  # demo seeds in the pool era, eleven `SELECT users WHERE id = ?` for one user.
+  #
+  # `:budgets` LEFT THE PRELOAD WITH THE HOLDING (Task 3). It was there because `HoldingStatus` read
+  # `category.budgets` for every anchored rule it ranked and `DistributionClock` read it again; the
+  # header reads neither now, and a preload nothing asks for is a query that reports nothing.
   def rules
-    @rules ||= user.all_budgets.includes(:item, category: [:user, :budgets]).to_a
+    @rules ||= user.all_budgets.includes(:item, category: :user).to_a
   end
 
   # `Category#holder?` IN MEMORY — the Ruby twin of `Category.in_fill_order`'s `expenses.where.not
@@ -321,24 +335,8 @@ class BudgetPagePresenter
   def build_group(category)
     Group.new(
       category: category,
-      rules: rules_by_category.fetch(category.id).sort_by { |budget| rule_order(budget) }.map { |budget| build_rule(budget) },
-      status: category.status(today: today, terms: ledger.terms_for(category)),
-      changed_after_distributing: distribution_clock.changed_after_distributing?(category)
+      rules: rules_by_category.fetch(category.id).map { |budget| build_rule(budget) }.sort_by { |rule| rule_order(rule) }
     )
-  end
-
-  # ONE CLOCK FOR THE WHOLE PAGE, and it is the ONLY ARM `DistributionClock` has. An allocation
-  # names no account (it moves money between the user's root and their categories, and the root is
-  # one), so there is one distribution per period and one moment it happened at: one query for the
-  # screen, O(1) in groups, and no `account_ids:` to thread. The pool era's per-account map and the
-  # `account_ids:` keyword that reached it were deleted in Task 6 with their last caller
-  # (`HomePresenter`), so this is no longer "the first caller to take" a second arm — there is no
-  # second arm.
-  #
-  # `category.budgets` is in memory already (`#rules` preloads it), so this asks the database
-  # nothing per row.
-  def distribution_clock
-    @distribution_clock ||= DistributionClock.new(user: user, today: today)
   end
 
   def build_rule(budget)
@@ -346,12 +344,16 @@ class BudgetPagePresenter
 
     Rule.new(
       budget: budget,
-      due_on: due_on_for(budget),
       shape: calculator.shape,
       claim: calculator.claim,
-      built_up: calculator.built_up,
-      planned_this_period: calculator.planned_this_period,
+      spent: calculator.spent_this_period,
       accrued_this_period: calculator.accrued_this_period,
+      built_up: calculator.built_up,
+      target: calculator.target,
+      next_due_on: calculator.next_due_on,
+      planned_this_period: calculator.planned_this_period,
+      over: calculator.over?,
+      overdue: calculator.overdue?,
       countable_span: calculator.countable_span,
       adjustments: adjustments_this_period.fetch(budget.id, [])
     )
@@ -393,36 +395,18 @@ class BudgetPagePresenter
     end
   end
 
-  # THROUGH THE CALCULATOR, NEVER THE RAW ANCHOR. A recurring bill's `anchor_date` is its FIRST
-  # occurrence — the demo's car insurance anchors in March and is due every six months — so
-  # printing the column would show a date years in the past as the next thing to pay.
-  def due_on_for(budget) = budget.anchor_date.presence && due_date_for(budget)
-
-  def due_date_for(budget) = (@due_dates ||= {})[budget] ||= calculator_for(budget).due_date
-
-  # BudgetCalculator#due_order, never a `[due_date, -amount, id]` of our own: that key decides
-  # which rule a category row names, which one `allocated_balances` fills first and therefore which
-  # one slips — and it lives in exactly one place.
+  # ** THE ORDER RULES ARE LISTED IN, OFF THE DATE THE PAGE ACTUALLY PRINTS (Task 3). ** It was
+  # `BudgetCalculator#due_order` over `#due_date`, and both are gone from this class: that class
+  # DIVERGES from `ClaimCalculator#next_due_on` on an item-less rule — it has no fulfilment signal
+  # without an item, so it assumes every bill was paid on time and rolls the date on the calendar,
+  # while the computed model reads the category's own lane and leaves an unpaid occurrence where it
+  # was anchored (the ruling of 2026-09-03; see that method's header). Ordering by one date and
+  # printing the other would put a row above its neighbour for a reason the screen contradicts.
   #
-  # The already-computed due date is handed in rather than left for the key to ask again, because
-  # #due_date re-runs #paid_since_anchor's SUM on every call and this page sorts every rule the
-  # user has.
-  def rule_order(budget) = calculator_for(budget).due_order(due_date_for(budget))
-
-  # Keyed by the record rather than by id, as HomePresenter does: an unsaved rule has no id, and
-  # nil as a cache key would hand every such rule the first one's calculator.
-  def calculator_for(budget) = (@calculators ||= {})[budget] ||= budget.calculator(today: today)
-
-  # ONE LEDGER FOR THE WHOLE PAGE, over exactly the categories the groups render — grouped queries
-  # for the set instead of five aggregates per category per status. A category in #unfilled_rules is
-  # not in it and needs no term: it holds nothing by definition, which is why its rule is in that
-  # list rather than in a group.
-  #
-  # Lazy, like Home's. This page writes nothing, so there is no deletion for a snapshot to fall
-  # the wrong side of; the laziness only keeps a presenter that is built and never rendered free.
-  #
-  # `user:` is passed so a page whose groups are empty still names an owner — `CategoryLedger`
-  # raises `NoSingleOwner` rather than guessing, and a brand-new user's page has no categories at
-  # all to read one off.
-  def ledger = @ledger ||= CategoryLedger.new(grouped_categories, user: user)
+  # THE KEY IS TOTAL. A rule with no date sorts last (a rate rule is never due); ties break on the
+  # larger amount and then on the id, because `budgets` carries no ORDER BY and a plain UPDATE
+  # relocates a row in the heap — the same defect the fill order carries its own tie-break for.
+  def rule_order(rule)
+    [rule.next_due_on.present? ? 0 : 1, rule.next_due_on || Date.new(9999, 12, 31), -rule.budget.amount.to_d, rule.budget.id]
+  end
 end

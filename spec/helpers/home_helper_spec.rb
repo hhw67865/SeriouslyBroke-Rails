@@ -161,73 +161,107 @@ RSpec.describe HomeHelper, type: :helper do
   # is pinned above, on `#pool_status_label`, which is where it always lived. Seven examples replace
   # the four.
 
-  # THE SMALL CLAUSE AFTER A "THIS PERIOD" BAR (answers-first spec §4). Home's system specs reach the
-  # attention arm and the two silent states; every arm is pinned here so the decision about what
-  # "earns its place" cannot drift silently.
-  describe "#period_row_clause" do
-    # A double rather than a real `PeriodRow`, for the reason the `status` double above exists: this
-    # method reads exactly three questions off the row and a real one would drag a category, a
-    # calculator and a period window in to answer them.
-    def period_row(state, amount: 0, due_on: nil, period_closed: false, changed: false)
+  # ** `#period_row_clause` AND ITS SEVEN EXAMPLES ARE DELETED (computed-claims Task 3), AND THE
+  # CLAIM VOCABULARY BELOW REPLACES THEM. ** Every one of them read a `HoldingStatus`, whose states
+  # describe money that had been MOVED into a category — `$90.00 left`, `saving`, `on track`,
+  # `· last period`, `— you changed a rule here after distributing`. Nothing moves (spec §5), so
+  # there is no balance to be left, no swept period to belong to and no distribution to have edited a
+  # rule after. What a claim can be is: under its rate, over it, or accruing toward a date.
+  #
+  # THE STATUS VOCABULARY ITSELF IS NOT DELETED — the categories, distribute and reallocation screens
+  # still speak it, and `#pool_status_label`'s own examples above are untouched. Home simply stopped.
+
+  # ── THE CLAIM VOCABULARY (computed-claims §3.4). One double per shape, for the reason the `status`
+  # double above exists: these three methods read a handful of questions off a line and a real
+  # `ClaimLine` would drag a category, a rule and a period walk in to answer them.
+  describe "the claim vocabulary" do
+    def rate_line(spent:, accrued:, over: false)
       instance_double(
-        HomePresenter::PeriodRow,
-        status: status(state, amount: amount, due_on: due_on, period_closed: period_closed),
-        needs_attention?: HoldingStatus::ATTENTION_STATES.include?(state),
-        changed_after_distributing?: changed
+        HomePresenter::ClaimLine,
+        rate?: true,
+        spent: spent,
+        accrued: accrued,
+        over?: over,
+        next_due_on: nil
       )
     end
 
-    # THE BAR HAS ALREADY SAID IT. `$90.00 left` is the $310-of-$400 row's own remainder and
-    # `$424.00 of $2,400.00` is the goal bar's own two figures, so a clause here would be the screen
-    # answering one question twice in two denominations.
-    it "says nothing on a category that is simply left to spend" do
-      expect(helper.period_row_clause(period_row(:left_to_spend, amount: 90))).to be_nil
+    def accruing_line(built_up:, target:, per_period:, next_due_on: nil, over: false)
+      instance_double(
+        HomePresenter::ClaimLine,
+        rate?: false,
+        built_up: built_up,
+        target: target,
+        per_period: per_period,
+        next_due_on: next_due_on,
+        over?: over,
+        spent: 0.to_d,
+        accrued: 0.to_d
+      )
     end
 
-    it "says nothing on a savings goal" do
-      expect(helper.period_row_clause(period_row(:saving, amount: 424))).to be_nil
+    describe "#claim_figure" do
+      # §3.4: a rate rule says what it SPENT of its rate. The denominator is the ACCRUED figure —
+      # `rate + Σ this period's deltas` — because that is what `#over?` compares against, so the
+      # colour and the fraction cannot describe different arithmetic.
+      it "says spent of rate on a rate rule" do
+        expect(helper.claim_figure(rate_line(spent: 310, accrued: 400))).to eq("$310.00 of $400.00")
+      end
+
+      # ** THE NOUN IS NOT THE CALLER'S TO CHOOSE. ** A row printing "spent" over a fund's running
+      # total would be the money screen's oldest lie, that savings are money to spend.
+      it "says built up of target on an accruing rule" do
+        line = accruing_line(built_up: 450, target: 1_200, per_period: 200)
+
+        expect(helper.claim_figure(line)).to eq("$450.00 built up of $1,200.00")
+      end
     end
 
-    # THE ONE THING A BAR-SILENT ROW STILL HAS TO SAY. Which period the money belongs to is a fact
-    # about the MONEY rather than about how the category is doing, and the bar cannot carry it — a
-    # row silent about it is a user surprised by the next distribution taking $400 back. It is also
-    # what /budget prints for the same category on the same afternoon.
-    it "still marks a closed period on an otherwise silent row" do
-      expect(helper.period_row_clause(period_row(:left_to_spend, amount: 400, period_closed: true)))
-        .to eq("last period")
+    describe "#claim_schedule" do
+      # §3.4's second half, on the shape that has one.
+      it "names the next due date and the per-period share" do
+        line = accruing_line(built_up: 450, target: 1_200, per_period: 200, next_due_on: Date.new(2026, 3, 1))
+
+        expect(helper.claim_schedule(line)).to eq("next due Mar 1 · $200.00 per period")
+      end
+
+      # A DATELESS TARGET HAS NO DUE DATE, and the clause is the half that is true rather than a
+      # sentence with a gap in it.
+      it "drops the date on a rule that has none" do
+        expect(helper.claim_schedule(accruing_line(built_up: 650, target: 2_400, per_period: 150)))
+          .to eq("$150.00 per period")
+      end
+
+      # A FULL FUND ACCRUES NOTHING MORE, so "$0.00 per period" would be a line reporting nothing.
+      it "drops the share on a fund that is already full" do
+        line = accruing_line(built_up: 1_200, target: 1_200, per_period: 0, next_due_on: Date.new(2026, 3, 1))
+
+        expect(helper.claim_schedule(line)).to eq("next due Mar 1")
+      end
+
+      # A RATE RULE HAS NEITHER — use-it-or-lose-it accrues toward nothing and is due on no day — so
+      # the view renders no element at all.
+      it "is nil for a rate rule" do
+        expect(helper.claim_schedule(rate_line(spent: 310, accrued: 400))).to be_nil
+      end
     end
 
-    # THE WORD WITHOUT THE MONEY. `pool_state_label` would print `$2,000.00 · on track`, and that
-    # amount is the HOLDING while the bar beside it is the SPENDING — two money figures from two
-    # different questions, an inch apart.
-    it "keeps on track as a word and drops its amount" do
-      expect(helper.period_row_clause(period_row(:on_track, amount: 2_000))).to eq("on track")
-    end
+    describe "#claim_trouble_label" do
+      # ** THE EXCESS, NOT THE CLAIM. ** §3.1 clamps an overspent claim to zero, so a figure taken
+      # from the claim would print "over by $0.00" on every overspend. `spent − accrued` is the
+      # pre-clamp difference, which is the money that came straight out of what is free.
+      it "names the excess on a rule spent past its rate" do
+        expect(helper.claim_trouble_label(rate_line(spent: 180, accrued: 150, over: true)))
+          .to eq("over by $30.00")
+      end
 
-    # THE DATE RIDES ON THE QUIET ARM, which is `HomePresenter::Row#due_marker?`'s rule re-housed.
-    it "dates a quiet row when its rule has a due date" do
-      row = period_row(:on_track, amount: 2_000, due_on: Date.new(2026, 10, 17))
+      # THE ONE STATE THAT SURVIVES THE CHANGE OF READERS UNCHANGED IN MEANING: a date has passed and
+      # the money is not there. `pool_state_label`'s own wording, kept.
+      it "dates an overdue occurrence" do
+        line = accruing_line(built_up: 400, target: 600, per_period: 0, next_due_on: Date.new(2026, 3, 1))
 
-      expect(helper.period_row_clause(row)).to eq("on track · Oct 17")
-    end
-
-    # THE OTHER DIRECTION OF THE SAME GATE: an attention row has already printed its date inside the
-    # label, and `overdrawn $50.00 · Oct 17` would date a debt with a deadline belonging to something
-    # else.
-    it "leaves the date off a row that needs attention" do
-      row = period_row(:overdrawn, amount: 50, due_on: Date.new(2026, 10, 17))
-
-      expect(helper.period_row_clause(row)).to eq("overdrawn $50.00")
-    end
-
-    # BOTH SUFFIXES AT ONCE, in the order `#pool_status_label` fixes: how the category is doing,
-    # which period its money belongs to, then why. Asserted as full equality against the same literal
-    # that method's own example uses, so the two are pinned to one string rather than to each other.
-    it "carries both suffixes on a row that needs attention" do
-      row = period_row(:behind, amount: 50, period_closed: true, changed: true)
-
-      expect(helper.period_row_clause(row))
-        .to eq("behind $50.00 · last period — you changed a rule here after distributing")
+        expect(helper.claim_trouble_label(line)).to eq("overdue · was Mar 1")
+      end
     end
   end
 end

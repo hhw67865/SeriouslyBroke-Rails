@@ -71,10 +71,18 @@ class AccountLedger
 
   def main = user.default_account
 
+  # MEMOISED, LIKE `#totals` BESIDE IT, AND FOR THE SAME REASON THIS CLASS IS A SNAPSHOT. It was the
+  # one term here that ran its two SUMs on every ask, and the asks are not rare: Home reads the pot,
+  # the claim ledger's `total_money` reads it again as one of the accounts it sums, and every
+  # overdraft check walks the accounts a third time — six statements for one figure, measured.
+  #
+  # `defined?` RATHER THAN `||=` because the answer is a real zero for every account but main, which
+  # is most of them, and `||=` would re-run the pair on exactly those.
   def entry_side(account)
     return 0.to_d unless main.present? && account.id == main.id
+    return @entry_side if defined?(@entry_side)
 
-    user_entries(Entry.incomes).sum(:amount).to_d - user_entries(Entry.expenses).sum(:amount).to_d
+    @entry_side = user_entries(Entry.incomes).sum(:amount).to_d - user_entries(Entry.expenses).sum(:amount).to_d
   end
 
   # `fetch` with a `0.to_d` default, both halves load-bearing: a grouped sum has NO KEY AT ALL for

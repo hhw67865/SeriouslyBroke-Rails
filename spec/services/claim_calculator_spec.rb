@@ -207,6 +207,43 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(calc(Date.new(2026, 8, 15)).planned_this_period).to eq(0)
     end
 
+    # ** `#overdue?` IS A DATE PAST **AND** A FUND SHORT (§4's trigger; Task 3), and the second half
+    # is what this pair is for. ** The cycle rolls on PAYMENT rather than on the calendar, so an
+    # occurrence nobody paid stays anchored at Jun 1 and `#next_due_on` goes on naming it — which
+    # means a FULL fund reads "in the past" too. That one is waiting to be PAID, not to be saved
+    # into, and a screen that flagged it would flag every bill the user is on top of.
+    #
+    # AUG 15, WITH NOTHING SPENT: the walk filled the fund to its $600 target back in June and holds
+    # it there (the two examples above), so the date has passed and the fund is whole.
+    it "is not overdue while the fund is whole", :aggregate_failures do
+      august = calc(Date.new(2026, 8, 15))
+
+      expect(august.next_due_on).to eq(Date.new(2026, 6, 1))
+      expect(august.built_up).to eq(600)
+      expect(august).not_to be_overdue
+    end
+
+    # THE OTHER DIRECTION, AND THE ARITHMETIC IS §3.2'S SETTLE ORDER: a $200 part payment in August
+    # lands AFTER that period's accrual, so `raw = 600 − 200` leaves **$400.00**; $200 is less than
+    # one whole cycle, so `cycles_paid_by` stays at 0 and the occurrence does not roll. Date past,
+    # fund $200 short.
+    it "is overdue once part of the bill has been paid out of the fund", :aggregate_failures do
+      spend(200, on: Date.new(2026, 8, 10), item: premium)
+      august = calc(Date.new(2026, 8, 15))
+
+      expect(august.next_due_on).to eq(Date.new(2026, 6, 1))
+      expect(august.built_up).to eq(400)
+      expect(august).to be_overdue
+    end
+
+    # AND A RULE WITH NO DATE AT ALL IS NEVER OVERDUE — `#next_due_on` is nil for a rate rule, and a
+    # `nil < today` would raise rather than answer.
+    it "is never overdue on a rule that has no due date" do
+      rate_rule = create(:budget, :per_period_rate, category: create(:category, :expense, :funded, user: user), amount: 400)
+
+      expect(described_class.new(rate_rule, today: Date.new(2026, 8, 15))).not_to be_overdue
+    end
+
     # ** THE CATCH-UP FORMULA, RECOMPUTED EVERY PERIOD (§3.2/§3.3). ** February is skipped by a
     # −$100 delta, and the remaining four periods rise from $100 to $125 to land the target on time:
     #   Jan 100 → 100   Feb 100 − 100 → 100   Mar (600−100)/4 = 125 → 225

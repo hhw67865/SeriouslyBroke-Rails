@@ -27,10 +27,6 @@ RSpec.describe "Budget page rules", type: :system do
 
   def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
-  def fund(category, amount, on:)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
-  end
-
   def rolling(category, amount:, anchor:, every: 1)
     create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
@@ -57,20 +53,44 @@ RSpec.describe "Budget page rules", type: :system do
       within(group("Groceries")) { expect(page).to have_content("priority 2") }
     end
 
-    # The date on the dated rule and NOT on the rate rule, on one screen: an anchorless rule is
-    # never due, and BudgetCalculator#due_date answers the end of the period for one.
-    it "prints a next date only for the anchored rule" do
+    # ** §3.4'S ROW (computed-claims Task 3), REPLACING TASK 2'S `$X claimed` / `$X built up`. **
+    # The date and the per-period share are the ACCRUING row's second half and belong to the dated
+    # rule alone: an anchorless rate rule is never due and accrues toward nothing, so its row carries
+    # neither. Both directions on one screen.
+    #
+    # PLANTED: a $1,200 six-monthly bill anchored three months out on a biweekly grid anchored today.
+    # §3.2's `periods_left` counts the boundaries from today through the due date — three months is
+    # 89 to 92 days and `floor(days ÷ 14) + 1` is **7** for every one of them — so
+    # `planned = 1,200 ÷ 7` = **$171.43**, and one walked period leaves that much built up.
+    it "gives the accruing rule a schedule and the rate rule none" do
       within(rule_row("Car Insurance")) do
-        expect(page).to have_content("next #{(Date.current + 3.months).strftime("%b %-d")}")
+        expect(page).to have_css(
+          "[data-rule-schedule]",
+          text: "next due #{(Date.current + 3.months).strftime("%b %-d")} · $171.43 per period"
+        )
       end
-      within(rule_row("Groceries")) { expect(page).to have_no_content("next") }
+      within(rule_row("Groceries")) { expect(page).to have_no_css("[data-rule-schedule]") }
     end
 
-    # The row vocabulary is the app's one vocabulary (`pool_status_label`), and the balance is
-    # printed only where the label has not already said it — see BudgetPageHelper#pool_balance_clause.
-    it "says how each category is doing, and holds only where the label names a bill" do
-      within(group("Car Insurance")) { expect(page).to have_content("behind").and have_content("holds $0.00") }
-      within(group("Groceries")) { expect(page).to have_content("$0.00 left").and have_no_content("holds") }
+    # THE FIGURE, PER SHAPE (§3.4): a rate rule says what it SPENT of its rate, an accruing one what
+    # it has BUILT UP of its target. Never both, and never the other one's noun.
+    it "reads spent-of-rate on the rate rule and built-up-of-target on the bill" do
+      within(rule_row("Groceries")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
+      end
+      within(rule_row("Car Insurance")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
+      end
+    end
+
+    # ** THE HEADER IS `Σ its rules' claims` (§3), WHERE A `HoldingStatus` USED TO BE. ** It read
+    # `$0.00 left · holds $0.00` — a balance and a state about money that had been MOVED into the
+    # category, and nothing moves. Groceries claims its whole unspent rate; Car Insurance claims what
+    # it has built up.
+    it "heads each category with what its rules claim" do
+      within(group("Groceries")) { expect(page).to have_css("[data-category-claim]", text: "$400.00 claimed") }
+      within(group("Car Insurance")) { expect(page).to have_css("[data-category-claim]", text: "$171.43 claimed") }
+      expect(page).to have_no_content("holds $")
     end
   end
 
@@ -155,145 +175,22 @@ RSpec.describe "Budget page rules", type: :system do
     end
   end
 
-  # WHICH PERIOD THE FIGURE BELONGS TO — the suffix `pool_status_label` appends for a rate
-  # category whose period has ended, and the one clause the Budget page used to be the only
-  # caller in the app to omit.
+  # ** TWO GROUPS OF EXAMPLES ARE DELETED HERE (computed-claims Task 3), and both measured a fact
+  # about money that had been MOVED into a category (spec §5):
   #
-  # The pair is deliberate and so is its shape: two categories with the SAME rule, the SAME
-  # holdings and therefore the same "$400.00 left", differing only in which side of a period
-  # boundary the money arrived on. A lone closed-period group would pass against a suffix
-  # printed unconditionally.
+  #   "a category whose period has ended" (2 examples, plus the Home-side cross-screen pin inside the
+  #     second) — the ` · last period` suffix. It said "this figure belongs to a period that has
+  #     closed and the next distribution will sweep it back". A rate claim is use-it-or-lose-it and
+  #     resets at the boundary by definition (§3.1): there is no leftover and nothing to sweep.
+  #   "a category whose rule moved after the money did" (2 examples, same shape) —
+  #     `DistributionClock` compares a rule's `updated_at` against the moment this period's split was
+  #     written, and there is no split.
   #
-  # ** THE HOME-SIDE TWIN IS RESTORED (Task 6), and in the other direction. ** It was withdrawn in
-  # Task 5 because Home still rendered POOLS and these two categories had no envelope for it to
-  # name. Home's rows are categories now, so the pair can be read off BOTH screens on one afternoon
-  # — which is the whole point of `shared/_holding_status` and the reason the suffix is threaded off
-  # one object rather than passed as a keyword each caller can forget.
-  describe "a category whose period has ended", :aggregate_failures do
-    before do
-      swept = holder("Swept", priority: 1)
-      live = holder("Live", priority: 2)
-      rate(swept, 400)
-      rate(live, 400)
-      # Two periods back on a biweekly cadence anchored today, so the rate rule's own period —
-      # measured from `last_funded_on`, which is this allocation — closed before today.
-      fund(swept, 400, on: Date.current - 21.days)
-      fund(live, 400, on: Date.current)
-      visit budget_page_path
-    end
-
-    it "says which period the figure belongs to, and only where the period has ended" do
-      within(group("Swept")) { expect(page).to have_content("$400.00 left · last period") }
-      within(group("Live")) do
-        expect(page).to have_content("$400.00 left")
-        expect(page).to have_no_content("last period")
-      end
-    end
-
-    # THE CROSS-SCREEN PIN, WITH ONE STATED CORRECTION (answers-first Task 2). Home's categories band
-    # is now the "This period" section, and it prints the INVERSE of `$400.00 left` — `$0.00 of
-    # $400.00`, the same money from the other end — with the state word suppressed because the bar
-    # has already said it. What must NOT differ between the two screens is the period marker, which
-    # is a fact about the MONEY rather than about how the category is doing: a Home row silent about
-    # it is a user surprised by the next distribution taking $400 back. So the pin is on that marker,
-    # still compared to a literal on both sides and still for the same pair on the same afternoon.
-    it "reads exactly as Home reads for the same categories", :aggregate_failures do
-      visit root_path
-
-      expect(find("[data-period-row='Swept'] [data-period-figure]")).to have_content("$0.00 of $400.00")
-      expect(find("[data-period-row='Swept'] [data-period-clause]")).to have_content("last period")
-      expect(find("[data-period-row='Live'] [data-period-figure]")).to have_content("$0.00 of $400.00")
-      expect(page).to have_no_css("[data-period-row='Live'] [data-period-clause]")
-    end
-  end
-
-  # WHY THE CATEGORY IS BEHIND — spec §8's rough edge, on the page it belongs to most.
-  #
-  # THE PAIR IS THE POINT. Two categories with the same shape of rule, the same distribution and
-  # the same `behind` state, differing only in which side of that distribution their rule was last
-  # edited on. Split into two examples the negative half would pass against a page that never
-  # prints the clause at all.
-  #
-  # `travel_to` rather than `update_column`: the signal is `budgets.updated_at` against the
-  # allocation's `created_at`, and both must be written by the app the way the app writes them —
-  # `created_at`, never `date` (a period marker compared to a timestamp is a unit mismatch, see
-  # `DistributionClock`).
-  #
-  # THE CLOCK IS THE SHARED CONTEXT'S, and its `#allocate` writes an `Allocation`, which is what
-  # `DistributionClock` reads. Its pool-era `#distribute` twin is DELETED (Task 6) with the
-  # `account_ids:` surface that made it necessary.
-  #
-  # ** THE HOME-SIDE TWIN IS RESTORED HERE TOO (Task 6), for the reason the pair above gives. **
-  describe "a category whose rule moved after the money did" do
-    include_context "with a rule changed after the money went out"
-
-    before do
-      anchor = today + 3.months
-      raised = steady = raised_rule = nil
-
-      before_distributing do
-        raised = holder("Car Insurance", priority: 1)
-        steady = holder("Property Tax", priority: 2)
-        raised_rule = rolling(raised, amount: 1_200, anchor: anchor, every: 6)
-        rolling(steady, amount: 1_200, anchor: anchor, every: 6)
-      end
-
-      # Small enough to leave both behind: the clause explains a `behind` row, so the row has to
-      # still be behind.
-      [raised, steady].each { |category| allocate(category, 10) }
-      after_distributing { raised_rule.update!(amount: 1_800) }
-
-      visit budget_page_path
-    end
-
-    it "says so on that group and on no other", :aggregate_failures do
-      within(group("Car Insurance")) do
-        expect(page).to have_content("behind")
-        expect(page).to have_content("you changed a rule here after distributing")
-      end
-      within(group("Property Tax")) do
-        expect(page).to have_content("behind")
-        expect(page).to have_no_content("you changed a rule here after distributing")
-      end
-    end
-
-    # THE CROSS-SCREEN PIN, on the clause most at risk of being threaded on one screen and forgotten
-    # on the other — it has shipped that way twice, once between Home and /budget and once between
-    # Home's own two bands.
-    #
-    # THE AMOUNT TRAVELS WITH THE CLAUSE, and it is READ off the page that already rendered it
-    # rather than pinned to a second literal: the lag is a function of how many boundaries fall
-    # inside a six-month cycle on the calendar the suite happens to run on, which is arithmetic this
-    # example does not own. Asserting the bare word "behind" on Home would have been the weaker
-    # half of the pair above (`$400.00 left · last period` carries its figure), and a label that
-    # lost its amount would have passed.
-    #
-    # THE TWO SCREENS' CLAUSES AFTER THE STATE DIFFER BY DESIGN — the Budget card adds `· holds $X`
-    # and a Home row adds a date (`Group#balance_clause?` against `Row#due_marker?`) — so what is
-    # compared is the STATE and its two suffixes, which is exactly what `shared/_holding_status`
-    # threads off one object.
-    # The two figures are asserted DIFFERENT first: same rule shape and same allocation, but one rule
-    # was raised to $1,800 and the other left at $1,200, so a pair of rows both matching one figure
-    # would be matching by coincidence.
-    it "reads exactly as Home reads for the same categories", :aggregate_failures do
-      raised, steady = ["Car Insurance", "Property Tax"].map { |name| behind_figure(group(name)) }
-      expect([raised, steady]).to all(match(/\A\$[\d,]+\.\d\d\z/))
-      expect(raised).not_to eq(steady)
-      visit root_path
-
-      expect(home_row("Car Insurance")).to have_content("behind #{raised} — you changed a rule here after distributing")
-      expect(home_row("Property Tax")).to have_content("behind #{steady}")
-      expect(home_row("Property Tax")).to have_no_content("you changed a rule here after distributing")
-    end
-
-    # The rendered figure, off the group's own status line. `nil` rather than a raise when the
-    # label has no amount at all, so the `all(match(...))` above is what reports it.
-    def behind_figure(node) = node.text[/behind (\$[\d,]+\.\d\d)/, 1]
-
-    # WAS `[data-holding-name]`, the categories band's row (answers-first Task 2). The clause is the
-    # part this pin is about, and on the "This period" section it has an element of its own.
-    def home_row(name) = find("[data-period-row='#{name}'] [data-period-clause]")
-  end
+  # THE CROSS-SCREEN PROPERTY THEY EXISTED FOR SURVIVES, and it is stronger than it was: Home's strip
+  # and this page's rule rows print the SAME string about the same rule through ONE helper
+  # (`HomeHelper#claim_trouble_label`), rather than through a partial threading two optional suffixes
+  # every caller could forget. It is pinned in `spec/system/home/trouble_spec.rb` → "reads the same in
+  # the strip as in the period section".
 
   # The link is in the sidebar, which every signed-in page renders — so it is asserted from two
   # unrelated screens, and its POSITION is asserted too: a rule is neither a report nor a

@@ -1,200 +1,168 @@
 # frozen_string_literal: true
 
-# Everything the Home screen renders — BOTH LEDGERS OVER ONE TOTAL (two-ledger spec §2). Read-only:
-# it builds no movements, writes no allocations and saves nothing; the fix buttons below are LINKS
-# to the reallocation screen, which owns the write.
+# Everything the Home screen renders — THE PHYSICAL LEDGER AND THE CLAIMS COMPUTED OVER IT
+# (computed-claims spec §§2-4). Read-only: it builds no movements, writes nothing, and — as of this
+# task — reads no `allocations` at all.
 #
-#   THE PHYSICAL BAND  — the accounts, each showing what the bank says. `AccountLedger#balance_of`,
-#                        and main's balance IS the pot. Accounts no longer contain anything: the
-#                        `pools_for(account)` nesting, the orphan band and the whole apparatus that
-#                        went with them are deleted (Task 6).
-#   THE PURPOSE BAND   — AVAILABLE and the holder categories that hold the rest. `CategoryLedger`,
-#                        `Category.in_fill_order`, and ONE waterfall over ONE root.
+#   THE PHYSICAL SIDE — the accounts, each showing what the bank says. `AccountLedger#balance_of`,
+#                       and main's balance IS the pot. Untouched by this plan.
+#   THE PURPOSE SIDE  — CLAIMS. `free = min(pot, total_money − Σ claims)`, computed from the rules,
+#                       the calendar, the spending and the dated adjustments. Nothing moved to put
+#                       the money anywhere, so there is no balance to read and nothing to distribute.
 #
-# WHAT THE COLLAPSE FROM PER-ACCOUNT TO ONE ROOT ACTUALLY DELETED, said here because five readers
-# on this class existed only to carry it: `#account_pots`, `#sweeps_by_account`, `#fill_waterfall`'s
-# per-account pot map, `#cutoff`'s `accounts.one?` gate and `#projected_buffer`'s "cash in an account
-# with nothing left to fund" reading. Allocating money is an act of intention rather than of location
-# (§2), so there is no account for money to be stranded in and no second reason the standing band's
-# figures fail to subtract. #shortfall and `remaining_plan - available` agreed wherever available was
-# non-negative — and BOTH `#cutoff` and `#shortfall` are themselves deleted now (answers-first Task
-# 2), with the waterfall band that was their only caller. Their marker sits beside `#waterfall`,
-# which is the reader that survived.
+# ** WHAT THIS CLASS STOPPED CONSUMING (Task 3 of the computed-claims plan), and every one of them
+# is still ALIVE for the Distribute screen until Task 4 deletes it. ** The old readers are not gone;
+# HOME simply no longer asks them anything:
 #
-# THE HERO CARD REPLACED THE STANDING BAND (answers-first spec §§2-3), and with it went the last of
-# that machinery: `#projected_buffer` is deleted and `#total_required` is `#remaining_plan`. Home
-# stops describing the system and answers "how much is in checking, how much of it is free, where
-# are we in the period" — see #in_checking, #free_to_spend and #period_progress below, all three
-# composed from readers this class already had.
+#   `AllocationCalculator` (`#proposal`, `#waterfall`, `#available`) — the distribution's own
+#     apparatus. `#remaining_plan` was a sum over its rows and `#free_to_spend` was
+#     `available − remaining_plan`; both are replaced by `ClaimLedger#free`, which is a DEFINITION
+#     rather than a subtraction of two moving parts (§2).
+#   `HoldingCalculator` / `HoldingStatus` (`#status_for`, `#row_for`, `Row`, `#period_closed?`,
+#     `#attention_categories`, `#dated_rules_for`, `#calculator_for`) — a holding is what was MOVED
+#     into a category, and nothing moves. `over?` and an overdue date come off `ClaimCalculator`.
+#   `CategoryLedger`'s allocation lane (`#ledger`, `#anything_set_aside_or_spoken_for?`) — its ENTRY
+#     lane survives, and is what `#holder_spending_this_period` still composes.
+#   `DistributionClock` (`#changed_after_distributing?`, `#undistributed_period?`) — it exists to say
+#     which distribution is this period's, and there is no distribution.
+#   `ReallocationPresenter` and the whole FIX apparatus (`Fix`, `#fix_for`, `#fix_amount_for`,
+#     `#fix_candidates_for`, `#covered_by_waterfall?`, `#free_amount_for`) — a fix was an ALLOCATION,
+#     a purpose-side move, and §5 of the spec leaves the purpose side with no moves at all. The
+#     remedy for a shortfall is spending less or editing a rule (§4), which is what the strip now
+#     says and where its one door goes.
 #
-# See docs/superpowers/specs/2026-08-21-two-ledger-design.md §2,
-# docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §4 and
-# docs/superpowers/specs/2026-09-02-answers-first-home-design.md §§2-3
+# See docs/superpowers/specs/2026-09-03-computed-claims-design.md §§2-4 and
+# docs/superpowers/specs/2026-09-02-answers-first-home-design.md §§2-6, whose four questions and
+# whose copy this screen still answers — only the readers underneath changed.
 class HomePresenter
-  # WHAT ONE PROBLEM ROW OFFERS TO DO ABOUT ITSELF (spec §4.2): the amount to move, the source that
-  # can genuinely cover it, and what the move would cost the source.
+  # ONE RULE'S CLAIM, AS THE SCREEN SAYS IT (spec §3.4). Every member comes off ONE
+  # `ClaimCalculator`, from the page's ONE `ClaimLedger`, so a row cannot pair one rule's figure with
+  # another's state and cannot cost a walk of its own.
   #
-  # `candidate` is a ReallocationPresenter::Candidate, not a shape of our own — the same object, from
-  # the same class, that the screen this button opens will render half a second later. "What would
-  # this move cost" has one answer, and Home prints it through the same `AllocationsHelper` sentence
-  # `/allocations/new` prints. Two readers answering one question has produced a defect in every task
-  # on this plan.
-  #
-  # nil `candidate` is the no-fix case and is REACHABLE — see #fix_candidates_for. The view says so
-  # in words rather than rendering a dead button.
-  Fix = Data.define(:category, :amount, :candidate, :covered) do
-    # THE CANDIDATE ITSELF, not a record inside it: a source may be AVAILABLE, which is not a
-    # category at all (ReallocationPresenter::ROOT). Both answer #id and #name, which is the whole
-    # reason the root is a null object rather than a `nil`.
-    def source = candidate
-
-    # The next distribution funds this category's whole ask, so there is nothing for a move to do.
-    # See HomePresenter#covered_by_waterfall?.
-    def covered? = covered
-
-    # WHETHER MOVING MONEY IN WOULD CHANGE ANYTHING, and it is a real branch rather than a guard.
-    # `amount` is HoldingStatus#funding_gap, which is zero for an overdue bill whose category already
-    # holds the money — the demo's Renters Insurance. That category needs paying, not funding, and
-    # the view says so instead of offering a button that would double-fund it.
-    def needs_money? = amount.positive?
-
-    # PLAIN DIGITS FOR THE QUERY STRING. `number_to_rounded` scales to two decimals and is asked for
-    # `delimiter: ""`, so a four-figure amount cannot reach `?amount=` as "1,500.00" — which the
-    # browser would read as one dollar fifty. `DigitsHelper.digits` is the one spelling of "money a
-    # browser can parse" on this branch; four copies of it is four chances to leave the delimiter in.
-    def amount_param = DigitsHelper.digits(amount)
-  end
-
-  # ONE BUDGETED CATEGORY AS A BAR: what it spent this period, of what it plans to spend in one
-  # (answers-first spec §4).
-  #
-  # ** THE INVERSE OF THE ROW THIS REPLACED, AND THE SAME TWO READINGS OF THE SAME CATEGORY. ** The
-  # categories band printed `$90.00 left` — `HoldingStatus#amount` on a `:left_to_spend` row — and
-  # `$310.00 of $400.00` is that same $90 said from the other end. Nothing new is derived: `spent`
-  # is `CategoryLedger::ENTRY_CATEGORY_ID` inside `User#period_datetimes_containing` (see
-  # HomePresenter#holder_spending_this_period, which names both shared readers) and `planned` is
-  # `EntryImpactPresenter#denominator`'s rule (see #planned_this_period).
-  #
-  # `status` TRAVELS ON THE ROW because the vocabulary survives as a small clause (spec §4, and
-  # HomeHelper#period_row_clause) — one object carrying the figures AND the state, so a view cannot
-  # pair one category's bar with another's word. `changed_after_distributing` rides along for the
-  # same reason it rides on `Row`: the clause is threaded off ONE object rather than passed as an
-  # optional keyword a caller is free to forget.
-  PeriodRow = Data.define(
+  # `shape` RATHER THAN TWO BOOLEANS, because §3.4 gives the three shapes three different sentences:
+  # a rate rule says `spent of rate`, an accruing one says `built up of target · next due · $X per
+  # period`, and the classification lives in exactly one place (`ClaimCalculator#shape`).
+  ClaimLine = Data.define(
     :category,
+    :rule,
+    :shape,
+    :claim,
     :spent,
-    :planned,
-    :held,
-    :goal,
-    :status,
-    :changed_after_distributing
+    :accrued,
+    :built_up,
+    :target,
+    :next_due_on,
+    :per_period,
+    :over,
+    :overdue
   ) do
-    def goal? = goal
-    def changed_after_distributing? = changed_after_distributing
-    delegate :needs_attention?, to: :status
+    def rate? = shape == :rate
 
-    # WHAT THE BAR FILLS TO. An envelope's bar measures SPENDING against the plan; a goal's measures
-    # its HOLDING against the target it is saving toward (spec §4: "savings goals keep their target
-    # bars"), which is the same bar `HoldingCalculator#progress_percentage` draws everywhere else in
-    # the app. One member each rather than one signed number, because the two are read by different
-    # halves of the row: #filled draws the bar, #held is what the goal's figure prints.
-    def filled = goal? ? held : spent
+    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, which reads the figure BEFORE the clamp
+    # at zero and is therefore the only reader that can tell "spent it exactly" from "spent more than
+    # there was". Both leave a claim of zero (§3.1/§3.2).
+    def over? = over
 
-    # A BAR NEEDS SOMETHING TO BE A FRACTION OF. A holder carrying no rule and no target has no
-    # per-period plan, so the row prints the fact and no track — `EntryImpactPresenter#bar?`'s rule,
-    # for its reason: an empty track beside a real figure says "nothing left" an inch under a line
-    # saying otherwise.
-    def bar? = planned.positive?
+    # A DATE THAT PASSED WITH THE MONEY STILL MISSING (§3.2). Not merely a date in the past: a bill
+    # whose fund is FULL is waiting to be PAID, which is a different sentence and not trouble — the
+    # cycle rolls on payment, so an unpaid occurrence stays anchored where it was and goes on asking.
+    #
+    # A MEMBER RATHER THAN A DERIVATION, because the comparison is against the presenter's `today` and
+    # a Data object computing it would have to reach for `Date.current` — which is the one thing every
+    # reader on this screen is built to avoid.
+    def overdue? = overdue
 
-    # NOTHING TO SAY AT ALL: a holder carrying no rule and no target, which nobody has spent from
-    # this period. It is the budgeted side of spec §4's rule that a zero-spend unbudgeted category is
-    # absent from Home, and it is the same rule for the same reason — `spent $0.00` under a name is a
-    # row that reports nothing and costs a line on the one screen that is supposed to answer four
-    # questions. The Categories page remains the full index.
-    def silent? = !bar? && spent.zero?
+    def trouble? = over? || overdue?
 
-    # SPENT PAST THE PLAN — red bar, red figure (spec §4). NEVER true of a goal: holding more than
-    # you were saving for is not an overspend. Exactly the plan is NOT over, for
-    # `EntryImpactPresenter#overdrawn?`'s reason — spending an envelope to the penny is the tidiest
-    # possible outcome and reading it as trouble would be the same lie as `-$0.00`.
-    def over? = !goal? && bar? && spent > planned
+    # WHAT THE BAR MEASURES: spending against the rate for an envelope, the running total against the
+    # target for a fund (§3.4). One pair of readers rather than a signed number, because the two
+    # halves are read by different parts of the row.
+    def filled = rate? ? spent : built_up
 
-    # WHOLE PERCENT, CLAMPED, matching `HoldingCalculator#progress_percentage` and
-    # `HomePresenter::Progress#percent` — the app's other two bars — so all three draw the same way.
+    def denominator = rate? ? accrued : target
+
+    # A BAR NEEDS SOMETHING TO BE A FRACTION OF. A rate rule skipped to nothing this period, and a
+    # dateless goal with no target at all, have no denominator — the row prints the fact and no
+    # track, `EntryImpactPresenter#bar?`'s rule for its reason.
+    def bar? = denominator.positive?
+
+    # WHOLE PERCENT, CLAMPED, matching `HomePresenter::Progress#percent` and
+    # `HoldingCalculator#progress_percentage` — the app's other bars — so all of them draw alike.
     def percent
       return 0 unless bar?
 
-      ((filled / planned) * 100).round.clamp(0, 100)
+      ((filled / denominator) * 100).round.clamp(0, 100)
     end
   end
 
-  # AN EXPENSE CATEGORY NOBODY BUDGETED, WITH SPENDING INSIDE THIS PERIOD: the fact, and no bar
-  # (spec §4). There is nothing for a bar to be a fraction of — its receipts drain AVAILABLE (§4's
-  # start-date rule, which is the same rule that puts it in this list) — so a denominator here would
-  # be inventing the pressure rather than reporting it.
-  UnbudgetedRow = Data.define(:category, :spent)
-
-  # ONE THING THAT NEEDS A HUMAN (spec §5). `kind` is which trigger; `subject` is the thing it is
-  # about — a Pool for :overdraft, a Category for :category, nil for the two that are about the
-  # user's whole position.
+  # ONE CATEGORY AS A ROW, AND ITS RULES AS LINES (spec §3.4 + answers-first §4).
   #
-  # A TYPE RATHER THAN FOUR LISTS ON THE PRESENTER, because the strip has to know whether it is
-  # rendering at all before it renders anything: `#trouble?` is `troubles.any?`, one question over
-  # one list, where four predicates OR'd together in a view is four chances to add a fifth trigger
-  # and forget the gate.
-  Trouble = Data.define(:kind, :subject)
-
-  # ONE CATEGORY AS A ROW, AND IT IS `BudgetPagePresenter::Group`'S SHAPE ON PURPOSE.
+  # ** THE RULING: A ROW PER CATEGORY, A LINE PER RULE. ** §3.4 gives per-RULE sentences and
+  # `Category#claim` is a SUM, so a category carrying a $400-a-period rate rule beside a $1,200
+  # six-monthly bill cannot honestly print one "spent of rate" or one "built up of target" — the two
+  # figures are denominated in different things and summing them would state a number that is true
+  # of neither. The category is still the heading (answers-first §4's fourth question is about
+  # categories), and where it has exactly ONE rule — the ordinary shape, and the only one
+  # `Budget#category_may_hold_one_item_less_rule` lets a user build without naming items — the row
+  # renders as it always did: name, figure, bar.
   #
-  # The two screens print the same sentence about the same category, and twice now they have printed
-  # it differently: the Budget page's group passed `period_closed:` and not
-  # `changed_after_distributing:`, and Home's own two bands passed one suffix each. Both defects were
-  # possible for one reason — `pool_status_label` takes the suffixes as OPTIONAL keywords, so every
-  # caller is free to thread one and forget the other, and a forgotten one is silent.
-  #
-  # This is the fix, and it is structural rather than vigilant: `shared/_holding_status` threads both
-  # suffixes off ONE object, and that object is this Data — so a caller does not decide which
-  # suffixes to pass, it decides which OBJECT to pass, and an object missing an answer raises
-  # NoMethodError at render rather than dropping a clause.
-  #
-  # `orphan` IS GONE (Task 6) and so is `#needs_attention?`'s OR with it. A category belongs to no
-  # account and needs none — allocating money moves nothing physical (§2) — so the state "nothing can
-  # fund this" has no shape left to describe, and the status alone decides both the colour and the
-  # auto-expand.
-  Row = Data.define(:category, :status, :period_closed, :changed_after_distributing) do
-    def period_closed? = period_closed
-    def changed_after_distributing? = changed_after_distributing
-    delegate :needs_attention?, to: :status
+  # `spent` IS THE CATEGORY'S WHOLE SPENDING THIS PERIOD and is what an UNRULED holder prints. It is
+  # deliberately not summed into the lines: each line already carries its own lane's spending, and
+  # the lanes partition (§3.1's `Entry.on_unruled_items`), so adding them would be the same money
+  # said twice.
+  PeriodRow = Data.define(:category, :lines, :spent) do
+    def budgeted? = lines.any?
 
-    # THE CLAUSE THIS SCREEN ADDS AFTER THE STATE, and Home's is a date. Of the three quiet states —
-    # `on track`, `saving` and `left to spend` — only the first has one to add: the other two have no
-    # anchored rule to take a date from, so #due_on is nil there anyway. A row needing attention has
-    # already said its date inside the label.
-    def due_marker? = !status.needs_attention? && status.due_on.present?
+    def needs_attention? = lines.any?(&:trouble?)
 
-    # Home does NOT print `· holds $X`, which is the Budget page's clause. Both screens print one
-    # clause after the state and they are different clauses, deliberately: a Home row shows no rules
-    # and no balance elsewhere, so a date is the thing it is missing, while a Budget card lists every
-    # rule underneath and is missing only the money. Said here rather than in the partial so the
-    # partial asks the row instead of asking which screen it is on.
-    def balance_clause? = false
+    # NOTHING TO SAY AT ALL: a holder with no rule that nobody has spent from this period. The
+    # budgeted side of answers-first §4's rule that a zero-spend unbudgeted category is absent from
+    # Home, for the same reason — `spent $0.00` under a name costs a line and reports nothing.
+    def silent? = !budgeted? && spent.zero?
   end
 
-  # WHERE THE PERIOD IS, AS THE CARD DRAWS IT (answers-first spec §2). Four members and two derived
-  # answers, because the two are one subtraction apart and a member for each would be a second place
-  # for the same number to be wrong — `AllocationCalculator::Row#short`'s rule, one level up.
+  # AN EXPENSE CATEGORY NOBODY BUDGETED, WITH SPENDING INSIDE THIS PERIOD: the fact, and no bar
+  # (answers-first §4). There is nothing for a bar to be a fraction of — no rule claims this money —
+  # so a denominator here would be inventing the pressure rather than reporting it.
+  UnbudgetedRow = Data.define(:category, :spent)
+
+  # ONE THING THAT NEEDS A HUMAN (answers-first §5, computed-claims §4). `kind` is which trigger;
+  # `subject` is the thing it is about — a Pool for :overdraft, a ClaimLine for :over and :overdue,
+  # nil for the two that are about the user's whole position.
   #
-  # `day` IS 1-BASED AND INCLUSIVE AT BOTH ENDS, which is the only reading that makes both edges
-  # true: the opening day is day 1 of 14 rather than day 0 (nobody is zero days into a period they
-  # are standing in), and the closing day is day 14 with nothing left. That fixes #days_left as
-  # `days - day` — the same figure as `last - today`, spelled off the members this object already
-  # carries so the two cannot disagree.
+  # A TYPE RATHER THAN FOUR LISTS ON THE PRESENTER, because the strip has to know whether it is
+  # rendering at all before it renders anything: `#trouble?` is `troubles.any?`, one question over one
+  # list, where four predicates OR'd together in a view is four chances to add a fifth trigger and
+  # forget the gate.
+  #
+  # ** `:undistributed` IS DELETED (computed-claims §6). ** "This period hasn't been distributed yet"
+  # was trouble only because money had to be MOVED before a category could hold any; claims are
+  # computed, so there is nothing to hand out and nothing to have missed. `:shortfall` takes its place
+  # in the list — the state §4 says IS worth a human — and it is the one arm that carries a door.
+  Trouble = Data.define(:kind, :subject)
+
+  # ONE UNCOVERED CLAIM, AND HOW MUCH OF IT THE SHORTFALL EATS (§4). `amount` is what this claim is
+  # short by after everything lower down the give-way order has already given way — so the last one
+  # in the list is usually PARTIAL, which is the honest reading and the reason this is a walk rather
+  # than a filter.
+  Uncovered = Data.define(:line, :amount) do
+    delegate :category, :claim, to: :line
+
+    # Did the shortfall swallow the whole claim, or only bite into it? The strip says which.
+    def whole? = amount >= claim
+  end
+
+  # WHERE THE PERIOD IS, AS THE CARD DRAWS IT (answers-first §2). Four members and two derived
+  # answers, because the two are one subtraction apart and a member for each would be a second place
+  # for the same number to be wrong.
+  #
+  # `day` IS 1-BASED AND INCLUSIVE AT BOTH ENDS, which is the only reading that makes both edges true:
+  # the opening day is day 1 of 14 rather than day 0, and the closing day is day 14 with nothing left.
+  # That fixes #days_left as `days - day` — the same figure as `last - today`, spelled off the members
+  # this object already carries so the two cannot disagree.
   Progress = Data.define(:first, :last, :day, :days) do
     def days_left = days - day
 
-    # WHOLE PERCENT, CLAMPED, matching `HoldingCalculator#progress_percentage` — the app's other
-    # bar — so the two draw the same way. The clamp is belt and braces: `period_containing(today)`
-    # contains today by construction, so neither bound is reachable from here.
     def percent = ((day.to_f / days) * 100).round.clamp(0, 100)
   end
 
@@ -202,14 +170,9 @@ class HomePresenter
 
   # `rejected_movement:` IS ONBOARDING STEP 2'S OWN 422 (main-account spec §5), threaded through
   # rather than read off an ivar the view would have to know about. AccountFundingsController's
-  # failure branch hands back the unsaved, invalid PoolMovement it tried to save, and #funding_
-  # movement_for below is how the ONE account it was for gets it back — every other account's
-  # card renders a fresh, blank one. Optional and nil everywhere else Home is built, which is
-  # every other caller of this presenter.
-  #
-  # A `PoolMovement` AND NOT AN `Allocation`, which is not a leftover: account funding is a move on
-  # the PHYSICAL ledger (main → the account it is really in), and that lane is untouched by this plan
-  # until Task 8 renames its table. Nothing on the purpose side has a form on this screen.
+  # failure branch hands back the unsaved, invalid AccountMovement it tried to save, and
+  # #funding_movement_for is how the ONE account it was for gets it back — every other account's card
+  # renders a fresh, blank one.
   def initialize(user:, today: Date.current, rejected_movement: nil)
     @user = user
     @today = today
@@ -225,33 +188,21 @@ class HomePresenter
   # WHAT THE BANK SAYS ABOUT ONE ACCOUNT — `AccountLedger#balance_of`, and for MAIN that figure is
   # the pot (§2: income − expenses − Σ moves out + Σ moves in).
   #
-  # It was `#current_buffer_for`, and the rename is the model rather than a tidy-up. A "buffer" was
-  # an account's cash net of the envelopes housed inside it; nothing is housed inside an account any
-  # more, so the account's balance IS everything it holds and there is no unallocated remainder to
-  # name. The word ALSO moved: the distribution screen calls AVAILABLE the buffer (§7.1 — the money
-  # no category has claimed), so leaving it here would have put one word over two different
-  # quantities on one screen, which is the exact defect #projected_buffer vs #current_buffer_for was
-  # split to prevent.
-  #
-  # ONE LEDGER FOR EVERY ACCOUNT ON THE SCREEN, so the accounts band, the overdraft lines and the two
-  # onboarding gates all read one snapshot.
+  # ONE LEDGER FOR EVERY ACCOUNT ON THE SCREEN — and it is the SAME `AccountLedger` the claim ledger
+  # reads its pot and its total out of, so the accounts band, the hero's two figures and `free`
+  # itself cannot come from two snapshots.
   delegate :balance_of, to: :account_ledger
 
   # Accounts that have gone below zero, and the loudest fact on the screen.
   #
-  # THEY ARE NOT PROBLEM ROWS ANY MORE (Task 6), and that is a correction rather than a loss. An
-  # overdrawn account is a PHYSICAL fact — money already spent out of a bank account — and the fix
-  # button beside a problem row proposes an ALLOCATION, which moves nothing physical (§2). Offering
-  # one here would be a real mistake proposed to fix a problem it cannot touch, which is the same
-  # ruling that keeps a fix off an overdue bill whose category already holds the money. The standing
-  # band names the account and the figure in red, and the accounts band prints the negative balance;
-  # what goes away is the button, not the debt.
+  # THEY CARRY NO FIX BUTTON, and that was already the ruling before this plan: an overdrawn account
+  # is a PHYSICAL fact — money already spent out of a bank account — and nothing on the purpose side
+  # can reach it. What goes away is the button, not the debt.
   def overdrawn_accounts
     accounts.select { |account| balance_of(account).negative? }
   end
 
-  # The debt as a positive figure, for the sentence that states it. `-balance`, exactly as
-  # HoldingStatus spells :overdrawn's own amount.
+  # The debt as a positive figure, for the sentence that states it.
   def overdraft_for(account) = -balance_of(account)
 
   # ONBOARDING STEP 2'S ONE GATE (main-account spec §5): not main, and holding no money yet. ONE
@@ -259,360 +210,212 @@ class HomePresenter
   # AccountFundingsController (which write is legal), so the two cannot drift into two different
   # answers about the same account.
   #
-  # `AccountLedger#balance_of` WHERE THIS READ `Pool#total` (Task 6). That reader was "unallocated
-  # cash PLUS every envelope housed inside it", and it existed because an account whose envelopes
-  # held every dollar it had read as "never funded" — the card came back under a fully funded account
-  # asking the user to match their bank statement a second time. Nothing is housed inside an account
-  # now, so the family total and the balance are the same figure and only one of them still has a
-  # reader. `Pool#total` is envelope-era and dies in Task 8.
-  #
-  # MED-1'S PROTECTION SURVIVES UNCHANGED, which is what the money test is for: a fresh account is
-  # zero however many categories the user owns, because a category is not inside it. Deliberately NOT
-  # "has no categories" in any spelling — money is the only signal.
-  #
   # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): the card used to read
   # `main_account.name` unconditionally, and a user with no main account 500'd on Home with no door
-  # back in. No main account means no card anywhere, full stop, not merely "no card on the pool that
-  # used to be main": every account is equally un-fundable with nothing to fund it FROM.
-  #
-  # THE SHAPE THAT REACHES IT IS NOW THE FIRST DAY, not a deletion (final fix wave, C-1). This note
-  # used to credit `users.default_account_id`'s `on_delete: :nullify` — main being DELETED out from
-  # under the pointer — and `Pool#main_account_is_not_deletable` closed that path: main cannot be
-  # destroyed while it is main. What remains reachable is a user who has not created an account yet,
-  # which is every user on their first visit, so the guard is load-bearing exactly as before.
+  # back in. No main account means no card anywhere.
   def awaiting_funding?(account)
     user.default_account.present? && account != user.default_account && balance_of(account).zero?
   end
 
   # ONBOARDING STEP 3'S OWN GATE (main-account spec §5): the account under review must BE the user's
-  # main account — not merely funded, this correction only ever applies to the one account that isn't
-  # funded by a movement — and the one-time latch, the "Opening Balance" category's own existence,
-  # must still be open. Asked here (which account gets the card — home/_account.html.erb) and
-  # LITERALLY BY `OpeningBalancesController#create`, which builds its own presenter and calls this
-  # same method rather than re-spelling either half of it, so the card's render gate and the write's
-  # legality gate cannot drift into two different answers.
-  #
-  # `user.default_account.present?` FIRST, for the same HIGH-1 reason #awaiting_funding? checks it
-  # first. It also makes `awaiting_opening_balance?(nil)` — reachable if a crafted POST names no
-  # account — false rather than a NoMethodError, because `nil.present?` short-circuits the `&&`
-  # before `account == user.default_account` is ever asked.
+  # main account, and the one-time latch — the "Opening Balance" category's own existence — must still
+  # be open. Asked here and LITERALLY BY `OpeningBalancesController#create`, which builds its own
+  # presenter and calls this same method, so the card's render gate and the write's legality gate
+  # cannot drift into two different answers.
   def awaiting_opening_balance?(account)
     user.default_account.present? && account == user.default_account && !opening_balance_recorded?
   end
 
-  # IS THIS THE ACCOUNT EVERYTHING FLOWS THROUGH (final fix wave, C-1)? The view's gate on the Delete
-  # button, and it is `Pool#main?` rather than a comparison of this screen's own: the model REFUSES
-  # the destroy on exactly that predicate, so a screen asking a differently-spelled question could
-  # offer a button the server then rejects — or, worse, hide one it would have accepted.
-  #
-  # FREE ON THIS SCREEN: `#accounts` loads through `user.pools`, so each row's `belongs_to :user` is
-  # the presenter's own already-loaded user through the automatic inverse, and `default_account_id` is
-  # a column on it. No query per card.
+  # IS THIS THE ACCOUNT EVERYTHING FLOWS THROUGH? The view's gate on the Delete button, and it is
+  # `Pool#main?` rather than a comparison of this screen's own: the model REFUSES the destroy on
+  # exactly that predicate, so a differently-spelled question here could offer a button the server
+  # then rejects — or hide one it would have accepted.
   def main?(account) = account.main?
 
   # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is the
-  # account it was refused for — so its typed amount and its errors survive the re-render, the same
-  # courtesy BankAccountsController's own 422 branch pays the add-account card — and a fresh unsaved
-  # one otherwise, so every other card's `simple_form_for` still has a record to ask for a (blank)
-  # value rather than a bare symbol with nothing behind it.
+  # account it was refused for — so its typed amount and its errors survive the re-render — and a
+  # fresh unsaved one otherwise.
   def funding_movement_for(account)
     return @rejected_movement if @rejected_movement&.to_pool_id == account.id
 
     AccountMovement.new(to_pool: account)
   end
 
-  # ── THE PURPOSE LEDGER ─────────────────────────────────────────────────────────────────────────
+  # ── THE CLAIMS (computed-claims spec §§2-3) ────────────────────────────────────────────────────
 
-  # THE CATEGORIES THAT HOLD MONEY, in the order a distribution reaches them. `Category.in_fill_order`
-  # rather than a scope of this screen's own: it is holders (`expense? && funded_since.present?`)
-  # ordered `[priority, name]`, which is exactly the set and exactly the order AllocationCalculator
-  # fills — so the band, the waterfall and the action the button opens cannot fall into different
-  # orders or over different sets. Priority alone is not a total order; `name` is unique per user, so
-  # the pair is.
+  # THE CATEGORIES THIS SCREEN SPEAKS ABOUT, in the order priority ranks them.
   #
-  # `:budgets` eager-loaded because every row asks for them three times over — #dated_rules_for,
-  # the status's anchored rules, and DistributionClock#changed_after_distributing?.
+  # `Category.in_fill_order` IS STILL THE SET AND STILL THE ORDER, and priority survives this plan as
+  # the GIVE-WAY order (§4) rather than as a fill order — the same ranking read for the opposite
+  # question: who yields when the money runs out.
+  #
+  # `:budgets` eager-loaded because a row asks for them and so does the trouble strip.
   def categories
     @categories ||= user.categories.in_fill_order.includes(:budgets).to_a
   end
 
-  # MONEY WITH NO JOB YET, PLUS WHAT THE NEXT DISTRIBUTION SWEEPS BACK — `AllocationCalculator
-  # #available` to the character, and that identity is the point rather than a coincidence.
+  # EVERY CATEGORY WITH A ROW ON THIS SCREEN — the holders, PLUS any category carrying a rule that is
+  # not one (`funded_since` cleared after the fact, which `BudgetPagePresenter#unfilled_rules` is the
+  # Budget page's band about). The second half is load-bearing rather than defensive: `ClaimLedger`
+  # counts EVERY rule's claim into `free`, so a claim with no row would be money missing from the
+  # hero's figure with nothing on the screen to explain it.
   #
-  # THE SWEEP IS NOT DOUBLE-COUNTING: swept money is inside the user's total but not inside
-  # `CategoryLedger#available`, because funding the category was an allocation out. It is sitting in a
-  # category and the sweep is what moves it back to the root.
-  #
-  # NOT CLAMPED AT ZERO, which is the one place this reader CHANGED with the collapse to one root.
-  # The pool era clamped each account's pot before summing, because an overdrawn account cancelling a
-  # healthy one's surplus gives a figure that is true about net worth and false about what can be
-  # allocated. There is no sibling to cancel against now — one root — so a negative available is a
-  # fact the screen must state rather than a figure to round up to nothing, exactly as
-  # AllocationCalculator leaves it. The two screens no longer diverge; the divergence that used to be
-  # pinned in spec/system/home/fixes_spec.rb is gone with the accounts it was about.
-  #
-  # IT IS NOW THE PROPOSAL'S OWN FIGURE RATHER THAN AN EXPRESSION THAT MATCHED IT (Task 7, the T6
-  # review's adopted recommendation). This read `ledger.available + total_swept`, which is
-  # character-for-character `AllocationCalculator#available` — two spellings of one figure, kept in
-  # step by three cross-pins in the specs. Delegated, they cannot drift at all.
-  delegate :available, to: :proposal
+  # `[priority, name]`, `Category.in_fill_order`'s own key — priority alone is not a total order, and
+  # a tie falling through to database order means the same data ranks differently between loads.
+  def budgeted_categories
+    @budgeted_categories ||= (categories + claim_ledger.rules.filter_map(&:category))
+      .uniq.sort_by { |category| [category.priority, category.name] }
+  end
 
-  # WHAT THE REST OF THIS PERIOD'S PLAN STILL ASKS FOR AND HAS NOT BEEN GIVEN — the hero card's
-  # "spoken for" (answers-first spec §3). Post-sweep, exactly as the distribution screen computes
-  # it, and off the SAME ROWS: a category the fill rejects for asking nothing contributes nothing to
-  # a sum over the rows. The `0.to_d` seed is the type guarantee for the user with no rows at all.
-  #
-  # ** ONE SPELLING, AND THIS IS THE READER IT IS. ** `AllocationCalculator::Row#needed` is
-  # `HoldingCalculator#required` on the net-of-sweep calculator `AllocationCalculator
-  # #ask_calculator_for` builds — the same object, from the same class, that the distribute
-  # waterfall prints a row of and that `DistributionPresenter::Line#needed` carries. Spec §3 writes
-  # the figure as `Σ max(0, this period's ask − allocated this period)`, and every part of that is
-  # ALREADY inside `needed`: `#required` measures each rule against `#allocated_balances` (what the
-  # category is already holding for it), and `AllocationCalculator#fill` floors the category's ask
-  # at zero and drops the rows that ask for nothing. Re-deriving any of it here would be a second
-  # answer to "what do I still owe this period", which is the one thing this plan forbids —
-  # `spec/presenters/home_presenter_spec.rb` reads the figure through both entry points on one
-  # fixture and compares them.
-  #
-  # IT WAS `#total_required`, RENAMED RATHER THAN JOINED (answers-first Task 1). Two names for one
-  # sum is the drift the rule is written against; what changed is Home's word for it.
-  #
-  # DELIBERATELY NOT `Budget.steady_need`, which is the STRUCTURAL question — what the rules claim
-  # from a TYPICAL period — and diverges from this in both directions on the same budget. See
-  # #structurally_underwater?, which is the reader that wants the other one.
-  def remaining_plan = waterfall.sum(0.to_d, &:needed)
-
-  # Fills top-down by priority, exactly as a distribution would, so the user sees who gets paid first
-  # and where the money ran out.
-  #
-  # ONE POT, NOT ONE PER ACCOUNT (§2). The pool era filled each account's own buffer because money
-  # could not cross an account boundary; an allocation crosses nothing, so a single `remaining` is
-  # the model rather than a simplification of it — and it is `AllocationCalculator#fill`'s own shape.
-  #
-  # Memoised because #remaining_plan, #free_to_spend, #undistributed_period? and
-  # #covered_by_waterfall? all derive from these rows, so a Home render asks for them several times
-  # over. (#shortfall, #covered? and #cutoff were three more, and they are deleted — see below.)
-  # ROWS ARE `AllocationCalculator::Row` NOW, not hashes this class fills itself (Task 7). They
-  # answer #category, #needed, #funded and #short.
-  #
-  # `Struct#[]` ANSWERS THE FIRST THREE BY NAME AND RAISES ON THE FOURTH, which is worth writing
-  # down because it decided which lines had to change: `category`, `needed` and `funded` are
-  # MEMBERS, so the deleted `home/_attention.html.erb`'s `row[:funded]` rendered unchanged; `short`
-  # is a METHOD (`needed - funded`, so a fourth member would be a second place for one number to be
-  # wrong), and `row[:short]` raises `NameError: no member 'short' in struct`. Every reader of it is
-  # `row.short` — measured, not reasoned about: the deleted #cutoff's block took the root route down
-  # until it was, and `fixes_spec`'s cross-pins spell `sum(&:short)` for the same reason.
-  def waterfall = proposal.rows
-
-  # ── `#cutoff`, `#shortfall` AND `#covered?` ARE DELETED (answers-first Task 2), and the reason is
-  # that Home stopped asking their question rather than that nothing happened to call them.
-  #
-  # All three existed for the waterfall band: `#cutoff` drew "— ran out here —" between two groups of
-  # rows, `#shortfall` printed the figure inside that line, and `#covered?` was the band's gate and
-  # the standing band's headline branch. The band is gone (spec §1: Home stops showing the system),
-  # and so is the headline branch — the hero card renders in every state and a short period is simply
-  # a negative `#free_to_spend` (spec §2, which rules the covered/uncovered question closed).
-  #
-  # NOTHING ELSE ASKED THEM. Grepped across `app/`: `#waterfall` has three live readers here
-  # (`#remaining_plan`, `#undistributed_period?`, `#covered_by_waterfall?`), and these three had
-  # none once the band went. They would have survived as readers kept alive by their own specs,
-  # which is the shape a comment cannot fix.
-  #
-  # WHERE EACH QUESTION LIVES NOW: the cutoff RULE is `Waterfall.cutoff`, drawn by
-  # `DistributionPresenter#cutoff` on the screen the trouble strip's own Distribute button opens
-  # (pinned both directions in `spec/system/distributions/proposal_spec.rb` and `overrides_spec.rb`);
-  # the total gap is `waterfall.sum(&:short)`, which is what the cross-screen pins in
-  # `spec/system/home/fixes_spec.rb` compare against `AllocationCalculator` directly.
-
-  # ── THE HERO CARD (answers-first spec §§2-3) ───────────────────────────────────────────────────
-  #
-  # `#projected_buffer` IS DELETED HERE, and the deletion is what these three readers are for. It
-  # was `available − Σ FUNDED`, so it clamped itself to what the waterfall actually handed out and
-  # read $0.00 on every short period — "nothing left over", said to a user $250 short. Worse, the
-  # band that printed it had to gate on `available.negative?` to stop calling a deficit "unclaimed
-  # money" (fix round 1, MED-1). `#free_to_spend` subtracts what the plan still ASKS for, so the
-  # gap is the figure rather than a state to be branched on, and there is one card in every state.
+  # ── THE HERO CARD (answers-first §§2-3, on computed-claims' terms) ─────────────────────────────
 
   # THE NUMBER THE USER'S BANK APP SHOWS — `AccountLedger#pot`, which is main's balance and only
-  # main's (§2: main carries the entry side of the physical ledger, every other account is movements
-  # alone). Named for what the card calls it, off the same ledger the accounts band reads, so the
-  # two figures on one screen cannot come from two snapshots.
-  #
-  # MEMOISED, AND MEASURED RATHER THAN ASSUMED. `AccountLedger#pot` is `#balance_of(main)`, and that
-  # method's entry term is NOT memoised in the ledger — it is two SUMs over the user's entries every
-  # time it is asked. The card asks three times (this figure, then #free_to_spend's `min`, then
-  # #free_cap_bound?'s comparison), which measured as six statements before this memo; the pin in
-  # `spec/presenters/home_presenter_spec.rb` holds it at two and then at none. `||=` is safe where
-  # `defined?` would be needed for a falsy answer: a zero pot is `BigDecimal("0")`, which is truthy.
-  def in_checking = @in_checking ||= account_ledger.pot
+  # main's (§2). Named for what the card calls it, off the same ledger `free` is capped by, so the two
+  # figures on one screen cannot come from two snapshots.
+  def in_checking = claim_ledger.pot
 
-  # ** THE ONE DERIVED NUMBER (spec §3): `min(pot, available − remaining_plan)`. **
+  # ** THE ONE DERIVED NUMBER (§2): `free = min(pot, total_money − Σ claims)`. **
   #
-  # `#available` IS THE PROPOSAL'S, POST-SWEEP, AND IT HAS TO BE THAT ONE. Spec §3 names
-  # `CategoryLedger#available`; this presenter's `#available` is that figure PLUS what the next
-  # distribution sweeps back, and `#remaining_plan` is the ask computed as if the sweep had ALREADY
-  # happened (see AllocationCalculator#ask_calculator_for, which exists for exactly that reason).
-  # Subtracting a post-sweep ask from a pre-sweep root charges the user for every swept dollar
-  # twice: the money is missing from the left-hand side while the right-hand side already assumes it
-  # is back. The two halves have to describe one moment, and this presenter's `#available` is the
-  # moment the rest of the screen is about.
+  # IT IS A DEFINITION NOW, NOT A SUBTRACTION OF TWO MOVING PARTS. This was
+  # `available − remaining_plan` — the distribution's post-sweep root less the rest of the period's
+  # unfunded ask — and both operands were the distribution's own arithmetic. Claims are computed, so
+  # there is nothing to have been handed out and nothing still owed: the money is either claimed by a
+  # rule or it is free.
   #
-  # THE CAP AT THE POT IS RULED (spec §3): free money you would have to transfer out of savings
-  # before you could spend it is not free in the moment. #free_cap_bound? is which side won.
+  # THE CAP AT THE POT IS THE ANSWERS-FIRST RULING, KEPT (§3 there, §2 here): money you would have to
+  # transfer out of savings before you could spend it is not free in the moment. #free_cap_bound? is
+  # which side won.
   #
-  # NEVER CLAMPED. A period that has promised or spent more than it has renders a negative figure in
-  # red with a sentence that says why; rounding it up to zero would be the app telling the user they
-  # are fine. The `min` of two BigDecimals is a BigDecimal, and both operands carry their own type
-  # guarantee, so the fresh user gets `0.0` rather than an Integer.
-  def free_to_spend = [in_checking, unspoken_for].min
+  # NEVER CLAMPED. A period whose rules claim more than the user has renders a negative figure in red
+  # with a sentence that says why; rounding it up to zero would be the app telling the user they are
+  # fine (§4: free below zero is a signal, never a refusal).
+  def free_to_spend = claim_ledger.free
 
   # DID THE CAP BIND — the subline's gate, and the reason it is a predicate rather than the view
   # comparing the two figures itself: a screen that re-spelled the `min`'s condition could print
   # "more is parked in other accounts" beside a figure the other branch produced.
   #
   # A STRICT `<`, so equality is not "parked somewhere else": with $1,000 in checking and exactly
-  # $1,000 unspoken for there is one pile of money, and the card would be inventing a second.
-  def free_cap_bound? = in_checking < unspoken_for
+  # $1,000 unclaimed there is one pile of money, and the card would be inventing a second.
+  delegate :free_cap_bound?, to: :claim_ledger
 
-  # ** WHICH KIND OF NEGATIVE THIS IS, AND IT IS A REAL BRANCH RATHER THAN A SHADE OF ONE (fix
-  # round 1 — MED-1). ** `#free_to_spend` goes below zero for two completely different reasons and
-  # the card was telling both of them the same story:
-  #
-  #   THE PLAN OUTRUNS THE MONEY — this is true. Every rule this period wants more than the root
-  #     holds, so there genuinely is nothing spare anywhere and spending goes further under.
-  #   THE MONEY IS IN THE WRONG ACCOUNT — this is NOT that. Measured: $1,000 of income with $1,200
-  #     walked over to a savings account and nothing budgeted at all leaves the pot at -$200 while
-  #     $1,000 is unspoken for. The card said "More is set aside or spoken for than you have" — $0
-  #     is set aside — and "nothing is free until money comes in", one transfer away from $1,000.
-  #     Two false sentences about a user who is not in trouble.
-  #
-  # THE SIGN OF `unspoken_for`, WHICH IS `#free_to_spend` BEFORE THE POT CAPS IT, is the only thing
-  # that tells them apart: the capped figure cannot, because the cap is exactly what erases the
-  # difference. `#free_cap_bound?` is NOT this question and must not be used for it — a pot of
-  # -$500 against an unspoken-for -$100 is cap-bound AND genuinely out of money.
-  #
-  # WHAT THE VIEW IS ALLOWED TO DO WITH IT: branch. The card asks this and #free_cap_bound?; it
-  # never compares `#in_checking` against anything itself, because a second spelling of the `min`'s
-  # own condition is how a figure and the sentence under it come to describe different arithmetic.
-  def plan_outruns_the_money? = unspoken_for.negative?
+  # EVERYTHING THE RULES CLAIM — `Σ ClaimCalculator#claim` over every rule the user owns. The strip's
+  # shortfall walk and the subline's cause both read it.
+  delegate :total_claims, to: :claim_ledger
 
-  # ── ** THE SUBLINE'S CAUSES, AND WHY THE SIGNS ALONE CANNOT ESTABLISH THEM (FINAL review — M-1).
+  # ** WHICH KIND OF NEGATIVE THIS IS, AND IT IS A REAL BRANCH RATHER THAN A SHADE OF ONE. **
+  # `#free_to_spend` goes below zero for two completely different reasons:
   #
-  # Every sentence on the free subline asserts a CAUSE, and until this fix three of them were gated
-  # on the SIGNS of `#free_to_spend` and `#unspoken_for` alone. The signs say WHICH WAY the arithmetic
-  # went; they do not say WHY, and the identity underneath the cap is the reason:
+  #   THE CLAIMS OUTRUN THE MONEY — true trouble. Every rule together wants more than the user has
+  #     anywhere, so there genuinely is nothing spare and spending goes further under.
+  #   THE MONEY IS IN THE WRONG ACCOUNT — NOT that. $1,000 of income with $1,200 walked over to a
+  #     savings account and nothing budgeted at all leaves the pot at −$200 while $1,000 is unclaimed.
+  #     "More is claimed than you have" would be false ($0 is claimed) and "nothing is free until
+  #     money comes in" would be false too — the user is one transfer away from $1,000.
   #
-  #     available − pot  =  net moves out of main  +  what the next distribution sweeps back
-  #                         −  Σ holdings
+  # THE SIGN OF `unclaimed`, WHICH IS `#free_to_spend` BEFORE THE POT CAPS IT, is the only thing that
+  # tells them apart: the capped figure cannot, because the cap is exactly what erases the difference.
+  # `#free_cap_bound?` is NOT this question and must not be used for it — a pot of −$500 against an
+  # unclaimed −$100 is cap-bound AND genuinely out of money.
   #
-  # THREE TERMS, AND THE OLD ARMS ATTRIBUTED THE WHOLE DIFFERENCE TO THE FIRST. A cap-bound card said
-  # "more is parked in other accounts" / "sitting outside checking" wherever `available > pot`, which
-  # the THIRD term makes true with no second account in existence: a SINGLE-account user whose holders
-  # are collectively overdrawn reads a sentence about savings above an accounts line with nothing in
-  # it. The reviewer's worked fixture — $1,000 in, $900 allocated to Groceries, $1,100 spent out of
-  # Groceries — is pot -$100, available $100, `remaining_plan` $0, so `unspoken_for` is +$100, the cap
-  # binds, and the money "sitting outside checking" is a category's overdraft.
+  # IT WAS `#plan_outruns_the_money?`, AND THE RENAME IS THE MODEL RATHER THAN A TIDY-UP: what
+  # outran the money was "the rest of this period's PLAN", a distribution-shaped quantity that no
+  # longer exists. What can outrun it now is the claims.
+  def claims_outrun_the_money? = claim_ledger.unclaimed.negative?
+
+  # ── THE SUBLINE'S CAUSES, AND WHY THE SIGNS ALONE CANNOT ESTABLISH THEM ────────────────────────
+  #
+  # Every sentence on the free subline asserts a CAUSE, and the answers-first review (M-1, §10.8 of
+  # that spec) found three of them gated on the SIGNS of two figures, which do not carry one. That
+  # discipline survives the change of readers; only the identity underneath it is new:
+  #
+  #     unclaimed − pot  =  Σ other accounts  −  Σ claims
+  #
+  # TWO TERMS NOW, WHERE THE OLD CAP HAD THREE. The old identity carried "net moves out of main" and
+  # "what the next distribution sweeps back" and the arms attributed the whole difference to the
+  # first; both terms are gone with the distribution. What survives is that a cap-bound card must not
+  # say "more is parked in other accounts" on the strength of the arithmetic alone — the SECOND term
+  # can produce the same inequality with no second account in existence.
   #
   # THE ARM TABLE. Rows are the signs; columns are the causes the sentence needs, each established by
-  # a predicate rather than inferred from the signs:
+  # a predicate rather than inferred from the signs. Both directions of every arm are pinned in
+  # `spec/presenters/home_presenter_spec.rb` and in `spec/system/home/hero_spec.rb`.
   #
-  #   unspoken_for < 0        anything set aside or spoken for → "More is set aside or spoken for
-  #   (the plan outruns          (#anything_set_aside_or_spoken_for?)  than you have…"
-  #    the money; free is     nothing of either (§10.7 #3: pure     → "You have spent past what you
-  #    negative either way)      overspend, R = 0 and no holding)      had…"
+  #   unclaimed < 0            anything claimed at all       → "More is claimed than you have.
+  #   (the claims outrun the      (#anything_claimed?)            Anything you spend now takes you
+  #    money; free is negative                                    further under."
+  #    either way)             no rule claims a penny        → "You have spent past what you had.
+  #                              (the pure overspend)             Anything you spend now takes you
+  #                                                               further under."
   #
-  #   free < 0, plan does     money really is in other accounts   → "…is sitting outside checking…"
-  #   not outrun (so the         (#money_parked_elsewhere?)
-  #    pot is negative and    no other account holds anything     → "Nothing here is free until money
-  #    the cap bound)            (the single-account corner)          comes in." — TRUE, and only
-  #                                                                   here: with nothing elsewhere,
-  #                                                                   a negative pot IS the whole of
-  #                                                                   the user's cash. The overdraft
-  #                                                                   itself is already stated on the
-  #                                                                   In Checking line above.
+  #   free < 0, claims do      established BY REACHING THE   → "The money that isn't claimed is
+  #    not outrun (so the pot     ARM — see below              sitting outside checking — nothing here
+  #    is negative and the                                     is free until some of it moves in."
+  #    cap bound)
   #
-  #   free ≥ 0, there IS a    anything set aside or spoken for    → "the rest is set aside or spoken
-  #    rest                      (#rest_in_checking? +                for."
-  #    (pot > unspoken_for)       #anything_set_aside_or_spoken_for?)
-  #                           neither is true of the account      → "the rest isn't set aside or
-  #                             (the walked-in corner below)         spoken for."
+  # ** THAT ARM HAS NO SECOND SENTENCE, AND THE MISSING BRANCH IS THE FINDING (Task 3). ** The old
+  # card asked `#money_parked_elsewhere?` here and said "Nothing here is free until money comes in"
+  # where it was false — the single-account corner. With the identity down to two terms that corner
+  # cannot exist: the arm needs `free < 0` with `unclaimed ≥ 0`, which forces `pot < 0` and therefore
+  # `Σ other accounts ≥ Σ claims − pot > 0`. A second account IS holding money whenever this arm
+  # renders. The branch is deleted rather than gated, because an unreachable branch on a money screen
+  # is a sentence waiting to be believed; the single-account user in the red reads the claims-outrun
+  # arm above, which is pinned.
   #
-  #   free ≥ 0, none of it    cap bound AND money elsewhere       → "none of it is set aside or spoken
-  #    is claimed                (#free_cap_bound? +                  for — more is parked in other
-  #    (pot ≤ unspoken_for)       #money_parked_elsewhere?)           accounts."
-  #                           otherwise (L-4's fresh signup, and  → "none of it is set aside or spoken
-  #                             the single-account cap corner)       for."
+  #   free ≥ 0, there IS a     anything claimed at all       → "the rest is claimed."
+  #    rest (pot > unclaimed)     (#rest_in_checking? +
+  #                                #anything_claimed?)
+  #                            nothing claimed               → "the rest isn't claimed." The rest is
+  #                              (an OTHER account in the         `Σ claims − Σ other accounts`, so
+  #                               red — see below)                with nothing claimed a positive rest
+  #                                                               is an overdrawn second account. It
+  #                                                               is there, it is not earmarked, and
+  #                                                               the card does not guess what it is;
+  #                                                               the accounts line and the strip name
+  #                                                               that account.
   #
-  # ** "the rest" NEEDS THE SAME KIND OF GATE THE OTHER SENTENCES DO, AND AN ARITHMETIC ARGUMENT IS
-  # NOT ONE (re-review round 2). ** This comment carried a proof that a positive `rest` can never be
-  # larger than what is set aside plus what is spoken for: `rest = pot − free` expands, through the
-  # identity above, to `Σ holdings + remaining_plan − moves out − swept`, and both subtrahends are
-  # "≥ 0". THE FIRST OF THEM IS A NET AND GOES NEGATIVE. Money walking INTO main from another account
-  # raises the pot and does not touch `available`, so it lands in `rest` with nothing behind it.
+  #   free ≥ 0, none of it     cap bound AND money           → "none of it is claimed — more is parked
+  #    is claimed (pot ≤          elsewhere                       in other accounts."
+  #    unclaimed)                 (#free_cap_bound? +
+  #                                #money_parked_elsewhere?)
+  #                            otherwise (the fresh signup)  → "none of it is claimed."
   #
-  # THE COUNTEREXAMPLE IS THE SUITE'S OWN OVERDRAWN-ALLY SHAPE: $1,000 of income and $200 walked out
-  # of an Ally that is $200 in the red. Pot $1,200, `available` $1,000, no holder holding anything and
-  # no rule asking — and the card said "the rest is set aside or spoken for" about $200 that is
-  # neither. M-1's exact failure mode, on the one arm that had been gated on arithmetic instead of on
-  # a cause.
+  # WHY THE LAST ROW IS HONEST EVEN WITH CLAIMS OUTSTANDING: `pot ≤ unclaimed` is
+  # `Σ claims ≤ Σ other accounts`, so either nothing is claimed at all, or every claim is covered by
+  # money sitting outside checking — and in that second case none of the money IN CHECKING is needed
+  # for one, which is exactly what the cap means and exactly what the sentence says. With no other
+  # account holding anything the inequality forces `Σ claims ≤ 0`, so the un-parked arm genuinely has
+  # nothing claimed. Both directions pinned.
   #
-  # SO THE ARM ASKS #anything_set_aside_or_spoken_for? AS WELL, and the corner where that is false
-  # gets the sentence that survives: the rest is there, and it is not earmarked. (WHAT it is, in that
-  # corner, is money net-walked in from another account — with nothing set aside, nothing spoken for
-  # and `swept ≥ 0`, the identity leaves no other term that can carry a positive rest — and the
-  # accounts line and the trouble strip below are where that account is named. The card does not say
-  # so itself: naming it would be a THIRD sentence asserting a cause, and this one is established by
-  # elimination rather than by a reader.)
-  #
-  # THE OTHER DIRECTION WAS BROKEN TOO, and is what the "none of it" row is for: `rest` is ZERO in
-  # every cap-bound state, and the card printed "the rest is set aside or spoken for" over it anyway —
-  # describing $0.00 to L-4's fresh signup, whose free and pot are the same figure because nothing is
-  # funded at all.
-  #
-  # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures: a card
-  # re-deriving "is there money in another account" from `#other_accounts_total` would be free to
-  # disagree with the accounts line that prints it.
+  # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures.
 
-  # IS THERE A REST AT ALL — the gate on BOTH "the rest…" sentences, and the reason it is a predicate
-  # is `#free_cap_bound?`'s: `in_checking > free_to_spend` is the `min`'s own condition read
+  # IS THERE A REST AT ALL — the gate on BOTH "the rest…" sentences. A predicate for
+  # `#free_cap_bound?`'s reason: `in_checking > free_to_spend` is the `min`'s own condition read
   # backwards, and a view spelling it could print a sentence about a rest the figures did not leave.
   # NOT the negation of `#free_cap_bound?` — at exact equality both are false, which is the
   # fresh-signup corner and gets its own sentence.
-  #
-  # IT SAYS THE REST EXISTS AND NOTHING ABOUT WHAT IT IS. `#anything_set_aside_or_spoken_for?` is the
-  # second half of that arm for the reason written in the table above: a rest can be money that walked
-  # in from another account, which is neither of the two nouns.
   def rest_in_checking? = in_checking > free_to_spend
 
   # IS THERE MONEY IN ANOTHER ACCOUNT AT ALL — the cause both "parked" sentences assert, and the
-  # figure is `#other_accounts_total`: THE SAME SUM THE ACCOUNTS LINE PRINTS (§6), so the card cannot
-  # claim money the line below it shows as absent. `positive?` rather than `#other_accounts.any?`: an
-  # account that exists and holds nothing is exactly the empty accounts line the M-1 fixture read.
+  # figure is `#other_accounts_total`: THE SAME SUM THE ACCOUNTS LINE PRINTS (answers-first §6), so
+  # the card cannot claim money the line below it shows as absent. `positive?` rather than
+  # `#other_accounts.any?`: an account that exists and holds nothing is exactly the empty accounts
+  # line the M-1 fixture read.
   def money_parked_elsewhere? = other_accounts_total.positive?
 
-  # IS ANYTHING ACTUALLY SET ASIDE OR SPOKEN FOR — the two nouns of the negative arm's sentence, asked
-  # as the disjunction the sentence itself makes. "Spoken for" is `#remaining_plan`, what the rules
-  # still ask; "set aside" is a holder actually holding money, which is why the sum is not the test —
-  # `Σ holdings` can be zero with $1,000 held against a $1,000 overdraft, and both nouns would still
-  # be true of that user. §10.7 #3's pure-overspend account satisfies neither: no rule asks for
-  # anything, no category holds anything, and the root is simply below zero.
+  # IS ANY OF THE USER'S MONEY CLAIMED BY A RULE — the noun of four of the seven sentences above.
   #
-  # COSTS THE PURPOSE LEDGER, which is what this fix adds to the card — and adds nothing to the PAGE:
-  # `#holding_of` reads `CategoryLedger#terms_for`, whose four terms are computed together on the
-  # first ask and memoised, and every holding status below (`#status_for`) reads the same four out of
-  # the same ledger. Whichever asks first pays. A user with no categories short-circuits on
-  # `#remaining_plan` and an empty `any?` without opening it at all. All three directions are
-  # measured in `spec/presenters/home_presenter_spec.rb`'s hero-cost block.
-  def anything_set_aside_or_spoken_for?
-    remaining_plan.positive? || categories.any? { |category| ledger.holding_of(category).positive? }
-  end
+  # IT REPLACES `#anything_set_aside_or_spoken_for?`, whose two nouns were a HOLDING (money moved
+  # into a category) and the rest of a distribution's ASK. Neither exists. `Σ claims` is one figure
+  # the ledger has already computed for `free`, so this costs nothing the card was not paying — where
+  # the old predicate opened the purpose ledger to ask each holder what it held.
+  def anything_claimed? = total_claims.positive?
 
-  # WHERE WE ARE IN THE PERIOD — day X of Y, and the bar's own percentage (spec §2).
+  # WHERE WE ARE IN THE PERIOD — day X of Y, and the bar's own percentage (answers-first §2).
   #
   # Off `#period_range`, never a second window: that reader is `User#period_containing`, the one
   # method that owns this arithmetic, and it is nil for a user who has declared no period. The card
-  # draws no bar there rather than inventing a calendar month — the same refusal the band this
-  # replaced made about the same reader.
+  # draws no bar there rather than inventing a calendar month.
   def period_progress
     range = period_range
     return nil if range.nil?
@@ -620,30 +423,23 @@ class HomePresenter
     Progress.new(first: range.first, last: range.last, day: (today - range.first).to_i + 1, days: range.count)
   end
 
-  # Sorted for the same reason #waterfall is, and by the same key: this is a rendered list, and the
-  # order the user ranked their categories in is the order "what do I deal with" wants. #categories
-  # is already `[priority, name]`, so the select preserves it.
-  def attention_categories
-    categories.select { |category| status_for(category).needs_attention? }
-  end
+  # ── "THIS PERIOD" — SPENDING AS PROGRESS (answers-first §4, computed-claims §3.4) ──────────────
 
-  # ── "THIS PERIOD" — SPENDING AS PROGRESS (answers-first spec §4) ───────────────────────────────
-
-  # THE BUDGETED ROWS, TROUBLE FIRST AND THEN FILL ORDER (spec §4).
+  # THE BUDGETED ROWS, TROUBLE FIRST AND THEN PRIORITY (answers-first §4).
   #
   # `sort_by` IS NOT STABLE IN RUBY, so the index is part of the key rather than left to chance:
-  # #categories is already `[priority, name]` — the order a distribution reaches them — and without
-  # the tiebreak two quiet categories could swap places between page loads with no data change,
-  # which is the same defect `HoldingCalculator#budgets_by_due_date` carries its triple key for.
+  # #budgeted_categories is already `[priority, name]`, and without the tiebreak two quiet categories
+  # could swap places between page loads with no data change.
   def period_rows
-    @period_rows ||= categories.each_with_index
-      .sort_by { |category, index| [status_for(category).needs_attention? ? 0 : 1, index] }
-      .map { |category, _index| period_row_for(category) }
+    @period_rows ||= budgeted_categories.each_with_index
+      .map { |category, index| [period_row_for(category), index] }
+      .sort_by { |row, index| [row.needs_attention? ? 0 : 1, index] }
+      .map(&:first)
       .reject(&:silent?)
   end
 
-  # THE UNBUDGETED ROWS: an expense category nobody has given a rule, WITH spending inside this
-  # period (spec §4). Zero-spend ones are absent by construction — they never appear in the grouped
+  # THE UNBUDGETED ROWS: an expense category nobody has given a rule, WITH spending inside this period
+  # (answers-first §4). Zero-spend ones are absent by construction — they never appear in the grouped
   # sum — which is the rule stated as a query rather than as a filter somebody could forget.
   #
   # ORDERED BY NAME, not by amount: these rows carry no plan and therefore no ranking, and sorting
@@ -660,177 +456,141 @@ class HomePresenter
     end
   end
 
-  # ── TROUBLE, ONLY WHEN TRUE (answers-first spec §5) ────────────────────────────────────────────
+  # ── TROUBLE, ONLY WHEN TRUE (answers-first §5, computed-claims §4) ─────────────────────────────
 
-  # EVERYTHING THAT NEEDS A HUMAN, AS ONE LIST. Each entry comes from a reader this class already
-  # had — the strip re-houses the attention band's sources rather than re-deriving them — and the
-  # ORDER is the order a reader needs them: money already gone, then the categories it went missing
-  # from, then the two acts that are still available (hand this period out; change the rules).
+  # EVERYTHING THAT NEEDS A HUMAN, AS ONE LIST, in the order a reader needs it: money already gone
+  # (a bank overdraft), then the one fact about the user's whole position that spending can still
+  # change (the shortfall), then the categories it is going wrong in, then the verdict no amount of
+  # care this period can fix.
   #
-  # FIVE KINDS WHERE SPEC §5 LISTS FOUR, and the fifth is the plan's own carry-over rather than an
-  # addition: §9's permanent "your budget doesn't fit your income" button had no home once the
-  # standing band became a card, so Task 1 parked it on the hero and Task 2 claims it. A strip that
-  # renders ONLY when something is true is the right place for it — the verdict IS something true,
-  # and it is the one kind of trouble no reallocation can fix.
+  # FOUR KINDS WHERE THE OLD STRIP HAD FIVE, and the arithmetic of the change is: `:undistributed`
+  # DIED (§6 — there is no distribution to have missed), `:category` SPLIT into `:over` and
+  # `:overdue` (they were one `HoldingStatus` state machine and are now two facts about a claim,
+  # each read off `ClaimCalculator`), and `:shortfall` is new (§4).
   def troubles
     @troubles ||= [
       *overdrawn_other_accounts.map { |account| Trouble.new(kind: :overdraft, subject: account) },
-      *attention_categories.map { |category| Trouble.new(kind: :category, subject: category) },
-      *(undistributed_period? ? [Trouble.new(kind: :undistributed, subject: nil)] : []),
+      *(short? ? [Trouble.new(kind: :shortfall, subject: nil)] : []),
+      *trouble_lines.map { |line| Trouble.new(kind: line.over? ? :over : :overdue, subject: line) },
       *(structurally_underwater? ? [Trouble.new(kind: :structural, subject: nil)] : [])
     ]
   end
 
-  # WHETHER THE STRIP RENDERS AT ALL. Asked once, over one list: spec §5 rules out a permanent
-  # "Nothing needs you" box, so silence is the good state and this is the gate that produces it.
+  # WHETHER THE STRIP RENDERS AT ALL. Asked once, over one list: answers-first §5 rules out a
+  # permanent "Nothing needs you" box, so silence is the good state and this is the gate that
+  # produces it.
   def trouble? = troubles.any?
 
-  # A NON-MAIN ACCOUNT BELOW ZERO. Main is excluded because ITS overdraft is the hero card's red
-  # "In Checking" figure with its own sentence (spec §2) — printing the same debt twice, with two
+  # A NON-MAIN ACCOUNT BELOW ZERO. Main is excluded because ITS overdraft is the hero card's red "In
+  # Checking" figure with its own sentence (answers-first §2) — printing the same debt twice, with two
   # different sentences about what counts it, is worse than printing it once.
-  #
-  # `main?` rather than a comparison of this class's own, for the reason that predicate exists: the
-  # model refuses a destroy on exactly it, so a second spelling here could hide a real debt or
-  # double-report one.
   def overdrawn_other_accounts
     overdrawn_accounts.reject { |account| main?(account) }
   end
 
-  # THIS PERIOD'S MONEY HAS NOT BEEN HANDED OUT, AND THERE IS SOMETHING TO HAND OUT.
-  #
-  # `DistributionClock#distributed_this_period?` is the same one query `#changed_after_distributing?`
-  # already runs for this screen — the clock owns "which distribution is this period's", and a second
-  # `Allocation.distributed` inside a period window spelled here would be free to disagree with it
-  # and with `AllocationCommitter`.
-  #
-  # THE `waterfall.any?` HALF IS NOT A GUARD, IT IS THE OTHER HALF OF THE QUESTION. Every fresh
-  # account has an undistributed period by definition, so without it the strip would greet every new
-  # user with a demand they cannot act on. A user whose rules ask for nothing has nothing to
-  # distribute, which is not trouble.
-  def undistributed_period? = waterfall.any? && !distribution_clock.distributed_this_period?
+  # ** FREE BELOW ZERO — THE SIGNAL (§4). ** Never a refusal to record anything; the strip states it,
+  # names who gives way, and says what pace lands the period at zero.
+  def short? = free_to_spend.negative?
 
-  # ── THE ACCOUNTS, DEMOTED TO ONE LINE (answers-first spec §6) ──────────────────────────────────
+  # THE SHORTFALL AS A POSITIVE FIGURE, for the sentence that states it. `-free`, exactly as
+  # #overdraft_for spells the physical one.
+  def shortfall = -free_to_spend
 
-  # WHAT THE LINE IS ABOUT: the accounts that are neither main nor mid-onboarding. Main is out
-  # because its balance IS the hero's "In Checking" figure, and counting it here would answer one
-  # question twice with two different numbers; an onboarding account is out because its card is
-  # rendered top-level and a figure in the line for a card sitting above it reads as two accounts.
+  # ** WHICH CLAIMS THE SHORTFALL EATS, IN GIVE-WAY ORDER (§4), AND THE WALK IS SPELLED ONCE. **
+  #
+  # PRIORITY KEEPS ITS JOB AS THE GIVE-WAY ORDER (§4), which is the fill order read for the opposite
+  # question: the category that would have been funded LAST is the one that goes without first. So the
+  # walk runs `#budgeted_categories` in reverse — REVERSE PRIORITY — taking each rule's claim until
+  # the shortfall is absorbed. The last claim reached is usually only PARTLY uncovered, which is why
+  # this is a walk rather than a filter: "Car repair is short $120" is a different sentence from "Car
+  # repair is uncovered", and only the walk can tell them apart.
+  #
+  # ZERO CLAIMS ARE SKIPPED rather than listed as covered: a rate rule spent flat claims nothing, and
+  # a row saying "$0.00 of it is uncovered" is a line that reports nothing.
+  #
+  # `break` RATHER THAN A `take_while`, because the boundary claim is IN the list with a REDUCED
+  # amount — a filter can only decide whether the whole row belongs.
+  def uncovered_claims
+    @uncovered_claims ||= begin
+      remaining = shortfall
+      list = []
+      give_way_order.each do |line|
+        break unless remaining.positive?
+        next unless line.claim.positive?
+
+        taken = [line.claim, remaining].min
+        list << Uncovered.new(line: line, amount: taken)
+        remaining -= taken
+      end
+      list
+    end
+  end
+
+  # ** THE PACE THAT LANDS THE PERIOD AT ZERO (§4): `shortfall ÷ days left`. ** No new date
+  # arithmetic — `days left` is `Progress#days_left`, off `User#period_containing`, the one reader
+  # that owns this calendar and the same one the hero's bar and this section's heading print.
+  #
+  # NIL FOR A USER WHO HAS DECLARED NO PERIOD, because there is no "rest of the period" to spread a
+  # shortfall over and inventing a calendar month would state a boundary nobody set — the same
+  # refusal `#period_range` makes.
+  #
+  # THE DIVISOR IS FLOORED AT ONE, and the floor is the CLOSING DAY rather than a guard against a
+  # bad number: `days_left` is `days - day` on a 1-based inclusive day, so it is ZERO on the last day
+  # of the period — the user still has today, and today is the whole of what is left. Dividing by
+  # zero there would raise on the one afternoon the sentence matters most.
+  def per_day_pace
+    progress = period_progress
+    return nil if progress.nil? || !short?
+
+    (shortfall / [progress.days_left, 1].max).round(2)
+  end
+
+  # ── THE ACCOUNTS, DEMOTED TO ONE LINE (answers-first §6) ───────────────────────────────────────
+
+  # WHAT THE LINE IS ABOUT: the accounts that are neither main nor mid-onboarding. Main is out because
+  # its balance IS the hero's "In Checking" figure, and counting it here would answer one question
+  # twice with two different numbers; an onboarding account is out because its card is rendered
+  # top-level and a figure in the line for a card sitting above it reads as two accounts.
   def other_accounts = accounts.reject { |account| main?(account) || onboarding?(account) }
 
   def other_accounts_total = other_accounts.sum(0.to_d) { |account| balance_of(account) }
 
   # THE CARDS THE LINE HIDES, which is every account whose onboarding is finished — MAIN INCLUDED.
   # The line's FIGURE is about the others; the expansion is the accounts INDEX, and Home carries
-  # rename and delete since `pools/index` and `pools/show` were deleted, so main's card has to stay
-  # reachable somewhere.
+  # rename and delete since `pools/index` and `pools/show` were deleted.
   def collapsed_accounts = accounts.reject { |account| onboarding?(account) }
 
-  # STILL UNFINISHED, so the card surfaces top-level (spec §6). Both gates asked through the
+  # STILL UNFINISHED, so the card surfaces top-level (answers-first §6). Both gates asked through the
   # presenter's own predicates rather than re-spelled, because each is ALSO the gate a controller
   # checks before accepting the write the card submits.
   def onboarding_accounts = accounts.select { |account| onboarding?(account) }
 
   def onboarding?(account) = awaiting_funding?(account) || awaiting_opening_balance?(account)
 
-  # THE ROW OBJECT `shared/_holding_status` IS GIVEN, built here rather than in the partial for the
-  # reason #status_for and #period_closed? are: every member is dated against THIS presenter's
-  # `today`, and a view assembling its own would be free to build one of them against `Date.current`
-  # and disagree with the rest of the screen silently.
-  #
-  # Both suffixes are read HERE, together, for every row — which is the point. They used to be two
-  # keyword arguments a partial could pass separately, and Home's two bands did exactly that.
-  def row_for(category)
-    Row.new(
-      category: category,
-      status: status_for(category),
-      period_closed: period_closed?(category),
-      changed_after_distributing: changed_after_distributing?(category)
-    )
-  end
-
-  # Views MUST use this rather than calling `category.status` directly. HoldingStatus defaults to
-  # Date.current, so a bare call in a partial would compute against a different day than this
-  # presenter whenever `today` is injected — and disagree silently.
-  def status_for(category)
-    @statuses ||= {}
-    @statuses[category.id] ||= category.status(today: today, terms: ledger.terms_for(category))
-  end
-
-  # Whether this category's money belongs to a period that has already ended — what the row marks as
-  # ` · last period` and what the next distribution will sweep back.
-  #
-  # Here rather than in the partial for the same reason as #status_for, and routed through
-  # #calculator_for so it reuses the calculator Home has already built for this category.
-  def period_closed?(category) = calculator_for(category).period_closed?
-
-  # SPEC §8'S ONE ROUGH EDGE — `behind $50.00 — you changed a rule here after distributing`, the
-  # clause that tells a user whose category went red because they edited a rule apart from one whose
-  # money genuinely went missing.
-  #
-  # `DistributionClock` OWNS THE WHOLE ANSWER, including the wording's justification and the
-  # period-bounded query behind it. It moved out of this class when the Budget page had to print the
-  # same clause, and Task 6 moved this caller onto its CATEGORY arm: one root means one distribution
-  # per period and one moment it happened at, so the clock takes a user and no account list at all.
-  #
-  # `delegate` TO A PRIVATE METHOD, and both halves are deliberate. Rails emits an implicit-receiver
-  # call, so a private target is reachable; and the laziness this screen needs lives inside
-  # #distribution_clock's own memo, so the clock's one query runs only when a row actually asks.
-  delegate :changed_after_distributing?, to: :distribution_clock
-
-  # The dated rules behind a category, earliest due first, each paired with the due date its row
-  # prints. What an expanded row shows: a category needing attention owes the user the rules that put
-  # it there.
-  #
-  # Here rather than in the partial for the same reason as #status_for, one level down:
-  # `budget.calculator` defaults to Date.current, so a view building its own calculators would date
-  # these rules against a different day than every other figure on the screen.
-  #
-  # Anchorless rules are excluded because they have no date to print; a row whose rules are all
-  # anchorless renders its own explanation instead (see _holding_row). The sort key is
-  # BudgetCalculator#due_order, the same one HoldingStatus#anchored_budgets and the fill order itself
-  # use — `category.budgets` carries no ORDER BY, so without it two rules sharing a due date could
-  # swap places between page loads. Memoised because BudgetCalculator#due_date re-runs its
-  # paid_since_anchor SUM on every call, which is also why the date this has already computed is
-  # handed to #due_order rather than left for it to ask again.
-  def dated_rules_for(category)
-    (@dated_rules ||= {})[category.id] ||= category.budgets
-      .select { |budget| budget.anchor_date.present? }
-      .map { |budget| [budget, calculator_for_budget(budget).due_date] }
-      .sort_by { |budget, due_on| calculator_for_budget(budget).due_order(due_on) }
-  end
-
   # ── THE PERIOD, AND THE STRUCTURAL VERDICT ─────────────────────────────────────────────────────
 
   # WHICH PERIOD THE SCREEN IS TALKING ABOUT, or nil for a user who has declared none.
   #
-  # `User#period_containing`, the one method that owns this arithmetic — the same window
-  # `DistributionPresenter#period` and `EntryImpactPresenter#period_ends_on` both read off, never
-  # re-derived here. GATED ON THE DECLARATION rather than taken on trust: `period_containing` falls
-  # back to the calendar month for an undeclared user, which is the right fallback for a normaliser
-  # and a lie on this card, since "Aug 1 – Aug 31" would state a boundary the user never set.
+  # `User#period_containing`, the one method that owns this arithmetic. GATED ON THE DECLARATION
+  # rather than taken on trust: `period_containing` falls back to the calendar month for an undeclared
+  # user, which is the right fallback for a normaliser and a lie on this card, since "Aug 1 – Aug 31"
+  # would state a boundary the user never set.
   def period_range
     return nil if user.period_cadence.blank? || user.period_anchor_date.blank?
 
     user.period_containing(today)
   end
 
-  # DOES THE BUDGET FIT THE INCOME — a question about the shape of the rules, not about this
-  # afternoon's cash.
+  # DOES THE BUDGET FIT THE INCOME — a question about the SHAPE of the rules, not about this
+  # afternoon's cash, and the one kind of trouble no amount of care this period can fix.
   #
-  # `Budget.steady_need`, not `remaining_plan`, which is THIS period's ask — catch-up on anything
-  # behind, zero on anything already funded — and the two diverge in both directions on the same
-  # budget. A period spent catching up on a slipped bill reported "your budget doesn't fit your
-  # income" at someone whose rules fit it comfortably, and the period right after a distribution
-  # reported nothing at all on a budget that does not fit. The second is the dangerous one: the whole
-  # point of the check is that reallocation cannot fix a budget that does not fit.
+  # `Budget.steady_need` reads the rules and the calendar and nothing else — no allocation, no
+  # holding — so it survives this task untouched. It is deliberately not `Σ claims`, which is THIS
+  # period's answer (catch-up on anything behind, zero on anything already full) and diverges from
+  # the structural question in both directions on the same budget.
   #
   # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate `BudgetPagePresenter#declared?`
-  # applies, because it is the same question. Income with a blank cadence is a reachable state, and in
-  # it `Budget.steady_need` falls back to treating the period as a calendar month. That fallback is
-  # right for a per-rule normaliser and useless as a verdict: "$1,668 a period" at a user who has not
-  # said how long a period is states a figure with no unit, and this band delivers the verdict WITHOUT
-  # the figures that would justify it. `/budget` already refuses to print those figures; Home refusing
-  # to print the verdict from them is the same refusal.
+  # applies, because it is the same question.
   #
   # Memoised, and the `false` case has to be memoised too — `||=` would recompute the whole sum on
   # every call for exactly the users who answer false.
@@ -843,192 +603,141 @@ class HomePresenter
       Budget.steady_need(user, today: today) > user.typical_income.to_d
   end
 
-  # ── THE FIX A PROBLEM ROW OFFERS ───────────────────────────────────────────────────────────────
-
-  # WHAT MOVING MONEY IN WOULD ACTUALLY CLOSE — HoldingStatus#funding_gap, not #amount.
-  #
-  # The two coincide on :overdrawn, :behind and :wont_make_it, and those are the only attention
-  # states whose ROW prints a figure at all (`overdrawn $80.00`, `behind $385.00`; the other prints a
-  # date), so the button and the label beside it still name one number.
-  #
-  # They diverge on :overdue, and taking #amount there was a measured defect: the demo's Renters
-  # Insurance holds every penny of a $180 premium that has simply not been paid, and Home offered
-  # "Take $180.00 from Available" — a real mistake proposed to fix an imaginary problem, which would
-  # have left the category holding $360 against a $180 bill. #funding_gap returns zero there, and the
-  # band says what the bill actually needs instead. See _attention.html.erb.
-  #
-  # `.round(2)` so the THREE places this figure lands cannot disagree: the button's label (rounded by
-  # number_to_currency), the link's `amount=` (rounded by Fix#amount_param) and the damage preview
-  # (computed from whatever is passed to ReallocationPresenter). Display-identical either way; the
-  # point is that the link and its own preview describe one move.
-  def fix_amount_for(category) = status_for(category).funding_gap.round(2)
-
-  # THE PARTIES WITH ENOUGH FREE MONEY, IN THE ORDER THE REALLOCATION SCREEN OFFERS THEM.
-  #
-  # AVAILABLE IS ALWAYS ONE OF THEM AND IS ALWAYS FIRST — `ReallocationPresenter#sources`' own order,
-  # for its own reason: idle money costs nothing to move, while a category's money is money the user
-  # decided to protect. Richest-first proposed exactly the opposite on the demo — a $950 house down
-  # payment offered four times over while $330 of unallocated money sat unoffered.
-  #
-  # THERE IS NO SAME-ACCOUNT TEST. `PoolMovement#crosses_accounts?` decided which pools could reach
-  # each other; an allocation moves nothing physical (§2), so every one of the user's holder
-  # categories is reachable from every other and the whole filter is gone.
-  #
-  # `free_amount` — holding less what EVERY rule holds — and not the balance, which is the threshold
-  # a USER-INITIATED move is gated on (ReallocationPresenter::Candidate#affordable?). Two thresholds
-  # for two different acts, deliberately: there the app STATES the damage rather than forbidding the
-  # move, here the app is PROPOSING, so it must not propose robbing a category that is counting on the
-  # money. AVAILABLE is in the third case by construction — it holds money for no rule, so its free
-  # amount is its whole holding.
-  #
-  # A category whose own status needs attention is excluded outright: proposing to rob a category that
-  # is itself behind is not a fix.
-  def fix_candidates_for(category)
-    (@fix_candidates ||= {})[category.id] ||= compute_fix_candidates(category)
-  end
-
-  # The one fix a problem row renders. nil `candidate` is the no-source case.
-  #
-  # `fetch` with a block rather than `||=`, because nil is a real answer here and `||=` would rebuild
-  # it on every hit.
-  def fix_for(category)
-    @fixes ||= {}
-    @fixes.fetch(category.id) { @fixes[category.id] = build_fix(category) }
-  end
-
   private
 
   # ── WHAT ONE "THIS PERIOD" ROW IS MADE OF ──────────────────────────────────────────────────────
 
-  # Every member dated against THIS presenter's `today` and read off the ONE calculator this screen
-  # already built for the category — `#calculator_for`'s memo, so a row costs no aggregate of its
-  # own and the bar's shape (`goal`) cannot come from a different reading than the figure in it.
   def period_row_for(category)
-    calculator = calculator_for(category)
-
     PeriodRow.new(
       category: category,
-      spent: spent_this_period(category),
-      planned: planned_this_period(category),
-      held: calculator.balance,
-      goal: calculator.saving_toward_a_target?,
-      status: status_for(category),
-      changed_after_distributing: changed_after_distributing?(category)
+      lines: claim_lines_for(category),
+      spent: spent_this_period(category)
     )
   end
 
-  # WHAT THIS CATEGORY PLANS TO SPEND IN ONE PERIOD — `EntryImpactPresenter#denominator`'S RULE,
-  # ASKED RATHER THAN RESTATED. That reader is the app's existing answer to "what is this category
-  # for, per period", and it is two arms for reasons measured on the demo seeds:
-  #
-  #   A GOAL MEASURES AGAINST ITS TARGET. `target_amount` is the figure `HoldingCalculator
-  #     #progress_percentage` and `#remaining_amount` already measure against, and it is what keeps
-  #     spec §4's "savings goals keep their target bars" true of a goal that ALSO carries a rate
-  #     rule (Retirement Supplement: $150 a period against $100,000) — under Σ steady_ask its bar
-  #     draws full an inch under a line reading "of $100,000.00".
-  #   AN ENVELOPE MEASURES AGAINST Σ `Budget#steady_ask`. That is the app's ONE per-period
-  #     normaliser: a $1,500-a-month rule claims $692.31 of a biweekly period, and a denominator in
-  #     sticker prices would draw a full envelope as a fifth of one.
-  #
-  # `saving_toward_a_target?` OFF THE MEMOISED CALCULATOR, which is the CHROME level of the app's
-  # two-level goal classification (see that reader's own comment) — the same predicate the impact
-  # card, the holdings card and the categories index card all ask to decide whether to draw a target
-  # bar. Home's row VOCABULARY stays on the other level (`HoldingStatus#saving?`), deliberately, and
-  # the pair is why an anchor-dated goal reads `on track` beside an envelope-shaped bar.
-  #
-  # DELIBERATELY NOT `HoldingCalculator#required`, which is what the category still ASKS for — zero
-  # on anything already funded, a catch-up on anything behind. A bar denominated in it would shrink
-  # as the user funded the category, which is the opposite of a plan.
-  def planned_this_period(category)
-    return category.target_amount.to_d if calculator_for(category).saving_toward_a_target?
+  # EVERY RULE'S CLAIM, BY CATEGORY, OFF THE PAGE'S ONE LEDGER. Built once for the whole screen: the
+  # "This period" rows, the trouble strip's over/overdue triggers and the shortfall's give-way walk
+  # are three readings of ONE list, and three lists would be three chances for the strip to name a
+  # category the section below it describes differently.
+  def claim_lines_for(category) = claim_lines.fetch(category.id, [])
 
-    category.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
+  # THE CATCH-ALL FIRST, THEN THE ITEMS BY NAME, ties broken by id. `budgets` carries no ORDER BY, so
+  # without a total key two rules on one category could swap lines between page loads with no data
+  # change — `HoldingCalculator#budgets_by_due_date`'s reason for its own triple key. The item-less
+  # rule leads because it is the category's own envelope and the item-backed ones are exceptions
+  # carved out of it (§3.1's lane partition).
+  def claim_lines
+    @claim_lines ||= claim_ledger.rules
+      .sort_by { |rule| [rule.item&.name.to_s, rule.id] }
+      .map { |rule| claim_line_for(rule) }
+      .group_by { |line| line.category.id }
+  end
+
+  def claim_line_for(rule)
+    calculator = claim_ledger.calculator_for(rule)
+
+    ClaimLine.new(
+      category: rule.category,
+      rule: rule,
+      shape: calculator.shape,
+      claim: calculator.claim,
+      spent: calculator.spent_this_period,
+      accrued: calculator.accrued_this_period,
+      built_up: calculator.built_up,
+      target: calculator.target,
+      next_due_on: calculator.next_due_on,
+      per_period: calculator.planned_this_period,
+      over: calculator.over?,
+      overdue: calculator.overdue?
+    )
+  end
+
+  # THE LINES THE STRIP IS ABOUT, in the order the section lists their categories, so a reader
+  # scanning down the strip and then down the section meets the same categories in the same order.
+  def trouble_lines
+    @trouble_lines ||= budgeted_categories.flat_map { |category| claim_lines_for(category) }.select(&:trouble?)
+  end
+
+  # REVERSE PRIORITY — the give-way order (§4). See #uncovered_claims.
+  def give_way_order
+    budgeted_categories.reverse.flat_map { |category| claim_lines_for(category) }
   end
 
   def spent_this_period(category) = holder_spending_this_period.fetch(category.id, 0.to_d)
 
   # ** WHAT EACH BUDGETED CATEGORY SPENT INSIDE THIS PERIOD, IN ONE GROUPED QUERY — AND NO NEW DATE
-  # ARITHMETIC ANYWHERE IN IT (spec §8: no ledger arithmetic beyond composing existing readers). **
-  # Two shared readers, composed, and neither is re-spelled here:
+  # ARITHMETIC ANYWHERE IN IT. ** Two shared readers, composed, and neither is re-spelled here:
   #
-  #   WHICH CATEGORY AN EXPENSE DRAINS — `CategoryLedger::ENTRY_CATEGORY_ID`, the app's ONE
-  #     statement of that rule (funded-since gate and the owner's-day timezone boundary included).
-  #     It is the same expression `CategoryLedger#grouped_entries` groups the ledger's own expense
-  #     term by, so this figure and `HoldingCalculator#balance` cannot count different rows.
+  #   WHICH CATEGORY AN EXPENSE DRAINS — `CategoryLedger::ENTRY_CATEGORY_ID`, the app's ONE statement
+  #     of that rule (funded-since gate and the owner's-day timezone boundary included). It is the
+  #     same expression `ClaimLedger`'s own lanes group by, so this figure and a claim's
+  #     `spent_this_period` cannot count different rows.
   #   WHERE THE PERIOD STARTS AND ENDS — `User#period_datetimes_containing`, the app's ONE reader of
-  #     that, with the widening to the closing day's own midnight that `entries.date` being a
-  #     DATETIME requires. `DistributionClock` and `AllocationCommitter` bound themselves by the
-  #     same call, so Home, the clock and the write path cannot disagree about which period this is.
+  #     that, with the widening to the closing day's own midnight that `entries.date` being a DATETIME
+  #     requires.
   #
-  # THE WINDOW IS TAKEN UNGATED, unlike `#period_range`. That reader refuses the calendar-month
-  # fallback because the hero PRINTS the boundary and "Aug 1 – Aug 31" would state one the user
-  # never set; nothing here prints a boundary, and a month is the same fallback `Budget#steady_ask`
-  # normalises an undeclared user's rules against — so the two halves of every bar describe one
-  # period whether or not the user has declared it.
+  # THE WINDOW IS TAKEN UNGATED, unlike `#period_range`: nothing here prints a boundary, and a month
+  # is the same fallback `Budget#steady_ask` normalises an undeclared user's rules against.
   #
-  # `categories.empty?` GUARDED because the fill order is empty for every user on their first day,
+  # `budgeted_categories.empty?` GUARDED because the set is empty for every user on their first day,
   # and an `IN ()` list is a query with nothing to ask.
   def holder_spending_this_period
     @holder_spending_this_period ||=
-      if categories.empty?
+      if budgeted_categories.empty?
         {}
       else
         period_entries
-          .where("#{CategoryLedger::ENTRY_CATEGORY_ID} IN (:ids)", ids: categories.map(&:id))
+          .where("#{CategoryLedger::ENTRY_CATEGORY_ID} IN (:ids)", ids: budgeted_categories.map(&:id))
           .group(CategoryLedger::ENTRY_CATEGORY_ID).sum(:amount).transform_values(&:to_d)
       end
   end
 
-  # THE SAME PARTITION, READ FOR ITS OTHER ANSWER: spending inside this period that drains no
-  # category at all — `CategoryLedger#unfunded_spending`'s rule, split by the category that NAMES
-  # the entry instead of summed into one figure. Together the two queries cover every expense entry
-  # in the window exactly once, which is the same partition §2 rests on one level up.
+  # THE SAME PARTITION, READ FOR ITS OTHER ANSWER: spending inside this period that drains no category
+  # at all, split by the category that NAMES the entry. Together the two queries cover every expense
+  # entry in the window exactly once.
   #
-  # HOLDERS ARE REJECTED AFTERWARD RATHER THAN IN SQL, and the reject is load-bearing rather than
-  # defensive: a category funded PART-WAY THROUGH this period drains available for the receipts
-  # dated before its `funded_since` and itself for the ones after, so without this it would be
-  # listed twice — once with a bar and once as unbudgeted. It is already in the list above, with the
-  # bar; its pre-funding spending belongs to available, which the hero's figures already carry.
+  # BUDGETED CATEGORIES ARE REJECTED AFTERWARD RATHER THAN IN SQL, and the reject is load-bearing
+  # rather than defensive: a category funded PART-WAY THROUGH this period drains nothing for the
+  # receipts dated before its `funded_since` and itself for the ones after, so without this it would
+  # be listed twice — once with a bar and once as unbudgeted.
   def unbudgeted_spending_this_period
     @unbudgeted_spending_this_period ||= begin
-      holders = categories.to_set(&:id)
+      budgeted = budgeted_categories.to_set(&:id)
 
       period_entries.where("#{CategoryLedger::ENTRY_CATEGORY_ID} IS NULL")
         .group("categories.id").sum(:amount)
-        .except(*holders)
+        .except(*budgeted)
         .transform_values(&:to_d)
     end
   end
 
   # THE SCOPE BOTH GROUPED READS START FROM. `Entry.expenses` already carries the `item: :category`
-  # join both the constant and the `categories.user_id` filter need; `ENTRY_CATEGORY_JOINS` brings
-  # the aliased owner whose timezone the constant's day-boundary comparison re-zones through.
+  # join both the constant and the `categories.user_id` filter need; `ENTRY_CATEGORY_JOINS` brings the
+  # aliased owner whose timezone the constant's day-boundary comparison re-zones through.
   def period_entries
     Entry.expenses
       .joins(*CategoryLedger::ENTRY_CATEGORY_JOINS)
       .where(categories: { user_id: user.id }, date: user.period_datetimes_containing(today))
   end
 
-  # THE UNCAPPED HALF OF `#free_to_spend` — money with no job once the rest of this period's plan is
-  # paid for. Private and spelled once because ALL THREE public readers need it: #free_to_spend
-  # takes the `min` of it and the pot, #free_cap_bound? asks which of the two that was,
-  # #plan_outruns_the_money? asks for its sign, and a second spelling of the subtraction is a card
-  # whose figure and whose subline could describe different arithmetic.
+  # ** ONE CLAIM LEDGER FOR THE WHOLE RENDER (§3.3). ** Three statements for the user's entire rule
+  # set, where a calculator per rule would be two per rule and a walk each. Every claim figure on this
+  # screen — the hero's `free`, each row's bar, each trouble line, the give-way walk — comes out of
+  # this one object, so the strip cannot name a category the section describes differently.
   #
-  # Not memoised: both operands already are (`#available` on the proposal, `#remaining_plan` on the
-  # rows), so this is a subtraction of two memos and the card asks for it twice.
-  def unspoken_for = available - remaining_plan
+  # LAZY, like everything else here: Home writes nothing, so there is no write for the snapshot to
+  # fall the wrong side of, and the laziness only keeps a presenter built and never rendered free.
+  #
+  # PINNED, not asserted: `home_presenter_spec`'s cost block counts the statements a five-rule screen
+  # costs against a one-rule one, because a reader that quietly grew a ledger of its own is invisible
+  # to every other example in the file.
+  def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
 
-  # ONE PHYSICAL LEDGER FOR THE SCREEN. Lazy, like everything else here: Home writes nothing, so
-  # there is no write for the snapshot to fall the wrong side of, and the laziness is only so a
-  # presenter built and never rendered costs nothing.
-  def account_ledger = @account_ledger ||= AccountLedger.new(user)
-
-  # ONE PURPOSE LEDGER FOR THE SCREEN, over exactly the categories this screen asks about, plus
-  # `user:` so `#available` is answerable for a user whose holder set is EMPTY — which is every user
-  # on their first day, and exactly the user Home renders for first. Read off the categories alone,
-  # CategoryLedger raises `NoSingleOwner` rather than answering.
-  def ledger = @ledger ||= CategoryLedger.new(categories, user: user)
+  # ONE PHYSICAL LEDGER FOR THE SCREEN, and it is the CLAIM LEDGER'S OWN — the accounts band, the
+  # overdraft lines, the onboarding gates and `free`'s cap all read one snapshot. A second
+  # `AccountLedger` here would be a second reading of the same two SUMs, free to disagree with the
+  # pot the hero prints.
+  def account_ledger = claim_ledger.account_ledger
 
   # THE LATCH ITSELF, memoised: #awaiting_opening_balance? is asked once per account this screen
   # renders, and every account but main gets a `false` from the first half of that predicate before
@@ -1036,152 +745,13 @@ class HomePresenter
   #
   # `Category.opening_balance`, NOT a hand-rolled `exists?(name: …)`: that scope is CASE-INSENSITIVE,
   # matching `Category`'s own uniqueness validation, so a user who already has a category spelled
-  # "opening balance" reads as latched here exactly as it would refuse a second `create!` — one rule,
-  # asked the one place it lives.
+  # "opening balance" reads as latched here exactly as it would refuse a second `create!`.
   #
-  # `defined?` rather than `||=`: the open latch (no such category yet) is `false`, the common case
-  # for as long as onboarding is unfinished, and `||=` would re-run the EXISTS on every hit.
+  # `defined?` rather than `||=`: the open latch is `false`, the common case for as long as onboarding
+  # is unfinished, and `||=` would re-run the EXISTS on every hit.
   def opening_balance_recorded?
     return @opening_balance_recorded if defined?(@opening_balance_recorded)
 
     @opening_balance_recorded = user.categories.opening_balance.exists?
-  end
-
-  # ONE CLOCK FOR THE SCREEN, on its category arm — no account list, because there is one root and
-  # one distribution per period to compare against.
-  def distribution_clock
-    @distribution_clock ||= DistributionClock.new(user: user, today: today)
-  end
-
-  def compute_fix_candidates(category)
-    amount = fix_amount_for(category)
-    return [] unless amount.positive?
-
-    fundable_by(category).select { |party| free_amount_for(party) >= amount }
-  end
-
-  # AVAILABLE, THEN THE HOLDERS IN FILL ORDER — `ReallocationPresenter#sources`' order, assembled
-  # from the list Home already holds rather than re-queried.
-  def parties = @parties ||= [ReallocationPresenter::ROOT, *categories]
-
-  def fundable_by(category)
-    parties.reject do |party|
-      next true if party == category
-
-      !root?(party) && status_for(party).needs_attention?
-    end
-  end
-
-  def root?(party) = party.is_a?(ReallocationPresenter::Root)
-
-  # AVAILABLE'S FREE MONEY IS `CategoryLedger#available`, NOT THIS SCREEN'S `#available`, and the
-  # difference is the sweep. The headline is post-sweep because it describes the distribution this
-  # screen is offering; a hand move happens NOW, out of money that is actually unclaimed today, which
-  # is what the reallocation screen would then show and refuse against (`Allocation#source_must_hold_
-  # it` reads the same figure). Offering a fix out of money that is still sitting in another category
-  # would propose a move the write path rejects.
-  def free_amount_for(party)
-    return ledger.available if root?(party)
-
-    (@free_amounts ||= {})[party.id] ||= calculator_for(party).free_amount
-  end
-
-  # ONE ReallocationPresenter FOR ONE ROW, and #source_for rather than #sources: the list reader would
-  # build a Candidate — with its damage, four calculators deep — for every holder category the user
-  # has, on a screen that renders one button.
-  def build_fix(category)
-    amount = fix_amount_for(category)
-    return Fix.new(category: category, amount: amount, candidate: nil, covered: true) if covered_by_waterfall?(category)
-
-    source = fix_candidates_for(category).first
-    Fix.new(
-      category: category,
-      amount: amount,
-      candidate: source && damage_reader(category, source, amount).source_for(source),
-      covered: false
-    )
-  end
-
-  # WHETHER THE NEXT DISTRIBUTION ALREADY SOLVES THIS, so the band does not talk the user into a move
-  # they do not need to make. Ruling 4 said do not offer money to a bill that already has it; this is
-  # the same principle one step out — do not offer money to a bill that is ABOUT to have it. The move
-  # is not free: the source loses money it was holding for its own rule.
-  #
-  # READ OFF #waterfall, WHICH IS THE PROPOSAL THIS SCREEN IS ALREADY DERIVED FROM, and deliberately
-  # not a fresh AllocationCalculator. Home no longer RENDERS the waterfall — the band that drew it
-  # died with the attention band (answers-first §1: Home stops showing the system) — but the same
-  # rows are still `#remaining_plan`'s and `#undistributed_period?`'s, and the sentence below is a
-  # promise about the very distribution the strip's own button opens. A second reader here could
-  # say "the next distribution funds this in full" beside a Distribute screen that funds none of it.
-  #
-  # NO ROW MEANS NOT COVERED, which is the safe direction: a category asking for nothing is rejected
-  # from the rows, and that category is already handled one branch earlier by
-  # HoldingStatus#funding_gap.
-  def covered_by_waterfall?(category)
-    row = waterfall_rows_by_category[category.id]
-
-    row.present? && row.short.zero?
-  end
-
-  def waterfall_rows_by_category
-    @waterfall_rows_by_category ||= waterfall.index_by { |row| row.category.id }
-  end
-
-  # THE SCREEN'S OWN LEDGER GOES WITH IT, and that is the whole of what `ledger:` is for. One of these
-  # is built per problem row (see #build_fix), and each would otherwise open a CategoryLedger of its
-  # own over the same holder categories, at the same moment, with no `as_of` on either.
-  #
-  # SHARING IS SAFE HERE BECAUSE HOME WRITES NOTHING. A ledger is a snapshot memoised at its first
-  # read, so handing one across a write would hand out figures from before it; this presenter renders
-  # a GET and the fix buttons are links.
-  #
-  # The two sets are identical by construction: both are `Category.in_fill_order` over the same user.
-  # It would not cost accuracy if one were not — #terms_for hands back nil for a category the ledger
-  # does not know and the calculator then runs its own aggregates — but #holding_of would raise, so
-  # "identical" is worth stating rather than relying on.
-  def damage_reader(category, source, amount)
-    ReallocationPresenter.new(
-      user: user, to_category: category, from_category: source, amount: amount, today: today, ledger: ledger
-    )
-  end
-
-  # THE PROPOSAL THIS SCREEN RENDERS, AND IT IS THE OBJECT THE DISTRIBUTE BUTTON ACTS ON.
-  #
-  # HOME USED TO KEEP A HAND-COPIED WATERFALL — `#fill_waterfall`, plus `#required_for` and
-  # `#ask_calculator_for` to feed it, plus `#total_swept` and an `available` expression, all of them
-  # transcriptions of `AllocationCalculator`. They agreed, and they agreed by being watched: five
-  # cross-screen pins in `spec/presenters/home_presenter_spec.rb` and `spec/system/home/fixes_spec.rb`
-  # exist for no other reason than to catch the day they stopped. Consuming the class removes the
-  # copy rather than the check — those pins now compare an object with itself and stay green, which
-  # is what "structurally cannot drift" looks like from a spec's side.
-  #
-  # THE COST IS ONE EXTRA `CategoryLedger`, AND IT IS THE HONEST PRICE. This presenter keeps its own
-  # ledger for the statuses, the free-money reads and the `ReallocationPresenter`s it builds; the
-  # proposal builds a second over the same categories at the same moment, because `#share_ledger` is
-  # `protected` — only another AllocationCalculator may hand one over, deliberately, since only
-  # another instance can honestly promise it was constructed after the last write. Widening that
-  # surface to save four grouped queries would trade the guarantee for the saving, and Home writes
-  # nothing, so the two ledgers cannot disagree about anything. The alternative — keeping the copy —
-  # costs the same queries AND the drift.
-  #
-  # NO `overrides:`: Home renders the proposal as it stands. The overrides are the distribution
-  # screen's, where there are boxes to type them into.
-  def proposal = @proposal ||= AllocationCalculator.new(user: user, today: today)
-
-  # THE PLAIN CALCULATOR — what a category holds right now. #period_closed? and #free_amount_for
-  # both ask it, once per rendered category, and each calculator is a set of aggregate queries plus
-  # a per-rule sort, so the memo is what stops the screen building two for one category.
-  #
-  # THE AGGREGATES ARE ONE LEDGER'S SHARE OF FOUR. The memo only ever stopped this screen building
-  # the same calculator twice; the ledger is what stops each category paying four aggregates of its
-  # own.
-  def calculator_for(category)
-    (@calculators ||= {})[category.id] ||= category.holding_calculator(today: today, terms: ledger.terms_for(category))
-  end
-
-  # Keyed by the record, not by id: an unsaved rule has no id, and `nil` as a cache key would hand
-  # every such rule the first one's calculator.
-  def calculator_for_budget(budget)
-    (@budget_calculators ||= {})[budget] ||= budget.calculator(today: today)
   end
 end

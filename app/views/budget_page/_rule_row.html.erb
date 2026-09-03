@@ -1,19 +1,29 @@
 <%# One funding rule. Local: `rule` (BudgetPagePresenter::Rule).
 
-    The date is printed only where the rule has one. An anchorless rate rule is never "due" —
-    BudgetCalculator#due_date answers the end of the period for one, which is a real number for
-    the maths and a lie on screen — so #due_on is nil there and the row stays quiet about dates.
+    The date is printed only where the rule has one. An anchorless rate rule is never "due", so
+    `#next_due_on` is nil there and the row stays quiet about dates.
 
     THE REASON CLAUSE IS GONE WITH THE ORPHANS (two-ledger spec §5). It said why a rule was outside
-    the fill order; every rule this page renders is owned by a category, and every category is in
-    the waterfall.
+    the fill order; every rule this page renders is owned by a category.
 
-    ** WHAT THE RULE HOLDS RIGHT NOW (computed-claims spec §3.3; Task 2). ** Two figures, never
-    both: a rate rule is use-it-or-lose-it, so what it has is this period's unspent CLAIM and its
-    built-up is zero by definition; an accruing rule's whole point is the running total, so it says
-    what is BUILT UP. Printing "built up $0.00" over an envelope that carries nothing at all is
-    exactly the confusion `ClaimCalculator#built_up`'s own comment refuses. Both come off the page's
-    ONE `ClaimLedger`. %>
+    ** §3.4'S ROW (Task 3), REPLACING TASK 2'S MINIMUM. ** That task left `· $250.00 claimed` /
+    `· $450.00 built up` here and named this as the replacement — REPLACING them rather than standing
+    beside them, or the row would say the same money twice. What the row prints now is §3.4 verbatim:
+
+      RATE      $310.00 of $400.00                          spent of this period's rate, over in red
+      ACCRUING  $450.00 built up of $1,200.00                the running total against the target,
+                next due Mar 1 · $200.00 per period            with the schedule beneath it
+
+    AND IT IS THE SAME SENTENCE HOME PRINTS. `claim_figure` and `claim_schedule` render this row and
+    `HomePresenter::ClaimLine` alike — the two screens say one thing about one rule rather than two
+    that have to be kept in step. Every figure comes off the page's ONE `ClaimLedger`.
+
+    THE STICKER STAYS BESIDE IT, AND THE REPETITION IS DELIBERATE. `budget_rule_amount` prints what
+    the rule SAYS ("$1,200.00 every 6 months") — the thing the Edit link edits — while §3.4's figure
+    prints where it has got to. On a dated rule the target IS the sticker, so the same number appears
+    twice; that is the declaration confirmed by the reading, not two figures a reader could add. This
+    is the page where rules are written, and a page for editing a rule that does not show the rule
+    would be the wrong subtraction. %>
 <%# STACKS BELOW `sm` (design review H5): the name, "$1,200.00 every 6 months", "· next Mar 1" and
     an Edit link are four things, and at 375px the figure and its date wrapped into the name's
     column. %>
@@ -22,19 +32,25 @@
     <span class="font-medium text-gray-900">
       <%= budget_rule_name(rule.budget) %>
     </span>
-    <span class="text-sm text-gray-700 flex items-baseline gap-2 shrink-0">
+    <span class="text-sm text-gray-700 flex flex-wrap items-baseline gap-2 shrink-0">
       <span><%= budget_rule_amount(rule.budget) %></span>
-      <% if rule.anchored? %>
-        <span class="text-gray-500">· next <%= rule.due_on.strftime("%b %-d") %></span>
-      <% end %>
-      <% if rule.rate? %>
-        <span class="text-gray-500" data-rule-claim>· <%= number_to_currency(rule.claim) %> claimed</span>
-      <% else %>
-        <span class="text-gray-500" data-rule-built-up>· <%= number_to_currency(rule.built_up) %> built up</span>
+      <span class="<%= rule.over? ? "text-status-danger font-medium" : "text-gray-500" %>" data-rule-figure>
+        · <%= claim_figure(rule) %>
+      </span>
+      <% if schedule = claim_schedule(rule) %>
+        <span class="text-gray-500" data-rule-schedule>· <%= schedule %></span>
       <% end %>
       <%= link_to "Edit", edit_budget_path(rule.budget), class: "text-brand-dark hover:text-brand underline" %>
     </span>
   </div>
+
+  <%# WHAT IS WRONG, WHERE ANYTHING IS — the same string Home's strip prints about this rule, off the
+      same helper, so a user moving between the two screens meets one sentence rather than two. %>
+  <% if rule.trouble? %>
+    <p class="mt-1 text-sm text-status-danger font-medium" data-rule-trouble>
+      <%= claim_trouble_label(rule) %>
+    </p>
+  <% end %>
 
   <%= render "adjust", rule: rule %>
 

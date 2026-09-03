@@ -164,11 +164,14 @@ RSpec.describe "ledger sharing", type: :model do
         .to raise_error(CategoryLedger::AsOfMismatch, /one ledger per `as_of`/)
     end
 
-    # HomePresenter's own ledger is unbounded, which is the pair this guard has to let through.
-    it "accepts the unbounded ledger Home actually hands it" do
-      home = HomePresenter.new(user: user, today: today)
-
-      expect { ReallocationPresenter.new(user: user, to_category: food, today: today, ledger: home.send(:ledger)) }
+    # ** HOME NO LONGER HANDS IT ONE (computed-claims Task 3), and this example is converted rather
+    # than deleted. ** It read `HomePresenter#ledger` — the `CategoryLedger` that screen kept for its
+    # holding statuses and for the `ReallocationPresenter`s it built behind its fix buttons. Home
+    # reads claims now and builds no reallocation at all, so the pair this guard had to let through
+    # is gone with the caller. What the guard is actually about survives unchanged: an UNBOUNDED
+    # ledger, which is what every writer-free screen builds, must pass.
+    it "accepts an unbounded ledger" do
+      expect { ReallocationPresenter.new(user: user, to_category: food, today: today, ledger: unbounded_categories) }
         .not_to raise_error
     end
   end

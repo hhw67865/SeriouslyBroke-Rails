@@ -65,15 +65,15 @@ RSpec.describe "Home Navigation", type: :system do
       visit root_path
     end
 
-    # WAS `find("div[aria-labelledby='waterfall-heading']")` (answers-first Task 2). The waterfall
-    # band died with the attention band — Home stops showing the system (spec §1) — and the
-    # Distribute call-to-action moved onto the trouble strip's :undistributed arm (spec §6), which
-    # is where a user who has not handed this period's money out actually needs it. The fixture
-    # above already produces that state: a $400 rule, $100 of income and no distribution.
-    def distribute_prompt = find("[data-undistributed]")
-
-    # `exact_text` because Capybara.exact is unset and Home's own strip link reads "Distribute
-    # this period" — a bare "Distribute" matches both, and the click below would be ambiguous.
+    # ** THE STRIP NO LONGER OFFERS DISTRIBUTE (computed-claims Task 3). ** The `:undistributed` arm
+    # and its button are deleted with the state they described: claims are computed, so there is
+    # nothing to hand out and nothing to have missed. Two examples went with it —
+    # "offers the same action from the strip that describes it" and the strip half of "keeps turbo
+    # from prefetching either link" — and the SIDEBAR's link is what is left of both, until Task 4
+    # deletes the screen itself.
+    #
+    # `exact_text` because Capybara.exact is unset; kept so the deletion above cannot quietly widen
+    # what this matches.
     def nav_link = find_link("Distribute", exact_text: true)
 
     # `have_link(href:)` rather than reading `[:href]` off the node: selenium hands back the
@@ -88,24 +88,19 @@ RSpec.describe "Home Navigation", type: :system do
       expect(page).to have_content("Where your money goes")
     end
 
-    # The strip that has just told the user this period has not been distributed is the other place
-    # the action belongs — a user reading the problem is one click away from performing the fix.
-    it "offers the same action from the strip that describes it", :aggregate_failures do
-      within(distribute_prompt) { click_link "Distribute this period" }
-
-      expect(page).to have_current_path(new_distribution_path)
-      expect(page).to have_css("h1", text: "Distribution")
+    # HOME OFFERS IT NOWHERE ELSE, and that is the other direction of the deletion above rather than
+    # an absence nobody asked about: the strip is where the button used to be.
+    it "leaves the action off Home's own panels", :aggregate_failures do
+      expect(page).to have_no_css("[data-undistributed]")
+      expect(page).to have_no_link("Distribute this period")
     end
 
     # `/distributions/new` is a GET that takes WRITE LOCKS: DistributionPresenter's snapshot
     # deletes this period's split, holds the row locks on both pools of every deleted row for the
     # whole snapshot (~320ms measured), and rolls back. turbo-rails prefetches links on hover by
-    # default, so without this a hover would fire it. Asserted on both links, because either one
-    # left unmarked is the whole hazard back.
-    it "keeps turbo from prefetching either link", :aggregate_failures do
+    # default, so without this a hover would fire it.
+    it "keeps turbo from prefetching the link" do
       expect(nav_link["data-turbo-prefetch"]).to eq("false")
-      strip_link = within(distribute_prompt) { find_link("Distribute this period") }
-      expect(strip_link["data-turbo-prefetch"]).to eq("false")
     end
   end
 end

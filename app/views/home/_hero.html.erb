@@ -9,8 +9,11 @@
     spend" and where the period is, and a bad state is a red figure with a sentence, not a different
     card. See spec §2, which rules the covered/uncovered question closed.
 
-    THE WORDS ARE THE USER'S (spec §3). In checking, free, set aside, spoken for. "Available" is the
-    mechanic's term and survives on Distribute and Budget; "buffer" and "unclaimed" are dead. %>
+    THE WORDS ARE THE USER'S (answers-first §3, computed-claims §2). In checking, free, CLAIMED,
+    built up, spent, of. "Spoken for" died with `#remaining_plan` — it named the rest of a
+    DISTRIBUTION's ask, and there is no distribution — and "set aside" went with it: nothing is set
+    aside any more, because nothing moves. A rule CLAIMS money where it sits. "Available",
+    "distribute", "allocation" and "buffer" are the mechanic's terms and Home never says them. %>
 <div class="bg-white border border-gray-200 rounded p-4 sm:p-6" data-hero>
   <dl class="space-y-4">
     <%# THE NUMBER THE BANK APP SHOWS. `#in_checking` is `AccountLedger#pot` — main's balance, not
@@ -43,9 +46,10 @@
       </p>
     <% end %>
 
-    <%# THE ONE DERIVED NUMBER: `min(pot, available − remaining_plan)` (spec §3). Larger than the
-        figure above because it is the question the user cannot answer from their bank app — the
-        pot they can. Never clamped: a negative free is rendered as a negative. %>
+    <%# THE ONE DERIVED NUMBER: `min(pot, total_money − Σ claims)` (computed-claims §2). Smaller than
+        the figure above wherever the rules claim more than the user's other accounts hold, because it
+        is the question the user cannot answer from their bank app — the pot they can. Never clamped:
+        a negative free is rendered as a negative (§4: it is a signal, not a refusal). %>
     <div class="flex items-baseline justify-between gap-4">
       <dt class="text-sm font-medium text-gray-600">Free to spend</dt>
       <dd class="text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-gray-900" %>"
@@ -55,65 +59,70 @@
     </div>
   </dl>
 
-  <%# WHERE THE DIFFERENCE WENT, in three words the user already owns — and FIVE arms, because
-      every sentence here asserts a CAUSE and each one has to be gated on a predicate that
-      ESTABLISHES that cause (FINAL review — M-1). The signs of the two figures say which way the
-      arithmetic went and never why: `available − pot` is `moves out + swept − Σ holdings`, so a
-      cap-bound card gated on the signs alone told a SINGLE-account user their money was "sitting
-      outside checking" when what had actually happened was a category being overspent — a sentence
-      about savings above an accounts line with nothing in it.
+  <%# WHERE THE DIFFERENCE WENT, in words the user already owns — and FOUR arms with seven
+      sentences, because every one of them asserts a CAUSE and each has to be gated on a predicate
+      that ESTABLISHES that cause (the answers-first review's M-1, and the discipline survives the
+      change of readers). The signs of the two figures say which way the arithmetic went and never
+      why: `unclaimed − pot` is `Σ other accounts − Σ claims`, so a cap-bound card gated on the signs
+      alone would tell a SINGLE-account user their money was "sitting outside checking" when what had
+      actually happened was a rule claiming more than they have.
 
       THE ARM TABLE IS IN THE PRESENTER, beside the four predicates these branches ask, written as
       signs × causes. In order, the arms are:
 
-        the plan outruns the money   → and something IS set aside or spoken for, or (§10.7 #3) the
-                                       account is a pure overspend and neither noun is true of it.
-        free is negative, plan does  → and the money really is in other accounts, or there is no
-        not outrun (the cap bound      other account holding anything — in which case a negative pot
-        on a negative pot)             IS the whole of the user's cash and the plain sentence is the
-                                       true one. Its overdraft is already stated one line up.
-        free is fine and there IS a  → "the rest is set aside or spoken for", or — where neither noun
-        rest                           is true of the account — "the rest isn't set aside or spoken
-                                       for". A rest can be money walked in from another account,
-                                       which is why THIS arm needs a cause too (round 2).
-        free is fine, none of it is  → "none of it is set aside or spoken for", and the parked
-        claimed                        clause only where a second account actually holds money.
-                                       This is L-4's fresh signup, whose two figures are the same
-                                       number because nothing is funded — the card used to describe
-                                       a "rest" of $0.00 to them.
+        the claims outrun the money  → and something IS claimed, or the account is a pure overspend
+                                       with no rule claiming a penny.
+        free is negative, the claims → the money really is in other accounts, which this arm does not
+        do not outrun (the cap bound   have to ask: reaching it at all proves it (see the note there).
+        on a negative pot)
+        free is fine and there IS a  → "the rest is claimed", or — where nothing is claimed at all —
+        rest                           "the rest isn't claimed". A positive rest with nothing claimed
+                                       is an OTHER account in the red, which is why THIS arm needs a
+                                       cause too.
+        free is fine, none of it is  → "none of it is claimed", and the parked clause only where a
+        claimed                        second account actually holds money. This is the fresh signup,
+                                       whose two figures are the same number because nothing is
+                                       claimed at all.
 
       EVERY GATE IS THE PRESENTER'S OWN PREDICATE rather than a comparison spelled here. A view
       re-deriving which side of the `min` won, or re-deriving whether another account holds money,
       could print a sentence about arithmetic the figure beside it did not do. %>
   <p class="mt-2 text-sm text-gray-600" data-free-subline>
-    <% if presenter.plan_outruns_the_money? %>
-      <% if presenter.anything_set_aside_or_spoken_for? %>
-        More is set aside or spoken for than you have. Anything you spend now takes you further under.
+    <% if presenter.claims_outrun_the_money? %>
+      <% if presenter.anything_claimed? %>
+        More is claimed than you have. Anything you spend now takes you further under.
       <% else %>
         You have spent past what you had. Anything you spend now takes you further under.
       <% end %>
     <% elsif presenter.free_to_spend.negative? %>
-      <%# NEITHER HALF ASSERTS AN ACCOUNT BY NAME, deliberately: `available` spans every account the
-          user has, so "it is in savings" is a guess this card cannot make. What it can say is that
-          the money is not spoken for and not here, which is the whole of what the cap means. %>
-      <% if presenter.money_parked_elsewhere? %>
-        The money that isn't spoken for is sitting outside checking — nothing here is free until some
-        of it moves in.
-      <% else %>
-        Nothing here is free until money comes in.
-      <% end %>
+      <%# ** THE ONE ARM WITH NO SECOND SENTENCE, AND THE ARITHMETIC IS WHY. ** The old card had a
+          `#money_parked_elsewhere?` branch here, because with THREE terms in the cap's identity the
+          money could be missing for a reason no other account explains. There are two terms now
+          (`unclaimed − pot = Σ other accounts − Σ claims`), and reaching this arm at all requires
+          `free < 0` with `unclaimed ≥ 0`, which forces `pot < 0` and therefore
+          `Σ other accounts ≥ Σ claims − pot > 0`. Another account IS holding money, necessarily. The
+          else branch was unreachable, and an unreachable branch on a money screen is a sentence
+          waiting to be believed — so it is gone rather than gated. Pinned in `hero_spec.rb`, whose
+          single-account fixture reads the claims-outrun arm above instead.
+
+          IT ASSERTS NO ACCOUNT BY NAME, deliberately: the claim ledger's total spans every account
+          the user has, so "it is in savings" is a guess this card cannot make. What it can say is
+          that the money is not claimed and not here, which is the whole of what the cap means. %>
+      The money that isn't claimed is sitting outside checking — nothing here is free until some
+      of it moves in.
     <% elsif presenter.rest_in_checking? %>
-      <%# THE REST IS NOT SELF-EXPLAINING (re-review round 2). `pot − free` being positive says a rest
-          EXISTS and never what it is: money walked in from another account raises the pot without
-          touching `available`, so an Ally $200 in the red that walked $200 into checking leaves a
-          $200 rest that is neither set aside nor spoken for. The second gate is the cause. %>
-      <% if presenter.anything_set_aside_or_spoken_for? %>
-        the rest is set aside or spoken for.
+      <%# THE REST IS NOT SELF-EXPLAINING. `pot − free` being positive is `Σ claims − Σ other
+          accounts`, so with nothing claimed at all a positive rest is a SECOND ACCOUNT IN THE RED —
+          money that is in checking, is not claimed by any rule, and is only "spare" until that
+          account is squared. The second gate is the cause; the accounts line and the strip below are
+          where that account is named. %>
+      <% if presenter.anything_claimed? %>
+        the rest is claimed.
       <% else %>
-        the rest isn't set aside or spoken for.
+        the rest isn't claimed.
       <% end %>
     <% else %>
-      none of it is set aside or spoken for<% if presenter.free_cap_bound? && presenter.money_parked_elsewhere? %> —
+      none of it is claimed<% if presenter.free_cap_bound? && presenter.money_parked_elsewhere? %> —
       more is parked in other accounts<% end %>.
     <% end %>
   </p>

@@ -135,6 +135,19 @@ class ClaimCalculator
   # because a date that passes unpaid has not been dealt with and must go on asking.
   def next_due_on = dated? ? due_on(today, walk.paid) : nil
 
+  # ** A DATE THAT PASSED WITH THE MONEY STILL MISSING (§4's trigger; Task 3). ** Not merely a date
+  # in the past: the cycle rolls on PAYMENT rather than on the calendar (see #due_on), so an
+  # occurrence nobody paid stays anchored where it was and `#next_due_on` goes on naming it — which
+  # means a FULL fund reads "in the past" too, and that one is waiting to be paid rather than to be
+  # saved into. `built_up < target` is what tells the two apart, and it is the difference between a
+  # bill the user must find money for and one they must simply pay.
+  #
+  # HERE RATHER THAN ON THE TWO PRESENTERS THAT ASK, because both would have to compare against a
+  # `today` of their own and this class already holds the only one that matters. It is also the one
+  # place the pair is stated, so Home's trouble strip and the Budget page's rule row cannot come to
+  # different verdicts about one rule on one afternoon.
+  def overdue? = next_due_on.present? && next_due_on < today && built_up < target
+
   # HOW MANY PERIODS ARE LEFT TO FILL THE FUND, THIS ONE INCLUDED (§3.2: the accrual counts in full
   # the day the period opens). Nil where there is no due date. Floors at 1, so an overdue bill asks
   # for the whole remainder now and a user who has declared no cadence at all gets one blunt period
