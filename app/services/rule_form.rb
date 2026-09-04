@@ -87,16 +87,21 @@ class RuleForm
 
   # WHERE A `Budget` ERROR LANDS ON THIS FORM — the field whose CHOICE produced the column that was
   # refused. `basis`, `interval_months` and `anchor_date` are all consequences of "How often", so a
-  # message about any of them belongs under that radio; `carries_over` and `target_amount` are
-  # consequences of "Unspent money". The alternative is a 422 whose only visible text is "please
-  # review the problems below", which is what an error on an attribute the form does not render
-  # produces.
+  # message about any of them belongs under that radio. The alternative is a 422 whose only visible
+  # text is "please review the problems below", which is what an error on an attribute the form does
+  # not render produces.
+  #
+  # ** `target_amount` KEEPS ITS OWN KEY (fix round 1 — L4). ** It is a CONTROL on this form, so
+  # "must be greater than 0" belongs under the input the figure was typed into; routed to `:unspent`
+  # it printed "Unspent money must be greater than 0" above a pair of radios that were perfectly
+  # well chosen. `carries_over` is the one that has no input — it IS the radio — so it alone is
+  # worded there.
   BUDGET_ERROR_FIELDS = {
     basis: :schedule,
     interval_months: :schedule,
     anchor_date: :schedule,
     carries_over: :unspent,
-    target_amount: :unspent,
+    target_amount: :target_amount,
     amount: :amount,
     rule_type: :rule_type,
     item: :item_id,
@@ -182,8 +187,15 @@ class RuleForm
   # category re-populates "Pays" with no round trip — and WITHOUT JavaScript the whole list renders
   # and the server still answers, because `Budget#item_must_belong_to_category` refuses an item from
   # somewhere else.
+  #
+  # ONE STATEMENT, WHATEVER THE SIZE OF THE ACCOUNT. `User#items` is `has_many through: :categories`,
+  # so `categories` is ALREADY in the join and `merge(Category.expenses)` and the `categories.name`
+  # ordering both reach it — the explicit `.joins(:category)` this used to carry was a second join on
+  # the same table (fix round 1 — L5). Pinned by strict statement equality in
+  # `spec/requests/budgets_spec.rb`, because a select that grew a query per category would look
+  # exactly the same on the page.
   def item_options
-    user.items.joins(:category).merge(Category.expenses).order("categories.name", :name)
+    user.items.merge(Category.expenses).order("categories.name", :name)
   end
 
   delegate :persisted?, to: :budget

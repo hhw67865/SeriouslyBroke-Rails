@@ -192,6 +192,31 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(page).to have_no_field("Target")
     end
 
+    # ** AND IT DISABLES THEM, WHICH IS THE STATE A BROWSER WITH NO JAVASCRIPT IS SERVED (fix round
+    # 1 — L2). ** The `<noscript>` rule forces every hidden block visible, so "hidden" alone left the
+    # radios live for a user without JavaScript and `RuleForm` dropped their choice in silence. The
+    # server renders them disabled on a dated schedule and this controller keeps in step, so the two
+    # readings of the same form can never diverge. `visible: :all`, because with JavaScript the block
+    # they sit in is away — the disabled state is what is being asserted, not the hiding.
+    it "disables the unspent radios and the target on a dated schedule", :aggregate_failures do
+      choose "Once"
+
+      expect(find("#budget_unspent_builds", visible: :all)).to be_disabled
+      expect(find("#budget_target_amount", visible: :all)).to be_disabled
+    end
+
+    it "makes them live again when the schedule goes back to a dateless one", :aggregate_failures do
+      choose "Once"
+      choose "Per period"
+
+      expect(find("#budget_unspent_builds", visible: :all)).not_to be_disabled
+      expect(page).to have_field("Resets each period")
+
+      choose "Builds up"
+
+      expect(page).to have_field("Target")
+    end
+
     it "reveals the target only when the money builds up" do
       expect(page).to have_no_field("Target")
 
@@ -353,9 +378,14 @@ RSpec.describe "Budgets Forms", type: :system do
     # set on this rule"). The category stays read-only because the page that LISTS rules groups them
     # by category, so moving one between categories is that list's act rather than a control buried
     # in one rule's form.
+    # ** IT SUBMITS NOTHING FOR THE CATEGORY EITHER (fix round 1 — M1). ** The read-only box used to
+    # sit over a hidden field, and the field's only real effect was to make a re-parent a legal
+    # PATCH that no control here could ask for. `#update` does not permit the key any more, so the
+    # form does not carry it; the rule keeps its owner because the ROW has one.
     it "exposes every control but the category" do
       expect(page).to have_no_select("Category")
       expect(page).to have_content("Groceries")
+      expect(page).to have_no_css("input[name='budget[category_id]']", visible: :all)
 
       expect(page).to have_select("Pays")
       expect(page).to have_field("Bill")

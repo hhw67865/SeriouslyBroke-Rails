@@ -45,6 +45,119 @@ RSpec.describe "Budgets", type: :request do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    # ** THE PREFILL ON THIS PATH IS THE AMOUNT AND NOTHING ELSE (fix round 1 — M1). ** A drift
+    # suggestion is the only thing that links here with a payload and the only thing it has to say
+    # is a figure it measured; the rest of the rule is already on the row. Merging the whole query
+    # string over `RuleForm.from` handed a GET the power to re-word an existing rule, and both of
+    # these were live.
+    it "takes a drift suggestion's amount" do
+      get edit_budget_path(rule, budget: { amount: "45.00" })
+
+      expect(response.body).to include('value="45.00"')
+    end
+
+    # SCENARIO A: the read-only box rendered the OTHER category's name and the hidden field carried
+    # it, so the form said the rule belonged somewhere it did not and Save moved it there.
+    it "ignores a category in the query string", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      get edit_budget_path(rule, budget: { category_id: own.id })
+
+      expect(response.body).to include("Groceries")
+      expect(response.body).not_to include("Dining Out")
+      expect(rule.reload.category).to eq(groceries)
+    end
+
+    # SCENARIO B: a schedule in the query string re-rendered a dated bill as a per-period rule with
+    # the date still sitting in a now-hidden input — `toggle()` early-returns when the state already
+    # matches — so Save was refused for a due date on a control that was not on screen. The rule
+    # opens on the schedule the ROW carries, whatever the URL says.
+    it "ignores a schedule in the query string", :aggregate_failures do
+      bill = create(:budget, :recurring, category: groceries, amount: 800, item: create(:item, category: groceries))
+
+      get edit_budget_path(bill, budget: { schedule: "per_period" })
+
+      expect(input_tag("budget_schedule_every_n")).to include('checked="checked"')
+      expect(input_tag("budget_schedule_per_period")).not_to include('checked="checked"')
+    end
+
+    # THE HIDDEN OWNER IS GONE WITH THE PERMITTED KEY: a persisted rule keeps its category because
+    # the ROW has one, and the field's only real effect was to make a re-parent a legal PATCH.
+    it "submits no category field at all" do
+      get edit_budget_path(rule)
+
+      expect(response.body).not_to include('name="budget[category_id]"')
+    end
+  end
+
+  # ** WHAT A BROWSER WITH NO JAVASCRIPT IS SERVED. ** A request spec IS that browser: the reveals
+  # are an enhancement, the `<noscript>` rule in the partial forces every hidden block visible, and
+  # the server has to answer for whatever such a form submits.
+  describe "GET /budgets/:id/edit — without JavaScript", :aggregate_failures do
+    # ** THE "UNSPENT MONEY" RADIOS ARE DISABLED ON A DATED SCHEDULE, AND SAY WHY (fix round 1 —
+    # L2). ** They were merely HIDDEN, which with no JavaScript means visible and live — so a user
+    # could choose "Builds up" on a dated bill and `RuleForm` dropped it in silence, because
+    # `Budget#build_up_must_be_valid` refuses `carries_over` beside an anchor and the form forces
+    # `resets` there rather than arguing. A disabled control submits nothing and states its reason,
+    # which is the honest version of the same refusal.
+    it "disables the unspent radios on a dated bill and states the reason" do
+      bill = create(:budget, :recurring, category: groceries, amount: 800, item: create(:item, category: groceries))
+
+      get edit_budget_path(bill)
+
+      expect(response.body).to include("A dated bill never carries money over.")
+      expect(input_tag("budget_unspent_builds")).to include('disabled="disabled"')
+      expect(input_tag("budget_unspent_resets")).to include('disabled="disabled"')
+      expect(input_tag("budget_target_amount")).to include('disabled="disabled"')
+    end
+
+    # THE OTHER DIRECTION, or "it disables them" would pass against a form that disabled them always.
+    it "leaves them live on a dateless rule" do
+      get edit_budget_path(rule)
+
+      expect(response.body).not_to include("A dated bill never carries money over.")
+      expect(input_tag("budget_unspent_builds")).not_to include('disabled="disabled"')
+      expect(input_tag("budget_target_amount")).not_to include('disabled="disabled"')
+    end
+  end
+
+  # ** THE "PAYS" SELECT RENDERS EVERY ITEM THE USER OWNS, AND IT COSTS ONE STATEMENT TO DO IT. **
+  # That is the price of filtering in the browser rather than re-fetching (and of degrading without
+  # JavaScript at all), and it is only acceptable while it stays flat: a select that grew a query per
+  # category would look exactly the same on the page. `User#items` is `has_many through: :categories`
+  # so `categories` is already in the join — the explicit `.joins(:category)` this used to carry was
+  # a second join on the same table, and nothing but a count would have said so.
+  describe "GET /budgets/new — the Pays select" do
+    def item_statements
+      statements = []
+      recorder = lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") { get new_budget_path }
+      statements.count { |sql| sql.include?(%("items")) }
+    end
+
+    # STRICT EQUALITY, and the absolute figure beside it: equality alone would be satisfied by a page
+    # that read the items zero times, which is what a select rendered from an empty relation does.
+    def stock_two_more_categories
+      2.times do |index|
+        category = create(:category, :expense, :funded, user: user, name: "Cat #{index}")
+        4.times { |slot| create(:item, category: category, name: "Item #{index}-#{slot}") }
+      end
+    end
+
+    it "reads the items once, whatever the size of the account", :aggregate_failures do
+      create(:item, category: groceries, name: "Milk")
+      one_category = item_statements
+
+      stock_two_more_categories
+      three_categories = item_statements
+
+      expect([user.categories.count, user.items.count]).to eq([3, 9])
+      expect(three_categories).to eq(one_category)
+      expect(one_category).to eq(1)
+    end
   end
 
   # ** THE WIRE CARRIES THE USER'S WORDS SINCE RULES-OWN-THE-BUDGET §4. ** `basis` is no longer a
@@ -57,6 +170,11 @@ RSpec.describe "Budgets", type: :request do
   def rule_words(**overrides)
     { amount: "40.00", rule_type: "usage", schedule: "per_period", unspent: "resets" }.merge(overrides)
   end
+
+  # ONE RENDERED `<input>`, BY ID. Rails writes an input's attributes in its own order and moves them
+  # between versions, so `include?(%(id="x" checked="checked"))` pins the ORDER as much as the state
+  # — it broke first time out on `disabled` landing before `name`. Find the tag, then ask it.
+  def input_tag(id) = response.body[/<input[^>]*id="#{id}"[^>]*>/].to_s
 
   # THE OTHER HALF OF §7a: a scoped READ beside an unscoped WRITE is not ownership, it is ownership
   # on the way in only. `budget[category_id]` is a wire parameter, and `Budget` itself cannot object
@@ -274,42 +392,46 @@ RSpec.describe "Budgets", type: :request do
       expect(foreign.reload.amount).to eq(90)
     end
 
-    # RE-PARENTING, which is the update-shaped version of the same hole: the rule is mine and
-    # #set_budget finds it, so the refusal has to come from the assignment rather than the lookup.
-    # Nothing in `Budget` objects — a stranger's category is a category — so the rule would move
-    # onto their page and render there. The reach direction is asserted too, or "it refuses a
-    # stranger's category" would pass against a parameter that was silently dropped.
-    it "re-parents onto another of the user's own categories", :aggregate_failures do
+    # ** RE-PARENTING IS NOT A THING THIS ACTION DOES ANY MORE (fix round 1 — M1). ** It WAS: the
+    # key was permitted and merely ownership-scoped, so a PATCH could move a rule between the user's
+    # own categories — an act no control on §4's form can ask for (the category is read-only on an
+    # edit) and one the page that LISTS rules should own, since that page is what groups them by
+    # category. `BudgetsController#update_params` drops the key outright, which is the only spelling
+    # of "not writable" that a hand-made request also obeys.
+    #
+    # THESE THREE EXAMPLES ARE THE OLD PAIR PLUS ITS INCOME TWIN, FLIPPED RATHER THAN DELETED. Each
+    # pinned a branch of a re-parent that could still be attempted; what changed is the answer, and
+    # the answer has to be pinned or the key could quietly come back.
+    it "leaves the category alone when a PATCH carries another of the user's own", :aggregate_failures do
       own = create(:category, :expense, :funded, user: user, name: "Dining Out")
 
-      patch budget_path(rule), params: { budget: { category_id: own.id } }
+      patch budget_path(rule), params: { budget: rule_words(category_id: own.id) }
 
       expect(response).to redirect_to(budget_page_path)
-      expect(rule.reload.category).to eq(own)
-    end
-
-    it "refuses to re-parent onto a stranger's category and leaves the rule alone", :aggregate_failures do
-      patch budget_path(rule), params: { budget: { category_id: stranger_category.id } }
-
-      expect(response).to have_http_status(:not_found)
       expect(rule.reload.category).to eq(groceries)
+      expect(own.budgets.reload).to be_empty
     end
 
-    # THE PATH `BudgetProposal` DOES NOT GUARD (fix round 1). `#create` goes through the proposal,
-    # whose `funded_since` stamp `Category#only_expenses_hold_money` refuses on an income category —
-    # `#update` writes straight through, so this re-parent SAVED CLEAN. The rule then counted into
-    # `Budget.steady_need` and was unfillable forever, because `Category.in_fill_order` is holders
-    # and an income category can never be one.
-    #
-    # A 422 AND NOT A 404: the category is the user's OWN, so ownership is not the objection — the
-    # model's is, and `Budget#category_must_be_an_expense` says it where the form can print it.
-    it "refuses to re-parent onto the user's own income category", :aggregate_failures do
+    it "leaves the category alone when a PATCH carries a stranger's", :aggregate_failures do
+      patch budget_path(rule), params: { budget: rule_words(category_id: stranger_category.id) }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(rule.reload.category).to eq(groceries)
+      expect(stranger_category.budgets.reload).to be_empty
+    end
+
+    # THE INCOME ARM, WHICH USED TO BE A 422 FROM `Budget#category_must_be_an_expense`. `#update`
+    # wrote straight through `BudgetProposal`'s guard, so this re-parent once SAVED CLEAN — the rule
+    # counted into `Budget.steady_need` and was unfillable forever, since `Category.in_fill_order` is
+    # holders and an income category can never be one. It is answered a layer earlier now: the key
+    # never reaches the record, so there is nothing for the validation to refuse. The validation
+    # stays where it is, for a category the user later switches to income.
+    it "leaves the category alone when a PATCH carries the user's own income category", :aggregate_failures do
       income = create(:category, :income, user: user)
 
-      patch budget_path(rule), params: { budget: { category_id: income.id } }
+      patch budget_path(rule), params: { budget: rule_words(category_id: income.id) }
 
-      expect(response).to have_http_status(:unprocessable_content)
-      expect(response.body).to include("must be an expense category")
+      expect(response).to redirect_to(budget_page_path)
       expect(rule.reload.category).to eq(groceries)
       expect(income.budgets.reload).to be_empty
     end

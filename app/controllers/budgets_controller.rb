@@ -57,14 +57,27 @@ class BudgetsController < ApplicationController
   # renders on this path except the category, and a shape change here is legal: the claim is
   # computed, so the walk re-runs from the rule's accrual start under whatever shape is saved.
   #
-  # A DRIFT SUGGESTION PREFILLS THE AMOUNT AND THE FORM SHOWS THE CURRENT ONE BESIDE IT — hence the
-  # merge order, the prefill last. The figure arrives in THE RULE'S OWN UNIT
-  # (`SuggestionEngine#rule_unit_amount` inverts `Budget#steady_ask` before putting it on the wire,
-  # precisely so nothing downstream converts), and the form labels it with the rule's own basis.
-  # Nothing is written: the user still has to submit.
+  # ** THE PREFILL ON THIS PATH IS THE AMOUNT AND NOTHING ELSE (fix round 1 — M1). ** A drift
+  # suggestion is the only thing that links here with a payload, and the only thing it has to say is
+  # a figure it MEASURED; the rest of the rule is already on the row. Merging the whole query string
+  # over `RuleForm.from` handed a GET the power to re-word an existing rule, and two of those
+  # re-wordings were live:
+  #
+  #   `?budget[category_id]=<another of my categories>` rendered the read-only box with the OTHER
+  #     category's name, and the hidden field carried it — so Save RE-PARENTED the rule, from a
+  #     link, with the form showing the destination as if it were the rule's own owner.
+  #   `?budget[schedule]=per_period` on a dated bill server-rendered the date block hidden with the
+  #     date still in it (`toggle()` early-returns when the state already matches), and Save was
+  #     then refused for a due date on a control that was not on screen.
+  #
+  # Both are shapes the user never chose, arriving as a URL. The amount survives because the figure
+  # is in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts `Budget#steady_ask`
+  # before putting it on the wire, precisely so nothing downstream converts — and because it is the
+  # one field the panel has a measurement for. Nothing is written: the user still has to submit.
   def edit
     @current_amount = @budget.amount
-    @rule_form = RuleForm.new(current_user, RuleForm.from(@budget).merge(prefill_attributes), budget: @budget)
+    words = RuleForm.from(@budget).merge(prefill_attributes.slice(:amount))
+    @rule_form = RuleForm.new(current_user, words, budget: @budget)
   end
 
   # POST /budgets
@@ -103,8 +116,16 @@ class BudgetsController < ApplicationController
   # and its due date. §4's form submits every control on every save, so the merge changes nothing
   # about what a user's own submission does — a field they CLEARED arrives as a blank and still
   # clears — and it makes a partial write mean what it says.
+  #
+  # ** `category_id` IS NOT WRITABLE HERE AT ALL (fix round 1 — M1). ** §4: the category is READ-ONLY
+  # on an edit, and the form no longer submits it — the rule already has an owner and the page that
+  # LISTS rules is where moving one between categories belongs. It used to be permitted and merely
+  # ownership-scoped, which made a re-parent a legal PATCH that no control on the form could ask for;
+  # an unpermitted key is the only spelling of "this is not writable" that a hand-made request also
+  # obeys. `Budget#category_must_be_an_expense` stays where it is: a category the user later switches
+  # to income can still refuse a save from this action.
   def update
-    words = RuleForm.from(@budget).merge(budget_params.to_h.symbolize_keys)
+    words = RuleForm.from(@budget).merge(update_params.to_h.symbolize_keys)
     @rule_form = RuleForm.new(current_user, words, budget: @budget)
 
     if @rule_form.save
@@ -143,6 +164,13 @@ class BudgetsController < ApplicationController
   # Budget's own validations. Scoping to `.expenses` here would turn a user naming their OWN income
   # category into a 404 — their record vanishing — where the model gives a legible 422.
   def budget_params = scoped_owners(params.expect(budget: BUDGET_FIELDS))
+
+  # ** THE SAME LIST WITHOUT THE OWNER, WHICH IS THE WHOLE OF `#update`'s WRITABLE SURFACE. ** The
+  # category is chosen once, when the rule is created, and §4 makes it read-only afterwards; the key
+  # is dropped rather than scoped, so a hand-made PATCH is the same no-op the form is. `item_id` is
+  # still here and still scoped: which item a rule pays IS editable, and it is the sharper of the two
+  # ids besides.
+  def update_params = scoped_owners(params.expect(budget: BUDGET_FIELDS - [:category_id]))
 
   # THE SAME LIST AND THE SAME SCOPING, read off a GET. `expect` raises ParameterMissing on a
   # bare `/budgets/new`, which is the ordinary way this form is reached, so the absence of the

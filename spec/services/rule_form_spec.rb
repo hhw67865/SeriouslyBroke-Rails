@@ -301,12 +301,29 @@ RSpec.describe RuleForm do
       expect(form.errors[:schedule]).to include(/greater than 0/)
     end
 
-    # `Budget`'s own numericality on the column, landing on the same control.
-    it "carries a target of zero onto Unspent money" do
+    # ** `Budget`'s NUMERICALITY LANDS UNDER THE INPUT THE FIGURE WAS TYPED INTO (fix round 1 — L4).
+    # ** Routed to `:unspent` it printed "Unspent money must be greater than 0" over a pair of radios
+    # that were perfectly well chosen, while the box holding the 0 said nothing at all. `Target` is a
+    # control on this form and owns its own refusals.
+    it "carries a target of zero onto the Target field" do
       form = form(unspent: "builds", target_amount: "0")
 
       expect(form.save).to be false
-      expect(form.errors[:unspent]).to include(/greater than 0/)
+      expect(form.errors[:target_amount]).to include(/greater than 0/)
+      expect(form.errors[:unspent]).to be_empty
+    end
+
+    # `carries_over` KEEPS `:unspent`, and it is the only build-up column that does — it IS the
+    # radio, so it has no input of its own to be worded under. It is unreachable from this form
+    # (`#build_up_columns` never writes `carries_over` beside an anchor), which is why the mapping
+    # rather than a refusal is what there is to say about it, and why the two keys must not collapse
+    # into one. The radio's own refusal still lands there:
+    it "keeps a choice this form does not recognise under Unspent money" do
+      form = form(unspent: "rolls over")
+
+      expect(form.save).to be false
+      expect(form.errors[:unspent]).to include(/is not one of the choices/)
+      expect(form.errors[:target_amount]).to be_empty
     end
 
     it "keeps an amount error on the amount" do

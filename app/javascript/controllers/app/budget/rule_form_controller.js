@@ -29,6 +29,11 @@ export default class extends Controller {
     "targetField"
   ]
 
+  // THE OWNER, WHERE NO INPUT CARRIES IT. On an EDIT the category is read-only and the form submits
+  // nothing for it (fix round 1 - M1), so the value on the form element is the only statement of
+  // which category "Pays" should be filtered by.
+  static values = { category: String }
+
   connect() {
     this.refresh()
   }
@@ -38,10 +43,10 @@ export default class extends Controller {
     this.revealFields()
   }
 
-  // The category in force: the picker's selection on the "new" path, the hidden field's value on
-  // every path that arrived already naming an owner.
+  // The category in force: the picker's selection while the user is choosing, and otherwise the one
+  // the form was rendered for. The target wins because it is the live one.
   get categoryId() {
-    return this.hasCategoryTarget ? this.categoryTarget.value : ""
+    return this.hasCategoryTarget ? this.categoryTarget.value : this.categoryValue
   }
 
   get schedule() {
@@ -78,6 +83,23 @@ export default class extends Controller {
     this.toggle(this.anchorFieldTarget_, this.schedule === "every_n" || this.schedule === "once")
     this.toggle(this.unspentFieldTarget_, dateless)
     this.toggle(this.targetFieldTarget_, dateless && this.unspent === "builds")
+
+    // ** THE SAME REFUSAL THE SERVER RENDERS (fix round 1 - L2). ** A dated rule cannot carry money
+    // over at all, so its "Unspent money" radios and the Target below them are DISABLED as well as
+    // away - the state a browser with no JavaScript is served, and the one this has to keep in step
+    // with as the schedule moves. Disabled is not the same question as hidden: the Target is hidden
+    // under "Resets each period" and still enabled, because moving the radio one line up is how a
+    // JavaScript-less user reaches it.
+    this.setDisabled(this.unspentFieldTarget_, !dateless)
+    this.setDisabled(this.targetFieldTarget_, !dateless)
+  }
+
+  setDisabled(field, disabled) {
+    if (!field) return
+
+    field.querySelectorAll("input").forEach((input) => {
+      input.disabled = disabled
+    })
   }
 
   get intervalFieldTarget_() {

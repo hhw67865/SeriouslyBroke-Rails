@@ -55,7 +55,18 @@
       as: :budget,
       url: rule_form.persisted? ? budget_path(budget) : budgets_path,
       method: rule_form.persisted? ? :patch : :post,
-      html: { class: "space-y-6", data: { controller: "app--budget--rule-form" } } do |f| %>
+      html: {
+        class: "space-y-6",
+        data: {
+          controller: "app--budget--rule-form",
+          # THE CATEGORY IN FORCE, AS A FACT RATHER THAN AS A FIELD. "Pays" filters by it, and on the
+          # EDIT path there is no longer an input carrying it (fix round 1 — M1: the category is not
+          # writable there, so the form does not submit it). A Stimulus value says the same thing
+          # without putting a writable copy of the owner back on the wire; the picker's own select
+          # overrides it while the user is choosing.
+          "app--budget--rule-form-category-value": rule_form.category_id
+        }
+      } do |f| %>
     <%= f.error_notification %>
     <%# ERRORS WITH NOWHERE ELSE TO LAND. simple_form prints an attribute's error under that
         attribute's input, so an error on a field this form does not RENDER produces a 422 whose
@@ -83,8 +94,15 @@
             with nothing chosen, not because a rule may have no owner: `Budget#must_have_a_category`
             refuses the blank on `:base`, which is where this form renders base errors.
 
-            IT CARRIES THE JS TARGET ON BOTH BRANCHES, because "Pays" filters by whatever category
-            is in force — chosen in the select, or fixed in the hidden field. %>
+            ** THE READ-ONLY BRANCH SUBMITS NOTHING (fix round 1 — M1). ** It used to carry a hidden
+            `category_id` so the record "kept the owner it arrived with" — but a persisted rule keeps
+            its owner because the ROW has one, and the hidden field's only real effect was to make a
+            re-parent a legal PATCH that no control here could ask for. `#update` does not permit the
+            key at all now. On the CREATE path that names an owner (a suggestion accept) the hidden
+            field stays: there is no row yet, so the form is the only thing that can say who owns it.
+
+            "Pays" still filters by the category in force, which the form element states as a
+            Stimulus VALUE — see the `simple_form_for` call above. %>
         <% if owner_picker %>
           <div>
             <%= f.input :category_id,
@@ -109,7 +127,7 @@
             <div class="form-input flex items-center bg-gray-50">
               <%= budget.category.name %>
             </div>
-            <%= f.hidden_field :category_id, data: { "app--budget--rule-form-target": "category" } %>
+            <%= f.hidden_field :category_id unless rule_form.persisted? %>
           </div>
         <% end %>
 
@@ -223,7 +241,7 @@
                ["per_period", "Per period", "every pay period, on your own cadence"],
                ["monthly", "Every month", "a standing monthly figure, with no due date"],
                ["every_n", "Every N months", "a bill that comes round on a date"],
-               ["once", "Once", "a single dated bill or goal"]
+               ["once", "Once", "a single dated bill"]
              ] %>
           <div class="mt-2 space-y-2">
             <% schedules.each do |value, label, help| %>
@@ -279,23 +297,32 @@
             survives it (an emergency fund), and a building rule may name a target that caps it —
             which is what a goal is, now that a goal is not a kind of category.
 
-            SHOWN ONLY FOR THE DATELESS PAIR, because a dated rule's build-up is already defined by
-            its date: §3.2's catch-up walk accrues toward the amount, holds it until the bill is
-            paid and empties when it is. `Budget#build_up_must_be_valid` refuses the pair outright,
-            so offering the choice there would be offering a shape the model rejects. %>
+            ** ON A DATED SCHEDULE IT IS DISABLED, NOT MERELY HIDDEN (fix round 1 - L2). ** A dated
+            rule's build-up is already defined by its date: §3.2's catch-up walk accrues toward the
+            amount, holds it until the bill is paid and empties when it is, and
+            `Budget#build_up_must_be_valid` refuses `carries_over` beside an anchor outright. With
+            JavaScript the block is simply away. WITHOUT it the `<noscript>` rule above forces every
+            reveal visible - so the radios were live, a user could choose "Builds up" on a `once`
+            rule, and `RuleForm` dropped it in silence. Disabled controls submit nothing and say why
+            they cannot be used, which is the honest version of the same refusal; the Stimulus
+            controller toggles the identical state as the schedule moves. %>
         <div data-rule-reveal
              data-app--budget--rule-form-target="unspentField"
              <%= "hidden" unless RuleForm::DATELESS_SCHEDULES.include?(rule_form.schedule) %>>
           <span class="form-label">Unspent money</span>
+          <% dated_schedule = RuleForm::DATELESS_SCHEDULES.exclude?(rule_form.schedule) %>
+          <% if dated_schedule %>
+            <p class="form-hint">A dated bill never carries money over.</p>
+          <% end %>
           <% unspent_choices = [
                ["resets", "Resets each period", "whatever is left goes back to free money"],
                ["builds", "Builds up", "what is left stays in this category and grows"]
              ] %>
           <div class="mt-2 space-y-2">
             <% unspent_choices.each do |value, label, help| %>
-              <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+              <label class="flex items-start gap-3 rounded border border-gray-200 p-3 <%= dated_schedule ? "opacity-60" : "cursor-pointer hover:border-gray-300" %>">
                 <% radio_data = { action: "change->app--budget--rule-form#refresh" } %>
-                <%= f.radio_button :unspent, value, class: "form-radio mt-1", data: radio_data %>
+                <%= f.radio_button :unspent, value, class: "form-radio mt-1", disabled: dated_schedule, data: radio_data %>
                 <span class="flex-1">
                   <span class="block text-sm font-medium text-gray-900"><%= label %></span>
                   <span class="block text-xs text-gray-500"><%= help %></span>
@@ -314,7 +341,17 @@
             A SIBLING OF THE BLOCK THAT REVEALS IT, not a child of it. Two nested reveals would each
             stash and clear the other's inputs on the way past — hiding "Unspent money" would stash
             the target, and hiding the target a moment later would stash the emptied field over the
-            top of it, losing the figure for good. Every reveal on this form is a leaf. %>
+            top of it, losing the figure for good. Every reveal on this form is a leaf.
+
+            DISABLED ON A DATED SCHEDULE, with the radios above it and for their reason (fix round 1
+            — L2): a dated rule cannot build up at all, so a figure typed here without JavaScript
+            could only ever be dropped. It is NOT disabled under "Resets each period", and that is
+            the difference: a JavaScript-less user has to be able to reach it by moving the radio
+            one line up, which nothing but JavaScript would otherwise re-enable.
+
+            ITS ERRORS ARE ITS OWN (fix round 1 — L4). `target_amount` is a control on this form, so
+            "must be greater than 0" belongs under the input the figure was typed into; only
+            `carries_over` — which has no input of its own — is worded under the radios. %>
         <div class="pl-3 border-l-2 border-gray-100"
              data-rule-reveal
              data-app--budget--rule-form-target="targetField"
@@ -325,7 +362,8 @@
               input_html: {
                 placeholder: "0.00",
                 step: 0.01,
-                min: 0
+                min: 0,
+                disabled: dated_schedule
               },
               hint: "leave blank to keep building" %>
         </div>
