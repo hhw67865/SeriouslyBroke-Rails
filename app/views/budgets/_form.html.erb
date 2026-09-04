@@ -178,8 +178,8 @@
 
           <% if @budget.item %>
             <%# THE ITEM THIS RULE PAYS, shown and submitted back rather than picked. It is what
-                makes the rule payable at all — BudgetCalculator reads its entries to decide
-                whether the bill has been settled this cycle — and it arrived from the engine,
+                makes the rule payable at all — the claim reads its entries to decide
+                whether the bill has been settled this cycle (`ClaimCalculator#due_on`) — and it arrived from the engine,
                 which chose it by measuring the item's own history. `item_id` is ownership-scoped
                 on the way in (BudgetsController#scoped_owners): a stranger's id would write a
                 rule against THEIR spending, so it 404s rather than rendering their item's name

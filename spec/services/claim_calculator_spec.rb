@@ -16,6 +16,16 @@ require "rails_helper"
 # `today:` IS ALWAYS INJECTED and no example travels the clock. `Date.current` never appears: the
 # whole subject is a walk over a calendar, so a fixture whose dates move with the wall clock would
 # make every literal here a different assertion each morning.
+#
+# ** `spec/services/budget_calculator_spec.rb` IS DELETED, AND ITS SUBJECT IS THIS FILE'S (fix wave
+# — MED-3). ** `BudgetCalculator` answered "what does this rule need from the next DISTRIBUTION",
+# and Task 4 deleted the distribution; the class survived on one branch of `Budget#steady_ask` with
+# a due date that CONTRADICTED the one below — it had no fulfilment signal for an item-less rule, so
+# it assumed every bill was paid on time and rolled the date on the calendar. The Budget page's
+# structural check priced an item-less one-off anchored Aug 1 at $0.00 a period while the row an
+# inch above it read `overdue · was Aug 1`. Both class and spec are gone; `#due_on`, `#periods_left`
+# and `#planned_this_period` here are the only readings of a rule's schedule left in the app, and
+# `budget_steady_ask_spec` pins the branch that now calls them.
 RSpec.describe ClaimCalculator, type: :model do
   let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
 
@@ -729,9 +739,91 @@ RSpec.describe ClaimCalculator, type: :model do
   end
 
   # ===========================================================================================
+  # ONE SPELLING OF THE PRE-CLAMP FIGURE (fix wave — LOW-2). `#raw_rate` and its negation `#over_by`
+  # are what `EntryImpactPresenter#pre_clamp_claim` adds an edited entry back to and what
+  # `HomeHelper#claim_trouble_label` prints as `over by $60.00`; both used to spell the subtraction
+  # themselves. Pinned against the members the two readers previously composed it out of, so the
+  # exposed figure cannot drift from what those screens used to compute.
+  # ===========================================================================================
+  describe "#raw_rate and #over_by" do
+    let(:today) { Date.new(2026, 9, 3) }
+    let(:rule) { create(:budget, :per_period_rate, category: groceries, amount: 400) }
+
+    it "is this period's accrual less its spending, and survives the clamp", :aggregate_failures do
+      spend(460, on: Date.new(2026, 9, 2))
+      calculator = described_class.new(rule, today: today)
+
+      expect(calculator.raw_rate).to eq(-60)
+      expect(calculator.raw_rate).to eq(calculator.accrued_this_period - calculator.spent_this_period)
+      expect(calculator.over_by).to eq(60)
+      expect(calculator.over?).to be(true)
+      # The clamp has eaten the difference by the time the claim is read, which is why the readers
+      # that need the excess need this figure and not that one.
+      expect(calculator.claim).to eq(0)
+    end
+
+    # THE OTHER DIRECTION: under the rate it is simply what is left, with the sign the other way
+    # round, and `#over?` is false.
+    it "is positive and reads as no overspend at all while the rate holds", :aggregate_failures do
+      spend(310, on: Date.new(2026, 9, 2))
+      calculator = described_class.new(rule, today: today)
+
+      expect(calculator.raw_rate).to eq(90)
+      expect(calculator.over_by).to eq(-90)
+      expect(calculator.over?).to be(false)
+    end
+  end
+
+  # ===========================================================================================
+  # WHICH DAYS' SPENDING THIS CLAIM COUNTS (fix wave — MED-1). `#counts_spending_on?` is
+  # `#spent_within`'s own predicate, exposed for the one reader that has to ask it from outside:
+  # the entry form's impact card, which gives an edited entry back to the figure only where the
+  # figure had already taken it out. It asked `#countable_span` instead and got the ADJUSTMENT
+  # question's answer — bounded at today — so a receipt dated later this period was subtracted by
+  # the claim and again by the card. Both directions, on both shapes.
+  # ===========================================================================================
+  describe "#counts_spending_on?" do
+    let(:today) { Date.new(2026, 9, 3) }
+
+    # ** THE BITING CASE. ** Sep 10 is four days out and squarely inside the Sep 1 – Sep 30 period,
+    # so `#spent_within(current_period)` sums an entry dated then — measured on the next line, where
+    # a $50 receipt dated Sep 10 drops the claim to $350. `#countable_span` closes at Sep 3 and
+    # would have said no.
+    it "counts a day later in the current period for a rate rule", :aggregate_failures do
+      rule = create(:budget, :per_period_rate, category: groceries, amount: 400)
+      spend(50, on: Date.new(2026, 9, 10))
+
+      expect(described_class.new(rule, today: today).counts_spending_on?(Date.new(2026, 9, 10))).to be(true)
+      expect(described_class.new(rule, today: today).claim).to eq(350)
+      expect(described_class.new(rule, today: today).countable_span).not_to cover(Date.new(2026, 9, 10))
+    end
+
+    # THE OTHER DIRECTION: a rate rule is use-it-or-lose-it, so August's spending is in no period
+    # this claim is made of and moves nothing.
+    it "does not count a day in a period a rate rule never walks" do
+      rule = create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      expect(described_class.new(rule, today: today).counts_spending_on?(Date.new(2026, 8, 31))).to be(false)
+    end
+
+    # AN ACCRUING RULE WALKS FROM ITS ACCRUAL START, so the same August day IS one of its days —
+    # the predicate is the walk's, not the current period's.
+    it "counts every day the accrual walk passes through", :aggregate_failures do
+      rule = goal_born_on("Vacation", born)
+      calculator = described_class.new(rule, today: today)
+
+      expect(calculator.counts_spending_on?(Date.new(2026, 8, 31))).to be(true)
+      expect(calculator.counts_spending_on?(Date.new(2026, 9, 10))).to be(true)
+      expect(calculator.counts_spending_on?(Date.new(2025, 12, 31))).to be(false)
+    end
+  end
+
+  # ===========================================================================================
   # §3.3 — WHICH DAYS AN ADJUSTMENT CAN LAND ON AND STILL BE COUNTED. `#countable_span` is the
-  # walk read as a range of days, and `AdjustmentForm` is its only caller: a row dated outside it
-  # sums into nothing, so writing one is a claim that never moves under a flash that says it did.
+  # walk read as a range of days, asked by `AdjustmentForm` and mirrored by the adjust panel's date
+  # field: a row dated outside it sums into nothing, so writing one is a claim that never moves
+  # under a flash that says it did. It is NOT "did the claim count this entry" — see
+  # `#counts_spending_on?` above, and the double subtraction that came of confusing the two.
   # ===========================================================================================
   describe "#countable_span" do
     let(:today) { Date.new(2026, 9, 3) }

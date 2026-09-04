@@ -173,10 +173,34 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_css("[data-in-checking]", text: "$300.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$300.00")
     expect(page).to have_css("[data-free-subline]", text: "more is parked in other accounts")
-    # AND NOT THE SENTENCE IT USED TO BE APPENDED TO. The two figures above are the SAME figure here,
-    # so the rest of the pot is $0.00 and "the rest is claimed" would be describing nothing at all.
-    expect(page).to have_css("[data-free-subline]", text: "none of it is claimed")
-    expect(page).to have_no_css("[data-free-subline]", text: "the rest is claimed")
+    # ** AND IT NAMES THE CLAIM, WHICH IS THE FIX WAVE'S HIGH. ** This example asserted "none of it is
+    # claimed" here for the length of Task 3, over a $400-a-period rule. The arm was gated on
+    # `!rest_in_checking?` alone — `pot ≤ unclaimed`, which is `Σ claims ≤ Σ other accounts` and says
+    # only WHERE the money is. Ming's Home printed it above five rules claiming $1,668.37 (spec §10.6
+    # item 6). The rest of the pot really is $0.00, so "the rest is claimed" is still wrong here; what
+    # was missing was the claim itself.
+    expect(find("[data-free-subline]")).to have_text("$400.00 is claimed")
+      .and have_no_text("none of it is claimed").and have_no_text("the rest is claimed")
+  end
+
+  # ** THE EXACT TIE, `Σ claims == Σ other accounts` (fix wave — HIGH). ** The same fixture with
+  # exactly $400 walked over: pot $1,600, total money $2,000, `unclaimed` $1,600. The two are EQUAL,
+  # so neither `#rest_in_checking?` (strict `>`) nor `#free_cap_bound?` (strict `<`) fires and the last
+  # arm is reached with a live claim — the corner the old gate could not see at all. `#anything_claimed?`
+  # is what carries it, which is why the parked clause hangs on `#money_parked_elsewhere?` here rather
+  # than on the cap.
+  it "names the claim at the exact tie between the claims and the other accounts", :aggregate_failures do
+    ally = create(:pool, :account, user: user, name: "Ally")
+    envelope("Groceries", 400)
+    deposit(1_000)
+    create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: Date.current, kind: :transfer)
+
+    visit root_path
+
+    expect(page).to have_css("[data-in-checking]", text: "$600.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 is claimed and more is parked in other accounts")
+    expect(page).to have_no_css("[data-free-subline]", text: "none of it is claimed")
   end
 
   # The other direction on the subline, so the gate cannot be satisfied by a card that simply always

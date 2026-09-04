@@ -27,8 +27,15 @@ class CategoriesController < ApplicationController
   # `Category#holder?` is `expense? && funded_since.present?`, so an INCOME category cannot hold
   # money and there is nothing for the card to say about one. Nil for the others, and the view
   # renders nothing for a nil.
+  #
+  # ** THE PAGE'S ONE LEDGER, HANDED IN (fix wave — LOW-1). ** `#claim_ledger` below is a
+  # `helper_method` so "the SHOW action and the card partial can reach the same reader without a
+  # second construction path" — and this action was the one caller that did not, building the card
+  # with `claims:` nil so it made a `ClaimLedger` of its own. Two ledgers on one request is two
+  # snapshots of one user's money, and the comment promising one was false the whole time. It costs
+  # nothing either way here (one category, one card) and it is the shape the index already has.
   def show
-    @holdings_card = CategoryBudgetPresenter.new(category: @category) if @category.expense?
+    @holdings_card = CategoryBudgetPresenter.new(category: @category, claims: claim_ledger) if @category.expense?
   end
 
   # GET /categories/new

@@ -341,6 +341,42 @@ class Category < ApplicationRecord
     budgets.sum(0.to_d) { |budget| budget.claim_calculator(today: today).claim }
   end
 
+  # A DATE NO RULE CAN BE DUE ON, so an undated rule sorts last without the key carrying a nil that
+  # `<=>` cannot compare.
+  NEVER_DUE = Date.new(9999, 12, 31)
+
+  # ** THE ORDER A CATEGORY'S RULES ARE LISTED IN — ONE SPELLING (fix wave — LOW-3). ** Three screens
+  # render §3.4's line per rule and each had written its own key: `BudgetPagePresenter#rule_order`
+  # and `CategoryBudgetPresenter#line_order` agreed on this one, and `HomePresenter#claim_lines`
+  # sorted by `[item name, id]` instead — so one category's rules appeared in one order on Home and
+  # another on the Budget page, and a user comparing the two screens read two lists.
+  #
+  # ** THE TWO-SCREEN KEY WINS, AND HOME'S ARGUMENT IS THE WEAKER ONE. ** Home's was that the
+  # item-less rule leads because it is the category's own envelope and the item-backed ones are
+  # exceptions carved out of it (§3.1's lane partition) — a real thought, but a preference about
+  # emphasis. This key is ordered on the DATE THE ROW PRINTS, which is a fact the reader can see:
+  # what is due soonest is first, and a rule with no date at all (a rate rule is never due) sorts
+  # last. That is the ordering a person scanning for what needs attention actually wants, and it is
+  # already the one two of the three screens use.
+  #
+  # ** IT IS TOTAL, and every term earns its place. ** `budgets` carries no ORDER BY and a plain
+  # UPDATE relocates a row in the heap, so without a total key two rules could swap places between
+  # page loads with no data change. `-amount` breaks a shared due date toward the LARGER obligation
+  # — the bigger bill is the one you can least afford to be short on — and the id makes even
+  # identical amounts deterministic.
+  #
+  # `next_due_on` IS THE CLAIM'S OWN READING (`ClaimCalculator#next_due_on`) at every caller, which
+  # is the date the row prints: ordering by one date and printing another would put a row above its
+  # neighbour for a reason the screen contradicts. `amount.to_d` because an in-memory record
+  # assigned `amount: 180` holds the Integer, and a key mixing Integer with BigDecimal across a
+  # comparison depends on where the row came from.
+  #
+  # ON `Category` because a rule's order is a fact about the SET one category holds — the three
+  # callers each sort the lines of exactly one category — and this is the record that owns that set.
+  def self.rule_order(next_due_on:, amount:, id:)
+    [next_due_on.present? ? 0 : 1, next_due_on || NEVER_DUE, -amount.to_d, id]
+  end
+
   # ** IS THIS ROW A GOAL — THE DISPLAY QUESTION (computed-claims spec §3.4). **
   # `HoldingCalculator#saving_toward_a_target?` re-homed, and it was always this expression: a holder
   # with a figure to reach. It REPLACED `#savings?`, which additionally required the category to

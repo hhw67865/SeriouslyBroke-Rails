@@ -17,7 +17,14 @@ RSpec.describe Budget, type: :model do
   # mixed-unit bug. Under a monthly user every "a month" figure passes through unchanged and the
   # trap below cannot fire at all.
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: today) }
-  let(:owner) { create(:category, :expense, :funded, user: user, name: "Car") }
+
+  # ** THE FUNDING DATE IS A LITERAL RATHER THAN THE `:funded` TRAIT'S `1.year.ago` (fix wave —
+  # MED-3). ** `#steady_ask`'s one-off branch reads `ClaimCalculator#planned_this_period` now, and a
+  # claim accrues from the LATER of `funded_since` and the rule's own birthday — so a wall-clock
+  # funding date one real year from now would land AFTER this file's fixed `today`, the walk would
+  # visit no period at all, and every one-off example here would quietly assert against zero.
+  # CLAUDE.md's third flake cause, closed by planting the date.
+  let(:owner) { create(:category, :expense, user: user, name: "Car", funded_since: Date.new(2025, 1, 1)) }
 
   # ** A CATEGORY MAY CARRY ONLY ONE ITEM-LESS RULE (`Budget#category_may_hold_one_item_less_rule`,
   # computed-claims ruling of 2026-09-03), and every helper here plants on the SAME `owner`. ** So
@@ -39,8 +46,26 @@ RSpec.describe Budget, type: :model do
 
   def second_catch_all? = Budget.exists?(category_id: owner.id, item_id: nil)
 
-  def one_off(amount, anchor:, item: nil)
-    create(:budget, category: owner, amount: amount, interval_months: nil, anchor_date: anchor, item: item)
+  # ** `born:` IS THE DAY THE RULE EXISTED FROM, AND IT IS THE FIXTURE'S SUBJECT RATHER THAN ITS
+  # PLUMBING (fix wave — MED-3). ** The one-off branch is §3.2's catch-up share now, so what the rule
+  # asks of THIS period depends on what it has already accrued — and a rule born on the day the
+  # current period opens has accrued nothing, which is the state that makes `amount ÷ periods left`
+  # the whole of the answer. Every unfulfilled example below is born on `today` for exactly that
+  # reason; the fulfilled group is born a period earlier, because a payment has to land inside a
+  # period the walk visits before it can count as one.
+  #
+  # The factory writes `created_at` at the real wall clock, months after this file's `today`, and a
+  # rule younger than the day it is asked about walks no periods and claims zero.
+  def one_off(amount, anchor:, item: nil, born: today)
+    create(
+      :budget,
+      category: owner,
+      amount: amount,
+      interval_months: nil,
+      anchor_date: anchor,
+      item: item,
+      created_at: Time.utc(born.year, born.month, born.day, 9, 0)
+    )
   end
 
   describe "#steady_ask on a per-period rate rule" do
@@ -161,12 +186,42 @@ RSpec.describe Budget, type: :model do
       expect(one_off(500, anchor: today + 2.days).steady_ask(user, today: today)).to eq(500)
     end
 
-    # The one shape whose steady figure DOES move with the calendar, and it moves because the rule
-    # itself is finite — there are fewer periods left to save in.
-    it "claims more per period as the due date approaches" do
+    # ** THE FIGURE HOLDS AS THE DUE DATE APPROACHES, BECAUSE THE FUND HAS KEPT PACE (fix wave —
+    # MED-3). ** This example asserted `be >` against `BudgetCalculator#periods_until_due`, which
+    # divided the WHOLE amount by a shrinking number of periods and so re-asked for money the user
+    # had already set aside. §3.2's catch-up divides what is STILL MISSING by the periods left, and
+    # on a fund nobody has raided those two shrink together: $2,000 due Jun 26 is $181.82 a period on
+    # Feb 6 and $181.82 a period on Apr 17, five periods and $909.10 later. Re-derived:
+    #
+    #   Feb 6   (2000 − 0)      ÷ 11 = 181.82   built up 181.82
+    #   Feb 20  (2000 − 181.82) ÷ 10 = 181.82   built up 363.64
+    #   …
+    #   Apr 17  (2000 − 909.10) ÷  6 = 181.82
+    it "reads the same as its due date approaches while the fund keeps pace", :aggregate_failures do
       rule = one_off(2_000, anchor: today + 140.days)
 
-      expect(rule.steady_ask(user, today: today + 70.days)).to be > rule.steady_ask(user, today: today)
+      expect(rule.steady_ask(user, today: today)).to eq(BigDecimal("181.82"))
+      expect(rule.steady_ask(user, today: today + 70.days)).to eq(BigDecimal("181.82"))
+    end
+
+    # ** AND IT RISES WHEN THE FUND FALLS BEHIND, which is the direction the old reading could not
+    # express at all. ** The same rule with $909.10 — every penny it had accrued through Apr 3 —
+    # spent out of the category IN the Apr 3 period. The walk clamps that period to zero and the
+    # last one starts from nothing, so the whole $2,000 has to be found in the six periods left:
+    #
+    #   Feb 6 – Mar 20   181.82 a period               built up 727.28
+    #   Apr 3            (2000 − 727.28) ÷ 7 = 181.82  accrued 909.10, spent 909.10 → built up 0
+    #   Apr 17           (2000 − 0)       ÷ 6 = 333.33
+    #
+    # A steady figure that ignored what was in the fund would still say $181.82 and the structural
+    # check would under-report by $151.51 a period. THE SPENDING IS DATED A PERIOD EARLY on purpose:
+    # §3.2's order inside a period is accrue, adjust, cap, THEN spend, so a receipt dated in the last
+    # period has not reached `planned` yet.
+    it "claims more per period once the fund has been spent down" do
+      rule = one_off(2_000, anchor: today + 140.days)
+      create(:entry, item: create(:item, category: owner), amount: 909.10, date: today + 56.days)
+
+      expect(rule.steady_ask(user, today: today + 70.days)).to eq(BigDecimal("333.33"))
     end
   end
 
@@ -176,7 +231,10 @@ RSpec.describe Budget, type: :model do
   describe "an anchored one-time rule, fulfilled" do
     let(:category) { owner }
     let(:item) { create(:item, category: category, name: "Dentist") }
-    let(:rule) { one_off(500, anchor: today - 10.days, item: item) }
+    # BORN A PERIOD EARLY, so the walk visits Jan 23 – Feb 5 as well as this one and the payment
+    # dated Feb 1 lands inside a period it passes through. A rule born today would not have seen the
+    # entry at all, and "claims nothing" would be true for the wrong reason.
+    let(:rule) { one_off(500, anchor: today - 10.days, item: item, born: today - 14.days) }
 
     before { create(:entry, item: item, amount: 500, date: today - 5.days) }
 
@@ -193,9 +251,11 @@ RSpec.describe Budget, type: :model do
     it "still claims when the bill was only part paid" do
       partial_item = create(:item, category: category, name: "Optician")
       create(:entry, item: partial_item, amount: 100, date: today - 5.days)
+      partial = one_off(500, anchor: today - 10.days, item: partial_item, born: today - 14.days)
 
-      expect(one_off(500, anchor: today - 10.days, item: partial_item).steady_ask(user, today: today))
-        .to be_positive
+      # $100 of a $500 bill leaves $100 in the fund and $400 still to find, over the one period
+      # `#periods_left` floors at for a date already past.
+      expect(partial.steady_ask(user, today: today)).to eq(100)
     end
   end
 
@@ -246,7 +306,8 @@ RSpec.describe Budget, type: :model do
         category: their_owner,
         amount: 500,
         interval_months: nil,
-        anchor_date: today + 140.days
+        anchor_date: today + 140.days,
+        created_at: Time.utc(today.year, today.month, today.day, 9, 0)
       )
 
       expect(rule.steady_ask(undeclared, today: today)).to eq(500)
@@ -339,12 +400,15 @@ RSpec.describe Budget, type: :model do
       five = sql_for { described_class.steady_need(user, today: today) }
 
       expect(five.size).to eq(one.size)
-      # THREE, NAMED: the rules themselves, then the two preloads that answer for every row at once
-      # — `categories` and the `users` the owner lane resolves to. It was FOUR while `pools` was a
-      # second owner lane to preload (two-ledger spec §5, Task 8). `:item` is in the `includes` and
-      # costs nothing here, because every rule in this fixture is item-less and the preloader skips
-      # a branch whose foreign keys are all nil.
-      expect(five.size).to eq(3)
+      # FIVE, NAMED: the rules themselves, then the two preloads that answer for every row at once —
+      # `categories` and the `users` the owner lane resolves to — then the `ClaimLedger`'s two
+      # grouped statements, one for spending and one for adjustments, which answer every rule's lane
+      # at once (fix wave — MED-3). It was THREE while the one-off branch built a `BudgetCalculator`
+      # and ran a `SUM` per rule; that was three statements plus one PER ONE-OFF RULE, and it is the
+      # count `one.size` would have matched while `five.size` did not. `:item` is in the `includes`
+      # and costs nothing here, because every rule in this fixture is item-less and the preloader
+      # skips a branch whose foreign keys are all nil.
+      expect(five.size).to eq(5)
     end
   end
 end

@@ -418,6 +418,44 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance).not_to eq(BigDecimal("285"))
     end
 
+    # ** A RECEIPT DATED LATER THIS PERIOD IS IN THE CLAIM, AND WAS SUBTRACTED TWICE (fix wave —
+    # MED-1). ** The period runs Feb 6 – Feb 19 and `today` is Feb 6, so Feb 10 is four days out and
+    # squarely inside it. `ClaimCalculator#spent_within` is `period.cover?(day)` with NO today bound,
+    # so the claim already counts the $50: `max(0, 300 − 50)` = $250, asserted below. The card asked
+    # `#countable_span` — which closes at TODAY because it answers where a typed ADJUSTMENT may be
+    # dated — decided the claim had not counted it, gave nothing back, and printed $250 for a world
+    # that already had the entry in it. Editing it to $60 then read $190.
+    #
+    # THE TRUTH IS $300 AND $240, and both wrong figures are asserted alongside so a revert cannot
+    # pass. A future-dated entry inside the period is an ordinary thing to type: a bill paid in
+    # advance, a receipt logged for the weekend.
+    it "gives back an entry dated later in the same period", :aggregate_failures do
+      rate(groceries, 300)
+      later = spend(groceries, 50, on: Date.new(2026, 2, 10))
+
+      impact = present(groceries, amount: "60", entry: later)
+
+      expect(groceries.claim(today: today)).to eq(BigDecimal("250"))
+      expect(impact.balance).to eq(BigDecimal("300"))
+      expect(impact.balance).not_to eq(BigDecimal("250"))
+      expect(impact.balance_after).to eq(BigDecimal("240"))
+      expect(impact.balance_after).not_to eq(BigDecimal("190"))
+    end
+
+    # THE OTHER DIRECTION, and it is the boundary the fix must not have swallowed: Feb 20 opens the
+    # NEXT period, which a use-it-or-lose-it rate claim does not walk. Nothing of it is in the figure,
+    # so nothing of it comes back and the card reads the claim unchanged.
+    it "gives nothing back for a receipt dated into the next period", :aggregate_failures do
+      rate(groceries, 300)
+      beyond = spend(groceries, 50, on: Date.new(2026, 2, 20))
+
+      impact = present(groceries, amount: "60", entry: beyond)
+
+      expect(groceries.claim(today: today)).to eq(BigDecimal("300"))
+      expect(impact.balance).to eq(BigDecimal("300"))
+      expect(impact.balance_after).to eq(BigDecimal("240"))
+    end
+
     # ** THE CLAMP AT THE OTHER END (§3.2: the built-up is capped at the target). ** A $600-a-period
     # rule on a $600 target, born Feb 6, with $150 spent on Feb 6, asked on Feb 20 — the second
     # period of the walk:

@@ -54,6 +54,7 @@ class HomePresenter
     :next_due_on,
     :per_period,
     :over,
+    :over_by,
     :overdue
   ) do
     def rate? = shape == :rate
@@ -394,18 +395,30 @@ class HomePresenter
   #                                                               the accounts line and the strip name
   #                                                               that account.
   #
-  #   free ≥ 0, none of it     cap bound AND money           → "none of it is claimed — more is parked
-  #    is claimed (pot ≤          elsewhere                       in other accounts."
-  #    unclaimed)                 (#free_cap_bound? +
-  #                                #money_parked_elsewhere?)
-  #                            otherwise (the fresh signup)  → "none of it is claimed."
+  #   free ≥ 0, no rest        something IS claimed          → "$1,668.37 is claimed and more is
+  #    (pot ≤ unclaimed)          (#anything_claimed?)            parked in other accounts."
+  #                            nothing claimed AND money     → "none of it is claimed — more is parked
+  #                              elsewhere                        in other accounts."
+  #                              (#money_parked_elsewhere?)
+  #                            nothing claimed, nothing      → "none of it is claimed."
+  #                              elsewhere (the fresh signup)
   #
-  # WHY THE LAST ROW IS HONEST EVEN WITH CLAIMS OUTSTANDING: `pot ≤ unclaimed` is
-  # `Σ claims ≤ Σ other accounts`, so either nothing is claimed at all, or every claim is covered by
-  # money sitting outside checking — and in that second case none of the money IN CHECKING is needed
-  # for one, which is exactly what the cap means and exactly what the sentence says. With no other
-  # account holding anything the inequality forces `Σ claims ≤ 0`, so the un-parked arm genuinely has
-  # nothing claimed. Both directions pinned.
+  # ** THE FIRST OF THOSE THREE IS THE FIX WAVE'S HIGH, AND IT WAS A SENTENCE ASSERTING A CAUSE
+  # NOBODY ASKED ABOUT. ** The arm was reached on `!rest_in_checking?` alone and said "none of it is
+  # claimed" — which is not what `pot ≤ unclaimed` establishes. That inequality is
+  # `Σ claims ≤ Σ other accounts`: a statement about WHERE the money is. It is satisfied by a user
+  # whose savings cover their rules, and Ming's Home printed it above five rules claiming $1,668.37
+  # (Task 5's browser pass; spec §10.6 item 6). The true sentence names both facts, and the second
+  # needs no gate of its own: `Σ claims ≤ Σ other accounts` with `Σ claims > 0` forces
+  # `Σ other accounts > 0`, so money IS parked whenever anything is claimed on this arm — including
+  # at the exact tie `Σ claims == Σ other accounts`, where the pot is entirely free and a second
+  # account holds the rest. An unreachable "claimed but nothing parked" branch is not written, for
+  # the reason the arm above deleted its own.
+  #
+  # WHY THE OTHER TWO ROWS ARE HONEST: with nothing claimed the inequality forces
+  # `Σ other accounts ≥ 0`, so the only question left is whether that sum is POSITIVE — which is
+  # `#money_parked_elsewhere?`, the accounts line's own figure, rather than `#free_cap_bound?`
+  # (which said the same thing here only because `Σ claims` was zero). Both directions pinned.
   #
   # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures.
 
@@ -644,7 +657,7 @@ class HomePresenter
     @structurally_underwater =
       user.typical_income.present? &&
       user.period_cadence.present? &&
-      Budget.steady_need(user, today: today) > user.typical_income.to_d
+      Budget.steady_need(user, today: today, ledger: claim_ledger) > user.typical_income.to_d
   end
 
   private
@@ -665,15 +678,21 @@ class HomePresenter
   # category the section below it describes differently.
   def claim_lines_for(category) = claim_lines.fetch(category.id, [])
 
-  # THE CATCH-ALL FIRST, THEN THE ITEMS BY NAME, ties broken by id. `budgets` carries no ORDER BY, so
-  # without a total key two rules on one category could swap lines between page loads with no data
-  # change — `HoldingCalculator#budgets_by_due_date`'s reason for its own triple key. The item-less
-  # rule leads because it is the category's own envelope and the item-backed ones are exceptions
-  # carved out of it (§3.1's lane partition).
+  # ** `Category.rule_order`, WHICH IS THE APP'S ONE KEY SINCE THE FIX WAVE (LOW-3). ** This sorted
+  # by `[item name, id]` — the catch-all first, then the items by name — on the argument that the
+  # item-less rule is the category's own envelope and the item-backed ones are exceptions carved out
+  # of it (§3.1's lane partition). The Budget page's group and the category card both sorted the SAME
+  # category's rules by the date the row prints, so one category read one way here and another way
+  # two clicks along. The date key won: it orders on a fact the reader can see, and it was already
+  # two screens' answer against this one's. See `Category.rule_order` for the whole argument.
+  #
+  # THE LINES ARE BUILT BEFORE THEY ARE SORTED, because the key reads `next_due_on` — which is the
+  # CLAIM's reading of the schedule and not a column. It costs nothing extra: the calculators are the
+  # ledger's own and the map ran either way.
   def claim_lines
     @claim_lines ||= claim_ledger.rules
-      .sort_by { |rule| [rule.item&.name.to_s, rule.id] }
       .map { |rule| claim_line_for(rule) }
+      .sort_by { |line| Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id) }
       .group_by { |line| line.category.id }
   end
 
@@ -692,6 +711,7 @@ class HomePresenter
       next_due_on: calculator.next_due_on,
       per_period: calculator.planned_this_period,
       over: calculator.over?,
+      over_by: calculator.over_by,
       overdue: calculator.overdue?
     )
   end

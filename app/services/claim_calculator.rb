@@ -29,9 +29,10 @@
 #
 # A PERIOD'S ACCRUAL COUNTS IN FULL THE DAY THE PERIOD OPENS (§3.2), which is why `periods_left`
 # counts the current period's own boundary and why the fund is whole ON the due date rather than at
-# the end of the month containing it. `BudgetCalculator#periods_until_due` counts from `today` and so
-# does NOT include a boundary already passed; the two are deliberately different questions and this
-# class does not call that one.
+# the end of the month containing it. `BudgetCalculator#periods_until_due` counted from `today` and so
+# did NOT include a boundary already passed — two answers to one question about one bill, which is
+# why that class was deleted in the fix wave and `Budget#steady_ask`'s one-off branch reads
+# `#planned_this_period` here instead.
 #
 # ** WHY THE SPENDING IS INSIDE THE WALK RATHER THAN SUBTRACTED AT THE END. ** §3.2 states the
 # formula as `Σ accruals since funded_since − spent_since_last_fulfilment`, and read literally — the
@@ -130,6 +131,24 @@ class ClaimCalculator
   # of zero. It is what puts a category's bar in red (§3.1) and what names an over-fulfilment (§3.2).
   def over? = rate? ? raw_rate.negative? : walk.raw.negative?
 
+  # ** THIS PERIOD'S ACCRUAL LESS THIS PERIOD'S SPENDING, BEFORE THE CLAMP — THE APP'S ONE SPELLING
+  # OF IT (fix wave — LOW-2). ** `#claim` is `max(0, this)` for a rate rule, so once the clamp has
+  # been applied the difference between "spent it exactly" and "spent $60 more than it had" is gone;
+  # every reader that needs the excess needs THIS figure. It was written out twice more — in
+  # `EntryImpactPresenter#pre_clamp_claim`, which adds an edited entry back to it, and in
+  # `HomeHelper#claim_trouble_label`, which prints its negation as `over by $60.00` — and two
+  # spellings of one subtraction is how a card and a strip come to describe the same overspend by
+  # different amounts.
+  #
+  # PUBLIC RATHER THAN A NEW METHOD, because `#rate_claim` and `#over?` above already read it: this
+  # is the same expression they have always used, with the `private` taken off it.
+  def raw_rate = accrued_this_period - spent_this_period
+
+  # HOW FAR PAST WHAT IT HAD — `#raw_rate` negated, so the strip and the row print a POSITIVE excess
+  # ("over by $60.00") without either of them owning the subtraction. Meaningful only where `#over?`
+  # is true; below that it is simply what is left, with the sign the other way round.
+  def over_by = -raw_rate
+
   # THE OCCURRENCE THIS RULE IS CURRENTLY SAVING FOR, or nil where there is no deadline to save
   # toward. It ROLLS ON PAYMENT and not on the calendar — `BudgetCalculator#due_date`'s rule, kept
   # because a date that passes unpaid has not been dealt with and must go on asking.
@@ -163,7 +182,8 @@ class ClaimCalculator
   # HOW MANY PERIODS ARE LEFT TO FILL THE FUND, THIS ONE INCLUDED (§3.2: the accrual counts in full
   # the day the period opens). Nil where there is no due date. Floors at 1, so an overdue bill asks
   # for the whole remainder now and a user who has declared no cadence at all gets one blunt period
-  # rather than a division by zero — the same floor `BudgetCalculator#periods_until_due` carries.
+  # rather than a division by zero — the floor `BudgetCalculator#periods_until_due` carried before it
+  # was deleted, kept here because the division is the same one.
   def periods_left
     due = next_due_on
     due ? periods_left_from(current_period.first, due) : nil
@@ -188,11 +208,35 @@ class ClaimCalculator
   # open is the honest floor — nothing before it can matter to a claim of zero.
   def window_start = periods.first&.first || current_period.first
 
+  # ** DOES THIS CLAIM COUNT SPENDING ON THIS DAY (fix wave — MED-1)? ** The predicate behind
+  # `#spent_within`, exposed: the walk subtracts a period's spending as it passes through it, so the
+  # days that can move this figure are exactly the days covered by a period this claim is made of.
+  # One period for a rate rule (use-it-or-lose-it), the whole accrual history for the other two.
+  #
+  # ** IT IS NOT `#countable_span`, AND THE DIFFERENCE IS A DOUBLE SUBTRACTION. ** The entry form's
+  # impact card asked that reader this question and got a different one back: the span is bounded at
+  # `min(today, …)` because money MOVED on a day that has not happened is not money the rule has,
+  # while spending is counted by `period.cover?(day)` with no such bound. A $50 grocery entry dated
+  # Feb 10 with today at Feb 6 and the period running Feb 6–19 IS subtracted by the claim and was
+  # NOT visible to the card, so the card gave nothing back and subtracted it a second time: a $300
+  # rate rule read $250 where the truth was $300, and editing the entry to $60 read $190 against
+  # $240. A typed adjustment's date and an entry's date are two different questions about the same
+  # calendar and they need two readers.
+  #
+  # THE DAY IS THE OWNER'S at every caller, because `#periods` is built from `today` and `today` is.
+  def counts_spending_on?(day) = periods.any? { |period| period.cover?(day) }
+
   # ** THE DAYS AN ADJUSTMENT CAN LAND ON AND STILL BE COUNTED (§3.3; fix round MED-1). ** It is
-  # #periods read as one range of DAYS rather than as a list of periods, and `AdjustmentForm` is
-  # its only caller: `accrued(P) = planned(P) + Σ adjustments dated inside P` sums over the periods
-  # this walk VISITS, so a row dated outside them moves no figure on any screen — written, unlisted
-  # (the row lists this period's deltas) and therefore unremovable.
+  # #periods read as one range of DAYS rather than as a list of periods, and it answers ONE question,
+  # asked by `AdjustmentForm` (the refusal) and mirrored by the adjust panel's date field (its `min`
+  # and `max`): `accrued(P) = planned(P) + Σ adjustments dated inside P` sums over the periods this
+  # walk VISITS, so a row dated outside them moves no figure on any screen — written, unlisted (the
+  # row lists this period's deltas) and therefore unremovable.
+  #
+  # ** IT IS NOT "DID THE CLAIM COUNT THIS ENTRY" AND MUST NOT BE ASKED THAT (fix wave — MED-1). **
+  # The entry form's impact card read it for exactly that and subtracted a future-dated receipt
+  # twice: the `min(today, …)` below is right for money a user is MOVING and wrong for spending the
+  # walk has already counted, which `#counts_spending_on?` above answers.
   #
   # THE START IS #window_start, WHICH IS THE WALK'S OWN FIRST DAY and not #accrual_start itself.
   # The two differ for a rule born mid-period: §3.2's "a period's accrual counts in full the day
@@ -234,16 +278,16 @@ class ClaimCalculator
 
   def rate_claim = [raw_rate, 0.to_d].max
 
-  def raw_rate = accrued_this_period - spent_this_period
-
   # THE APP'S ONE ANSWER TO "WHAT DOES THIS RULE COST A PERIOD" — $260 a month is $120 a period under
   # a fortnightly cadence, always, because 26 periods a year is what biweekly means. A normalisation
   # of this class's own would be a second answer free to drift from the structural check's.
   #
-  # IT NEVER REACHES `steady_ask`'s ONE-OFF BRANCH, which is the branch that builds a
-  # `BudgetCalculator`: only anchorless rules ask this (a dated rule takes the catch-up formula), and
-  # `Budget#shape_must_be_valid` pins an anchorless rule to per-period or to a 1-month interval. So
-  # nothing in this file touches the calculator Task 4 deletes.
+  # ** IT NEVER REACHES `steady_ask`'s ONE-OFF BRANCH, AND SINCE THE FIX WAVE THAT IS WHAT KEEPS THE
+  # CALL FINITE. ** That branch now reads `#planned_this_period` on a calculator of its own, so a
+  # rule that asked this method AND took that branch would recurse. It cannot: only ANCHORLESS rules
+  # reach here (a dated rule takes the catch-up formula above), `:one_off` is by definition anchored,
+  # and `Budget#shape_must_be_valid` pins an anchorless rule to per-period or to a 1-month interval.
+  # Two disjoint shapes, checked by the model rather than by argument.
   def rate_per_period = rule.steady_ask(user, today: today)
 
   # ---- §3.2/§3.3, the accrual walk -----------------------------------------------------------
@@ -276,7 +320,7 @@ class ClaimCalculator
   # THE CATCH-UP FORMULA (§3.2), and the two shapes that do not take it.
   #
   # A SETTLED ONE-TIME BILL ASKS FOR NOTHING EVER AGAIN. It is the only shape that can be settled — a
-  # recurring rule always has a next occurrence to fund, which is `BudgetCalculator#fulfilled?`'s own
+  # recurring rule always has a next occurrence to fund, which was `BudgetCalculator#fulfilled?`'s own
   # narrowness — and without this gate a paid one-off would re-accrue its whole amount the period
   # after it was paid, forever, because its due date never rolls.
   #
@@ -305,11 +349,11 @@ class ClaimCalculator
   # `SUM` over the item's entries, asked once per period rather than once per query, which is what
   # lets the whole walk cost no statements at all.
   #
-  # ** IT DIVERGES FROM THAT CLASS ON THE ITEM-LESS RULE, DELIBERATELY, AND THIS READING IS THE LAW
-  # GOING FORWARD (review of 2026-09-03; `BudgetCalculator` dies in Task 4). ** That class has no
+  # ** IT DIVERGED FROM THAT CLASS ON THE ITEM-LESS RULE, DELIBERATELY, AND THIS READING IS NOW THE
+  # ONLY ONE (review of 2026-09-03; `BudgetCalculator` was deleted in the fix wave). ** That class had no
   # fulfilment signal for a rule with no item, so it falls back to "assume every bill was paid on
   # time" and rolls the due date on the CALENDAR: a $600 six-monthly rule anchored Jun 1 with nothing
-  # ever spent reports Dec 1 there and Jun 1 here. The computed model has a signal it did not have —
+  # ever spent reported Dec 1 there and Jun 1 here. The computed model has a signal it did not have —
   # an item-less rule's fulfilment is spending on the CATEGORY (§3.2), which this walk already sums —
   # so "unpaid" is a fact rather than an absence, and a date that passed with the money never spent
   # is exactly the state the user needs told. The claim stays at the target and the row reads overdue

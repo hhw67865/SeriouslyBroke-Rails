@@ -429,9 +429,17 @@ RSpec.describe "db/seeds.rb" do
       expect(home.uncovered_remainder).to eq(0)
     end
 
+    # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
+    # one-off branch divided the WHOLE amount by the periods before the due date — asking for every
+    # bill again from scratch, whatever was already saved toward it — and reached that divisor
+    # through a class that also assumed every item-less bill was paid on time. It reads §3.2's
+    # catch-up share now: what is STILL MISSING over the periods left. This household's funds are
+    # part built, so its standing ask is genuinely lower, and the seeds' declared income follows it
+    # down to $2,050 to keep the state this fixture exists to show. Both figures are planted, and
+    # the verdict is asserted beside them so a pair that stopped straddling could not pass.
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_459.99)
-      expect(user.typical_income).to eq(2_400.00)
+      expect(Budget.steady_need(user, today: today)).to eq(2_103.41)
+      expect(user.typical_income).to eq(2_050.00)
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
 

@@ -112,6 +112,53 @@ RSpec.describe Category, type: :model do
     end
   end
 
+  # ** THE ONE KEY A CATEGORY'S RULES ARE LISTED BY (fix wave — LOW-3). ** Three screens render §3.4's
+  # line per rule — Home's period row, the Budget page's group and the category card — and each had
+  # written the key itself; two agreed and Home did not, so one category's rules read one way on Home
+  # and another two clicks along. Every term is asserted in both directions here, because a key is
+  # exactly the kind of thing that passes its callers' examples while being wrong in one place.
+  describe ".rule_order" do
+    def key(due, amount, id) = described_class.rule_order(next_due_on: due, amount: amount, id: id)
+
+    # `<=>` RATHER THAN `be <`: the key is an Array, which defines the spaceship but not `<`.
+    def before?(one, other) = (one <=> other).negative?
+
+    # TERM 1: a rule with a date sorts ahead of one without. A rate rule is never due, and "what is
+    # coming" is what a reader scanning the list is after. The undated rule is given the LARGER
+    # amount, so a key that had dropped this term would order them the other way round.
+    it "puts a dated rule ahead of an undated one", :aggregate_failures do
+      expect(before?(key(Date.new(2026, 6, 1), 100, 1), key(nil, 9_999, 0))).to be(true)
+      expect(before?(key(nil, 9_999, 0), key(Date.new(2099, 1, 1), 100, 1))).to be(false)
+    end
+
+    # TERM 2: among dated rules the earlier date leads.
+    it "puts the earlier due date first", :aggregate_failures do
+      expect(before?(key(Date.new(2026, 2, 14), 100, 2), key(Date.new(2026, 6, 1), 100, 1))).to be(true)
+      expect(before?(key(Date.new(2026, 6, 1), 100, 1), key(Date.new(2026, 2, 14), 100, 2))).to be(false)
+    end
+
+    # TERM 3: a shared date breaks toward the LARGER obligation — the bigger bill is the one you can
+    # least afford to be short on. Asserted with the amount as an Integer on one side and a
+    # BigDecimal on the other, which is the mix an in-memory record produces and which the key's
+    # `.to_d` exists for.
+    it "breaks a shared date toward the larger amount", :aggregate_failures do
+      due = Date.new(2026, 6, 1)
+
+      expect(before?(key(due, 500, 9), key(due, BigDecimal("180"), 1))).to be(true)
+      expect(before?(key(due, BigDecimal("180"), 1), key(due, 500, 9))).to be(false)
+    end
+
+    # TERM 4: identical rules stay put. `budgets` carries no ORDER BY and a plain UPDATE relocates a
+    # row in the heap, so without this two rules could swap between page loads with no data change.
+    # Both arms, because the undated lane reaches the tie-break through `NEVER_DUE`.
+    it "breaks an identical pair on the id", :aggregate_failures do
+      due = Date.new(2026, 6, 1)
+
+      expect(before?(key(due, 100, 1), key(due, 100, 2))).to be(true)
+      expect(before?(key(nil, 100, 1), key(nil, 100, 2))).to be(true)
+    end
+  end
+
   # FIVE BLOCKS ARE DELETED HERE, ALL ABOUT `categories.pool_id` (two-ledger spec §5, Task 8):
   # `#buffer_funded?` (the rate detector's population, re-aimed at `#holder?` in Task 7),
   # `#effective_pool` and its default-account fallback, the pool-ownership pair, the reachability

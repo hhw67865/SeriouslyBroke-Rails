@@ -51,9 +51,9 @@ class User < ApplicationRecord
   STRIDE_DAYS = { "weekly" => 7, "biweekly" => 14 }.freeze
 
   # How far #period_containing looks either side of a date to find the boundaries around it.
-  # The longest cadence is monthly, so no period can exceed 31 days; 45 is the same window
-  # BudgetCalculator#boundary_period_end already searches, kept identical so the two cannot
-  # disagree about which boundary comes next.
+  # The longest cadence is monthly, so no period can exceed 31 days; 45 is the window
+  # BudgetCalculator#boundary_period_end searched, kept when that class was deleted because the
+  # bound is a fact about the cadences rather than about the caller.
   PERIOD_WINDOW_DAYS = 45
 
   # HOW MANY PERIODS A YEAR HOLDS, per cadence. The one divisor that turns a rule stated in
@@ -70,8 +70,8 @@ class User < ApplicationRecord
   # a divisor of zero there would 500 a page whose whole purpose is to let the user declare.
   #
   # The choice matches what the rest of the app already does with an undeclared period:
-  # `BudgetCalculator#period_end` falls back to `today.end_of_month` and `User#period_containing`
-  # to the calendar month. A monthly-basis rule therefore passes through unchanged, and a
+  # `#period_containing` below falls back to the calendar month, as `BudgetCalculator#period_end`
+  # did before it was deleted. A monthly-basis rule therefore passes through unchanged, and a
   # per-period rule never consults this at all — `steady_ask` returns its amount directly.
   def periods_per_year = PERIODS_PER_YEAR.fetch(period_cadence, 12)
 
@@ -158,8 +158,9 @@ class User < ApplicationRecord
   # second on top of it.
   #
   # A user who declared no period has no boundaries at all, so the calendar month stands in.
-  # That is the same fallback BudgetCalculator#period_end uses for a monthly rule, chosen so
-  # the two answers agree rather than because a month is a period.
+  # That was BudgetCalculator#period_end's fallback for a monthly rule too, chosen so the two
+  # answers agreed rather than because a month is a period; that class is gone and this is now the
+  # only answer.
   def period_containing(date)
     date = date.to_date
     opened_on = period_boundaries(from: date - PERIOD_WINDOW_DAYS, to: date).last

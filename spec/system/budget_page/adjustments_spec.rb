@@ -266,6 +266,25 @@ RSpec.describe "Budget page adjustments", type: :system do
       expect(user.reload.period_cadence).to eq("monthly")
     end
 
+    # ** ONE `id` PER ELEMENT ON THIS PAGE (fix wave — LOW-6). ** The confirm panel carries the
+    # pending declaration as hidden fields and the declaration form below it still renders the SELECT
+    # the user typed into, so `hidden_field_tag "user[period_cadence]"` and that select both derived
+    # `id="user_period_cadence"` — two elements, one id, which is invalid HTML and makes any lookup
+    # by id (a label's `for`, `find_field`, a script) a coin toss. The pending value is named for
+    # what it is now.
+    #
+    # THE WHOLE DOCUMENT, not just the two known offenders: a pin on one pair would say nothing
+    # about the next one. The select is asserted present as well, because the honest fix here was to
+    # rename the hidden field rather than to stop rendering the form — that the confirm step shows
+    # the OLD cadence in that select is a separate, open design question (spec §10.6 item 5).
+    it "renders no duplicate element ids", :aggregate_failures do
+      ids = page.all("[id]", visible: :all).pluck(:id).compact_blank
+
+      expect(ids).to eq(ids.uniq)
+      expect(page).to have_css("select#user_period_cadence", visible: :all, count: 1)
+      expect(page).to have_css("#pending_period_cadence", visible: :all, count: 1)
+    end
+
     # BOTH HALVES OF THE ANSWER LAND TOGETHER (§3.5: one confirm, one transaction). The cadence AND
     # the amount are asserted on each arm, because a screen that wrote one without the other is
     # exactly the half-changed state the transaction exists to prevent.

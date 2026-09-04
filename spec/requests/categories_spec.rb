@@ -147,6 +147,62 @@ RSpec.describe "Categories", type: :request do
     end
   end
 
+  # ** THE SHOW PAGE HAD NO PIN AT ALL, AND IT WAS THE ONE ACTION THAT BUILT ITS OWN LEDGER (fix
+  # wave — LOW-1). ** `CategoriesController#claim_ledger` is a `helper_method` and its comment says
+  # in as many words that it exists "so the SHOW action and the card partial can reach the same
+  # reader without a second construction path" — but `#show` handed `CategoryBudgetPresenter` no
+  # `claims:`, so the card built a `ClaimLedger` of its own and the promise was false. Nothing on
+  # the index could catch it: the index passes its ledger in.
+  #
+  # THE PROBE IS THE INDEX'S, for the index's reasons — `adjustments` is read by nothing else on
+  # this screen, so it isolates the claim reader from the per-card spending queries. §3.4 gives a
+  # LINE PER RULE, so N here is rules on ONE category rather than categories: a card that walked
+  # back to `Budget#claim_calculator` per line would cost one statement per rule.
+  #
+  # ** WHAT THIS PIN DOES NOT CATCH, SAID PLAINLY: the threading itself. ** Measured both ways — with
+  # `claims:` handed in and with it left nil — this page costs the same 1 and 1, because nothing else
+  # on the show template asks the `claim_ledger` helper, so the card's own ledger was the ONLY one
+  # built and it batches exactly as well. The defect LOW-1 names is a second construction path rather
+  # than a live cost: the day a partial on this page reads the helper (as `_category_card` does on
+  # the index), an unthreaded card would make the second ledger and the `budgets` figure below would
+  # go to 2. That is what the second arm is here for, and it is the honest reach of it.
+  describe "GET /categories/:id — claim aggregates" do
+    def adjustment_statements(category)
+      statements = []
+      recorder = lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+      end
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") { get category_path(category) }
+      [
+        statements.count { |sql| sql.include?(%("adjustments")) },
+        statements.count { |sql| sql.start_with?(%(SELECT "budgets")) }
+      ]
+    end
+
+    # ONE CATCH-ALL RULE AND `count − 1` ITEM-BACKED ONES: a category may hold only one item-less
+    # rule (`Budget#category_may_hold_one_item_less_rule`), and the item lane is a second grouped
+    # statement in the ledger, so both lanes are live at every size and the comparison is not
+    # measuring a lane appearing.
+    def rules_on(category, count)
+      create(:budget, :per_period_rate, category: category, amount: 100)
+      (count - 1).times do |index|
+        item = create(:item, category: category, name: "Lane #{index}")
+        create(:budget, :per_period_rate, category: category, amount: 50, item: item)
+      end
+      get category_path(category) # a warm request: the first render compiles the template.
+    end
+
+    it "asks the same number of times for one rule as for five", :aggregate_failures do
+      one_rule = create(:category, :expense, :funded, user: user, name: "Groceries")
+      five_rules = create(:category, :expense, :funded, user: user, name: "Pet Care")
+      rules_on(one_rule, 1)
+      rules_on(five_rules, 5)
+
+      expect(adjustment_statements(five_rules)).to eq(adjustment_statements(one_rule))
+      expect(adjustment_statements(five_rules)).to eq([1, 1])
+    end
+  end
+
   describe "PATCH /categories/:id" do
     let!(:category) do
       create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 500)

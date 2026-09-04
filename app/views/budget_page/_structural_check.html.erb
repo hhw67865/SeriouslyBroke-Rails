@@ -33,10 +33,14 @@
           </dd>
         </div>
         <%# THE THIRD LINE SAYS WHICH WAY IT WENT. §8 printed "Left over $732 → buffer" on a budget
-            that fits — the destination is spelled "available" here, and everywhere, since the
-            answers-first Home spec §3 retired the older word; the same row on one that does not fit
-            would print "Left over -$468", which is a sum, not a sentence. The underwater wording is §9's own ("$468 underwater every
-            period") so the block and the button beneath it name one thing. %>
+            that fits; the same row on one that does not would print "Left over -$468", which is a
+            sum and not a sentence, so the two directions get two words. THE WORD IS "FREE", and this
+            comment said "available" until the fix wave (LOW-5) — a name for the distribution's
+            post-sweep root, which does not exist: nothing is distributed and nothing is set aside,
+            so what is left over is money no rule claims (computed-claims §2). The row itself has
+            said `free` since Task 3's copy sweep; only this note was still describing the old model.
+            The underwater wording is §9's own ("$468 underwater every period") so the block and the
+            button beneath it name one thing. %>
         <div class="flex justify-between items-baseline gap-4 pt-2 border-t border-gray-100"
              data-figure="leftover">
           <% if presenter.underwater? %>

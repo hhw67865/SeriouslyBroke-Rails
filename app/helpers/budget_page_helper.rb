@@ -29,7 +29,17 @@ module BudgetPageHelper
   # "$400.00 / period", "$600.00 every 6 months" — the amount and what it is an amount PER.
   # A figure with no basis is unreadable on this page: $600 a period and $600 every six months
   # are the same digits and a twelvefold difference in what the user owes.
+  #
+  # ** A $0 RULE HAS NO RATE TO STATE, SO IT SAYS SO IN WORDS (fix wave — LOW-4). ** Zero is legal on
+  # exactly one shape (`Budget#set_aside_only?`, spec §10.1 ruling 3): a goal the user feeds by hand
+  # and never on a schedule, which is what Task 4's migration minted for every goal in the database
+  # that lacked a rule. This printed "$0.00 / period" for one, beside a real built-up figure on the
+  # same row — a rate of nothing read as a rule that had been set wrong rather than a rule that was
+  # never about a rate. `positive?` and not `zero?`: the column cannot go negative on any shape, and
+  # a row that somehow did should say this rather than print a minus sign as a rate.
   def budget_rule_amount(budget)
+    return "fed by hand" unless budget.amount.to_d.positive?
+
     "#{number_to_currency(budget.amount)} #{budget_rule_basis(budget)}"
   end
 

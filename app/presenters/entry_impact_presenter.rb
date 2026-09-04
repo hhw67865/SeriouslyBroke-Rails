@@ -404,7 +404,7 @@ class EntryImpactPresenter
   # That is the understating direction, and gate 3's note carries the argument for preferring it.
   def pre_clamp_claim
     claim_calculators.sum(0.to_d) do |calculator|
-      calculator.rate? ? calculator.accrued_this_period - calculator.spent_this_period : calculator.built_up
+      calculator.rate? ? calculator.raw_rate : calculator.built_up
     end
   end
 
@@ -457,11 +457,19 @@ class EntryImpactPresenter
   # ** IS THIS ENTRY IN THE FIGURE AT ALL, AND BY ITS WHOLE AMOUNT? ** #balance's gates 2 and 3,
   # both read off the calculators rather than re-derived here.
   #
-  # `#countable_span` is `ClaimCalculator`'s own answer to which DAYS its walk counts — one period
-  # for a use-it-or-lose-it rate rule, the whole accrual history for the other two shapes — so an
-  # entry from a previous period is simply not in a rate claim and there is nothing of it to give
-  # back. `ANY` rule, because the category's claim is a SUM and one rule counting the day is enough
-  # for the amount to be inside the figure.
+  # `#counts_spending_on?` is `ClaimCalculator`'s own answer to which DAYS its walk subtracts
+  # spending on — one period for a use-it-or-lose-it rate rule, the whole accrual history for the
+  # other two shapes — so an entry from a previous period is simply not in a rate claim and there is
+  # nothing of it to give back. `ANY` rule, because the category's claim is a SUM and one rule
+  # counting the day is enough for the amount to be inside the figure.
+  #
+  # ** IT WAS `#countable_span`, AND THAT READER ANSWERS A DIFFERENT QUESTION (fix wave — MED-1). **
+  # The span is the days a typed ADJUSTMENT may be dated on and is bounded at `min(today, …)`; the
+  # claim's spending predicate has no today bound at all. An entry dated LATER THIS PERIOD is
+  # therefore subtracted by the claim and was invisible here, so this method returned false, the
+  # give-back was dropped, and the card subtracted the entry a second time — $250 against a truth of
+  # $300 on a $300 rate rule with a $50 receipt dated four days out. One predicate, on the class that
+  # owns the walk.
   #
   # `#over?` IS ASKED OF THE ACCRUING RULES ONLY, and the exclusion of the rate rules is the whole
   # of gate 3's precision. A rate rule that has been overspent is handled exactly by
@@ -470,13 +478,13 @@ class EntryImpactPresenter
   # past what it had the give-back is dropped rather than guessed. See #balance for why the safe
   # direction is to understate.
   #
-  # THE DAY IS THE OWNER'S, through `User#local_day`, because `#countable_span`'s bounds are: a
+  # THE DAY IS THE OWNER'S, through `User#local_day`, because the calculator's periods are: a
   # Tokyo user's Sep 1 receipt is stored on Aug 31 in UTC, which on a monthly grid is a different
   # period and therefore a different answer.
   def counted_by_the_claim?(counted)
     day = user.local_day(counted.date)
 
-    claim_calculators.any? { |calculator| calculator.countable_span.cover?(day) } &&
+    claim_calculators.any? { |calculator| calculator.counts_spending_on?(day) } &&
       claim_calculators.none? { |calculator| !calculator.rate? && calculator.over? }
   end
 

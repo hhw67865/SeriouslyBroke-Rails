@@ -46,6 +46,27 @@ RSpec.describe BudgetPageHelper, type: :helper do
     it "says a one-off rule happens once" do
       expect(helper.budget_rule_amount(rule(:one_time, category: build(:category, :expense, :funded), amount: 300))).to eq("$300.00 once")
     end
+
+    # ** THE MINTED GOAL RULE, WHICH HAS NO RATE TO STATE (fix wave — LOW-4). ** Zero is legal on
+    # exactly one shape — a dateless target rule (`Budget#set_aside_only?`, spec §10.1 ruling 3) —
+    # and Task 4's migration minted one for every goal in the database that lacked a rule. The
+    # sticker printed "$0.00 / period" for those, beside a real built-up figure on the same row,
+    # which reads as a rule somebody set wrong rather than a rule that was never about a rate. The
+    # category carries the target, because that is the only shape the model lets the amount be zero
+    # on.
+    it "says a $0 goal rule is fed by hand" do
+      goal = build(:category, :expense, :funded, target_amount: 5_000)
+
+      expect(helper.budget_rule_amount(rule(:per_period_rate, category: goal, amount: 0))).to eq("fed by hand")
+    end
+
+    # THE OTHER DIRECTION, one penny apart: a rule that names ANY rate states it, so the gate cannot
+    # be satisfied by a helper that stopped printing figures.
+    it "still states a rate of a single cent" do
+      goal = build(:category, :expense, :funded, target_amount: 5_000)
+
+      expect(helper.budget_rule_amount(rule(:per_period_rate, category: goal, amount: 0.01))).to eq("$0.01 / period")
+    end
   end
 
   # ** `#pool_balance_clause` AND ITS TWO EXAMPLES ARE DELETED (computed-claims spec §6). ** They

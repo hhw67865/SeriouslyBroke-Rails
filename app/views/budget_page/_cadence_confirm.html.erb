@@ -44,8 +44,17 @@
   </ul>
 
   <%= form_with url: budget_page_user_path, method: :patch, class: "px-6 py-4 flex flex-wrap gap-2" do %>
+    <%# ** ONE `id` PER ELEMENT, AND THE PENDING VALUE TAKES ITS OWN (fix wave — LOW-6). **
+        `hidden_field_tag "user[period_cadence]"` derives `id="user_period_cadence"`, which is the id
+        the SELECT in `_declaration_form` below already carries — two elements, one id, on one page,
+        which is invalid HTML and makes `find_field("user_period_cadence")` a coin toss for anything
+        that looks a control up by id. The pending value is a different thing from the control the
+        user typed into, so it is named for what it is. The stale SELECT below is a separate and
+        open design question (spec §10.6 item 5): the confirm step deliberately renders `current_user`
+        unchanged, so the select still shows the OLD cadence while this panel says it is changing —
+        threading the presenter's declaration through the offer path is that fix, not this one. %>
     <% change.declaration.each do |field, value| %>
-      <%= hidden_field_tag "user[#{field}]", value %>
+      <%= hidden_field_tag "user[#{field}]", value, id: "pending_#{field}" %>
     <% end %>
 
     <%= button_tag "Scale them", type: :submit, name: "scale", value: "1", class: "btn btn-primary" %>

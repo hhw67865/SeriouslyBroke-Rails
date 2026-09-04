@@ -305,8 +305,13 @@ class SuggestionEngine
   # `:pool` LEFT THE PRELOAD and `:category` took its place: a rule belongs to the category that
   # holds the money (two-ledger spec §3), and the two detectors that name a rule's owner —
   # drift's sentence and a dead rule's — read the category now.
+  #
+  # THE OWNER RIDES ON THE CATEGORY (fix wave — MED-2), matching `Budget.steady_need` and
+  # `ClaimLedger#rules` exactly. `#rate_shape?` asks `Budget#claim_shape`, whose calculator resolves
+  # its own `today` through `category.user`; without the nested preload that is one `users` query per
+  # CATEGORY on a page that already has the row in memory.
   def budgets
-    @budgets ||= Budget.for_user(user).includes(:item, :category).to_a
+    @budgets ||= Budget.for_user(user).includes(:item, category: :user).to_a
   end
 
   # The items that already carry a rule of their own. Dated-bill skips them (proposing a rule for
@@ -666,8 +671,25 @@ class SuggestionEngine
   # something else, the figure is built entirely from dollars this rule does not cover. Both are a
   # number on a money screen that describes different money from the sentence around it. An
   # item-backed rule is detector 4's subject, not this one's.
+  #
+  # ** "IS THIS A RATE RULE" IS `ClaimCalculator#shape`'S QUESTION AND THIS METHOD USED TO ANSWER IT
+  # ITSELF (fix wave — MED-2). ** The old spelling was
+  # `anchor_date.blank? && item_id.blank? && cadence.in?([:per_period, :monthly])` — which never
+  # reads the CATEGORY's `target_amount`, the very column §3.3 uses to tell a goal from a rate. So
+  # every goal category's item-less rule was a rate rule here while `ClaimCalculator` called it
+  # `:target`, and the detector spoke about money the claim computes by a different formula: a $0
+  # rule minted by Task 4's migration fired "your rule says $0.00" at a fund the user tops up by
+  # hand, and a $50-a-period goal with heavy spending was told to RAISE a contribution that is
+  # already accruing toward a fixed figure. `Budget#claim_shape` is the one door onto §3's
+  # classification; a `:target` rule never drifts.
+  #
+  # ** AND A $0 RULE NEVER DRIFTS EITHER. ** `#drift_suggestion`'s thresholds are `gap ≥ $10` and
+  # `gap ≥ 10% of the rule`, and the second is vacuous against zero — so ANY spending at all on a
+  # rule that declares no standing contribution clears both and reports a rule "drifting" from a
+  # figure it never claimed. Zero is §3.3's honest way of saying "this fund has no rate", not a rate
+  # of nothing (spec §10.1 ruling 3), and there is nothing there to have drifted from.
   def rate_shape?(budget)
-    budget.anchor_date.blank? && budget.item_id.blank? && [:per_period, :monthly].include?(budget.cadence)
+    budget.claim_shape == :rate && budget.item_id.blank? && budget.amount.to_d.positive?
   end
 
   # `{ category_id => total }` over the drift window, in one query for every category at once.

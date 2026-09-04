@@ -74,6 +74,7 @@ class CategoryBudgetPresenter
     :next_due_on,
     :planned_this_period,
     :over,
+    :over_by,
     :overdue
   ) do
     def rate? = shape == :rate
@@ -272,17 +273,16 @@ class CategoryBudgetPresenter
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,
+      over_by: calculator.over_by,
       overdue: calculator.overdue?
     )
   end
 
+  # `Category.rule_order`, THE APP'S ONE KEY (fix wave — LOW-3): this card, the Budget page's group
+  # and Home's period row list the same category's rules, and until the model owned the key Home
+  # listed them differently.
   def line_order(line)
-    [
-      line.next_due_on.present? ? 0 : 1,
-      line.next_due_on || Date.new(9999, 12, 31),
-      -line.rule.amount.to_d,
-      line.rule.id
-    ]
+    Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id)
   end
 
   # WHETHER A PROPOSAL COULD BE ABOUT THIS CATEGORY AT ALL — ONE CONDITION, and it stays one.

@@ -223,11 +223,19 @@ today = Time.find_zone!(user.timezone).today
 # claim is `max(0, rate + Σ this period's deltas − this period's spending)` (§3.1) and this period
 # is one morning old.
 #
-# `typical_income` is what the user SAYS they bring in, and it is $200 under the paycheck below on
+# `typical_income` is what the user SAYS they bring in, and it is UNDER the $2,600 paycheck below on
 # purpose: it is a declaration, not a measurement, and §9's structural check compares it against
-# `Budget.steady_need` — $2,459.99 here — so the demo is structurally underwater and the sacrifice
-# view has a screen.
-user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_400)
+# `Budget.steady_need` — $2,103.41 here — so the demo is structurally underwater and the sacrifice
+# view has a screen. That screen existing is the load-bearing property; the exact gap is not.
+#
+# ** IT WAS $2,400 AGAINST A NEED OF $2,459.99 (fix wave — MED-3). ** `Budget#steady_ask`'s one-off
+# branch used to divide the WHOLE amount by the periods left before the due date, and it built a
+# `BudgetCalculator` to do it — a class that also assumed every item-less bill was paid on time.
+# It reads §3.2's catch-up share now: what is STILL MISSING over the periods left, which for this
+# household's part-built funds is $356.58 a period less than asking for every bill again from
+# scratch. The demo's need fell with it, so the declaration follows it down to keep the state this
+# seed exists to show.
+user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_050)
 
 # ---------------------------------------------------------------------------------------------
 # Builders. Every record below goes through one of these, so a shape this demo may not write has
@@ -314,6 +322,14 @@ end
 # against real data and mints the rule where there is none — which is what the four goals below do
 # for themselves, in the same target-only shape.
 set_aside = lambda do |category, amount, on|
+  # ** THE SEEDS WRITE `Adjustment` DIRECTLY AND THAT IS ACCEPTED (fix wave — LOW-7). ** Every
+  # adjustment a USER makes goes through `AdjustmentForm`, the one typed door, which refuses a date
+  # the rule's walk cannot count (§3.3; spec §10.2 ruling 11). These rows are not typed: they are a
+  # history being planted, dated deliberately across the periods the demo's rules have lived
+  # through, and the form's span check is exactly the thing that would refuse them — the same
+  # reasoning §7's migration converts a user's real history at its ORIGINAL dates on. The model's
+  # own validations still apply; what is bypassed is the door's opinion about WHEN, which a seed
+  # writing the past is entitled to hold.
   Adjustment.create!(rule: Budget.find_by!(category: category, item_id: nil), amount: amount, date: on)
 end
 

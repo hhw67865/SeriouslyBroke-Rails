@@ -131,8 +131,8 @@ class BudgetsController < ApplicationController
   # `item_id` IS §7a'S CLASS AGAIN, AND IT IS THE SHARPEST OF THEM. A rule names the item it pays;
   # `Budget` validates that the item sits in the rule's category, never WHOSE item it is. Unscoped,
   # `POST /budgets` with a stranger's item id writes a funding rule against THEIR spending — the
-  # rule then reads their entries through `BudgetCalculator#paid_since_anchor` and reports their
-  # bills as paid or unpaid on this user's page. `current_user.items` walks the user's categories,
+  # rule then reads their entries through `ClaimCalculator`'s own lane (`Entry.draining` narrowed to
+  # the rule's item) and reports their bills as paid or unpaid on this user's page. `current_user.items` walks the user's categories,
   # so a stranger's id is not found.
   #
   # The line stays exactly where Task 2 drew it: whose, here; what shape, in the model. An item of

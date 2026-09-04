@@ -196,6 +196,43 @@ RSpec.describe "Budget page structural check", type: :system do
     end
   end
 
+  # ** THE CHECK AND THE ROW ARE ONE PAGE AND USED TO CONTRADICT EACH OTHER (fix wave — MED-3). **
+  # `Budget#steady_ask`'s one-off branch built a `BudgetCalculator`, whose `#fulfilled?` has NO
+  # payment signal for an item-less rule and falls back to "assume every bill was paid on time"
+  # (`today >= anchor_date`). So a $600 bill anchored a month ago with nothing spent was priced at
+  # $0.00 a period by the block at the bottom of this page while its own row, an inch above, read
+  # `overdue`. One rule, one afternoon, two verdicts.
+  #
+  # THE CLAIM HAS THE SIGNAL THAT CLASS LACKED — an item-less rule's fulfilment is spending on the
+  # CATEGORY, which the walk already sums (§3.2) — so the check now reads §3.2's catch-up share.
+  # RE-DERIVED: the rule is born today, the period opens today, the due date is already past, so
+  # `#periods_left` floors at one and the whole $600 is asked of this period. Against $2,400 of
+  # income that is not underwater, which is the arm this fixture is in.
+  describe "an item-less one-off whose date has gone by unpaid", :aggregate_failures do
+    before do
+      declared_user(2_400)
+      create(
+        :budget,
+        category: holder("Car Service"),
+        amount: 600,
+        interval_months: nil,
+        anchor_date: Date.current - 1.month
+      )
+      visit budget_page_path
+    end
+
+    it "prices the bill the row calls overdue" do
+      within(figure("rules-need")) do
+        expect(page).to have_content("$600.00 a period")
+        expect(page).to have_no_content("$0.00")
+      end
+      within("[data-rule='Car Service']") do
+        expect(page).to have_css("[data-rule-trouble]", text: "overdue")
+        expect(page).to have_css("[data-rule-schedule]", text: "was due")
+      end
+    end
+  end
+
   # HOME'S TROUBLE STRIP, both directions. The branch has been unreachable in production since it
   # was written — there was no writer for `typical_income` — so this is the first time it renders
   # against a real user. It has moved twice since: the standing band became the hero card

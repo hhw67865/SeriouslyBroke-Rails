@@ -79,10 +79,15 @@
         rest                           "the rest isn't claimed". A positive rest with nothing claimed
                                        is an OTHER account in the red, which is why THIS arm needs a
                                        cause too.
-        free is fine, none of it is  → "none of it is claimed", and the parked clause only where a
-        claimed                        second account actually holds money. This is the fresh signup,
+        free is fine and none of it  → "none of it is claimed", and the parked clause only where a
+        is claimed                     second account actually holds money. This is the fresh signup,
                                        whose two figures are the same number because nothing is
                                        claimed at all.
+        free is fine, nothing in     → "$1,668.37 is claimed and more is parked in other accounts."
+        checking is claimed, but       The arm reached here on `!rest_in_checking?` ALONE for the
+        SOMETHING is                   length of Task 3, which asserted "none of it is claimed" over
+                                       a screen listing five claims (Task 5's browser pass, spec
+                                       §10.6 item 6). `#anything_claimed?` is the gate.
 
       EVERY GATE IS THE PRESENTER'S OWN PREDICATE rather than a comparison spelled here. A view
       re-deriving which side of the `min` won, or re-deriving whether another account holds money,
@@ -122,8 +127,28 @@
         the rest isn't claimed.
       <% end %>
     <% else %>
-      none of it is claimed<% if presenter.free_cap_bound? && presenter.money_parked_elsewhere? %> —
-      more is parked in other accounts<% end %>.
+      <%# ** THIS ARM ASKED NOTHING BEFORE PRINTING "none of it is claimed" (fix wave — HIGH). **
+          Reaching here is `pot ≤ unclaimed`, which is `Σ claims ≤ Σ other accounts` — a statement
+          about WHERE the money is, not about whether any of it is claimed. Ming's Home satisfied it
+          with five rules claiming $1,668.37, because her savings covered them, and the card said
+          none of it was. Every other sentence on this screen is gated on a predicate that
+          establishes its cause; this one now is too.
+
+          WITH CLAIMS PRESENT THE SENTENCE NAMES BOTH FACTS, and the second half needs no gate of its
+          own here: `Σ claims ≤ Σ other accounts` with `Σ claims > 0` forces `Σ other accounts > 0`,
+          so `#money_parked_elsewhere?` is TRUE whenever `#anything_claimed?` is true on this arm.
+          Gating it anyway would be an unreachable branch on a money screen, which is the thing the
+          arm above deleted rather than kept. At the exact tie (`Σ claims == Σ other accounts`) the
+          clause is still true read as it is written — there IS more money, parked outside checking,
+          on top of the pot this figure is about. Both directions pinned in `home_presenter_spec`
+          and `hero_spec`. %>
+      <% if presenter.anything_claimed? %>
+        <%= number_to_currency(presenter.total_claims) %> is claimed and more is parked in other
+        accounts.
+      <% else %>
+        none of it is claimed<% if presenter.money_parked_elsewhere? %> —
+        more is parked in other accounts<% end %>.
+      <% end %>
     <% end %>
   </p>
 

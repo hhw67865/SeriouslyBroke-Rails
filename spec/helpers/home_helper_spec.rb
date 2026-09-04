@@ -87,6 +87,10 @@ RSpec.describe HomeHelper, type: :helper do
   # double above exists: these three methods read a handful of questions off a line and a real
   # `ClaimLine` would drag a category, a rule and a period walk in to answer them.
   describe "the claim vocabulary" do
+    # `over_by:` DEFAULTS TO THE PRE-CLAMP DIFFERENCE THIS DOUBLE'S OWN MEMBERS DESCRIBE, which is
+    # `ClaimCalculator#over_by` (`spent − accrued`) — the figure the line now CARRIES rather than one
+    # the helper subtracts (fix wave — LOW-2). Stated here so a caller that passes a matching pair
+    # gets the matching label without a third keyword.
     def rate_line(spent:, accrued:, over: false)
       instance_double(
         HomePresenter::ClaimLine,
@@ -94,6 +98,7 @@ RSpec.describe HomeHelper, type: :helper do
         spent: spent,
         accrued: accrued,
         over?: over,
+        over_by: spent.to_d - accrued.to_d,
         overdue?: false,
         next_due_on: nil
       )
@@ -114,6 +119,7 @@ RSpec.describe HomeHelper, type: :helper do
         per_period: per_period,
         next_due_on: next_due_on,
         over?: false,
+        over_by: 0.to_d,
         overdue?: overdue,
         spent: 0.to_d,
         accrued: 0.to_d
@@ -189,8 +195,10 @@ RSpec.describe HomeHelper, type: :helper do
 
     describe "#claim_trouble_label" do
       # ** THE EXCESS, NOT THE CLAIM. ** §3.1 clamps an overspent claim to zero, so a figure taken
-      # from the claim would print "over by $0.00" on every overspend. `spent − accrued` is the
-      # pre-clamp difference, which is the money that came straight out of what is free.
+      # from the claim would print "over by $0.00" on every overspend. `ClaimCalculator#over_by` is
+      # the pre-clamp difference, which is the money that came straight out of what is free — and it
+      # is the CALCULATOR's subtraction since the fix wave (LOW-2), carried on the line, rather than
+      # one this helper and `EntryImpactPresenter#pre_clamp_claim` each spelled for themselves.
       it "names the excess on a rule spent past its rate" do
         expect(helper.claim_trouble_label(rate_line(spent: 180, accrued: 150, over: true)))
           .to eq("over by $30.00")

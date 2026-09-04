@@ -55,6 +55,7 @@ class BudgetPagePresenter
     :next_due_on,
     :planned_this_period,
     :over,
+    :over_by,
     :overdue,
     :countable_span,
     :adjustments
@@ -213,7 +214,7 @@ class BudgetPagePresenter
   # them spell the sum themselves they are free to disagree about which rules count. One reader,
   # measured: see the query note in the task report.
   #
-  def rules_need = @rules_need ||= Budget.steady_need(user, today: today)
+  def rules_need = @rules_need ||= Budget.steady_need(user, today: today, ledger: claim_ledger)
 
   # NIL, NOT ZERO, for a user who has not declared one. Zero is a claim — "you bring in nothing"
   # — and it would make every user with a single rule read as underwater on a screen they have
@@ -354,6 +355,7 @@ class BudgetPagePresenter
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,
+      over_by: calculator.over_by,
       overdue: calculator.overdue?,
       countable_span: calculator.countable_span,
       adjustments: adjustments_this_period.fetch(budget.id, [])
@@ -396,18 +398,15 @@ class BudgetPagePresenter
     end
   end
 
-  # ** THE ORDER RULES ARE LISTED IN, OFF THE DATE THE PAGE ACTUALLY PRINTS (Task 3). ** It was
-  # `BudgetCalculator#due_order` over `#due_date`, and both are gone from this class: that class
-  # DIVERGES from `ClaimCalculator#next_due_on` on an item-less rule — it has no fulfilment signal
-  # without an item, so it assumes every bill was paid on time and rolls the date on the calendar,
-  # while the computed model reads the category's own lane and leaves an unpaid occurrence where it
-  # was anchored (the ruling of 2026-09-03; see that method's header). Ordering by one date and
-  # printing the other would put a row above its neighbour for a reason the screen contradicts.
-  #
-  # THE KEY IS TOTAL. A rule with no date sorts last (a rate rule is never due); ties break on the
-  # larger amount and then on the id, because `budgets` carries no ORDER BY and a plain UPDATE
-  # relocates a row in the heap — the same defect the fill order carries its own tie-break for.
+  # ** THE ORDER RULES ARE LISTED IN, OFF THE DATE THE PAGE ACTUALLY PRINTS (Task 3) — AND IT IS
+  # `Category.rule_order` NOW (fix wave — LOW-3). ** It was `BudgetCalculator#due_order` over
+  # `#due_date`, and both are gone: that class DIVERGED from `ClaimCalculator#next_due_on` on an
+  # item-less rule — no fulfilment signal without an item, so it assumed every bill was paid on time
+  # and rolled the date on the calendar, while the computed model reads the category's own lane and
+  # leaves an unpaid occurrence where it was anchored. The key that replaced it was then written out
+  # a third time on Home, in a DIFFERENT order; the model owns the one spelling and carries the
+  # argument for it.
   def rule_order(rule)
-    [rule.next_due_on.present? ? 0 : 1, rule.next_due_on || Date.new(9999, 12, 31), -rule.budget.amount.to_d, rule.budget.id]
+    Category.rule_order(next_due_on: rule.next_due_on, amount: rule.budget.amount, id: rule.budget.id)
   end
 end

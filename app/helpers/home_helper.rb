@@ -75,14 +75,20 @@ module HomeHelper
   # period" row print the SAME string about the same rule inches apart, which is why it is one method:
   # the two said it differently once already, under the status vocabulary this replaces.
   #
-  # `over by` IS THE PRE-CLAMP FIGURE — `spent − accrued`, the excess that reduced `free` directly
-  # (§3.1). The claim itself is zero in this state, so a figure taken from the claim would print
-  # `over by $0.00` on every overspend.
+  # `over by` IS THE PRE-CLAMP FIGURE — `ClaimCalculator#over_by`, the excess that reduced `free`
+  # directly (§3.1). The claim itself is zero in this state, so a figure taken from the claim would
+  # print `over by $0.00` on every overspend.
+  #
+  # ** IT IS THE CALCULATOR'S SUBTRACTION AND NOT THIS METHOD'S (fix wave — LOW-2). ** It was spelled
+  # `line.spent - line.accrued` here and `accrued_this_period - spent_this_period` in
+  # `EntryImpactPresenter#pre_clamp_claim` — one figure, two derivations, on two screens that print
+  # it about the same rule. All three §3.4 row objects carry `#over_by` off the one calculator now,
+  # and `claim_calculator_spec` pins the two readings equal.
   #
   # `overdue · was Mar 1` KEEPS THE STATUS VOCABULARY'S OWN WORDING for the one state that survives
   # the change of readers unchanged in meaning: a date has passed and the money is not there.
   def claim_trouble_label(line)
-    return "over by #{number_to_currency(line.spent - line.accrued)}" if line.over?
+    return "over by #{number_to_currency(line.over_by)}" if line.over?
 
     "overdue · was #{line.next_due_on.strftime("%b %-d")}"
   end

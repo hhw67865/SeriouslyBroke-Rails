@@ -598,6 +598,70 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:drift)).to be_empty
     end
 
+    # ** A GOAL'S RULE IS NOT A RATE RULE, AND THE DETECTOR USED TO THINK IT WAS (fix wave — MED-2).
+    # ** `SuggestionEngine#rate_shape?` read `anchor_date`, `item_id` and `cadence` and never the
+    # CATEGORY's `target_amount` — the column §3.3 uses to tell a fund accruing toward a figure from
+    # a use-it-or-lose-it rate. `ClaimCalculator#shape` calls this rule `:target`, so the detector
+    # was describing money computed by a formula it does not know.
+    #
+    # PLANTED AT THE BACKWARDS SENTENCE: a $50-a-period rule on a $5,000 goal with $200 a period of
+    # spending. As a rate rule the gap is $150 — past both thresholds — and the panel says RAISE
+    # your contribution, which is exactly wrong: the fund is being drained, not underfunded. The
+    # shape is asserted as well as the silence, so a revert cannot pass by some other route.
+    it "does not fire on a goal's rule, whose claim accrues toward a target", :aggregate_failures do
+      vacation = funded_category("Vacation")
+      vacation.update!(target_amount: 5_000)
+      rule = create(:budget, :per_period_rate, category: vacation, amount: 50)
+      in_drift_window(item("Flights", in_category: vacation), 200)
+
+      expect(rule.claim_shape).to eq(:target)
+      expect(of_kind(:drift)).to be_empty
+    end
+
+    # THE OTHER DIRECTION, one column apart: the same rule and the same spending on a category with
+    # NO target is a rate rule, and it drifts. Without this the example above would pass against a
+    # detector that had simply stopped firing.
+    it "fires on the same rule and the same spending once the category names no target", :aggregate_failures do
+      _category, rule, food = rate_category("Vacation", 50)
+      in_drift_window(food, 200)
+
+      expect(rule.claim_shape).to eq(:rate)
+      expect(of_kind(:drift).sole.subject).to eq(rule)
+      expect(of_kind(:drift).sole.detail[:direction]).to eq(:up)
+    end
+
+    # ** A $0 RULE HAS NO RATE TO HAVE DRIFTED FROM (fix wave — MED-2). ** Task 4's migration minted
+    # eight of these — a target-only rule whose amount is zero, which is §3.3's honest way of saying
+    # "this fund is fed by hand" (spec §10.1 ruling 3). Both drift thresholds are vacuous against
+    # zero: any spending at all is $10 away and infinitely far in percentage terms, so the panel
+    # said "your rule says $0.00 a period, you spend $200.00" about a rule that claims nothing by
+    # design. The minted shape is planted here exactly as the migration writes it — target on the
+    # category, amount 0 on the rule.
+    it "does not fire on a hand-fed $0 rule, whatever is spent", :aggregate_failures do
+      emergency = funded_category("Emergency Fund")
+      emergency.update!(target_amount: 5_000)
+      create(:budget, :per_period_rate, category: emergency, amount: 0)
+      in_drift_window(item("Repairs", in_category: emergency), 200)
+
+      expect(of_kind(:drift)).to be_empty
+    end
+
+    # AND THE SAME ZERO ONCE THE TARGET IS GONE, which `#claim_shape` calls a RATE rule — so this arm
+    # is the `amount.positive?` gate on its own rather than the shape gate wearing a second hat.
+    # `Budget#set_aside_only?` only lets a $0 rule be SAVED beside a target, but the target lives on
+    # the CATEGORY and clearing it re-validates nothing: a user who retires a goal and keeps its rule
+    # leaves exactly this row behind, and it must not start reporting drift for having been retired.
+    it "does not fire on a $0 rule whose category has since dropped its target", :aggregate_failures do
+      emergency = funded_category("Rainy Day")
+      emergency.update!(target_amount: 5_000)
+      rule = create(:budget, :per_period_rate, category: emergency, amount: 0)
+      in_drift_window(item("Repairs", in_category: emergency), 200)
+      emergency.update!(target_amount: nil)
+
+      expect(rule.reload.claim_shape).to eq(:rate)
+      expect(of_kind(:drift)).to be_empty
+    end
+
     # AMENDMENT A. The bill payment below would take the average from $100 to $400 a period and
     # report drift on a rule that is exactly right.
     it "measures the rate rule's own lane, not the whole category's spend", :aggregate_failures do
@@ -912,10 +976,17 @@ RSpec.describe SuggestionEngine do
 
     # The exact number, on a fixture that exercises every read the engine makes. `eq`, not `<=`: a
     # bound pins nothing, and the point of the figure is that the Budget page can be costed.
-    it "costs exactly eight queries when every detector has something to say", :aggregate_failures do
+    #
+    # NINE SINCE THE FIX WAVE, AND THE NINTH IS A PRELOAD (MED-2). `#rate_shape?` now asks
+    # `Budget#claim_shape`, whose `ClaimCalculator` resolves `today` through `category.user`, so
+    # `#budgets` preloads `category: :user` — the same nesting `Budget.steady_need` and
+    # `ClaimLedger#rules` already carry. It is ONE `users` statement for the whole page against one
+    # per category without it, which is the trade the figure records. It stays flat in rules: the
+    # example above still measures three bills against fifteen and reads the same number.
+    it "costs exactly nine queries when every detector has something to say", :aggregate_failures do
       one_of_each
 
-      expect(query_count { suggestions }).to eq(8)
+      expect(query_count { suggestions }).to eq(9)
       expect(suggestions.size).to eq(4)
     end
   end

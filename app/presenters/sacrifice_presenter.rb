@@ -189,9 +189,14 @@ class SacrificePresenter
   # writes — every category-owned rule — so the cut list would be missing rows the headline above it
   # counted, which is the one defect `#rows_total` exists to catch.
   #
-  # THE OWNER IS PRELOADED, matching `Budget.steady_need` exactly. `Budget#user` walks the category,
-  # and `#steady_ask`'s one-off branch builds a BudgetCalculator that asks `budget.user` for its
-  # period boundaries and `budget.item` for what has been paid.
+  # THE OWNER IS PRELOADED, matching `ClaimLedger#rules` — which is what `Budget.steady_need` iterates
+  # since the fix wave — exactly. `Budget#user` walks the category, and `#steady_ask`'s one-off branch
+  # builds a `ClaimCalculator` that asks `budget.user` for its period boundaries and its own day.
+  #
+  # ** THIS CLASS DOES NOT BATCH, AND THE COST IS STATED RATHER THAN HIDDEN. ** The cut list is
+  # rendered once, on a page the user reaches from the structural check, and an unbatched one-off
+  # rule costs two statements. If that ever bites, the fix is to iterate a `ClaimLedger` here the way
+  # `.steady_need` does — never a second figure computed a second way.
   def rules
     @rules ||= Budget.for_user(user).includes(:item, category: :user).to_a
   end
