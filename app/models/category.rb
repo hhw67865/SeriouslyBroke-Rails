@@ -400,12 +400,15 @@ class Category < ApplicationRecord
   # `#holder?` before they reach here). Folding it in would make one predicate answer two questions
   # and hide the second.
   #
-  # `detect` OVER THE ASSOCIATION rather than a `where`, and the TEST is `Budget
-  # #builds_up_the_category?` rather than two clauses written out here — because a second population
-  # asks the same question. `CategoryBudgetPresenter` finds the rule among the ones its `ClaimLedger`
-  # has ALREADY loaded for the whole page: going through this reader there would load `budgets` once
-  # per card on the categories index, which is exactly the per-row cost that ledger exists to avoid.
-  # One spelling of the test, two ways in.
+  # `detect` OVER THE ASSOCIATION rather than a `where`, and the TEST is
+  # `Budget#builds_up_the_category?` rather than two clauses written out here. Both halves are
+  # measured rather than stylistic: every caller has the association loaded (the entry card reads it
+  # twice more, the dashboard's strip preloads it) and `budgets.merge(scope).first` issues a
+  # statement on a LOADED association, so a relational reader here is one query per card on the
+  # screens that draw many. `CategoryBudgetPresenter` asks the same predicate of a different
+  # population — the rules its page's ONE `ClaimLedger` already fetched — and
+  # `Budget::BUILDS_UP_THE_CATEGORY` is the one place the two clauses are written down, with
+  # `Budget.builds_up_the_category` the SQL side the dashboard's strip composes.
   def building_rule = budgets.detect(&:builds_up_the_category?)
 
   # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round

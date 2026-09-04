@@ -116,8 +116,11 @@ module SearchHelper
       "description" => "e.g., Monthly payment, Grocery shopping",
       "category" => "e.g., Food, Housing, Income",
       "name" => "e.g., Coffee, Food, Emergency Fund",
-      "category_type" => "e.g., expense, income",
-      "target_amount" => "e.g., 1000, 5000"
+      # `"target_amount"` IS DELETED (rules-own-the-budget spec §7). It was a placeholder for a
+      # search field nothing declares — `Category` is `searchable :name` and nothing else — and the
+      # column it named is the one moving onto the rule. A placeholder for a field no form renders
+      # is a hint nobody can meet.
+      "category_type" => "e.g., expense, income"
     }
   end
 end

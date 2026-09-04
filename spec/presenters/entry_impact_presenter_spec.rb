@@ -726,6 +726,69 @@ RSpec.describe EntryImpactPresenter do
       expect(present(vacation.reload).denominator).to eq(BigDecimal("600"))
     end
 
+    # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING, BECAUSE THE FIGURE BESIDE IT IS NOT THE
+    # FUND'S (fix round 1 — MED-4). ** `#balance` is the WHOLE CATEGORY's claim — §3.1's lane ruling
+    # forbids this card from resolving which rule an entry drains — so a target printed beside it has
+    # to be a ceiling on THAT figure or it is a false sentence.
+    #
+    # PLANTED, re-derived by hand. "Car", funded Jan 1 2025, both rules born as the current period
+    # opens (Feb 6), so each walks exactly ONE period:
+    #
+    #   the FUND      item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600,
+    #                 nothing spent → built up **$600.00**
+    #   the BILL      on the item "Insurance", $600 due Feb 9 — inside the Feb 6–19 period, so
+    #                 `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
+    #
+    # Σ claims **$1,200.00**. Against the fund's $2,400 that reads half full while the fund is a
+    # QUARTER full, and the other $600 is a bill's accrual with nothing to do with the target. The
+    # denominator falls back to Σ standing_ask — `600` (the fund's rate) + `600` (the bill's amount
+    # over the one period it has to fund) = **$1,200.00** — and the trailing phrase to `built up`,
+    # which stays true: both contributions are money this category has accrued.
+    # THE FUND, ON A CATEGORY OF ITS OWN. The sibling is added by the example that wants one.
+    def car_fund
+      car = create(:category, :expense, user: user, name: "Car", funded_since: funded_since)
+      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400, created_at: born)
+      car
+    end
+
+    # THE BILL IS ITEM-BACKED BECAUSE IT HAS TO BE: `Budget#category_may_hold_one_item_less_rule`
+    # allows exactly one rule whose lane is the whole category, and the fund is it.
+    def insurance_bill_on(car)
+      create(
+        :budget,
+        category: car,
+        item: create(:item, category: car, name: "Insurance"),
+        amount: 600,
+        interval_months: nil,
+        anchor_date: today + 3.days,
+        created_at: born
+      )
+    end
+
+    it "prints no ceiling where the fund is not the whole category", :aggregate_failures do
+      car = car_fund
+      insurance_bill_on(car)
+
+      impact = present(car.reload, amount: "150")
+
+      expect(impact.building?).to be(true)
+      expect(impact.noun).to eq("fund")
+      expect(impact.balance).to eq(BigDecimal("1200"))
+      expect(impact.balance_after).to eq(BigDecimal("1050"))
+      expect(impact.building_target).to be_nil
+      expect(impact.denominator).to eq(BigDecimal("1200"))
+    end
+
+    # THE OTHER DIRECTION, ON THE SAME FIXTURE MINUS THE SIBLING: the ceiling comes back the moment
+    # the fund IS the whole category, which is when Σ claims and the fund's built-up are one figure.
+    it "prints the ceiling once the fund is the whole category", :aggregate_failures do
+      impact = present(car_fund.reload, amount: "150")
+
+      expect(impact.balance).to eq(BigDecimal("600"))
+      expect(impact.building_target).to eq(BigDecimal("2400"))
+      expect(impact.denominator).to eq(BigDecimal("2400"))
+    end
+
     # ** A CATEGORY WITH NO RULE AT ALL IS NOT A FUND, AND IT NEVER HAD BEEN ONE (fix round 1 — M2).
     # ** It claims nothing (§3.3: every claim comes from a rule), so the card has no figures to
     # print — and now it has no NOUN either, which is the change: under the old predicate a figure

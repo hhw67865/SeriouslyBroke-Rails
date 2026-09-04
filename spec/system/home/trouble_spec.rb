@@ -469,6 +469,12 @@ RSpec.describe "Home Trouble", type: :system do
   # to the full $1,200 in ONE period. Under the old `built_up < target` gate that user — who had
   # saved every penny and simply not paid the bill — got SILENCE, and their row printed `next due`
   # over a date ten days gone. The bill still has to be paid; what changes is the sentence.
+  # ** AND IT IS THE REACHABLE HALF OF `_trouble.html.erb`'s `capped?` GATE (fix round 1 — LOW-8). **
+  # That arm has an `else` for an UNCAPPED rule, which is a guard rather than a branch: a rule is
+  # only overdue if it has a due date, a dated rule is always capped (its target is its own amount),
+  # and `Budget#build_up_must_be_valid` refuses `carries_over` beside an `anchor_date` — so the
+  # uncapped arm is unplantable, not merely unreached. This example and the one above it are what
+  # the gate actually renders.
   it "names a bill whose date has passed even with the fund whole", :aggregate_failures do
     deposit(2_000)
     due = Date.current - 10.days

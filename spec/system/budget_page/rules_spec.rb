@@ -269,13 +269,17 @@ RSpec.describe "Budget page rules", type: :system do
       within(rule_row("Fun")) { expect(page).to have_css("[data-rule-type='choice']", text: "Choice") }
     end
 
-    # THE REORDER COPY SAYS WHAT THE ARROWS ACTUALLY DO NOW: the type is read before this list is,
-    # so dragging a card sets the order among rules of the SAME kind.
-    it "says the arrows order rules within each type" do
+    # ** THE REORDER COPY SAYS WHAT THE ARROWS ACTUALLY DO, IN THE CATEGORY FORM'S OWN WORDS (fix
+    # round 1 — LOW-11). ** The type is read before this list is, so dragging a card sets the order
+    # among rules of the SAME kind — and the DIRECTION is said with the number rather than with a
+    # position ("lower" meant a lower number on one screen and a lower card on the other). The
+    # form's hint is pinned to the same sentence in `spec/system/categories/new/form_spec.rb`, so
+    # the two cannot drift back apart.
+    it "says the arrows order rules within each type, in the number's own words" do
       three_types
       visit budget_page_path
 
-      expect(find("[data-fill-order]")).to have_content("within each type, lower rules give way first")
+      expect(find("[data-fill-order]")).to have_content("within each type, the highest number gives way first")
     end
   end
 

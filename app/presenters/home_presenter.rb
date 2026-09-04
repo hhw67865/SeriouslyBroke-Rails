@@ -664,19 +664,6 @@ class HomePresenter
     user.period_containing(today)
   end
 
-  # DOES THE BUDGET FIT THE INCOME — a question about the SHAPE of the rules, not about this
-  # afternoon's cash, and the one kind of trouble no amount of care this period can fix.
-  #
-  # `Budget.steady_need` reads the rules and the calendar and NOTHING ELSE — no spending, no
-  # adjustment, no fund state (`ClaimCalculator#standing_ask`, fix wave 2 — MED-A). It is deliberately
-  # not `Σ claims`, which is THIS period's answer (catch-up on anything behind, zero on anything
-  # already full) and diverges from the structural question in both directions on the same budget:
-  # for one wave the one-off branch read exactly that figure, and this verdict then appeared on an
-  # unpaid $600 bill and vanished when the bill was paid, with no rule changed.
-  #
-  # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate `BudgetPagePresenter#declared?`
-  # applies, because it is the same question.
-  #
   # ** THE ORDER CLAIMS GIVE WAY IN (rules-own-the-budget spec §3), AND IT IS ONE SORT OVER EVERY
   # CLAIM LINE. ** It was `budgeted_categories.reverse.flat_map { … }` — a category-level walk that
   # could only rank whole categories against each other — and the type is a fact about a RULE: one
@@ -705,6 +692,19 @@ class HomePresenter
     @give_way_order ||= claim_lines.values.flatten.sort_by { |line| give_way_key(line) }
   end
 
+  # DOES THE BUDGET FIT THE INCOME — a question about the SHAPE of the rules, not about this
+  # afternoon's cash, and the one kind of trouble no amount of care this period can fix.
+  #
+  # `Budget.steady_need` reads the rules and the calendar and NOTHING ELSE — no spending, no
+  # adjustment, no fund state (`ClaimCalculator#standing_ask`, fix wave 2 — MED-A). It is deliberately
+  # not `Σ claims`, which is THIS period's answer (catch-up on anything behind, zero on anything
+  # already full) and diverges from the structural question in both directions on the same budget:
+  # for one wave the one-off branch read exactly that figure, and this verdict then appeared on an
+  # unpaid $600 bill and vanished when the bill was paid, with no rule changed.
+  #
+  # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate `BudgetPagePresenter#declared?`
+  # applies, because it is the same question.
+  #
   # Memoised, and the `false` case has to be memoised too — `||=` would recompute the whole sum on
   # every call for exactly the users who answer false.
   def structurally_underwater?

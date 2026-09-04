@@ -83,9 +83,11 @@ module Dashboard
     # saved is not the place a user should first learn that. Both halves are the two facts this strip
     # has always required: something is building up, and the category is counting.
     #
-    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: an `IN (SELECT category_id …)` over the item-less
-    # building rules is `Category#building_rule` as a row set, with no `budgets` preload and no Ruby
-    # pass. The two spellings are pinned against each other in the presenter's spec.
+    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: `Budget.builds_up_the_category` as an
+    # `IN (SELECT category_id …)` subquery is `Category#building_rule` as a row set, in one statement
+    # and with no Ruby pass over every category the user owns. It is the SAME conditions
+    # (`Budget::BUILDS_UP_THE_CATEGORY`) the predicate reads, so the population here and the rule
+    # each row prints cannot disagree — pinned equal in `budget_spec` and again in this file.
     #
     # THE TARGET IS THE RULE'S AND IT MAY BE NIL, which is the strip's one new arm: an uncapped fund
     # has no denominator, so its card gets its figure and no bar (see the partial).
@@ -168,7 +170,7 @@ module Dashboard
       @savings_categories ||= @user.categories
         .expenses
         .where.not(funded_since: nil)
-        .where(id: Budget.where(item_id: nil, carries_over: true).select(:category_id))
+        .where(id: Budget.builds_up_the_category.select(:category_id))
         .includes(:budgets)
         .order(:name)
     end

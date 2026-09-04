@@ -10,7 +10,8 @@
     moves or where.
 
     ** WHAT THE ARROWS SET IS THE TIE-BREAK INSIDE A TYPE (rules-own-the-budget spec §3), which is
-    what the instruction above the list says: within each type, lower rules give way first. The type
+    what the instruction above the list says: within each type, the highest number gives way first
+    — one phrasing shared with the category form, see `_fill_order.html.erb` for which and why. The type
     itself is set on the rule, not here — every choice rule gives way before any usage rule whatever
     these arrows say — so moving a card changes the order among rules of the SAME kind. The title
     below says as much, because a control whose effect a user has to infer from a paragraph is a
@@ -40,7 +41,7 @@
                   disabled: reorder_edge?(groups, group, offset),
                   form_class: "inline-block leading-none",
                   aria: { label: "Move #{group.category.name} #{direction}" },
-                  title: "Move #{group.category.name} #{direction} — within each type, lower rules give way first",
+                  title: "Move #{group.category.name} #{direction} — within each type, the highest number gives way first",
                   class: "inline-flex h-11 w-11 items-center justify-center text-xs rounded " \
                          "border border-gray-200 text-gray-700 transition-colors " \
                          "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \

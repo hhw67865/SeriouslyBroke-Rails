@@ -162,9 +162,37 @@ class EntryImpactPresenter
   # figures are the same two figures, and only the trailing phrase differs.
   def building? = holding.present? && holding.building_rule.present?
 
+  # ** THE TARGET IS PRINTED ONLY WHERE IT IS A CEILING ON THE FIGURE BESIDE IT (fix round 1 —
+  # MED-4). ** `#balance` is the WHOLE CATEGORY's claim — Σ over every rule on it — and that is not
+  # negotiable: §3.1's lane ruling forbids this card from resolving which rule an entry drains,
+  # because doing so means spelling `Entry.on_unruled_items`' partition a second time, in Ruby. So
+  # the figure on the left is the category's, and the phrase after it has to be true OF THE
+  # CATEGORY'S FIGURE or it is not true at all.
+  #
+  # ** MEASURED ON THE MIXED SHAPE, WHICH IS ORDINARY RATHER THAN EXOTIC. ** A "Car" category with a
+  # $600-a-period fund building toward $2,400 and a $600 insurance bill on one of its items claims
+  # `600 + 600` = $1,200 after one period. Printed against the fund's ceiling that reads
+  # `$1,200.00 of $2,400.00` — half full — when the FUND is a quarter full and the other $600 is a
+  # bill's accrual that has nothing to do with the target. The bar said the same thing twice as
+  # loudly.
+  #
+  # SO THE TARGET ARM REQUIRES THE BUILDING RULE TO BE THE CATEGORY'S ONLY RULE, which is exactly
+  # when `Σ claims` IS the fund's built-up and the target IS its ceiling. Everywhere else the card
+  # falls to the sentence it already had for a fund with no ceiling — `built up`, with the ordinary
+  # `Σ standing_ask` denominator — and that sentence stays TRUE on the mixed shape: both rules'
+  # contributions are money the category has accrued. What is dropped is only the false "of".
+  #
+  # THE NOUN IS UNAFFECTED. `#building?` is a question about the SHAPE — money here builds up — and a
+  # sibling bill does not make that less so.
+  #
+  # `budgets.load.one?` and not a `count`: the association is already loaded on every path that
+  # reaches here (`Category#budgeted?` loads it, and `#claim_calculators` reads it), so this costs
+  # no statement.
   def building_target
     rule = holding&.building_rule
-    rule&.target_amount&.to_d
+    return nil unless rule && holding.budgets.load.one?
+
+    rule.target_amount&.to_d
   end
 
   # "envelope" or "fund" — the noun the header uses.

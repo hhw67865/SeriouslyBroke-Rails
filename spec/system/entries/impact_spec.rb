@@ -536,6 +536,53 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
+  # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING, AT THE BROWSER (fix round 1 — MED-4). ** This is
+  # the premise the rewrite of "a goal whose rule carries a due date" lost: that describe planted a
+  # category with a $2,400 figure of its own and a dated rule, and pinned that the CHROME did not
+  # inherit the rule's shape. The shape and the figure are one record's now, so the question it was
+  # really asking has moved — what happens when a category carries a fund AND something else?
+  #
+  # THE ANSWER IS THAT THE FIGURE STAYS THE CATEGORY'S AND THE CEILING GOES. `#balance` is Σ over
+  # every rule on the category (§3.1's lane ruling forbids this card resolving which rule an entry
+  # drains), so the fund's target is not a ceiling on it, and `$1,200.00 of $2,400.00` would read
+  # half full over a fund that is a quarter full.
+  #
+  # PLANTED, both rules written now so each walks exactly ONE period (a rule accrues from the later
+  # of its category's funding date and its own birthday, and this category was funded a year back):
+  # the item-less fund plans `min(600, 2,400)` = **$600.00**, and the $600 bill due three days out
+  # is inside this period so `periods_left` is 1 and the catch-up asks the whole **$600.00**.
+  # Σ **$1,200.00**; $150 typed leaves **$1,050.00**.
+  describe "a fund with a bill beside it" do
+    before do
+      car = create(:category, :expense, user: user, name: "Car", funded_since: funded_since)
+      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400)
+      create(
+        :budget,
+        category: car,
+        item: create(:item, category: car, name: "Insurance"),
+        amount: 600,
+        interval_months: 1,
+        anchor_date: Date.current + 3.days
+      )
+
+      visit new_entry_path
+      select_category("Car")
+    end
+
+    it "keeps the fund shape and drops the ceiling", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='fund']")
+      fill_in "Amount", with: "150"
+
+      within(card) do
+        expect(figure("envelope")).to have_text("Car fund")
+        expect(figure("balance")).to have_text("$1,200.00")
+        expect(figure("balance-after")).to have_text("$1,050.00")
+        expect(figure("target")).to have_text("built up")
+        expect(page).to have_no_content("of $2,400.00")
+      end
+    end
+  end
+
   # ** A DATED BILL IS AN ENVELOPE ON THIS CARD, AND THAT IS THE CLASSIFICATION MOVING ONTO THE RULE
   # (rules-own-the-budget spec §5). ** This example used to plant a category with a $2,400 figure and
   # a dated rule, and pin that the CHROME did not inherit the rule's shape — the card said "goal" and

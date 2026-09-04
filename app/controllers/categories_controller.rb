@@ -44,8 +44,9 @@ class CategoriesController < ApplicationController
   # because `pool_id` was required and a blank picker made every create a 422; the picker is gone
   # with the pool layer (two-ledger spec §5), and the two columns that replaced it — `priority` and
   # `funded_since` — are both legitimately blank on an ordinary new category (`target_amount` was
-  # the third and is gone, rules-own-the-budget §7). A category that holds nothing is the honest default: its spending drains available
-  # until the user gives it a rule or an allocation, which is exactly what §4 says.
+  # the third and is gone, rules-own-the-budget §7). A category that holds nothing is the honest
+  # default: its spending drains free money until the user gives it a rule, which is exactly what
+  # §4 says.
   #
   # `?type=` IS CHECKED AGAINST THE ENUM (plan 3, task 5), and this arm is a 500 rather than a
   # wrong heading: assigning an enum value the mapping does not hold raises ArgumentError, so

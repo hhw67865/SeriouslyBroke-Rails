@@ -97,9 +97,25 @@ RSpec.describe "Categories", type: :request do
     end
 
     # A CATEGORY THAT HOLDS NOTHING IS THE HONEST DEFAULT (§4): its spending drains free money until
-    # it gets a rule. Blank is not a refusal.
-    it "accepts both blank", :aggregate_failures do
-      expect { create_category(priority: "", funded_since: "") }.not_to change(Category, :count)
+    # it gets a rule. A blank funding start is not a refusal, and the record is written with the
+    # column NULL rather than defaulted to today — `Category#holder?` is exactly that column's
+    # presence, so a coerced date would put a brand-new category into the give-way order.
+    it "accepts a blank funding start", :aggregate_failures do
+      expect { create_category(funded_since: "") }.to change(Category, :count).by(1)
+
+      category = user.categories.find_by(name: "Vacation")
+      expect(category).not_to be_holder
+      expect(category.funded_since).to be_nil
+    end
+
+    # ** THE OTHER COLUMN IS NOT OPTIONAL, AND THE PAIR USED TO BE ASSERTED AS ONE. **
+    # `categories.priority` is NOT NULL with a database default of 0, so the blank arm of
+    # `Category#priority_is_a_fill_order` only ever fires on a form that submitted an empty string —
+    # which is exactly this payload. It is a 422 and not a silent default, because the number decides
+    # who gives way when the claims outrun the money and a category quietly landing at the front of
+    # its type is not something to infer from an empty box.
+    it "refuses a blank give-way order", :aggregate_failures do
+      expect { create_category(priority: "") }.not_to change(Category, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
     end
@@ -133,10 +149,22 @@ RSpec.describe "Categories", type: :request do
   # is what "batched" means here, and a page that stopped reading claims altogether would satisfy a
   # bare equality while printing nothing about anybody's money.
   #
+  # ** `budgets` IS COUNTED BESIDE IT SINCE THE FUND READER LANDED (fix round 1 — LOW-13). ** The
+  # `adjustments` probe cannot see the hazard this page acquired: `_category_card` asks
+  # `CategoryBudgetPresenter#bar?`, which needs the category's BUILDING RULE, and the model's door
+  # (`Category#building_rule` over the `:budgets` association) is not preloaded here — so routing the
+  # card through it is a `SELECT budgets` PER CARD, on the one screen that draws every category a
+  # user owns, and not one extra `adjustments` statement to show for it. The presenter finds the rule
+  # among the ones the page's ONE `ClaimLedger` already fetched, and this counter is what holds it
+  # there. Measured on the show page, where the identical mistake took the pin from `[1, 1]` to
+  # `[1, 2]`.
+  #
   # A request spec because the count is a fact about a rendered PAGE, and the null cache store this
   # environment configures means every card really renders.
   describe "GET /categories — claim aggregates" do
-    def adjustment_statements
+    # `[adjustments, budgets]`, on the show page's own shape: one grouped delta read for the whole
+    # page, and one `SELECT budgets` — the ledger's own — however many cards are drawn.
+    def claim_statements
       statements = []
       recorder = lambda do |_name, _start, _finish, _id, payload|
         statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
@@ -144,7 +172,10 @@ RSpec.describe "Categories", type: :request do
       ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") do
         get categories_path(type: "expense")
       end
-      statements.count { |sql| sql.include?(%("adjustments")) }
+      [
+        statements.count { |sql| sql.include?(%("adjustments")) },
+        statements.count { |sql| sql.start_with?(%(SELECT "budgets")) }
+      ]
     end
 
     def holders(*names)
@@ -160,14 +191,28 @@ RSpec.describe "Categories", type: :request do
 
     it "asks the same number of times for one rule as for five", :aggregate_failures do
       holders("Groceries")
-      one = adjustment_statements
+      one = claim_statements
 
       holders("Rent", "Transit", "Utilities", "Vacation")
-      five = adjustment_statements
+      five = claim_statements
 
       expect(user.categories.count(&:holder?)).to eq(5)
       expect(five).to eq(one)
-      expect(five).to eq(1)
+      expect(five).to eq([1, 1])
+    end
+
+    # ** THE FUND BAR IS DRAWN WITHOUT A SECOND `budgets` READ (fix round 1 — LOW-13). ** The
+    # example above plants rules whose money RESETS, so `#bar?` answers false before it needs a
+    # target — the arm that costs a query is the one a FUND takes. Five capped building rules, five
+    # bars, and the same two statements.
+    it "draws five fund bars on the same two statements", :aggregate_failures do
+      5.times do |index|
+        category = create(:category, :expense, :funded, user: user, name: "Fund #{index}")
+        create(:budget, :capped, category: category, amount: 100, target_amount: 1_000)
+      end
+      get categories_path(type: "expense") # warm
+
+      expect(claim_statements).to eq([1, 1])
     end
   end
 

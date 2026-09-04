@@ -81,11 +81,20 @@
           <%# ** THE WHOLE-FUND ARM ASKS `#capped?` LIKE EVERY OTHER READER OF `#target` (Task 1's
               fix round — MED). ** Reaching here means `#fund_short?` was false, which an UNCAPPED
               rule answers false for the other reason — there is no figure to be short OF — so an
-              un-gated `of $target` printed `of ` with nothing after it. It is unreachable today
-              (this arm is only entered on an OVERDUE rule, which has a date and is therefore always
-              capped) and it is gated anyway, because "unreachable" is a fact about the trigger
-              above and this is a sentence about a row. The uncapped fallback says the built-up
-              alone, which is `HomeHelper#claim_figure`'s own answer for that shape. %>
+              un-gated `of $target` printed `of ` with nothing after it.
+
+              ** THE `else` BELOW IS A GUARD AND NOTHING ELSE, AND IT IS DELIBERATELY UNPINNED (fix
+              round 1 — LOW-8). ** This block is only entered on an OVERDUE rule; `ClaimCalculator
+              #overdue?` requires a `next_due_on`, which only a DATED rule has, and a dated rule is
+              always `#capped?` (its target is its own amount). `Budget#build_up_must_be_valid`
+              refuses `carries_over` beside an `anchor_date`, so the uncapped arm is not merely
+              unreached — it is UNPLANTABLE, and an example for it would have to construct a record
+              the model rejects. What IS pinned is the reachable pair, in
+              `spec/system/home/trouble_spec.rb`: "names a bill whose date has passed while its fund
+              is short" and "names a bill whose date has passed even with the fund whole". The guard
+              stays because "unreachable" is a fact about the trigger above, not about this row, and
+              the day a building rule can be overdue this prints a true sentence instead of a
+              dangling preposition. %>
           <% elsif trouble.subject.capped? %>
             <%= number_to_currency(trouble.subject.built_up) %> built up of
             <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and the

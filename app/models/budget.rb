@@ -42,9 +42,17 @@ class Budget < ApplicationRecord
   # integers are storage and were chosen to read bill-first, and re-numbering them to make `sort_by`
   # work would rewrite every row in the table to express an opinion about presentation.
   #
-  # WITHIN a type, `Category.in_fill_order` (priority, lowest first) is the tie-break and the drag
-  # reorder survives as it is; within a category, the existing rule order. Type decides before
-  # priority does, which is what closes the intra-category ordering question §3 opens.
+  # ** WITHIN A TYPE, THE HIGHEST PRIORITY NUMBER GIVES WAY FIRST, and the direction is worth
+  # spelling out because it is the OPPOSITE of the list it is read from. ** `Category.in_fill_order`
+  # is `[priority, name]` ASCENDING — lowest first — and that ordering is the fill order: who would
+  # have been funded soonest. The give-way order is that list read BACKWARDS, because the category
+  # that would have been funded LAST is the one that goes without first. `HomePresenter
+  # #give_way_rank` is the one place it is spelled (the negated index into `#budgeted_categories`),
+  # so the drag reorder survives untouched and there is no second copy of the key here to drift.
+  # A tie on priority breaks on the LATER name, for the same reason.
+  #
+  # WITHIN A CATEGORY, the existing `Category.rule_order`. Type decides before priority does, which
+  # is what closes the intra-category ordering question §3 opens.
   TYPE_RANK = { choice: 0, usage: 1, bill: 2 }.freeze
 
   # `fetch`, not `[]`: a fourth type added to the enum without a rank is a sorting bug that would
@@ -80,6 +88,28 @@ class Budget < ApplicationRecord
   # Scoped by the OWNER's user, not by a `user_id` on this table — a budget carries no user
   # column, and inventing one would give the invariant two places to be wrong.
   scope :for_user, ->(user) { where(category_id: user.categories.select(:id)) }
+
+  # ** WHAT MAKES A RULE THE ONE THAT BUILDS ITS CATEGORY'S MONEY UP (rules-own-the-budget spec §5)
+  # — THE CONDITIONS, ONCE (fix round 1 — LOW-7). ** The question was spelled THREE times: this pair
+  # of columns as a `detect` block on `Category`, again as a `detect` block on
+  # `CategoryBudgetPresenter`, and again as a literal `where(item_id: nil, carries_over: true)` in
+  # `Dashboard::OverviewPresenter#savings_categories`. Three copies of a two-clause test is how a
+  # strip comes to list a set the category pages disagree with.
+  #
+  # ONE HASH, TWO DERIVED READERS, AND THEY CANNOT DIVERGE BY CONSTRUCTION: `.builds_up_the_category`
+  # is the SQL side (the dashboard's `IN (SELECT category_id …)` subquery) and
+  # `#builds_up_the_category?` is the in-memory side (`Category#building_rule` and the presenter's,
+  # both over rows something else has already loaded). `budget_spec` pins them equal on planted rules
+  # anyway, because a derivation nobody checks is a derivation waiting to grow an argument.
+  #
+  # TWO CLAUSES AND NO THIRD. `carries_over` is what makes unspent money survive the boundary — the
+  # target is a CAP on that and may be absent (§2.1 row 2), so asking about it here would be the old
+  # `Category#saving_toward_a_target?` in a new place, blind to an emergency fund. `item_id IS NULL`
+  # is §3.1's lane partition: an item-backed rule speaks for one item's spending, so a fund carved
+  # out for the phone handset is not the CATEGORY building up.
+  BUILDS_UP_THE_CATEGORY = { item_id: nil, carries_over: true }.freeze
+
+  scope :builds_up_the_category, -> { where(BUILDS_UP_THE_CATEGORY) }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
@@ -175,18 +205,18 @@ class Budget < ApplicationRecord
   # `today:` default walks `category.user`, which every caller of this method already preloads.
   def claim_shape = claim_calculator.shape
 
-  # ** IS THIS THE RULE THAT BUILDS THE WHOLE CATEGORY'S MONEY UP (rules-own-the-budget spec §5)? **
-  # The test behind `Category#building_rule`, spelled HERE because it is a fact about a rule and
-  # because two populations ask it: the category's own association, and the set a `ClaimLedger` has
-  # already loaded for a whole page (`CategoryBudgetPresenter#building_rule`, which must not cost a
-  # `budgets` statement per card on the categories index). One spelling, two callers.
+  # ** THE IN-MEMORY SIDE OF `BUILDS_UP_THE_CATEGORY`, and it reads that hash rather than restating
+  # it. ** It is asked of rows something else has already loaded — `Category#building_rule` over the
+  # `:budgets` association, and `CategoryBudgetPresenter#building_rule` over the set the page's ONE
+  # `ClaimLedger` fetched — so it must not be the scope: `budgets.merge(…).first` issues a statement
+  # on a LOADED association, which is a `SELECT budgets` per card on the categories index and one
+  # more per render of the entry form's impact card. Measured: routing the presenter through a
+  # relational reader took the categories show page's cost pin from `[1, 1]` to `[1, 2]`.
   #
-  # TWO CLAUSES AND NO THIRD. `carries_over` is what makes unspent money survive the boundary — the
-  # target is a CAP on that and may be absent (§2.1 row 2), so asking about it here would be the old
-  # `Category#saving_toward_a_target?` in a new place, blind to an emergency fund. `item_id.nil?` is
-  # §3.1's lane partition: an item-backed rule speaks for one item's spending, so a fund carved out
-  # for the phone handset is not the CATEGORY building up.
-  def builds_up_the_category? = item_id.nil? && carries_over?
+  # `self[column]` and not the attribute readers, so the columns are named in exactly one place.
+  def builds_up_the_category?
+    BUILDS_UP_THE_CATEGORY.all? { |column, value| self[column] == value }
+  end
 
   # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`
   # are three columns whose COMBINATION is the shape (§3.1), and reading the shape off them takes

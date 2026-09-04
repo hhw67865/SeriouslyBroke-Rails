@@ -152,15 +152,20 @@ type,
             half a single number could ever have answered honestly.
 
             THE TIE-BREAK IS UNCHANGED and still worth saying: a number typed in this box may tie
-            with another category's, and `Category.in_fill_order` breaks a tie on NAME. The Budget
-            page's drag handle (`Category.apply_fill_order`) is the other writer of this column. %>
+            with another category's, and the LATER name gives way first. The Budget page's drag
+            handle (`Category.apply_fill_order`) is the other writer of this column.
+
+            ** THE DIRECTION IS SAID WITH THE NUMBER, HERE AND ON THE BUDGET PAGE ALIKE (fix round 1
+            — LOW-11). ** That page's instruction used to say "lower rules give way first", which
+            means a lower NUMBER here and a lower CARD there — opposite directions in one word. One
+            phrasing on both, and it is this one, because the number is what both controls write. %>
         <div class="mt-5">
           <%= f.input :priority,
               as: :integer,
               label: "Give-way order",
               input_html: { min: 0, step: 1 },
               hint: "Who gives way when your rules claim more than you have. A rule's type goes " \
-                    "first — choice, then usage, then bills — and within a type the highest " \
+                    "first — choice, then usage, then bills — and within each type, the highest " \
                     "number gives way first, so a lower number is the one that keeps its money. " \
                     "Ties are broken by name. You can also drag the order on the Budget page." %>
         </div>

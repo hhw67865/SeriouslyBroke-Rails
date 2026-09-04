@@ -683,14 +683,21 @@ RSpec.describe BudgetPagePresenter do
       expect(presenter.type_overview).to eq([[:usage, 600], [:choice, 300]])
     end
 
-    # ** THE THREE FIGURES ARE THE STRUCTURAL CHECK'S ONE FIGURE, SPLIT. ** `#rules_need` is
-    # `Budget.steady_need`, which sums `Budget#steady_ask` over the same rules; this sums
-    # `ClaimCalculator#standing_ask`, which IS that method's own one-off arm and delegates to it for
-    # every other shape. Asserted as an identity on a fixture carrying all three types AND a dated
-    # bill — the one shape where the two spellings could part company — so a reader that quietly
-    # switched to `Σ claims` would print a split that does not add up to the total beneath it.
-    # ONE OF EACH TYPE, AND THE BILL IS DATED — the shape where `standing_ask` and `steady_ask` could
-    # part company, since a one-off's standing figure is the calendar arm rather than the rate.
+    # ** THE THREE FIGURES ARE THE STRUCTURAL CHECK'S ONE FIGURE, SPLIT (fix round 1 — LOW-6). **
+    # `#rules_need` is `Budget.steady_need`, which sums `Budget#steady_ask`; this sums
+    # `ClaimCalculator#standing_ask`. The two CANNOT diverge by construction — `standing_ask` IS
+    # `steady_ask`'s one-off arm and delegates straight back to that method for every other shape —
+    # so this is NOT a pin on two derivations agreeing, which is what it used to claim.
+    #
+    # WHAT IT PINS is that the overview reads the STANDING figure at all. `Σ claims` is a perfectly
+    # reasonable-looking thing for a screen to sum, and a reader that switched to it would print a
+    # three-way split that does not add up to the total two blocks beneath it — on the same page, an
+    # inch apart — with nothing else in this file saying so.
+    #
+    # THE BILL IS A ONE-OFF because that is the only shape where `standing_ask` does ARITHMETIC OF
+    # ITS OWN: the amount over the periods from the accrual start to the due date, rather than a
+    # delegation to the rate. A rolling bill would have exercised the delegation a third time and
+    # proved nothing about the arm.
     def one_rule_of_every_type
       typed(holder("Groceries"), 600, :usage)
       typed(holder("Fun"), 300, :choice)
@@ -698,7 +705,7 @@ RSpec.describe BudgetPagePresenter do
         holder("Insurance"),
         amount: 1_200,
         anchor: Date.new(2026, 8, 1),
-        every: 6,
+        every: nil,
         created_at: Time.zone.local(2025, 9, 1)
       )
     end

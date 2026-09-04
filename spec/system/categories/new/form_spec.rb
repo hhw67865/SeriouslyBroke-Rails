@@ -82,8 +82,12 @@ RSpec.describe "Categories New - Form", type: :system do
     # box no longer decides the whole order: `HomePresenter#give_way_order` reads a rule's TYPE
     # before it reads any category's priority, so a hint that promised "the highest number gives way
     # first" full stop would be describing a ranking the app stopped using.
-    it "says a rule's type is read before this number is" do
+    # THE DIRECTION IS PINNED IN THE SAME WORDS THE BUDGET PAGE'S INSTRUCTION USES (fix round 1 —
+    # LOW-11), and `spec/system/budget_page/rules_spec.rb` pins the other half of the pair — so the
+    # two screens cannot drift back into two vocabularies for one rule.
+    it "says a rule's type is read before this number is, and which way the number runs" do
       expect(page).to have_content("A rule's type goes first — choice, then usage, then bills")
+      expect(page).to have_content("within each type, the highest number gives way first")
     end
   end
 

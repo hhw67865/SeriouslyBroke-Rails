@@ -218,6 +218,58 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  # ** THE RULE THAT BUILDS ITS CATEGORY'S MONEY UP, ASKED IN SQL AND IN MEMORY (rules-own-the-budget
+  # spec §5; fix round 1 — LOW-7). ** Two readers exist because two populations ask: the dashboard's
+  # savings strip composes `.builds_up_the_category` as a subquery over every category a user owns,
+  # while `Category#building_rule` and `CategoryBudgetPresenter#building_rule` ask the predicate of
+  # rows something else has already loaded (a relational reader there is a `SELECT budgets` per card
+  # on the categories index).
+  #
+  # BOTH ARE DERIVED FROM `BUILDS_UP_THE_CATEGORY`, so they cannot diverge by construction — and
+  # they are pinned equal anyway, over a planted set that covers all four combinations of the two
+  # clauses, because a derivation nobody checks is a derivation waiting to grow an argument.
+  describe "which rule builds a category's money up" do
+    let(:groceries) { create(:category, :expense, :funded, name: "Groceries") }
+
+    # ONE OF EACH ARM. The item-less BUILDING rule is the only one either reader may answer; the
+    # other three are the three ways to fail the two clauses.
+    def lane(name) = create(:item, category: groceries, name: name)
+
+    def building(**attrs) = create(:budget, :capped, category: groceries, target_amount: 900, **attrs)
+
+    def resetting(**attrs) = create(:budget, :per_period_rate, amount: 400, **attrs)
+
+    def planted
+      {
+        own_building: building(amount: 200, target_amount: 5_000),
+        item_backed_building: building(amount: 100, item: lane("Flights")),
+        own_resetting: resetting(category: create(:category, :expense, :funded, name: "Fun")),
+        item_backed_resetting: resetting(category: groceries, item: lane("Bread"))
+      }
+    end
+
+    it "selects the same rules in SQL as the predicate does in memory", :aggregate_failures do
+      rules = planted
+
+      expect(described_class.builds_up_the_category.to_a).to eq([rules.fetch(:own_building)])
+      expect(rules.transform_values(&:builds_up_the_category?))
+        .to eq(
+          own_building: true,
+          item_backed_building: false,
+          own_resetting: false,
+          item_backed_resetting: false
+        )
+    end
+
+    # AND THE CATEGORY'S OWN DOOR ANSWERS THE ROW THE SCOPE FOUND — the identity the dashboard's
+    # population and each of its rows' targets both stand on.
+    it "hands back the row the scope names" do
+      rules = planted
+
+      expect(groceries.reload.building_rule).to eq(rules.fetch(:own_building))
+    end
+  end
+
   # ** ONE CATEGORY, ONE BUDGET LINE (two-ledger spec §3), NOW THAT THE LINE IS A CLAIM (ruling of
   # 2026-09-03). ** An item-less rule's spending lane is the whole category, so two of them on one
   # category subtract the same entries twice — and `Category#claim` sums them, so neither rule is
