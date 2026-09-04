@@ -353,18 +353,23 @@ browsing — reading never writes. Figures, formulas and screenshots:
 
 ### 10.6 Open for Henry
 
-1. **Intra-category give-way order is unruled.** `priority` orders CATEGORIES; within one category
-   the walk hands its rules to the shortfall in the order the ledger returns them, so a catch-all
-   rate rule can give way before an item-backed bill on the same category. Nothing in this spec says
-   which should.
+1. **CLOSED by `2026-09-04-rules-own-the-budget` (DELIVERED).** ~~Intra-category give-way order is
+   unruled.~~ Every rule now carries a **type** — bill, usage or choice — and the give-way key is
+   `[type rank, category rank, rule order]`, so TYPE decides before priority does and a catch-all
+   rate rule typed `choice` gives way ahead of an item-backed `bill` on the same category.
+   `Budget::TYPE_RANK` is the one spelling of `choice → usage → bill`; `HomePresenter#give_way_key`
+   is the one place the three terms meet.
 2. **The strip's arm 1 never names money parked elsewhere, though the two can co-occur.** "Your
    rules claim more than you have" is true when `unclaimed < 0`, and a user in that state may ALSO
    be holding money outside checking; arm 3's sentence about it is reachable only when the claims do
    NOT outrun. Whether arm 1 should carry the same clause is a design call.
-3. **`Category#saving_toward_a_target?` widens the dashboard's Savings band.** It now includes a
-   goal fed by a real RATE rule — money being spent toward a rate rather than saved toward a figure,
-   which is exactly the distinction `#savings?`'s deleted third clause used to draw. On Ming's data
-   the band is the same either way; on a user who rate-funds a goal it is not.
+3. **CLOSED by `2026-09-04-rules-own-the-budget` (DELIVERED).**
+   ~~`Category#saving_toward_a_target?` widens the dashboard's Savings band.~~ The predicate is
+   deleted and `Category#building_rule` answers instead: the band lists the categories whose
+   item-less rule **carries its unspent money over**, capped or not. "Which money is being saved" is
+   a question about the SHAPE of a rule rather than about a figure on a neighbouring record — a
+   goal fed by a real rate rule is on the band because it builds up, and a rate rule beside a figure
+   is not because it does not. `categories.target_amount` is dropped outright.
 4. **The adjust panel's "planned this period" is PRE-delta while the row above it is POST-delta.**
    On a rate rule topped up by $50 the row reads `$0.00 of $450.00` and the panel, an inch below,
    reads `$400.00 planned this period`. Both are labelled and the delta list sits between them, but

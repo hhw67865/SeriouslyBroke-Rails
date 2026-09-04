@@ -88,9 +88,15 @@
 #   THE TROUBLE STRIP (§4), and this demo lights four of its five arms:
 #     :overdraft   Side Gig Checking is overdrawn $300.00
 #     :shortfall   $2,740.34 short, at $210.80 a day for the thirteen days left, and the give-way
-#                  walk in REVERSE priority: Retirement Supplement $1,050.00, New Car $525.00,
-#                  House Down Payment $1,050.00 and $115.34 of Vacation to Europe — the last one
-#                  PARTIAL, which is the shape a walk can say and a filter cannot
+#                  walk BY TYPE AND THEN BY REVERSE PRIORITY (rules-own-the-budget §3): Retirement
+#                  Supplement $1,050.00, New Car $525.00, Vacation to Europe $520.00 and $645.34 of
+#                  Holiday Gifts — the last one PARTIAL, which is the shape a walk can say and a
+#                  filter cannot. ** ALL FOUR ARE `choice`, WHICH IS THE POINT OF THE TYPE. ** Under
+#                  priority alone the list ran Retirement, New Car, House Down Payment and a PART of
+#                  Vacation; House Down Payment is typed `usage` and Emergency Fund `bill`, so both
+#                  now rank behind every discretionary rule the household has and the walk reaches
+#                  the Holiday Gifts fund instead. The headline, the pace and the four figures'
+#                  total are unchanged — only WHO gives way moved, which is the ruling working.
 #     :over        Dining Out — over by $10.00
 #     :overdue     Renters Insurance — was due 6 days ago, $180.00 built up of $180.00, all there
 #     :structural  rules need $2,103.42 a period against a declared $2,050.00 — the standing ask of
@@ -125,9 +131,31 @@
 #     category has no holding date, so its $25.00 claims every period while nothing spent there
 #     ever comes off it.
 #
-#   THE DASHBOARD'S SAVINGS STRIP reads `Category#saving_toward_a_target?` — a holder with a figure
-#   to reach — so all five goals below appear on it, led by Emergency Fund at $700.00 of $10,000.00
-#   and Vacation to Europe at $520.00 of $5,000.00. Both are claims and neither is money moved.
+#   THE DASHBOARD'S SAVINGS STRIP reads `Category#building_rule` — the item-less rule whose unspent
+#   money CARRIES (rules-own-the-budget §5) — so all five goals below appear on it, led by Emergency
+#   Fund at $700.00 of $10,000.00 and Vacation to Europe at $520.00 of $5,000.00. Both are claims and
+#   neither is money moved. It used to read `Category#saving_toward_a_target?`, a holder with a figure
+#   on its own record; that column is dropped and the shape answers instead.
+#
+#   THE BUDGET PAGE'S TYPE OVERVIEW (§3), summed from `Budget#steady_ask` over all 21 rules:
+#     `Bills $1,136.89 · Usage $745.38 · Choice $221.15 a period` — which adds to the $2,103.42
+#     `Budget.steady_need` reports, because it is the same sum partitioned three ways.
+#
+#   WHICH TYPE EACH RULE CARRIES, and the table is here because nothing else in the file can say it
+#   in one place. Henry's definitions (§3): bill "must be paid", usage "a real need whose amount
+#   moves with how you live", choice "discretionary".
+#
+#     bill    Rent · Dentist · Car Insurance · Vet · Renters Insurance · Quarterly Taxes ·
+#             Prescriptions · Emergency Fund
+#     usage   Utilities/Electric · Groceries · Household Supplies · Pet Care · Commuter Pass ·
+#             Medical Copays · House Down Payment
+#     choice  Dining Out · Holiday Gifts · Streaming · Vacation to Europe · New Car ·
+#             Retirement Supplement
+#
+#   THE ELECTRIC BILL IS `usage` THOUGH IT HAS A DUE DATE, and it is the row that keeps the type
+#   from being a synonym for the schedule: "usage is like power bill (can be lowered by adjusting
+#   life)" is Henry's own example of the word. The migration's default types every dated rule `bill`
+#   (§6 step 3) precisely because it cannot know that; the demo shows the corrected reading.
 #
 #   THE FOUR SUGGESTION DETECTORS, and the categories that feed each. `SuggestionEngine` reads
 #   ENTRIES and RULES and never read an allocation, so the drop moved none of these:
@@ -281,14 +309,13 @@ demo_start = periods_ago[13]
 # A CATEGORY THAT HOLDS MONEY — `Category#holder?` is `expense? && funded_since.present?`, and this
 # is the only builder that stamps the column. `priority` survives as the GIVE-WAY order (§4): the
 # same ranking read for the opposite question, which category yields first when the money runs out.
-holder = lambda do |name, priority, color, target: nil|
+holder = lambda do |name, priority, color|
   user.categories.create!(
     name: name,
     category_type: :expense,
     color: color,
     funded_since: demo_start,
-    priority: priority,
-    target_amount: target
+    priority: priority
   )
 end
 
@@ -397,25 +424,45 @@ transit_pass = commuter.items.create!(name: "Transit Pass")
 # the three payments below are all before this anchor, so nothing has rolled and the next occurrence
 # is ten days out. The anchor is ten days out rather than on a calendar day, so the state does not
 # depend on where in the month the seeds are run.
-rule.call(category: rent, item: rent_item, amount: 1_500, interval_months: 1, anchor_date: today + 10)
+rule.call(
+  category: rent,
+  item: rent_item,
+  amount: 1_500,
+  interval_months: 1,
+  anchor_date: today + 10,
+  rule_type: :bill
+)
 
 # THE SAME SHAPE ON A SHORTER LEASH, and the reason the electric bill is not the demo's OVERDUE row.
 # `ClaimCalculator#due_on` rolls the cycle on PAYMENT, counted as `min(paid ÷ target, cycles
 # elapsed)`: three $120 bills have been paid since `demo_start`, so one whole cycle is settled and
 # the next occurrence is a month past this anchor — in the future, and the row reads as accruing
 # toward it. Renters Insurance below is the row whose date really did pass unpaid.
-rule.call(category: utilities, item: electric_item, amount: 120, interval_months: 1, anchor_date: today - 10)
+rule.call(
+  category: utilities,
+  item: electric_item,
+  amount: 120,
+  interval_months: 1,
+  anchor_date: today - 10,
+  rule_type: :usage
+)
 
 # A ONE-TIME BILL, THREE DAYS OUT, with no period boundary between tomorrow and then. Under the
 # distribution this was the `won't make it` state — no future funding could reach it. There is no
 # funding step to miss now: §3.2's catch-up formula has been accruing toward it since `demo_start`,
 # so the fund is simply there, and what the row says is the date.
-rule.call(category: dentist, amount: 300, anchor_date: today + 3)
+rule.call(category: dentist, amount: 300, anchor_date: today + 3, rule_type: :bill)
 
 # A SIX-MONTHLY PREMIUM ONE MONTH OUT — the longest catch-up on the demo, and the row whose
 # `$X per period` clause is worth reading: the share is recomputed every period from what is still
 # owed and how many periods are left, so it is not $1,200 ÷ 13.
-rule.call(category: car_insurance, amount: 1_200, interval_months: 6, anchor_date: today + 1.month)
+rule.call(
+  category: car_insurance,
+  amount: 1_200,
+  interval_months: 6,
+  anchor_date: today + 1.month,
+  rule_type: :bill
+)
 
 # ** A RATE RULE SPENT OVER ITS RATE (§3.1) — the demo's one RED row. ** $110 of dinner against a
 # $100 fortnight, so `claim = max(0, 100 − 110)` is zero, the $10 excess came straight out of what
@@ -428,13 +475,13 @@ rule.call(category: car_insurance, amount: 1_200, interval_months: 6, anchor_dat
 # "$110.00 of $150.00" and the demo would have no `over` anywhere. The second dinner stays where it
 # was, in the period that closed yesterday, because the DRIFT detector measures the four complete
 # periods and a category whose every receipt moved into today would read "averaged $0.00" there.
-rule.call(category: dining, amount: 100, basis: :per_period)
+rule.call(category: dining, amount: 100, basis: :per_period, rule_type: :choice)
 
 # THE RATE RULE NOTHING HAS COME OFF YET — the ordinary shape on the morning a period opens, and the
 # one the bar draws at 0%. Its spending runs $460 a period against this $400 rule over the four
 # complete periods behind it, which is the drift detector's one UPWARD suggestion: every other drift
 # on this demo says cut.
-rule.call(category: groceries, amount: 400, basis: :per_period)
+rule.call(category: groceries, amount: 400, basis: :per_period, rule_type: :usage)
 
 # ** A RATE RULE SPENT UNDER ITS RATE ** — $45 of detergent this morning against $120 a fortnight,
 # so the claim is the $75 that is left and the row is the only one on the demo that shows a number
@@ -444,21 +491,21 @@ rule.call(category: groceries, amount: 400, basis: :per_period)
 # one this category has, so the four complete periods behind it are empty and the panel says
 # "averaged $0.00 for 4 periods, your rule says $120.00" — `SuggestionEngine#drift_suggestion`'s
 # funded-category-that-quietly-stopped branch, which no other detector can report.
-rule.call(category: supplies, amount: 120, basis: :per_period)
+rule.call(category: supplies, amount: 120, basis: :per_period, rule_type: :usage)
 
 # THE MIXED CATEGORY, and it is what §3.1's lane PARTITION exists for: a rate rule whose lane is
 # everything in Pet Care EXCEPT the items that carry their own rule, beside a dated vet bill whose
 # lane is the Vet item alone. Without the partition the kibble and the vet's fee would come off both
 # claims, Σ claims would fall twice for one payment, and `free` would RISE when a bill was paid.
-rule.call(category: pet_care, amount: 50, basis: :per_period)
-rule.call(category: pet_care, item: vet, amount: 180, anchor_date: today + 20)
+rule.call(category: pet_care, amount: 50, basis: :per_period, rule_type: :usage)
+rule.call(category: pet_care, item: vet, amount: 180, anchor_date: today + 20, rule_type: :bill)
 
 # A RULE STILL FUNDING SOMETHING THAT STOPPED — detector 4's only subject on this demo, and the
 # one shape the other three cannot report. The household stopped buying the fortnightly transit
 # pass five periods ago and the $60 rule is still claiming for it every period: item-backed (an
 # item is what makes a rule payable and therefore what can stop) and per-period, so it never
 # reads `overdue` and the sentence the panel prints is the whole of what is wrong with it.
-rule.call(category: commuter, item: transit_pass, amount: 60, basis: :per_period)
+rule.call(category: commuter, item: transit_pass, amount: 60, basis: :per_period, rule_type: :usage)
 
 # ---------------------------------------------------------------------------------------------
 # ** THE OCCURRENCE WHOSE DATE PASSED WITH NOBODY PAYING IT (§3.2, `ClaimCalculator#overdue?`). **
@@ -481,7 +528,8 @@ rule.call(
   item: renters_insurance.items.create!(name: "Renters Policy"),
   amount: 180,
   interval_months: 12,
-  anchor_date: today - 6
+  anchor_date: today - 6,
+  rule_type: :bill
 )
 
 # FOUR MORE COMMITMENTS, and the SHAPE OF EACH ONE IS CHOSEN SO THE DRIFT PANEL STAYS HONEST.
@@ -495,41 +543,57 @@ rule.call(
 # So the two that are genuinely SAVED FOR are dated (a dated rule is not in drift's population at
 # all), and the two that are genuinely SPENT every period carry the spending to match.
 holiday_gifts = holder.call("Holiday Gifts", 11, "#F06292")
-rule.call(category: holiday_gifts, amount: 1_200, interval_months: 12, anchor_date: today + 2.months)
+rule.call(
+  category: holiday_gifts,
+  amount: 1_200,
+  interval_months: 12,
+  anchor_date: today + 2.months,
+  rule_type: :choice
+)
 
 quarterly_taxes = holder.call("Quarterly Taxes", 12, "#78909C")
-rule.call(category: quarterly_taxes, amount: 1_800, interval_months: 3, anchor_date: today + 2.months)
+rule.call(
+  category: quarterly_taxes,
+  amount: 1_800,
+  interval_months: 3,
+  anchor_date: today + 2.months,
+  rule_type: :bill
+)
 
 # The two that ARE spent every period, at the rate their rules claim — so the drift panel has
 # nothing to say about either, which is the half of the detector only a category it DECLINES to
 # report can prove. Their money went out inside the four complete periods behind us, so this period
 # they read $0.00 of their rate like every other untouched envelope.
 medical_copays = holder.call("Medical Copays", 13, "#4FC3F7")
-rule.call(category: medical_copays, amount: 60, basis: :per_period)
+rule.call(category: medical_copays, amount: 60, basis: :per_period, rule_type: :usage)
 copay_visits = medical_copays.items.create!(name: "Copays")
 
 prescriptions = holder.call("Prescriptions", 14, "#4DD0E1")
-rule.call(category: prescriptions, amount: 35, basis: :per_period)
+rule.call(category: prescriptions, amount: 35, basis: :per_period, rule_type: :bill)
 pharmacy = prescriptions.items.create!(name: "Pharmacy")
 
 # ---------------------------------------------------------------------------------------------
 # THE GOALS — §3.2's DATELESS TARGET, in both of the two shapes it comes in.
 #
-# A savings category is a holder with a TARGET: no separate pool, no separate type, and nothing
-# sweeps out of one because a target switches use-it-or-lose-it off. `ClaimCalculator#shape` reads
-# `:target` off exactly that pair — no anchor on the rule, a figure on the category — and walks the
-# same accrual as a dated fund with no deadline to spread it over.
+# ** A GOAL IS A BUILDING RULE WITH A TARGET, NOT A KIND OF CATEGORY (rules-own-the-budget §2.1,
+# §7). ** `ClaimCalculator#shape` answers `:building` off the RULE's own `carries_over` — what
+# becomes of money the period did not spend — and caps the walk at the RULE's `target_amount`. The
+# category below is an ordinary holder with a name and a give-way order; it carried the figure until
+# §6's migration moved every one of them onto the rule that accrues toward it.
 #
 # Priorities 15 and up leave the household's bills ahead of them: a goal that gives way LAST, ahead
-# of the rent, is not a budget anybody runs.
+# of the rent, is not a budget anybody runs. ** THE TYPE NOW DECIDES BEFORE THE PRIORITY DOES (§3),
+# so the three types below are what really order these five: `choice` on the three the household
+# could stop saving into, `usage` on the house deposit, `bill` on the emergency fund — which is the
+# one fund this demo says must not be raided, and the give-way walk never reaches it.
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the savings goals..."
 
-emergency_fund = holder.call("Emergency Fund", 15, "#26A69A", target: 10_000)
-vacation = holder.call("Vacation to Europe", 16, "#FF8A65", target: 5_000)
-house_fund = holder.call("House Down Payment", 17, "#BA68C8", target: 50_000)
-new_car = holder.call("New Car", 18, "#64B5F6", target: 15_000)
-retirement = holder.call("Retirement Supplement", 19, "#AED581", target: 100_000)
+emergency_fund = holder.call("Emergency Fund", 15, "#26A69A")
+vacation = holder.call("Vacation to Europe", 16, "#FF8A65")
+house_fund = holder.call("House Down Payment", 17, "#BA68C8")
+new_car = holder.call("New Car", 18, "#64B5F6")
+retirement = holder.call("Retirement Supplement", 19, "#AED581")
 
 # SPENDING OUT OF A GOAL — the one lane on the demo that reaches the entry form's goal arm, where
 # the bar is drawn against the TARGET rather than against a per-period rate.
@@ -544,11 +608,18 @@ vacation_costs = vacation.items.create!(name: "Flights & Hotels")
 # says nothing about it.
 #
 # ** THE GOAL IS THE RULE'S, NOT THE CATEGORY'S (rules-own-the-budget spec §2.1/§9). ** `carries_over`
-# is what makes the money build up and `target_amount` is where it stops; the category's copy of the
-# figure survives only until the screens that still read it are moved. The two columns reproduce this
-# rule's previous shape exactly — it was a fund because its CATEGORY named a figure — so every demo
-# number below is the number it always was.
-rule.call(category: vacation, amount: 50, basis: :per_period, carries_over: true, target_amount: vacation.target_amount)
+# is what makes the money build up and `target_amount` is where it stops, and there is no second copy
+# of the figure any more — `categories.target_amount` is dropped. Typed `choice`: a European holiday
+# is the household's own decision, so it is among the first things to give way when the money runs
+# short, which is exactly where the trouble strip finds it.
+rule.call(
+  category: vacation,
+  amount: 50,
+  basis: :per_period,
+  carries_over: true,
+  target_amount: 5_000,
+  rule_type: :choice
+)
 
 # ** SHAPE TWO — A GOAL FED ONLY BY HAND (§3.2, Henry's ruling of 2026-09-03). ** "No rate" is
 # spelled as an amount of ZERO: every claim comes from a rule (§3.3), so a goal somebody feeds by
@@ -556,13 +627,32 @@ rule.call(category: vacation, amount: 50, basis: :per_period, carries_over: true
 # `Budget#set_aside_only?` is the predicate that permits it and it names all three columns — the
 # rule carries over, names a target, and has no due date — and refuses the zero everywhere else.
 #
-# THIS IS THE SHAPE `DropTheDistribution#mint_rule` MINTS, COLUMN FOR COLUMN, and that is the point
-# of writing it here rather than giving these four goals a rate: a real database that had these
-# set-asides as `transfer` rows comes out of the migration holding exactly this, so the demo and the
-# migrated database are one shape. Every penny each of these four holds arrives as a positive
-# adjustment below.
-[emergency_fund, house_fund, new_car, retirement].each do |goal|
-  rule.call(category: goal, amount: 0, basis: :per_period, carries_over: true, target_amount: goal.target_amount)
+# THIS IS THE SHAPE `DropTheDistribution#mint_rule` MINTS — and, once `RulesOwnTheBudget` has filled
+# in `carries_over` and the target, the shape `RulesOwnTheBudget#mint_the_missing_rules` mints too —
+# COLUMN FOR COLUMN. That is the point of writing it here rather than giving these four goals a rate:
+# a real database that had these set-asides as `transfer` rows comes out of the two migrations
+# holding exactly this, so the demo and the migrated database are one shape. Every penny each of
+# these four holds arrives as a positive adjustment below.
+#
+# ** THE TARGET AND THE TYPE ARE PER GOAL, WHICH IS WHY THIS IS A TABLE AND NOT A LIST. ** The four
+# shared one loop while the figure lived on the category and the type did not exist; both are the
+# RULE's columns now, so the loop carries them. `bill` on the emergency fund and `usage` on the house
+# deposit are what put those two behind every `choice` rule in the give-way order — see the header's
+# shortfall walk for the measurement.
+{
+  emergency_fund => { target: 10_000, type: :bill },
+  house_fund => { target: 50_000, type: :usage },
+  new_car => { target: 15_000, type: :choice },
+  retirement => { target: 100_000, type: :choice }
+}.each do |goal, shape|
+  rule.call(
+    category: goal,
+    amount: 0,
+    basis: :per_period,
+    carries_over: true,
+    target_amount: shape[:target],
+    rule_type: shape[:type]
+  )
 end
 
 # ---------------------------------------------------------------------------------------------
@@ -579,7 +669,7 @@ end
 # that already has one.
 # ---------------------------------------------------------------------------------------------
 streaming = lane.call("Streaming", :expense, "#9CCC65")
-rule.call(category: streaming, amount: 25, basis: :per_period)
+rule.call(category: streaming, amount: 25, basis: :per_period, rule_type: :choice)
 
 # ---------------------------------------------------------------------------------------------
 # THE CATEGORIES THAT HOLD NOTHING — no `funded_since`, so their spending is attributed to no

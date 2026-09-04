@@ -20,17 +20,44 @@ conserve, so `free` is a definition rather than a balance. The only connection b
 and a category is that both are read from the same total — there is no account→category movement.
 
 - **User** → has_many Categories (the purpose side) and Pools (physical); `default_account` is the pot; `#today` is the owner's local day (see below)
-- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` COUNTS ITS OWN SPENDING from that date (`target_amount` makes it a savings goal, `priority` is its place in the GIVE-WAY order — who gives way first when the claims outrun the money). `#budgeted?` is the one spelling of "a rule claims this category"
+- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` COUNTS ITS OWN SPENDING from that date, and `priority` is its place in the GIVE-WAY order — who gives way first when the claims outrun the money. It carries NO figure of its own: `categories.target_amount` is dropped (`2026-09-04-rules-own-the-budget` §7) and `Category#building_rule` — the item-less rule whose unspent money carries — is what answers "what is this category saving toward". `#budgeted?` is the one spelling of "a rule claims this category"
 - **Item** → has_many Entries
 - **Entry** → the actual transaction record; income and expenses are the physical ledger's other writer
 - **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name — the rename is §8 out-of-scope)
 - **AccountMovement** → a transfer between two of a user's own accounts (physical ledger's only writer besides entries; its columns are still named `from_pool_id`/`to_pool_id`)
-- **Budget** → a funding rule, owned by the expense Category whose money it claims. A category carries at most ONE item-less ("catch-all") rule, beside as many item-backed rules as it has items
+- **Budget** → a funding rule, owned by the expense Category whose money it claims. A category carries at most ONE item-less ("catch-all") rule, beside as many item-backed rules as it has items. Seven columns say what a rule IS (`2026-09-04-rules-own-the-budget` §2):
+
+  ```
+  amount          money  NOT NULL  what the rule puts in (per period / per month / the bill)
+  basis           int    NOT NULL  per_period | monthly
+  interval_months int    NULL      every N months
+  anchor_date     date   NULL      the due date the interval counts from
+  item_id         uuid   NULL      the item this rule pays, else the whole category
+  carries_over    bool   NOT NULL  unspent money builds up (true) or resets (false)
+  target_amount   money  NULL      a CAP on what builds up; NULL is "grows without limit"
+  rule_type       int    NOT NULL  bill (0) | usage (1) | choice (2), default usage
+  ```
+
+  `ClaimCalculator#shape` reads the first three of those: `:dated` if `anchor_date`, `:building` if `carries_over`, `:rate` otherwise. `#capped?` is the one predicate the `min(…, target)` sites read
 - **Adjustment** → `(rule, date, signed amount)`: a dated delta on one rule's accrual — set aside, take back, top up, reduce and skip are all this one row. It never touches accounts
 
-**The four writers, and there are no others.** Purpose side: RULES (`Budget`) and ADJUSTMENTS
-(`Adjustment`, whose one typed door is `AdjustmentForm` — it refuses a date the rule's walk cannot
-count). Physical side: ACCOUNT MOVEMENTS and ENTRIES.
+**The four writers, and there are no others.** Purpose side: RULES (`Budget`, whose one typed door
+is `RuleForm`) and ADJUSTMENTS (`Adjustment`, whose one typed door is `AdjustmentForm` — it refuses
+a date the rule's walk cannot count). Physical side: ACCOUNT MOVEMENTS and ENTRIES.
+
+**`RuleForm` is the rule's one typed door.** `/budgets/new` and `/budgets/:id/edit` send the USER'S
+WORDS — `schedule` (`per_period` · `monthly` · `every_n` · `once`), `unspent` (`resets` · `builds`),
+`target_amount`, `rule_type` — and the form object derives `basis`, `interval_months`, `anchor_date`
+and `carries_over` from them. The four-column mapping is spelled once, there, and never in a
+controller or a view. `category_id` is not permitted on update: the category is read-only on edit.
+
+**Rule type decides the give-way order before priority does** (`2026-09-04-rules-own-the-budget` §3).
+`Budget::TYPE_RANK` is `{ choice: 0, usage: 1, bill: 2 }` — the restaurant budget gives way before
+the power bill, and the power bill before the rent — and it is deliberately NOT the enum's own order,
+which is storage. `HomePresenter#give_way_key` is `[rule.type_rank, category rank,
+Category.rule_order]`, and the category term is `#budgeted_categories` (sorted `[priority, name]`)
+read BACKWARDS: within a type, the HIGHEST priority number gives way first, because the category that
+would have been funded last is the one that goes without first.
 
 ## Custom Patterns
 

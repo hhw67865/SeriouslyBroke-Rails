@@ -1,6 +1,7 @@
 # Rules Own the Budget: targets on rules, money that builds up, and a type on every rule
 
-**Status:** APPROVED (Henry, 2026-09-04) — plan in `docs/superpowers/plans/2026-09-04-rules-own-the-budget.md`
+**Status:** DELIVERED (2026-09-04) — plan in `docs/superpowers/plans/2026-09-04-rules-own-the-budget.md`,
+as built in §10, open questions in §11.
 **Date:** 2026-09-04
 **Builds on:** `2026-09-03-computed-claims-design.md` (DELIVERED). The claim formulas, the
 adjustments, the physical ledger and the screens all survive; this changes WHAT A RULE CAN SAY and
@@ -202,3 +203,128 @@ already show.
 - **Screens**: Home row copy per shape; Savings band lists building rules; impact card reads the
   rule's target; every prior copy pin that survives keeps its figure.
 - Seeds: the demo's Vacation and Emergency rules re-declared as building rules; `seeds_spec` ALONE.
+
+## 10. As built
+
+Four tasks, one branch, no `main`. Every ruling below was taken during the build and is written
+down here because a spec that reads like the plan is a spec nobody can trust afterwards.
+
+### 10.1 The migration is TWO files
+
+`db/migrate/20260905000000_rules_own_the_budget_columns.rb` adds `carries_over`, `target_amount`
+and `rule_type` to `budgets` with the `budgets_positive_target_amount` CHECK, and does nothing else.
+`db/migrate/20260905010000_rules_own_the_budget.rb` is §6's data half: it moves every category
+target onto that category's item-less rule, mints one where there is none, types every dated rule
+`bill`, verifies, and drops `categories.target_amount`.
+
+**Why two.** The column half had already run on the test database when the data half was written,
+and a migration edited after it has run cannot re-run — two files keep both environments migrated by
+the ordinary path. They are also two different kinds of statement: a column added is a column
+dropped, while the data half's `down` copies a figure back the other way and could only be written
+once the column it copies FROM existed.
+
+### 10.2 The shapes, and `capped?`
+
+`ClaimCalculator#shape` is `:dated` if `anchor_date`, `:building` if `carries_over`, `:rate`
+otherwise — three of the rule's OWN columns and no reach for the category. `#capped?` is the one
+predicate the two `min(…, target)` sites read, so "uncapped" is spelled once: a dated rule is always
+capped (its target is its amount), a building rule only where it names a figure, and a rate rule is
+neither. `#target` is **nil** for an uncapped building rule and nil is not zero — zero would make the
+gap negative on the first period and plan nothing for ever.
+
+### 10.3 The form
+
+`RuleForm` is the rule's **one typed door**: the wire carries the user's words (`schedule`,
+`unspent`, `target_amount`, `rule_type`) and the form object derives `basis`, `interval_months`,
+`anchor_date` and `carries_over` from them, so the four-column mapping is spelled once.
+
+- **Edit prefills the amount only, and the category is immutable on update.** A prefill that merged
+  the whole query string let a crafted edit link re-parent a rule onto another category on save, and
+  left a hidden date in a revealed input that answered 422 about an off-screen control. `category_id`
+  is not permitted on update at all (§4: category read-only on edit).
+- **Unspent and target are silently ignored where they cannot apply; a stray date is refused.** The
+  two are answers to a question the chosen schedule does not ask, so dropping them is dropping noise;
+  an `anchor_date` under a per-period schedule is a fact the user typed and is refused by name.
+- **The type radio is required with no preselection.** The column's `usage` default exists for rows
+  written before the column did; a form that preselected it would put an opinion in the user's mouth.
+
+### 10.4 The give-way order
+
+`[Budget#type_rank, category rank, Category.rule_order]`. `TYPE_RANK` is `choice → usage → bill`,
+which is the reverse of the enum's storage order and cannot be the enum's own — re-numbering the
+integers to make `sort_by` work would rewrite every row to express an opinion about presentation.
+
+**Within a type, the HIGHEST priority number gives way first** (implementer pushback, accepted). The
+plan sketched an ascending sort; the app's existing direction is `Category.in_fill_order` read
+BACKWARDS — the category that would have been funded last is the one that goes without first — and
+§3 says "category priority as today". `HomePresenter#give_way_rank` is the one place the key is
+spelled (the negated index into `#budgeted_categories`), so the drag reorder survives untouched.
+
+### 10.5 Two readers hoisted to one spelling
+
+- `Budget::BUILDS_UP_THE_CATEGORY` — `{ item_id: nil, carries_over: true }` — derives BOTH the
+  `.builds_up_the_category` scope (the dashboard's subquery) and `#builds_up_the_category?` (the
+  in-memory predicate `Category#building_rule` and `CategoryBudgetPresenter` read over already-loaded
+  rows). The question was spelled three times and three copies of a two-clause test is how a strip
+  comes to list a set the category pages disagree with.
+- **The entry impact card prints a target only where the building rule is the category's ONLY rule.**
+  On a category carrying a fund beside other rules the card's denominator is Σ `standing_ask`, and a
+  bar drawn against the fund's target there would be a fraction of the wrong number.
+
+### 10.6 The migration's receipts, and what it refuses
+
+Per user and in total: **targets moved · rules minted · rules typed bill · rules typed usage**, plus
+the physical invariant (`pot + Σ accounts == income − expenses`) printed unchanged for every user.
+
+It REFUSES rather than guesses, before the first write: a target category whose catch-all rule has a
+due date (`carries_over` cannot be set on a dated rule, and there is nowhere else to put the figure);
+a target on a category that is not an expense (no rule may live there); and a `$0` rule that no
+target will repair — a rule that demands nothing and builds toward nothing, which is the shape
+`DropTheDistribution` left behind wherever its category named no figure. After the last write it
+refuses to commit a database where any figure reached no rule, or where any rule it wrote or touched
+is a shape `Budget` itself would reject (the validations restated in SQL, clause for clause).
+
+**Dev run:** 9 targets moved, 7 rules minted, 4 typed bill, 24 typed usage; every user's physical
+invariant unchanged. **A re-run raises**, loudly and on purpose: `up` drops the column, so a second
+run meets `PG::UndefinedColumn` on its first read rather than shrugging.
+
+**What "the claim is identical before and after" means.** Not a comparison against the pre-migration
+schema — `ClaimCalculator` already read the rule, so a goal's rule reads as a plain rate rule there.
+The figure that must survive is the **computed-claims era's**: §3.2's walk capped at the CATEGORY's
+figure. `spec/migrations/rules_own_the_budget_spec.rb` re-derives each from §3's formula in a comment
+and plants it as a literal. One shape's claim deliberately changes, and it is the defect §6 names: an
+item-backed rate rule on a goal category used to accrue toward the category's figure, and is now what
+it always said it was.
+
+### 10.7 Seeds
+
+The demo's five goals are building rules with targets on the rule; `categories.target_amount` is
+written nowhere. Every one of the 21 rules names its own type rather than taking the column default:
+`bill` on Rent, Dentist, Car Insurance, Vet, Renters Insurance, Quarterly Taxes, Prescriptions and
+the Emergency Fund; `usage` on Utilities/Electric, Groceries, Household Supplies, Pet Care, the
+Commuter Pass, Medical Copays and the House Down Payment; `choice` on Dining Out, Holiday Gifts,
+Streaming, Vacation to Europe, New Car and Retirement Supplement.
+
+**The Electric Bill is `usage` though it has a due date**, and it is the row that keeps the type from
+being a synonym for the schedule — "usage is like power bill" is Henry's own example of the word. The
+migration's default types every dated rule `bill` precisely because it cannot know that.
+
+Every headline figure survives ($7,461.00 total money, $5,561.00 pot, $10,201.34 claimed, -$2,740.34
+free, $2,103.42 standing ask, $210.80 a day). **The give-way LIST changed and the headline did not**:
+under priority alone it read Retirement, New Car, House Down Payment and $115.34 of Vacation; House
+Down Payment is `usage` and the Emergency Fund is `bill`, so both rank behind every discretionary
+rule and the walk now reads Retirement $1,050.00, New Car $525.00, Vacation $520.00 and $645.34 of
+Holiday Gifts — the same total, absorbed by four `choice` rules.
+
+## 11. Open for Henry
+
+1. **An uncapped building rule grows without limit and nothing warns.** §2.1 row 2 is the emergency
+   fund that "grows for as long as the user keeps it", and that is the declared behaviour — but its
+   claim rises every period for ever, so it eats into `free` indefinitely and no screen says so. A
+   fund nobody has looked at in two years is indistinguishable from one being used. Whether the
+   Budget page should say anything (a "no ceiling" marker, a suggested target) is a design call.
+2. **Every pre-existing rule is typed `usage`, and only the user can correct it.** §6 step 3's
+   default is the widest of the three, and the Budget page prints the label so it is visible — but a
+   database of thirty rules arrives with thirty of them claiming to be "a real need whose amount
+   moves with how you live", and the give-way order reads that. There is no bulk retype and no
+   prompt; the user meets one rule at a time on the edit form.

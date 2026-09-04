@@ -159,6 +159,29 @@ RSpec.describe "db/seeds.rb" do
       expect(written.reject { |call| call.include?("category:") }).to eq([])
     end
 
+    # ** A TARGET IS A RULE'S, AND THE GREP IS THE ONLY HALF THAT CAN SAY SO (rules-own-the-budget
+    # §6/§7). ** `categories.target_amount` is dropped, so a seed writing one would raise on the
+    # replant and the database half below would catch it — but a seed writing the figure onto the
+    # CATEGORY through some other spelling would not, and neither would a reviewer skimming past a
+    # `target:` keyword on the holder builder. Every `target_amount` in the file has to sit inside a
+    # `rule.call`, which is what this asks: strip the rule calls out and nothing is left.
+    it "names a target only on a rule" do
+      outside_the_rules = code.gsub(/rule\.call\((?:[^()]|\([^()]*\))*\)/m, "")
+
+      expect(outside_the_rules).not_to include("target_amount")
+    end
+
+    # ** EVERY RULE NAMES ITS OWN TYPE (§3). ** `budgets.rule_type` is NOT NULL with a `usage`
+    # default, so a rule that said nothing would still save — and would then read `usage` on the
+    # Budget page and give way second whatever the demo meant by it. The default exists for rows
+    # written before the column did (§6 step 3); this file writes none of those, so an untyped call
+    # here is an opinion nobody stated rather than a legacy row.
+    it "types every rule it writes" do
+      written = code.scan(/rule\.call\((?:[^()]|\([^()]*\))*\)/m)
+
+      expect(written.reject { |call| call.include?("rule_type:") }).to eq([])
+    end
+
     it "never writes a savings category", :aggregate_failures do
       expect(code).not_to match(/category_type:\s*:savings/)
       expect(code).not_to match(/lane\.call\([^)]*:savings/)
@@ -385,21 +408,28 @@ RSpec.describe "db/seeds.rb" do
     end
 
     # ** FREE BELOW ZERO IS A SIGNAL (§4), AND THE STRIP SAYS WHO GIVES WAY. ** The walk runs
-    # `#budgeted_categories` in REVERSE priority — the category that would have been funded last is
-    # the one that goes without first — taking each rule's claim until the $2,740.34 is absorbed:
+    # `HomePresenter#give_way_order` — TYPE first (choice, then usage, then bill), and inside a type
+    # the highest priority number first, which is `#budgeted_categories` read backwards — taking each
+    # rule's claim until the $2,740.34 is absorbed:
     #
-    #   Retirement Supplement  1,050.00   priority 19, the demo's last, so it yields first
-    #   New Car                  525.00   18
-    #   House Down Payment     1,050.00   17
-    #   Vacation to Europe       115.34   16 — PARTIAL, and the whole reason this is a walk rather
-    #                                     than a filter: "$115.34 of it is uncovered" is a different
-    #                                     sentence from "Vacation is uncovered", and only the walk
-    #                                     can tell them apart
+    #   Retirement Supplement  1,050.00   choice, priority 19, the demo's last, so it yields first
+    #   New Car                  525.00   choice, 18
+    #   Vacation to Europe       520.00   choice, 16
+    #   Holiday Gifts            645.34   choice, 11 — PARTIAL, and the whole reason this is a walk
+    #                                     rather than a filter: "$645.34 of it is uncovered" is a
+    #                                     different sentence from "Holiday Gifts is uncovered", and
+    #                                     only the walk can tell them apart
     #   ────────────────────   2,740.34   which is the headline exactly, so `#uncovered_remainder`
     #                                     is zero and no part of the shortfall goes unnamed
     #
-    # THE FOUR GOALS ABSORB THE WHOLE OF IT AND NO BILL IS TOUCHED, which is what a give-way order
-    # is for: this household's savings are what gives, and the rent is never in the list.
+    # ** THE LIST CHANGED WITH THE TYPES AND THE HEADLINE DID NOT (rules-own-the-budget §3). ** It
+    # used to read Retirement, New Car, House Down Payment and $115.34 of Vacation, on priority
+    # alone. `db/seeds.rb` types House Down Payment `usage` and Emergency Fund `bill`, so both now
+    # rank behind every discretionary rule the household has and the walk reaches Holiday Gifts
+    # instead — four `choice` rules absorbing the same $2,740.34 at the same $210.80 a day.
+    #
+    # NO BILL IS TOUCHED, which is what a give-way order is for: this household's discretionary
+    # saving is what gives, and the rent — and now the emergency fund — is never in the list.
     it "leaves the household short, and says so on every reader the strip renders", :aggregate_failures do
       home = HomePresenter.new(user: user, today: today)
 
@@ -410,23 +440,44 @@ RSpec.describe "db/seeds.rb" do
       expect(home.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :overdue, :structural])
     end
 
-    # ** AND WHO GIVES WAY, WHICH IS THE HALF THE FIGURE ABOVE CANNOT SAY. ** The walk reads
-    # `Category.in_fill_order` BACKWARDS, so the lowest priority gives way first, and the four goals
-    # absorb the whole $2,740.34 — the last of them PART-COVERED at $115.34, which is why
-    # `#uncovered_remainder` is zero and no part of the shortfall goes unnamed. No bill is touched:
-    # this household's savings are what gives, and the rent is never in the list.
-    it "names the four goals that give way, the last of them part-covered", :aggregate_failures do
+    # ** AND WHO GIVES WAY, WHICH IS THE HALF THE FIGURE ABOVE CANNOT SAY. ** Type decides before
+    # priority does (§3), so the walk is the household's four `choice` rules in reverse priority and
+    # they absorb the whole $2,740.34 — the last of them PART-COVERED at $645.34, which is why
+    # `#uncovered_remainder` is zero and no part of the shortfall goes unnamed.
+    #
+    it "names the four discretionary rules that give way, the last part-covered", :aggregate_failures do
       home = HomePresenter.new(user: user, today: today)
 
       expect(home.uncovered_claims.map { |claim| [claim.category.name, claim.amount] }).to eq(
         [
           ["Retirement Supplement", 1_050],
           ["New Car", 525],
-          ["House Down Payment", 1_050],
-          ["Vacation to Europe", 115.34]
+          ["Vacation to Europe", 520],
+          ["Holiday Gifts", 645.34]
         ]
       )
       expect(home.uncovered_remainder).to eq(0)
+    end
+
+    # THE TWO TYPED FUNDS ARE ASSERTED ABSENT, because that is what the type bought: House Down
+    # Payment is `usage` and Emergency Fund is `bill`, and both carry claims ($1,050.00 and $700.00)
+    # large enough to have been in the list above under priority alone — House Down Payment was.
+    it "leaves the funds typed usage and bill out of the give-way list" do
+      home = HomePresenter.new(user: user, today: today)
+
+      expect(home.uncovered_claims.map { |claim| claim.category.name })
+        .not_to include("House Down Payment", "Emergency Fund")
+    end
+
+    # ** THE TYPE OVERVIEW (§3), WHICH IS THE OTHER THING THE TYPES BOUGHT. ** `BudgetPagePresenter
+    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,103.42
+    # `Budget.steady_need` reports two examples down — the same sum, partitioned three ways. Planted,
+    # and the sum asserted beside them so a partition that lost a rule could not pass.
+    it "partitions the standing ask across the three types", :aggregate_failures do
+      overview = BudgetPagePresenter.new(user: user, today: today).type_overview
+
+      expect(overview).to eq([[:bill, 1_136.89], [:usage, 745.38], [:choice, 221.15]])
+      expect(overview.sum { |_type, amount| amount }).to eq(2_103.42)
     end
 
     # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
