@@ -104,8 +104,13 @@ RSpec.describe DropThePoolLayer do
     create(:entry, item: create(:item, category: cat), amount: amount, date: on)
   end
 
+  # Written in SQL: `Allocation` and its factory left with the distribution (20260903010000), but
+  # the table still exists at this migration's version, which is the only world this file asks about.
   def allocate(to:, amount:, on: Date.new(2026, 8, 5))
-    create(:allocation, to_category: to, from_category: nil, amount: amount, date: on)
+    sql(<<~SQL.squish, to: to.id, amount: amount, on: on)
+      INSERT INTO allocations (id, from_category_id, to_category_id, amount, date, kind, created_at, updated_at)
+      VALUES ('#{SecureRandom.uuid}', NULL, :to, :amount, :on, 0, NOW(), NOW())
+    SQL
   end
 
   # ---------------------------------------------------------------------------------------------

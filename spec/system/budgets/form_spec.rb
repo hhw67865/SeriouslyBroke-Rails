@@ -30,7 +30,7 @@ RSpec.describe "Budgets Forms", type: :system do
 
     it "shows the rule's own controls and none of the cap's" do
       expect(page).to have_content("Edit rule")
-      expect(page).to have_content("How Groceries gets filled each period")
+      expect(page).to have_content("What Groceries claims each period")
       expect(page).to have_field("Amount")
       expect(page).to have_button("Update rule")
       expect(page).to have_link("Cancel")
