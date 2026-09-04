@@ -432,13 +432,20 @@ RSpec.describe "db/seeds.rb" do
     # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
     # one-off branch divided the WHOLE amount by the periods before the due date — asking for every
     # bill again from scratch, whatever was already saved toward it — and reached that divisor
-    # through a class that also assumed every item-less bill was paid on time. It reads §3.2's
-    # catch-up share now: what is STILL MISSING over the periods left. This household's funds are
-    # part built, so its standing ask is genuinely lower, and the seeds' declared income follows it
-    # down to $2,050 to keep the state this fixture exists to show. Both figures are planted, and
-    # the verdict is asserted beside them so a pair that stopped straddling could not pass.
+    # through a class that also assumed every item-less bill was paid on time. The seeds' declared
+    # income followed it down to $2,050 to keep the state this fixture exists to show. Both figures
+    # are planted, and the verdict is asserted beside them so a pair that stopped straddling could
+    # not pass.
+    #
+    # ** AND ONE CENT WHEN THE BRANCH BECAME A STANDING FIGURE (fix wave 2 — MED-A). ** It read
+    # §3.2's catch-up share for one wave — what is still missing over the periods left, which moves
+    # with every payment — and reads `ClaimCalculator#standing_ask` now, the amount over the periods
+    # from the rule's birth to its due date. On this household the two nearly agree: both one-time
+    # bills are as old as the seed and neither has been paid into, so only the Dentist's rounding
+    # separates them ($21.43 a period against $21.42 — one division rounded once, against a division
+    # rounded in each of fourteen periods). $2,103.41 → $2,103.42; the declaration does not move.
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_103.41)
+      expect(Budget.steady_need(user, today: today)).to eq(2_103.42)
       expect(user.typical_income).to eq(2_050.00)
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end

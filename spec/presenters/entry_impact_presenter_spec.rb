@@ -90,6 +90,21 @@ RSpec.describe EntryImpactPresenter do
     create(:budget, :rate, category: category, amount: amount, created_at: born)
   end
 
+  # A ONE-TIME BILL — an anchor and no interval (`Budget#cadence`'s `:one_off`). Its standing cost is
+  # `ClaimCalculator#standing_ask`: the amount over the periods from the accrual start's period
+  # through the one the anchor falls in, which is the only shape whose denominator this card cannot
+  # read off the rule's own columns.
+  def one_off(category, amount, anchor:)
+    create(
+      :budget,
+      category: category,
+      amount: amount,
+      interval_months: nil,
+      anchor_date: anchor,
+      created_at: born
+    )
+  end
+
   # A DATED, SIGNED DELTA ON A RULE'S ACCRUAL (§3.3). Dated at `today` by default, because the delta
   # only counts in the period it falls in and this file's clock is not the wall clock.
   def adjust(rule, amount, on: today)
@@ -248,6 +263,25 @@ RSpec.describe EntryImpactPresenter do
       unfunded = create(:category, :expense, user: user, name: "Shopping")
 
       expect(present(unfunded).bar?).to be(false)
+    end
+
+    # ** A SETTLED ONE-TIME BILL STILL GIVES THE BAR SOMETHING TO MEASURE AGAINST (fix wave 2 —
+    # LOW-2). ** The denominator is `Σ ClaimCalculator#standing_ask`, and for one wave it was §3.2's
+    # catch-up share — which is ZERO once a one-off has been paid — so the track under an envelope
+    # that had drawn one all along simply stopped rendering the afternoon the bill cleared. $600 due
+    # Mar 6, born Feb 6: three biweekly periods (Feb 6, Feb 20, Mar 6), so $200 a period whatever
+    # has been spent. The $0 is asserted as an absence so a denominator that fell back to zero
+    # cannot pass.
+    it "draws a bar for a category whose only rule is a one-time bill already paid", :aggregate_failures do
+      repairs = create(:category, :expense, user: user, name: "Repairs", funded_since: funded_since)
+      one_off(repairs, 600, anchor: today + 28.days)
+      spend(repairs, 600)
+      card = present(repairs)
+
+      expect(card.balance).to eq(0)
+      expect(card.denominator).to eq(BigDecimal("200"))
+      expect(card.denominator).not_to eq(0)
+      expect(card.bar?).to be(true)
     end
   end
 
@@ -794,6 +828,29 @@ RSpec.describe EntryImpactPresenter do
       expect(creating).to eq(3)
       expect(editing).to eq(creating + 1)
       expect(editing).to eq(4)
+    end
+
+    # ** THE BAR'S DENOMINATOR BUILT A SECOND CALCULATOR PER ONE-OFF RULE (fix wave 2 — MED-B). **
+    # `#steady_claim` was `holding.budgets.sum { |b| b.steady_ask(user, today:) }`, and `#steady_ask`'s
+    # one-off branch BUILDS a `ClaimCalculator` — one more per rule than `#claim_calculators` already
+    # holds, which is the defect fix round 1's L5 closed on the edit path.
+    #
+    # MEASURED, AND THE FIGURE IS SMALLER THAN THE FINDING GUESSED. Against the wave that read
+    # `#planned_this_period` this fixture costs FOUR statements and the fix takes it to three — one
+    # repeat, not two, because both calculators are built over the SAME `holding.budgets` instances,
+    # so the second one finds `rule.adjustments` already loaded and only its bare `Entry` spending
+    # scope runs again. Against the code as it now stands the second calculator costs NOTHING
+    # (`#standing_ask` reads no rows), so this example pins the count that stays right either way and
+    # the ONE-DOOR argument is what the fix is really for. `#standing_ask` off the calculators in hand
+    # is the same figure — asserted here too, so a cheaper card that stopped answering could not pass.
+    it "costs no extra statement for a one-time bill's denominator", :aggregate_failures do
+      repairs = create(:category, :expense, user: user, name: "Repairs", funded_since: funded_since)
+      one_off(repairs, 600, anchor: today + 28.days)
+      spend(repairs, 60)
+      card = present(fresh(repairs), amount: "45")
+
+      expect(count_statements { read_the_card(card) }).to eq(3)
+      expect(card.denominator).to eq(BigDecimal("200"))
     end
   end
 

@@ -104,7 +104,9 @@ class Budget < ApplicationRecord
   # IT WAS NOT THE ONLY CALCULATOR ON THIS ROW UNTIL THE FIX WAVE. `#calculator` built a
   # `BudgetCalculator` — what the rule needed from the next DISTRIBUTION — and Task 4 was meant to
   # delete it along with the distribution. It survived on one branch of `#steady_ask` with a due date
-  # the claims overrule; both are gone now (see `#one_off_steady_ask`).
+  # the claims overrule; both are gone now (see `#one_off_steady_ask`), and that branch reads
+  # `ClaimCalculator#standing_ask`, which touches neither `spending:` nor `adjustments:` and so costs
+  # this door no query when it is built unbatched.
   def claim_calculator(today: self.today, spending: nil, adjustments: nil)
     ClaimCalculator.new(self, today: today, spending: spending, adjustments: adjustments)
   end
@@ -149,20 +151,23 @@ class Budget < ApplicationRecord
   end
 
   # PER-PERIOD STEADY-STATE COST OF THIS RULE — what it claims from a typical period, NOT what
-  # it asks this period. That second question is `PoolCalculator#required` / `BudgetCalculator
-  # #required`, and the two are deliberately different figures with deliberately different names:
+  # it asks this period. That second question is `ClaimCalculator#planned_this_period`, and the two
+  # are deliberately different figures with deliberately different names:
   #
-  #   #required   — this period's ask. Catch-up on a bill that slipped, zero on one already
-  #                 funded, the whole remainder on one due before the next boundary. It moves
-  #                 every time money is distributed.
+  #   #planned_this_period — this period's ask. Catch-up on a bill that slipped, zero on one
+  #                 already funded, the whole remainder on one whose date has gone by. It moves
+  #                 with the fund, with the spending and with the calendar, and it is what a rule's
+  #                 ROW and the adjust panel print.
   #   #steady_ask — the standing claim. What this rule costs a period FOREVER, assuming nothing
-  #                 is behind and nothing is ahead. It moves only when the rule itself changes.
+  #                 is behind and nothing is ahead. It moves only when the rule itself changes
+  #                 (or the grid under it does).
   #
   # §9's structural check ("your rules need $X a period / you typically bring in $Y") is a
   # question about the SHAPE of a budget, so it can only be asked of the steady figure. Asked of
-  # #required it answers a different question in the same words: a catch-up period reads
-  # underwater on a budget that fits fine, and the period right after a distribution reads fine
-  # on a budget that does not fit at all.
+  # this period's figure it answers a different question in the same words — measured, and it is why
+  # this method exists in this shape (fix wave 2 — MED-A): a $600 one-off anchored a month ago and
+  # unpaid prices at the whole $600 under catch-up, fires "your budget doesn't fit your income", and
+  # CLEARS the verdict the afternoon the bill is paid, with no rule changed.
   #
   # BUILT ON #cadence, not on a fifth reading of `basis`/`interval_months`/`anchor_date`. The
   # shape classification is that method's and the two helpers that used to hold a copy each were
@@ -176,37 +181,39 @@ class Budget < ApplicationRecord
   # Integer and `Integer * 12 / Integer` truncates the cents.
   #
   # `user` is the divisor's owner. The one-off branch reaches the rule's OWN owner through the
-  # calculator instead (`BudgetCalculator#periods_until_due`); the two are the same record by
-  # construction, since every caller reaches this through `Budget.for_user(user)`.
+  # calculator instead (`ClaimCalculator#user`); the two are the same record by construction, since
+  # every caller reaches this through `Budget.for_user(user)`.
   #
-  # `today:` is not in the plan's sketch and is needed: the one-off shape amortises over the
-  # periods between NOW and its due date, so a caller with a fixed clock (every calculator in
-  # this app takes one) must be able to hand its own down rather than have this reach for a clock
-  # behind it. Unhanded, it reads the OWNER's day off the user it is already given (fix round 2 —
-  # LOW-1), not the ambient one.
+  # `today:` is not in the plan's sketch and is needed: every calculator in this app takes a clock
+  # and this method builds one, so a caller with a fixed clock must be able to hand its own down
+  # rather than have this reach for a clock behind it. Unhanded, it reads the OWNER's day off the
+  # user it is already given (fix round 2 — LOW-1), not the ambient one. THE ONE-OFF FIGURE ITSELF
+  # DOES NOT MOVE WITH IT (fix wave 2 — MED-A): `#standing_ask` is a constant of the rule and the
+  # grid, and the clock only decides which owner's day a walk would open on.
   #
   # THIS DIVIDES A MONTHLY RULE BY `periods_per_year` WHILE ITS PERIOD STILL ENDS ON THE CALENDAR
-  # MONTH, and the divergence is deliberate (plan 2d decision 5, recorded here and in
-  # `BudgetCalculator#period_end`). A $260-a-month rule under a biweekly cadence costs $120 a
-  # period — always, in every month — because that is what a standing monthly rate means spread
-  # over 26 periods. Its LIFECYCLE is a different question: the month is the span the user said
-  # the money is for, so `period_end` closes it at month end and the sweep may not take the
-  # envelope's leftover before then.
+  # MONTH, and the divergence is deliberate (plan 2d decision 5). A $260-a-month rule under a
+  # biweekly cadence costs $120 a period — always, in every month — because that is what a standing
+  # monthly rate means spread over 26 periods. Its LIFECYCLE is a different question: the month is
+  # the span the user said the money is for, and `User#period_containing` closes it at month end for
+  # an undeclared user for the same reason.
   #
   # Cost and lifecycle are not the same question, so one answer for both would be wrong for one of
   # them. Measured in both directions: costing by the calendar's boundaries made this rule answer
   # $130 in nine months of 2026 and $86.67 in the two holding a third boundary (see above), and
   # ending its period by `periods_per_year` instead would roll a monthly rule mid-month and fund it
   # twice inside one month.
-  # `claim:` IS A SEAM AND NOT A SECOND DOOR (`ClaimCalculator#spending:`'s own reasoning). Only the
-  # one-off branch reads it, and only `.steady_need` — which iterates a whole user's rules — hands
-  # one in, off the `ClaimLedger` whose three grouped statements answer for every rule at once. Left
-  # nil this method builds its own through `#claim_calculator`, so the single-rule door still works
-  # unbatched.
-  def steady_ask(user, today: user.today, claim: nil)
+  #
+  # ** THERE IS NO `claim:` SEAM ANY MORE (fix wave 2 — MED-A). ** It existed so `.steady_need` could
+  # hand the one-off branch a BATCHED calculator, because that branch read `#planned_this_period` and
+  # an unbatched calculator runs a spending query and an adjustment query to answer it.
+  # `#standing_ask` reads two columns and the period grid and NOTHING ELSE, so the branch costs no
+  # statement at all and a seam that saved statements has nothing left to save. A calculator built
+  # here is an object, not a query.
+  def steady_ask(user, today: user.today)
     case cadence
     when :per_period then amount.to_d
-    when :one_off then one_off_steady_ask(today, claim)
+    when :one_off then one_off_steady_ask(today)
     else (amount.to_d * 12 / (user.periods_per_year * (interval_months || 1))).round(2)
     end
   end
@@ -236,62 +243,65 @@ class Budget < ApplicationRecord
   # this figure is compared against `typical_income` and subtracted from it — the seed keeps a
   # user with no rules at all on the same numeric type as one with them.
   #
-  # ** IT ITERATES A `ClaimLedger` RATHER THAN A RELATION, AND THAT IS A COST DECISION (fix wave —
-  # MED-3). ** `#steady_ask`'s one-off branch reads `ClaimCalculator#planned_this_period` now, and an
-  # unbatched calculator runs a spending query and an adjustment query of its OWN — two statements
-  # per one-off rule on a reader three screens call. `ClaimLedger` answers every rule's lanes in
-  # three grouped statements whatever the count, and its `#rules` is this method's own population
-  # spelled once (`for_user(user).includes(:item, category: :user)` — the same relation, the same
-  # preloads, on the class that already owns it).
+  # ** IT ITERATES THE `ClaimLedger`'s RULES WHERE ONE IS OFFERED, AND THE SAVING IS THE RELATION
+  # RATHER THAN THE ROWS (fix wave — MED-3, corrected in fix wave 2 — MED-A). ** The `ledger:` seam
+  # was introduced to hand each one-off rule a BATCHED calculator, because the branch then read
+  # `#planned_this_period` and an unbatched calculator queried spending and adjustments per rule.
+  # `#standing_ask` reads no rows at all, so no calculator here costs a statement and the seam's
+  # value is now the LOADED RULES: Home and the Budget page have already paid for
+  # `for_user(user).includes(:item, category: :user)` and this sum reuses it instead of running the
+  # same relation and the same two preloads a second time. Handed nothing it builds a ledger and asks
+  # it only for `#rules` — the grouped spending and adjustment statements are lazy, so a caller that
+  # wants only this figure never pays for them.
   #
-  # THE PRELOAD ITSELF IS MEASURED, and the measurement corrected a claim this comment first made.
-  # On the demo seeds it buys NOTHING on the FIGURE side: 22 rules cost 5 statements with it and 5
-  # without, because only two of them are dated. It is kept because the shape differs even where the
-  # figure does not — a budget has no user column, so `#user` walks the category, and without the
-  # nested preload that is two un-preloaded queries per rule that reaches for a clock.
+  # THE PRELOAD IS WHAT THE COST PIN IS ABOUT. A budget has no user column, so `#user` walks the
+  # category, and without the nested preload that is two un-preloaded queries per rule that reaches
+  # for a clock — which every one-off rule does.
   #
   # PINNED, not asserted: `budget_steady_ask_spec`'s "costs the same number of queries for five
-  # dated rules as for one" counts the statements, because a batching that quietly stops covering a
+  # dated rules as for one" counts the statements, because a preload that quietly stops covering a
   # lane is invisible to every other example in that file.
   def self.steady_need(user, today: user.today, ledger: nil)
-    ledger ||= ClaimLedger.new(user, today: today)
+    rules = (ledger || ClaimLedger.new(user, today: today)).rules
 
-    ledger.rules.sum(0.to_d) { |budget| budget.steady_ask(user, today: today, claim: ledger.calculator_for(budget)) }
+    rules.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
   end
 
   private
 
-  # ** A ONE-TIME RULE HAS NO INTERVAL TO DIVIDE BY, so its steady claim is §3.2's CATCH-UP SHARE:
-  # what is still missing, over the periods left to find it in. `ClaimCalculator#planned_this_period`
-  # IS that figure and this branch reads nothing else (fix wave — MED-3). **
+  # ** A ONE-TIME RULE HAS NO INTERVAL TO DIVIDE BY, SO THE CALENDAR IS THE DIVISOR: its amount over
+  # the periods between the day it started accruing and the day it falls due.
+  # `ClaimCalculator#standing_ask` IS that figure and this branch reads nothing else (fix wave 2 —
+  # MED-A). **
   #
-  # ** IT WAS `BudgetCalculator`, AND THAT CLASS DIED HERE. ** Task 4 deleted the distribution it
-  # belonged to; this one branch kept it alive, and with it a SECOND due date the claims overrule.
-  # Two defects, both measured:
+  # ** IT WAS `#planned_this_period` FOR ONE WAVE, AND THAT MADE A STANDING FIGURE MOVE. ** §3.2's
+  # catch-up share is what the rule asks of THIS period — what is still missing over the periods
+  # left — so it falls as a fund fills, rises when the fund is raided, and prices an overdue bill at
+  # its whole amount because `#periods_left` floors at one. Every one of those is right for a row and
+  # wrong for §9's verdict about the shape of a budget: a $600 bill anchored a month ago and unpaid
+  # fired "your budget doesn't fit your income", and PAYING it cleared the verdict without a rule
+  # changing. `#standing_ask` is constant for a given rule and grid; `#planned_this_period` stays
+  # exactly where it belongs, on the row and in the adjust panel.
+  #
+  # ** BEFORE THAT IT WAS `BudgetCalculator`, AND THAT CLASS DIED HERE (fix wave — MED-3). ** Task 4
+  # deleted the distribution it belonged to; this one branch kept it alive, and with it a SECOND due
+  # date the claims overrule. Two defects, both measured:
   #
   #   THE FULFILMENT LIE. `BudgetCalculator#fulfilled?` has no payment signal for an ITEM-LESS rule,
-  #     so it fell back to "assume every bill was paid on time" — `today >= anchor_date`. An
-  #     item-less one-off anchored Aug 1 with nothing spent was therefore priced at $0.00 a period by
-  #     the structural check while its own row on the same page read `overdue · was Aug 1`. The
-  #     computed model has the signal that class lacked (spending on the category, §3.2), so
-  #     `#settled?` is a fact rather than an assumption — and it is inside `#planned_this_period`.
-  #   THE FENCEPOST. `periods_until_due` counts from `today` and so misses the boundary today is
-  #     standing on; `#periods_left` counts it, because §3.2's accrual lands IN FULL the day a period
-  #     opens (spec §10.1 ruling 7). The two answered different numbers of periods for one bill.
+  #     so it fell back to "assume every bill was paid on time" — `today >= anchor_date` — and priced
+  #     such a rule at $0.00 a period while its own row on the same page read `overdue · was Aug 1`.
+  #     A one-time rule's standing cost does not depend on whether it has been paid at all now, so
+  #     the contradiction cannot come back from either side.
+  #   THE FENCEPOST. `periods_until_due` counted from `today` and missed the boundary today stands
+  #     on; the divisor here counts the accrual start's own period, because §3.2's accrual lands IN
+  #     FULL the day a period opens (spec §10.1 ruling 7).
   #
-  # ** IT IS THE CATCH-UP FIGURE AND THEREFORE MOVES WITH WHAT IS ALREADY SAVED, which the old
-  # reading did not. ** `amount / periods_until_due` re-asks for the WHOLE bill every period, so a
-  # one-off half funded still reported the full per-period cost and the structural check counted
-  # money the user had already set aside. The catch-up share reports what is left to find, and a
-  # fund that is whole reports zero — the same zero the fulfilled gate used to produce, arrived at
-  # from the fund rather than from the calendar.
-  #
-  # THE FLOOR AT ONE PERIOD SURVIVES INSIDE `#periods_left`, so a user with no declared cadence —
-  # whose `period_boundaries` is empty — gets the whole remainder in one period rather than a
-  # division by zero. Blunt, and it is the honest answer: without a period there is nothing to
-  # spread over.
-  def one_off_steady_ask(today, claim)
-    (claim || claim_calculator(today: today)).planned_this_period
+  # THE FLOOR AT ONE PERIOD LIVES IN `#periods_to_fund`, so a bill due inside the period it was
+  # written in — and a user with no declared cadence, whose `period_boundaries` is empty — gets the
+  # whole amount asked of one period rather than a division by zero. Blunt, and it is the honest
+  # answer: without a period there is nothing to spread over.
+  def one_off_steady_ask(today)
+    claim_calculator(today: today).standing_ask
   end
 
   # A RULE BELONGS TO A CATEGORY, full stop (two-ledger spec §3). Its ancestor

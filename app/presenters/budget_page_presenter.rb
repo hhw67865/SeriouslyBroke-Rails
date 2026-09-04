@@ -233,7 +233,10 @@ class BudgetPagePresenter
   #
   # Steady need against declared income, never THIS period's Σ claims against it — the structural
   # question is what the rules ask of a TYPICAL period, and the two diverge in both directions on the
-  # same budget. See Budget#steady_ask and HomePresenter#structurally_underwater?.
+  # same budget. The steady figure is a constant of the rules and the grid on every shape, one-time
+  # bills included (`ClaimCalculator#standing_ask`, fix wave 2 — MED-A), so nothing a user spends or
+  # pays this afternoon can turn this block on or off. See Budget#steady_ask and
+  # HomePresenter#structurally_underwater?.
   #
   # `declared?` AND NOT `typical_income.present?`, WHICH IS THIS FIX ROUND'S CORRECTION. The gate
   # used to ask only about the income, and it was unreachable in the wrong state only because the

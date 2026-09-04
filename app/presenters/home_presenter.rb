@@ -641,10 +641,12 @@ class HomePresenter
   # DOES THE BUDGET FIT THE INCOME — a question about the SHAPE of the rules, not about this
   # afternoon's cash, and the one kind of trouble no amount of care this period can fix.
   #
-  # `Budget.steady_need` reads the rules and the calendar and nothing else — no allocation, no
-  # holding — so it survives this task untouched. It is deliberately not `Σ claims`, which is THIS
-  # period's answer (catch-up on anything behind, zero on anything already full) and diverges from
-  # the structural question in both directions on the same budget.
+  # `Budget.steady_need` reads the rules and the calendar and NOTHING ELSE — no spending, no
+  # adjustment, no fund state (`ClaimCalculator#standing_ask`, fix wave 2 — MED-A). It is deliberately
+  # not `Σ claims`, which is THIS period's answer (catch-up on anything behind, zero on anything
+  # already full) and diverges from the structural question in both directions on the same budget:
+  # for one wave the one-off branch read exactly that figure, and this verdict then appeared on an
+  # unpaid $600 bill and vanished when the bill was paid, with no rule changed.
   #
   # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate `BudgetPagePresenter#declared?`
   # applies, because it is the same question.

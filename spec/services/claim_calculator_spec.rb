@@ -739,6 +739,171 @@ RSpec.describe ClaimCalculator, type: :model do
   end
 
   # ===========================================================================================
+  # THE STANDING ASK IS A CONSTANT OF THE RULE AND THE GRID (fix wave 2 — MED-A). It is what
+  # `Budget#steady_ask` answers for a one-time bill and therefore what §9's structural verdict — "your
+  # budget doesn't fit your income", a sentence about the SHAPE of the rules — is computed from. The
+  # wave before this one read `#planned_this_period` there, which is catch-up and moves with the
+  # fund, the spending and the calendar; every example below is a day, a payment or an adjustment
+  # that must NOT move the figure, plus the three inputs that must.
+  # ===========================================================================================
+  describe "#standing_ask" do
+    # $600 due Jun 1, no interval, born Jan 1 on a category funded Jan 1 — six monthly periods from
+    # the accrual start's period through the period the bill falls due in (Jan, Feb, Mar, Apr, May,
+    # Jun), so $100 a period. The divisor is asserted through a figure that changes if the fencepost
+    # does: five periods would read $120 and seven $85.71.
+    let(:bill) do
+      create(
+        :budget,
+        category: groceries,
+        amount: 600,
+        interval_months: nil,
+        anchor_date: Date.new(2026, 6, 1),
+        created_at: born
+      )
+    end
+
+    def calc(on) = described_class.new(bill, today: on)
+
+    it "spreads the amount over the periods from the accrual start to the due date" do
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(100)
+    end
+
+    it "answers a BigDecimal" do
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to be_a(BigDecimal)
+    end
+
+    # THE SAME FIGURE ON THREE DATES: before the bill is due, on the day it is due, and two months
+    # after it went by unpaid. `#planned_this_period` reads $100, $100 and $0 across those same three
+    # days (the third because the fund is full), and the third pair is the divergence that matters —
+    # a verdict about the shape of a budget cannot be allowed to depend on which afternoon it is
+    # asked on.
+    it "reads the same before, on and after the due date", :aggregate_failures do
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(100)
+      expect(calc(Date.new(2026, 6, 1)).standing_ask).to eq(100)
+      expect(calc(Date.new(2026, 8, 15)).standing_ask).to eq(100)
+    end
+
+    # A PAYMENT MOVES THE ROW AND NOT THE SHAPE. $200 spent on the category's lane in February empties
+    # what had accrued, so March's catch-up share rises to (600 − 0) ÷ 4 = $150 — and the standing ask
+    # does not move at all. Both are asserted on one calculator, so the pair cannot pass by the two
+    # readers having become the same method.
+    it "does not move when the bill is part paid, though this period's share does", :aggregate_failures do
+      spend(200, on: Date.new(2026, 2, 10))
+      march = calc(Date.new(2026, 3, 15))
+
+      expect(march.standing_ask).to eq(100)
+      expect(march.planned_this_period).to eq(150)
+    end
+
+    # AND A SETTLED BILL STILL DECLARES ITS COST — the ruling taken in full (fix wave 2 — MED-A). The
+    # catch-up share is zero for ever after `#settled?`; the standing ask is what the rule costs a
+    # period for as long as the user keeps it. This is the shape whose bar had stopped being drawn
+    # (`EntryImpactPresenter#bar?`, LOW-2), and it is what makes a paid one-off go on counting toward
+    # `Budget.steady_need`.
+    it "still asks after the bill has been paid in full", :aggregate_failures do
+      spend(600, on: Date.new(2026, 2, 10))
+      august = calc(Date.new(2026, 8, 15))
+
+      expect(august.planned_this_period).to eq(0)
+      expect(august.standing_ask).to eq(100)
+    end
+
+    # An adjustment is a delta on ONE period's accrual (§3.3). It moves the fund and therefore the
+    # catch-up share; the standing figure reads the rule, not the fund.
+    it "does not move when the fund is topped up by hand" do
+      adjust(bill, 300, on: Date.new(2026, 2, 10))
+
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(100)
+    end
+
+    # THE THREE INPUTS THAT DO MOVE IT, one example each — without these the figure could be a
+    # constant for the wrong reason (a method returning the amount, or zero, would pass every
+    # example above except the divisor's).
+    it "moves with the amount" do
+      bill.update!(amount: 1_200)
+
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(200)
+    end
+
+    # A bill due four months earlier has four fewer periods to be found in: Jan and Feb, so $300.
+    it "moves with the anchor" do
+      bill.update!(anchor_date: Date.new(2026, 2, 1))
+
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(300)
+    end
+
+    # ** THE GRID IS AN INPUT, AND A CADENCE CHANGE IS HOW A USER MOVES IT (§3.5). ** The same bill on
+    # the same dates under a WEEKLY grid has 22 boundaries in Jan 1..Jun 1 rather than 6, so it costs
+    # $27.27 of a week instead of $100 of a month. That is the figure changing because the PERIOD
+    # changed, which is exactly what "a constant of the rule and the grid" means.
+    it "moves when the user's cadence does" do
+      user.update!(period_cadence: :weekly)
+
+      expect(calc(Date.new(2026, 3, 15)).standing_ask).to eq(BigDecimal("27.27"))
+    end
+
+    # THE FLOOR AT ONE PERIOD, on the shape that reaches it: a bill anchored before the rule was even
+    # written has no boundary between its accrual start and its due date, and dividing by zero periods
+    # would raise on a page whose only job is to render figures.
+    it "asks for the whole amount when the date was already past when the rule was written" do
+      overdue = create(
+        :budget,
+        category: create(:category, :expense, user: user, name: "Car Service", funded_since: Date.new(2026, 1, 1)),
+        amount: 600,
+        interval_months: nil,
+        anchor_date: Date.new(2025, 12, 20),
+        created_at: born
+      )
+
+      expect(described_class.new(overdue, today: Date.new(2026, 3, 15)).standing_ask).to eq(600)
+    end
+
+    # THE OTHER TWO SHAPES ARE `Budget#steady_ask`'s OWN ARITHMETIC, delegated rather than re-derived
+    # — an interval rule's per-cycle figure and a rate rule's rate. Asserted against that method on
+    # the same records, because the ruling is that this reader ANSWERS FOR EVERY SHAPE and the one-off
+    # arm is the only one it computes itself.
+    # $600 every six months under a monthly grid is $100 a period — the interval's own arithmetic,
+    # nothing to do with the anchor's distance.
+    it "delegates the interval shape to Budget#steady_ask" do
+      recurring = create(
+        :budget,
+        category: create(:category, :expense, user: user, name: "Premiums", funded_since: Date.new(2026, 1, 1)),
+        amount: 600,
+        interval_months: 6,
+        anchor_date: Date.new(2026, 6, 1)
+      )
+
+      expect(described_class.new(recurring, today: Date.new(2026, 3, 15)).standing_ask).to eq(100)
+    end
+
+    it "delegates the rate shape to Budget#steady_ask", :aggregate_failures do
+      march = Date.new(2026, 3, 15)
+      rate = create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      expect(described_class.new(rate, today: march).standing_ask).to eq(400)
+      expect(described_class.new(rate, today: march).standing_ask).to eq(rate.steady_ask(user, today: march))
+    end
+
+    # IT COSTS NO QUERY, and that is the property three call sites lean on: `Budget#steady_ask`'s
+    # one-off branch builds an UNBATCHED calculator at `EntryImpactPresenter#steady_claim`,
+    # `SacrificePresenter#rows` and `SuggestionEngine#dead_rule_suggestion`. Under
+    # `#planned_this_period` each of those ran a spending query and an adjustment query per one-off
+    # rule; this reader touches neither lane.
+    it "reads no spending and no adjustment rows" do
+      spend(200, on: Date.new(2026, 2, 10))
+      calculator = calc(Date.new(2026, 3, 15))
+      statements = []
+      recorder = lambda do |_name, _start, _finish, _id, payload|
+        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+      end
+
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") { calculator.standing_ask }
+
+      expect(statements).to be_empty
+    end
+  end
+
+  # ===========================================================================================
   # ONE SPELLING OF THE PRE-CLAMP FIGURE (fix wave — LOW-2). `#raw_rate` and its negation `#over_by`
   # are what `EntryImpactPresenter#pre_clamp_claim` adds an edited entry back to and what
   # `HomeHelper#claim_trouble_label` prints as `over by $60.00`; both used to spell the subtraction

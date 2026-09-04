@@ -209,8 +209,11 @@ class EntryImpactPresenter
   #      claim is use-it-or-lose-it and sees ONE period (§3.1), so an entry from LAST period is not
   #      in the figure at all and giving it back would be pure invention: a $300 envelope with $60
   #      spent would read $285 while editing a $45 receipt from a fortnight ago.
-  #      `ClaimCalculator#countable_span` is the calculator's own answer to which days its walk
-  #      counts, so the test is the walk's rather than a second reading of the calendar here.
+  #      `ClaimCalculator#counts_spending_on?` is the calculator's own answer to which days its walk
+  #      SUBTRACTS SPENDING ON, so the test is the walk's rather than a second reading of the
+  #      calendar here. It is not `#countable_span`, which answers where a typed ADJUSTMENT may be
+  #      dated and is bounded at `min(today, …)` — see #counted_by_the_claim? for the double
+  #      subtraction that difference produced (fix wave — MED-1).
   #   3. NO ACCRUING RULE MAY BE SPENT PAST WHAT IT HAD — `#counted_by_the_claim?`'s second half.
   #      The pre-clamp reading above is available for a RATE rule (`accrued_this_period` and
   #      `spent_this_period` are both public) and NOT for an accruing one: §3.2 clamps the built-up
@@ -305,6 +308,13 @@ class EntryImpactPresenter
   # there is nothing for a bar to be a fraction OF — and an empty track drawn beside real figures
   # says "nothing left" an inch under a line saying $240.00, which is the same two-answers-on-one-
   # card defect that moved the goal's denominator. No denominator, no bar.
+  #
+  # ** A CATEGORY WHOSE ONLY RULE IS A SETTLED ONE-TIME BILL DRAWS A BAR AGAIN (fix wave 2 — LOW-2).
+  # ** For one wave `#steady_claim` read §3.2's catch-up share, which is ZERO once a one-off has been
+  # paid — so the bar under an envelope that had one all along simply stopped being rendered the
+  # afternoon the bill cleared. `#standing_ask` is what the rule costs a period whatever its payment
+  # history, so the denominator is positive for as long as the rule exists and the track goes on
+  # being drawn.
   def bar? = figures? && denominator.positive?
 
   # BALANCE-AFTER OVER THE DENOMINATOR, CLAMPED 0..1. Zero when there is nothing to measure against:
@@ -351,10 +361,19 @@ class EntryImpactPresenter
   # (see the class header) — so the one place the two due-date derivations diverge is a place this
   # file never reaches.
   #
+  # ** READ OFF THE CALCULATORS THIS CARD ALREADY HOLDS, NOT OFF A SECOND SET (fix wave 2 — MED-B).
+  # ** This was `holding.budgets.sum { |b| b.steady_ask(user, today:) }`, and `#steady_ask`'s one-off
+  # branch BUILDS A CALCULATOR — so a category with a one-time bill on it minted a second calculator
+  # per rule beside `#claim_calculators`, which is the very defect fix round 1's L5 closed on the
+  # edit path. `ClaimCalculator#standing_ask` is the same figure by construction: it IS the one-off
+  # arm of `#steady_ask`, and for the other two shapes it delegates straight back to that method.
+  # (Under the wave that read `#planned_this_period` those extra calculators also cost two statements
+  # each; `#standing_ask` reads no rows, so what is saved now is the object and the second door.)
+  #
   # `0.to_d` seeded, because an unseeded `sum` over an empty set returns the Integer literal 0 and
   # #bar_fraction divides by this. It is the same money-type guarantee `Category#claim` keeps one
   # layer up, for the same reason.
-  def steady_claim = holding.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
+  def steady_claim = claim_calculators.sum(0.to_d, &:standing_ask)
 
   # WHAT THE CATEGORY CLAIMS RIGHT NOW — `Category#claim`'s expression, off the calculators this
   # card has already built (fix round 1 — L5).
@@ -383,10 +402,12 @@ class EntryImpactPresenter
   # for exactly what `Category#claim` used to cost it — one calculator per rule — and the edit card
   # now pays that once instead of twice (see #claim).
   #
-  # ASKED FOR THE SHAPE OF THE CLAIM AS WELL AS FOR ITS FIGURE — `#over?`, `#countable_span`,
-  # `#rate?`, `#target`, `#accrued_this_period` and `#claim` itself. `Budget#claim_calculator` is
-  # the same constructor `Category#claim` uses, so what these objects say about the claim is what
-  # that claim is made of.
+  # ASKED FOR THE SHAPE OF THE CLAIM AS WELL AS FOR ITS FIGURE — `#over?`, `#counts_spending_on?`,
+  # `#rate?`, `#target`, `#accrued_this_period`, `#standing_ask` (the bar's denominator, fix wave 2 —
+  # MED-B) and `#claim` itself. `#countable_span` is NOT among them and must not be: it answers where
+  # a typed adjustment may be dated, and this card types none. `Budget#claim_calculator` is the same
+  # constructor `Category#claim` uses, so what these objects say about the claim is what that claim
+  # is made of.
   def claim_calculators
     @claim_calculators ||= holding.budgets.map { |budget| budget.claim_calculator(today: today) }
   end

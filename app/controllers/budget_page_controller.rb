@@ -24,8 +24,8 @@ class BudgetPageController < ApplicationController
   # `update` leaves the REJECTED values on `current_user` in memory: after submitting a cadence
   # with no anchor, `current_user.typical_income` reads $2,400 and `period_cadence` reads
   # "biweekly" though the row holds neither. Handing that object to the presenter rendered the
-  # full structural check — "Your rules need $520.00 a period / You typically bring in $2,400.00 /
-  # Left over $1,880.00 → available" — computed from a declaration the database had just refused,
+  # full structural check — "Your rules need $520.00 a period / You typically bring in $2,400.00 a
+  # period / Left over $1,880.00 free" — computed from a declaration the database had just refused,
   # under an error message saying the save had failed. Reloading the page made all three lines
   # vanish.
   #

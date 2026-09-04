@@ -733,6 +733,12 @@ class SuggestionEngine
   # has averaged $0.00 for 4 periods, your rule says $400" is spec §8's drift sentence with the
   # starkest figure it can carry. Detector 4 cannot say it — that one is item-backed rules only — so
   # without this the funded category that quietly stopped has no owner at all.
+  # ** THIS `#steady_ask` NEVER BUILDS A CALCULATOR, AND THE POPULATION IS WHY (fix wave 2 — MED-B).
+  # ** Only the one-off branch reaches `ClaimCalculator`, and this method is handed
+  # `#attributable_rate_rules` — rules whose `claim_shape` is `:rate`, which means NO ANCHOR, which
+  # means `#cadence` cannot answer `:one_off`. Every rule here takes the per-period or the monthly
+  # branch, both of them pure arithmetic on two columns. (`#claim_shape` above does build one, to
+  # read `#shape` off two columns; it runs no query either.)
   def drift_suggestion(rule, observed_total, window)
     return nil if observed_total.zero? && !rule.category.holder?
 
@@ -822,6 +828,13 @@ class SuggestionEngine
     # WHAT IT COSTS A PERIOD, not what the rule says: a $1,200 six-monthly premium and a $200
     # per-period rate are the same sentence to a user only once both are stated in the unit the
     # money actually leaves in. `steady_ask` again, for the same reason drift uses it.
+    #
+    # ** UNLIKE DRIFT'S, THIS POPULATION CAN HOLD ONE-OFF RULES — an item-backed one-time bill is
+    # exactly the shape that goes quiet — so this call CAN build a `ClaimCalculator`, one per dead
+    # rule. It costs no statement (fix wave 2 — MED-B): `#standing_ask` reads `amount`, the anchor,
+    # the category's `funded_since` and the rule's own `created_at`, then counts boundaries off
+    # `User#period_boundaries` in memory. Nothing here queries entries or adjustments, and the
+    # category and its user are preloaded by `#budgets`. An object per dead rule, not a query.
     per_period = rule.steady_ask(user, today: today)
 
     Suggestion.new(

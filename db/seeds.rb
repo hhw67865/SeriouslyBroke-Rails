@@ -93,7 +93,11 @@
 #                  PARTIAL, which is the shape a walk can say and a filter cannot
 #     :over        Dining Out — over by $10.00
 #     :overdue     Renters Insurance — was due 6 days ago, $180.00 built up of $180.00, all there
-#     :structural  rules need $2,459.99 a period against a declared $2,400.00
+#     :structural  rules need $2,103.42 a period against a declared $2,050.00 — the standing ask of
+#                  every rule (`Budget.steady_need`), which for the two one-time bills here is the
+#                  amount spread from the day the rule was born to the day it falls due and moves
+#                  with nothing else (fix wave 2 — MED-A). It read $2,459.99 against $2,400.00 while
+#                  `BudgetCalculator` re-asked for each bill in full every period.
 #
 #   "THIS PERIOD" (§3.4), one row per category and one line per rule. The period ANCHORS ON TODAY,
 #   so today is the only day of it that has happened — a rate row reads $0.00 unless its money went
@@ -225,16 +229,23 @@ today = Time.find_zone!(user.timezone).today
 #
 # `typical_income` is what the user SAYS they bring in, and it is UNDER the $2,600 paycheck below on
 # purpose: it is a declaration, not a measurement, and §9's structural check compares it against
-# `Budget.steady_need` — $2,103.41 here — so the demo is structurally underwater and the sacrifice
+# `Budget.steady_need` — $2,103.42 here — so the demo is structurally underwater and the sacrifice
 # view has a screen. That screen existing is the load-bearing property; the exact gap is not.
 #
 # ** IT WAS $2,400 AGAINST A NEED OF $2,459.99 (fix wave — MED-3). ** `Budget#steady_ask`'s one-off
 # branch used to divide the WHOLE amount by the periods left before the due date, and it built a
 # `BudgetCalculator` to do it — a class that also assumed every item-less bill was paid on time.
-# It reads §3.2's catch-up share now: what is STILL MISSING over the periods left, which for this
-# household's part-built funds is $356.58 a period less than asking for every bill again from
-# scratch. The demo's need fell with it, so the declaration follows it down to keep the state this
-# seed exists to show.
+# The need fell $356.58 when that class died, so the declaration followed it down to keep the state
+# this seed exists to show.
+#
+# ** FIX WAVE 2 (MED-A) MOVED IT BY ONE CENT, AND THE CENT IS WORTH THE SENTENCE. ** The one-off
+# branch is `ClaimCalculator#standing_ask` now — the amount over the periods from the rule's birth to
+# its due date, constant — rather than §3.2's catch-up share, which moves with the fund. On THIS
+# household the two agree almost exactly, because both one-time bills (the $300 Dentist visit and the
+# $180 Vet bill) were born with the rest of the seed and have had nothing spent against them: only
+# the Dentist's rounding differs, $21.43 a period against $21.42, because the standing figure divides
+# and rounds ONCE while catch-up rounds every period it walks. $2,103.41 → $2,103.42, and the demo
+# stays $53.42 a period underwater against the same declared $2,050.
 user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_050)
 
 # ---------------------------------------------------------------------------------------------

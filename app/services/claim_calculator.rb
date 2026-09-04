@@ -31,8 +31,13 @@
 # counts the current period's own boundary and why the fund is whole ON the due date rather than at
 # the end of the month containing it. `BudgetCalculator#periods_until_due` counted from `today` and so
 # did NOT include a boundary already passed — two answers to one question about one bill, which is
-# why that class was deleted in the fix wave and `Budget#steady_ask`'s one-off branch reads
-# `#planned_this_period` here instead.
+# why that class was deleted in the fix wave.
+#
+# TWO FIGURES COME OFF THIS WALK AND THEY ARE NOT THE SAME QUESTION. `#planned_this_period` is what
+# the rule asks of THIS period — catch-up, so it moves with the fund, the spending and the calendar —
+# and it is what a row and the adjust panel print. `#standing_ask` is what the rule costs a TYPICAL
+# period — a constant of the rule and the grid, read by `Budget#steady_ask` and therefore by §9's
+# structural verdict, which is a sentence about the SHAPE of the rules and must not move with cash.
 #
 # ** WHY THE SPENDING IS INSIDE THE WALK RATHER THAN SUBTRACTED AT THE END. ** §3.2 states the
 # formula as `Σ accruals since funded_since − spent_since_last_fulfilment`, and read literally — the
@@ -118,8 +123,54 @@ class ClaimCalculator
   def built_up = rate? ? 0.to_d : walk.built_up
 
   # THIS PERIOD'S SHARE BEFORE ANY ADJUSTMENT — the rate for a rate rule, the catch-up share for a
-  # dated one, the rate capped by what is missing for a dateless target.
+  # dated one, the rate capped by what is missing for a dateless target. IT MOVES: with what is
+  # already built up, with what was spent, with how many periods are left. That is right for a row
+  # ("$150.00 this period") and wrong for a verdict about the SHAPE of a budget — see #standing_ask.
   def planned_this_period = rate? ? rate_per_period : walk.planned
+
+  # ** WHAT THIS RULE COSTS A TYPICAL PERIOD — A CONSTANT OF THE RULE AND THE GRID, AND THE ONLY
+  # FIGURE §9's STRUCTURAL CHECK MAY BE ASKED (fix wave 2 — MED-A). ** `Budget#steady_ask` is the
+  # method three screens read; this is the arm of it a ONE-TIME bill takes, and it is here because
+  # the divisor is a walk over `User#period_boundaries` that this class already owns.
+  #
+  #     one-off  → amount ÷ (periods from the accrual-start period through the period the due date
+  #                falls in), floored at one period
+  #     interval → the per-cycle figure `Budget#steady_ask` computes (amount × 12 ÷ periods a year ÷
+  #                interval) — unchanged, and already constant
+  #     rate     → the rate itself — unchanged, and already constant
+  #
+  # ** IT WAS `#planned_this_period`, AND THAT MADE A STRUCTURAL VERDICT MOVE WITH THIS AFTERNOON'S
+  # CASH. ** The fix wave replaced `BudgetCalculator` with §3.2's catch-up share, which is the right
+  # figure for a ROW and the wrong one for "your budget doesn't fit your income": catch-up divides
+  # what is STILL MISSING by the periods LEFT, so a $600 bill anchored a month ago and unpaid prices
+  # at the whole $600 (`#periods_left` floors at 1), fires the verdict — and clears it the afternoon
+  # the bill is PAID, with no rule changed. A sentence about the shape of the rules that a payment
+  # can switch off is not a sentence about the shape of the rules.
+  #
+  # ** THE DUE DATE IS THE ANCHOR, NOT `#next_due_on`, AND FOR THIS SHAPE THEY ARE THE SAME DATE. **
+  # A one-time bill's occurrence never rolls (`#due_on` returns the anchor whenever there is no
+  # interval), so nothing here reads the walk's `paid` total and nothing here can move with a
+  # receipt. The START is the accrual start's own period — the first period the walk WOULD visit —
+  # rather than the period containing `today`, which is what keeps the figure the same on every day
+  # of the rule's life. No spending, no adjustment and no `today` is read: this method costs no
+  # query at all, which is why the readers below can call it once per rule without batching.
+  #
+  # ** A SETTLED ONE-OFF STILL ASKS, AND THAT IS THE RULING TAKEN (fix wave 2 — MED-A/LOW-2). **
+  # `#planned_this_period` drops to zero the moment the bill is paid (`#settled?`); this does not,
+  # because the standing cost of a rule the user still holds is a fact about the rule and not about
+  # its last payment. The consequence is stated rather than hidden: a paid one-time bill goes on
+  # counting toward `Budget.steady_need` until the user deletes the rule — and the bar on the entry
+  # card, whose denominator is this sum, goes on drawing instead of vanishing the day the bill
+  # clears.
+  #
+  # THE FLOOR AT ONE PERIOD is `#periods_left_from`'s own, and it answers two shapes at once: a bill
+  # due inside the period it was created in, and a user who has declared no cadence and therefore has
+  # no boundaries to count. Both get the whole amount asked of one period, which is blunt and honest.
+  def standing_ask
+    return rate_per_period unless one_time?
+
+    (target / periods_to_fund).round(2)
+  end
 
   # `accrued(P) = planned(P) + Σ adjustments dated inside P` (§3.3), verbatim.
   def accrued_this_period = planned_this_period + adjustments_within(current_period)
@@ -283,11 +334,12 @@ class ClaimCalculator
   # of this class's own would be a second answer free to drift from the structural check's.
   #
   # ** IT NEVER REACHES `steady_ask`'s ONE-OFF BRANCH, AND SINCE THE FIX WAVE THAT IS WHAT KEEPS THE
-  # CALL FINITE. ** That branch now reads `#planned_this_period` on a calculator of its own, so a
-  # rule that asked this method AND took that branch would recurse. It cannot: only ANCHORLESS rules
-  # reach here (a dated rule takes the catch-up formula above), `:one_off` is by definition anchored,
-  # and `Budget#shape_must_be_valid` pins an anchorless rule to per-period or to a 1-month interval.
-  # Two disjoint shapes, checked by the model rather than by argument.
+  # CALL FINITE. ** That branch reads `#standing_ask` on a calculator of its own, so a rule that
+  # asked this method AND took that branch would recurse. It cannot, twice over: `#standing_ask`
+  # answers the one-off shape itself and only DELEGATES here for the other two, and only ANCHORLESS
+  # rules reach here at all (a dated rule takes the catch-up formula above) while `:one_off` is by
+  # definition anchored — `Budget#shape_must_be_valid` pins an anchorless rule to per-period or to a
+  # 1-month interval. Two disjoint shapes, checked by the model rather than by argument.
   def rate_per_period = rule.steady_ask(user, today: today)
 
   # ---- §3.2/§3.3, the accrual walk -----------------------------------------------------------
@@ -447,6 +499,18 @@ class ClaimCalculator
   def periods_left_from(from, due)
     [user.period_boundaries(from: from, to: due).count, 1].max
   end
+
+  # THE DIVISOR BEHIND `#standing_ask`'s ONE-OFF ARM: how many periods this rule has, from the first
+  # one it accrues in through the one its bill falls due in. The same count `#periods_left` makes and
+  # from the same method — the difference is where it starts. `#periods_left` starts at TODAY's
+  # period, because it is answering "how long have I got"; this starts at the accrual start's period,
+  # because it is answering "what was this rule ever going to cost a period", and only the second
+  # question has an answer that stays put.
+  #
+  # AN ANCHOR ALREADY PAST WHEN THE RULE WAS WRITTEN yields no boundaries at all (`to < from`), which
+  # the floor turns into one period and the whole amount. That is the same answer the walk gives such
+  # a rule on its first day and every day after.
+  def periods_to_fund = periods_left_from(user.period_containing(accrual_start).first, anchor)
 
   # ---- the rows ------------------------------------------------------------------------------
 
