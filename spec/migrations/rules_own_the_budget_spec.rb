@@ -153,6 +153,19 @@ RSpec.describe RulesOwnTheBudget do
   # no anchor, no interval, and neither `carries_over` nor a target — legal at that migration's own
   # moment in the sequence and refused by `Budget#set_aside_only?` from the day Task 1's columns
   # landed. `Budget.create!` cannot write it, which is exactly why the migration has to.
+  # A SECOND CATCH-ALL RULE ON A CATEGORY THAT ALREADY HAS ONE — the legacy shape
+  # `#category_may_hold_one_item_less_rule` refuses, which is why it can only be planted in SQL.
+  # Returns its id, so the example asserting that BOTH ids are named has one of them in hand.
+  def plant_a_second_lane(category)
+    id = SecureRandom.uuid
+    sql(<<~SQL.squish, id: id, cid: category.id)
+      INSERT INTO budgets (id, category_id, amount, basis, interval_months, carries_over, rule_type,
+                           created_at, updated_at)
+      VALUES (:id, :cid, 100, 1, NULL, FALSE, 1, NOW(), NOW())
+    SQL
+    id
+  end
+
   def plant_a_bare_zero_rule(category)
     sql(<<~SQL.squish, id: SecureRandom.uuid, cid: category.id)
       INSERT INTO budgets (id, category_id, amount, basis, interval_months, carries_over, rule_type,
@@ -491,6 +504,13 @@ RSpec.describe RulesOwnTheBudget do
   # The receipt
   # ---------------------------------------------------------------------------------------------
 
+  # ** EVERY FIGURE IS A COUNT OF ROWS THIS RUN WROTE. ** The usage figure used to be a census of
+  # every `usage` row in the table, so a user whose rules this file barely touched read "9 typed
+  # usage" about nine rows it had not written a byte of: `usage` is the column's DEFAULT (§6.3), so
+  # an anchorless rule was already `usage` before the typing UPDATE ran. The only rows this file
+  # types usage are the ones it MINTS, which is why they are one clause. The plural forms are
+  # asserted too — "1 targets moved" is the kind of line that makes a reader wonder what else the
+  # file is careless about.
   it "counts what it moved, minted and typed", :aggregate_failures do
     plant_the_goal_era
 
@@ -498,8 +518,8 @@ RSpec.describe RulesOwnTheBudget do
 
     expect(lines).to include(
       *[
-        "ming@example.com: 1 targets moved onto rules; 2 rules minted; 2 typed bill, 4 typed usage",
-        "1 targets moved; 2 rules minted; 2 rules typed bill; 4 rules typed usage",
+        "ming@example.com: 1 target moved onto rules; 2 rules minted and typed usage; 2 rules typed bill",
+        "2 rules typed bill; every other rule kept the column's usage default",
         "ming@example.com: physical 5550.0 == bank 5550.0, unchanged"
       ].map { |line| a_string_including(line) }
     )
@@ -554,6 +574,62 @@ RSpec.describe RulesOwnTheBudget do
     expect(catch_all_rule_for(someday)).to be_valid
     expect(catch_all_rule_for(someday).target_amount).to eq(3_000)
     expect(claim_of(world[:vacation])).to eq(1_150.to_d)
+  end
+
+  # ** TWO RULES WITH NO ITEM SHARE ONE LANE, AND THIS RUN CANNOT CHOOSE BETWEEN THEM. **
+  # `Budget#category_may_hold_one_item_less_rule` is younger than the data it guards, so the pair is
+  # a shape a restore can carry. `CATEGORY_LANE` would hand the target to the OLDER and leave the
+  # younger beside it — a category coming out of the migration with one catch-all holding a fund and
+  # another claiming the same lane, refused at the far end of the run by `#malformed_rules` under a
+  # sentence naming neither as the other's twin. Which one the user meant is a decision about their
+  # money, so it is named BEFORE anything moves.
+  #
+  # PLANTED IN SQL, because `Budget` refuses the second rule outright — which is the whole point.
+  it "refuses a category carrying two rules with no item", :aggregate_failures do
+    world = plant_the_goal_era
+    plant_a_second_lane(world[:vacation])
+
+    expect { migrate! }.to raise_error(described_class::PreflightFailed, /Vacation has two rules with no item/)
+    expect(target_of(world[:vacation])).to be_present
+  end
+
+  # BOTH IDS ARE NAMED, because "keep one" is not actionable without them.
+  it "names both rules of a duplicate lane" do
+    world = plant_the_goal_era
+    second = plant_a_second_lane(world[:vacation])
+    first = Budget.where(category_id: world[:vacation].id, item_id: nil).where.not(id: second).sole
+
+    expect { migrate! }.to raise_error(described_class::PreflightFailed, /#{first.id}, #{second}/)
+  end
+
+  # ** THE OTHER DIRECTION, AND IT IS THE ONE A CARELESS `GROUP BY` WOULD GET WRONG. ** An item-less
+  # rule beside an item-BACKED one is the demo's own commonest shape (§3.1's lane partition: a
+  # catch-all rate rule beside a dated bill), and it is not a duplicate of anything — the two lanes
+  # are disjoint by construction.
+  it "does not call an item-less rule beside an item-backed one a duplicate" do
+    world = plant_the_goal_era
+    dated(
+      world[:groceries],
+      90,
+      on: Date.new(2026, 11, 1),
+      item: create(:item, category: world[:groceries], name: "Bulk order")
+    )
+
+    expect { migrate! }.not_to raise_error
+  end
+
+  # ** A TARGET OF ZERO IS ALREADY MET, AND WITHOUT THIS ARM POSTGRES SAYS SO WITHOUT NAMING ANYONE.
+  # ** `Category#target_is_a_goal` refused the figure and `update_column` walks past it, so a legacy
+  # `0` is a shape a restore can carry. It would reach `budgets_positive_target_amount` — the same
+  # sentence re-stated on the new owner — and come back as a `PG::CheckViolation` naming a constraint
+  # and a table: no owner, no category, no figure. Named here instead.
+  it "refuses a target of zero, naming the category and the figure", :aggregate_failures do
+    plant_the_goal_era
+    name_a_target(holder("Someday"), 0)
+
+    expect { migrate! }
+      .to raise_error(described_class::PreflightFailed, /Someday names a target of \$0\.00, which is not a goal/)
+    expect(connection.column_exists?(:categories, :target_amount)).to be(true)
   end
 
   # ** A TARGET ON A CATEGORY THAT CANNOT HOLD A RULE. ** `Budget#category_must_be_an_expense`

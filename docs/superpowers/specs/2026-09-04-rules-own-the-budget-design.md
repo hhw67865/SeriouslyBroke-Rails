@@ -226,7 +226,7 @@ once the column it copies FROM existed.
 ### 10.2 The shapes, and `capped?`
 
 `ClaimCalculator#shape` is `:dated` if `anchor_date`, `:building` if `carries_over`, `:rate`
-otherwise — three of the rule's OWN columns and no reach for the category. `#capped?` is the one
+otherwise — TWO of the rule's own columns, and no reach for the category. `#capped?` is the one
 predicate the two `min(…, target)` sites read, so "uncapped" is spelled once: a dated rule is always
 capped (its target is its amount), a building rule only where it names a figure, and a rate rule is
 neither. `#target` is **nil** for an uncapped building rule and nil is not zero — zero would make the
@@ -276,16 +276,22 @@ spelled (the negated index into `#budgeted_categories`), so the drag reorder sur
 Per user and in total: **targets moved · rules minted · rules typed bill · rules typed usage**, plus
 the physical invariant (`pot + Σ accounts == income − expenses`) printed unchanged for every user.
 
-It REFUSES rather than guesses, before the first write: a target category whose catch-all rule has a
-due date (`carries_over` cannot be set on a dated rule, and there is nowhere else to put the figure);
-a target on a category that is not an expense (no rule may live there); and a `$0` rule that no
-target will repair — a rule that demands nothing and builds toward nothing, which is the shape
-`DropTheDistribution` left behind wherever its category named no figure. After the last write it
-refuses to commit a database where any figure reached no rule, or where any rule it wrote or touched
-is a shape `Budget` itself would reject (the validations restated in SQL, clause for clause).
+It REFUSES rather than guesses, and all five refusals fire BEFORE the first write: a target category
+whose catch-all rule has a due date (`carries_over` cannot be set on a dated rule, and there is
+nowhere else to put the figure); a target on a category that is not an expense (no rule may live
+there); a target of zero or less (already met, or money the budget owes its owner — named here so it
+is not a `PG::CheckViolation` naming no owner); a category carrying TWO item-less rules (they share
+one lane, so the target has no single rule to move onto, and picking the older is a decision about
+the user's money rather than a tie-break — both ids are named); and a `$0` rule that no target will
+repair, which is the shape `DropTheDistribution` left behind wherever its category named no figure.
+After the last write it refuses to commit a database where any figure reached no rule, or where any
+rule it wrote or touched is a shape `Budget` itself would reject (the validations restated in SQL,
+clause for clause).
 
-**Dev run:** 9 targets moved, 7 rules minted, 4 typed bill, 24 typed usage; every user's physical
-invariant unchanged. **A re-run raises**, loudly and on purpose: `up` drops the column, so a second
+**Dev run:** 9 targets moved onto rules, 7 rules minted and typed usage, 4 rules typed bill; every
+user's physical invariant unchanged. Every receipt figure counts rows this run WROTE — `usage` is the
+column's default, so an anchorless rule was already `usage` before the typing statement ran and only
+the minted rules were typed usage by this file. **A re-run raises**, loudly and on purpose: `up` drops the column, so a second
 run meets `PG::UndefinedColumn` on its first read rather than shrugging.
 
 **What "the claim is identical before and after" means.** Not a comparison against the pre-migration

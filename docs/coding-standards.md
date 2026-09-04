@@ -25,7 +25,7 @@ and a category is that both are read from the same total — there is no account
 - **Entry** → the actual transaction record; income and expenses are the physical ledger's other writer
 - **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name — the rename is §8 out-of-scope)
 - **AccountMovement** → a transfer between two of a user's own accounts (physical ledger's only writer besides entries; its columns are still named `from_pool_id`/`to_pool_id`)
-- **Budget** → a funding rule, owned by the expense Category whose money it claims. A category carries at most ONE item-less ("catch-all") rule, beside as many item-backed rules as it has items. Seven columns say what a rule IS (`2026-09-04-rules-own-the-budget` §2):
+- **Budget** → a funding rule, owned by the expense Category whose money it claims. A category carries at most ONE item-less ("catch-all") rule, beside as many item-backed rules as it has items. Eight columns say what a rule IS (`2026-09-04-rules-own-the-budget` §2):
 
   ```
   amount          money  NOT NULL  what the rule puts in (per period / per month / the bill)
@@ -38,7 +38,7 @@ and a category is that both are read from the same total — there is no account
   rule_type       int    NOT NULL  bill (0) | usage (1) | choice (2), default usage
   ```
 
-  `ClaimCalculator#shape` reads the first three of those: `:dated` if `anchor_date`, `:building` if `carries_over`, `:rate` otherwise. `#capped?` is the one predicate the `min(…, target)` sites read
+  `ClaimCalculator#shape` reads TWO of those and nothing else: `:dated` if `anchor_date`, `:building` if `carries_over`, `:rate` otherwise. `#capped?` is the one predicate the `min(…, target)` sites read
 - **Adjustment** → `(rule, date, signed amount)`: a dated delta on one rule's accrual — set aside, take back, top up, reduce and skip are all this one row. It never touches accounts
 
 **The four writers, and there are no others.** Purpose side: RULES (`Budget`, whose one typed door

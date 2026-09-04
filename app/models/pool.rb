@@ -9,9 +9,12 @@
 #     sat in, and a category holds its own money now (§2). With them go the destroy-time
 #     re-pointing machinery, `REFUSALS`, and `User#destroy_child_pools_first`.
 #   * `start_date`, `target_amount` and `priority` are gone. They were the envelope's three
-#     columns; the goal that wanted them is a `Category` carrying `funded_since`, `target_amount`
-#     and `priority` of its own. `target_amount`'s "buffer marker" was a parked question and the
-#     ruling is no.
+#     columns; what wants them now is split between two records — a `Category` carrying
+#     `funded_since` and `priority`, and the BUILDING RULE on it carrying `carries_over` and the
+#     `target_amount` it accrues toward (rules-own-the-budget §2.1; `categories.target_amount` was
+#     itself dropped by §6's migration, because a goal is a rule and not a kind of category).
+#     The POOL's `target_amount` was a "buffer marker" — a health line on a bank account, which is a
+#     different question from a goal — and that was a parked question whose ruling is no.
 #   * `NOUNS` is gone with the three types it named. An account is a "buffer" wherever a screen
 #     needs the word, and `EntryImpactPresenter#noun` names the two shapes a CATEGORY has.
 #   * `#calculator`, `#status`, `#total` and `#timeline` are gone with `PoolCalculator`,

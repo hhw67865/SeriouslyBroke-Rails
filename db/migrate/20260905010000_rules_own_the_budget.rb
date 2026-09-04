@@ -126,11 +126,16 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
   # transaction, so a database whose rules stopped being shapes the app accepts is never committed.
   class VerificationFailed < StandardError; end
 
-  # ** THE CATEGORY'S OWN LANE — ONE RULE PER CATEGORY, CHOSEN THE SAME WAY TWICE. **
-  # `Budget#category_may_hold_one_item_less_rule` is younger than the data it guards, so a real
-  # database may carry two catch-all rules on one category; `DISTINCT ON` with the oldest first
-  # resolves that to a single row, and it resolves it identically on every run, which is what makes a
-  # diff of two runs against one backup a usable audit.
+  # ** THE CATEGORY'S OWN LANE — ONE RULE PER CATEGORY, CHOSEN THE SAME WAY TWICE. ** `DISTINCT ON`
+  # with the oldest first, so a lane resolves identically on every run and a diff of two runs against
+  # one backup is a usable audit.
+  #
+  # ** IT IS NOT WHAT HANDLES A DUPLICATE LANE — `#duplicate_lanes` REFUSES THAT OUTRIGHT. ** This
+  # `DISTINCT ON` would silently pick the older of two catch-all rules and leave the younger beside
+  # it, and picking one of a user's two rules is a decision about their money rather than a tie-break.
+  # The clause stays because the preflight arm is what makes it single-valued: with the refusal in
+  # front of it, every group this selects from has exactly one row, and the `ORDER BY` is what says
+  # so out loud rather than leaving a reader to assume it.
   CATEGORY_LANE = <<~SQL.squish
     SELECT DISTINCT ON (category_id) id FROM budgets
      WHERE item_id IS NULL ORDER BY category_id, created_at, id
@@ -145,7 +150,7 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
     before = ledgers
     preflight!
     receipts = { moved: move_the_targets, minted: mint_the_missing_rules }
-    verify!(before, receipts.merge(type_the_rules))
+    verify!(before, receipts.merge(bill: type_the_rules))
     remove_column :categories, :target_amount
   end
 
@@ -153,6 +158,9 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
   # type it was given: those are the app's rows now, and a `down` that deleted them would take a
   # user's own edits with them. What comes back is the column four older migration specs read and
   # the number it held.
+  # NO `DISTINCT ON` TIE-BREAK ON THE COPY-BACK, and it needs none: `#duplicate_lanes` refuses a
+  # category with two item-less rules before `up` writes anything, so no database this `down` can
+  # meet has two building rules on one category for the UPDATE to pick between.
   def down
     add_column :categories, :target_amount, :money, scale: 2
 
@@ -173,11 +181,73 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
   # The refusals
   # -----------------------------------------------------------------------------------------------
 
+  # ** FIVE ARMS, AND EVERY ONE OF THEM RUNS BEFORE THE FIRST WRITE. ** Two of these started life on
+  # the OTHER side of the run — as disjuncts of `#malformed_rules`, which fires after every statement
+  # has already gone in — and that placement was wrong twice over. It reports a shape this file could
+  # have seen coming under the generic sentence "a shape the app would refuse", and it makes the
+  # operator read a `VerificationFailed` rollback where the honest message is "this database is not
+  # convertible yet". `CategoriesHoldTheMoney`'s two classes exist for exactly that split: "is this
+  # database convertible" and "did the conversion go wrong" need different work from whoever reads
+  # the message.
   def preflight!
-    failures = dated_targets + unfundable_targets + meaningless_zero_rules
+    failures = dated_targets + unfundable_targets + unusable_targets +
+               duplicate_lanes + meaningless_zero_rules
     return if failures.empty?
 
     raise PreflightFailed, failures.join("; ")
+  end
+
+  # ** A CATEGORY WITH TWO ITEM-LESS RULES, NAMED BEFORE ANYTHING MOVES. **
+  # `Budget#category_may_hold_one_item_less_rule` is younger than the data it guards, so a real
+  # database can carry two catch-all rules on one category — `SuggestionEngine
+  # #attributable_rate_rules` keeps its own `rules.one?` guard for the same reason.
+  #
+  # ** THIS RUN CANNOT HEAL IT AND MUST NOT PRETEND TO. ** `CATEGORY_LANE` would hand the target to
+  # the OLDER of the two and leave the younger beside it, so the category would come out of this
+  # migration with one catch-all holding a fund and another claiming the same lane — a pair
+  # `#malformed_rules` then refuses at the far end of the run, under a sentence that names neither
+  # rule as the other's twin. Which of the two the user meant is a decision about their money: the
+  # older one is where the fund would land, the younger one may be the one they actually edit.
+  #
+  # BOTH IDS ARE NAMED, because "keep one" is not actionable without them. The pair is reported once,
+  # not once per row: `string_agg` over the category's item-less rules, ordered so two runs against
+  # one backup produce the same message.
+  def duplicate_lanes
+    template = "%<extra>s has two rules with no item (%<id>s) — they share one lane, so the " \
+               "category's target has no single rule to move onto; keep one"
+    named(<<~SQL.squish, template)
+      SELECT string_agg(b.id::text, ', ' ORDER BY b.created_at, b.id) AS id, c.name AS extra, u.email
+        FROM budgets b
+        JOIN categories c ON c.id = b.category_id
+        JOIN users u ON u.id = c.user_id
+       WHERE b.item_id IS NULL
+       GROUP BY c.id, c.name, u.email
+      HAVING COUNT(*) > 1
+       ORDER BY u.email, c.name
+    SQL
+  end
+
+  # ** A TARGET OF ZERO OR LESS, WHICH THE DATABASE WOULD OTHERWISE REFUSE WITHOUT NAMING ANYONE. **
+  # `Category#target_is_a_goal` said "a goal of zero is already met and a negative one is money the
+  # budget owes its owner", and `update_column` walks past it — `spec/requests/budget_page_spec.rb`
+  # planted exactly that row to make a category already-invalid — so a legacy figure of `0` is a
+  # shape a restore can be carrying.
+  #
+  # WITHOUT THIS ARM IT REACHES `budgets_positive_target_amount` (`RulesOwnTheBudgetColumns`' CHECK,
+  # which is that same sentence re-stated on the new owner) and comes back as a `PG::CheckViolation`
+  # naming a constraint, a table and nothing else: no owner, no category, no figure. Refused here it
+  # names all three, and the fix is the one the message states.
+  def unusable_targets
+    template = "%<extra>s names a target of %<id>s, which is not a goal — a target of zero is " \
+               "already met and a negative one is money the budget owes its owner"
+    named(<<~SQL.squish, template)
+      SELECT c.target_amount::text AS id, c.name AS extra, u.email
+        FROM categories c
+        JOIN users u ON u.id = c.user_id
+       WHERE c.target_amount IS NOT NULL
+         AND c.target_amount <= 0::money
+       ORDER BY u.email, c.name
+    SQL
   end
 
   # ** A TARGET CATEGORY WHOSE CATCH-ALL RULE HAS A DUE DATE. ** `Budget#build_up_must_be_valid`
@@ -331,10 +401,11 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
     SQL
   end
 
-  # ** `bill` WHERE THERE IS A DATE, AND THE REST KEEP THE COLUMN'S `usage` (§6.3). ** Both halves
-  # are counted, because "3 typed bill" alone does not say whether the other eighteen rules were
-  # seen: the usage figure is read back from the table rather than derived by subtraction, so a row
-  # this statement missed shows up as a total that does not add up.
+  # ** `bill` WHERE THERE IS A DATE, AND THE REST KEEP THE COLUMN'S `usage` (§6.3). ** Only the
+  # anchored rows are counted, because only the anchored rows are WRITTEN: an anchorless rule is
+  # `usage` because the column's default made it so before this statement ran, and counting it as
+  # something this migration did would be claiming a write that never happened. See #report for the
+  # figure that IS this run's usage.
   def type_the_rules
     bills = tally(<<~SQL.squish)
       WITH typed AS (
@@ -349,18 +420,7 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
        GROUP BY u.email
     SQL
 
-    { bill: bills, usage: usage_tally }
-  end
-
-  def usage_tally
-    tally(<<~SQL.squish)
-      SELECT u.email, COUNT(*) AS n
-        FROM budgets b
-        JOIN categories c ON c.id = b.category_id
-        JOIN users u ON u.id = c.user_id
-       WHERE b.rule_type = #{USAGE}
-       GROUP BY u.email
-    SQL
+    bills
   end
 
   # Email -> count, from a statement that already grouped by email. `Hash.new(0)` so the report can
@@ -427,9 +487,10 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
   #
   #   * `carries_over AND anchor_date IS NOT NULL` — `#build_up_must_be_valid`, first clause;
   #   * `target_amount IS NOT NULL AND NOT carries_over` — its second (a cap on money that resets);
-  #   * `target_amount <= 0` — `validates :target_amount, numericality: { greater_than: 0 }`, which
-  #     `budgets_positive_target_amount` also carries; restated because a CHECK that was dropped
-  #     from under this file should fail here rather than reach a form;
+  #     (`validates :target_amount, numericality: { greater_than: 0 }` is DELIBERATELY NOT here: the
+  #     only non-positive figure that could reach a rule is a category's, `#unusable_targets` refuses
+  #     that before the first write, and `budgets_positive_target_amount` stands behind both — a
+  #     disjunct this file cannot reach reads as a check somebody is relying on);
   #   * `amount = 0 AND NOT (carries_over AND target_amount IS NOT NULL AND anchor_date IS NULL)` —
   #     `#set_aside_only?` and the two `amount` numericality rules it gates;
   #   * the two basis clauses — `#shape_must_be_valid`, both branches: a per-period rule carries
@@ -459,7 +520,6 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
        WHERE (b.carries_over OR b.target_amount IS NOT NULL OR b.amount = 0::money)
          AND ((b.carries_over AND b.anchor_date IS NOT NULL)
            OR (b.target_amount IS NOT NULL AND NOT b.carries_over)
-           OR (b.target_amount IS NOT NULL AND b.target_amount <= 0::money)
            OR (b.amount = 0::money
                AND NOT (b.carries_over AND b.target_amount IS NOT NULL AND b.anchor_date IS NULL))
            OR (b.basis = #{PER_PERIOD}
@@ -475,21 +535,35 @@ class RulesOwnTheBudget < ActiveRecord::Migration[8.1]
     SQL
   end
 
-  # ONE LINE PER USER WHO HAD ANY OF THIS, plus the totals and the invariant. A per-user receipt is
-  # what lets an operator match this run against the screens afterwards; a total alone says only that
-  # something happened.
+  # ** ONE LINE PER USER THIS RUN WROTE SOMETHING FOR, plus the totals and the invariant. ** A
+  # per-user receipt is what lets an operator match this run against the screens afterwards; a total
+  # alone says only that something happened.
+  #
+  # ** EVERY FIGURE IS A COUNT OF ROWS THIS RUN WROTE, WHICH IS NARROWER THAN IT FIRST READ. ** The
+  # usage figure was a CENSUS — `SELECT COUNT(*) … WHERE rule_type = usage` after the typing — so a
+  # user whose rules this migration barely touched read "0 typed bill, 9 typed usage" about nine rows
+  # it had not written a byte of. `usage` is the column's DEFAULT (§6.3), so an anchorless rule was
+  # already `usage` before the UPDATE ran: the only rows this file typed usage are the ones it
+  # MINTED, which is why the two are one clause here rather than two figures that happen to agree.
+  #
+  # PLURALS, because a receipt is read by a person: "1 targets moved" is the kind of line that makes
+  # a reader wonder what else the file is careless about.
   def report(before, receipts)
     receipts.values.flat_map(&:keys).uniq.sort.each do |email|
-      say "#{email}: #{receipts[:moved][email]} targets moved onto rules; " \
-          "#{receipts[:minted][email]} rules minted; #{receipts[:bill][email]} typed bill, " \
-          "#{receipts[:usage][email]} typed usage"
+      say "#{email}: #{count(receipts[:moved][email], "target")} moved onto rules; " \
+          "#{count(receipts[:minted][email], "rule")} minted and typed usage; " \
+          "#{count(receipts[:bill][email], "rule")} typed bill"
     end
-    say "#{total(receipts[:moved])} targets moved; #{total(receipts[:minted])} rules minted; " \
-        "#{total(receipts[:bill])} rules typed bill; #{total(receipts[:usage])} rules typed usage"
+    say "#{count(total(receipts[:moved]), "target")} moved onto rules; " \
+        "#{count(total(receipts[:minted]), "rule")} minted and typed usage; " \
+        "#{count(total(receipts[:bill]), "rule")} typed bill; " \
+        "every other rule kept the column's usage default"
     before.each_value { |was| say "#{was[:email]}: physical #{was[:physical].to_f} == bank #{was[:bank].to_f}, unchanged" }
   end
 
   def total(counts) = counts.values.sum
+
+  def count(number, noun) = "#{number} #{noun.pluralize(number)}"
 
   # -----------------------------------------------------------------------------------------------
   # The physical invariant, before and after
