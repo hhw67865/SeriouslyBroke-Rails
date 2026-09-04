@@ -4,20 +4,33 @@ This document defines the architecture, patterns, and coding conventions for the
 
 ## Core Domain Models
 
-Two ledgers over one total (`docs/superpowers/specs/2026-08-21-two-ledger-design.md`): the
-PHYSICAL ledger says where money sits, the PURPOSE ledger says what it is for, and
-`pot + Σ accounts == income − expenses == available + Σ category holdings` to the cent. The only
-connection between an account and a category is that both are partitions of the same money —
-there is no account→category movement.
+One PHYSICAL ledger, and a purpose side that is COMPUTED
+(`docs/superpowers/specs/2026-09-03-computed-claims-design.md`, which supersedes the purpose-ledger
+writers of `2026-08-21-two-ledger-design.md`). The physical ledger says where money sits and holds
+its invariant to the cent:
 
-- **User** → has_many Categories (purpose ledger) and Pools (physical ledger); `default_account` is the pot
-- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` also HOLDS money (`target_amount` makes it a savings goal, `priority` sets its place in the fill order)
+```
+pot + Σ accounts == income − expenses          # the INVARIANT, verified in raw SQL by every migration
+free = min( pot , total_money − Σ claims )     # the DEFINITION — nothing is conserved on the purpose side
+```
+
+A category's money is a CLAIM computed from its rules, the calendar, its spending and dated
+adjustments. Nothing moves on the purpose side: there is no distribute step and no partition to
+conserve, so `free` is a definition rather than a balance. The only connection between an account
+and a category is that both are read from the same total — there is no account→category movement.
+
+- **User** → has_many Categories (the purpose side) and Pools (physical); `default_account` is the pot; `#today` is the owner's local day (see below)
+- **Category** (expense/income) → has_many Items and Budgets; an EXPENSE category with a `funded_since` COUNTS ITS OWN SPENDING from that date (`target_amount` makes it a savings goal, `priority` is its place in the GIVE-WAY order — who gives way first when the claims outrun the money). `#budgeted?` is the one spelling of "a rule claims this category"
 - **Item** → has_many Entries
-- **Entry** → the actual transaction record; the one thing that touches BOTH ledgers
+- **Entry** → the actual transaction record; income and expenses are the physical ledger's other writer
 - **Pool** → one of the user's bank accounts (two-ledger spec §5: the envelope and goal types are deleted; the table keeps its name — the rename is §8 out-of-scope)
 - **AccountMovement** → a transfer between two of a user's own accounts (physical ledger's only writer besides entries; its columns are still named `from_pool_id`/`to_pool_id`)
-- **Allocation** → money leaving the purpose ledger's root and taking on a job, or moving between jobs (purpose ledger's only writer besides entries; a NULL side is "available")
-- **Budget** → a funding rule, owned by the expense Category that holds the money
+- **Budget** → a funding rule, owned by the expense Category whose money it claims. A category carries at most ONE item-less ("catch-all") rule, beside as many item-backed rules as it has items
+- **Adjustment** → `(rule, date, signed amount)`: a dated delta on one rule's accrual — set aside, take back, top up, reduce and skip are all this one row. It never touches accounts
+
+**The four writers, and there are no others.** Purpose side: RULES (`Budget`) and ADJUSTMENTS
+(`Adjustment`, whose one typed door is `AdjustmentForm` — it refuses a date the rule's walk cannot
+count). Physical side: ACCOUNT MOVEMENTS and ENTRIES.
 
 ## Custom Patterns
 
@@ -35,22 +48,39 @@ Uses Ruby `Data.define` for immutable value objects. Controllers instantiate pre
 ### Calculator Pattern (`app/services/`)
 
 Memoized service objects for computing metrics. Accessed via model method. A Category answers two
-different questions and each has its own calculator — spending metrics, and what it holds:
+different questions — what was spent on it, and what its rules claim:
 
 ```ruby
-category.calculator(date).top_items              # CategoryCalculator — spending metrics
-category.holding_calculator(today:).free_amount  # HoldingCalculator — the purpose ledger
-category.status(today:)                          # HoldingStatus — behind / on track / saving / ...
+category.calculator(date).top_items       # CategoryCalculator — spending metrics
+category.claim(today:)                    # Σ its rules' claims
+rule.claim_calculator(today:).built_up    # ClaimCalculator — one rule, spec §3's formulas
 ```
+
+`ClaimCalculator` is the whole of §3: `#claim`, `#built_up`, `#planned_this_period`,
+`#accrued_this_period`, `#spent_this_period`, `#over?`, `#overdue?`, `#next_due_on`,
+`#periods_left`, `#countable_span`. Period arithmetic comes only from
+`User#period_boundaries`/`#period_containing` — one spelling.
 
 ### Ledger Pattern (`app/services/`)
 
-`CategoryLedger` and `AccountLedger` are the ONE reader of each partition — batched grouped sums
-over the whole set a screen is about, memoized at first read and stale after any write. A screen
-builds one ledger and threads its `terms_for(...)` into every calculator it makes, rather than
-letting N calculators run their own aggregates. `CategoryLedger#available` is the conservation
-figure; `AllocationCalculator#available` is a projection that includes a pending sweep and must
-never be used to check the invariant.
+`ClaimLedger`, `AccountLedger` and `CategoryLedger` are the ONE reader of what they read — batched
+grouped sums over the whole set a screen is about, memoized at first read and stale after any
+write. A screen builds ONE ledger and threads it into every calculator it makes, rather than
+letting N calculators run their own aggregates.
+
+```ruby
+ledger = ClaimLedger.new(user, today: user.today)
+ledger.claim_of(rule); ledger.total_claims; ledger.free   # free = min(pot, total_money − Σ claims)
+```
+
+- **`ClaimLedger`** → every rule's claim in ≤3 statements, plus `#total_money`, `#pot`, `#free`, `#free_cap_bound?`, `#claim_of_category`. It reads `AccountLedger` for the physical figures.
+- **`AccountLedger`** → the physical ledger: `#pot`, `#balance_of`, `#income_within`.
+- **`CategoryLedger`** → the ENTRY LANE ONLY (`ENTRY_CATEGORY_ID`, `ENTRY_CATEGORY_JOINS`, `ENTRY_LOCAL_DAY`) — the one spelling of "which category does this entry's spending count against, on whose calendar day". It is composed by the claim readers and by `SuggestionEngine`; it holds no money terms of its own.
+
+**`User#today`, not `Date.current`.** Anything that reads a claim outside a request (a job, a rake
+task, a console, a seed) runs under the ambient zone and would answer UTC's day about a user in
+Tokyo; `User#today` is `local_day(Time.current)` — one re-zoning, read from the OWNER. Models reach
+it through their own owner (`Category#today`, `Budget#today`).
 
 ### Searchable System (Custom DSL)
 

@@ -1,5 +1,20 @@
 # Categories Hold the Money: the Two-Ledger Model
 
+**SUPERSEDED in part by `2026-09-03-computed-claims-design.md`** (DELIVERED 2026-09-03). What died
+is this document's PURPOSE-LEDGER WRITER and everything built on it: the DISTRIBUTE step and its
+screen, the `allocations` table and the `Allocation` model (with the `allocation`/`sweep`/`transfer`
+kinds), the reallocation screen, `AllocationCalculator`/`AllocationCommitter`/`Waterfall`/
+`DistributionClock`/`DistributionPresenter`, the holding readers
+(`HoldingCalculator`/`HoldingStatus`/`HoldingProjection` and the seven-state vocabulary),
+`CategoryLedger`'s allocation lane and its `available` figure, the conservation identity
+`available + Σ holdings == total`, and `.in_fill_order`'s FILL semantics. A category's money is now
+a CLAIM computed from its rules, the calendar, its spending and dated adjustments, and
+`free = min(pot, total − Σ claims)` is a DEFINITION, not a partition. What SURVIVES is everything
+else here: the PHYSICAL ledger and its invariant (`pot + Σ accounts == income − expenses`), accounts
+as movement-fed mirrors of one pot, categories that carry rules and savings targets, `funded_since`
+(now the accrual anchor and the spending gate), `priority` (now the GIVE-WAY order), items, entries
+and the "one connection is the movement" ruling. `CategoryLedger` keeps its name and its ENTRY lane.
+
 **Status:** DELIVERED 2026-09-02 (plan `docs/superpowers/plans/2026-08-21-two-ledger.md`, tasks
 1–9; ledger `.superpowers/sdd/2026-08-21-two-ledger/progress.md`). §10 below records where the
 build differs from this text, the rulings taken during it, and what it leaves open.

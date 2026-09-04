@@ -1,5 +1,19 @@
 # Answers-First Home: Free to Spend, and the Period as Progress
 
+**SUPERSEDED in part by `2026-09-03-computed-claims-design.md`** (DELIVERED 2026-09-03). What died
+is every reader here that named a DISTRIBUTION: `#remaining_plan` and the hero's "spoken for"
+clause (it named the rest of a distribution's ask — the subline's noun is now CLAIMED, beside
+built up, spent and of), the trouble strip's UNDISTRIBUTED trigger, and the FIX apparatus the
+strip's category rows carried (`#fix_for`/`#fix_candidates_for`/`#fundable_by`, the fix buttons and
+`/allocations/new` behind them) — a fix was an allocation, and nothing on the purpose side moves.
+"Set aside" leaves the hero card with them. What SURVIVES is the whole shape of this document: the
+four questions in their order, the hero card in every state, `free` capped at the pot (§3's ruling,
+now `min(pot, total − Σ claims)`), the period-as-progress bar, the trouble strip and its remaining
+triggers, the spent-of-planned rows in "This period" (re-cut on §3.4's per-rule sentences), and the
+cause-established discipline the arm table encodes — every one of the hero's sentences is still
+gated on a predicate that establishes its cause. The shortfall arm is the fix apparatus's
+replacement: the figure, the give-way list in reverse priority, and the per-day pace.
+
 **Status:** DELIVERED 2026-09-03 (`feature/envelope-budgeting`, commits `917ee35..` — see §10 for
 the as-built and the two design calls still open for Henry).
 **Was:** APPROVED in chat (Henry, 2026-09-02) — "the mechanism is right but the UI hurts…

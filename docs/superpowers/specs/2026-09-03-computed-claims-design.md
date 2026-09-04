@@ -1,6 +1,8 @@
 # Computed Claims: the Rules Are the Budget, Nothing Moves
 
-**Status:** DRAFT — awaiting Henry's review
+**Status:** DELIVERED (2026-09-03) — plan `docs/superpowers/plans/2026-09-03-computed-claims.md`,
+tasks 1–5; ledger `.superpowers/sdd/2026-09-03-computed-claims/progress.md`. §10 records every
+ruling the build took, and §10.6 what it leaves open for Henry.
 **Date:** 2026-09-03
 **Supersedes the purpose-ledger WRITERS of:** `2026-08-21-two-ledger-design.md` (distribute, allocations
 as the routine writer). The physical ledger, the entries, the rules, and the answers-first Home
@@ -183,3 +185,203 @@ Roll-over rate rules (later, per rule); multi-currency; anything the app doesn't
 - Migration: allocation/sweep rows gone, transfers kept, physical Σ unchanged, claims recomputed.
 - Home: the hero and bars read the claim readers; every prior copy pin that survives keeps its
   figure; the Distribute nav item and route gone.
+
+## 10. As built
+
+Every ruling taken while this was built, in the order the tasks took them. The ledger and the four
+task reports beside it (`.superpowers/sdd/2026-09-03-computed-claims/`) carry the measurements.
+
+### 10.1 The claim itself (Task 1)
+
+1. **A rule accrues from the LATER of `funded_since` and its own birth.** `funded_since` is stamped
+   by a category's FIRST rule, so for that rule the two dates coincide; for a rule added later they
+   do not, and walking from the category's date would report a fund as already built up the moment
+   it was saved. The birth day is read in the OWNER's zone (a rule written on a Tokyo evening is
+   stored on the previous UTC day, which on a monthly grid is a different first period). A rule born
+   mid-period accrues that WHOLE period — the start date only decides which period the walk opens
+   in, and pro-rating would be a second, finer clock beside the period grid. A rule asked about a
+   day before it was written walks no periods and holds nothing (no phantom period).
+2. **One item-less rule per category** (`Budget#category_may_hold_one_item_less_rule`). An item-less
+   rule's lane is the whole category and `Category#claim` is a SUM, so two of them subtract the same
+   entries twice. Item-backed rules stay per item. `SuggestionEngine#attributable_rate_rules`' own
+   `rules.one?` guard is kept — it is now a guard about legacy rows rather than about what the app
+   can write.
+3. **A dateless target rule may carry `amount = 0`** (`Budget#set_aside_only?`): the category names a
+   target and the rule names neither an anchor nor an interval. Every claim comes from a rule, so a
+   goal fed only by hand has to BE a rule, and zero is the only honest way to say it has no standing
+   contribution. Refused in every other shape.
+4. **THE LANE PARTITION.** A catch-all rule's spending lane EXCLUDES entries on items that carry
+   their own rule (`Entry.on_unruled_items`, one spelling, composed by both the per-rule calculator
+   and the batched ledger). Measured on the demo's own figures before the fix: a $300 bill payment
+   lowered the bill's built-up AND the rate rule's claim, Σ claims fell $600 while the money fell
+   $300, and `free` ROSE $300 for having paid a bill.
+5. **The accrual sum and the spending are measured over the SAME span** — each period's spending is
+   subtracted as the walk passes through it. Read literally (accruals since `funded_since`, spending
+   since the last fulfilment) a rule paid twice reads FULL the day after it was emptied.
+6. **The clamp at zero is applied per period, not only to the final figure**: overpaying a $600 bill
+   by $100 spills into free and the next period starts from zero rather than $100 behind. `#over?`
+   reads the PRE-clamp figure — the only reader that can tell "spent it exactly" from "spent more
+   than it had".
+7. **An item-less dated rule's due date is ANCHOR-PINNED**, and that reading is the law going
+   forward. `BudgetCalculator` had no fulfilment signal without an item and assumed every bill was
+   paid on time; the computed model reads the category's own lane, so an occurrence whose money was
+   never spent stays where it was anchored and the row reads overdue. A settled one-off claims
+   nothing forever (`#settled?`) — a one-off's due date never rolls.
+8. **`spec/support/schema_rewind.rb` was deliberately NOT extended for `CreateAdjustments`**: it
+   touches nothing any rewound `down` gives or takes away, and a dead entry there reads as a
+   dependency. The file records the measurement (cutover 49, two_ledger 15, drop_the_pool_layer 18,
+   green with it left out).
+9. **The ledger is batched to ≤3 statements** for any number of rules (measured: 3 for eight rules,
+   against 21 unbatched), by asking probe calculators for `#window_start` before it queries.
+
+### 10.2 The writer (Task 2)
+
+10. **Skip means "accrue nothing this period"**: the amount is `−accrued_this_period` (plan + this
+    period's deltas), computed on the SERVER and dated today, so a period already topped up by $50
+    is taken back by $200 and a period already skipped offers no button at all
+    (`Rule#skippable?` reads the same figure). "Nothing to skip" has its own refusal, both halves.
+11. **THE COUNTABLE SPAN.** A delta is accepted only where the rule's walk can count it: from the
+    OPEN of the period containing the accrual start (§3.2's "counts in full the day the period
+    opens" applies to the first period like any other) to `min(today, the last visited period's
+    end)` — the upper bound matters because `PERIOD_WALK_LIMIT` can stop the walk short of today. An
+    empty walk is an empty span with its own sentence. The refusal lives in `AdjustmentForm`, THE
+    ONE TYPED DOOR, and never on the model: the walk's whole subject is summing rows from periods it
+    no longer stands in, and §7's migration converts a user's history at its ORIGINAL dates.
+12. **A FIRST cadence is not a change.** Until the user names a period their per-period amounts are
+    denominated in the 12-a-year fallback — an assumption the app made, not something they said — so
+    there is no old unit to convert from. The offer fires only for a declaration that would actually
+    save, renders at 422 (nothing is written), and `#apply` computes `scale && offered?` before the
+    transaction opens, so a hand-built `scale=1` scales nothing. The flash names only what was
+    written.
+13. **Only rules whose amount is denominated PER PERIOD scale** (`cadence == :per_period`), whatever
+    the category's shape — a "$260 a month" rule already means the same thing on every grid and
+    scaling it would apply the ratio twice. **Zero stays zero**: a $0 goal rule is neither offered
+    nor rewritten (the `SMALLEST_RATE` floor catches a ROUNDING, never a DECLARATION).
+14. **The wire takes a signed amount and the BUTTON carries the direction** (`amount_sign`), so one
+    input serves top up / reduce and set aside / take back; the typed date is cast in the owner's
+    zone by `ApplicationController`'s existing `around_action`, measured rather than re-parsed.
+
+### 10.3 The screens (Task 3)
+
+15. **A ROW PER CATEGORY, A LINE PER RULE.** §3.4's sentences are per rule and `Category#claim` is a
+    sum, so a $400-a-period rate rule beside a $1,200 six-monthly bill cannot honestly print one
+    figure. A single-rule category — the ordinary shape — renders exactly as before.
+16. **The FIX apparatus dies with the strip's category row.** A fix was an allocation; §5 leaves the
+    purpose side with no movements. §4's own remedy (spend less, or edit/adjust a rule) is what the
+    shortfall arm says, with one link to /budget.
+17. **The hero's noun is CLAIMED** — in checking, free, claimed, built up, spent, of. One arm lost
+    its else branch as UNREACHABLE: with two terms in the cap's identity
+    (`unclaimed − pot = Σ other accounts − Σ claims`), `free < 0` with `unclaimed ≥ 0` forces
+    `pot < 0` and therefore another account holding money.
+18. **The trouble strip renders the hero's arm table branch for branch** — the same three gates, the
+    same causes — because `free < 0` is a SIGN and every sentence about it asserts a cause. The
+    give-way walk is gated on `claims_outrun_the_money?` (otherwise it named categories whose money
+    was sitting in a savings account two inches below), the remainder past Σ claims is named on its
+    own line, and at one priority the LATER name gives way first.
+19. **Overdue fires on the DATE** (`next_due_on < today`, strict), and the FUND STATE is a matter of
+    COPY: `the fund is short $500.00 — this needs paying` against `it's all there — pay it and the
+    fund starts again`. §3.2's catch-up floors `periods_left` at 1 for a date already past, so the
+    ordinary overdue bill reads WHOLE and is waiting to be PAID; gating the trigger on the fund
+    silenced the ordinary case rather than a corner of it.
+20. **The Budget page's group header is `Σ its rules' claims`**, rules are ordered on the date the
+    row PRINTS (not `BudgetCalculator#due_order`, which diverges on an item-less rule), and the
+    rule's own sticker stays beside §3.4's figure — this is the page where a rule is edited.
+21. **Every rule with a claim gets a row**, including one on a category whose `funded_since` was
+    cleared afterwards: `ClaimLedger` counts it into `free`, and a claim with no row would be money
+    missing from the hero with nothing on screen to explain it. The per-day pace floors its divisor
+    at one — the user still has today.
+22. **`today` is the OWNER's day, spelled once** (`User#today = local_day(Time.current)`, reached
+    through `Category#today`/`Budget#today`), at 45 call sites. Inside a request `Date.current` was
+    already owner-zoned by the `around_action` — the reader is for the job, console, seed or task
+    that is not in one, where the ambient zone is UTC and the overdue trigger's sole input would be
+    off by the owner's offset.
+
+### 10.4 The deletion and the migration (Task 4)
+
+23. **One transfer can become TWO adjustments** — one per category END (`to_category_id` positive,
+    `from_category_id` negative, date verbatim): a category-to-category reallocation really did
+    lower one fund and raise another, and converting one end would record half a move.
+24. **The minted rule is born before the money it holds.** A target-only rule minted TODAY would
+    walk no period any inherited set-aside is dated in, so its `created_at` is the earlier of the
+    category's `funded_since` and the first transfer converted onto it — which lands `accrual_start`
+    on `funded_since`, §7's own sentence.
+25. **History is converted at its ORIGINAL date even where the walk cannot see it** (a March
+    set-aside on a rate rule moves no figure — a rate rule is use-it-or-lose-it), and the migration
+    counts any such row in its receipt rather than leaving it to be found.
+26. **The shape is verified by `Budget`'s predicates RESTATED IN SQL, clause for clause**, not by
+    calling `Budget#valid?` — a migration that reaches into today's model is a migration whose
+    meaning changes when the model does. Being STRICTER than `Budget` is the failure this verifier
+    has already had once (an item-backed $0 rule on a category with a target is a shape the model
+    accepts).
+27. **The `down` restores the SHAPE and not the rows**, and it has to: the schema rewind runs
+    `CategoriesHoldTheMoney#up`, which creates `allocations`, so without an executable `down` here
+    three older migration specs cannot reach the world their subjects were written for. This is the
+    house's own precedent, verbatim. A re-run on a migrated database raises `PG::UndefinedTable` at
+    the first `allocations` read, which is preferred to a guard that would make a second run a
+    silent no-op.
+28. **Dev receipts:** 60 transfers → 60 adjustments, 8 target-only rules minted, 9 `allocation`/
+    `sweep` rows discarded, `allocations` dropped; the physical figure `pot + Σ accounts ==
+    income − expenses` unchanged for every user, verified in raw SQL before and after.
+29. **`Category#saving_toward_a_target?` is the one DISPLAY predicate** (`holder? &&
+    target_amount.present?`). `#savings?` is deleted: its third clause (`budgets.none?`) had a real
+    job while a waterfall existed, but under §3.3 every claim comes from a rule, so it selected
+    exactly the goals claiming $0.00 — and on migrated data the dashboard's savings band rendered
+    nothing at all.
+30. **`Category#budgeted? = budgets.load.any?` is the one spelling of "a rule claims this
+    category"**, asked by Home's period rows and by the entry form's impact card, which had painted
+    a funded ruleless category red for a $0 envelope while Home called the same category unbudgeted.
+31. **`#money_may_not_be_stranded` is deleted because the state it refused cannot be reached** — a
+    category holds nothing now. Clearing `funded_since` is still not free (the category leaves the
+    give-way order and its spending stops being counted), but that is a visible state on a screen
+    that names it.
+32. **The copy sweep**: fill order → GIVE-WAY order ("which gives way first when you run short"),
+    "out of available" → "unbudgeted", "the rules that fill your categories" → "the rules that claim
+    your money", "nothing fills it" → "spending here isn't counted against it", and the Distribute
+    nav item gone. The seeds are rebuilt on rules + dated adjustments alone, every rule born on
+    `demo_start` for ruling 24's reason.
+
+### 10.5 Verified in the browser (Task 5)
+
+A fresh throwaway walked onboarding → a rate rule, a dated rule and a goal → the Budget page's rows
+→ skip, top up, set aside and take back → the hero's `free` moving by exactly those amounts →
+spending past free → the shortfall arm with the give-way list and the per-day pace → a cadence
+change with both answers → the overdue arm; then destroyed, with zero rows left behind. Ming's five
+claims were recomputed by hand from §3 and matched the screen to the cent ($1,409.00 + $83.34 +
+$144.54 + $4.99 + $26.50 = $1,668.37), and her pot read $3,039.33 in raw SQL before and after the
+browsing — reading never writes. Figures, formulas and screenshots:
+`.superpowers/sdd/2026-09-03-computed-claims/task-5-report.md`.
+
+### 10.6 Open for Henry
+
+1. **Intra-category give-way order is unruled.** `priority` orders CATEGORIES; within one category
+   the walk hands its rules to the shortfall in the order the ledger returns them, so a catch-all
+   rate rule can give way before an item-backed bill on the same category. Nothing in this spec says
+   which should.
+2. **The strip's arm 1 never names money parked elsewhere, though the two can co-occur.** "Your
+   rules claim more than you have" is true when `unclaimed < 0`, and a user in that state may ALSO
+   be holding money outside checking; arm 3's sentence about it is reachable only when the claims do
+   NOT outrun. Whether arm 1 should carry the same clause is a design call.
+3. **`Category#saving_toward_a_target?` widens the dashboard's Savings band.** It now includes a
+   goal fed by a real RATE rule — money being spent toward a rate rather than saved toward a figure,
+   which is exactly the distinction `#savings?`'s deleted third clause used to draw. On Ming's data
+   the band is the same either way; on a user who rate-funds a goal it is not.
+4. **The adjust panel's "planned this period" is PRE-delta while the row above it is POST-delta.**
+   On a rate rule topped up by $50 the row reads `$0.00 of $450.00` and the panel, an inch below,
+   reads `$400.00 planned this period`. Both are labelled and the delta list sits between them, but
+   they are two "this period" figures an inch apart. The one-line fix is `rule.accrued_this_period`
+   in `budget_page/_adjust.html.erb` (it would also make the panel's figure the amount the skip
+   button names); it renames a hook three specs read.
+5. **The cadence confirm screen's declaration form still shows the OLD cadence.** `current_user` is
+   deliberately clean on that path, so the select below the panel reads "Monthly" while the panel
+   says the period is changing to biweekly — and the page carries TWO elements with `id`
+   `user_period_cadence` (the pending value as a hidden field, the old value as the select). Threading
+   `BudgetPagePresenter#declaration` through the offer path is the fix.
+6. **A DEFECT found in Task 5's browser pass, not fixed: the hero's last arm asserts "none of it is
+   claimed" without asking whether anything is.** The arm is gated on `!rest_in_checking?`
+   (`in_checking > free_to_spend`), which is false whenever `Σ claims ≤ Σ other accounts` — so a
+   user whose savings cover their claims reads "none of it is claimed" over a screen listing their
+   claims. Live on Ming's Home: `none of it is claimed — more is parked in other accounts` above
+   five rules claiming $1,668.37. Every other sentence on that card is gated on a predicate that
+   establishes its cause; `#anything_claimed?` already exists and is the missing gate (the true
+   sentence being "the rest is parked in other accounts"). Reproduced on a throwaway at the exact
+   tie (Σ claims $500, one other account holding $500).
