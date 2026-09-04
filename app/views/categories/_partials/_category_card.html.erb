@@ -50,29 +50,40 @@
             <span class="text-gray-500">Spent <%= period_time_label %></span>
             <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
           </div>
-          <%# WHAT IT HOLDS, WHERE IT HOLDS ANYTHING (two-ledger spec §3, Task 7). This line read
-              "Pool: Checking" — the name of the pool the category pointed at, which under this
-              model says nothing about the category at all. `Category#holder?` is the question, and
-              a card that is saving toward a figure gets the goal's own bar so the savings the
-              Pools index used to list are findable on the screen that replaced it.
+          <%# ** WHAT THIS CATEGORY CLAIMS (computed-claims spec §2, §3.4). ** The line read
+              "Holding" over a `HoldingCalculator#balance` — allocations in, less allocations out,
+              less the spending attributed to the category. Nothing moves on the purpose side any
+              more (§5), so there is no balance to read: a category's money is Σ its rules' claims,
+              computed from the rules, the calendar and its spending at the instant it is asked for.
+              `Claimed` is the noun the Budget page's group header already prints over the same sum.
 
-              THE GOAL TEST IS `HoldingCalculator#saving_toward_a_target?` (Task 7's ruling), the
-              same predicate the show page's holdings card, Home and the entry form's impact card
-              ask — so a rule-bearing goal is a goal on every one of them. %>
+              ** ONE PRESENTER PER CARD, AND ONE LEDGER FOR THE WHOLE PAGE. ** The figure and the
+              bar's percentage are `CategoryBudgetPresenter`'s — the same object the show page's
+              holdings card is built from — so the clamped percentage is spelled ONCE for the two
+              screens that draw a goal bar. The old code had `HoldingCalculator#progress_percentage`
+              shared for exactly that reason, and it is the reader whose comment carries the
+              measurement: an overdrawn goal read `-30% complete` on this app's own demo data before
+              the clamp existed, and a second copy of the arithmetic is how it would come back.
+
+              `claim_ledger` IS THE INDEX'S ONE LEDGER — see `CategoriesController#claim_ledger`. It
+              is built over the user's WHOLE rule set in three grouped statements, so this costs the
+              same whether the page draws one card or thirty; a presenter left to build its own
+              would be the thirtieth copy. Everything on it is lazy, so an index of income
+              categories — none of which reaches this branch — runs no query for it at all.
+
+              THE GOAL TEST IS `Category#saving_toward_a_target?`, the same predicate the show
+              page's holdings card and the entry form's impact card ask, so a rule-bearing goal is
+              a goal on every one of them. %>
           <% if category.holder? %>
-            <%# `holding_terms` IS THE INDEX'S ONE LEDGER (fix round 1, MED-3) — see
-                `CategoriesController#holding_terms`. A nil for a category the ledger does not know
-                is legal and means "run your own aggregates", so this can never be wrong for want
-                of terms. %>
-            <% holdings = category.holding_calculator(terms: holding_terms[category.id]) %>
+            <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger) %>
             <div class="flex justify-between text-xs mt-2" data-holding-line>
-              <span class="text-gray-500">Holding</span>
-              <span class="font-medium <%= holdings.balance.negative? ? "text-status-danger" : "text-gray-900" %>">
-                <%= number_to_currency(holdings.balance) %>
+              <span class="text-gray-500">Claimed</span>
+              <span class="font-medium text-gray-900">
+                <%= number_to_currency(money.claim) %>
               </span>
             </div>
-            <% if holdings.saving_toward_a_target? %>
-              <% progress = holdings.progress_percentage %>
+            <% if category.saving_toward_a_target? %>
+              <% progress = money.progress_percentage %>
               <div class="mt-2" data-goal-progress>
                 <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand-dark" %>"
@@ -84,8 +95,14 @@
               </div>
             <% end %>
           <% else %>
+            <%# NOT "comes out of what's available" — there is no `available` any more. `free` is a
+                DEFINITION (`min(pot, total − Σ claims)`, §2) rather than a pot that spending is read
+                against, and what is true of this category is that no rule speaks for its receipts,
+                so they reduce `free` directly. Home's "This period" section says the same thing
+                about the same population by simply printing what was spent, with no bar and no
+                denominator, because there is nothing for a bar to be a fraction of. %>
             <p class="text-xs text-gray-500 mt-2" data-holding-line>
-              Comes out of what's available
+              Nothing claims this — comes out of what's free to spend
             </p>
           <% end %>
         </div>

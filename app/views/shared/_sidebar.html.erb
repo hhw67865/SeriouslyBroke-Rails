@@ -52,19 +52,13 @@
                 title: "Main",
                 links: [
                   { name: "Home", path: root_path, icon: "home" },
-                  # THE ONLY WAY INTO THE DISTRIBUTION SCREEN, and it is here because it is an
-                  # ACTION on the household's money rather than a report on it — beside Home and
-                  # Entries, not under Analysis. Until this link existed the headline feature of
-                  # the plan shipped dark: nothing in `app/` outside the distributions controller
-                  # and its own views named the route, so the only way to split a paycheck was to
-                  # type the URL. Home's waterfall band links here too; that band is conditional
-                  # and this is not.
-                  {
-                    name: "Distribute",
-                    path: new_distribution_path,
-                    icon: "arrows-right-left",
-                    data: { turbo_prefetch: false }
-                  },
+                  # ** THE "Distribute" ITEM IS GONE (computed-claims spec §§5-6). ** It opened
+                  # `/distributions/new`, the screen that split a paycheck into envelopes, and
+                  # there is no such screen: a category's money is a CLAIM computed from its
+                  # rules, so there is nothing to hand out and nothing to have missed. Budget
+                  # below is what the item really pointed at all along — editing the rules IS how
+                  # the user now says where the money goes.
+                  #
                   # THE RULES THEMSELVES, between the action that spends them and the ledger that
                   # records what was spent — a rule is neither a report nor a category, and until
                   # this link existed §8's page had no way in but the URL. `/budget` is a prefix

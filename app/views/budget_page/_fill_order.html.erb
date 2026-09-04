@@ -1,12 +1,13 @@
-<%# THE FILL ORDER: every category a rule fills, in the order the money reaches them. Local:
-    `groups` (BudgetPagePresenter::Group list).
+<%# ** THE GIVE-WAY ORDER: every category a rule claims for, in the order they give way (§4).
+    Local: `groups` (BudgetPagePresenter::Group list).
 
-    ONE LIST FOR THE PAGE, WHERE `_account_band` RENDERED ONE PER ACCOUNT (two-ledger spec §2). The
-    band existed because priority was only ever compared inside an account —
-    `AllocationCalculator#fill` walked `account.child_pools.by_priority`, so a drag across accounts
-    moved a row past rows whose relative order decided nothing. The waterfall now walks
-    `Category.in_fill_order` over ONE root, so every holder is ranked against every other and what
-    is inside this element is exactly what `PATCH /budget/reorder` rewrites.
+    IT WAS THE FILL ORDER AND THE LIST IS THE SAME LIST. A distribution used to walk it handing
+    money out, lowest priority first; nothing is handed out any more (computed-claims spec §5).
+    What priority still decides is what §4 keeps it for: when a user's claims outrun their money,
+    `HomePresenter#uncovered_claims` walks this order BACKWARDS and names the categories nothing
+    covers — so the card at the BOTTOM is the one that gives way first. `Category.in_fill_order`
+    ranks every holder against every other over ONE list, and what is inside this element is
+    exactly what `PATCH /budget/reorder` rewrites.
 
     The form is EMPTY and hidden: reorder_controller fills it with one `category_ids[]` per card in
     DOM order at drop time. The ▲▼ buttons carry their own already-swapped list (see
@@ -21,8 +22,8 @@
       ORDER" and ran to five lines. `text-gray-500` rather than `-400`, which measured 2.9:1 on
       white — a hint nobody could read is not a quieter hint. %>
   <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
-    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fill order</h2>
-    <p class="text-xs text-gray-500">Drag a card, or use the arrows, to set the order your money fills them</p>
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Give-way order</h2>
+    <p class="text-xs text-gray-500">Drag a card, or use the arrows, to set which gives way first when you run short</p>
   </div>
 
   <% groups.each do |group| %>

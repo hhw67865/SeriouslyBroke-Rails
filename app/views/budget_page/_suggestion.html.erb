@@ -40,10 +40,10 @@
         <% subject_name = suggestion.detail[:category_name] || suggestion.subject.name %>
         <p class="text-gray-500" data-suggestion-effect>
           <% if suggestion.detail[:starts_holding] %>
-            Accepting this starts <%= subject_name %> holding its own money, from today onward —
-            spending before today stays with what is available.
+            Accepting this starts <%= subject_name %> counting its own spending, from today onward —
+            spending before today is money already gone.
           <% else %>
-            <%= subject_name %> already holds its own money; this rule adds to what fills it.
+            <%= subject_name %> already counts its own spending; this rule adds to what it claims.
           <% end %>
         </p>
       <% end %>

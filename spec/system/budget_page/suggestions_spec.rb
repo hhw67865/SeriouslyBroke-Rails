@@ -60,7 +60,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "states a detected rate, its window and that nothing holds it" do
       within(suggestion(:rate, groceries)) do
         expect(page).to have_content("Groceries — $300.00 a period")
-          .and have_content("currently comes out of what's available")
+          .and have_content("currently claimed by no rule")
           .and have_content("$900.00 spent in 3 of the last 6 periods")
           .and have_content("averaged over 3 periods")
       end
@@ -171,7 +171,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # the rule is which side of the start-date rule this category's future spending falls on.
     it "says what accepting does to the category" do
       within(effect_of(:dated_bill, phone)) do
-        expect(page).to have_content("starts Utilities holding its own money, from today onward")
+        expect(page).to have_content("starts Utilities counting its own spending, from today onward")
       end
     end
 
@@ -284,7 +284,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "lands on a form prefilled with everything the engine measured" do
       accept(:dated_bill, phone)
 
-      expect(page).to have_content("How Utilities gets filled each period")
+      expect(page).to have_content("What Utilities claims each period")
       expect(page).to have_field("Rule Amount", with: "85.0")
       expect(page).to have_field("Comes round every (months)", with: "1")
       expect(page).to have_content("Pays").and have_content("Phone")
@@ -392,10 +392,10 @@ RSpec.describe "Budget page suggestions", type: :system do
     # THE COPY HALF, and the negative is the whole assertion. A regression that printed the
     # STARTING sentence here would promise a change of state that has already happened and will not
     # happen again — and it would be telling the user their earlier spending is about to move.
-    it "says the category already holds money, without promising to start it again" do
+    it "says the category already counts its own spending, without promising to start it again" do
       expect(page).to have_content("Budget was successfully created")
       within(effect_of(:dated_bill, internet)) do
-        expect(page).to have_content("Utilities already holds its own money")
+        expect(page).to have_content("Utilities already counts its own spending")
         expect(page).to have_no_content("from today onward")
       end
     end
@@ -509,20 +509,36 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
   end
 
-  # WHAT ACCEPTING DOES TO THE PURPOSE LEDGER — the consequence `BudgetProposal`'s header used to
-  # deny and nothing asserted, re-anchored (two-ledger spec §2/§4).
+  # ** WHAT ACCEPTING DOES TO THE MONEY — re-anchored on claims (computed-claims spec §2/§3.1). **
   #
   # THE HISTORY DOES NOT MOVE, AND IT USED TO MOVE ALL OF IT. Before the start-date rule the
   # acceptance re-pointed the category at a brand-new envelope with no date bound, so every entry
   # that category had ever carried fell inside the envelope's lane and it opened at minus its
   # lifetime spend — Ming's Food & Grocery envelope opened $46,739.63 overdrawn on the day she made
-  # it, which is §1's opening complaint. The rule bounded that at the envelope's `start_date`; the
-  # two-ledger model makes it the CATEGORY'S OWN `funded_since`, stamped today, and the claim is
-  # exactly the same: the category opens at nothing and available keeps what it always held.
+  # it, which is §1's opening complaint. `BudgetProposal` stamps `funded_since` TODAY, and
+  # `CategoryLedger::ENTRY_CATEGORY_ID` counts an expense against its category only from that day
+  # on — so the claim opens at the rule's full rate rather than at minus a lifetime.
   #
-  # EVERY FIGURE IS A PLANTED LITERAL AND THE TWO SIDES ARE INDEPENDENT. $2,000 comes in, $1,400
-  # goes out, $600 is what is available — three literals written here, never one computed from the
-  # other two.
+  # ** WHAT CHANGED WITH THE MODEL, AND IT IS THE SUBJECT OF THE LAST TWO EXAMPLES. ** Under moved
+  # money, accepting a rule wrote nothing and `available` did not budge; the envelope filled later,
+  # when a distribution ran. Under computed claims there is no later: the rule IS the claim, so
+  # `Σ claims` rises by the rule's whole rate the instant it is written (§2). That is not the history
+  # moving, which is exactly what the pair below separates: the $1,400 already spent stays spent and
+  # stays out of the claim, and the ONLY thing that moves is the new rule's own $300.
+  #
+  # ** `ClaimLedger#total_claims` RATHER THAN `#free`, AND THE CAP IS WHY. ** `free` is
+  # `min(pot, total_money − Σ claims)` and this fixture has no bank account at all — every screen
+  # here is about rules — so the pot binds at zero and `free` would read zero before and after,
+  # which is true and says nothing about the subject. Σ claims is the purpose side asked directly.
+  #
+  # EVERY FIGURE IS A PLANTED LITERAL AND THE SIDES ARE INDEPENDENT. $2,000 comes in and $1,400 goes
+  # out — two literals written here. The accepted rate is $300 a period (the engine's own proposal
+  # off $900 in 3 of the last 6 periods), so Σ claims goes from $0 to exactly $300 and not to
+  # $1,700.
+  #
+  # NOTHING IS SPENT IN THE CURRENT PERIOD, WHICH IS WHY THE CLAIM IS THE WHOLE RATE. The user is
+  # biweekly anchored on today, and the three $300 entries are 5, 19 and 33 days back — every one of
+  # them in a period already closed. §3.1's `max(0, rate − spent)` therefore has nothing to subtract.
   #
   # THE ANCIENT ENTRY IS THE POINT OF THE FIXTURE. $500 spent 400 days ago is outside every window
   # this page measures — `#rates` indexes only the last six periods, so it moves neither the
@@ -549,38 +565,44 @@ RSpec.describe "Budget page suggestions", type: :system do
       create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
     end
 
-    def available = CategoryLedger.new(user.categories.expenses.reload.to_a, user: user).available
+    def total_claims = ClaimLedger.new(user.reload).total_claims
+
+    def spending_on(category) = category.entries.sum(:amount)
 
     # THE ROW SAYS SO BEFORE THE CLICK. One clause, on the sentence already naming which category
-    # starts holding — burying it to make room for something else would be worse than omitting it.
-    it "says the category starts today and leaves earlier spending with available" do
+    # starts counting its own spending — burying it to make room for something else would be worse
+    # than omitting it.
+    it "says the category starts today and leaves earlier spending out of the claim" do
       within(effect_of(:rate, groceries)) do
         expect(page).to have_content("from today onward")
-        expect(page).to have_content("spending before today stays with what is available")
+        expect(page).to have_content("spending before today is money already gone")
       end
     end
 
-    # The "before" the two below are measured against: $2,000 in, $1,400 of unfunded spending out.
-    it "starts with the whole history draining available" do
-      expect(available).to eq(600)
+    # The "before" the two below are measured against: $1,400 of lifetime spending on Groceries, and
+    # no rule claiming a penny of it.
+    it "starts with nothing claimed and the whole history already spent", :aggregate_failures do
+      expect(total_claims).to eq(0)
+      expect(spending_on(groceries)).to eq(1_400)
     end
 
-    it "opens the category at nothing, leaving the lifetime spending behind" do
+    it "opens the category claiming its whole rate, not minus its lifetime spending" do
       accept_and_create(:rate, groceries)
 
       expect(page).to have_content("Budget was successfully created")
-      within("[data-category-group='Groceries']") { expect(page).to have_no_content("overdrawn") }
-      expect(groceries.reload.holding_calculator.balance).to eq(0)
+      within("[data-category-group='Groceries']") { expect(page).to have_no_content("over by") }
+      expect(groceries.reload.claim).to eq(300)
     end
 
-    # BOTH SIDES OF THE NON-MOVE, INDEPENDENTLY: available still holds every dollar of the history,
-    # and no `allocations` row was written. `available + Σ holdings` is the invariant either way;
-    # what these two say is that the acceptance moved NOTHING between the sides of it.
-    it "leaves the history draining available without writing an allocation" do
-      expect { accept_and_create(:rate, groceries) }.not_to change(Allocation, :count)
+    # BOTH HALVES OF "THE HISTORY DID NOT MOVE", INDEPENDENTLY: Σ claims rises by the new rule's rate
+    # and by NOTHING else — $300, not $300 + $1,400 — and no dated delta was written, because a rule
+    # is not an adjustment and accepting one records no movement of any kind (§5).
+    it "claims only the new rule's own rate, and writes no delta", :aggregate_failures do
+      expect { accept_and_create(:rate, groceries) }.not_to change(Adjustment, :count)
 
       expect(page).to have_content("Budget was successfully created")
-      expect(available).to eq(600)
+      expect(total_claims).to eq(300)
+      expect(spending_on(groceries)).to eq(1_400)
     end
   end
 

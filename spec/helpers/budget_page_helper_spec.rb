@@ -48,45 +48,18 @@ RSpec.describe BudgetPageHelper, type: :helper do
     end
   end
 
-  # ALL SEVEN STATES, IN BOTH DIRECTIONS. Three were asserted in neither, and :overdue and
-  # :wont_make_it are the dangerous pair: their labels print a DATE and no money figure at all,
-  # so if either fell out of the balance side the category's balance would vanish from the page and
-  # every example here would stay green.
-  describe "#pool_balance_clause" do
-    # A REAL HoldingStatus with only its state and balance stubbed, never an `instance_double`
-    # answering `amount_is_balance?` itself: the helper is a lookup on that method now, and a
-    # double told what to answer would assert nothing about which states print their own money.
-    # This way the mapping under test is HoldingStatus's real one. It was a `PoolStatus` over a
-    # pool until the drop (Task 8); the states and the mapping are the same, because the class was
-    # ported onto the category rather than rewritten.
-    #
-    # A BARE STATUS, which is what the helper now takes — the Categories page's budget block
-    # (spec §8.1) renders the same clause off a category it holds no Group for, and wrapping one
-    # here would test a shape only one of the two callers has.
-    def status_for(state, balance: 250)
-      HoldingStatus.new(build(:category, :expense, :funded)).tap do |status|
-        allow(status).to receive_messages(state: state, balance: balance)
-      end
-    end
-
-    # :overdue and :wont_make_it print `overdue · was Aug 6` and `won't make it · Aug 19` — no
-    # figure whatsoever — so the clause is the only thing putting the balance on screen for them.
-    it "states the balance where the label named a bill instead", :aggregate_failures do
-      expect(helper.pool_balance_clause(status_for(:behind))).to eq("· holds $250.00")
-      expect(helper.pool_balance_clause(status_for(:overdue))).to eq("· holds $250.00")
-      expect(helper.pool_balance_clause(status_for(:wont_make_it))).to eq("· holds $250.00")
-    end
-
-    # `pool_status_label` prints PoolStatus#amount, which IS the balance here — printed again
-    # the row read "$250.00 left · holds $250.00". :overdrawn is included because its label
-    # prints the balance NEGATED, which read "overdrawn $80.00 · holds -$80.00".
-    it "stays silent where the label has already said it", :aggregate_failures do
-      expect(helper.pool_balance_clause(status_for(:left_to_spend))).to eq("")
-      expect(helper.pool_balance_clause(status_for(:on_track))).to eq("")
-      expect(helper.pool_balance_clause(status_for(:overdrawn))).to eq("")
-      expect(helper.pool_balance_clause(status_for(:saving))).to eq("")
-    end
-  end
+  # ** `#pool_balance_clause` AND ITS TWO EXAMPLES ARE DELETED (computed-claims spec §6). ** They
+  # asserted, over all seven `HoldingStatus` states, that a group said its BALANCE exactly once:
+  # the clause `· holds $250.00` printed for the three states whose label named a bill's shortfall
+  # instead, and stayed silent for the four whose label was the balance already. Every one of those
+  # states is a reading of money MOVED into a category, and nothing moves on the purpose side any
+  # more (§5) — `HoldingStatus` is deleted, and so is the helper that read it.
+  #
+  # WHAT REPLACED THE SENTENCE, and where it is pinned: §3.4's row prints ONE figure per rule,
+  # named — `spent of rate` for an envelope, `built up of target` for a fund — so there is no
+  # second clause to fill in a figure the first one left out. `HomeHelper#claim_figure` is that
+  # reader and `spec/helpers/home_helper_spec.rb` pins it; the row is pinned on the page in
+  # `spec/system/budget_page/rules_spec.rb`.
 
   # `#budget_rule_reason` AND ITS ONE SURVIVING EXAMPLE ARE DELETED (two-ledger spec §5, Task 5).
   # It gave an account-less pool Home's own wording, which was the last reason a rule could be

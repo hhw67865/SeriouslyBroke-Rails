@@ -4,6 +4,7 @@ require Rails.root.join("db/migrate/20260817010000_tighten_pool_shape")
 require Rails.root.join("db/migrate/20260817020000_drop_cap_era_budget_columns")
 require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
+require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -60,8 +61,26 @@ require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 #
 # Named in the order they run FORWARD; the rewind reverses them itself.
 #
+# ** A FIFTH MIGRATION JOINED WITH THE COMPUTED CLAIMS, AND IT IS THE ONE EVERY OTHER FILE ON THE
+# LIST NOW DEPENDS ON. ** `DropTheDistribution` (2026-09-03) DROPS the `allocations` table, and
+# `allocations` is the table `CategoriesHoldTheMoney#up` creates and fills — so its `down` has to
+# restore the table before that `up` can run, which puts it FIRST on the way down and LAST on the way
+# back up. Every one of the three older migration specs therefore names it at the END of its own
+# forward list:
+#
+#   include_context "with the schema its subject was written for",
+#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney,
+#                   DropThePoolLayer, DropTheDistribution
+#
+# ITS `down` RESTORES THE SHAPE AND NOT THE ROWS, on `DropThePoolLayer#down`'s law and for the same
+# mechanical reason this paragraph exists: a `down` that raised — which is what a data migration's
+# `down` would honestly be — would leave those three specs with no way to reach the world their own
+# subjects were written for. The converted rows are adjustments now and the discarded ones are gone;
+# a real reversal is a restore from backup, and the migration's own header says so.
+#
 # ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
-# It is newer than all four, so the question is live; it is left out because it touches NOTHING any
+# It is newer than the first four and older than the fifth, so the question is live in both
+# directions; it is left out because it touches NOTHING any
 # rewound migration gives or takes away. It adds a table of its own whose only foreign key is to
 # `budgets.id`, and no `down` here drops `budgets` or its primary key — `CategoriesHoldTheMoney#down`
 # removes `budgets.category_id`, which the adjustments table has never read. Measured by running all

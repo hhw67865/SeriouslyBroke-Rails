@@ -3,18 +3,43 @@
 require "rails_helper"
 
 # THE §6 IMPACT CARD'S SERVER HALF. The card answers "can I afford this" beside the amount box, and
-# everything below is the half the browser cannot get wrong on its own: whether the category is
-# holding money at all, what it holds, what the bar measures against, and — on edit — what the
-# ledger has already counted.
+# everything below is the half the browser cannot get wrong on its own: whether any rule claims this
+# spending at all, what the category claims, what the bar measures against, and — on edit — what the
+# claim has already counted.
 #
-# CONVERTED TO THE PURPOSE LEDGER (Task 6). Every fixture used to plant an envelope inside an
-# account and fund it with a movement; a category holds its own money now (two-ledger spec §3), so
-# the funding is an `Allocation` and the rule sits on the category. The figures are unchanged: the
-# same $240 funded, the same $300-a-period claim, the same $185 left.
+# ** CONVERTED ONTO COMPUTED CLAIMS (computed-claims spec §3). ** Every fixture used to plant an
+# `Allocation` — money MOVED into a category — and read the holding back. Nothing moves (§5), so
+# every `fund(...)` in this file is gone and the money is written the way the model actually puts it
+# there: a rule that claims a rate, a rule that accrues toward a target, or a dated adjustment
+# (§3.3). THE FIGURES ARE THE SAME FIGURES wherever the shape allows it — the same $240 claimed, the
+# same $300-a-period rule, the same $185 left — re-derived from §3's formulas rather than carried:
+#
+#   * `$240 held` became `$300 a period with $60 of it spent` — `claim = max(0, 300 − 60)`.
+#   * `$600 in a goal` became `a $600-a-period rule on a $2,400 target, one period walked` —
+#     `built_up = min(0 + 600, 2400)`.
+#   * `$600 held against a $300 claim` became `$300 a period with a +$300 adjustment` —
+#     `claim = max(0, 300 + 300 − 0)`, which is §3.3's delta doing what an allocation used to.
+#
+# ── DELETED, EACH BECAUSE THE SHAPE IT ASSERTED CANNOT HAPPEN NOW:
+#
+#   * "writes a negative holding signed, so the browser subtracts from the right number" — a holding
+#     was a signed sum and could go below zero; §3.1 and §3.2 both clamp a claim at zero, so
+#     `#balance` has no negative to sign. CONVERTED rather than dropped: "never writes a negative
+#     figure at all" asserts the clamp in its place, on the same overspent fixture.
+#   * "is still a goal once a refill rule fills it" — it planted a goal with NO rule and then added
+#     one, to show the classification did not change. A goal with no rule claims nothing at all now
+#     (every claim comes from a rule, §3.3), so the two halves are no longer one category's before
+#     and after. Both facts survive as their own examples: "a goal with no rule claims nothing" and
+#     "is a goal on the one predicate every screen now asks".
+#
+# ── NEW, AND EACH PINS ONE HALF OF #balance's GIVE-BACK RULING (see that method's comment):
+#   "gives the whole entry back through the clamp when the envelope is overspent", "gives nothing
+#   back for a receipt from a period the rate claim never saw", "caps the give-back at what the
+#   rules could hold", "gives nothing back when an accruing rule is spent past what it had".
 #
 # EVERY EXPECTED FIGURE IS A PLANTED LITERAL and both sides of every equality are independent. A
-# holding is asserted against the sum of the allocations and entries this file wrote, spelled out,
-# and never against another reading of the same objects.
+# claim is asserted against the arithmetic §3 does on the rules and entries this file wrote, spelled
+# out, and never against another reading of the same objects.
 #
 # EVERY FIXTURE IS BIWEEKLY and the anchor is a fixed date, so a monthly rule's amount and its
 # per-period claim are never the same number — the mixed-unit slip has struck five times on this
@@ -22,7 +47,8 @@ require "rails_helper"
 # rather than travelled to, so no example reads `Date.current` inside a frozen clock.
 RSpec.describe EntryImpactPresenter do
   # Feb 6 is the anchor AND the day, so the boundaries are Feb 6 and Feb 20 and the period the card
-  # reports runs to Feb 19 — the spec's own mockup date.
+  # reports runs to Feb 19 — the spec's own mockup date. The period before it is Jan 23 – Feb 5,
+  # which is what the back-dated example below reaches into.
   let(:today) { Date.new(2026, 2, 6) }
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6), typical_income: 2_400)
@@ -37,47 +63,61 @@ RSpec.describe EntryImpactPresenter do
     create(:category, :expense, user: user, name: "Groceries", funded_since: funded_since)
   end
 
-  # MONEY INTO A CATEGORY IS AN ALLOCATION OUT OF AVAILABLE — the same shape a distribution writes.
-  # It moves nothing physical (§2), which is why no account appears in this file's fixtures at all
-  # beyond the one every user must have.
-  def fund(category, amount)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: Date.new(2026, 2, 6))
-  end
+  # ** THE DAY AN ACCRUING RULE WAS BORN, AND IT IS NOT BOOKKEEPING (§3.2, Henry's ruling of
+  # 2026-09-03). ** A rule accrues from the LATER of its category's funding date and its own
+  # creation, so a rule the factory writes a moment ago — at the real wall clock, months after this
+  # file's `today` — walks NO periods at all and holds nothing. Born on the day the current period
+  # opens, every accruing fixture here walks exactly ONE period and its built-up is one period's
+  # accrual, which is what makes the literals below readable.
+  #
+  # IRRELEVANT TO A RATE RULE, which walks only the period containing `today` whatever its birthday,
+  # and passed anyway so no fixture depends on which shape it happens to be.
+  def born = Time.utc(2026, 2, 6, 9, 0)
 
-  def spend(category, amount, on: Date.new(2026, 2, 6))
+  def spend(category, amount, on: today)
     create(:entry, item: create(:item, category: category), amount: amount, date: on)
   end
 
-  # $300 EVERY PERIOD — a rate rule, so its own amount IS its per-period claim.
+  # $X EVERY PERIOD — a rate rule, so its own amount IS its per-period claim (§3.1), and the claim it
+  # produces is that amount less whatever has been spent on the category this period.
   def rate(category, amount)
-    create(:budget, :per_period_rate, category: category, amount: amount)
+    create(:budget, :per_period_rate, category: category, amount: amount, created_at: born)
   end
 
   # $X A MONTH — its per-period claim under a biweekly user is `amount * 12 / 26`, nothing like its
   # own amount. This is the shape the bar's denominator lives or dies on.
   def monthly_rate(category, amount)
-    create(:budget, :rate, category: category, amount: amount)
+    create(:budget, :rate, category: category, amount: amount, created_at: born)
   end
 
-  # A HOLDER WITH A TARGET AND NO RULE — `Category#savings?`, which is the card's goal question.
-  def goal(name, target:, funded: 0)
-    attrs = { funded_since: funded_since, target_amount: target }
-    category = create(:category, :expense, user: user, name: name, **attrs)
-    fund(category, funded) if funded.positive?
+  # A DATED, SIGNED DELTA ON A RULE'S ACCRUAL (§3.3). Dated at `today` by default, because the delta
+  # only counts in the period it falls in and this file's clock is not the wall clock.
+  def adjust(rule, amount, on: today)
+    create(:adjustment, rule: rule, amount: amount, date: on)
+  end
+
+  # A CATEGORY SAVING TOWARD A FIGURE. `accrues:` is the per-period rule that feeds it — every claim
+  # comes from a rule (§3.3), so a goal with no rule is a goal with nothing in it, which is exactly
+  # what `accrues: 0` plants — a goal all the same, because the predicate is about the target.
+  def goal(name, target:, accrues: 0)
+    category = create(:category, :expense, user: user, name: name, funded_since: funded_since, target_amount: target)
+    rate(category, accrues) if accrues.positive?
     category
   end
 
-  def present(category, amount: nil, entry: nil)
-    described_class.new(user: user, category: category, amount: amount, entry: entry, today: today)
+  def present(category, amount: nil, entry: nil, on: today)
+    described_class.new(user: user, category: category, amount: amount, entry: entry, today: on)
   end
 
   describe "the envelope card" do
+    # $300 a period with $60 of it already spent: `claim = max(0, 300 − 60)` = $240, the mockup's
+    # own figure, planted the way the model actually produces it.
     before do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
     end
 
-    it "prints the holding the ledger has and what the typed amount would leave", :aggregate_failures do
+    it "prints what the category claims and what the typed amount would leave", :aggregate_failures do
       impact = present(groceries, amount: "55")
 
       expect(impact.balance).to eq(BigDecimal("240"))
@@ -86,12 +126,20 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.noun).to eq("envelope")
     end
 
-    it "leaves the holding where it is when nothing has been typed", :aggregate_failures do
+    it "leaves the claim where it is when nothing has been typed", :aggregate_failures do
       impact = present(groceries)
 
       expect(impact.balance).to eq(BigDecimal("240"))
       expect(impact.balance_after).to eq(BigDecimal("240"))
       expect(impact.balance_after).not_to eq(BigDecimal("185"))
+    end
+
+    # THE FIGURE IS `Category#claim`'S, and the two are asserted against each other here so a
+    # presenter that quietly started summing rules of its own would fail rather than agree with
+    # itself. The literal is what keeps this from being `x == x`.
+    it "reads the category's own claim and not a second sum of its rules", :aggregate_failures do
+      expect(groceries.claim(today: today)).to eq(BigDecimal("240"))
+      expect(present(groceries).balance).to eq(groceries.claim(today: today))
     end
 
     it "answers in BigDecimal, whatever the amount arrived as", :aggregate_failures do
@@ -118,21 +166,23 @@ RSpec.describe EntryImpactPresenter do
       user.update!(period_cadence: nil, period_anchor_date: nil)
 
       expect(present(groceries).period_ends_on).to be_nil
-      expect(present(groceries).balance).to eq(BigDecimal("240"))
+      expect(present(groceries).balance).to be_a(BigDecimal)
     end
 
     # `#pool` IS GONE with `Category#effective_pool`, which resolved which POOL a category's spending
-    # reached. The question the card asks now is whether the CATEGORY holds it, and the answer is the
-    # category itself or nothing at all.
-    it "has no pool to name" do
+    # reached. `#calculator` went with `HoldingCalculator` (computed-claims §6): there is no object
+    # holding a balance for this card to read one off. The question is what the RULES claim, and the
+    # answer comes from the category itself.
+    it "has neither a pool nor a holding calculator to name", :aggregate_failures do
       expect(present(groceries)).not_to respond_to(:pool)
+      expect(present(groceries)).not_to respond_to(:calculator)
     end
   end
 
   describe "the bar" do
     it "measures what would be left against what the category claims from a period", :aggregate_failures do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
 
       # 185 of a 300-a-period claim.
       expect(present(groceries, amount: "55").denominator).to eq(BigDecimal("300"))
@@ -141,7 +191,6 @@ RSpec.describe EntryImpactPresenter do
     end
 
     it "claims the PER-PERIOD share of a monthly rule and not its sticker price", :aggregate_failures do
-      fund(groceries, 240)
       monthly_rate(groceries, 1_500)
 
       # $1,500 a month under a biweekly period is 1500 * 12 / 26.
@@ -149,42 +198,48 @@ RSpec.describe EntryImpactPresenter do
       expect(present(groceries).denominator).not_to eq(BigDecimal("1500"))
     end
 
-    it "clamps full rather than overflowing when the category holds more than it claims", :aggregate_failures do
-      fund(groceries, 600)
-      rate(groceries, 300)
+    # ** A CLAIM ABOVE THE RULE'S OWN RATE IS AN ADJUSTMENT'S DOING (§3.3), and that is how a
+    # category comes to hold more than it claims from a period now that nothing is allocated in.
+    # `claim = max(0, 300 + 300 − 0)` = $600 against a $300 denominator.
+    it "clamps full rather than overflowing when the category claims more than a period's rate", :aggregate_failures do
+      adjust(rate(groceries, 300), 300)
 
+      expect(present(groceries).balance).to eq(BigDecimal("600"))
       expect(present(groceries).bar_percent).to eq(100)
       expect(present(groceries, amount: "450").bar_percent).to eq(50)
     end
 
     it "clamps empty rather than going negative when the category is overdrawn", :aggregate_failures do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
 
       expect(present(groceries, amount: "400").balance_after).to eq(BigDecimal("-160"))
       expect(present(groceries, amount: "400").bar_percent).to eq(0)
     end
 
-    # NO BAR AT ALL rather than an empty one: a full-length grey track under "$240.00 left" says
-    # "nothing left" an inch beneath a figure saying otherwise.
+    # ** A CATEGORY WITH NO RULES CLAIMS NOTHING, HOWEVER MUCH HAS BEEN SPENT AGAINST IT (§3.4). **
+    # It used to hold whatever had been allocated in, which is why this example planted $240 and
+    # asserted it; every claim comes from a rule now, so the honest figure is zero and there is
+    # still no bar — an empty grey track beside a real figure would say "nothing left" an inch
+    # under a figure saying otherwise.
     it "has no bar at all, and does not divide, on a category with no rules on it", :aggregate_failures do
-      fund(groceries, 240)
+      spend(groceries, 60)
 
+      expect(present(groceries).balance).to eq(0)
       expect(present(groceries).bar?).to be(false)
       expect(present(groceries).denominator).to eq(0)
       expect(present(groceries).bar_percent).to eq(0)
-      expect(present(groceries).balance).to eq(BigDecimal("240"))
     end
 
     it "has one the moment the category has something to claim", :aggregate_failures do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
 
       expect(present(groceries).bar?).to be(true)
       expect(present(groceries).bar_percent).to eq(80)
     end
 
-    it "has none on a card whose category is holding nothing" do
+    it "has none on a card whose category claims nothing at all" do
       unfunded = create(:category, :expense, user: user, name: "Shopping")
 
       expect(present(unfunded).bar?).to be(false)
@@ -193,8 +248,8 @@ RSpec.describe EntryImpactPresenter do
 
   describe "the figures the browser re-reads" do
     it "writes four-figure money without a thousands separator", :aggregate_failures do
-      fund(groceries, 1_500)
-      rate(groceries, 1_200)
+      # `claim = max(0, 1200 + 300 − 0)` = $1,500 against a $1,200-a-period denominator.
+      adjust(rate(groceries, 1_200), 300)
 
       expect(present(groceries).balance_param).to eq("1500.00")
       expect(present(groceries).denominator_param).to eq("1200.00")
@@ -202,17 +257,26 @@ RSpec.describe EntryImpactPresenter do
       expect(present(groceries).denominator_param).not_to include(",")
     end
 
-    it "writes a negative holding signed, so the browser subtracts from the right number" do
-      spend(groceries, 80)
+    # ** THE SUCCESSOR TO "writes a negative holding signed". ** A holding could go below zero and
+    # the browser had to be handed the sign; §3.1 clamps a rate claim at `max(0, …)`, so $360 of
+    # spending against a $300 rule leaves $0 and not -$60. The MINUS still reaches the user — it is
+    # the right-hand figure, which #balance_after computes unclamped — and this is the left one.
+    it "never writes a negative figure, because a claim is clamped at zero", :aggregate_failures do
+      rate(groceries, 300)
+      spend(groceries, 360)
 
-      expect(present(groceries).balance_param).to eq("-80.00")
+      expect(present(groceries).balance_param).to eq("0.00")
+      expect(present(groceries).balance_param).not_to eq("-60.00")
+      expect(present(groceries, amount: "10").balance_after).to eq(BigDecimal("-10"))
     end
   end
 
   describe "overdrawing" do
+    # $300 a period with $260 spent: `claim = max(0, 300 − 260)` = $40, where $40 used to be
+    # allocated in.
     before do
-      fund(groceries, 40)
       rate(groceries, 300)
+      spend(groceries, 260)
     end
 
     it "goes negative and says so", :aggregate_failures do
@@ -237,19 +301,20 @@ RSpec.describe EntryImpactPresenter do
     end
   end
 
-  describe "editing an entry the ledger has already counted" do
+  describe "editing an entry the claim has already counted" do
+    # $60 of other spending plus the $45 being edited: `claim = max(0, 300 − 105)` = $195, and the
+    # card must say $240 — the world WITHOUT this entry, which is `195 + 45`.
     let!(:existing) { spend(groceries, 45) }
 
     before do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
     end
 
-    # THE LEDGER SAYS $195 — $240 allocated in less the $45 already logged. The card must not.
     it "shows the world as if this entry were being decided now", :aggregate_failures do
       impact = present(groceries, amount: "45", entry: existing)
 
-      expect(groceries.holding_calculator(today: today).balance).to eq(BigDecimal("195"))
+      expect(groceries.claim(today: today)).to eq(BigDecimal("195"))
       expect(impact.balance).to eq(BigDecimal("240"))
       expect(impact.balance_after).to eq(BigDecimal("195"))
     end
@@ -268,10 +333,11 @@ RSpec.describe EntryImpactPresenter do
       expect(present(groceries, amount: "10", entry: existing).balance_after).to eq(BigDecimal("230"))
     end
 
-    # RE-CATEGORISING: the entry's money drains Groceries, so Dining Out must not be credited with it.
+    # RE-CATEGORISING: the entry's money comes off Groceries' claim, so Dining Out must not be
+    # credited with it.
     it "excludes nothing from a category the entry's money does not drain", :aggregate_failures do
       dining = create(:category, :expense, user: user, name: "Dining Out", funded_since: funded_since)
-      fund(dining, 100)
+      rate(dining, 100)
 
       impact = present(dining, amount: "45", entry: existing)
 
@@ -279,41 +345,123 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance_after).to eq(BigDecimal("55"))
     end
 
-    # THE DATE IS THE SECOND HALF OF THE SAME TEST, and it is new with the re-anchored start-date
-    # rule (§4). An entry dated BEFORE its category's `funded_since` drains AVAILABLE, not the
-    # category — the ledger never counted it here — so removing it would credit the card with money
-    # the category has never held. Both figures are the same because there is nothing to give back.
+    # THE DATE IS THE SECOND HALF OF THE SAME TEST, and it is the re-anchored start-date rule (§4).
+    # An entry dated BEFORE its category's `funded_since` moves no claim at all — the ledger's own
+    # gate keeps it out of every lane — so there is nothing to give back and the card falls to the
+    # honest arm, which is about the day the ENTRY is about.
     it "excludes nothing for an entry dated before the category started holding money", :aggregate_failures do
       early = spend(groceries, 45, on: funded_since - 1.day)
 
       impact = present(groceries, amount: "45", entry: early)
 
-      # The card describes the day the ENTRY is about, and on that day this category held nothing.
       expect(impact.unbudgeted?).to be(true)
       expect(impact.figures?).to be(false)
     end
 
     # AN EXPENSE ALREADY COUNTED AGAINST A GOAL, re-read on the edit form. Spending from a goal is
-    # still spending against a goal, and the exclusion works the same way there.
+    # still spending against a goal, and the give-back works the same way there.
+    #
+    # PLANTED: a $600-a-period rule on a $2,400 target, born as the period opened, so the walk
+    # visits ONE period — `built_up = min(0 + 600, 2400) − 150` = $450. Without this entry: $600.
     it "gives back an expense already counted against a goal rather than spending it twice", :aggregate_failures do
-      vacation = goal("Vacation", target: 2_400, funded: 600)
+      vacation = goal("Vacation", target: 2_400, accrues: 600)
       spent = spend(vacation, 150)
 
       impact = present(vacation, amount: "150", entry: spent)
 
-      # Ledger: 600 allocated in − 150 spent. Without this entry: 600. Spending 150: 450.
-      expect(vacation.holding_calculator(today: today).balance).to eq(BigDecimal("450"))
+      expect(vacation.claim(today: today)).to eq(BigDecimal("450"))
       expect(impact.balance).to eq(BigDecimal("600"))
       expect(impact.balance_after).to eq(BigDecimal("450"))
     end
   end
 
-  # ONE SHAPE REACHES THIS CARD, AND IT IS A DATE AS MUCH AS A CATEGORY (Task 6). `#unbudgeted?` read
+  # ** THE GIVE-BACK'S OWN RULING (see EntryImpactPresenter#balance). ** A holding was a signed sum
+  # and adding an entry back to it was exactly invertible; a claim is clamped, at zero by §3.1/§3.2
+  # and at the target by §3.2, and a clamp is not invertible. Each example below is one arm of the
+  # ruling with the arithmetic written out, and each asserts the figure the naive give-back would
+  # have produced as well as the right one, so an implementation that reverted could not pass.
+  describe "the give-back through a clamp" do
+    it "gives the whole entry back through the clamp when the envelope is overspent", :aggregate_failures do
+      rate(groceries, 300)
+      spend(groceries, 60)
+      overdrew = spend(groceries, 300)
+
+      impact = present(groceries, amount: "300", entry: overdrew)
+
+      # The claim itself is clamped flat: `max(0, 300 − 360)` = $0. The give-back is applied to the
+      # figure BEFORE that clamp — `max(0, −60 + 300)` = $240 — which is what the envelope had
+      # before this receipt, and $240 → −$60 is what the receipt does to it.
+      expect(groceries.claim(today: today)).to eq(0)
+      expect(impact.balance).to eq(BigDecimal("240"))
+      expect(impact.balance_after).to eq(BigDecimal("-60"))
+      # Adding back AFTER the clamp would have said $300, an envelope that never held that much.
+      expect(impact.balance).not_to eq(BigDecimal("300"))
+    end
+
+    # ** A RATE CLAIM IS USE-IT-OR-LOSE-IT AND SEES ONE PERIOD (§3.1). ** Feb 5 is the last day of
+    # the period before this one, so the $45 is not in the figure at all and there is nothing of it
+    # to give back. Under the old cumulative holding it was, which is why this gate is new.
+    it "gives nothing back for a receipt from a period the rate claim never saw", :aggregate_failures do
+      rate(groceries, 300)
+      spend(groceries, 60)
+      last_period = spend(groceries, 45, on: today - 1)
+
+      impact = present(groceries, amount: "45", entry: last_period)
+
+      expect(groceries.claim(today: today)).to eq(BigDecimal("240"))
+      expect(impact.balance).to eq(BigDecimal("240"))
+      expect(impact.balance).not_to eq(BigDecimal("285"))
+    end
+
+    # ** THE CLAMP AT THE OTHER END (§3.2: the built-up is capped at the target). ** A $600-a-period
+    # rule on a $600 target, born Feb 6, with $150 spent on Feb 6, asked on Feb 20 — the second
+    # period of the walk:
+    #
+    #   Feb 6–19  planned min(600, gap 600) = 600 · accrued min(0 + 600, 600) = 600 · spent 150 → 450
+    #   Feb 20–…  planned min(600, gap 150) = 150 · accrued min(450 + 150, 600) = 600 · spent 0 → 600
+    #
+    # The fund has refilled to its target, so giving the old $150 back would print $750 of a $600
+    # goal. The ceiling is what the rules could hold at most, and it is $600.
+    it "caps the give-back at what the rules could hold", :aggregate_failures do
+      vacation = goal("Vacation", target: 600, accrues: 600)
+      spent = spend(vacation, 150)
+      later = Date.new(2026, 2, 20)
+
+      impact = present(vacation, amount: "150", entry: spent, on: later)
+
+      expect(vacation.claim(today: later)).to eq(BigDecimal("600"))
+      expect(impact.balance).to eq(BigDecimal("600"))
+      expect(impact.balance).not_to eq(BigDecimal("750"))
+      expect(impact.balance_after).to eq(BigDecimal("450"))
+    end
+
+    # ** THE ONE ARM THAT UNDERSTATES, AND IT IS THE DELIBERATE DIRECTION. ** §3.2 clamps an
+    # accruing rule's built-up inside EVERY period of the walk, so the figure before that clamp is
+    # gone by the time the walk returns and there is no `accrued − spent` to add the entry back to.
+    # Planted: a $600-a-period rule on a $600 target with $750 spent — `min(0 + 600, 600) − 750` is
+    # −$150 before the clamp and $0 after it, and `over?` is the calculator's own reader for it.
+    #
+    # THE TRUTH IS $600 AND THIS CARD SAYS $0. That is the cost, stated: on a card answering "can I
+    # afford this", understating a fund already spent past zero is the safe direction, and the
+    # alternative — adding the $750 back to a zero — would offer $750 that is provably not there.
+    it "gives nothing back when an accruing rule is spent past what it had", :aggregate_failures do
+      vacation = goal("Vacation", target: 600, accrues: 600)
+      overdrew = spend(vacation, 750)
+
+      impact = present(vacation, amount: "750", entry: overdrew)
+
+      expect(vacation.claim(today: today)).to eq(0)
+      expect(impact.balance).to eq(0)
+      expect(impact.balance).not_to eq(BigDecimal("750"))
+    end
+  end
+
+  # ONE SHAPE REACHES THIS CARD, AND IT IS A DATE AS MUCH AS A CATEGORY. `#unbudgeted?` read
   # `pool.nil? || pool.pool_type_account?` — no envelope, or an envelope that was really an account,
   # and both meant "nothing reserves this money". Its successor is `Category#counts_spending_on?`,
   # which is the ledger's own rule: a category that has never been funded, and a funded one asked
-  # about a day before it started holding, both send their spending to AVAILABLE.
-  describe "a category that is not holding money" do
+  # about a day before it started holding, both leave their spending to FREE money (§2).
+  describe "a category no rule claims" do
     let(:unfunded) { create(:category, :expense, user: user, name: "Shopping") }
 
     it "is told the truth rather than shown an envelope", :aggregate_failures do
@@ -329,11 +477,11 @@ RSpec.describe EntryImpactPresenter do
       expect(present(unfunded, amount: "55").overdrawn?).to be(false)
     end
 
-    # THE DATED ARM, and it is the new one: this category DOES hold money, and this receipt still
-    # drains available because it predates the day it started. Both directions on one category, so
-    # the example is about the date and nothing else.
+    # THE DATED ARM, and it is the new one: this category DOES carry a rule, and this receipt still
+    # comes out of free money because it predates the day the category started holding. Both
+    # directions on one category, so the example is about the date and nothing else.
     it "is the same card for a receipt dated before the category started holding", :aggregate_failures do
-      fund(groceries, 240)
+      rate(groceries, 300)
       before_it_started = create(
         :entry,
         item: create(:item, category: groceries),
@@ -353,8 +501,8 @@ RSpec.describe EntryImpactPresenter do
       expect(present(unfunded).unbudgeted?).to be(true)
     end
 
-    it "is not what a holder gets", :aggregate_failures do
-      fund(groceries, 240)
+    it "is not what a category with a rule gets", :aggregate_failures do
+      rate(groceries, 300)
 
       expect(present(groceries, amount: "55").unbudgeted?).to be(false)
       expect(present(groceries, amount: "55").figures?).to be(true)
@@ -362,11 +510,13 @@ RSpec.describe EntryImpactPresenter do
   end
 
   describe "a savings goal" do
-    # A GOAL IS `Category#savings?` — a holder, with a target, carrying NO refill rule (spec §3).
-    # That is the app's DISPLAY question and deliberately not `HoldingCalculator#dateless_goal?`,
-    # which asks the target alone because it is the FUNDING question. The card is a rendering, so it
-    # asks the rendering question — and the two part company on exactly one shape, pinned below.
-    let(:vacation) { goal("Vacation", target: 2_400, funded: 600) }
+    # A GOAL IS `Category#saving_toward_a_target?` — a holder with a figure to reach — and since
+    # Task 4 that is the ONLY goal predicate in the app. Its rival `#savings?` additionally required
+    # the category to carry no rule, which under §3.3 selects exactly the goals that claim nothing;
+    # it is deleted, and this card, Home, the categories page and the savings strip all ask this one.
+    #
+    # $600 of a $2,400 target: a $600-a-period rule born as the period opened, one period walked.
+    let(:vacation) { goal("Vacation", target: 2_400, accrues: 600) }
 
     before { vacation }
 
@@ -381,8 +531,8 @@ RSpec.describe EntryImpactPresenter do
     end
 
     it "measures its bar against the target, which no rule could ever be", :aggregate_failures do
-      # 450 of 2,400. A goal with NO rule has no per-period claim at all, so under the envelope
-      # denominator its bar could never move — which is the defect the target arm exists to fix.
+      # 450 of 2,400. Measured against the $600-a-period rule instead, the bar would read 75% of a
+      # goal that is a quarter full — which is the defect the target arm exists to fix.
       expect(present(vacation, amount: "150").denominator).to eq(BigDecimal("2400"))
       expect(present(vacation, amount: "150").bar_percent).to eq(19)
       expect(present(vacation, amount: "150").bar?).to be(true)
@@ -397,50 +547,58 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.overdrawn?).to be(true)
     end
 
-    # ** THE CARRIED INCONSISTENCY, AND IT IS REVERSED HERE (Task 7's ruling). ** This example read
-    # "is an envelope, not a goal, once a refill rule fills it": the card asked
-    # `Category#savings?` — holder + target + NO RULE — so a goal the waterfall ALSO refills at a
-    # rate (the demo's Retirement Supplement, $150 a period against a $100,000 target) drew the
-    # ENVELOPE bar here while `HoldingStatus` called the same category `saving` on Home. One
-    # category, two screens, two answers, and the bar was the visible half: Σ steady_ask as the
-    # denominator of a six-figure goal, drawn FULL an inch under "of $100,000.00 goal".
+    # ** THE CARRIED INCONSISTENCY, REVERSED IN TASK 7 AND NOW STRUCTURALLY GONE. ** This card once
+    # asked `Category#savings?` — holder + target + NO RULE — so a goal a rate rule also refills
+    # drew the ENVELOPE bar here while Home called the same category a goal. One category, two
+    # screens, two answers, and the bar was the visible half.
     #
-    # Every RENDERING asks `HoldingCalculator#saving_toward_a_target?` now — the calculator's own
-    # predicate, the one the sweep already runs on — so a rule-bearing goal is a goal on this card,
-    # on Home and on the categories page's holdings card alike. `Category#savings?` still answers
-    # FALSE, deliberately and without contradiction: it is the question an INDEX of the user's
-    # savings asks, not the question a rendering asks, and both are asserted here so the two cannot
-    # be quietly folded together.
-    it "is still a goal once a refill rule fills it", :aggregate_failures do
-      rate(vacation, 500)
-
-      expect(vacation.reload.savings?).to be(false)
+    # `#savings?` IS DELETED (Task 4): under §3.3 every claim comes from a rule, so a goal with money
+    # in it HAS one by construction and the third clause selected exactly the goals that claim
+    # nothing. What is left is `Category#saving_toward_a_target?` — a funding start and a figure to
+    # reach — which this card, Home, the categories page and the dashboard's savings strip now ALL
+    # ask, so the inconsistency has no second predicate left to be an inconsistency with.
+    it "is a goal on the one predicate every screen now asks", :aggregate_failures do
+      expect(vacation.reload.saving_toward_a_target?).to be(true)
       expect(present(vacation).goal?).to be(true)
       expect(present(vacation).goal_target).to eq(BigDecimal("2400"))
       expect(present(vacation).denominator).to eq(BigDecimal("2400"))
     end
 
-    it "is not a goal without a target, and falls back to the category's own claim", :aggregate_failures do
+    # ** AND THE OTHER HALF OF THE SAME FACT. ** A goal with NO RULE claims nothing at all (§3.3:
+    # every claim comes from a rule), so the card draws it as a goal with an empty bar rather than as
+    # a goal holding money nobody put anywhere. It is still a goal — the predicate is about the
+    # target, not about the money — which is exactly why the deleted `#savings?` could not be the
+    # rendering question.
+    it "claims nothing at all while no rule feeds it", :aggregate_failures do
+      empty = goal("Someday", target: 5_000)
+
+      expect(empty.saving_toward_a_target?).to be(true)
+      expect(present(empty).goal?).to be(true)
+      expect(present(empty).balance).to eq(0)
+      expect(present(empty).bar_percent).to eq(0)
+    end
+
+    it "is not a goal without a target, and falls back to the category's own rule", :aggregate_failures do
       vacation.update!(target_amount: nil)
-      rate(vacation, 500)
 
       expect(present(vacation).goal?).to be(false)
       expect(present(vacation).goal_target).to be_nil
-      expect(present(vacation).denominator).to eq(BigDecimal("500"))
+      expect(present(vacation).denominator).to eq(BigDecimal("600"))
     end
 
     it "is not a goal on an ordinary spending category", :aggregate_failures do
-      fund(groceries, 240)
+      rate(groceries, 300)
 
       expect(present(groceries).goal?).to be(false)
       expect(present(groceries).goal_target).to be_nil
     end
 
     # A TARGET ON A CATEGORY THAT HOLDS NOTHING IS NOT A GOAL either, because there is nothing for
-    # it to be progress toward — `Category#savings?` carries `holder?` for exactly this reason, and
-    # the card falls to the honest arm rather than drawing a bar against a target no money can reach.
+    # it to be progress toward — `Category#saving_toward_a_target?` carries `holder?` for exactly
+    # this reason, and the card falls to the honest arm rather than drawing a bar against a target
+    # no rule can reach.
     it "is not a goal on a category that has never been funded", :aggregate_failures do
-      never = create(:category, :expense, user: user, name: "Someday", target_amount: 5_000)
+      never = create(:category, :expense, user: user, name: "Never", target_amount: 5_000)
 
       expect(present(never).goal?).to be(false)
       expect(present(never).unbudgeted?).to be(true)
@@ -450,9 +608,8 @@ RSpec.describe EntryImpactPresenter do
   describe "an income category" do
     let(:paycheck) { create(:category, user: user, name: "Paycheck", category_type: :income) }
 
-    # §6 leaves income out on purpose: it lands in available (§2), and how income meets categories
-    # is the distribution screen's subject — a concept the daily screen deliberately does not
-    # introduce.
+    # §6 leaves income out on purpose: it lands in the account, and what happens to it there is the
+    # hero's subject — a concept the daily screen deliberately does not introduce.
     it "gets no card at all", :aggregate_failures do
       expect(present(paycheck, amount: "2400").render?).to be(false)
       expect(present(paycheck, amount: "2400").figures?).to be(false)
@@ -470,8 +627,8 @@ RSpec.describe EntryImpactPresenter do
 
   describe "what counts as a typed amount" do
     before do
-      fund(groceries, 240)
       rate(groceries, 300)
+      spend(groceries, 60)
     end
 
     it "reads a plain number, with or without cents", :aggregate_failures do
@@ -482,13 +639,13 @@ RSpec.describe EntryImpactPresenter do
 
     # `parseFloat("10*5")` is 10 in the browser and Dentaku says 50 on save. Neither is a figure to
     # print, so the card holds still until the formula resolves.
-    it "holds at the holding for a formula the browser cannot evaluate", :aggregate_failures do
+    it "holds at the claim for a formula the browser cannot evaluate", :aggregate_failures do
       expect(present(groceries, amount: "10*5").amount).to eq(0)
       expect(present(groceries, amount: "10*5").balance_after).to eq(BigDecimal("240"))
       expect(present(groceries, amount: "10*5").balance_after).not_to eq(BigDecimal("190"))
     end
 
-    it "holds at the holding for a figure the form could never save", :aggregate_failures do
+    it "holds at the claim for a figure the form could never save", :aggregate_failures do
       expect(present(groceries, amount: "-10").amount).to eq(0)
       expect(present(groceries, amount: "1,500").amount).to eq(0)
       expect(present(groceries, amount: "abc").amount).to eq(0)

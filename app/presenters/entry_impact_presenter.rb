@@ -10,29 +10,38 @@
 #     $240  →  $185 left                     until Feb 19
 #     ▓▓▓▓▓▓░░░░░░
 #
+# ** EVERY FIGURE HERE IS A CLAIM NOW, AND NOT A HOLDING (computed-claims spec §3). ** Nothing is
+# moved into a category any more (§5), so there is no balance sitting anywhere to read: a category's
+# money is the SUM OF ITS RULES' CLAIMS, computed from the rules, the calendar, its spending and its
+# dated adjustments at the instant it is asked for. `Category#claim` is that sum and it is the one
+# door this class reads it through.
+#
 # PLAN DECISION 1 — THIS CLASS COMPUTES NO NEW FIGURE. Every number below is an existing reader:
 #
-#   * the balance is `PoolCalculator#balance` (ledger-backed, the one answer to "what is in this
-#     envelope"),
-#   * the bar's denominator is `Σ Budget#steady_ask` over the envelope's own rules — steady_ask is
+#   * the balance is `Category#claim` (the app's one unbatched answer to "what does this category
+#     have"), corrected on EDIT by what this entry has already taken out of it — see #balance, which
+#     is the only arithmetic in this file and carries its own ruling,
+#   * the bar's denominator is `Σ Budget#steady_ask` over the category's own rules — steady_ask is
 #     THE per-period normaliser on this branch and a local division would be a second one, which
 #     is the mixed-unit trap that has struck five times here,
 #   * the date is the edge `User#period_boundaries` puts after today, taken through
 #     `User#period_containing` so the window arithmetic is not spelled twice.
 #
-# AND IT SPEAKS NO STATUS. `HoldingStatus` is the app's most-guarded reader and it is not consulted,
-# not here and not in the browser: the card renders figures, a bar and a date. There is no "behind",
-# no "on track", no colour band standing in for one. The one colour it does use is the ordinary
-# negative-money red the account header already uses for a negative buffer — a fact about a sign,
-# not a verdict about an envelope.
+# AND IT SPEAKS NO STATUS. The card renders figures, a bar and a date. There is no "behind", no "on
+# track", no colour band standing in for one — and no RULE date either: the one date it prints is
+# the period's own closing edge (#period_ends_on), never an occurrence's due date, so nothing here
+# reads a schedule at all. The one colour it does use is the ordinary negative-money red the account
+# header already uses for a negative balance — a fact about a sign, not a verdict about a category.
 #
-# PLAN DECISION 2 — OVERDRAWING WARNS AND NEVER BLOCKS, and a category with no envelope is told the
+# PLAN DECISION 2 — OVERDRAWING WARNS AND NEVER BLOCKS, and a category no rule claims is told the
 # truth rather than shown an envelope that does not exist. See #unbudgeted? and #overdrawn?.
 #
-# THE INVARIANT IS UNTOUCHED BY CONSTRUCTION: `Σ pools == your bank balance` can only be moved by a
-# write, and this class has none. Every figure it prints is read.
+# NOTHING IS MOVED BY LOOKING AT IT: `free = min(pot, total_money − Σ claims)` is a DEFINITION (§2)
+# rather than a partition anything writes, and this class has no writes at all. Every figure it
+# prints is read.
 #
-# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §6
+# See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §6 and
+# docs/superpowers/specs/2026-09-03-computed-claims-design.md §§3, 5
 class EntryImpactPresenter
   # WHAT COUNTS AS A TYPED AMOUNT, and it is deliberately strict.
   #
@@ -79,8 +88,8 @@ class EntryImpactPresenter
   # `Category#counts_spending_on?` — the app's ONE Ruby mirror of `CategoryLedger::ENTRY_CATEGORY_ID`
   # (§4's re-anchored start-date rule, compared in the OWNER's calendar day). It answers `holder? &&
   # local_day(date) >= funded_since`, so a category that has never been funded, and a funded one
-  # asked about a day before it started holding, both answer nil here: their spending drains
-  # AVAILABLE, not the category, and the honest card below says so.
+  # asked about a day before it started holding, both answer nil here: no rule's claim can be moved
+  # by that receipt, so it comes straight out of FREE money (§2) and the honest card below says so.
   #
   # ON THE DAY THE ENTRY IS ABOUT, which is what the start-date rule made this card have to say. On
   # EDIT that day is the entry's own; on NEW there is no entry and the day is `today`, the same clock
@@ -101,17 +110,17 @@ class EntryImpactPresenter
     @holding = category.present? && category.counts_spending_on?(entry&.date || today) ? category : nil
   end
 
-  # THE HONEST CARD (decision 2). ONE shape reaches it now: a category that is not holding money on
-  # this day, so the spending drains AVAILABLE — money with no job yet (§2).
+  # THE HONEST CARD (decision 2). ONE shape reaches it now: a category whose claim this receipt
+  # cannot move, so the spending comes straight out of FREE money — `total − Σ claims`, the money no
+  # rule has spoken for (§2).
   #
   # THE TWO SHAPES IT USED TO BE were "no pool at all" and "a pool that IS an account", and they
-  # were one sentence because an account is the buffer and nothing reserved money sitting in one.
-  # That pair was `Category#buffer_funded?`; its successor is `Category#holder?`, asked with a date
-  # because a holder still drains available for spending that predates its funding.
+  # were one sentence because nothing reserved money sitting in an account. That pair was
+  # `Category#buffer_funded?`; its successor is `Category#holder?`, asked with a date because a
+  # funded category's claim still cannot be moved by spending that predates its funding.
   #
-  # The register is the Budget page's own — its rate suggestion says a category's spending
-  # "currently comes out of what's available" of exactly this population — so a user who meets the
-  # sentence here and the offer there is reading one app.
+  # The register is the Budget page's own — its rate suggestion offers a rule to exactly this
+  # population — so a user who meets the sentence here and the offer there is reading one app.
   def unbudgeted? = holding.nil?
 
   # A CATEGORY SAVING TOWARD A FIGURE IS A GOAL, so the card takes the goal shape
@@ -120,22 +129,26 @@ class EntryImpactPresenter
   # IT ASKED `Category#savings?` AND THAT WAS THE CARRIED INCONSISTENCY (Task 7's ruling). That
   # predicate is holder + target + NO RULE, so a goal the user ALSO refills at a rate — the demo's
   # Retirement Supplement, $150 a period against a $100,000 target — was classified as an envelope
-  # HERE and as `saving` on Home, which reads its state through `HoldingStatus#saving?` →
-  # `HoldingCalculator#dateless_goal?`. One category, two screens, two answers, and the bar was the
-  # visible half: this card drew Σ steady_ask as the denominator of a $100,000 goal.
+  # HERE and as a goal on Home. One category, two screens, two answers, and the bar was the visible
+  # half: this card drew Σ steady_ask as the denominator of a $100,000 goal.
   #
-  # `HoldingCalculator#saving_toward_a_target?` is the calculator's OWN predicate and the one the
-  # sweep already runs on ("savings never sweep, whatever their rule mix"), so asking it here makes
-  # the classification the same on the impact card, on Home and on the categories page's holdings
-  # card. Asked of the CALCULATOR rather than re-derived from the columns for the reason that
-  # predicate's own comment gives: a second spelling is a second answer waiting to happen.
+  # `Category#saving_toward_a_target?` IS THE RENDERING PREDICATE, and it is the same expression
+  # asked of the category itself — a holder with a figure to reach. It lives on the model rather
+  # than on a calculator because the question is about the CATEGORY a screen is drawing and not
+  # about any one rule: `ClaimCalculator#shape` answers `:target` off the same column for a single
+  # rule, and a category may carry a `:target` rule beside a `:dated` one without ceasing to be a
+  # goal to look at. The categories index card, the categories page's holdings card and this card
+  # all ask the one predicate, so a rule-bearing goal is a goal on every one of them.
   #
-  # Off #calculator, the one object this card's balance is already read from, so the classification
-  # and the figure beside it cannot come from two different readings of one category.
+  # `Category#savings?` IS DELETED (Task 4) AND THERE IS NO SECOND PREDICATE LEFT TO DISAGREE WITH.
+  # It was the INDEX question — which rows belong in a band headed "Savings" — and its extra clause
+  # inverted under §3.3: a goal with money in it always has a rule, so `budgets.none?` selected
+  # exactly the goals claiming nothing. The dashboard's savings strip, its last caller, asks this
+  # predicate too.
   #
   # Spending from a goal is still spending against a goal, which is why this arm exists at all: the
   # figures are the same two figures, and only the trailing phrase differs.
-  def goal? = holding.present? && calculator.saving_toward_a_target?
+  def goal? = holding.present? && holding.saving_toward_a_target?
 
   def goal_target = goal? ? category.target_amount.to_d : nil
 
@@ -146,29 +159,73 @@ class EntryImpactPresenter
   # own spending money, and it is also the fallback the honest card's own headline is written in.
   def noun = goal? ? "goal" : "envelope"
 
-  # WHAT THE CATEGORY HOLDS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
+  # WHAT THE CATEGORY CLAIMS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #
-  # `HoldingCalculator#balance` and then ONE correction, which is the whole of the edit case: on edit
-  # the ledger has ALREADY counted this entry, so a card built straight off the holding would answer
+  # `Category#claim` and then ONE correction, which is the whole of the edit case: on edit the
+  # claim has ALREADY counted this entry's spending, so a card built straight off it would answer
   # "what is left after the spending you already logged" while the user is looking at a form that
-  # asks "how much is this". Typing the same figure again would appear to spend it twice. The
-  # entry's own contribution is removed so the two figures the card prints are the world without
-  # this entry and the world with it — which is the question the screen is asking.
+  # asks "how much is this". Typing the same figure again would appear to spend it twice. What this
+  # entry has already taken out of the claim is given back, so the two figures the card prints are
+  # the world without this entry and the world with it — which is the question the screen is asking.
   #
-  # Only when the entry actually drains THIS category (see #own_contribution): re-categorising an
-  # entry must not credit its new category with money it never held.
+  # ** THE CORRECTION KEPT ITS SHAPE AND LOST ITS INNOCENCE (computed-claims §3.1/§3.2). ** Under the
+  # old model a holding was a signed sum and adding an entry's amount back to it was exactly
+  # invertible. A claim is not: `claim = max(0, rate + adjustments − spent)` for a rate rule, and an
+  # accruing rule's built-up is clamped into `0..target` in every period of its walk. A CLAMP IS NOT
+  # INVERTIBLE, so adding an amount back to a CLAMPED figure invents money. Measured, on a
+  # $300-a-period rate rule with $400 of spending in the period of which THIS entry is $100:
   #
-  # `Category#holding_calculator`, the ONE door onto what a category holds — never
-  # `HoldingCalculator.new`, and never `Category#calculator`, which is the unrelated per-period
-  # spending reader the categories and dashboard screens ask.
-  def balance = @balance ||= (calculator.balance - own_contribution).to_d
-
-  # ONE CALCULATOR PER CARD, and it is the reason #goal? can be asked of it. `#balance` built one
-  # inline and threw it away; #goal? needs the same object's `saving_toward_a_target?`, and two
-  # calculators over one category on one render is how a bar's shape and the figure inside it come
-  # to disagree. `Category#holding_calculator` is still the one door — this is a memo, not a second
-  # construction path.
-  def calculator = @calculator ||= holding.holding_calculator(today: today)
+  #     claim                 = max(0, 300 − 400)     = $0
+  #     naive give-back       = 0 + 100               = $100     ← money that is not there
+  #     the truth without it  = max(0, 300 − 300)     = $0
+  #
+  # ** SO THE GIVE-BACK IS APPLIED BEFORE THE CLAMP AND THE CLAMP IS RE-APPLIED AFTER IT. **
+  # `#pre_clamp_claim` is the same sum `Category#claim` makes, read one step earlier — a rate rule's
+  # `accrued − spent` instead of `max(0, accrued − spent)` — so the arithmetic above comes out at
+  # `max(0, −100 + 100)` = $0, which is the truth, and the ordinary case is untouched because the two
+  # figures are the same number wherever nothing is clamped. It is what keeps the reachable shape
+  # right: editing the $300 entry that overdrew a $300 envelope already carrying $60 of other
+  # spending reads `max(0, −60 + 300)` = **$240 → −$60**, which is what the envelope had and what
+  # this entry does to it. Adding back after the clamp would have said `$0 → −$300`.
+  #
+  # THREE GATES STAND IN FRONT OF IT, and none of them fires on the ordinary path:
+  #
+  #   1. THE ENTRY MUST DRAIN THIS CATEGORY, ON ITS OWN DATE — `#counted_by_holding?`, unchanged.
+  #      Re-categorising must not credit the new category with money it never had.
+  #   2. THE CLAIM MUST ACTUALLY COUNT THAT DAY — `#counted_by_the_claim?`'s first half. A rate
+  #      claim is use-it-or-lose-it and sees ONE period (§3.1), so an entry from LAST period is not
+  #      in the figure at all and giving it back would be pure invention: a $300 envelope with $60
+  #      spent would read $285 while editing a $45 receipt from a fortnight ago.
+  #      `ClaimCalculator#countable_span` is the calculator's own answer to which days its walk
+  #      counts, so the test is the walk's rather than a second reading of the calendar here.
+  #   3. NO ACCRUING RULE MAY BE SPENT PAST WHAT IT HAD — `#counted_by_the_claim?`'s second half.
+  #      The pre-clamp reading above is available for a RATE rule (`accrued_this_period` and
+  #      `spent_this_period` are both public) and NOT for an accruing one: §3.2 clamps the built-up
+  #      inside every period of the walk, and the figure before that clamp is gone by the time the
+  #      walk returns. `#over?` is the calculator's own reader for having gone past it, and where it
+  #      is true of an accruing rule the card gives back NONE of the entry and shows the fund at zero
+  #      going further under. That UNDERSTATES, deliberately: on a card answering "can I afford
+  #      this", understating a fund already spent past zero is the safe direction and overstating it
+  #      is the unsafe one.
+  #
+  # ALL THREE ARE ASKED OF EVERY RULE ON THE CATEGORY rather than of the one whose lane this entry
+  # is on, and the alternative lost on §3.1's own ground: resolving the lane means spelling
+  # `Entry.on_unruled_items`' partition a second time, in Ruby, and a second spelling of the
+  # partition is exactly what that ruling forbids. What it costs is a category mixing an OVERSPENT
+  # accruing rule with a healthy one, where the give-back is silenced on both lanes — an understating
+  # card in a shape few categories have, against an inventing card in the shape every overspent
+  # envelope has.
+  #
+  # AND A CEILING OVER THE LOT (#most_it_could_claim), for the clamp at the OTHER end: an accruing
+  # rule's built-up is capped at its target, so giving an old fulfilment back to a fund that has
+  # since refilled would print `$750.00 of $600.00 goal`. Nothing a category claims can exceed what
+  # its rules could hold at most, so the corrected figure is capped there too.
+  def balance
+    @balance ||= begin
+      given_back = -own_contribution
+      given_back.zero? ? claim : (pre_clamp_claim + given_back).clamp(0.to_d, most_it_could_claim)
+    end
+  end
 
   # The figure the amount box currently holds, as money. See TYPED_AMOUNT for what "currently holds"
   # is allowed to mean.
@@ -181,16 +238,23 @@ class EntryImpactPresenter
   end
 
   # SPENDING ALWAYS SUBTRACTS (plan 3, task 5). This read `balance + amount * #direction`, where
-  # `#direction` was `+1` for a savings category and `-1` otherwise, because `PoolCalculator#balance`
-  # used to ADD savings entries. It no longer does, and there is no savings category to sign: every
+  # `#direction` was `+1` for a savings category and `-1` otherwise, because a contribution used to
+  # RAISE the pool it filled. Contributions are gone and there is no savings category to sign: every
   # card this class renders describes an expense (income is silent — see `#render?`), and an expense
-  # takes money out of whatever pool it reaches. The GOAL arm is unaffected and still renders —
-  # spending from a goal is spending against a goal, which is `#goal?`'s own note.
+  # is what §3 subtracts from a claim. The GOAL arm is unaffected and still renders — spending from
+  # a goal is spending against a goal, which is `#goal?`'s own note.
+  #
+  # UNCLAMPED, AND THAT IS THE POINT OF THE RIGHT-HAND FIGURE. §3 clamps a claim at zero and this
+  # subtraction does not, because "what this spending leaves" and "what the rules will claim
+  # afterwards" are different questions: the claim afterwards is zero, and the figure the user needs
+  # is how far past zero they are going. It is `ClaimCalculator#over?`'s pre-clamp reading, said on a
+  # card — and it is why `#overdrawn?` below can be true at all.
   def balance_after = @balance_after ||= (balance - amount).to_d
 
   # WHETHER THERE ARE FIGURES TO PRINT AT ALL — the envelope and goal cards have them, the honest
-  # not-holding card has none. Every money reader below is gated on it, because there is no holding
-  # to read off a category that is not holding anything.
+  # nothing-claims-this card has none. Every money reader below is gated on it, because a receipt no
+  # rule's claim can move has no "left" figure to offer: it comes out of free money and that is the
+  # whole of what the card can say about it.
   def figures? = render? && !unbudgeted?
 
   # NEGATIVE IS THE ONLY TEST, and it is a fact about a sign rather than a status. Exactly zero is
@@ -209,17 +273,19 @@ class EntryImpactPresenter
   # A GOAL MEASURES AGAINST ITS TARGET INSTEAD, and this is a CORRECTION to the plan's wording
   # ("the bar's denominator is Σ steady_ask") rather than an exception to its ruling — the ruling is
   # that the card invents no normaliser, and `target_amount` is the existing goal reader that
-  # `PoolCalculator#progress_percentage` and `#remaining_amount` already measure against. Measured
-  # on the demo seeds, both halves:
+  # `ClaimCalculator#target` takes for a `:target`-shaped rule and that the categories page's goal
+  # bar already measures against. Measured on the demo seeds, both halves:
   #
-  #   * Retirement Supplement holds $545 against a $100,000 goal and $150 a period of rules. Under
+  #   * Retirement Supplement claims $545 against a $100,000 goal and $150 a period of rules. Under
   #     the steady_ask denominator its bar is drawn FULL while the line directly above it reads
   #     "of $100,000.00 goal" — two answers to one question, an inch apart, on the same card.
-  #   * The other four savings pools (Emergency Fund, House Down Payment, New Car, Vacation to
+  #   * The other four savings goals (Emergency Fund, House Down Payment, New Car, Vacation to
   #     Europe) carry NO rules at all, so Σ steady_ask is zero and their bars could never move —
-  #     empty on a goal the user is watching fill.
+  #     empty on a goal the user is watching fill. Under §3.3 such a goal claims nothing either, so
+  #     the bar is empty for a second and better reason; the target denominator is what lets it
+  #     start moving the moment a rule is written.
   #
-  # The envelope case is untouched: a budget pool's bar is Σ steady_ask, exactly as ruled.
+  # The rate case is untouched: a budgeted category's bar is Σ steady_ask, exactly as ruled.
   def denominator = @denominator ||= goal_target || steady_claim
 
   # WHETHER THERE IS A BAR AT ALL. An envelope with no rules on it has no per-period claim, so
@@ -265,39 +331,127 @@ class EntryImpactPresenter
 
   private
 
-  # `Σ steady_ask` over the category's rules. `0.to_d` seeded, because an unseeded `sum` over an
-  # empty set returns the Integer literal 0 and #bar_fraction divides by this — the money-type
-  # guarantee `HoldingCalculator` keeps for the same reason, one layer up.
+  # `Σ steady_ask` over the category's rules, and `Budget#steady_ask` SURVIVES THE CLAIM MODEL: it
+  # is the app's one answer to "what does this rule cost a period", which is what a bar's
+  # denominator is, and `ClaimCalculator#rate_per_period` reads the very same method for a rate
+  # rule's own share. Nothing about a SCHEDULE is read here — this card prints no due date at all
+  # (see the class header) — so the one place the two due-date derivations diverge is a place this
+  # file never reaches.
+  #
+  # `0.to_d` seeded, because an unseeded `sum` over an empty set returns the Integer literal 0 and
+  # #bar_fraction divides by this. It is the same money-type guarantee `Category#claim` keeps one
+  # layer up, for the same reason.
   def steady_claim = holding.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
 
-  # WHAT THE LEDGER ALREADY COUNTS FOR THIS ENTRY, in the ledger's own sign. Zero for a new entry,
-  # and zero for one that drains something other than the category the card is describing.
+  # WHAT THE CATEGORY CLAIMS RIGHT NOW, through the app's ONE unbatched door (`Category#claim` —
+  # `Σ` of its rules' claims, §3). This card describes ONE category, so the batched `ClaimLedger` is
+  # the wrong shape: it builds a walk over every rule the user owns to answer a question about one.
   #
-  # NEGATIVE, UNCONDITIONALLY: the purpose ledger has one sign for an entry that reaches a category
-  # — an expense subtracts (`CategoryLedger#holding_of`). `#render?` keeps income off this path, so
-  # there is no second case.
+  # `.to_d` on the RESULT even though `Category#claim` seeds its own `sum` with `0.to_d`: this
+  # figure is subtracted, compared and divided by all over this file, and the guarantee costs
+  # nothing to restate at the boundary the card actually reads it through.
+  def claim = @claim ||= holding.claim(today: today).to_d
+
+  # ONE CALCULATOR PER RULE, BUILT ONLY WHEN THE EDIT CASE NEEDS THEM. Nothing on the NEW-entry path
+  # touches this: `#own_contribution` returns zero before it is reached, so the ordinary card costs
+  # exactly the queries `Category#claim` costs and no more.
+  #
+  # ASKED FOR THE SHAPE OF THE CLAIM AND NEVER FOR ITS FIGURE — `#over?`, `#countable_span`,
+  # `#rate?`, `#target`, `#accrued_this_period`. Summing `#claim` off these instead of asking
+  # `Category#claim` would be a SECOND answer to what this category has, free to drift from the one
+  # every other screen reads; `Budget#claim_calculator` is the same constructor that model uses, so
+  # what these objects say about the claim is what that claim is made of.
+  def claim_calculators
+    @claim_calculators ||= holding.budgets.map { |budget| budget.claim_calculator(today: today) }
+  end
+
+  # ** THE SAME SUM `Category#claim` MAKES, READ ONE STEP BEFORE THE CLAMP AT ZERO. ** A rate rule's
+  # claim IS `max(0, accrued − spent)` (§3.1), so this drops the `max` and hands #balance a figure
+  # the give-back can be added to without the clamp having eaten part of it first. An accruing rule
+  # contributes its `built_up`, which is already clamped and whose pre-clamp figure the walk does not
+  # keep — gate 3 on #counted_by_the_claim? is what stops that difference from mattering.
+  #
+  # `max(0, this)` IS `Category#claim` for the ordinary one-rule category, which is why #balance can
+  # keep reading the one door on the NEW-entry path and this one only on edit. The two part company
+  # on a category mixing an OVERSPENT rate rule with a healthy accruing one, where the sum is taken
+  # before the clamp instead of after it and the overspend therefore eats into the sibling's figure.
+  # That is the understating direction, and gate 3's note carries the argument for preferring it.
+  def pre_clamp_claim
+    claim_calculators.sum(0.to_d) do |calculator|
+      calculator.rate? ? calculator.accrued_this_period - calculator.spent_this_period : calculator.built_up
+    end
+  end
+
+  # THE MOST THIS CATEGORY COULD POSSIBLY CLAIM — a rate rule's whole accrual for the period (§3.1's
+  # `rate + Σ adjustments`, floored at zero because a big enough negative delta would otherwise make
+  # the ceiling itself negative), and an accruing rule's target (§3.2 caps its built-up there).
+  #
+  # A CATEGORY CARRYING TWO ACCRUING RULES AGAINST ONE CATEGORY TARGET COUNTS THAT TARGET TWICE, and
+  # that is accepted rather than corrected: it makes the ceiling LOOSER, never tighter, so it cannot
+  # cut a figure that was true, and the ceiling is the second line of defence behind the three gates
+  # on #own_contribution rather than the thing doing the work.
+  def most_it_could_claim
+    claim_calculators.sum(0.to_d) do |calculator|
+      calculator.rate? ? [calculator.accrued_this_period, 0.to_d].max : calculator.target
+    end
+  end
+
+  # WHAT THIS ENTRY HAS ALREADY TAKEN OUT OF THE CLAIM, in the claim's own sign. Zero for a new
+  # entry, zero for one that drains a category other than the one the card is describing, and zero
+  # wherever the claim's arithmetic makes the give-back a guess — see #balance for the three gates
+  # and the measurement behind each.
+  #
+  # NEGATIVE, UNCONDITIONALLY: §3 has one sign for spending on a rule's lane — it subtracts, from a
+  # rate rule's period and from an accruing rule's built-up alike. `#render?` keeps income off this
+  # path, so there is no second case.
   #
   # THE TEST IS THE LEDGER'S OWN RULE, ASKED TWICE. `ENTRY_CATEGORY_ID` counts an entry against its
   # own category and only from that category's `funded_since` onward, so BOTH halves have to hold:
   # the entry's category must be the one on screen, and its DATE must be one the category counts.
-  # A back-dated receipt on a recently funded category drains available in the ledger, so removing
-  # it here would credit the card with money the category never held.
+  # A back-dated receipt on a recently funded category moves no claim at all, so giving it back
+  # would credit the card with money no rule ever claimed.
   #
   # THE RECORD ON DISK, NOT THE ONE IN THE FORM. Both the date and the amount are facts about what
-  # the ledger already counted, and the object handed in is not always that: a failed `update`
+  # the claim already counted, and the object handed in is not always that: a failed `update`
   # re-renders an `@entry` carrying the REJECTED amount and possibly a different item, so reading
-  # `entry.amount` there would remove a figure the ledger never held. `#changed?` is false on every
+  # `entry.amount` there would remove a figure no claim ever held. `#changed?` is false on every
   # ordinary path (the edit GET, the fragment endpoint), so the reload costs a query only on the
-  # one path where the in-memory record is provably not the ledger's.
+  # one path where the in-memory record is provably not the one on disk.
   def own_contribution
     counted = counted_entry
-    return 0.to_d unless counted && counted_by_holding?(counted)
+    return 0.to_d unless counted && counted_by_holding?(counted) && counted_by_the_claim?(counted)
 
     -counted.amount.to_d
   end
 
   def counted_by_holding?(counted)
     counted.item.category_id == holding.id && holding.counts_spending_on?(counted.date)
+  end
+
+  # ** IS THIS ENTRY IN THE FIGURE AT ALL, AND BY ITS WHOLE AMOUNT? ** #balance's gates 2 and 3,
+  # both read off the calculators rather than re-derived here.
+  #
+  # `#countable_span` is `ClaimCalculator`'s own answer to which DAYS its walk counts — one period
+  # for a use-it-or-lose-it rate rule, the whole accrual history for the other two shapes — so an
+  # entry from a previous period is simply not in a rate claim and there is nothing of it to give
+  # back. `ANY` rule, because the category's claim is a SUM and one rule counting the day is enough
+  # for the amount to be inside the figure.
+  #
+  # `#over?` IS ASKED OF THE ACCRUING RULES ONLY, and the exclusion of the rate rules is the whole
+  # of gate 3's precision. A rate rule that has been overspent is handled exactly by
+  # `#pre_clamp_claim`, which reads the figure before the clamp; an accruing rule's pre-clamp figure
+  # is not recoverable (§3.2 clamps inside every period of the walk), so where one of those has gone
+  # past what it had the give-back is dropped rather than guessed. See #balance for why the safe
+  # direction is to understate.
+  #
+  # THE DAY IS THE OWNER'S, through `User#local_day`, because `#countable_span`'s bounds are: a
+  # Tokyo user's Sep 1 receipt is stored on Aug 31 in UTC, which on a monthly grid is a different
+  # period and therefore a different answer.
+  def counted_by_the_claim?(counted)
+    day = user.local_day(counted.date)
+
+    claim_calculators.any? { |calculator| calculator.countable_span.cover?(day) } &&
+      claim_calculators.none? { |calculator| !calculator.rate? && calculator.over? }
   end
 
   # The entry AS THE LEDGER HOLDS IT, or nil when the ledger holds none: nothing at all for a new

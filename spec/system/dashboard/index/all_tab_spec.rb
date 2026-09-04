@@ -83,14 +83,16 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     end
 
     # THE CASING IS LOAD-BEARING (FINAL review — M-2): these two labels name the same two lanes the
-    # Expenses tab heads its sections with, and they read "Out of available" / "Out of an envelope"
-    # against that tab's "Out of Available" / "Out of an Envelope" — one phrase in two casings, one
-    # screen. `have_content` is a case-SENSITIVE substring match, so these three lines are what holds
-    # the register: the labels are asserted in exactly the casing the section headings use, and a
-    # revert to either lowercase spelling fails here rather than passing quietly.
-    it "shows three legend amounts: Available, Envelope, left over" do
+    # Expenses tab heads its sections with, and they must read in the same register on both screens.
+    # `have_content` is a case-SENSITIVE substring match, so these three lines are what holds it.
+    #
+    # THE FIRST LABEL IS "Unbudgeted" (computed-claims spec §§5-6, §3.4). It read "Out of Available",
+    # and available is deleted with the movements — free money is `ClaimLedger#free`, derived, not a
+    # pot that spending comes out of. What the band counts is unchanged: spending on a category no
+    # rule counts against, which is §3.4's own "unbudgeted".
+    it "shows three legend amounts: Unbudgeted, Envelope, left over" do
       within money_flow_section do
-        expect(page).to have_content("Out of Available $400.00")
+        expect(page).to have_content("Unbudgeted $400.00")
         expect(page).to have_content("Out of an Envelope $200.00")
         expect(page).to have_content("Left over $2,400.00")
       end
@@ -149,14 +151,20 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
 
   private
 
-  # THE TWO LANES ARE `Category#holder?`'s NOW (two-ledger spec §3, Task 7). `Groceries` holds
-  # nothing, so its spending drains what is available; `Emergency Fund` is a goal — a category with
-  # a target, holding money from a year back — and its own spending comes out of what it holds. The
-  # $500 arriving in the goal is deliberately still here: it is what makes the "no savings
-  # vocabulary" negative above a real claim rather than an empty fixture. It was a $500 entry in a
-  # SAVINGS category until plan 3 task 5 and a `AccountMovement` until Task 7; it is the ALLOCATION
-  # those became, at the same amount on the same day, and the strip's balance ($500 in, $200 spent)
-  # is unchanged.
+  # THE TWO LANES ARE `Category#holder?`'s (two-ledger spec §3, Task 7). `Groceries` holds nothing,
+  # so nothing counts its spending against it; `Emergency Fund` is a goal — a category with a target,
+  # counting its own spending from a year back — so its $200 comes off what it has.
+  #
+  # ** THE $500 IS A SET-ASIDE NOW, AND THE ARITHMETIC IS UNCHANGED TO THE CENT (computed-claims spec
+  # §3.3). ** It was a $500 entry in a SAVINGS category until plan 3 task 5, an `AccountMovement`
+  # until Task 7, and an `allocation` until this one — and the table it last lived in is dropped, so
+  # it is the thing an allocation BECAME: a target-only rule (`amount: 0`, the shape §3.2 rules is
+  # how "no rate" is spelled) carrying a `+$500` adjustment on the same day. §3.2's walk then reads
+  # `clamp(min(0 + 500, 5,000) − 200, 0, 5,000)` = **$300**, which is exactly the balance the old
+  # fixture's "$500 in, $200 spent" produced.
+  #
+  # It is deliberately still here: it is what makes the "no savings vocabulary" negative above a real
+  # claim rather than an empty fixture, and it is what puts a card on the savings strip.
   def seed_mixed_financial_data
     goal = create(
       :category,
@@ -171,7 +179,23 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     create_entry_for(create(:category, :income, user: user, name: "Salary"), "Paycheck", 3000.00, 1)
     create_entry_for(expense_cat, "Weekly Shopping", 400.00, 2)
     create_entry_for(goal, "Mechanic", 200.00, 3)
-    create(:allocation, kind: :allocation, to_category: goal, amount: 500.00, date: base_date + 4.days)
+    set_aside(goal, 500.00, on: base_date + 4.days)
+  end
+
+  # A GOAL FED BY HAND: the rule that makes the claim possible, and the dated delta that IS the
+  # money. `basis: :per_period` with no anchor and no interval is the only shape `Budget` permits a
+  # zero amount on (`#set_aside_only?`), which is §3.2's "no rate is spelled as zero".
+  def set_aside(category, amount, on:)
+    rule = create(
+      :budget,
+      category: category,
+      item: nil,
+      amount: 0,
+      basis: :per_period,
+      interval_months: nil,
+      anchor_date: nil
+    )
+    create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
   def create_entry_for(category, item_name, amount, day_offset)

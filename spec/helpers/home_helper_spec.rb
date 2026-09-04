@@ -3,111 +3,25 @@
 require "rails_helper"
 
 RSpec.describe HomeHelper, type: :helper do
-  # `needs_attention?` is answered from HoldingStatus's own constant rather than a hand-set
-  # flag, so a double can never claim a combination the real object cannot produce.
+  # ** `#pool_status_label`, `#pool_state_label` AND `#saving_label` ARE DELETED WITH THEIR TWELVE
+  # EXAMPLES (computed-claims spec §6), AND SO IS THE `status` DOUBLE THEY ALL SHARED. ** They pinned
+  # the row vocabulary of the UI design spec §4.4 — all seven `HoldingStatus` states (`overdrawn`,
+  # `overdue`, `won't make it`, `behind`, `saving`, `left to spend`, `on track`), the `· last period`
+  # suffix on each of them, and the `— you changed a rule here after distributing` clause gated on
+  # `:behind`.
   #
-  # `period_closed?` is on the double because #period_row_clause READS it off the status rather than
-  # taking it as a keyword — that is the fix, not an accident of the double: a keyword gave a caller
-  # the option of omitting it, and Home's attention band took that option.
-  def status(state, amount: 0, due_on: nil, target: nil, period_closed: false)
-    instance_double(
-      HoldingStatus,
-      state: state,
-      amount: amount,
-      due_on: due_on,
-      target: target,
-      period_closed?: period_closed,
-      needs_attention?: HoldingStatus::ATTENTION_STATES.include?(state)
-    )
-  end
-
-  # The row vocabulary of the UI design spec §4.4. Home's system specs reach two of these
-  # six states; the rest are exercised here so a wording or formatting change cannot slip
-  # through, and so Task 7's pool rows inherit tested copy.
-  describe "#pool_status_label" do
-    it "names the amount already spent when overdrawn" do
-      expect(helper.pool_status_label(status(:overdrawn, amount: 50))).to eq("overdrawn $50.00")
-    end
-
-    it "names the date that passed when overdue" do
-      label = helper.pool_status_label(status(:overdue, amount: 600, due_on: Date.new(2026, 3, 1)))
-
-      expect(label).to eq("overdue · was Mar 1")
-    end
-
-    it "names the unreachable date when it won't make it" do
-      label = helper.pool_status_label(status(:wont_make_it, amount: 300, due_on: Date.new(2026, 2, 14)))
-
-      expect(label).to eq("won't make it · Feb 14")
-    end
-
-    # How much EXTRA is owed, not the gap to target — the two differ and the spec is explicit.
-    it "names the catch-up amount when behind" do
-      expect(helper.pool_status_label(status(:behind, amount: 385))).to eq("behind $385.00")
-    end
-
-    # The only state that renders a spendable number, because a rate envelope is the only
-    # kind where the balance genuinely is spendable (principle 2).
-    it "names what is left to spend on a rate envelope" do
-      expect(helper.pool_status_label(status(:left_to_spend, amount: 240))).to eq("$240.00 left")
-    end
-
-    # The seventh state. Both forms read as accumulation; neither reads as money to spend,
-    # which is the whole reason it exists (principle 2).
-    it "names progress toward a target when saving" do
-      expect(helper.pool_status_label(status(:saving, amount: 424, target: 2_400)))
-        .to eq("$424.00 of $2,400.00")
-    end
-
-    it "names what has been put away when a savings pool has no target" do
-      expect(helper.pool_status_label(status(:saving, amount: 424, target: 0))).to eq("$424.00 saved")
-    end
-
-    # The word this state was carved out to avoid, asserted directly: a substring check on
-    # "$424.00" alone would pass against the label it replaced.
-    it "never says a savings balance is left to spend", :aggregate_failures do
-      expect(helper.pool_status_label(status(:saving, amount: 424, target: 2_400))).not_to include("left")
-      expect(helper.pool_status_label(status(:saving, amount: 424, target: 0))).not_to include("left")
-    end
-
-    it "stays quiet on track" do
-      expect(helper.pool_status_label(status(:on_track, amount: 1_000))).to eq("$1,000.00 · on track")
-    end
-
-    # Single-digit days unpadded: the locale's :short format renders "Mar 01", which is not
-    # the vocabulary the spec writes and not how any other date in this app is formatted.
-    it "does not zero-pad a single-digit day" do
-      label = helper.pool_status_label(status(:overdue, amount: 10, due_on: Date.new(2026, 3, 5)))
-
-      expect(label).to eq("overdue · was Mar 5")
-    end
-
-    # Plan 2b decision 1: the closed-period marker is a SUFFIX on the real balance, never a
-    # replacement for it. The $60 is physically in the envelope until a distribution moves it,
-    # and `Σ pools == your bank balance` is the invariant the whole app rests on — so the
-    # figure has to survive the marker. Asserted as full equality, because a `have_content`
-    # on the suffix alone would pass against a label that had dropped the amount.
-    it "marks a closed period without touching the amount" do
-      label = helper.pool_status_label(status(:left_to_spend, amount: 60), period_closed: true)
-
-      expect(label).to eq("$60.00 left · last period")
-    end
-
-    # The default, and the direction that keeps the marker meaning something: an ordinary row
-    # must not carry it. Same state and same amount as above, so the flag is the only variable.
-    it "says nothing about a period that has not closed" do
-      expect(helper.pool_status_label(status(:left_to_spend, amount: 60))).to eq("$60.00 left")
-    end
-
-    # A closed period is a fact about the money, not about how the pool is doing, so it does
-    # not displace the state's own wording — an overdrawn envelope whose period ended is both
-    # at once. This is the pair that would fail if the suffix were folded into one branch.
-    it "marks a closed period on a state that is already in trouble" do
-      label = helper.pool_status_label(status(:overdrawn, amount: 80), period_closed: true)
-
-      expect(label).to eq("overdrawn $80.00 · last period")
-    end
-  end
+  # NONE OF IT SURVIVES, AND IT IS THE MODEL RATHER THAN THE COPY THAT KILLED IT. Every one of those
+  # sentences is a reading of money MOVED into a category and of what the next distribution would do
+  # to it: `left to spend` is a balance awaiting a sweep, `· last period` is which period that
+  # balance belongs to, `behind` is a shortfall a transfer could catch up, and the clause names an
+  # edit made after a split. Nothing moves on the purpose side (§5), there is no split, and
+  # `HoldingStatus`, `DistributionClock` and the partial that threaded them are all deleted.
+  #
+  # WHAT REPLACED THEM, AND WHERE: the claim vocabulary at the foot of this file. `#claim_figure`
+  # (`spent of rate` / `built up of target`), `#claim_schedule` (`next due Mar 1 · $200.00 per
+  # period`) and `#claim_trouble_label` (`over by $30.00` / `overdue · was Mar 1`) are §3.4's three
+  # sentences, and the last of them carries the ONE state that survived the change of readers with
+  # its wording intact — see its own example, which says so.
 
   # What an expanded row calls each rule. An item names itself; an item-less rule used to
   # render the literal word "Rule", which on screen reads as missing data rather than as
@@ -153,13 +67,10 @@ RSpec.describe HomeHelper, type: :helper do
   # silent about a period that has not closed" and "carries both suffixes together". (Its orphan arm
   # had already gone in two-ledger Task 6, taking four more.)
   #
-  # THE PROPERTY IT PINNED IS NOT LOST — IT BECAME STRUCTURAL. The method forced `period_closed:` off
-  # the status so that Home's attention band could not omit the suffix the categories band printed
-  # inches below. The trouble strip that replaced that band renders `shared/_holding_status`, which
-  # threads BOTH suffixes off ONE `HomePresenter::Row`: a caller chooses which OBJECT to pass, not
-  # which suffixes, and an object missing an answer raises at render. The two suffixes' own wording
-  # is pinned above, on `#pool_status_label`, which is where it always lived. Seven examples replace
-  # the four.
+  # THE PROPERTY IT PINNED IS NOT LOST — IT BECAME MOOT. The method forced `period_closed:` off the
+  # status so that Home's attention band could not omit a suffix the categories band printed inches
+  # below. There are no suffixes and no status: §3.4's row is one figure per rule, read off the rule
+  # itself, and there is nothing for a caller to thread or to forget.
 
   # ** `#period_row_clause` AND ITS SEVEN EXAMPLES ARE DELETED (computed-claims Task 3), AND THE
   # CLAIM VOCABULARY BELOW REPLACES THEM. ** Every one of them read a `HoldingStatus`, whose states
@@ -168,8 +79,9 @@ RSpec.describe HomeHelper, type: :helper do
   # there is no balance to be left, no swept period to belong to and no distribution to have edited a
   # rule after. What a claim can be is: under its rate, over it, or accruing toward a date.
   #
-  # THE STATUS VOCABULARY ITSELF IS NOT DELETED — the categories, distribute and reallocation screens
-  # still speak it, and `#pool_status_label`'s own examples above are untouched. Home simply stopped.
+  # THE STATUS VOCABULARY ITSELF IS NOW DELETED TOO (Task 4) — the categories, distribute and
+  # reallocation screens were the last to speak it, and the first two of those were converted to the
+  # claim vocabulary while the third was deleted outright. See the head of this file.
 
   # ── THE CLAIM VOCABULARY (computed-claims §3.4). One double per shape, for the reason the `status`
   # double above exists: these three methods read a handful of questions off a line and a real
@@ -284,8 +196,10 @@ RSpec.describe HomeHelper, type: :helper do
           .to eq("over by $30.00")
       end
 
-      # THE ONE STATE THAT SURVIVES THE CHANGE OF READERS UNCHANGED IN MEANING: a date has passed and
-      # the money is not there. `pool_state_label`'s own wording, kept.
+      # ** THE ONE STATE THAT SURVIVES THE CHANGE OF READERS UNCHANGED IN MEANING: ** a date has
+      # passed and the money is not there. The deleted `#pool_state_label`'s own wording, character
+      # for character, which is why this example is the last thing in this file that a reader of the
+      # old vocabulary would recognise.
       it "dates an overdue occurrence" do
         line = accruing_line(built_up: 400, target: 600, per_period: 0, next_due_on: Date.new(2026, 3, 1))
 

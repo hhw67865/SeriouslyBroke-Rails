@@ -57,6 +57,30 @@ class ClaimLedger
 
   def claim_of(rule) = calculator_for(rule).claim
 
+  # ** WHAT ONE CATEGORY'S MONEY IS, BATCHED — `Category#claim`'s figure asked of a ledger. ** The
+  # categories index renders dozens of them, and the unbatched door costs a spending query and an
+  # adjustment query PER RULE; this reads the rows the ledger has already grouped.
+  #
+  # A CATEGORY OUTSIDE THIS USER'S RULES ANSWERS ZERO, and that is the honest answer rather than
+  # `#calculator_for`'s raise: a category with no rules claims nothing at all (§3.4 — an unbudgeted
+  # category with spending shows `spent $X`, which is a fact about entries and not a claim), and it
+  # is the ordinary shape on that index. The raise next door guards a RULE the ledger does not know,
+  # which is a caller bug because the ledger is built over every rule the user owns.
+  #
+  # `Category#claim` REMAINS THE ONE UNBATCHED DOOR and the two are pinned figure for figure, on
+  # `ClaimLedger`'s own one-spelling rule: two readings of one category's money is how two screens
+  # come to print different figures on one afternoon.
+  def claim_of_category(category)
+    rules_of(category).sum(0.to_d) { |rule| claim_of(rule) }
+  end
+
+  # THE RULES OF ONE CATEGORY, out of the set already loaded — §3.4's row is per RULE (Task 3's
+  # ruling 1: a row per category, a line per rule), so a screen that lists them needs the rules
+  # themselves and not only their sum.
+  def rules_of(category) = rules_by_category.fetch(category.id, [])
+
+  def rules_by_category = @rules_by_category ||= rules.group_by(&:category_id)
+
   # THE CALCULATOR ITSELF, so a screen that needs the built-up, the due date and the per-period share
   # of the same rule (§3.4's row vocabulary) asks one object rather than four readers here.
   def calculator_for(rule)

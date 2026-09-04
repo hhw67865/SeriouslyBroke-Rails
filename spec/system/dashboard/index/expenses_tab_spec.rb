@@ -29,7 +29,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     before { visit reports_path(tab: "expenses") }
 
     it "shows empty messages for both lanes" do
-      expect(page).to have_content("No spending out of available")
+      expect(page).to have_content("No unbudgeted spending")
       expect(page).to have_content("No envelope spending")
     end
   end
@@ -64,8 +64,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "keeps each lane's spending out of the other lane's totals" do
-      within_stat_card("Tracked Available Spending") { expect(page).to have_content("$150.00") }
-      within_stat_card("Total Available Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$150.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$150.00") }
       within_stat_card("Tracked Envelope Spending") { expect(page).to have_content("$200.00") }
       within_stat_card("Total Envelope Spending") { expect(page).to have_content("$200.00") }
     end
@@ -113,8 +113,8 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "shows tracked and total available stats with category links" do
-      within_stat_card("Tracked Available Spending") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Available Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_link("Groceries", href: category_path(groceries))
       expect(page).to have_link("Dining", href: category_path(dining))
@@ -157,9 +157,9 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
     end
 
     it "carries the YTD prefix into the chart heading and the stat cards", :aggregate_failures do
-      expect(page).to have_content("YTD Available Spending")
-      within_stat_card("YTD Tracked Available Spending") { expect(page).to have_content("$220.00") }
-      within_stat_card("YTD Total Available Spending") { expect(page).to have_content("$220.00") }
+      expect(page).to have_content("YTD Unbudgeted Spending")
+      within_stat_card("YTD Tracked Unbudgeted Spending") { expect(page).to have_content("$220.00") }
+      within_stat_card("YTD Total Unbudgeted Spending") { expect(page).to have_content("$220.00") }
     end
 
     it "shows no YTD Budget card" do
@@ -170,7 +170,7 @@ RSpec.describe "Dashboard Index - Expenses Tab", type: :system do
   private
 
   def available_section
-    find("h2", text: "Out of Available").ancestor("section")
+    find("h2", text: "Unbudgeted").ancestor("section")
   end
 
   def envelope_section

@@ -119,31 +119,34 @@ RSpec.describe "OpeningBalances", type: :request do
     expect(user.categories.find_by(name: "Opening Balance")).not_to be_tracked
   end
 
-  # THE POT, AND ALLOCATING MONEY DOES NOT MOVE IT (two-ledger spec §2, Task 6).
+  # THE POT, AND A CLAIM DOES NOT MOVE IT (two-ledger spec §2; computed-claims §2).
   #
   # THIS EXAMPLE USED TO PIN THE FAMILY TOTAL — `Pool#total`, unallocated cash PLUS every envelope
   # housed inside main — because money an envelope inside main was holding had not left the bank
   # account, and a bare buffer would have "corrected" main down by exactly what the envelope held.
-  # The gate is `AccountLedger#pot` now, and the hazard it was written for cannot recur: a category
-  # is not inside an account, and an allocation is an act of intention rather than of location, so
-  # the physical ledger never sees it at all.
+  # The gate is `AccountLedger#pot` now, and the hazard it was written for cannot recur: nothing
+  # holds money but an account, and a claim is a FUNCTION rather than a location, so the physical
+  # ledger never sees it at all.
   #
-  # SAME FIXTURE IN THE NEW SHAPE, and the same arithmetic has to come out: $1,000 of income with
-  # $150 already claimed by Groceries, a bank statement reading $1,200. The correction is $200, main
-  # ends at $1,200, and the PURPOSE side still partitions the same total — $1,050 available plus
-  # $150 held.
-  it "corrects against the pot, which money already claimed by a category does not lower",
+  # ** THE SECOND ASSERTION CHANGED SHAPE WITH THE MODEL, AND IT IS NOT A WEAKER TEST. ** It used to
+  # read `available + holding_of(groceries) == 1200` — a PARTITION, which computed claims deletes:
+  # §2 says free money is the DEFINITION `total − Σ claims`, not a term conserved against the
+  # holdings. So the same fact is asserted as the definition itself, over the same fixture and the
+  # same figures: $1,000 of income and a $150-a-period rule on Groceries with nothing spent, a bank
+  # statement reading $1,200. The correction is $200, the pot ends at $1,200, Groceries claims its
+  # whole $150 (§3.1 — `max(0, rate − spent)` with nothing spent), and `free` is $1,050.
+  it "corrects against the pot, which money a rule claims does not lower",
      :aggregate_failures do
        income = create(:category, :income, user: user, name: "Pay")
        create(:entry, item: create(:item, category: income), amount: 1000, date: Date.current)
        groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
-       create(:allocation, kind: :allocation, to_category: groceries, amount: 150, date: Date.current)
+       create(:budget, :per_period_rate, category: groceries, amount: 150)
 
        post opening_balance_path, params: { opening_balance: { actual: 1200 } }
 
-       ledger = CategoryLedger.new([groceries], user: user)
+       ledger = ClaimLedger.new(user.reload)
        expect(AccountLedger.new(user).pot).to eq(1200)
-       expect(ledger.available + ledger.holding_of(groceries)).to eq(1200)
+       expect([ledger.total_claims, ledger.free]).to eq([150, 1050])
        expect(user.categories.exists?(name: "Opening Balance")).to be true
      end
 

@@ -4,29 +4,32 @@ require "rails_helper"
 
 # `GET /entries/impact` — the §6 card's fragment, and THE ONE THING BETWEEN IT AND A CROSS-USER READ.
 #
-# The endpoint takes two ids off the query string and prints a CATEGORY'S HOLDING from them. Both are
-# scoped through `current_user`, and that scoping is asserted here rather than in the system suite
-# because a browser can only ever send ids the page put in front of it — the request layer is where
-# a stranger's id is actually reachable, and where a dropped scope looks exactly like a missing
+# The endpoint takes two ids off the query string and prints WHAT A CATEGORY CLAIMS from them. Both
+# are scoped through `current_user`, and that scoping is asserted here rather than in the system
+# suite because a browser can only ever send ids the page put in front of it — the request layer is
+# where a stranger's id is actually reachable, and where a dropped scope looks exactly like a missing
 # record.
+#
+# CONVERTED ONTO COMPUTED CLAIMS (spec §3): the fixture's `Allocation` is gone with the movement it
+# was, and the same $240 is planted the way the model produces it — a $300-a-period rule with $60 of
+# it spent, `claim = max(0, 300 − 60)`.
 #
 # EVERY FIGURE IS A PLANTED LITERAL and each scope is pinned in BOTH directions: the owner's id
 # beside the stranger's, on the same request shape, so an example cannot pass by finding nothing.
 RSpec.describe "Entry impact", type: :request do
   let(:user) { create(:user, period_cadence: :biweekly, period_anchor_date: Date.current) }
   # NO ACCOUNT LET (Task 6): nothing on this endpoint reads one. Income is what needs a main account
-  # and this fixture writes none; the `:category` factory mints one of its own for the lane column
-  # that Task 8 drops.
+  # and this fixture writes none.
   let(:groceries) do
     create(:category, :expense, user: user, name: "Groceries", funded_since: 30.days.ago.to_date)
   end
 
-  # $240 allocated in, $300 a period claimed. The funding is an `Allocation` — money moving out of
-  # AVAILABLE and into the category (two-ledger spec §2) — where it used to be a movement into an
-  # envelope sitting inside Checking.
+  # $300 a period claimed, $60 of it spent. The rule is what gives the category a claim at all
+  # (computed-claims §3.3 — every claim comes from a rule), where an allocation used to move money
+  # into it.
   before do
-    create(:allocation, kind: :allocation, to_category: groceries, amount: 240, date: Time.zone.now)
     create(:budget, :per_period_rate, category: groceries, amount: 300)
+    create(:entry, item: create(:item, category: groceries, name: "Earlier shop"), amount: 60, date: Date.current)
     sign_in user, scope: :user
   end
 
@@ -44,7 +47,7 @@ RSpec.describe "Entry impact", type: :request do
     it "prints nothing at all for a category belonging to somebody else", :aggregate_failures do
       other = create(:user)
       other_category = create(:category, :expense, :funded, user: other, name: "Their Groceries")
-      create(:allocation, kind: :allocation, to_category: other_category, amount: 9_999, date: Time.zone.now)
+      create(:budget, :per_period_rate, category: other_category, amount: 9_999)
 
       get impact_entries_path(category_id: other_category.id, amount: "55")
 
@@ -56,16 +59,16 @@ RSpec.describe "Entry impact", type: :request do
   end
 
   describe "the entry id" do
-    # $45 already logged, so the ledger holds $195 and the card must hold $240 — see
-    # EntryImpactPresenter#own_contribution.
+    # $45 already spent on top of the $60, so the claim is $195 and the card must say $240 — see
+    # EntryImpactPresenter#balance.
     let!(:existing) do
-      create(:entry, item: create(:item, category: groceries), amount: 45, date: Date.current)
+      create(:entry, item: create(:item, category: groceries, name: "Weekly shop"), amount: 45, date: Date.current)
     end
 
-    it "excludes the owner's own entry from the holding it prints", :aggregate_failures do
+    it "excludes the owner's own entry from the figure it prints", :aggregate_failures do
       get impact_entries_path(category_id: groceries.id, amount: "45", entry_id: existing.id)
 
-      expect(groceries.holding_calculator.balance).to eq(BigDecimal("195"))
+      expect(groceries.claim).to eq(BigDecimal("195"))
       expect(response.body).to include("$240.00")
       expect(response.body).to include("$195.00")
     end
@@ -98,11 +101,11 @@ RSpec.describe "Entry impact", type: :request do
   # start-date rule).
   #
   # This is the divergence the start-date rule opened and the one the card cannot survive: the
-  # ledger sends an entry dated before its category's `funded_since` to AVAILABLE, while a card that
-  # asked only "is this a holder" would name the category, print its holding, and offer a "left"
-  # figure for money that was never going to come out of it. `EntryImpactPresenter#holding` asks
-  # `Category#counts_spending_on?` — the app's one Ruby mirror of `CategoryLedger::ENTRY_CATEGORY_ID`
-  # — with the day the ENTRY is about.
+  # ledger keeps an entry dated before its category's `funded_since` out of every lane, so no claim
+  # can be moved by it, while a card that asked only "is this a holder" would name the category,
+  # print its claim, and offer a "left" figure for money that is never going to come out of it.
+  # `EntryImpactPresenter#holding` asks `Category#counts_spending_on?` — the app's one Ruby mirror of
+  # `CategoryLedger::ENTRY_CATEGORY_ID` — with the day the ENTRY is about.
   #
   # ASSERTED THROUGH THE FRAGMENT rather than on the presenter, because the whole failure is that
   # the two halves of the screen disagree, and only a rendered card shows which one the user reads.
@@ -118,7 +121,7 @@ RSpec.describe "Entry impact", type: :request do
       get impact_entries_path(category_id: groceries.id, amount: "10", entry_id: old.id)
 
       expect(response.body).to include('data-impact-card="unbudgeted"')
-      expect(response.body).to include("Not holding money yet")
+      expect(response.body).to include("Nothing claims this yet")
       expect(response.body).not_to include("Groceries envelope")
     end
 
@@ -129,7 +132,7 @@ RSpec.describe "Entry impact", type: :request do
 
       expect(response.body).to include('data-impact-card="envelope"')
       expect(response.body).to include("Groceries envelope")
-      expect(response.body).not_to include("Not holding money yet")
+      expect(response.body).not_to include("Nothing claims this yet")
     end
   end
 end

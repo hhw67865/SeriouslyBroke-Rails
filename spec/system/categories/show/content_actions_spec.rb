@@ -12,7 +12,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
 
     # The cap this planted (`create(:budget, category: …)`) is deleted with the shape, and the
     # summary card's "Monthly Budget" arm went with it: the card says what the category spent and
-    # which lane it came out of (Task 7 — its own holdings, or what's available).
+    # what that spending counts against (computed-claims Task 4 — its own rules' claims, or nothing
+    # at all, in which case it comes straight out of what's free to spend).
     before { visit category_path(category) }
 
     it "shows key sections and expense summary" do

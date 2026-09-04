@@ -95,10 +95,14 @@ type,
       </div>
     </div>
 
-    <%# WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4). This block REPLACES the pool picker —
-        "Where this money lives", a grouped select over every pool the user owned — which is gone
-        with the layer it named: a category holds its own money now, so there is nowhere else for
-        it to live and nothing to point at.
+    <%# WHAT CLAIMS THIS CATEGORY'S MONEY (computed-claims spec §2-§4). This block REPLACES the pool
+        picker — "Where this money lives", a grouped select over every pool the user owned — which
+        is gone with the layer it named.
+
+        ** THE THREE COLUMNS SURVIVE THE MOVE TO COMPUTED CLAIMS, AND TWO OF THEM CHANGE JOBS. **
+        Nothing is held any more (§5), so this section is no longer about money put somewhere: it is
+        about what the rules on the Budget page are allowed to claim, when they start claiming it,
+        and who gives way when the claims outrun the money.
 
         ALL THREE ARE USER-EDITABLE, which §4 requires of `funded_since` and which the two beside
         it have always needed: `priority` was seed data with no writer in the app until the Budget
@@ -110,65 +114,78 @@ type,
         a target on an income category. %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
-        <h2 class="text-xl font-semibold mb-4">Holding money</h2>
+        <h2 class="text-xl font-semibold mb-4">Claiming money</h2>
 
         <p class="text-sm text-gray-500 mb-5" data-holding-intro>
-          An expense category holds its own money once it has a funding start. Until then its
-          spending comes out of what's available.
+          An expense category's rules start claiming money once it has a funding start. Until then
+          nothing claims its spending, and that spending comes straight out of what's free to spend.
         </p>
 
-        <%# THE TARGET, AND THE HINT SAYS WHAT IT SWITCHES OFF. A target does not merely draw a
-            progress bar: `HoldingCalculator#saving_toward_a_target?` is the guard on
-            `#compute_period_closed`, so a category with one NEVER has its leftover swept back to
-            available at the end of a period (Task 3's savings-never-sweep ruling). Setting a
-            target on an ordinary funded category therefore turns off use-it-or-lose-it, quietly,
-            and a user who is not told that will meet it as a surprise a period later. %>
+        <%# ** THE TARGET, AND THE HINT SAYS WHAT IT CHANGES — WHICH IS STILL USE-IT-OR-LOSE-IT, FOR
+            A DIFFERENT REASON. ** The old sentence promised that a target stopped the SWEEP; there
+            is no sweep, because nothing moves. But the promise turns out to be true of the computed
+            model on its own terms, and structurally rather than by a guard:
+            `ClaimCalculator#shape` reads `:target` for any ANCHORLESS rule on a category that names
+            a figure, and `:rate` for the same rule where the category names none. So a target
+            genuinely does switch a category's undated rules from §3.1's use-it-or-lose-it
+            (`max(0, rate − spent)`, reset every period, nothing carried) to §3.2's accrual toward
+            the figure, which carries. Same consequence, said in the vocabulary that now produces
+            it — and a user who is not told will meet it as a surprise a period later either way. %>
         <div class="mt-5">
           <%= f.input :target_amount,
               as: :decimal,
               label: "Target",
               input_html: { placeholder: "0.00", step: 0.01, min: 0.01 },
-              hint: "The figure you're saving toward. A target makes this a goal — and money " \
-                    "here is never swept back to available at the end of a period, so a target " \
-                    "switches off use-it-or-lose-it. Leave it blank for an ordinary envelope." %>
+              hint: "The figure you're saving toward. A target makes this a goal — and it changes " \
+                    "what the category's undated rules do: instead of a fresh allowance each " \
+                    "period with anything unspent lost, they build up toward this figure and what " \
+                    "has built up carries. Leave it blank for an ordinary envelope." %>
         </div>
 
-        <%# THE FILL ORDER. `Category.apply_fill_order` is the Budget page's drag handle and the
-            other writer; both write the same column, and it is dense there rather than here — a
-            number typed in this box may tie with another category's, and `Category.in_fill_order`
-            breaks a tie on NAME. Said plainly rather than left to be discovered. %>
+        <%# ** PRIORITY IS THE GIVE-WAY ORDER NOW (§4). ** It used to name a position in the
+            distribution waterfall — "lower is funded first" — and there is no distribution to be
+            first in (§6). What survives is the harder half of the same idea: when Σ claims outruns
+            the user's money, `free` goes below zero, and Home's trouble strip walks
+            `HomePresenter#uncovered_claims` in REVERSE priority order, naming the claims nothing
+            covers. So the highest number gives way first and the lowest is the last one standing,
+            which is the same ranking read from the other end.
+
+            THE TIE-BREAK IS UNCHANGED and still worth saying: a number typed in this box may tie
+            with another category's, and `Category.in_fill_order` breaks a tie on NAME. The Budget
+            page's drag handle (`Category.apply_fill_order`) is the other writer of this column. %>
         <div class="mt-5">
           <%= f.input :priority,
               as: :integer,
-              label: "Funding priority",
+              label: "Give-way order",
               input_html: { min: 0, step: 1 },
-              hint: "Where this category sits when you distribute — lower is funded first. Ties " \
-                    "are broken by name. You can also drag the order on the Budget page." %>
+              hint: "Who gives way when your rules claim more than you have. The highest number " \
+                    "gives way first, so a lower number is the one that keeps its money — and " \
+                    "Home names the claims nothing covers. Ties are broken by name. You can also " \
+                    "drag the order on the Budget page." %>
         </div>
 
-        <%# THE FUNDING START, AND THE HINT SAYS THAT EDITING IT MOVES HISTORY. It is the date
-            `CategoryLedger::ENTRY_CATEGORY_ID` compares every entry against: spending on or after
-            it drains THIS category, spending before it drains available. So changing this field
-            re-reads spending that is already recorded, in both directions — and clearing it on a
-            category that carries a rule drops that category out of `Category.in_fill_order`
-            entirely, which the Budget page shows as its "Not in the fill order" band.
+        <%# ** THE FUNDING START, AND IT ANCHORS BOTH HALVES OF THE CLAIM (§3.2). ** It is
+            `ClaimCalculator#accrual_start`'s first term — the period the accrual walk opens in, so
+            no rule ever accrues retroactively — and it is the date `Entry.draining` compares every
+            receipt against, so spending before it counts against no rule at all. Changing it
+            therefore re-reads history in BOTH directions, which is what the hint has always said
+            and is now true of two sums rather than one.
 
-            THE HINT NAMES THE ONE CASE THE FORM WILL REFUSE (final fix wave, I-1).
-            `Category#money_may_not_be_stranded` rejects a cleared date on a category whose holdings
-            are not zero, because the money would stay in a category every reader of the app has
-            stopped looking at. A constraint a user meets as a 422 they were never warned about is a
-            constraint the form is hiding, so the sentence says it before the click and says what to
-            do instead — which is the reallocation screen, the same door the error message names. %>
+            THE REFUSAL THE OLD HINT WARNED ABOUT IS GONE with the money it protected.
+            `Category#money_may_not_be_stranded` rejected a cleared date while the category still
+            HELD allocations, because they would sit where no reader could see them. Nothing is
+            held, and a category with no funding start claims exactly zero by the formula — so
+            clearing this field strands nothing and the form refuses nothing. What it does do is
+            stated instead, because it is the consequence a user meets otherwise. %>
         <div class="mt-5">
           <%= f.input :funded_since,
               as: :date,
               html5: true,
-              label: "Holding since",
-              hint: "The day this category started holding its own money. Spending before it " \
-                    "reads against what's available instead — so changing this date moves " \
-                    "history. Clear it and the category stops holding money and leaves the " \
-                    "fill order — which you can only do once it holds nothing, so move any " \
-                    "money out first." %>
+              label: "Claiming since",
+              hint: "The day this category's rules start claiming. They build up from this date " \
+                    "onward and never before it, and spending here counts against them from this " \
+                    "date onward — so changing it moves history in both directions. Clear it and " \
+                    "the category claims nothing at all." %>
         </div>
       </div>
     </div>

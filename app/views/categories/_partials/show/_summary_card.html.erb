@@ -1,5 +1,11 @@
 <!-- Summary Card -->
-<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6">
+<%# `data-summary-card` IS A TEST HOOK AND IT EARNS ITS PLACE (computed-claims Task 4). This card and
+    the holdings card in the right-hand column now answer the same question in the same words — what
+    claims this category's spending, and what happens to it when nothing does — which is exactly the
+    agreement the two are supposed to keep. Unscoped, every negative assertion about this card's
+    sentence was satisfied by the OTHER card's, so a summary card serving a stale sentence out of its
+    fragment cache read green. The hook is what lets the spec ask about one card. %>
+<div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6" data-summary-card>
   <h2 class="text-xl font-semibold mb-4">Summary</h2>
 
   <% calc = category.calculator(selected_date, period: current_period) %>
@@ -14,17 +20,26 @@
           <span class="text-gray-500">Spent <%= period_time_label %></span>
           <span class="font-medium text-gray-900"><%= number_to_currency(calc.total_amount) %></span>
         </div>
-        <%# WHERE THE SPENDING WENT, IN ONE SENTENCE, AND THE POOL IS OUT OF IT (Task 7). This
-            named `category.pool` — "Spending here comes out of the envelope Groceries", linked to
-            the pool page — and both halves are gone: the pool screens are deleted and a category
-            holds its own money (two-ledger spec §3). The line asks `Category#holder?`, which is
-            the one predicate the holdings card in the right-hand column branches on, so the two
-            cards on this page cannot say different things about the same category. %>
+        <%# WHAT THE SPENDING COUNTS AGAINST, IN ONE SENTENCE (computed-claims spec §3.1/§3.2).
+            It named `category.pool` once and then what the category HELD, and both are gone: there
+            are no pools, and nothing is held — a category's money is a claim computed from its
+            rules, and spending is one of the terms that computes it (`claim = max(0, rate − spent)`
+            for a rate rule; a fulfilment that drops the built-up for an accruing one). So spending
+            here does not come OUT of anything, it counts AGAINST the rules that claim this
+            category.
+
+            THE OTHER ARM NAMES `free` RATHER THAN `available`. There is no available: `free` is a
+            DEFINITION (`min(pot, total − Σ claims)`, §2), and a receipt no rule claims reduces it
+            directly. The hero calls it "Free to spend".
+
+            The line asks `Category#holder?`, which is the one predicate the holdings card in the
+            right-hand column branches on, so the two cards on this page cannot say different things
+            about the same category. %>
         <p class="text-xs text-gray-500">
           <% if category.holder? %>
-            Spending here comes out of what this category holds
+            Spending here counts against what this category's rules claim
           <% else %>
-            Spending here comes out of what's available — nothing reserves it
+            Nothing claims this category's spending — it comes straight out of what's free to spend
           <% end %>
         </p>
       </div>
@@ -80,6 +95,8 @@
   <%# THE SAVINGS ARM IS DELETED (plan 3, task 5) — a "Monthly Contribution" figure, a pool box
       saying "This category contributes to a shared goal", and a running-total line drawn by
       `CategoriesHelper#savings_evolution_series` (deleted with it, one reader). There is no savings
-      category: money reaches a goal as an `Allocation`, and the category's own page reads it. %>
+      TYPE: a goal is an ordinary expense category that names a target, and what it has saved is a
+      claim its rules have built up toward that figure (computed-claims spec §3.2). The holdings
+      card in the right-hand column is where that is read. %>
   <% end %>
 </div> 

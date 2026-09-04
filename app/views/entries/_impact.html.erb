@@ -9,8 +9,13 @@
         ▓▓▓▓▓▓░░░░░░
 
     NO STATUS VOCABULARY ANYWHERE ON IT (plan decision 1) — no "behind", no "on track", no band of
-    colour standing in for one. `HoldingStatus` is not consulted here or in the browser. What is
-    printed is a name, two figures, a date and a bar.
+    colour standing in for one, and no rule schedule: the one date printed is the period's own
+    closing edge, never an occurrence's due date. What is printed is a name, two figures, a date and
+    a bar.
+
+    THE WORDS ARE HOME'S (answers-first §3, computed-claims §2): claimed, free, spent, of. A claim
+    is money a rule speaks for where it sits — nothing was moved to put it there — so "available",
+    "distribute", "allocation" and "buffer" appear nowhere on this card.
 
     EVERY FIGURE IS SERVER-RENDERED AND CORRECT ON ARRIVAL. The Stimulus controller re-reads the two
     `data-` figures below while the user types and rewrites only the right-hand figure, the bar and
@@ -18,28 +23,33 @@
     with, which on edit is the entry's own. %>
 <% if impact&.render? %>
   <% if impact.unbudgeted? %>
-    <%# THE HONEST CARD (plan decision 2). ONE shape lands here now: a category that is not holding
-        money on the day of this entry, so the spending drains AVAILABLE — money with no job yet
-        (two-ledger spec §2). It covers both a category that has never been funded and a funded one
-        asked about a day BEFORE its `funded_since`, which is `Category#counts_spending_on?`, the
-        app's one Ruby mirror of the ledger's own rule.
+    <%# THE HONEST CARD (plan decision 2). ONE shape lands here now: a category whose claim this
+        receipt cannot move, so the money comes straight out of FREE — `total − Σ claims`, the money
+        no rule has spoken for (computed-claims §2). It covers both a category that has never been
+        funded and a funded one asked about a day BEFORE its `funded_since`, which is
+        `Category#counts_spending_on?`, the app's one Ruby mirror of the ledger's own rule.
 
         IT USED TO BE TWO SHAPES said as one sentence — no pool at all, and a pool that IS an
-        account — because an account was where the unclaimed money sat (§7.1) and nothing reserved
-        money sitting in one. The pool has gone and the date has arrived: a category can hold money and still send
-        THIS receipt to available.
+        account — because an account was where the unclaimed money sat and nothing reserved money
+        sitting in one. The pool has gone and the date has arrived: a category can carry rules and
+        still leave THIS receipt to free money.
 
-        THE REGISTER IS THE BUDGET PAGE'S OWN — its rate suggestion says a category's spending
-        "currently comes out of what's available" of exactly this population, so a user who meets
-        the sentence here and the offer there is reading one app. And it points at the Budget page,
-        which is where the rule that starts a category holding money is written. %>
+        ** THE COPY IS REWRITTEN AND THE TWO SENTENCES IT REPLACES WERE BOTH FALSE NOW. ** "Not
+        holding money yet" described a balance that had been moved in, and no category holds money
+        under §3 — the funded ones included. "It comes out of what's available" named a recorded
+        pot of unclaimed money, and `available` is gone with the partition (§§5-6): what is left
+        over is FREE, and it is computed rather than held. The words are Home's — claimed, free —
+        so a user reading this card and the hero on the same afternoon is reading one app.
+
+        IT POINTS AT THE BUDGET PAGE, which is where the rule that gives a category a claim is
+        written, and where the rate suggestion makes the same offer to exactly this population. %>
     <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
          data-impact-card="unbudgeted">
       <p class="text-sm font-medium text-gray-900" data-figure="headline">
-        Not holding money yet — this spending isn't budgeted.
+        Nothing claims this yet — this spending isn't budgeted.
       </p>
       <p class="mt-1 text-sm text-gray-600">
-        It comes out of what's available.
+        It comes straight out of what's free.
         <%= link_to "Give it a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
       </p>
     </div>
@@ -103,8 +113,16 @@
       <% end %>
 
       <%# §6: "Overdrawing shows the envelope going negative and says the buffer can cover it" —
-          and the word §6 called the buffer is AVAILABLE, here as everywhere (answers-first Home
-          spec §3). The `buffer` target name below is the JavaScript hook, not the copy.
+          and under the computed model the sentence is a fact about ARITHMETIC rather than about a
+          second pot. §3.1: overspending drives the claim to zero and the excess reduces FREE
+          directly. So the money does not come out of a buffer that covers the difference; it comes
+          out of the money nothing has claimed, which is what free IS. The old copy named
+          "available", a recorded balance that no longer exists (§§5-6).
+
+          `buffer` IN THE TARGET AND THE HOOK IS THE JAVASCRIPT'S NAME, NOT THE COPY, and it stays:
+          `impact_controller.js` toggles this element by that name, the controller is not this
+          task's to edit, and a hook rename is a rename in two files for no user-visible gain.
+
           BOTH STATES ARE RENDERED BY THE SERVER and the browser only toggles `hidden`, so the
           sentence a user sees after typing is the same one the server would have printed for the
           same figure — there is no second author of this copy. Nothing blocks: the button below
@@ -113,7 +131,7 @@
          data-app--entry--impact-target="buffer"
          data-figure="buffer"
          <%= "hidden" unless impact.overdrawn? %>>
-        This <%= impact.noun %> goes negative — your available money covers the difference.
+        This <%= impact.noun %> goes over — the difference comes straight out of what's free.
       </p>
     </div>
   <% end %>

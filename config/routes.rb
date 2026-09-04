@@ -113,13 +113,18 @@ Rails.application.routes.draw do
   # show a validation message.
   patch "budget/user" => "budget_page#update", as: :budget_page_user
 
-  # WHERE FUNDING PRIORITY IS SET (spec §8). Until this route `priority` was seed data with no
-  # writer in the app at all, while every distribution spent by it.
+  # WHERE THE GIVE-WAY ORDER IS SET (spec §8). Until this route `priority` was seed data with no
+  # writer in the app at all, while every figure on the Budget page was ranked by it.
   #
-  # EVERY CLAUSE OF THIS COMMENT WAS FALSE FOR ONE COMMIT and is rewritten rather than patched: it
-  # described `pool_ids[]`, a per-account ordering and `Pool.apply_fill_order`, and the two-ledger
-  # cutover (spec §2) replaced all three. `AllocationCalculator#fill` walks
-  # `Category.in_fill_order` over ONE root, so there is no account to compare priority within.
+  # IT IS A GIVE-WAY ORDER NOW, NOT A FILL ORDER, and that is the substance rather than the
+  # vocabulary. Nothing hands money out any more — a category's money is a CLAIM computed from its
+  # rules (`ClaimCalculator`/`ClaimLedger`), and every claim is stated in full whether or not the
+  # money exists. So priority no longer decides who gets filled first; it decides WHO GIVES WAY
+  # when the claims outrun the money, which is the order the shortfall walks in reverse.
+  #
+  # ONE LIST FOR THE WHOLE USER, because `Category.in_fill_order` ranks every holder against every
+  # other. There is no account to compare priority within — that was the pool era's shape, and it
+  # is gone with it.
   #
   # THE USER'S RULE-CARRYING HOLDER CATEGORIES IN THEIR NEW ORDER, as `category_ids[]` — one list
   # for the whole page. `Category.apply_fill_order` owns the refusal and the write, and it refuses
@@ -137,30 +142,24 @@ Rails.application.routes.draw do
   # Singular and verbless: there is no Sacrifice record and nothing on the page is written.
   get "sacrifice" => "sacrifices#show"
 
-  # Splitting a paycheck into envelopes (spec §5). `new` proposes the split — a GET that renders
-  # the period as if its distribution had not happened, which it does by DELETING this period's
-  # allocation and sweep rows inside a transaction it rolls back, so it takes write locks despite
-  # being safe by HTTP's definition (every link to it carries `data-turbo-prefetch="false"`).
-  # `create` CONFIRMS it, and is the only request in this app that moves money between pools: it
-  # locks the account, replaces any previous split for the period, and writes the movements.
-  resources :distributions, only: [:new, :create]
-
-  # Moving money by hand on the PURPOSE LEDGER (spec §5, two-ledger spec §2): `category → category`
-  # or `available ↔ category`. `new` states the damage, `create` writes the single `transfer`
-  # allocation. Both take `to_category_id`, `from_category_id` and `amount` as flat params rather
-  # than a nested hash, because ONE form serves both: the GET recomputes the damage against the
-  # ledger and a submitter inside it POSTs the same fields. `"available"` names the root on either
-  # side, and it is not a uuid, so it cannot collide with a category id.
-  resources :allocations, only: [:new, :create]
-
-  # ── THE POOL-ERA TWIN IS GONE (Task 6). `resources :pool_movements` stood here for one task
-  # longer than the route above, because Home's fix buttons were its only remaining links and
-  # Home's rows were pools. Home's rows are CATEGORIES now and its buttons point at
-  # `/allocations/new`, so the twin — the route, `PoolMovementsController`, `PoolReallocation
-  # Presenter`, `PoolMovementsHelper` and `app/views/pool_movements/` — was deleted whole.
-  # The TABLE survives as the physical lane (income routing, account funding) under the name it
-  # always meant — `account_movements`, since Task 8 — and nothing about that lane was ever
-  # reachable through this route.
+  # ── THE PURPOSE LEDGER'S TWO ROUTES ARE GONE (computed-claims spec §§5-6). `resources
+  # :distributions` split a paycheck into envelopes and `resources :allocations` moved money
+  # between them by hand; both wrote `allocations` rows, and both are deleted whole along with
+  # `DistributionsController`, `AllocationsController`, `DistributionPresenter`,
+  # `ReallocationPresenter`, `AllocationCalculator`, `AllocationCommitter`, `Waterfall`, their
+  # helpers and every view under `app/views/distributions/` and `app/views/allocations/`.
+  #
+  # THERE IS NOTHING LEFT FOR THEM TO DO. A category's money is a CLAIM computed from its rules
+  # (`ClaimCalculator`/`ClaimLedger`), not a balance built by moving money into it, so there is no
+  # split to propose, no split to confirm and no envelope to move a dollar out of. What the user
+  # used to express by distributing they now express by EDITING THE RULES on /budget, and what
+  # they used to express by reallocating they express with an adjustment (`resources :adjustments`
+  # above) against the one rule they mean.
+  #
+  # DO NOT POINT ANYTHING AT `/allocations/new`. Home's fix buttons and the pool era's
+  # `resources :pool_movements` both did, and neither route exists; /budget is the door now.
+  # The `allocations` TABLE and the physical lane are a separate question, handled with the
+  # models — `account_movements` (income routing, account funding) was never reachable here.
 
   resource :account, only: [:show] do
     patch :toggle_theme

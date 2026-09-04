@@ -7,7 +7,7 @@ class CategoriesController < ApplicationController
   before_action :set_category, only: [:show, :edit, :update, :destroy, :toggle_tracked]
   before_action :set_categories, only: [:index]
 
-  helper_method :holding_terms
+  helper_method :claim_ledger
 
   # GET /categories
   def index
@@ -170,32 +170,24 @@ class CategoriesController < ApplicationController
     @categories = categories.order(name: :asc).to_a
   end
 
-  # ONE LEDGER FOR THE WHOLE INDEX, keyed by category id (fix round 1, MED-3).
+  # ** ONE LEDGER FOR THE WHOLE INDEX (fix round 1, MED-3 — re-homed on claims). **
   #
-  # THE CARD PRINTS WHAT ITS CATEGORY HOLDS, and it built a `HoldingCalculator` per card to do it —
-  # N categories, N sets of grouped aggregates, on the one screen in this app that renders every
-  # category a user owns. Every other multi-category screen batches: Home, the Budget page and
-  # `AllocationCalculator` all build ONE `CategoryLedger` and thread `#terms_for` into each
-  # calculator, so the aggregates are five grouped queries whatever the row count. This is that
-  # shape, arriving late.
+  # THE CARD PRINTS WHAT ITS CATEGORY'S MONEY IS, and the unbatched door (`Category#claim`) costs a
+  # spending query and an adjustment query PER RULE — on the one screen in this app that renders
+  # every category a user owns. `ClaimLedger` is the batched door and it is the same shape this
+  # method had under `CategoryLedger`: build ONE, let the view ask it per category, and the grouped
+  # queries run once whatever the row count. Home and the Budget page already do exactly this.
   #
-  # HOLDERS ONLY, because they are the only cards that read a balance — a category that holds
-  # nothing prints one sentence and asks no calculator at all. `user:` is passed for the shape the
-  # categories cannot answer for (an EMPTY holder set, which is every user on their first day):
-  # read off the categories alone, `CategoryLedger` raises `NoSingleOwner` rather than answering.
+  # THE WHOLE USER RATHER THAN THE FILTERED SET, and that is a change from the `CategoryLedger`
+  # version. `ClaimLedger` is built over every rule its user owns — `#total_claims` and `#free` are
+  # figures about the user, not about a page's selection — so handing it a filtered list would be
+  # handing it a set it does not take. A category outside the filter simply is never asked about.
   #
-  # NIL IS A LEGAL ANSWER and the view does not check for one: `#terms_for` returns nil for a
-  # category this ledger was not built over, and `Category#holding_calculator` treats a nil `terms:`
-  # exactly as it treats none — the calculator runs its own aggregates. So a card can never be
-  # WRONG for want of terms, only slower, which is the property that makes threading them safe.
-  #
-  # LAZY BY CONSTRUCTION: the ledger memoises each grouped query at its first read, so an index of
-  # income categories — none of them holders — pays nothing for this.
-  def holding_terms
-    @holding_terms ||= begin
-      holders = @categories.select(&:holder?)
-      ledger = CategoryLedger.new(holders, user: current_user)
-      holders.to_h { |category| [category.id, ledger.terms_for(category)] }
-    end
+  # A HELPER METHOD RATHER THAN AN IVAR SET IN `#index`, so the SHOW action and the card partial can
+  # reach the same reader without a second construction path, and so an index of income categories —
+  # none of which carries a rule — pays for nothing: `ClaimLedger` memoises each grouped query at
+  # its FIRST read, and a page that asks no claim runs no query.
+  def claim_ledger
+    @claim_ledger ||= ClaimLedger.new(current_user, today: current_user.today)
   end
 end

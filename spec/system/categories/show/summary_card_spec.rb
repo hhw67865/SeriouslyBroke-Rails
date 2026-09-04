@@ -38,24 +38,37 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
     end
   end
 
-  # THE LEFT COLUMN'S OWN SENTENCE ABOUT WHERE THE SPENDING COMES FROM (Task 7). It named the POOL
-  # — "Spending here comes out of the envelope Groceries", linked to the pool page — and both
-  # halves are gone with the layer: a category holds its own money (two-ledger spec §3). It asks
-  # `Category#holder?` now, which is the SAME predicate the holdings card in the right-hand column
-  # branches on, so the two cards on one page cannot say different things about one category.
-  describe "what the sentence says the spending comes out of", :aggregate_failures do
-    it "names the category's own holdings when it holds money" do
+  # THE LEFT COLUMN'S OWN SENTENCE ABOUT WHAT THE SPENDING COUNTS AGAINST (Task 7, converted onto
+  # claims by Task 4). It named the POOL — "Spending here comes out of the envelope Groceries",
+  # linked to the pool page — and then what the category HELD, and both readings are gone: nothing is
+  # held (computed-claims spec §5), and spending is a TERM in the claim rather than a withdrawal from
+  # it (`max(0, rate − spent)`, §3.1). The other arm names `free` rather than `available`, because
+  # there is no available: `free` is a definition, and a receipt no rule claims reduces it directly.
+  #
+  # It asks `Category#holder?`, which is the SAME predicate the holdings card in the right-hand
+  # column branches on, so the two cards on one page cannot say different things about one category.
+  # ** SCOPED TO `[data-summary-card]`, AND THE SCOPE IS LOAD-BEARING (Task 4). ** The holdings card
+  # in the right-hand column now speaks the same vocabulary about the same category — its no-rule
+  # sentence ends "its spending comes straight out of what's free to spend" — so an unscoped negative
+  # here is satisfied by the OTHER card and asserts nothing at all. Measured: both examples below
+  # failed against a correct page for exactly that reason.
+  describe "what the sentence says the spending counts against", :aggregate_failures do
+    it "names the category's own rules when they claim its money" do
       visit category_path(create(:category, :expense, :funded, user: user, name: "Food"))
 
-      expect(page).to have_content("Spending here comes out of what this category holds")
-      expect(page).to have_no_content("comes out of what's available")
+      within("[data-summary-card]") do
+        expect(page).to have_content("Spending here counts against what this category's rules claim")
+        expect(page).to have_no_content("comes straight out of what's free to spend")
+      end
     end
 
-    it "names available when it holds nothing" do
+    it "names free money when nothing claims it" do
       visit category_path(create(:category, :expense, user: user, name: "Health"))
 
-      expect(page).to have_content("Spending here comes out of what's available")
-      expect(page).to have_no_content("what this category holds")
+      within("[data-summary-card]") do
+        expect(page).to have_content("Nothing claims this category's spending — it comes straight out of what's free to spend")
+        expect(page).to have_no_content("counts against what this category's rules claim")
+      end
     end
   end
 
@@ -119,28 +132,30 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
 
     let!(:spending) { create(:category, category_type: "expense", user: user, name: "Rainy Day") }
 
-    # THE BUST ITSELF: the category starts holding money, and the sentence has moved on the next
-    # load. `update!` moves `updated_at`, which is the whole of what puts the category in the key.
-    it "moves when the category starts holding money", :aggregate_failures do
+    # THE BUST ITSELF: the category starts claiming, and the sentence has moved on the next load.
+    # `update!` moves `updated_at`, which is the whole of what puts the category in the key.
+    it "moves when the category starts claiming", :aggregate_failures do
       visit category_path(spending)
-      expect(page).to have_content("comes out of what's available")
+      within("[data-summary-card]") { expect(page).to have_content("comes straight out of what's free to spend") }
 
       spending.update!(funded_since: Date.current - 1.month)
       visit category_path(spending)
 
-      expect(page).to have_content("comes out of what this category holds")
-      expect(page).to have_no_content("comes out of what's available")
+      within("[data-summary-card]") do
+        expect(page).to have_content("counts against what this category's rules claim")
+        expect(page).to have_no_content("comes straight out of what's free to spend")
+      end
     end
 
     # AND THE CACHE IS GENUINELY ON, which the example above cannot show on its own — it would read
     # exactly the same against a store that never stored anything, and the null store is what this
     # environment configures. `update_column` writes the date with no callbacks, so `updated_at`
     # does not move and the key does not either: the LEFT column keeps serving the old sentence
-    # while the holdings card in the uncached right column already says the category holds money.
+    # while the holdings card in the uncached right column already says the category's rules claim.
     # One load, both halves.
     it "still serves a cached left column when nothing in the key moved", :aggregate_failures do
       visit category_path(spending)
-      expect(page).to have_content("comes out of what's available")
+      within("[data-summary-card]") { expect(page).to have_content("comes straight out of what's free to spend") }
 
       # SKIPPING THE CALLBACKS IS THE POINT, not a shortcut: `update!` would move `updated_at`,
       # which is exactly what this example needs NOT to happen — a key that moved would prove
@@ -148,7 +163,10 @@ RSpec.describe "Categories Show - Summary Card Period Labels", type: :system do
       spending.update_column(:funded_since, Date.current - 1.month) # rubocop:disable Rails/SkipsModelValidations
       visit category_path(spending)
 
-      expect(page).to have_content("comes out of what's available")
+      # THE SCOPE IS THE WHOLE EXAMPLE. The holdings card next door prints this same clause for a
+      # holder with no rule, so an unscoped positive would pass over a summary card that had
+      # correctly re-rendered — which is the opposite of what this asserts.
+      within("[data-summary-card]") { expect(page).to have_content("comes straight out of what's free to spend") }
       expect(find("[data-holdings-card]")["data-holdings-state"]).to eq("holding")
     end
   end

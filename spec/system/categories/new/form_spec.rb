@@ -19,7 +19,7 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("Set up a new category to organize your finances")
       expect(page).to have_field("Name")
       expect(page).to have_content("Basic Information")
-      expect(page).to have_content("Holding money")
+      expect(page).to have_content("Claiming money")
       expect(page).to have_content("Appearance")
       expect(page).to have_button("Create Category")
     end
@@ -44,25 +44,37 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_link("Cancel")
     end
 
-    # THE THREE COLUMNS THAT REPLACED THE PICKER (two-ledger spec §3, §4), all three blank on a
-    # new category: a category that holds nothing is the honest default, and its spending drains
-    # available until it gets a rule or an allocation.
-    it "asks what the category holds, and opens on nothing", :aggregate_failures do
+    # THE THREE COLUMNS THAT REPLACED THE PICKER (two-ledger spec §3, §4; re-labelled onto claims by
+    # computed-claims Task 4), all three blank on a new category: a category nothing claims is the
+    # honest default, and its spending comes straight out of what's free to spend until it gets a
+    # rule. `Funding priority` is `Give-way order` now — there is no distribution to be funded first
+    # in (§6), and what priority ranks is who gives way when the claims outrun the money (§4).
+    it "asks what claims the category, and opens on nothing", :aggregate_failures do
       expect(page).to have_field("Target", with: "")
-      expect(page).to have_field("Holding since", with: "")
-      # `categories.priority` is NOT NULL DEFAULT 0, so the box opens on the front of the queue
+      expect(page).to have_field("Claiming since", with: "")
+      # `categories.priority` is NOT NULL DEFAULT 0, so the box opens at the front of the order
       # rather than on a blank — the column has no "unset" to render.
-      expect(page).to have_field("Funding priority", with: "0")
+      expect(page).to have_field("Give-way order", with: "0")
       expect(page).to have_no_select("Where this money lives")
     end
 
-    # ** THE TWO HINTS THAT DESCRIBE A CONSEQUENCE, not a field. ** A target switches off
-    # use-it-or-lose-it (`HoldingCalculator#compute_period_closed` refuses to sweep a
-    # target-bearing category at all), and editing the funding start RE-READS spending that is
-    # already recorded. Both are things a user meets a period later if the form does not say them.
-    it "says a target stops the sweep and a start date moves history", :aggregate_failures do
-      expect(page).to have_content("never swept back to available")
-      expect(page).to have_content("changing this date moves history")
+    # ** THE TWO HINTS THAT DESCRIBE A CONSEQUENCE, not a field. ** Both promises survive the move to
+    # computed claims; one of them changes its reason.
+    #
+    # A TARGET STILL SWITCHES OFF USE-IT-OR-LOSE-IT, and now structurally rather than by a guard: it
+    # used to be that `HoldingCalculator#compute_period_closed` refused to sweep a target-bearing
+    # category, and there is no sweep. `ClaimCalculator#shape` reads `:target` for any ANCHORLESS
+    # rule on a category that names a figure and `:rate` for the same rule where it does not — so a
+    # target moves the category's undated rules off §3.1's reset-every-period arithmetic and onto
+    # §3.2's accrual, which carries.
+    #
+    # THE START DATE STILL MOVES HISTORY, and now in TWO sums rather than one: it is the period the
+    # accrual walk opens in (`ClaimCalculator#accrual_start`) and the day `Entry.draining` starts
+    # attributing this category's receipts.
+    it "says a target makes the money carry and a start date moves history", :aggregate_failures do
+      expect(page).to have_content("they build up toward this figure and what has built up carries")
+      expect(page).to have_content("changing it moves history in both directions")
+      expect(page).to have_no_content("swept")
     end
   end
 
@@ -203,7 +215,7 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("New Income Category")
     end
 
-    it "creates a category that holds nothing when the three boxes are left alone", :aggregate_failures do
+    it "creates a category nothing claims when the three boxes are left alone", :aggregate_failures do
       fill_in "Name", with: "Buffer Spending"
       find("label", text: "Expense").click
       click_button "Create Category"
@@ -214,24 +226,24 @@ RSpec.describe "Categories New - Form", type: :system do
       expect([category.target_amount, category.funded_since]).to eq([nil, nil])
     end
 
-    it "writes the target, the priority and the funding start", :aggregate_failures do
+    it "writes the target, the give-way order and the claiming start", :aggregate_failures do
       submit_goal
 
       expect(page).to have_content("Category was successfully created")
       category = Category.find_by(name: "Vacation")
       expect([category.target_amount, category.priority]).to eq([2_400, 3])
       expect(category.funded_since).to eq(Date.new(2026, 2, 6))
-      expect(category).to be_savings
+      expect(category).to be_saving_toward_a_target
     end
 
     def submit_goal
       fill_in "Name", with: "Vacation"
       find("label", text: "Expense").click
       fill_in "Target", with: "2400"
-      fill_in "Funding priority", with: "3"
+      fill_in "Give-way order", with: "3"
       # A `Date`, NOT a formatted string: Capybara sends a String into a date input as KEYSTROKES,
       # which reads back as the year 60206. See spec/system/budget_page/suggestions_spec.rb.
-      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      fill_in "Claiming since", with: Date.new(2026, 2, 6)
       click_button "Create Category"
     end
 

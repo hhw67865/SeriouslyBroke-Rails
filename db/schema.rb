@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_03_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_03_010000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -42,23 +42,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_03_000000) do
     t.index ["date"], name: "index_adjustments_on_date"
     t.index ["rule_id"], name: "index_adjustments_on_rule_id"
     t.check_constraint "amount <> 0::money", name: "adjustments_non_zero_amount"
-  end
-
-  create_table "allocations", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.money "amount", scale: 2, null: false
-    t.datetime "created_at", null: false
-    t.datetime "date", null: false
-    t.uuid "from_category_id"
-    t.integer "kind", default: 0, null: false
-    t.uuid "source_entry_id"
-    t.uuid "to_category_id"
-    t.datetime "updated_at", null: false
-    t.index ["date"], name: "index_allocations_on_date"
-    t.index ["from_category_id"], name: "index_allocations_on_from_category_id"
-    t.index ["source_entry_id"], name: "index_allocations_on_source_entry_id"
-    t.index ["to_category_id"], name: "index_allocations_on_to_category_id"
-    t.check_constraint "amount > 0::money", name: "allocations_positive_amount"
-    t.check_constraint "from_category_id IS DISTINCT FROM to_category_id", name: "allocations_distinct_sides"
   end
 
   create_table "budgets", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -161,9 +144,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_03_000000) do
   add_foreign_key "account_movements", "pools", column: "from_pool_id"
   add_foreign_key "account_movements", "pools", column: "to_pool_id"
   add_foreign_key "adjustments", "budgets", column: "rule_id"
-  add_foreign_key "allocations", "categories", column: "from_category_id"
-  add_foreign_key "allocations", "categories", column: "to_category_id"
-  add_foreign_key "allocations", "entries", column: "source_entry_id"
   add_foreign_key "budgets", "categories"
   add_foreign_key "budgets", "items"
   add_foreign_key "categories", "users"

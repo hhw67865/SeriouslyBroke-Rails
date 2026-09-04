@@ -1,8 +1,0 @@
-<%# Where the money ran out. Local: `presenter` (DistributionPresenter).
-
-    A partial rather than inline markup because it renders at either edge of the list — before
-    the first envelope that got nothing, or after the last row when the money ran out inside
-    it — and two copies of one line are two places for it to drift. %>
-<li class="mx-6 my-2 list-none border-t-2 border-dashed border-status-danger pt-2 text-sm font-medium text-status-danger">
-  — ran out here · <%= number_to_currency(presenter.shortfall) %> unfunded —
-</li>

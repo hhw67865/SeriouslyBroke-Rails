@@ -2,29 +2,62 @@
 
 require "rails_helper"
 
-# THE CATEGORIES PAGE'S HOLDINGS CARD — two states, each asserted in both directions.
+# THE CATEGORIES PAGE'S HOLDINGS CARD — two states, each asserted in both directions. Converted onto
+# computed claims by Task 4; the file kept its name because the card kept its route and its hooks.
 #
-# ONE CARD WHERE THERE WERE TWO, AND ONE FILE WHERE THERE WERE THREE (two-ledger spec §3, §5,
-# Task 7). `budget_spec.rb` drove `_budget_card`, `pool_card_spec.rb` drove `_pool_card` four
-# inches below it, and `savings_pool_spec.rb` pinned the noun the two of them kept disagreeing
-# about. Both partials are replaced by `_holdings_card` and all three files by this one, because
-# there is now one thing to describe: a category holds its own money.
+# ** EVERY FIGURE IN THIS FILE IS A CLAIM NOW, AND NOT A HOLDING (computed-claims spec §2, §5). **
+# The card read a `HoldingCalculator#balance` — allocations in, less allocations out, less the
+# spending attributed to the category — and stood a `HoldingStatus` beside it. Nothing moves on the
+# purpose side any more, so every `allocate(...)` in this file is gone and the money the fixtures
+# used to move is written the way the model actually puts it there: a rule that accrues. Every figure
+# below is a PLANTED LITERAL re-derived from §3's formulas with the working beside it.
 #
-# THE ARMS ARE `Category#holder?`'s, where they used to be the pool's TYPE. `pool_covered` and
-# `account_pointed` are gone; `holding` and `unfunded` are the two states an expense category can
-# be in, and the second is the whole of what "no pool" used to mean.
+# ── DELETED RATHER THAN CONVERTED. Each asserted a fact about money that had been MOVED, and nothing
+# moves:
+#
+#   * "says its money is never swept back" — the ` · never swept` promise named a sweep at the period
+#     boundary. There is no sweep because there is nothing to sweep: a rate claim RESETS to the rate
+#     at every boundary by its own definition (§3.1) and no money changes hands to do it. The
+#     consequence the sentence was really about — that a target makes a category's undated rules
+#     CARRY what they build up instead of losing it — survives structurally, in
+#     `ClaimCalculator#shape`, and is pinned by "keeps a goal's built-up against its target" below
+#     and by the form's own hint in `categories/new/form_spec.rb`.
+#   * "keeps the goal chrome while the standing reads its schedule" — the `Standing` row, its
+#     `shared/_holding_status` partial and the whole two-level goal classification it belonged to are
+#     deleted with `HoldingStatus`. The card has no state word left to disagree with its heading:
+#     what a rule is doing is §3.4's own row, which is a figure and a schedule rather than one of
+#     seven adjectives. "gives an accruing rule its schedule and a rate rule none" carries the fact
+#     the example was really pinning — that a goal with a due date is read by its schedule.
+#   * the whole "a category that is not holding but still has money in it" group (3 examples) — it
+#     planted allocations past `Category#money_may_not_be_stranded` with `update_column` and asserted
+#     the card named the money anyway. Nothing is ever MOVED into a category now, so a cleared
+#     funding date leaves nothing behind and the fixture cannot be built by any means at all — the
+#     state is unplantable rather than merely unreachable, which is why the `stranded?` arm is
+#     deleted instead of left untested. "says its spending comes straight out of what's free to
+#     spend" carries what remains true of a non-holder.
+#   * the "closed-period suffix" pair — ` · last period` named a leftover physically sitting in an
+#     envelope until a distribution moved it. §3.1's claim resets at the boundary; there is no
+#     leftover and no period for one to belong to.
+#   * the "changed-after-distributing clause" pair, and the `spec/support/changed_after_distributing_context.rb`
+#     include that built them — `DistributionClock` compared a rule's `updated_at` against the moment
+#     a period's split was written, and there is no split. A rule change now moves the claim on the
+#     next render with nothing to explain, which is the whole of what the computed model buys.
+#
+# ── CARRIED, WITH THE FIGURES RE-DERIVED: the two arms and their `data-holdings-state` stamp, the
+# goal heading and its bar (the same 25%, now claim over target), the rule list, the funding date,
+# the suggestion pointer's three examples, and the income category's absence.
 #
 # `Capybara.exact` is unset in this suite and this page is full of chrome that matches substrings
-# (the sidebar's "Budget" link, the summary card's own sentence about where spending comes from,
-# the category's own name in three places), so every assertion is scoped to `[data-holdings-card]`
-# and every positive is paired with a negative.
+# (the sidebar's "Budget" link, the summary card's own sentence about the spending, the category's
+# own name in three places), so every assertion is scoped to `[data-holdings-card]` and every
+# positive is paired with a negative.
 RSpec.describe "Categories Show - Holdings card", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
   # rubocop:disable RSpec/LetSetup -- THE POT HAS TO EXIST for income to land in
-  # (`Category#income_must_land_in_an_account`), and for the category factory's own `pool` default,
-  # which still names a pool for the length of this branch. Nothing on this card reads it.
+  # (`Category#income_must_land_in_an_account`), and for the category factory's own `pool` default.
+  # Nothing on this card reads it.
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
   # rubocop:enable RSpec/LetSetup
 
@@ -32,46 +65,53 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
 
   def card = find("[data-holdings-card]")
 
-  # A category that holds its own money, funded a year back so nothing in a fixture has to say a
-  # date twice.
+  def rule_row(label) = find("[data-holdings-rule='#{label}']")
+
+  # A category whose rules claim its money: an expense category with a `funded_since`, a year back so
+  # nothing in a fixture has to say a date twice and every entry dated "today" counts against it.
   def holder(name, **attributes)
     create(:category, :expense, :funded, user: user, name: name, **attributes)
   end
 
-  def rate(category, amount)
-    create(:budget, :per_period_rate, category: category, amount: amount)
+  # §3.1'S SHAPE — use-it-or-lose-it, no anchor, no item, so its lane is the whole category.
+  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
+
+  # §3.2'S SHAPE — accrues toward its own amount by the catch-up formula.
+  def dated(category, amount:, anchor:, every: 6, item: nil)
+    create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor, item: item)
   end
 
-  def allocate(category, amount, on: Date.current)
-    create(:allocation, kind: :allocation, to_category: category, amount: amount, date: on)
+  def spend(category, amount, on: Date.current, item: nil)
+    create(:entry, item: item || create(:item, category: category), amount: amount, date: on)
   end
 
   # ------------------------------------------------------------------------------------------
-  # State 1 — the category holds money
+  # State 1 — the category's rules claim its money
   # ------------------------------------------------------------------------------------------
 
-  describe "a category holding its own money", :aggregate_failures do
+  describe "a category whose rules claim its money", :aggregate_failures do
     let!(:groceries) { holder("Groceries") }
 
     before do
       rate(groceries, 400)
-      allocate(groceries, 400)
       visit category_path(groceries)
     end
 
-    it "names what it is, prints the balance and links to the Budget page" do
+    # PLANTED: a $400 per-period rate rule with nothing spent. §3.1 is
+    # `max(0, rate + Σ adjustments − spent)` = `max(0, 400 + 0 − 0)` = **$400.00**, which is the whole
+    # of the category's claim because it is its only rule.
+    it "names what it is, prints what it claims and links to the Budget page" do
       expect(card["data-holdings-state"]).to eq("holding")
       within(card) do
         expect(page).to have_content("Envelope")
         expect(page).to have_no_content("Goal")
-        expect(page).to have_content("$400.00 left")
         expect(page).to have_link("Rules on the Budget page", href: budget_page_path)
       end
-      expect(find("[data-figure='balance']").text).to eq("$400.00")
+      expect(find("[data-figure='claim']").text).to eq("$400.00")
     end
 
-    # NO EDITOR, and the negative is the point: the money a category has to spend is decided by
-    # its rules and its allocations, and neither is edited here.
+    # NO EDITOR, and the negative is the point: what a category claims is decided by its rules, and
+    # a rule is written on /budget.
     it "offers no editor of its own" do
       within(card) do
         expect(page).to have_no_link("Create rule")
@@ -80,22 +120,24 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       end
     end
 
-    # THE RULES ARE NAMED. `pool_rule_label` is the reader Home's expanded row uses, so a rule is
-    # named one way on both screens.
-    it "lists the rule that fills it" do
-      within("[data-holdings-rules]") do
-        expect(page).to have_content("1 rule")
-        expect(page).to have_content("$400.00")
+    # ** THE COPY THE MOVED-MONEY MODEL LEFT BEHIND, ASSERTED ABSENT. ** Each of these sentences was
+    # rendered by this card and each is now false — there is no `available` to read against, no
+    # sweep at a period's end, and no distribution that puts money here.
+    it "says nothing about available, sweeping or distributing" do
+      within(card) do
+        expect(page).to have_no_content("available")
+        expect(page).to have_no_content("swept")
+        expect(page).to have_no_content("distribute")
+        expect(page).to have_content("Nothing was moved here")
       end
     end
 
-    # THE START DATE IS PRINTED, because it is the only thing on the card that says WHICH of the
-    # user's spending the balance above it covers — anything earlier drained available (§4).
-    it "says which spending it counts, from when" do
-      within(card) do
-        expect(page).to have_content("holds its own money from")
-        expect(page).to have_content("spending before then read against what was available")
-      end
+    # THE START DATE IS PRINTED, because it is the only thing on the card that says which periods and
+    # which receipts the figure above it is made of: it is `ClaimCalculator#accrual_start`'s first
+    # term — the period the accrual walk opens in — and the day `Entry.draining` starts attributing
+    # this category's spending to its rules. Anything earlier is in neither sum.
+    it "says which spending and which periods it counts, from when" do
+      within(card) { expect(page).to have_content("Claiming since") }
       expect(find("[data-figure='funded-since']").text).to eq(groceries.funded_since.strftime("%b %-d, %Y"))
     end
 
@@ -104,101 +146,199 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     end
   end
 
-  describe "a category with no rule filling it", :aggregate_failures do
-    it "says the money arrives by distribution or by hand" do
-      cushion = holder("Cushion")
-      allocate(cushion, 120)
+  # ------------------------------------------------------------------------------------------
+  # §3.4's row, per rule — the same sentences the Budget page and Home print about one rule
+  # ------------------------------------------------------------------------------------------
 
-      visit category_path(cushion)
+  describe "the row each rule gets", :aggregate_failures do
+    # PLANTED: $310 spent this period against a $400 per-period rate. The figure is `spent of rate`
+    # verbatim, and the claim is `max(0, 400 − 310)` = **$90.00**. `over?` reads the pre-clamp figure
+    # (+$90), so nothing is red and there is no trouble line.
+    it "reads spent-of-rate on a rate rule, with no schedule and no trouble" do
+      groceries = holder("Groceries")
+      rate(groceries, 400)
+      spend(groceries, 310)
 
-      expect(card["data-holdings-state"]).to eq("holding")
-      expect(card).to have_no_css("[data-holdings-rules]")
-      expect(find("[data-figure='no-rules']").text).to include("No rule fills this category")
+      visit category_path(groceries)
+
+      expect(find("[data-figure='claim']").text).to eq("$90.00")
+      within(rule_row("Per period")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$310.00 of $400.00")
+        expect(page).to have_no_css("[data-rule-schedule]")
+        expect(page).to have_no_css("[data-rule-trouble]")
+      end
+    end
+
+    # PLANTED: $450 spent against the same $400 rate. The pre-clamp figure is `400 − 450` = **−$50**,
+    # which is what makes the row "over" and what the trouble label prints — the CLAIM is clamped to
+    # **$0.00**, so a figure taken from the claim would read "over by $0.00" on every overspend
+    # (`HomeHelper#claim_trouble_label`'s own note).
+    it "puts an overspent rate rule in the red with the excess named" do
+      groceries = holder("Groceries")
+      rate(groceries, 400)
+      spend(groceries, 450)
+
+      visit category_path(groceries)
+
+      expect(find("[data-figure='claim']").text).to eq("$0.00")
+      within(rule_row("Per period")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$450.00 of $400.00")
+        expect(page).to have_css("[data-rule-trouble]", text: "over by $50.00")
+      end
+    end
+
+    # PLANTED: a $1,200 six-monthly bill anchored three months out, on a biweekly grid anchored today.
+    # The rule is written today, so §3.2's walk opens in the current period and visits exactly one
+    # (`accrual_start` is the LATER of the category's funding date and the rule's own birthday).
+    # `periods_left` counts the boundaries from this period's open through the due date — three
+    # months is 89 to 92 days and `floor(days ÷ 14) + 1` is **7** for every one of them — so
+    # `planned = 1,200 ÷ 7` = **$171.43**, and one walked period leaves exactly that built up.
+    # The same figure is pinned on the Budget page in `budget_page/rules_spec.rb`.
+    it "gives an accruing rule its figure and its schedule" do
+      insurance = holder("Car Insurance")
+      dated(insurance, amount: 1_200, anchor: Date.current + 3.months)
+
+      visit category_path(insurance)
+
+      expect(find("[data-figure='claim']").text).to eq("$171.43")
+      within(rule_row("Every 6 months")) { expect_the_accruing_row(Date.current + 3.months) }
+    end
+
+    # The row's three assertions, lifted out of the example above so it stays inside the length its
+    # neighbours keep. The figure and the schedule are §3.4's two halves and the absent trouble is
+    # the third fact: a fund on course is not a thing that needs a human (§4).
+    def expect_the_accruing_row(due_on)
+      expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
+      expect(page).to have_css(
+        "[data-rule-schedule]",
+        text: "next due #{due_on.strftime("%b %-d")} · $171.43 per period"
+      )
+      expect(page).to have_no_css("[data-rule-trouble]")
+    end
+
+    # ** A DATE THAT HAS GONE BY IS NOT "NEXT". ** The cycle rolls on PAYMENT rather than on the
+    # calendar (§3.2), so an occurrence nobody settled stays where it was anchored and the row reads
+    # overdue instead of silently re-aiming a month out.
+    #
+    # PLANTED: `periods_left` floors at 1 for a date already past, so the one walked period accrues
+    # the whole **$1,200.00** — the fund is FULL, which is the ordinary shape of an unpaid bill, not
+    # the exception — and the per-period share falls to $0.00, so the schedule is displaced entirely
+    # by the trouble line beside it.
+    it "puts a rule whose date has passed in the past tense, with the trouble line" do
+      due = Date.current - 10.days
+      utilities = holder("Utilities")
+      dated(utilities, amount: 1_200, anchor: due, every: 1)
+
+      visit category_path(utilities)
+
+      expect(find("[data-figure='claim']").text).to eq("$1,200.00")
+      within(rule_row("Monthly")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-trouble]", text: "overdue · was #{due.strftime("%b %-d")}")
+        expect(page).to have_no_content("next due")
+      end
+    end
+  end
+
+  # ** A LINE PER RULE, AND THE CARD'S FIGURE IS THEIR SUM (§3.4; Task 3's ruling for Home). ** §3.4's
+  # sentences are per RULE and `Category#claim` is a SUM, so a category carrying a rate rule beside an
+  # item-backed bill cannot honestly print one figure: the two are denominated in different things —
+  # one in this period's spending against a rate, the other in a running total against a target.
+  #
+  # THE ITEM ON THE BILL IS WHAT MAKES THE LANES DISJOINT (§3.1's partition, and
+  # `Budget#category_may_hold_one_item_less_rule`): the rate rule names no item, so its lane is the
+  # category MINUS the items that carry their own rule.
+  describe "a category with two rules", :aggregate_failures do
+    let!(:home) { holder("Home") }
+
+    before do
+      rate(home, 400)
+      dated(home, amount: 1_200, anchor: Date.current + 3.months, item: create(:item, category: home, name: "Insurance"))
+      visit category_path(home)
+    end
+
+    # PLANTED: $400.00 (the untouched rate, §3.1) + $171.43 (one period of `1,200 ÷ 7`, §3.2 — the
+    # working is on "gives an accruing rule its figure and its schedule" above) = **$571.43**.
+    it "heads the card with the sum of its rules' claims" do
+      expect(find("[data-figure='claim']").text).to eq("$571.43")
+      within("[data-holdings-rules]") { expect(page).to have_content("2 rules") }
+    end
+
+    # EACH ROW IN ITS OWN SHAPE'S WORDS, and never the other's noun: a rate row must not print
+    # "built up" over money that carries nothing, and a fund's running total must not read as money
+    # to spend. `pool_rule_label` names the item-backed rule by its item and the item-less one by its
+    # cadence, which is the app's one answer to what a rule is called.
+    it "says each rule's own sentence, in its own row" do
+      within(rule_row("Insurance")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
+      end
+      within(rule_row("Per period")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
+        expect(page).to have_no_content("built up")
+      end
     end
   end
 
   # ------------------------------------------------------------------------------------------
-  # The goal arm, and the carried inconsistency Task 7 resolved
+  # The goal arm
   # ------------------------------------------------------------------------------------------
 
   describe "a category saving toward a target", :aggregate_failures do
-    it "calls it a goal and states the balance against the target" do
-      allocate(holder("Vacation", target_amount: 2_000), 500)
+    # A GOAL IS A CATEGORY WITH A TARGET AND A RULE THAT ACCRUES TOWARD IT (§3.3: every claim comes
+    # from a rule). `ClaimCalculator#shape` reads `:target` for an anchorless rule whose category
+    # names a figure, which is the branch that makes the money CARRY rather than reset.
+    def goal(name, target:, rate_amount:)
+      holder(name, target_amount: target).tap { |category| rate(category, rate_amount) }
+    end
 
-      visit category_path(user.categories.find_by!(name: "Vacation"))
+    # PLANTED: a $500-per-period rule on a $2,000 goal, funded a year back but written today, so the
+    # walk visits one period. §3.2's dateless branch plans `min(rate, gap)` = `min(500, 2,000)` =
+    # **$500.00**, nothing is spent, so `built_up` = $500.00 and the claim is that. The bar is
+    # `(500 ÷ 2,000 × 100).round` = **25** — the same 25% the moved-money version of this example
+    # asserted over a $500 allocation, which is the point of keeping the figure.
+    it "calls it a goal and states its built-up against the target" do
+      visit category_path(goal("Vacation", target: 2_000, rate_amount: 500))
 
       within(card) do
         expect(page).to have_content("Goal")
         expect(page).to have_no_content("Envelope")
-        expect(page).to have_content("$500.00 of $2,000.00")
       end
-    end
-
-    it "draws the bar against the target" do
-      allocate(holder("Vacation", target_amount: 2_000), 500)
-
-      visit category_path(user.categories.find_by!(name: "Vacation"))
-
+      expect(find("[data-figure='claim']").text).to eq("$500.00")
       within("[data-goal-progress]") do
         expect(page).to have_content("25% complete")
         expect(page).to have_content("Target: $2,000.00")
       end
     end
 
-    # THE TARGET'S OTHER CONSEQUENCE, said on the card because the form's hint promises it: a
-    # target-bearing category is never swept, whatever its rule mix.
-    it "says its money is never swept back" do
-      vacation = holder("Vacation", target_amount: 2_000)
+    # ** THE ROW READS THE GOAL AS A FUND, NEVER AS MONEY TO SPEND. ** The figure is
+    # `built up of target` and the schedule is the rate the goal is filling at; a dateless goal has
+    # no due date, so `claim_schedule` drops that half and prints the per-period share alone.
+    it "keeps a goal's built-up against its target, with the rate it fills at" do
+      visit category_path(goal("Vacation", target: 2_000, rate_amount: 500))
 
-      visit category_path(vacation)
-
-      within(card) { expect(page).to have_content("nothing here is ever swept back at the end of a period") }
-    end
-
-    # ** THE ANCHOR-DATED GOAL — THE TWO LEVELS ON ONE CARD (fix round 1, MED-2). ** A goal whose
-    # rule names a DUE DATE is `HoldingCalculator#dateless_goal?` FALSE, so `HoldingStatus` does not
-    # call it `saving`; it is `#saving_toward_a_target?` TRUE, so the heading and the bar are still
-    # the goal's. The card therefore heads itself `Goal` and stands `on track` in the same breath,
-    # which is two facts rather than a contradiction — what the category IS, and how its schedule is
-    # going. The same category is pinned on the impact card (`spec/system/entries/impact_spec.rb`)
-    # and on Home's row (`spec/system/home/categories_spec.rb`).
-    it "keeps the goal chrome while the standing reads its schedule", :aggregate_failures do
-      visit category_path(anchored_goal)
-
-      within(card) do
-        expect(page).to have_content("Goal")
-        expect(page).to have_no_content("Envelope")
-      end
-      expect(card).to have_css("[data-goal-progress]")
-      within("[data-holdings-status]") do
-        expect(page).to have_content("on track")
-        expect(page).to have_no_content("of $2,400.00")
+      within(rule_row("Per period")) do
+        expect(page).to have_css("[data-rule-figure]", text: "$500.00 built up of $2,000.00")
+        expect(page).to have_css("[data-rule-schedule]", text: "$500.00 per period")
+        expect(page).to have_no_content("due")
       end
     end
 
-    def anchored_goal
-      holder("House Deposit", target_amount: 2_400).tap do |house|
-        create(
-          :budget,
-          category: house,
-          amount: 300,
-          interval_months: 1,
-          anchor_date: Date.current + 2.months
-        )
-        allocate(house, 600)
-      end
-    end
-
-    # ** THE CARRIED INCONSISTENCY, RESOLVED HERE (Task 7's ruling). ** A goal the user ALSO
-    # refills at a rate — the demo's Retirement Supplement — was `Category#savings?` FALSE, so the
-    # entry form's impact card drew it as an envelope while Home's row vocabulary called it
-    # `saving`. Every rendering asks `HoldingCalculator#saving_toward_a_target?` now, so a
-    # rule-bearing goal is a goal on all three screens. Asserted here and on the impact card
-    # (spec/system/entries/impact_spec.rb) against the same shape.
-    it "is still a goal when a rate rule also fills it" do
-      retirement = holder("Retirement", target_amount: 100_000)
-      rate(retirement, 150)
-      allocate(retirement, 500)
+    # ** THE CARRIED INCONSISTENCY, NOW RESOLVED STRUCTURALLY (Task 7's ruling, re-homed on the
+    # model). ** A goal the user ALSO refills at a rate — the demo's Retirement Supplement — was
+    # `Category#savings?` FALSE, because that predicate additionally required the category to carry
+    # NO rule; the entry form's impact card therefore drew it as an envelope while Home called it
+    # saving. `#savings?` is DELETED with the computed model, and the reason is the model's own: every
+    # claim comes from a rule (§3.3), so a goal with no rule accrues nothing and "a goal is a category
+    # with no rule" has become a description of a goal that does not work. There is one predicate
+    # left, `Category#saving_toward_a_target?`, which is what all three screens ask — so the two
+    # readings that could disagree are now one reading, and the assertion that used to pin the
+    # disagreement (`expect(retirement).not_to be_savings`) has nothing left to say.
+    #
+    # PLANTED: `min(rate, gap)` = `min(150, 100,000)` = **$150.00** after one period, which is
+    # `(150 ÷ 100,000 × 100).round` = **0**% — a bar drawn at zero, which is exactly the row that
+    # would have been unassertable if the percentage rode on the fill rather than on the track.
+    it "is still a goal when a rate rule fills it" do
+      retirement = goal("Retirement", target: 100_000, rate_amount: 150)
 
       visit category_path(retirement)
 
@@ -206,46 +346,69 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
         expect(page).to have_content("Goal")
         expect(page).to have_no_content("Envelope")
       end
-      expect(card).to have_css("[data-goal-progress]")
-      # The DISPLAY predicate disagrees, deliberately and on the record rather than on the screen:
-      # `Category#savings?` requires no rule, and it survives for the one question it is the right
-      # sentence for — which categories are the user's savings, on an index that lists them.
-      expect(retirement).not_to be_savings
+      expect(find("[data-figure='claim']").text).to eq("$150.00")
+      within("[data-goal-progress]") { expect(page).to have_content("0% complete") }
+      expect(retirement).to be_saving_toward_a_target
+    end
+  end
+
+  # A HOLDER WITH NO RULE AT ALL. Every claim comes from a rule (§3.3), so this category claims
+  # exactly nothing however much has been spent on it — and the $0.00 needs saying, or it reads as an
+  # envelope somebody emptied. The old sentence named the two ways money used to arrive ("when you
+  # distribute or move some in by hand"); there is one way now, and it is a rule.
+  describe "a category with no rule claiming it", :aggregate_failures do
+    it "claims nothing, and says a rule is what would change that" do
+      cushion = holder("Cushion")
+      spend(cushion, 120)
+
+      visit category_path(cushion)
+
+      expect(card["data-holdings-state"]).to eq("holding")
+      expect(find("[data-figure='claim']").text).to eq("$0.00")
+      expect(card).to have_no_css("[data-holdings-rules]")
+      expect(find("[data-figure='no-rules']").text).to include("No rule claims this category's money")
+      within(card) { expect(page).to have_no_content("distribute") }
     end
   end
 
   # ------------------------------------------------------------------------------------------
-  # State 2 — the category holds nothing
+  # State 2 — nothing claims this category
   # ------------------------------------------------------------------------------------------
 
-  describe "a category that holds nothing", :aggregate_failures do
+  describe "a category nothing claims", :aggregate_failures do
     let!(:streaming) { create(:category, :expense, user: user, name: "Streaming") }
 
-    it "says the spending comes out of what's available" do
+    it "says its spending comes straight out of what's free to spend" do
       visit category_path(streaming)
 
       expect(card["data-holdings-state"]).to eq("unfunded")
       within(card) do
-        expect(page).to have_content("Available")
-        expect(page).to have_content("This category doesn't hold money yet.")
-        expect(page).to have_content("Its spending comes out of what's available.")
+        expect(page).to have_content("Unbudgeted")
+        expect(page).to have_content("Nothing claims this category's money.")
+        expect(page).to have_content("comes straight out of what's free to spend")
+        expect(page).to have_no_content("available")
       end
     end
 
-    # THE OTHER DIRECTION, and it is the half that used to be wrong: no balance, no standing and
-    # no rule list, because there is nothing holding money for any of them to be about.
-    it "claims no balance and no standing for it" do
+    # THE OTHER DIRECTION: no figure, no bar and no rule list, because this arm has no claim to be
+    # about. The sentence above is about SPENDING and it is exact —
+    # `CategoryLedger::ENTRY_CATEGORY_ID` yields NULL for a NULL `funded_since`, so no rule's lane
+    # can hold one of this category's receipts. (A rule written on such a category does go on
+    # accruing, which is what the Budget page's own band is for; this card's subject is the
+    # category.)
+    it "claims no figure and no bar for it" do
       visit category_path(streaming)
 
-      expect(card).to have_no_css("[data-figure='balance']")
-      expect(card).to have_no_css("[data-holdings-status]")
+      expect(card).to have_no_css("[data-figure='claim']")
       expect(card).to have_no_css("[data-goal-progress]")
-      within(card) { expect(page).to have_no_content("holds its own money from") }
+      expect(card).to have_no_css("[data-holdings-rules]")
+      within(card) { expect(page).to have_no_content("Claiming since") }
     end
 
     # THE SHARPEST HALF. `SuggestionEngine#unfunded_categories` is `reject(&:holder?)` — literally
     # this arm's own population — so this is precisely the shape the panel is most likely to be
-    # proposing a rule for, and a rule is this category's only way out.
+    # proposing a rule for, and a rule is now this category's ONLY way out (§5 closed the allocation
+    # that used to be the second door).
     it "carries the pointer at the Budget page's proposal" do
       bill(streaming, amount: 180)
 
@@ -269,8 +432,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       end
     end
 
-    # And with nothing proposed the card is still not a dead end: it makes the offer in the words
-    # `entries/_impact`'s honest card already uses for this exact shape.
+    # And with nothing proposed the card is still not a dead end: it makes the offer in the words the
+    # entry form's honest card already uses for this exact shape.
     it "offers the rule directly when nothing is proposed" do
       visit category_path(streaming)
 
@@ -280,7 +443,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
 
     # The holding arm never runs the engine at all — see CategoryBudgetPresenter#suggestions' cost
     # note.
-    it "never renders on a category that holds money" do
+    it "never renders on a category whose rules claim its money" do
       groceries = holder("Groceries")
       rate(groceries, 400)
 
@@ -291,63 +454,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     end
   end
 
-  # ** MONEY IN A CATEGORY THAT IS NOT A HOLDER (final fix wave, I-1, belt). ** The unfunded arm's
-  # headline is "this category doesn't hold money yet", and the one shape that makes it a lie is a
-  # non-holder with a non-zero balance — $400 of the user's own money, printed as nothing.
-  #
-  # ** PLANTED PAST THE MODEL, AND THAT IS THE POINT. ** Both live doors into this state are shut in
-  # this same wave — `AllocationsController` stamps `funded_since` on the way in, and
-  # `Category#money_may_not_be_stranded` refuses to clear it on the way out — so `update_column` is
-  # the ONLY way to build the fixture, and it stands for the shapes the app cannot refuse: a console
-  # session, an import, an `update_all`, a row written before this wave. A page that says $0 over
-  # $400 is the worst of the three answers available, so it is asserted rather than assumed
-  # unreachable.
-  describe "a category that is not holding but still has money in it", :aggregate_failures do
-    let!(:orphaned) { holder("Orphaned") }
-
-    before do
-      allocate(orphaned, 400)
-      # rubocop:disable Rails/SkipsModelValidations -- THE VALIDATION IS WHAT THIS PLANTS AROUND.
-      # `#money_may_not_be_stranded` refuses exactly this write; the card under test is what renders
-      # for a row that reached the state some other way.
-      orphaned.update_column(:funded_since, nil)
-      # rubocop:enable Rails/SkipsModelValidations
-      visit category_path(orphaned)
-    end
-
-    it "names the money and says the category is not set up to hold it" do
-      expect(card["data-holdings-state"]).to eq("unfunded")
-      within(card) do
-        expect(page).to have_content("This category still holds $400.00, but it isn't set up to hold money.")
-        expect(page).to have_content("Move it back to available, or set a holding date")
-      end
-    end
-
-    # THE FIGURE IS ON THE SAME HOOK THE HOLDING ARM USES, because it is the same question with the
-    # same answer — what this category holds — and a second hook would let a screen-level assertion
-    # pass over a card showing nothing.
-    it "prints the balance under the card's own figure hook" do
-      expect(card.find("[data-figure='balance']")).to have_content("$400.00")
-    end
-
-    # THE OTHER DIRECTION, ON THE SAME ARM: an unfunded category that really holds nothing keeps the
-    # honest "doesn't hold money yet" sentence and no figure at all. Asserted here rather than only
-    # in the block above so the two arms are compared on one fixture shape.
-    it "keeps the plain sentence when the category truly holds nothing" do
-      streaming = create(:category, :expense, user: user, name: "Streaming")
-
-      visit category_path(streaming)
-
-      within(card) do
-        expect(page).to have_content("This category doesn't hold money yet.")
-        expect(page).to have_no_content("isn't set up to hold money")
-      end
-      expect(card).to have_no_css("[data-figure='balance']")
-    end
-  end
-
-  # AN INCOME CATEGORY HOLDS NOTHING BY THE MODEL'S OWN RULE (`Category#holder?` is `expense? &&
-  # …`), so there is no card at all rather than an "Available" arm that would be true and useless.
+  # AN INCOME CATEGORY CANNOT CLAIM BY THE MODEL'S OWN RULE (`Category#holder?` is `expense? && …`),
+  # so there is no card at all rather than an arm that would be true and useless.
   describe "an income category", :aggregate_failures do
     it "gets no holdings card" do
       salary = create(:category, :income, user: user, name: "Salary")
@@ -359,82 +467,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     end
   end
 
-  # BOTH SUFFIXES, and each in both directions. This card says how the category stands RIGHT NOW,
-  # which is the class of caller `HomeHelper#pool_status_label` documents as owing both — a suffix
-  # here and not on Home is two screens describing one category differently on one afternoon.
-  describe "the closed-period suffix", :aggregate_failures do
-    before do
-      rate(holder("Swept"), 400)
-      rate(holder("Live"), 400)
-      allocate(user.categories.find_by!(name: "Swept"), 60, on: Date.current - 20.days)
-      allocate(user.categories.find_by!(name: "Live"), 60)
-    end
-
-    it "says which period the money belongs to" do
-      visit category_path(user.categories.find_by!(name: "Swept"))
-
-      within(card) { expect(page).to have_content("$60.00 left · last period") }
-    end
-
-    it "stays silent on a category funded this period" do
-      visit category_path(user.categories.find_by!(name: "Live"))
-
-      within(card) do
-        expect(page).to have_content("$60.00 left")
-        expect(page).to have_no_content("last period")
-      end
-    end
-  end
-
-  # SPEC §8'S ROUGH EDGE, on a third screen. `travel_to` rather than `update_column`, because the
-  # signal is `budgets.updated_at` against the allocation's `created_at` and both have to be
-  # written the way the app writes them (see DistributionClock).
-  describe "the changed-after-distributing clause", :aggregate_failures do
-    include_context "with a rule changed after the money went out"
-
-    before do
-      anchor = today + 3.months
-      raised = steady = nil
-
-      before_distributing do
-        raised = dated("Raised", anchor: anchor)
-        steady = dated("Steady", anchor: anchor)
-      end
-
-      # Ten dollars against a $1,200 bill three months out leaves both behind, which is the state
-      # the clause explains.
-      [raised, steady].each { |category| allocate(category, 10) }
-      after_distributing { raised.budgets.sole.update!(amount: 1_800) }
-    end
-
-    it "says why this category is behind" do
-      visit category_path(user.categories.find_by!(name: "Raised"))
-
-      within(card) do
-        expect(page).to have_content("behind")
-        expect(page).to have_content("you changed a rule here after distributing")
-      end
-    end
-
-    it "stays silent on a category whose rule nobody touched" do
-      visit category_path(user.categories.find_by!(name: "Steady"))
-
-      within(card) do
-        expect(page).to have_content("behind")
-        expect(page).to have_no_content("you changed a rule here after distributing")
-      end
-    end
-  end
-
   private
-
-  # A holder carrying a DATED rule. The `behind` state belongs to an accumulating rule — a rate
-  # category is `left to spend` however little is in it — so the rate helper above cannot reach it.
-  def dated(name, anchor:, amount: 1_200)
-    holder(name).tap do |category|
-      create(:budget, category: category, amount: amount, interval_months: 6, anchor_date: anchor)
-    end
-  end
 
   # A BILL'S SHAPE, straight into `SuggestionEngine`'s dated-bill detector: two payments of the
   # same size a whole month apart, on an item carrying no rule of its own.

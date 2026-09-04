@@ -10,7 +10,7 @@
     `standard_action_button` rather than markup of its own, which is what puts it in the same
     treatment as the New Category button on the categories index. %>
 <%= page_header(title: "Budget",
-                subtitle: "The rules that fill your categories",
+                subtitle: "The rules that claim your money",
                 actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
 
 <div class="space-y-6">
@@ -24,7 +24,7 @@
   <% if @presenter.no_rules? %>
     <%= render "empty" %>
   <% else %>
-    <%# The fill order itself: category by category, top to bottom, exactly as a distribution
+    <%# The give-way order itself: category by category, top to bottom, exactly as the shortfall
         spends. One list — the account bands are gone with the per-account waterfall. %>
     <% groups = @presenter.category_groups %>
     <%= render "fill_order", groups: groups if groups.any? %>

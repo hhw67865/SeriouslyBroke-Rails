@@ -2,33 +2,11 @@
 
 # The Budget page's row copy. See the UI design spec §8.
 module BudgetPageHelper
-  # WHAT THE ENVELOPE IS HOLDING, and only where the row has not already said it.
-  #
-  # `pool_status_label` prints PoolStatus#amount, which IS the balance in four of the seven states
-  # — the balance itself in three and its negation on :overdrawn. Printed unconditionally this
-  # read "$400.00 left · holds $400.00" and "overdrawn $80.00 · holds -$80.00" — one number twice,
-  # on ten of the demo's fourteen groups. Measured on the rendered page, not reasoned about.
-  #
-  # `PoolStatus#amount_is_balance?` rather than a state list of this module's own. Which states
-  # print the pool's money is a fact about `PoolStatus#amount`, and a hand copy of its case
-  # statement here would be a second reader free to drift from it the day an eighth state lands.
-  # (String-testing the label for a `$` would be worse still — an assertion about a string this
-  # module does not own.)
-  #
-  # The balance is therefore on screen for every pool either way; this clause is what puts it
-  # there for the three states whose figure is a bill's shortfall instead.
-  #
-  # A STATUS RATHER THAN A `Group`, which is Task 5's widening and not a tidy-up: spec §8.1 puts
-  # the same envelope on the Categories page, said in the same row vocabulary, and that screen has
-  # no Group to hand over. Taking the object the clause actually reads — `PoolStatus`, which owns
-  # both `amount_is_balance?` and `balance` — is what lets the second screen reuse this rather than
-  # grow its own copy of the `· holds` rule. Renamed with the signature so the name stops promising
-  # a Group. `Group#balance` delegates to its status, so the figure is unchanged on the Budget page.
-  def pool_balance_clause(status)
-    return "" if status.amount_is_balance?
-
-    "· holds #{number_to_currency(status.balance)}"
-  end
+  # ** `#pool_balance_clause` IS GONE (computed-claims spec §6). ** It appended `· holds $400.00`
+  # to a row whose `HoldingStatus` had printed a bill's shortfall instead of the envelope's money,
+  # so that every group said its balance exactly once. There is no balance: a category's money is
+  # `Category#claim`, and §3.4's row prints `spent of rate` or `built up of target` — one figure,
+  # named, with nothing left for a second clause to fill in. The status class it read is deleted.
 
   # WHAT A RULE IS CALLED. The item it pays is the truest name — "Rent Bill" says what the money
   # does — and where there is none the rule is named by whatever owns it, because a rule with no
@@ -139,8 +117,8 @@ module BudgetPageHelper
     category = budget.category
     return "written before the cutover — no category to hold it" if category.blank?
 
-    subject = budget.item.present? ? "#{category.name} isn't" : "isn't"
-    "#{subject} holding money yet — nothing fills it"
+    subject = budget.item.present? ? "#{category.name} has" : "has"
+    "#{subject} no claiming date — spending here isn't counted against it"
   end
 
   # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the second clause is about WHERE THE SCHEDULE IS. It

@@ -14,11 +14,13 @@
                       request.path.start_with?(link[:path]) && link[:path] != "#"
                     end
       %>
-      <%# `data:` is optional and per link. Only Distribute carries one today, and it carries
-          `turbo_prefetch: false` because turbo-rails prefetches links on hover and
-          `/distributions/new` is a GET that takes write locks: DistributionPresenter's snapshot
-          deletes this period's split, holds the row locks on both pools of every deleted row for
-          the whole snapshot, and rolls back. Hovering the nav item would fire that. %>
+      <%# `data:` is optional and per link, and NO LINK CARRIES ONE TODAY (computed-claims spec §6).
+          The one that did was Distribute: it passed `turbo_prefetch: false` because turbo-rails
+          prefetches on hover and that GET took write locks, so hovering the nav item fired a
+          snapshot that deleted a period's split and rolled it back. There is no such screen and no
+          such write; every reader in this app is now a pure function of rows nobody's mouse can
+          touch. The keyword is kept because the next link that needs one should not have to
+          re-derive that a nav link may carry data attributes. %>
       <%= link_to link[:path],
           data: link[:data],
           class: class_names(

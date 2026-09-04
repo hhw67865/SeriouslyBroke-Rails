@@ -8,8 +8,15 @@
     the spending came out of, and what is left — so it is drawn once.
 
     ** THE LEGEND NAMES THE TWO LANES IN THE WORDS THE OTHER TAB HEADS THEM WITH (FINAL review —
-    M-2). ** These two rows read "Out of available" / "Out of an envelope" and the Expenses tab's own
-    section headings read "Out of Available" / "Out of an Envelope" — one pair of phrases in two
+    ** THE FIRST HALF OF THE PAIR IS NOW "Unbudgeted" (computed-claims spec §§5-6, §3.4). ** It read
+    "Out of Available", and AVAILABLE is deleted with the movements: free money is
+    `ClaimLedger#free`, a figure derived from the claims rather than a pot spending can come "out
+    of". What the band actually counts is unchanged — spending on a category no rule counts against
+    — and §3.4's own word for that category is "unbudgeted", so the noun follows the spec rather
+    than inventing a third one. "Out of an Envelope" is untouched: an envelope is still exactly what
+    a category with a rate rule is.
+
+    M-2). ** These two rows and the Expenses tab's own section headings are ONE pair of phrases in two
     casings, a tab apart, on one screen. THE CAPITAL IS THE ONE THAT SURVIVES, on both halves: this
     is a LABEL beside a swatch rather than a sentence, and Reports Title-Cases every label it has
     ("Money Flow", "Health Indicators", "Tracked Available Spending"). The lowercase register is
@@ -67,7 +74,7 @@
       <div class="flex flex-wrap gap-4 mt-3 text-xs">
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-terracotta"></span>
-          <span class="text-gray-600">Out of Available <%= number_to_currency(buffer_spending) %></span>
+          <span class="text-gray-600">Unbudgeted <%= number_to_currency(buffer_spending) %></span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="w-3 h-3 rounded-sm bg-dusty-teal"></span>

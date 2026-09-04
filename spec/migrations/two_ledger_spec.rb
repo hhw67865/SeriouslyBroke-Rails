@@ -25,7 +25,10 @@ RSpec.describe CategoriesHoldTheMoney do
   # which are the whole world this migration converts. Named in the order the two run FORWARD; the
   # context reverses them itself, so the drop's `down` restores the pool era before this one's
   # `down` takes the two-ledger columns away.
-  include_context "with the schema its subject was written for", described_class, DropThePoolLayer
+  include_context "with the schema its subject was written for",
+                  described_class,
+                  DropThePoolLayer,
+                  DropTheDistribution
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com") }

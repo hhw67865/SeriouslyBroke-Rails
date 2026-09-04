@@ -2,30 +2,42 @@
     since task 5 moved them off the deleted `Dashboard::SavingsPresenter`.
 
     SAVINGS ARE CATEGORIES NOW (two-ledger spec §3, Task 7) — `_pools_strip` renamed with the
-    thing it draws. Each card links to the category's own page, which is where a goal's balance,
+    thing it draws. Each card links to the category's own page, which is where a goal's figure,
     its target and its history all live since the Pools screens were deleted. The classifier is
-    `Category#savings?` (see the presenter): a target, a funding start, and no refill rule. %>
+    `Category#saving_toward_a_target?` (see the presenter): a funding start and a target to reach.
+
+    ** THE FIGURE IS A CLAIM AND THE STRIP NAMES NO MOMENT (computed-claims §§2-3). ** It used to be
+    a HOLDING bounded at `period_range.end` — money that had been moved in by that date, less what
+    was spent — and there is no such balance any more. What a category has is what its rules claim,
+    computed from the calendar and the spending; the presenter's `#as_of` explains what bounding a
+    walk at a past month can and cannot mean, and the short of it is that the bound is
+    PERIOD-grained rather than day-grained. So nothing here says "as of", prints a date, or promises
+    a month's closing figure: the cards carry a name, a claim, a target and a bar, all of which are
+    true whichever month is selected.
+
+    ** THE NEGATIVE ARM IS GONE, NOT GATED. ** §3 clamps every claim at zero — a rate rule's at
+    `max(0, …)`, an accruing rule's into `0..target` — so no row here can carry a negative figure,
+    and the card's red "negative" badge and the total's `text-terracotta` were branches nothing
+    could reach. `home/_hero.html.erb`'s rule: an unreachable branch on a money screen is a sentence
+    waiting to be believed. What the old branch was really about — spending past what a fund had —
+    is `ClaimCalculator#over?`, which Home's own rows and trouble strip report; a strip whose whole
+    subject is progress toward a target is not the place to re-derive it. %>
 <% goals = @presenter.savings_summary %>
 <% if goals.any? %>
   <div class="mb-8" data-savings-strip>
     <div class="mb-4">
       <h3 class="text-lg font-medium text-gray-900">Savings Goals</h3>
       <p class="text-sm text-gray-500">
-        Total: <span class="font-semibold <%= @presenter.total_savings_balance >= 0 ? "text-brand-dark" : "text-terracotta" %>"><%= number_to_currency(@presenter.total_savings_balance) %></span>
+        Claimed: <span class="font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_savings_balance) %></span>
       </p>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <% goals.each do |goal| %>
         <% progress = goal[:progress_percentage] %>
-        <% negative = goal[:balance].negative? %>
 
-        <%# Status based purely on funding level %>
-        <% if negative %>
-          <% card_class = "border-2 border-status-danger/40 bg-status-danger-light" %>
-          <% bar_class = "bg-status-danger" %>
-          <% badge_class = "text-white bg-status-danger" %>
-          <% badge_text = "negative" %>
-        <% elsif progress < 10 && goal[:target_amount].positive? %>
+        <%# Status based purely on how much of the target the rules claim. See the header for why
+            there is no negative arm: a claim cannot be negative. %>
+        <% if progress < 10 && goal[:target_amount].positive? %>
           <% card_class = "border-2 border-status-warning/40 bg-status-warning-light" %>
           <% bar_class = "bg-status-warning" %>
           <% badge_class = "text-status-warning bg-status-warning/20" %>
@@ -60,8 +72,9 @@
               `Pool#contribution_entries` — savings-TYPED entries — so it printed $0.00 on every
               card while the demo's goals were visibly receiving $525 a period: a figure that
               denies money that arrived is worse than no figure. "Out" alone is half a story. The
-              balance, the target and the progress bar are `HoldingCalculator`'s — the app's one
-              reader for what a category holds — and stay. %>
+              figure, the target and the progress bar stay, and all three are now `ClaimLedger`'s —
+              `Σ` of the category's rules' claims (computed-claims §3), which is the app's one
+              answer to what a category has. %>
           <div class="flex items-center justify-between text-xs text-gray-500">
             <span class="font-medium"><%= number_to_currency(goal[:balance]) %></span>
             <span>of <%= number_to_currency(goal[:target_amount]) %></span>

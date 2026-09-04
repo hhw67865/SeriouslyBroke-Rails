@@ -6,8 +6,12 @@ RSpec.describe Category, type: :model do
   describe "associations" do
     it { is_expected.to belong_to(:user) }
     it { is_expected.to have_many(:budgets).dependent(:destroy) }
-    it { is_expected.to have_many(:allocations_in).class_name("Allocation").dependent(:destroy) }
-    it { is_expected.to have_many(:allocations_out).class_name("Allocation").dependent(:destroy) }
+    # `allocations_in` AND `allocations_out` ARE DELETED WITH THE TABLE (computed-claims spec §5).
+    # Both were `dependent: :destroy` so that destroying a category that had ever held money did not
+    # raise on a foreign key with no ON DELETE. Nothing moves on the purpose side any more: a
+    # category's money is `#claim`, so there is no row to cascade. What a destroyed category still
+    # takes with it is its rules (`have_many(:budgets).dependent(:destroy)` above) and, through them,
+    # their adjustments.
     it { is_expected.to have_many(:items).dependent(:destroy) }
     it { is_expected.to have_many(:entries).through(:items) }
     # `belongs_to(:pool)` IS DELETED WITH `categories.pool_id` (two-ledger spec §5, Task 8) — a

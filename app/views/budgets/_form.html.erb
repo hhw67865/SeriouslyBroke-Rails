@@ -11,7 +11,7 @@
     and the panel's own row says before the click.
 
     THE OWNER PICKER IS A CATEGORY PICKER, on the paths where nothing named an owner. It offers
-    this user's EXPENSE categories — income lands in available and is allocated out of it (§2), so
+    this user's EXPENSE categories — an income category can carry no claim (§2), so
     a rule on one would be a claim on money that category never holds — and
     `BudgetsController#new`/`#create` own the one decision about when it renders. Every path that
     ALREADY names an owner is untouched: the Edit link's rule, and the panel's accept link, which
@@ -32,9 +32,9 @@
     measured by the engine and submitted back; changing it later is the edit form's business, and
     an existing rule's shape is not this partial's to re-offer. %>
 <% new_rule = @budget.new_record? && (category_mode || owner_picker) %>
-<% subtitle = "How a category gets filled each period" %>
-<% subtitle = "Pick what this rule fills, and how much it asks for each period" if owner_picker %>
-<% subtitle = "How #{@budget.category.name} gets filled each period" if category_mode && !owner_picker %>
+<% subtitle = "What a category claims each period" %>
+<% subtitle = "Pick what this rule is for, and how much it claims each period" if owner_picker %>
+<% subtitle = "What #{@budget.category.name} claims each period" if category_mode && !owner_picker %>
 <% cancel_path = budget_page_path %>
 <%# "RULE", NOT "BUDGET" (design review M1). The screen this form is reached from calls the thing a
     RULE in every one of its own words — the heading above the list, the "New rule" button, the
@@ -87,7 +87,7 @@
                 value_method: :id,
                 include_blank: "Select a category",
                 label: "Category",
-                hint: "The category this rule fills each period. A rule is one of the two things " \
+                hint: "The category this rule claims for each period. A rule is one of the two things " \
                       "that make a category start holding its own money." %>
           </div>
         <% elsif category_mode %>

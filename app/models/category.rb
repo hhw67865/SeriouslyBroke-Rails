@@ -46,23 +46,13 @@ class Category < ApplicationRecord
   # no category to fund is a demand on the waterfall for money nothing can hold.
   has_many :budgets, dependent: :destroy
 
-  # BOTH SIDES OF THE PURPOSE LEDGER, and both are `dependent: :destroy` because `allocations` has
-  # real foreign keys to `categories` with no ON DELETE: without these, destroying a category that
-  # ever held money raises rather than deletes, and `user.destroy` with it.
-  #
-  # DESTROYING A CATEGORY GIVES ITS MONEY BACK TO AVAILABLE, which is the honest outcome and not a
-  # loss: every allocation deleted here was a claim on money the pot still holds, so `pot + Σ
-  # accounts == available + Σ holdings` is true again the instant the rows are gone.
-  has_many :allocations_in,
-           class_name: "Allocation",
-           foreign_key: :to_category_id,
-           dependent: :destroy,
-           inverse_of: :to_category
-  has_many :allocations_out,
-           class_name: "Allocation",
-           foreign_key: :from_category_id,
-           dependent: :destroy,
-           inverse_of: :from_category
+  # ** `allocations_in` AND `allocations_out` ARE GONE WITH THE TABLE (computed-claims spec §5). **
+  # They were the two sides of the purpose ledger, `dependent: :destroy` so that destroying a
+  # category that had ever held money did not raise on a foreign key. Nothing moves on the purpose
+  # side any more: a category's money is `#claim`, computed from its rules, so there is no row to
+  # cascade and no holding to give back. What a destroyed category's rules take with them is
+  # `has_many :budgets, dependent: :destroy` above, and their adjustments follow from
+  # `Budget has_many :adjustments, dependent: :destroy`.
 
   # `has_one :budget` IS GONE (plan 3, task 4). Task 3 kept it alive for one commit because
   # `CategoryCalculator#monthly_budget_rate` still read `category.budget&.amount` and the
@@ -139,20 +129,22 @@ class Category < ApplicationRecord
   scope :tracked, -> { where(tracked: true) }
   scope :untracked, -> { where(tracked: false) }
 
-  # THE ORDER THE DISTRIBUTE WATERFALL FILLS IN, and the ONE place it lives (two-ledger spec §2).
-  # It answers both halves of "which categories does a distribution fill, and in what order",
-  # because a caller that could ask them separately is a caller that can fill a set it did not
-  # order — `AllocationCalculator` reads this once for the sweep and the fill alike so the two
-  # cannot disagree about who is in the waterfall.
+  # ** THE GIVE-WAY ORDER, AND THE ONE PLACE IT LIVES (computed-claims spec §4). ** It was the
+  # order the distribute waterfall FILLED in; there is no distribution and nothing to fill, and
+  # §4 keeps the column for the job it can still do: when a user's claims outrun their money,
+  # `HomePresenter#uncovered_claims` walks this order BACKWARDS and names the categories nothing
+  # covers, lowest priority giving way first. The Budget page's drag-reorder writes it
+  # (`.apply_fill_order`), and the scope's NAME is kept because both readers spell it this way and
+  # a rename would put a diff over them for a word.
   #
   # HOLDERS ONLY, which is `expense? && funded_since.present?` — `Category#holder?` in SQL. An
-  # income category holds nothing (income lands in available, §2) and an expense category that has
-  # never been funded drains available rather than itself, so filling either would put money
-  # somewhere no reader would ever take it out of.
+  # income category can hold no claim (`Budget#category_must_be_an_expense`), and an expense
+  # category that has never been funded is one whose spending counts against nothing
+  # (`CategoryLedger::ENTRY_CATEGORY_ID`'s own NULL arm).
   #
   # `[priority, name]`, ON `Pool.by_priority`'S OWN REASON: priority alone is not a total order, and
-  # a tie falling through to database order means random UUID bytes deciding which envelope gets
-  # funded when the money runs out. `name` is unique per user, so the pair is total.
+  # a tie falling through to database order means random UUID bytes deciding which category gives
+  # way first. `name` is unique per user, so the pair is total.
   scope :in_fill_order, -> { expenses.where.not(funded_since: nil).order(:priority, :name) }
 
   # THE CATEGORIES THE BUDGET PAGE DRAWS A CARD FOR — the ones a rule actually fills. `Pool
@@ -310,22 +302,19 @@ class Category < ApplicationRecord
     update(funded_since: today)
   end
 
-  # A GOAL IS A HOLDER WITH A TARGET AND NO RULE (spec §3: "a savings category is just a category
-  # with a target and typically no refill rule"). The rule half is what tells a goal apart from an
-  # envelope somebody also set a ceiling on: a category the waterfall refills every period is being
-  # SPENT toward a rate, not SAVED toward a figure.
+  # ** `#savings?` IS DELETED (computed-claims spec §3.3), AND ITS THIRD CLAUSE IS WHY. ** It was
+  # `holder? && target_amount.present? && budgets.none?` — a goal is a holder with a target and NO
+  # RULE — and that clause existed to tell a goal apart from an envelope somebody also set a ceiling
+  # on: a category the waterfall refilled every period was being SPENT toward a rate, not SAVED
+  # toward a figure.
   #
-  # THE CALCULATOR DOES NOT ASK THIS, and an earlier draft of this comment said it did. §3's own
-  # "typically" is why: a goal MAY carry a refill rule (the demo's Retirement Supplement does), and
-  # such a category is not `savings?` — so `HoldingCalculator` asking this would call it an envelope
-  # and sweep the user's savings back to available at the end of every rate period. The funding
-  # question is asked of the TARGET instead, in `HoldingCalculator#dateless_goal?`, whose comment
-  # carries the whole argument and the measurement. This predicate is the DISPLAY question — is this
-  # row a goal to render as one — and the two are deliberately different conditions.
-  #
-  # It is also exactly the shape Task 1's migration mints out of a savings pool — target, priority,
-  # `funded_since`, `tracked: false`, and no rule was ever attached to a goal.
-  def savings? = holder? && target_amount.present? && budgets.none?
+  # THERE IS NO WATERFALL, AND EVERY CLAIM COMES FROM A RULE. A goal with money in it therefore HAS
+  # a rule by construction — a target rule that accrues, or the amount-ZERO shape §3.2 rules is how
+  # "no rate" is spelled for a goal fed only by set-asides — so `budgets.none?` selected exactly the
+  # goals that claim nothing, and `DropTheDistribution` mints that zero-amount rule for every goal
+  # in a real database that lacked one. Its last caller, the dashboard's savings strip, rendered
+  # NOTHING on migrated data; it asks `#saving_toward_a_target?` now, which is the same question
+  # without the clause that inverted.
 
   # THE RUBY MIRROR OF `CategoryLedger::ENTRY_CATEGORY_ID`, and the ONLY one (Task 2's global
   # constraint): every other reader in this app asks the SQL. Spending counts against this category
@@ -352,43 +341,30 @@ class Category < ApplicationRecord
     budgets.sum(0.to_d) { |budget| budget.claim_calculator(today: today).claim }
   end
 
+  # ** IS THIS ROW A GOAL — THE DISPLAY QUESTION (computed-claims spec §3.4). **
+  # `HoldingCalculator#saving_toward_a_target?` re-homed, and it was always this expression: a holder
+  # with a figure to reach. It REPLACED `#savings?`, which additionally required the category to
+  # carry NO rule — a goal the user also refills at a rate (the demo's Retirement Supplement) is
+  # still a goal to look at, and under §3.3 a goal with money in it always HAS a rule, so that
+  # clause selected exactly the goals claiming nothing. See its tombstone above.
+  #
+  # THE FOUR SCREENS THAT ASK IT — the categories index card, the categories page's holdings card,
+  # the entry form's impact card and the dashboard's savings strip — ask it here, so a rule-bearing
+  # goal is a goal on every one of them. `ClaimCalculator#shape` answers `:target` off the same column for one RULE; this is the
+  # same question asked of the category a screen is drawing.
+  def saving_toward_a_target? = holder? && target_amount.present?
+
   def calculator(date = today, period: :monthly)
     CategoryCalculator.new(self, date, period: period)
   end
 
-  # THE ONE DOOR ONTO WHAT THIS CATEGORY HOLDS (two-ledger spec §2), and the port of
-  # `Pool#calculator`: `terms:` threads straight through to the calculator underneath and DEFAULTS
-  # TO NOTHING, which keeps this the unbatched single-category door — one category is a handful of
-  # queries whether they are grouped or not. Only the callers that ITERATE categories build a
-  # `CategoryLedger` and pass its terms down here.
-  #
-  # A keyword here rather than those callers reaching for `HoldingCalculator.new` themselves, so
-  # this stays the one place a calculator is built from a category. A second construction path is
-  # how a keyword ends up honoured on one screen and forgotten on the next.
-  #
-  # `net_of_sweep:` and `pending:` are PROJECTIONS — questions about a ledger nobody has written —
-  # and they belong to `HoldingProjection`, which wraps a plain calculator and owns the arithmetic,
-  # the twin and the refusal. `HoldingProjection.for` hands back a plain HoldingCalculator when
-  # neither is asked for, so the callers that ask none are on exactly the object they expect.
-  #
-  # IT IS NOT CALLED `#calculator`, AND THAT IS THE COLLISION RATHER THAN A PREFERENCE. That name
-  # is `CategoryCalculator`'s — what a category SPENT in a period, which the categories and
-  # dashboard screens still ask on every render — and the two answer different questions about the
-  # same record. Renaming that one is a change to screens this task does not touch; this reader
-  # takes the name the whole stack is called by instead.
-  def holding_calculator(as_of: nil, today: self.today, net_of_sweep: false,
-                         pending: HoldingProjection::Pending.none, terms: nil)
-    HoldingProjection.for(
-      self, net_of_sweep: net_of_sweep, pending: pending, as_of: as_of, today: today, terms: terms
-    )
-  end
+  # ** `#holding_calculator` AND `#status` ARE GONE (computed-claims spec §6). ** They were the one
+  # door onto what a category HELD and the reading of that balance in the row vocabulary
+  # (`HoldingCalculator`, `HoldingStatus`, `HoldingProjection`, all deleted). Both answered a
+  # question about MOVED money — allocations in, less allocations out, less the spending — and there
+  # is no such money. `#claim` above is the door now, `ClaimCalculator` is the reading, and its
+  # `#over?`/`#overdue?` carry the two states of the old seven that survive the change of model.
 
-  # `pending:` threads straight through to the calculator underneath, exactly as it does above: a
-  # status is a reading of a balance, so a status of a category that has not yet received this
-  # distribution's money is a status of the wrong balance. It is what lets the distribution screen
-  # ask "does this envelope still make it if I fund $200 instead of $500" in the app's own
-  # vocabulary rather than inventing a second one. `terms:` threads down the same way and for the
-  # same reason, and defaults to nothing here too.
   # THE OWNER'S TODAY, reached the same way every other day on this record is (fix round 2 — LOW-1).
   # `User#today` carries the whole argument for why this is not `Date.current`; what this reader adds
   # is the OWNER-LESS arm, which it gets for free by going through the private `#local_day` — the
@@ -396,13 +372,9 @@ class Category < ApplicationRecord
   # category.
   #
   # PUBLIC, THOUGH `#local_day` IS NOT: it is the default for every `today:` this class hands down
-  # (`#start_holding`, `#claim`, `#calculator`, `#holding_calculator`, `#status`) and it is what
-  # `Budget#today` reaches through, so a caller that names no day gets the owner's.
+  # (`#start_holding`, `#claim`, `#calculator`) and it is what `Budget#today` reaches through, so a
+  # caller that names no day gets the owner's.
   def today = local_day(Time.current)
-
-  def status(today: self.today, pending: HoldingProjection::Pending.none, terms: nil)
-    HoldingStatus.new(self, today: today, pending: pending, terms: terms)
-  end
 
   private
 
@@ -463,7 +435,6 @@ class Category < ApplicationRecord
     priority_is_a_fill_order
     target_is_a_goal
     funding_start_is_not_in_the_future
-    money_may_not_be_stranded
     only_expenses_hold_money
   end
 
@@ -507,51 +478,20 @@ class Category < ApplicationRecord
     )
   end
 
-  # ** MONEY MAY NOT BE LEFT IN A CATEGORY THAT NO LONGER HOLDS (final fix wave, I-1). ** The other
-  # half of the stranding pair, and the form-reachable one: the categories form makes `funded_since`
-  # user-editable, and CLEARING it on a category carrying allocations left the money exactly where it
-  # was while every reader of it stopped looking. MEASURED on a $400 envelope: the category vanishes
-  # from `Category.in_fill_order` and from every holder population, its show page headlines "This
-  # category doesn't hold money yet", the reallocation picker offers no radio for it — so there is no
-  # screen in the app that can move the $400 back out, and no screen that admits it is there.
+  # ** `#money_may_not_be_stranded` IS GONE, AND SO IS THE STATE IT REFUSED (computed-claims spec
+  # §5). ** It stopped a user clearing `funded_since` on a category still carrying allocations: the
+  # money stayed exactly where it was while every reader of `holder?` stopped looking at it, and no
+  # screen in the app could move it back out. There are no allocations. A category holds nothing to
+  # strand — its money is `#claim`, a function that simply answers differently once the column
+  # changes — so the shape the validator existed to make unreachable cannot be reached.
   #
-  # REFUSED RATHER THAN SWEPT, on `#funding_start_is_not_in_the_future`'s reasoning: quietly moving
-  # $400 to available is a write the user did not ask for, and a message naming the move they DO have
-  # to make is the honest answer. `/allocations/new` is that move.
-  #
-  # THE FIGURE IS THE PERSISTED HOLDING, not the one the submitted attributes imply, and the SQL is
-  # what makes that free: `HoldingCalculator#expense_entries_total` reaches entries through
-  # `Entry.draining` — `CategoryLedger::ENTRY_CATEGORY_ID` against `categories.funded_since` IN THE
-  # DATABASE — so the balance read here is the category's holdings as they stand a moment before the
-  # UPDATE, which is exactly the money that would be stranded. No `_was` arithmetic of this
-  # validator's own, and so no second reader of the start-date rule.
-  #
-  # ** THE COST, JUSTIFIED AT THE SITE. ** This is the only validator in the class that touches the
-  # database, and it is three aggregate queries (the draining expenses, the allocations in, the
-  # allocations out). They run on ONE transition and no other: `funded_since` present in the database
-  # and blank in the submitted record. Every ordinary save — a rename, a colour, a target, SETTING a
-  # funding start, saving a category that never had one — fails the guard on its first clause and
-  # costs nothing. A cheaper column test cannot answer this question: allocations and entries both
-  # move the holding, so "has allocations" would refuse a category whose money has been fully spent
-  # and let through one whose spending predates its funding date.
-  def money_may_not_be_stranded
-    return unless funded_since.blank? && funded_since_in_database.present?
-
-    held = holding_calculator.balance
-    return if held.zero?
-
-    errors.add(
-      :funded_since,
-      "can't be cleared while this category still holds " \
-      "#{ActiveSupport::NumberHelper.number_to_currency(held)} — move the money out first"
-    )
-  end
-
-  # The value the UPDATE is about to overwrite, and `_in_database` rather than `_was` deliberately:
-  # `_was` reads the value at the start of the current CHANGE, which on a record assigned twice
-  # before a save is not necessarily what the row holds. The queries above read the row, so the guard
-  # that decides whether to run them has to read the row too.
-  def funded_since_in_database = attribute_in_database(:funded_since)
+  # WHAT CLEARING `funded_since` DOES NOW, said plainly because it is not nothing: the category
+  # leaves `#in_fill_order` and every holder population, and `CategoryLedger::ENTRY_CATEGORY_ID`
+  # stops attributing its spending to it — so a rate rule on it reads its full claim with the
+  # spending ignored. That is a visible, recoverable state on a screen that names it (the Budget
+  # page's "not filling" band, and Home renders those categories for Task 3's ruling 9), not money
+  # nobody can reach. `#funded_since_in_database`, which existed only to gate this validator's
+  # queries, goes with it.
 
   # THE PRESENCE ERROR WINS (design review H3). `expense?` is false for a category whose type is
   # BLANK as well as for an income one, so a user who filled the form in and simply never picked a

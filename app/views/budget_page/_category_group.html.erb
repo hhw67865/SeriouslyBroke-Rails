@@ -1,18 +1,18 @@
-<%# One category and the rules that fill it. Locals: `group` (BudgetPagePresenter::Group) and
-    `groups` (the whole fill order — the card is a row of that drag list).
+<%# One category and the rules that claim for it. Locals: `group` (BudgetPagePresenter::Group)
+    and `groups` (the whole give-way order — the card is a row of that drag list).
 
     THE LIST IS THE PAGE, WHERE IT USED TO BE ONE ACCOUNT'S BAND (two-ledger spec §2). Priority was
-    compared only inside an account while the fill walked `account.child_pools.by_priority`;
-    `AllocationCalculator` fills every holder off one root now, so `groups` is the whole order and
-    the scope of one reorder.
+    compared only inside an account while a fill walked `account.child_pools.by_priority`;
+    `Category.in_fill_order` ranks every holder against every other over one list now, so `groups`
+    is the whole order and the scope of one reorder.
 
     The header says what the category CLAIMS (computed-claims §3) in the same words Home's hero uses
     for the total of them — the same red for the same two facts. A second vocabulary here would have
     two screens describe one category differently on the same afternoon.
 
-    `priority` is stated because this page is where funding priority is set; the number is what
-    decides who gets filled first when the money runs out, and dragging this card — or its ▲▼ —
-    is what writes it. %>
+    `priority` is stated because this page is where it is set; the number is what decides who
+    GIVES WAY first when the money runs out (computed-claims §4 — Home's shortfall walks this order
+    backwards), and dragging this card — or its ▲▼ — is what writes it. %>
 <section class="bg-white border border-gray-200 rounded"
          data-category-group="<%= group.category.name %>"
          data-category-id="<%= group.category.id %>"

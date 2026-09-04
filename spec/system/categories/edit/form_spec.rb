@@ -144,49 +144,56 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
   end
 
-  # ── WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4, Task 7). The three columns that replaced
-  # the pool picker, and the two of them that move something.
-  describe "the holding fields", :aggregate_failures do
+  # ── WHAT CLAIMS THIS CATEGORY (two-ledger spec §3, §4, Task 7; re-labelled onto computed claims by
+  # Task 4). The three columns that replaced the pool picker, and the two of them that move
+  # something. `Holding since` is `Claiming since` and `Funding priority` is `Give-way order`,
+  # because nothing is held and there is no distribution to be funded first in — see
+  # `categories/_form.html.erb` for the whole of both renamings.
+  describe "the claiming fields", :aggregate_failures do
     let(:goal_attributes) do
       { name: "Vacation", target_amount: 2_400, priority: 3, funded_since: Date.new(2026, 2, 6) }
     end
 
-    it "pre-fills the target, the priority and the funding start" do
+    it "pre-fills the target, the give-way order and the claiming start" do
       visit edit_category_path(create(:category, :expense, user: user, **goal_attributes))
 
       expect(page).to have_field("Target", with: "2400.0")
-      expect(page).to have_field("Funding priority", with: "3")
-      expect(page).to have_field("Holding since", with: "2026-02-06")
+      expect(page).to have_field("Give-way order", with: "3")
+      expect(page).to have_field("Claiming since", with: "2026-02-06")
     end
 
     it "turns an ordinary category into a goal" do
       visit edit_category_path(category)
       fill_in "Target", with: "2400"
-      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      fill_in "Claiming since", with: Date.new(2026, 2, 6)
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(category.reload).to be_savings
+      expect(category.reload).to be_saving_toward_a_target
     end
   end
 
-  # ** EDITING `funded_since` MOVES A CATEGORY IN AND OUT OF THE FILL ORDER (Task 7's ruling). **
+  # ** EDITING `funded_since` MOVES A CATEGORY IN AND OUT OF THE GROUPED HALF OF THE BUDGET PAGE
+  # (Task 7's ruling, re-anchored on claims). **
   #
-  # `Category.in_fill_order` is `expenses.where.not(funded_since: nil)`, and `AllocationCalculator`
-  # walks exactly that scope — so clearing the date on a category that CARRIES A RULE does not
-  # merely change a balance's start line: the rule stops being reachable by any distribution, and
-  # the Budget page has a band that says so. This is the pair the form's hint promises, asserted on
-  # the screen that shows the consequence rather than on the record alone.
-  describe "clearing and setting the funding start on a ruled category", :aggregate_failures do
+  # `BudgetPagePresenter#category_groups` is holders that own a rule, so clearing the date on a
+  # category that CARRIES A RULE drops it out of the ordered list — and what it drops INTO is a band
+  # whose sentence changed with the model. The rule does not stop claiming: `ClaimCalculator
+  # #accrual_start` falls back to the rule's own birthday, so it claims its full $400 every period.
+  # What stops is the SPENDING — `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its
+  # category only from `funded_since` on — so the rule claims in full while nothing the user spends
+  # there ever comes off it. That is what the band says now, and it is the pair the form's hint
+  # promises, asserted on the screen that shows the consequence rather than on the record alone.
+  describe "clearing and setting the claiming start on a ruled category", :aggregate_failures do
     let!(:groceries) do
       create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
     end
 
     before { create(:budget, :per_period_rate, category: groceries, amount: 400) }
 
-    it "drops the category out of the fill order and into the band that says why" do
+    it "drops the category out of the grouped half and into the band that says why" do
       visit edit_category_path(groceries)
-      fill_in "Holding since", with: ""
+      fill_in "Claiming since", with: ""
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
@@ -197,14 +204,14 @@ RSpec.describe "Categories Edit - Form", type: :system do
       # The heading names the category (this rule pays no item), so the reason clause beside it
       # does not repeat it — see budget_page/rules_spec.rb for the whole of that rule.
       expect(find("[data-not-filling-rule='Groceries']").text)
-        .to include("Groceries", "isn't holding money yet")
+        .to include("Groceries", "has no claiming date")
     end
 
-    it "puts it back in the fill order when the date is set again" do
+    it "puts it back in the grouped half when the date is set again" do
       groceries.update!(funded_since: nil)
 
       visit edit_category_path(groceries)
-      fill_in "Holding since", with: Date.new(2026, 2, 6)
+      fill_in "Claiming since", with: Date.new(2026, 2, 6)
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
@@ -216,54 +223,22 @@ RSpec.describe "Categories Edit - Form", type: :system do
     end
   end
 
-  # ** CLEARING THE FUNDING START IS REFUSED WHILE THE CATEGORY HOLDS MONEY (final fix wave, I-1). **
-  # The form is where the stranding was reachable: clear the date on a category carrying allocations
-  # and the money stays exactly where it is while every reader stops looking at it — out of
-  # `Category.in_fill_order`, out of every holder population, and out of the reallocation picker, so
-  # there is no screen left that can move it back out. `Category#money_may_not_be_stranded` refuses
-  # it, and this is that refusal arriving at the screen the user is on.
+  # ** THE "clearing the funding start on a category holding money" GROUP IS DELETED WHOLE (three
+  # examples), WITH THE REFUSAL IT DROVE (computed-claims spec §5, Task 4). ** It asserted that
+  # `Category#money_may_not_be_stranded` rejected a cleared date while allocations still sat in the
+  # category ("can't be cleared while this category still holds $400.00"), that the clear went
+  # through once a reallocation had moved the $400 back to available, and that the field's hint
+  # warned about it before the click.
   #
-  # THE BLOCK ABOVE IS THE OTHER DIRECTION AND STAYS UNCHANGED: Groceries there holds nothing, and it
-  # clears freely. The guard is about money, not about rules.
-  describe "clearing the funding start on a category holding money", :aggregate_failures do
-    let!(:groceries) do
-      create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
-    end
-
-    before { create(:allocation, to_category: groceries, amount: 400, date: Date.current) }
-
-    it "refuses, says the figure, and writes nothing" do
-      visit edit_category_path(groceries)
-      fill_in "Holding since", with: ""
-      click_button "Update Category"
-
-      expect(page).to have_content("can't be cleared while this category still holds $400.00")
-      expect(page).to have_no_content("Category was successfully updated")
-      expect(groceries.reload.funded_since).not_to be_nil
-    end
-
-    # THE DOOR THE MESSAGE NAMES, WALKED. Moving the $400 back to available is what the reallocation
-    # screen writes, and the clear must then go through — a refusal a user cannot resolve would be a
-    # lock rather than a guard.
-    it "goes through once the money has been moved back to available" do
-      create(:allocation, from_category: groceries, to_category: nil, amount: 400, date: Date.current)
-
-      visit edit_category_path(groceries)
-      fill_in "Holding since", with: ""
-      click_button "Update Category"
-
-      expect(page).to have_content("Category was successfully updated")
-      expect(groceries.reload.funded_since).to be_nil
-    end
-
-    # THE HINT SAYS IT BEFORE THE CLICK. A constraint a user only meets as a 422 is a constraint the
-    # form is hiding.
-    it "warns in the field's own hint that the money has to move first" do
-      visit edit_category_path(groceries)
-
-      expect(page).to have_content("which you can only do once it holds nothing, so move any money out first")
-    end
-  end
+  # NONE OF IT SURVIVES, and not because the guard was removed — because the state it guarded cannot
+  # be built. Nothing is ever MOVED into a category (§5), so a cleared date leaves nothing behind and
+  # there is nothing for a 422 to protect: the fixture is unwritable by any means and the sentences
+  # are unrenderable. What the clear DOES still do is re-read history — spending before the date
+  # counts against no rule — and that is the block above's subject.
+  #
+  # WHAT REPLACED THEM is the block above, which is now the WHOLE behaviour of clearing the date:
+  # the category stops claiming and its rules move to the Budget page's band. The form's hint says
+  # that instead of the old warning, and `categories/new/form_spec.rb` pins its wording.
 
   describe "navigation", :aggregate_failures do
     before { visit edit_category_path(category) }

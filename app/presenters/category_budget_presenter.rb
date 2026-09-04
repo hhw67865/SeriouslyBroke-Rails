@@ -1,49 +1,109 @@
 # frozen_string_literal: true
 
-# THE CATEGORIES PAGE'S HOLDINGS CARD — what this category holds, in the two states an expense
+# THE CATEGORIES PAGE'S HOLDINGS CARD — what this category's money IS, in the two states an expense
 # category can be in. Read-only: it has nothing to write.
 #
-# TWO ARMS, AND THE LINE BETWEEN THEM IS `Category#holder?` (two-ledger spec §3, §4). A category
-# either holds money of its own — an expense category with a `funded_since` — or it does not, in
-# which case its spending drains AVAILABLE, money with no job yet. That is one column and one
-# predicate, where the pool era needed a pool, a pool TYPE and a start date to answer the same
-# question.
+# ** NOTHING IS HELD ANY MORE, AND THAT IS THE WHOLE OF THIS REWRITE (computed-claims spec §5). **
+# The card used to read a `HoldingCalculator` — allocations in, less allocations out, less the
+# spending attributed to the category — and stand a `HoldingStatus` beside it. There are no
+# movements on the purpose side at all now: a category's money is a CLAIM computed from its rules,
+# the calendar, its spending and its dated adjustments (§2), knowable at any instant with nothing
+# ever having moved. So there is no balance to read, no allocation to be stranded, no period whose
+# leftover awaits a sweep, and no distribution for a rule to have been changed after.
 #
-# IT SERVED TWO CARDS AND NOW SERVES ONE (Task 7). `_budget_card` said how the envelope stood in
-# the row vocabulary; `_pool_card`, four inches below it, drew the same pool again with a name, a
-# progress bar and a noun of its own. They spent three review rounds converging on one vocabulary —
-# the three-noun defect ("Envelope" / "Savings Pool" / "goal", one pool, one afternoon) was the
-# loudest of them — and the convergence is now structural: there is one card, so there is nothing
-# to disagree with.
+# TWO ARMS, AND THE LINE BETWEEN THEM IS STILL `Category#holder?` (§3.2). A category with a
+# `funded_since` is one whose rules accrue and whose spending counts against them — that date is
+# `ClaimCalculator#accrual_start`, the day the walk opens in. A category without one claims nothing
+# whatever has been spent on it, because a claim comes from a rule and a rule on a category with no
+# funding date walks no periods at all.
 #
-# THE GOAL TEST IS THE CALCULATOR'S, NOT `Category#savings?` (Task 7's carried-inconsistency
-# ruling). `savings?` is holder + target + NO RULE, so a goal the user also refills at a rate — the
-# demo's Retirement Supplement — read as an envelope here and on the entry form.
-# `HoldingCalculator#saving_toward_a_target?` is the predicate the sweep already runs on ("savings
-# never sweep, whatever their rule mix"), and it is what this card's HEADING and its target bar ask.
+# ** A LINE PER RULE, AND THE CARD'S FIGURE IS THEIR SUM (§3.4; Task 3's ruling for Home). ** §3.4's
+# sentences are per RULE — `spent of rate` for a rate rule, `built up of target · next due · $X per
+# period` for an accruing one — and `Category#claim` is a SUM, so a category carrying a rate rule
+# beside an item-backed bill cannot honestly print one figure: the two are denominated in different
+# things. `Line` below is the same object shape `BudgetPagePresenter::Rule` and
+# `HomePresenter::ClaimLine` are, so `HomeHelper#claim_figure`, `#claim_schedule` and
+# `#claim_trouble_label` render all three — one sentence about one rule across the three screens
+# that show it, rather than a third vocabulary invented here.
 #
-# TWO LEVELS, DELIBERATELY (fix round 1, MED-2). The CHROME — `Goal` or `Envelope`, bar or no bar —
-# is that predicate, here and on the impact card and the index card alike. The STANDING line below
-# it is `HoldingStatus`, which stays schedule-aware through `HoldingCalculator#dateless_goal?`: a
-# DATELESS goal reads `saving`, and a goal carrying an anchor-dated rule reads `on track` / `behind`
-# / `won't make it`, because it has a deadline the anchored maths can measure. `Goal · on track` is
-# therefore a sensible pairing rather than the two halves of this card disagreeing — see
-# `HoldingCalculator#dateless_goal?` for the whole argument.
+# ** A `ClaimLedger`, NOT `Category#claim`, EVEN THOUGH THIS PAGE RENDERS EXACTLY ONE CATEGORY. **
+# The old class refused a `CategoryLedger` on precisely that ground — "a ledger's whole point is
+# answering for a SET" — and the ground has moved out from under it. The card needs a
+# `ClaimCalculator` PER RULE for §3.4's line, and `Category#claim` cannot supply one: it returns the
+# sum and nothing else, so going that way means `category.claim` walking every rule once for the
+# heading and `Budget#claim_calculator` walking every rule again for the lines — every figure on the
+# card computed twice, by two objects, which is exactly how a heading comes to disagree with the rows
+# beneath it. `ClaimLedger` answers both off ONE set of calculators, in three grouped statements, and
+# `#claim_of_category` is pinned figure for figure against `Category#claim` in `claim_ledger_spec`.
 #
-# See docs/superpowers/specs/2026-08-21-two-ledger-design.md §3–§4 and
-# docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8.1.
+# `claims:` IS A SEAM AND NOT A SECOND DOOR, on `ClaimCalculator#spending:`'s own reasoning: the
+# categories INDEX renders every category the user owns and `CategoriesController#claim_ledger`
+# already holds one ledger for that whole page, so a card there hands its ledger in rather than
+# building the thirtieth copy of it. Nothing is passed on the show page and this class builds its
+# own; either way there is one ledger per screen.
+#
+# THE GOAL TEST IS `Category#saving_toward_a_target?` (`holder? && target_amount.present?`), which is
+# `HoldingCalculator`'s predicate re-homed on the model. It is deliberately NOT the deleted `#savings?` —
+# that additionally requires the category to carry NO rule, and a goal the user also refills at a
+# rate (the demo's Retirement Supplement) is still a goal to look at. The show card's heading and
+# bar, the index card's bar and the entry form's impact card all ask the one predicate, so a
+# rule-bearing goal is a goal on every one of them.
+#
+# See docs/superpowers/specs/2026-09-03-computed-claims-design.md §2-§5.
 class CategoryBudgetPresenter
+  # ** ONE RULE'S LINE ON THE CARD — §3.4'S ROW, IN THE SHAPE THE SHARED HELPERS READ. **
+  #
+  # The member names are `BudgetPagePresenter::Rule`'s, and the three aliases below it are the same
+  # three: `HomeHelper#claim_figure` asks `#rate?`, `#spent`, `#accrued`, `#built_up` and `#target`;
+  # `#claim_schedule` asks `#rate?`, `#next_due_on`, `#overdue?` and `#per_period`;
+  # `#claim_trouble_label` asks `#over?`, `#spent`, `#accrued` and `#next_due_on`. An object that
+  # answered any of them differently would be this card quietly saying a different sentence about a
+  # rule than the Budget page says about the same rule on the same afternoon.
+  #
+  # A `Data` HOLDING FIGURES RATHER THAN THE CALCULATOR ITSELF, on `BudgetPagePresenter::Rule`'s
+  # reasoning: `#overdue?` compares against the presenter's `today` — the OWNER's day — and an object
+  # free to ask a calculator for more would be free to ask it with a clock of its own.
+  Line = Data.define(
+    :rule,
+    :shape,
+    :claim,
+    :spent,
+    :accrued_this_period,
+    :built_up,
+    :target,
+    :next_due_on,
+    :planned_this_period,
+    :over,
+    :overdue
+  ) do
+    def rate? = shape == :rate
+
+    def accrued = accrued_this_period
+
+    def per_period = planned_this_period
+
+    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, the figure BEFORE the clamp at zero,
+    # which is the only reader that can tell "spent it exactly" from "spent more than there was".
+    def over? = over
+
+    # A DATE THAT PASSED WITH THE MONEY STILL UNSPENT (§3.2).
+    def overdue? = overdue
+
+    def trouble? = over? || overdue?
+  end
+
   attr_reader :category, :today
 
   # `today` DEFAULTS TO THE OWNER'S DAY (`Category#today` → `User#today`) AND IS NOT THE PAGE'S
-  # `selected_date`. The category page has a
-  # period toggle and can be read for a month that is over; what a category HOLDS is a fact about
-  # NOW (§4.1 — the time word cannot be dropped), and rendering last March's row vocabulary beside
-  # a live "Rules on the Budget page" button would be the page disagreeing with the screen it links
-  # to. The spending figures above this card are the ones the toggle is for.
-  def initialize(category:, today: category.today)
+  # `selected_date`. The category page has a period toggle and can be read for a month that is over;
+  # what a category CLAIMS is a fact about NOW — a claim is computed at the instant it is asked for
+  # (§2) — and rendering last March's figures beside a live "Rules on the Budget page" button would
+  # be the page disagreeing with the screen it links to. The spending figures above this card are
+  # the ones the toggle is for.
+  def initialize(category:, today: category.today, claims: nil)
     @category = category
     @today = today
+    @claims = claims
   end
 
   # ---- Which state the card is in ---------------------------------------------------------------
@@ -56,97 +116,117 @@ class CategoryBudgetPresenter
 
   def holding? = state == :holding
 
-  # ** MONEY IN A CATEGORY THAT IS NOT A HOLDER (final fix wave, I-1, belt). ** The unfunded arm's
-  # sentence is "this category doesn't hold money yet", and the one shape that makes it a lie is a
-  # non-holder whose balance is not zero — allocations sitting in a category whose `funded_since` is
-  # NULL. §2's partition still counts that money; every screen that reads `holder?` stops looking at
-  # it.
+  # `#stranded?` IS DELETED WITH THE MONEY IT DESCRIBED (§5). It was "a non-holder whose BALANCE is
+  # not zero" — allocations sitting in a category whose `funded_since` had been cleared, money §2's
+  # old partition still counted while every reader had stopped looking at it, with no screen left
+  # that could move it back out.
   #
-  # UNREACHABLE ONCE THE TWO GUARDS IN THIS WAVE LAND, and rendered anyway. `AllocationsController`
-  # stamps the date on the way in and `Category#money_may_not_be_stranded` refuses to clear it on the
-  # way out, so no live path produces this state — but it is PLANTABLE (an `update_column`, a console,
-  # an import, a row from before this wave), and a page that says $0 over $400 of the user's money is
-  # the worst of the three possible answers. The card tells the truth and names the door out.
+  # NOTHING IS EVER MOVED INTO A CATEGORY NOW, so there is nothing a cleared date can leave behind:
+  # the state is unplantable rather than merely unreachable, and the arm is deleted instead of being
+  # kept as a belt. What the unfunded arm says is a fact about SPENDING and it stays exactly true —
+  # `CategoryLedger::ENTRY_CATEGORY_ID` yields NULL for a NULL `funded_since`, so no rule's lane can
+  # contain one of this category's receipts and nothing claims them.
   #
-  # `#balance` READS FOR A NON-HOLDER, which is why this costs nothing extra: `HoldingCalculator
-  # #balance` is allocations in, less allocations out, less the spending `Entry.draining` attributes —
-  # and for a NULL `funded_since` that last term is zero by `CategoryLedger::ENTRY_CATEGORY_ID`'s own
-  # arm. So the figure is exactly the stranded allocations, on the calculator this class already
-  # memoises.
-  def stranded? = !holding? && !balance.zero?
+  # ** ITS RULES MAY STILL ACCRUE, AND THAT IS NOT THIS ARM'S SUBJECT. ** A rate rule on a category
+  # whose date was cleared goes on claiming its whole rate — `accrual_start` falls back to the rule's
+  # own birthday — which is precisely why `BudgetPagePresenter#unfilled_rules` exists to list it.
+  # This card is about the CATEGORY, and the honest thing to say about one nothing counts against is
+  # that nothing claims its spending; the rule's own state is said on the page that owns rules.
 
   # ---- The holding arm --------------------------------------------------------------------------
 
-  # ONE CALCULATOR AND ONE STATUS FOR THE CARD, so the balance, the bar and the words beside them
-  # cannot disagree — the same objects the Budget page's group header and Home's category row are
-  # built from, which is what keeps all three screens describing one category in one vocabulary on
-  # one afternoon.
+  # ONE LEDGER FOR THE CARD, so the heading, the lines and the bar cannot come from three readings.
+  # Built here when the caller hands none in — see the header for why the seam exists.
+  def claims = @claims ||= ClaimLedger.new(category.user, today: today)
+
+  # ** WHAT THIS CATEGORY'S MONEY IS (§2) — Σ its rules' claims, off the rows this card already
+  # built. ** `BudgetPagePresenter::Group#claim`'s spelling exactly, and for its reason: summing the
+  # LINES rather than re-asking `ClaimLedger#claim_of_category` means the figure at the top of the
+  # card is arithmetically the list beneath it, so no edit to how a line is built can leave the two
+  # describing different money. The two expressions are the same sum over the same calculators.
+  def claim = lines.sum(0.to_d, &:claim)
+
+  # THE RULES THAT CLAIM THIS CATEGORY'S MONEY, each as §3.4's row. Off the page's one ledger, never
+  # a calculator per line: a card free to build its own would cost a walk per rule and could disagree
+  # with the figure above it.
   #
-  # No `CategoryLedger`: a ledger's whole point is answering for a SET of categories in grouped
-  # queries, and this page renders exactly one.
-  def status = @status ||= category.status(today: today)
+  # ** ORDERED BY THE DATE THE LINE ACTUALLY PRINTS — `BudgetPagePresenter#rule_order`'s key. ** The
+  # old spelling was `order(:anchor_date, :created_at)`, the RECORD's anchor, which is not the date a
+  # row shows: `ClaimCalculator#next_due_on` rolls the occurrence on PAYMENT rather than on the
+  # calendar (§3.2), so a half-paid six-monthly bill prints a date its `anchor_date` does not carry.
+  # Ordering by one date and printing the other puts a line above its neighbour for a reason the
+  # screen contradicts. The key is total: a rule with no date sorts last (a rate rule is never due),
+  # ties break on the larger amount and then on the id, because `budgets` carries no ORDER BY and a
+  # plain UPDATE relocates a row in the heap.
+  def lines
+    @lines ||= claims.rules_of(category).map { |rule| build_line(rule) }.sort_by { |line| line_order(line) }
+  end
 
-  def calculator = @calculator ||= category.holding_calculator(today: today)
-
-  # THE ROW VOCABULARY'S FOUR QUESTIONS, so this presenter can be handed straight to
-  # `shared/_holding_status` exactly as `HomePresenter::Row` and `BudgetPagePresenter::Group` are.
-  # An object either answers all four or raises on the first render, which is the property that
-  # partial exists for — see its header.
+  # ** DOES ANYTHING HERE NEED A HUMAN — the two facts §4 says are worth one, asked of these rows. **
+  # Home's trouble strip and the Budget page's group header fire on exactly this test
+  # (`BudgetPagePresenter::Group#needs_attention?`), so the three screens cannot come to different
+  # verdicts about one category on one afternoon.
   #
-  # `balance_clause?` true and `due_marker?` false: the card prints the balance in its own right
-  # beneath the status, and a bare date would be a rule's date with nothing saying which rule.
-  delegate :needs_attention?, :period_closed?, to: :status
-  def balance_clause? = true
-  def due_marker? = false
+  # It was delegated to `HoldingStatus`, whose seven states were about money that had been MOVED —
+  # `behind` was the gap between what the rules had asked for and what a distribution had actually
+  # put in, and there are no distributions. A claim can be wrong in two ways and no others: spent
+  # past what the rule had (§3.1), or a due date gone by with the bill unpaid (§3.2).
+  def needs_attention? = lines.any?(&:trouble?)
 
-  # WHAT THIS CATEGORY HOLDS. Off the calculator this class already holds, never a second one: two
-  # objects for one balance is how two figures on one page come to disagree.
-  delegate :balance, to: :calculator
+  # ---- The goal arm -----------------------------------------------------------------------------
 
-  # IS THIS A GOAL — asked of the calculator, which is the whole of the ruling above. Also the
-  # gate on the progress bar, because `#progress_percentage` measures a balance against a target
-  # and a category without one has nothing for a bar to be a fraction of.
-  delegate :saving_toward_a_target?, :progress_percentage, :remaining_amount, to: :calculator
+  # IS THIS A GOAL — the DISPLAY question, asked of the model (see the header). Also the gate on the
+  # progress bar, because `#progress_percentage` measures a claim against a target and a category
+  # without one has nothing for a bar to be a fraction of.
+  delegate :saving_toward_a_target?, to: :category
 
   def target = category.target_amount.to_d
 
-  # THE RULES THAT FILL THIS CATEGORY, named. `budgets.category_id` is a rule's owner since Task 5,
-  # so this is the category's own association rather than a pool's — the card lists what the Budget
-  # page would show under this category's group header, and links there rather than offering an
-  # editor of its own.
+  # HOW FULL, AS A WHOLE PERCENT, CLAMPED AT BOTH ENDS — `HoldingCalculator#progress_percentage`'s
+  # arithmetic verbatim, with `#claim` where `#balance` stood. Kept to the digit deliberately: the
+  # money the numerator names changed, the reading of it did not, and a figure that moved here would
+  # have moved for a reason nobody asked for.
   #
-  # `includes(:item)` because `HomeHelper#pool_rule_label` names a rule by its item where it has
-  # one, which is the ordinary shape for a dated bill.
-  def rules = @rules ||= category.budgets.includes(:item).order(:anchor_date, :created_at).to_a
-
-  def rules? = rules.any?
-
-  # WHEN THIS CATEGORY STARTED HOLDING MONEY (§4). Printed rather than alluded to, because it is
-  # the only thing on the card that says WHICH of the user's spending the balance above it covers:
-  # anything earlier drained available.
-  delegate :funded_since, to: :category
-
-  # BOTH SUFFIXES, and this screen owes both for the reason `HomeHelper#pool_status_label`'s comment
-  # gives: this card says how the category STANDS RIGHT NOW, so a clause here and not on Home is
-  # two screens describing the same category differently. `period_closed?` rides on the status's own
-  # calculator; this one is a question about the SCREEN's period, which a status cannot answer.
+  # THE FLOOR IS AT THE READER, and it is what keeps every render site from drawing a bar of negative
+  # width. A claim cannot itself go below zero — `ClaimCalculator` clamps at zero per period — but
+  # the clamp costs nothing and is what the two render sites (this card and the index card, through
+  # this same method) are entitled to assume rather than each re-checking.
   #
-  # `defined?` rather than `||=`, because the answer is false for most categories most of the time
-  # and `||=` would re-run the clock's query on every call for exactly those — the memo would work
-  # only where it was not needed.
-  def changed_after_distributing?
-    return @changed_after_distributing if defined?(@changed_after_distributing)
+  # The type is Integer at both bounds by construction — `.round` on the quotient, and two Integer
+  # clamp bounds.
+  def progress_percentage
+    return 0 unless category.target_amount.to_f.positive?
 
-    @changed_after_distributing = DistributionClock
-      .new(user: category.user, today: today)
-      .changed_after_distributing?(category)
+    (claim / category.target_amount * 100).round.clamp(0, 100)
   end
+
+  # `to_d`, not `to_f`: nil-safe in exactly the same way (`nil.to_d` is 0, and an envelope
+  # legitimately has no target) without routing a money value through binary floating point.
+  def remaining_amount
+    [category.target_amount.to_d - claim, 0.to_d].max
+  end
+
+  # ---- What the card says about the rules -------------------------------------------------------
+
+  # THE RULE RECORDS THEMSELVES, in the lines' own order, for the heading that counts them. Read off
+  # `#lines` rather than through a second trip to the ledger, so "2 rules" cannot count a set the
+  # list below it does not render.
+  def rules = lines.map(&:rule)
+
+  def rules? = lines.any?
+
+  # WHEN THIS CATEGORY STARTED COUNTING (§3.2). Printed rather than alluded to, because it is the one
+  # date on the card that says which of the user's spending and which of its rules' periods the
+  # figure above it is made of: it is `ClaimCalculator#accrual_start`'s first term — the day the
+  # accrual walk opens in — and it is the day `Entry.draining` starts attributing this category's
+  # spending to its rules. Anything earlier is in neither sum.
+  delegate :funded_since, to: :category
 
   # ---- The unfunded arm -------------------------------------------------------------------------
 
-  # WHETHER THE BUDGET PAGE IS CURRENTLY PROPOSING A RULE FOR THIS CATEGORY — §8.1 put this on its
-  # third state, which is deleted; the unfunded arm is the one that carries it now, and a rule (or
-  # an allocation) is that category's only way out of it.
+  # WHETHER THE BUDGET PAGE IS CURRENTLY PROPOSING A RULE FOR THIS CATEGORY. A rule is now the ONLY
+  # way out of this arm — under the moved-money model an allocation was a second door, and §5 closes
+  # it — so the pointer is the whole of what this card can offer.
   #
   # `SuggestionEngine` itself, never a re-derivation of the four detectors' conditions: the pointer
   # exists to say that something is waiting on /budget, and a second reader of "is there" that
@@ -178,17 +258,41 @@ class CategoryBudgetPresenter
 
   private
 
+  def build_line(rule)
+    calculator = claims.calculator_for(rule)
+
+    Line.new(
+      rule: rule,
+      shape: calculator.shape,
+      claim: calculator.claim,
+      spent: calculator.spent_this_period,
+      accrued_this_period: calculator.accrued_this_period,
+      built_up: calculator.built_up,
+      target: calculator.target,
+      next_due_on: calculator.next_due_on,
+      planned_this_period: calculator.planned_this_period,
+      over: calculator.over?,
+      overdue: calculator.overdue?
+    )
+  end
+
+  def line_order(line)
+    [
+      line.next_due_on.present? ? 0 : 1,
+      line.next_due_on || Date.new(9999, 12, 31),
+      -line.rule.amount.to_d,
+      line.rule.id
+    ]
+  end
+
   # WHETHER A PROPOSAL COULD BE ABOUT THIS CATEGORY AT ALL — ONE CONDITION, and it stays one.
   #
-  # IT WAS `Category#buffer_funded?` AND THAT IS A POOL READER (Task 7). `SuggestionEngine
-  # #unfunded_categories` is `expense_categories.reject(&:holder?)` — literally this arm's own
-  # population — so the gate and the detector it gates are the same predicate rather than two that
-  # can drift. Under the two-ledger model they had already inverted for the shapes this branch
-  # mints: a category that holds its own money is precisely the one whose `pool` is nil, which
-  # `buffer_funded?` answers false for and `holder?` answers true for.
+  # `SuggestionEngine#unfunded_categories` is `expense_categories.reject(&:holder?)` — literally this
+  # arm's own population — so the gate and the detector it gates are the same predicate rather than
+  # two that can drift.
   #
-  #   holds nothing → asks   (the unfunded arm's only way out)
-  #   holds money   → silent (the holding arm)
+  #   claims nothing → asks   (the unfunded arm's only way out)
+  #   has a claim    → silent (the holding arm)
   #
   # Asked of the model rather than of #state's symbol so an edit to the state names cannot widen
   # the gate, and written as a predicate rather than `state == :unfunded` so there is one place a

@@ -8,73 +8,20 @@
 # rubocop's Metrics/ModuleLength limit, so this vocabulary does not fit there without
 # starting to delete other people's comments.
 module HomeHelper
-  # `period_closed:` APPENDS ` · last period` rather than replacing the figure. Plan 2b
-  # decision 1: the leftover is still physically in the envelope until a distribution moves
-  # it, so rendering `$0` here would put the screen at odds with the ledger and break
-  # `Σ pools == your bank balance`. "$60.00 left · last period" is true about the amount AND
-  # about which period it belongs to, and creates the same pressure to distribute.
+  # ** THE STATUS VOCABULARY IS GONE (computed-claims spec §6). ** `#pool_status_label`,
+  # `#pool_state_label` and `#saving_label` read a `HoldingStatus` and printed its seven states —
+  # `overdrawn`, `overdue`, `won't make it`, `behind`, `saving`, `left to spend`, `on track` — with
+  # two suffixes, `· last period` and `— you changed a rule here after distributing`. Every one of
+  # those sentences is about money that was MOVED into a category and what a distribution would do
+  # to it next, and there are no movements on the purpose side any more (§5). The last screens that
+  # spoke it — the categories page's holdings card and `shared/_holding_status` — were converted to
+  # §3.4's claim vocabulary in this same commit, so the methods are callerless as well as
+  # meaningless.
   #
-  # It is a suffix on every state, not just :left_to_spend, because a closed period is a fact
-  # about the money rather than about how the pool is doing — an overdrawn envelope whose
-  # period has ended is both things at once, and the row has room to say so.
-  # `changed_after_distributing:` IS SPEC §8'S ROUGH EDGE, and it is gated on `:behind` HERE rather
-  # than at each caller. Rule changes apply immediately, so editing a rule the day after a
-  # distribution flips its envelope from `on track` to `behind $50` with no money having moved —
-  # and the clause exists to say which of the two kinds of `behind` this is. On any other state it
-  # would be an unexplained aside: an `overdue` bill is overdue because it was not paid, and an
-  # edited rule has nothing to do with it. One gate, so no caller can put the clause somewhere it
-  # does not belong.
-  #
-  # "CHANGED A RULE HERE" AND NOT §8'S LITERAL "you raised this rule". The spec's sentence claims a
-  # DIRECTION and a SUBJECT that the signal behind it cannot supply — a lowered rule moves the same
-  # timestamp, and a pool with two rules cannot say which one moved. See `DistributionClock` for
-  # both shapes and for the timestamps behind them. The design spec is being corrected to match, as
-  # it was over the waterfall band's tense.
-  #
-  # WHICH CALLERS PASS THIS CLAUSE, and it is not all of them. The three that say how a pool STANDS
-  # RIGHT NOW pass it — Home's "This period" bars (through #period_row_clause), Home's trouble strip
-  # (through `shared/_holding_status`) and the Budget page's group header — because those three
-  # render the same category on the same afternoon and a clause on one of them alone reads as the app
-  # disagreeing with itself. It was missing from two of the three at different times, once between
-  # Home and /budget and once between Home's own two bands.
-  #
-  # The distribution and reallocation screens pass `period_closed:` and NOT this, deliberately.
-  # Their rows describe a move that has not happened — `AllocationsHelper`'s sentences are
-  # literally "becomes …" — and why the category got into its current state is a different subject
-  # from what a proposed transfer would do to it. Which period the money belongs to bears on the
-  # move; who last edited the rule does not.
-  #
-  # AFTER the `· last period` suffix, because the two say different kinds of thing and the order
-  # is the order a reader needs them: how the pool is doing, WHICH period its money belongs to,
-  # then why it is doing that. `behind $50.00 · last period — you changed a rule here after
-  # distributing` reads as one sentence; the other order splits the state from its own explanation.
-  def pool_status_label(status, period_closed: false, changed_after_distributing: false)
-    label = pool_state_label(status)
-    label = "#{label} · last period" if period_closed
-    label = "#{label} — you changed a rule here after distributing" if changed_after_distributing && status.state == :behind
-
-    label
-  end
-
-  # `strftime("%b %-d")` rather than `l(date, format: :short)`: no view in this app formats
-  # a date through I18n, and the locale's :short renders "Mar 01" where the spec's row
-  # vocabulary reads "Mar 1". Same format string as WeeklyCalendarPresenter#range_label.
-  #
-  # Split from #pool_status_label rather than nested inside it because the seven states plus
-  # the closed-period suffix put the one method past rubocop's complexity limit — and the two
-  # answer different questions anyway: this one is how the pool is doing, its caller adds
-  # which period the money belongs to.
-  def pool_state_label(status)
-    case status.state
-    when :overdrawn then "overdrawn #{number_to_currency(status.amount)}"
-    when :overdue then "overdue · was #{status.due_on.strftime("%b %-d")}"
-    when :wont_make_it then "won't make it · #{status.due_on.strftime("%b %-d")}"
-    when :behind then "behind #{number_to_currency(status.amount)}"
-    when :saving then saving_label(status)
-    when :left_to_spend then "#{number_to_currency(status.amount)} left"
-    else "#{number_to_currency(status.amount)} · on track"
-    end
-  end
+  # WHAT SURVIVES OF THE SEVEN STATES is two facts about a claim rather than a state machine:
+  # `ClaimCalculator#over?` (spent past what the rule allowed) and `#overdue?` (a date already
+  # past), rendered by `#claim_trouble_label` below. `#pool_rule_label` is untouched — it names a
+  # RULE, which is a question the change of model does not touch.
 
   # ── ** THE CLAIM VOCABULARY (computed-claims spec §3.4). ** ────────────────────────────────────
   #

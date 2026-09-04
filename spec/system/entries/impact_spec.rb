@@ -13,10 +13,20 @@ require "rails_helper"
 # the card. Unscoped, "$240.00" would match the balance from an assertion about the balance-after
 # and a swapped pair would pass.
 #
-# EVERY FIXTURE IS BIWEEKLY and every category is funded by an ALLOCATION whose amount is spelled
-# out here (two-ledger spec §2 — a category holds its own money and an allocation is what puts it
-# there). A monthly rule's amount and its per-period claim are never the same number — the
-# mixed-unit slip has struck five times on this branch.
+# ** CONVERTED ONTO COMPUTED CLAIMS (spec §3). ** Every category here used to be funded by an
+# ALLOCATION — money moved into it — and nothing moves (§5). The money is written the way the model
+# actually produces it, and the figures on screen are the same figures:
+#
+#   $240 in Groceries    → a $300-a-period rule with $60 of it spent · `max(0, 300 − 60)`
+#   $1,500 in Rent       → a $1,500-a-period rule with nothing spent
+#   $600 in Vacation     → a $600-a-period rule on a $2,400 target, one period walked
+#   $600 in House Deposit→ a $600 bill due inside this period, so the catch-up formula asks for the
+#                          whole of it now (`periods_left` is 1) and the fund is whole
+#   $240 in Gifts        → NOTHING. A category with no rules claims nothing (§3.4), which is the one
+#                          figure on this screen that genuinely changed; see that example.
+#
+# EVERY FIXTURE IS BIWEEKLY. A monthly rule's amount and its per-period claim are never the same
+# number — the mixed-unit slip has struck five times on this branch.
 RSpec.describe "Entry impact card", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
@@ -34,19 +44,26 @@ RSpec.describe "Entry impact card", type: :system do
   # yesterday counts against it.
   let(:funded_since) { Date.current - 1.year }
 
-  # $240 in the category against a $300-a-period claim — the spec's own mockup, to the dollar.
+  # $240 claimed against a $300-a-period rule — the spec's own mockup, to the dollar, planted as
+  # §3.1 makes it: the rate less what has been spent on the category this period. The $60 sits on an
+  # item of its own so the "Weekly shop" item the editing examples write against stays empty until
+  # they use it.
   let!(:groceries) do
     create(:category, :expense, user: user, name: "Groceries", funded_since: funded_since).tap do |category|
-      create(:allocation, kind: :allocation, to_category: category, amount: 240, date: Time.zone.now)
       create(:budget, :per_period_rate, category: category, amount: 300)
       create(:item, category: category, name: "Weekly shop")
+      create(:entry, item: create(:item, category: category, name: "Earlier shop"), amount: 60, date: Date.current)
     end
   end
 
+  # The item the editing examples spend from, by NAME: the category carries two now, and
+  # `items.first` is unordered.
+  def weekly_shop = groceries.items.find_by(name: "Weekly shop")
+
   # THE TWO CATEGORIES EVERY OTHER STATE NEEDS, reached by name through the select rather than by
-  # reference: an expense that is NOT HOLDING MONEY — no `funded_since`, so its spending drains
-  # available (§4's start-date rule), which is what "unbudgeted" means now — and an income one
-  # (which must land in an account, `Category#income_must_land_in_an_account`).
+  # reference: an expense NO RULE CAN CLAIM — no `funded_since`, so its spending comes straight out
+  # of free money (§4's start-date rule, computed-claims §2), which is what "unbudgeted" means now —
+  # and an income one (which must land in an account, `Category#income_must_land_in_an_account`).
   before do
     create(:category, :expense, user: user, name: "Shopping")
     create(:category, user: user, name: "Paycheck", category_type: :income)
@@ -157,7 +174,7 @@ RSpec.describe "Entry impact card", type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
       expect(page).to have_button("Create Entry")
       expect(page).not_to have_button("Save anyway")
-      expect(page).not_to have_text("your available money covers the difference")
+      expect(page).not_to have_text("comes straight out of what's free")
     end
 
     # `parseFloat("10*5")` is 10 and Dentaku says 50 on save. Neither belongs on the card, so it
@@ -182,7 +199,7 @@ RSpec.describe "Entry impact card", type: :system do
 
       within(card) do
         expect(figure("balance-after")).to have_text("-$60.00")
-        expect(figure("buffer")).to have_text("This envelope goes negative — your available money covers the difference.")
+        expect(figure("buffer")).to have_text("This envelope goes over — the difference comes straight out of what's free.")
       end
       expect(page).to have_button("Save anyway")
       expect(page).not_to have_button("Create Entry")
@@ -200,7 +217,7 @@ RSpec.describe "Entry impact card", type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$185.00") }
       expect(page).to have_button("Create Entry")
       expect(page).not_to have_button("Save anyway")
-      expect(page).not_to have_text("your available money covers the difference")
+      expect(page).not_to have_text("comes straight out of what's free")
     end
 
     # THE SACRIFICE DIAL'S SHIPPED BUG, in the one place it is reachable here: spending an envelope
@@ -225,8 +242,9 @@ RSpec.describe "Entry impact card", type: :system do
       click_button "Save anyway"
 
       expect(page).to have_content("Entry was successfully created")
-      expect(Entry.count).to eq(1)
-      expect(Entry.last.amount).to eq(BigDecimal("300"))
+      # TWO: the fixture's own $60 receipt, which is what makes the claim $240, plus this one.
+      expect(Entry.count).to eq(2)
+      expect(Entry.where(amount: 300).count).to eq(1)
     end
   end
 
@@ -236,7 +254,6 @@ RSpec.describe "Entry impact card", type: :system do
   describe "a category with four figures in it" do
     before do
       rent = create(:category, :expense, user: user, name: "Rent", funded_since: funded_since)
-      create(:allocation, kind: :allocation, to_category: rent, amount: 1_500, date: Time.zone.now)
       create(:budget, :per_period_rate, category: rent, amount: 1_500)
 
       visit new_entry_path
@@ -264,8 +281,8 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).to have_css("[data-impact-card='unbudgeted']")
 
       within(card) do
-        expect(figure("headline")).to have_text("Not holding money yet — this spending isn't budgeted.")
-        expect(page).to have_text("It comes out of what's available.")
+        expect(figure("headline")).to have_text("Nothing claims this yet — this spending isn't budgeted.")
+        expect(page).to have_text("It comes straight out of what's free.")
         expect(page).to have_link("Give it a rule on the Budget page", href: budget_page_path)
       end
     end
@@ -303,13 +320,13 @@ RSpec.describe "Entry impact card", type: :system do
     # honest card renders for it. Both directions on one category, so the example is about the date
     # and nothing else.
     it "is the same card for a receipt dated before the category started holding", :aggregate_failures do
-      early = create(:entry, item: groceries.items.first, amount: 45, date: funded_since - 1.day)
+      early = create(:entry, item: weekly_shop, amount: 45, date: funded_since - 1.day)
 
       visit edit_entry_path(early)
 
       expect(page).to have_css("[data-impact-card='unbudgeted']")
       within(card) do
-        expect(figure("headline")).to have_text("Not holding money yet — this spending isn't budgeted.")
+        expect(figure("headline")).to have_text("Nothing claims this yet — this spending isn't budgeted.")
       end
     end
   end
@@ -320,20 +337,25 @@ RSpec.describe "Entry impact card", type: :system do
   # pointing at an account. There is no savings category, so there is nothing to select and one
   # honest card is left. The negative above is what keeps the deleted copy from creeping back.
 
-  # An empty grey track beside "$240.00 left" would say "nothing left" an inch under a figure saying
-  # otherwise, so an envelope with nothing to claim gets no bar at all.
+  # An empty grey track beside a real figure would say "nothing left" an inch under a figure saying
+  # otherwise, so a category with nothing to claim gets no bar at all.
+  #
+  # ** AND ITS FIGURE IS NOW $0.00, WHICH IS THE ONE NUMBER ON THIS SCREEN THAT MOVED (§3.4). ** The
+  # category used to hold $240 that had been allocated into it; every claim comes from a rule
+  # (§3.3), so a category carrying none claims nothing however much has been spent against it. The
+  # example is kept rather than deleted because the ABSENCE OF THE BAR is what it is for, and that
+  # absence is now doubly true: no rules, no denominator, and nothing for a bar to be a fraction of.
   describe "a category with no rules on it" do
     before do
-      gifts = create(:category, :expense, user: user, name: "Gifts", funded_since: funded_since)
-      create(:allocation, kind: :allocation, to_category: gifts, amount: 240, date: Time.zone.now)
+      create(:category, :expense, user: user, name: "Gifts", funded_since: funded_since)
 
       visit new_entry_path
     end
 
-    it "prints the figures and draws no bar", :aggregate_failures do
+    it "prints a claim of nothing and draws no bar", :aggregate_failures do
       select_category("Gifts")
 
-      within(card) { expect(figure("balance")).to have_text("$240.00") }
+      within(card) { expect(figure("balance")).to have_text("$0.00") }
       expect(page).not_to have_css("[data-figure='bar']", visible: :all)
     end
 
@@ -401,11 +423,12 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE GOAL ARM, KEYED ON THE CATEGORY (Task 6) AND ON THE CALCULATOR (Task 7). It asked
-  # `Category#savings?` — a holder, with a target, carrying NO refill rule — and now asks
-  # `HoldingCalculator#saving_toward_a_target?`, the CHROME level of the two-level classification:
-  # a goal is a goal whatever refills it. Spending from a goal is still spending against a goal, so
-  # the card takes the goal shape and measures against the target.
+  # THE GOAL ARM, KEYED ON THE CATEGORY. It asked `Category#savings?` — a holder, with a target,
+  # carrying NO refill rule — and now asks `Category#saving_toward_a_target?`, the RENDERING level
+  # of the two-level classification: a goal is a goal whatever feeds it. Under §3.3 that is no
+  # longer a nicety, it is the only reachable shape — every claim comes from a rule, so a goal with
+  # anything in it HAS one and `#savings?` is false for it. Spending from a goal is still spending
+  # against a goal, so the card takes the goal shape and measures against the target.
   describe "a savings goal" do
     before do
       vacation = create(
@@ -416,7 +439,11 @@ RSpec.describe "Entry impact card", type: :system do
         funded_since: funded_since,
         target_amount: 2_400
       )
-      create(:allocation, kind: :allocation, to_category: vacation, amount: 600, date: Time.zone.now)
+      # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $600-a-period rule on a category that
+      # names a figure is a `:target`-shaped rule, and one walked period accrues
+      # `min(0 + 600, 2400)` = $600. The rule is what gives the goal a claim at all — an allocation
+      # used to put the money there, and nothing moves.
+      create(:budget, :per_period_rate, category: vacation, amount: 600)
 
       visit new_entry_path
       select_category("Vacation")
@@ -461,17 +488,17 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # ** THE ANCHOR-DATED GOAL, PINNED AT THE BROWSER (fix round 1, MED-2). ** The two-level
-  # classification's sharpest shape, and the one no screen tested: a goal whose rule names a DUE
-  # DATE is `HoldingCalculator#dateless_goal?` FALSE — so Home's row calls it `on track` rather than
-  # `saving` — while `#saving_toward_a_target?` is still true, so THIS card must keep drawing it as
-  # a goal. The card speaks no status at all (see EntryImpactPresenter's header), so all that is
-  # asked of it here is that the chrome level does not inherit the status level's condition.
+  # ** THE ANCHOR-DATED GOAL, PINNED AT THE BROWSER (fix round 1, MED-2). ** A goal whose rule names
+  # a DUE DATE takes §3.2's dated shape — it accrues toward the RULE's own amount by the catch-up
+  # formula, not toward the category's figure — while the CARD's classification asks only
+  # `Category#saving_toward_a_target?`, a holder with a figure to reach. So the chrome must not
+  # inherit the rule's shape: this is still a goal, and it still measures against $2,400.
   #
-  # The same category is pinned on the holdings card
-  # (`spec/system/categories/show/holdings_spec.rb`) and on Home's row
-  # (`spec/system/home/categories_spec.rb`), which is what makes this a cross-screen agreement
-  # rather than three files each describing their own fixture.
+  # PLANTED: a $600 bill due three days out, which is INSIDE the period anchored on today, so
+  # `periods_left` is 1 and the catch-up formula asks for the whole $600 now —
+  # `min(0 + 600, 600)` built up in one walked period. Anchoring it two months out instead would
+  # make the figure a function of how many fortnights fall between today and then, which is a
+  # different number every day of the year.
   describe "a goal whose rule carries a due date" do
     before do
       house = create(
@@ -482,13 +509,12 @@ RSpec.describe "Entry impact card", type: :system do
         funded_since: funded_since,
         target_amount: 2_400
       )
-      create(:allocation, kind: :allocation, to_category: house, amount: 600, date: Time.zone.now)
       create(
         :budget,
         category: house,
-        amount: 300,
+        amount: 600,
         interval_months: 1,
-        anchor_date: Date.current + 2.months
+        anchor_date: Date.current + 3.days
       )
 
       visit new_entry_path
@@ -509,17 +535,17 @@ RSpec.describe "Entry impact card", type: :system do
 
   describe "editing an entry the ledger has already counted" do
     let!(:existing) do
-      create(:entry, item: groceries.items.first, amount: 45, date: Date.current)
+      create(:entry, item: weekly_shop, amount: 45, date: Date.current)
     end
 
     before { visit edit_entry_path(existing) }
 
-    # The ledger says $195 — $240 funded less the $45 already logged. The card says $240, because
-    # the question on the screen is what this entry costs, not what the last one did.
+    # The claim is $195 — a $300 rate less the fixture's $60 and this $45. The card says $240,
+    # because the question on the screen is what this entry costs, not what the last one did.
     it "opens on the world without this entry, then puts it back", :aggregate_failures do
       expect(page).to have_css("[data-impact-card='envelope']")
 
-      expect(groceries.holding_calculator.balance).to eq(BigDecimal("195"))
+      expect(groceries.claim).to eq(BigDecimal("195"))
       within(card) do
         expect(figure("balance")).to have_text("$240.00")
         expect(figure("balance-after")).to have_text("$195.00")
@@ -549,7 +575,7 @@ RSpec.describe "Entry impact card", type: :system do
 
     it "credits a different category with nothing when the category is changed", :aggregate_failures do
       dining = create(:category, :expense, user: user, name: "Dining Out", funded_since: funded_since)
-      create(:allocation, kind: :allocation, to_category: dining, amount: 100, date: Time.zone.now)
+      create(:budget, :per_period_rate, category: dining, amount: 100)
       visit edit_entry_path(existing)
 
       select_category("Dining Out")
@@ -572,7 +598,7 @@ RSpec.describe "Entry impact card", type: :system do
 
   describe "editing an entry that already overdraws its category" do
     let!(:existing) do
-      create(:entry, item: groceries.items.first, amount: 300, date: Date.current)
+      create(:entry, item: weekly_shop, amount: 300, date: Date.current)
     end
 
     it "opens on the negative figure and on 'Save anyway'", :aggregate_failures do

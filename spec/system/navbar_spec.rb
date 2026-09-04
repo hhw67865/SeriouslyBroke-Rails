@@ -2,6 +2,15 @@
 
 require "rails_helper"
 
+# ** DISTRIBUTE IS OUT OF THIS FILE (computed-claims spec §§5-6). ** Two assertions went, both in
+# "main navigation": `have_link("Distribute")` in the link sweep, and the `"Distribute"` entry
+# second in the literal order list below. Both pinned a sidebar item pointing at
+# `/distributions/new`, and that route, its controller, its presenter and its views are deleted —
+# a category's money is a CLAIM computed from its rules, so there is no paycheck to split. The
+# ABSENCE is now pinned instead, beside "Pools", and for the same reason it is pinned at all: a
+# deletion nothing asserts is a link that comes back on the next edit to `shared/_sidebar` with
+# no example objecting. The surviving nav behaviour is the order list, which is now §2's table
+# exactly — Home · Budget · Entries · Categories · Calendar · Reports.
 RSpec.describe "Navbar", type: :system do
   let!(:user) { create(:user) }
 
@@ -14,7 +23,6 @@ RSpec.describe "Navbar", type: :system do
     it "shows all main navigation links" do
       # Check for navigation links anywhere on the page (sidebar or mobile nav)
       expect(page).to have_link("Home")
-      expect(page).to have_link("Distribute")
       expect(page).to have_link("Budget")
       expect(page).to have_link("Entries")
       expect(page).to have_link("Categories")
@@ -27,22 +35,27 @@ RSpec.describe "Navbar", type: :system do
       # without a single example objecting. A savings goal is a CATEGORY now, so Categories above
       # is where that screen went.
       expect(page).to have_no_link("Pools")
+      # AND "Distribute" IS GONE THE SAME WAY (computed-claims §§5-6), asserted for the same
+      # reason: `/distributions/new` is deleted, claims are computed, and nothing may quietly
+      # link at a route that no longer exists.
+      expect(page).to have_no_link("Distribute")
     end
 
-    # SPEC §2'S ORDER, END TO END — Home · Distribute · Budget · Entries · Categories · Calendar ·
-    # Reports, with Reports LAST because that is what the demotion means: the charts answer *what
+    # SPEC §2'S ORDER, END TO END — Home · Budget · Entries · Categories · Calendar · Reports,
+    # with Reports LAST because that is what the demotion means: the charts answer *what
     # happened*, a question you visit deliberately, so nothing may sit below them and read as more
-    # incidental than they are. Distribute is second (2b's addition, absent from §2's table) because
-    # it is an ACTION on the household's money rather than a report on it.
+    # incidental than they are.
     #
     # A LITERAL LIST, so neither side is derived from the other — the same shape as
     # budget_page/rules_spec's `first(4)`, which asserts Budget's position inside the Main section
     # and stays green under this. `Pools` used to sit between Categories and Calendar and was in
-    # this list because it was on the screen; it is deleted with the layer (Task 8's sweep), and
-    # the list is now exactly §2's own — the Management section carries one link.
+    # this list because it was on the screen; it is deleted with the layer (Task 8's sweep).
+    # `Distribute` sat second, ahead of Budget, and is deleted with the distribution screen
+    # (computed-claims §§5-6) — so the list is now exactly §2's own, and the Management section
+    # carries one link.
     it "puts the sections in spec §2's order, Reports last" do
       expect(page.all("nav a").map { |link| link.text.strip })
-        .to eq(["Home", "Distribute", "Budget", "Entries", "Categories", "Calendar", "Reports"])
+        .to eq(["Home", "Budget", "Entries", "Categories", "Calendar", "Reports"])
     end
 
     # THE NEGATIVE HALF OF THE ORDER, and it is not redundant with the list above: the list would

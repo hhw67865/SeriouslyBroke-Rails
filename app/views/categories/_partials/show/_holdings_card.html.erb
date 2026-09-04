@@ -1,79 +1,98 @@
-<%# WHAT THIS CATEGORY HOLDS (two-ledger spec §3, §4). Local: `presenter`
+<%# WHAT THIS CATEGORY'S MONEY IS (computed-claims spec §2, §3.4). Local: `presenter`
     (CategoryBudgetPresenter).
 
-    ONE CARD WHERE THERE WERE TWO (Task 7). `_budget_card` printed the pool's standing in the row
-    vocabulary and `_pool_card`, four inches below it, drew the SAME pool again with a name, a
-    progress bar and a noun of its own — "Envelope" above "Savings Pool" about one pool on one
-    afternoon, which took three review rounds to converge and could always drift again. The
-    category holds the money now, so there is one thing to describe and one card describing it.
+    ** EVERY FIGURE HERE IS A CLAIM NOW, AND NOT A HOLDING. ** The card read a `HoldingCalculator` —
+    what had been ALLOCATED into the category, less what was spent out of it — and stood a
+    `HoldingStatus` beside it in the row vocabulary. Nothing moves on the purpose side any more
+    (§5), so there is nothing allocated to read: the category's money is a FUNCTION of its rules, the
+    calendar, its spending and its dated adjustments, and the card is that function shown.
 
-    TWO ARMS, AND THE LINE IS `Category#holder?`: a category with a `funded_since` holds its own
-    money, and one without it spends AVAILABLE. The old arms were "points at an account" against
-    "points at an envelope or a goal", which is the same distinction asked of a layer that no
-    longer exists.
+    THE COPY THAT HAD TO GO, AND WHY EACH SENTENCE WAS FALSE:
 
-    THE GOAL BAR IS DRAWN ON `HoldingCalculator#saving_toward_a_target?`, NOT `Category#savings?`
-    (Task 7's ruling — see the presenter's header). A goal the user also refills at a rate is still
-    a goal, and it is now classified as one here, on the entry form's impact card and on the
-    categories index card alike.
+      "against what was available"                    there is no `available` — `free` is a
+                                                        DEFINITION (`total − Σ claims`), not a pot
+                                                        that spending is read against.
+      "nothing here is ever swept back"               nothing is ever swept from anywhere; a rate
+                                                        claim RESETS at the boundary by its own
+                                                        definition (§3.1) and no money moves.
+      "its money arrives when you distribute"         there is no distribute step (§1).
+      "Move it back to available"                     there is nothing to move and nowhere to move
+                                                        it to (§5).
 
-    THE `Standing` ROW IS A DIFFERENT QUESTION AND KEEPS ITS OWN CONDITION (fix round 1, MED-2).
-    `HoldingStatus` is schedule-aware: a DATELESS goal reads `saving`, and a goal carrying an
-    anchor-dated rule reads `on track` / `behind` / `won't make it`. So this card can head itself
-    `Goal` and stand `on track` in the same breath, which is two facts rather than a contradiction —
-    what it IS, and how its schedule is going. %>
+    ** THE ROWS ARE §3.4'S, AND THEY ARE THE BUDGET PAGE'S OWN SENTENCES. ** `claim_figure`,
+    `claim_schedule` and `claim_trouble_label` render `budget_page/_rule_row`, Home's "This period"
+    line and this card alike — one sentence about one rule across the three screens that show it:
+
+      RATE      $310.00 of $400.00                    spent of this period's rate, over in red
+      ACCRUING  $450.00 built up of $1,200.00          the running total against the target,
+                next due Mar 1 · $200.00 per period      with the schedule beneath it
+
+    A LINE PER RULE, because §3.4's sentences are per RULE and the card's own figure is their SUM: a
+    category carrying a rate rule beside an item-backed bill cannot honestly print one figure, since
+    the two are denominated in different things.
+
+    TWO ARMS, AND THE LINE IS `Category#holder?`: a category with a `funded_since` is one whose
+    rules accrue and whose spending counts against them. One without it claims nothing at all —
+    not by a guard but by the formula, since its rules' walks have no day to open in. %>
 <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 p-6"
      data-holdings-card
      data-holdings-state="<%= presenter.state %>">
   <% if presenter.holding? %>
-    <%# THE CATEGORY HOLDS MONEY. The heading names what it is — a goal, or an envelope — from the
+    <%# THE CATEGORY HAS A CLAIM. The heading names what it is — a goal, or an envelope — from the
         one predicate, so the word and the bar below it cannot describe different things. %>
     <h2 class="text-xl font-semibold mb-4">
       <%= presenter.saving_toward_a_target? ? "Goal" : "Envelope" %>
     </h2>
 
+    <%# WHAT THE FIGURE BELOW IS MADE OF, SAID PLAINLY. It is the one thing about the computed model
+        a user has to be told once: no money was put here, and none will be — the rules on the
+        Budget page decide what this category claims, and the claim moves when a rule, an adjustment
+        or the spending moves. The two arms differ only in what the money is FOR, which is what the
+        heading above them already said. %>
     <p class="text-sm text-gray-500 mb-4">
       <% if presenter.saving_toward_a_target? %>
-        This category is saving toward a figure. It holds its own money from
-        <%= presenter.funded_since.strftime("%b %-d, %Y") %> onward — spending before then read
-        against what was available — and nothing here is ever swept back at the end of a period.
+        This category is saving toward a figure. Nothing was moved here to put it there — what it
+        has is what its rules have built up since
+        <%= presenter.funded_since.strftime("%b %-d, %Y") %>, less what has been spent here.
       <% else %>
-        This category holds its own money from
-        <%= presenter.funded_since.strftime("%b %-d, %Y") %> onward — spending before then read
-        against what was available. What is in it is what there is to spend, and the rules on the
-        Budget page are what fill it.
+        Nothing was moved here. What this category claims is worked out from its rules on the Budget
+        page, the calendar, and what has been spent here since
+        <%= presenter.funded_since.strftime("%b %-d, %Y") %>.
       <% end %>
     </p>
 
     <dl class="divide-y divide-gray-200 mb-4">
+      <%# `Claimed` AND NOT `Holding`. The old noun was a fact about money sitting in the category;
+          this is the same word the Budget page's group header prints over the same figure
+          (`$400.00 claimed`), because it is the same sum over the same rules. %>
       <div class="py-3 flex justify-between gap-4">
-        <dt class="text-sm font-medium text-gray-500">Holding</dt>
-        <dd class="text-sm text-gray-900 font-medium <%= "text-status-danger" if presenter.balance.negative? %>"
-            data-figure="balance"><%= number_to_currency(presenter.balance) %></dd>
-      </div>
-
-      <div class="py-3 flex justify-between gap-4">
-        <dt class="text-sm font-medium text-gray-500">Standing</dt>
-        <%# THROUGH `shared/_holding_status`, never hand-threaded: the partial takes ONE object and
-            reads all four of the row vocabulary's questions off it, which is what stops a caller
-            dropping a suffix the screen beside it keeps. `CategoryBudgetPresenter` answers all
-            four. %>
-        <dd data-holdings-status>
-    <%= render "shared/holding_status", row: presenter %>
+        <dt class="text-sm font-medium text-gray-500">Claimed</dt>
+        <dd class="text-sm text-gray-900 font-medium" data-figure="claim">
+          <%= number_to_currency(presenter.claim) %>
         </dd>
       </div>
 
+      <%# THE START DATE STAYS, AND THE LABEL NOW SAYS WHY IT MATTERS. It is
+          `ClaimCalculator#accrual_start`'s first term — the day the accrual walk opens in — and the
+          day `Entry.draining` starts attributing this category's spending to its rules. It is
+          therefore the one date on the card that says which periods and which receipts the figure
+          above is made of; anything earlier is in neither sum. "Holding since" named a fact about
+          money that had been put here, which is the fact that stopped being true.
+
+          THE WORD IS THE CATEGORY FORM'S FIELD LABEL, verbatim. That form is where this date is
+          written and this card is where its consequence is read, and a date called two things on
+          two screens is a user wondering whether they are two dates. %>
       <div class="py-3 flex justify-between gap-4">
-        <dt class="text-sm font-medium text-gray-500">Holding since</dt>
+        <dt class="text-sm font-medium text-gray-500">Claiming since</dt>
         <dd class="text-sm text-gray-900" data-figure="funded-since">
           <%= presenter.funded_since.strftime("%b %-d, %Y") %>
         </dd>
       </div>
     </dl>
 
-    <%# THE PROGRESS BAR IS THE GOAL'S ALONE. `progress_percentage` clamps at both ends, so an
-        overdrawn goal draws an empty bar rather than the "-30% complete" the pool card used to
-        print on this app's own demo data. %>
+    <%# THE PROGRESS BAR IS THE GOAL'S ALONE, and it measures the CLAIM against the target.
+        `progress_percentage` clamps at both ends, so a goal whose rules claim more than the figure
+        it is saving toward draws a full bar rather than "130% complete". %>
     <% if presenter.saving_toward_a_target? %>
       <% progress = presenter.progress_percentage %>
       <div class="mb-4" data-goal-progress>
@@ -88,27 +107,58 @@
       </div>
     <% end %>
 
-    <%# THE RULES THAT FILL IT, NAMED. The card lists them and links to the page that edits them —
-        it offers no editor of its own, because the money a category has to spend is decided by its
-        rules and its allocations, both of which live elsewhere. `pool_rule_label` is the same
-        reader Home's expanded row uses, so a rule is named one way on both screens. %>
+    <%# ** THE RULES, EACH AS §3.4'S ROW. ** The card used to list a rule's NAME and its STICKER
+        amount — "$1,200.00" beside "Car Insurance" — which says what the rule declares and nothing
+        about where it has got to, on the one card whose whole subject is where it has got to. The
+        row says both halves now, in the Budget page's own words and off the same helpers, and the
+        card still offers no editor: this is where a claim is read, /budget is where a rule is
+        written. %>
     <% if presenter.rules? %>
       <div class="mb-4" data-holdings-rules>
         <h3 class="text-sm font-medium text-gray-500 mb-2">
           <%= pluralize(presenter.rules.size, "rule") %>
         </h3>
         <ul class="divide-y divide-gray-100">
-          <% presenter.rules.each do |rule| %>
-            <li class="py-2 flex justify-between gap-4 text-sm">
-              <span class="text-gray-700 truncate"><%= pool_rule_label(rule) %></span>
-              <span class="text-gray-900 font-medium"><%= number_to_currency(rule.amount) %></span>
+          <% presenter.lines.each do |line| %>
+            <li class="py-2 text-sm" data-holdings-rule="<%= pool_rule_label(line.rule) %>">
+              <%# STACKS BELOW `sm` for `budget_page/_rule_row`'s measured reason: a name, a figure
+                  and a schedule are three things, and at 375px the figure wrapped into the name's
+                  column. %>
+              <div class="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+                <span class="text-gray-700 truncate"><%= pool_rule_label(line.rule) %></span>
+                <%# RED WHERE THE SPENDING HAS PASSED WHAT THE RULE HAD — `over?` off the
+                    calculator, which reads the figure BEFORE the clamp at zero and is the only
+                    reader that can tell "spent it exactly" from "spent more than there was". %>
+                <span class="tabular-nums shrink-0 <%= line.over? ? "text-status-danger font-medium" : "text-gray-900 font-medium" %>"
+                      data-rule-figure>
+                  <%= claim_figure(line) %>
+                </span>
+              </div>
+
+              <%# THE CLAUSE UNDER THE ROW, WHERE IT EARNS ITS PLACE. Two kinds, and never both:
+                  what is WRONG (over by $X, or an overdue date) takes the line in red, because that
+                  is the news and it is the same string Home's strip prints about this rule; the
+                  SCHEDULE otherwise, which is the half of §3.4's accruing row the figure has no room
+                  for. A rate rule in good standing has neither and renders no element at all. %>
+              <% if line.trouble? %>
+                <p class="mt-1 text-status-danger font-medium" data-rule-trouble>
+                  <%= claim_trouble_label(line) %>
+                </p>
+              <% elsif schedule = claim_schedule(line) %>
+                <p class="mt-1 text-gray-500" data-rule-schedule><%= schedule %></p>
+              <% end %>
             </li>
           <% end %>
         </ul>
       </div>
     <% else %>
+      <%# A HOLDER WITH NO RULE AT ALL. Every claim comes from a rule (§3.3), so a category with
+          none claims nothing however much has been spent on it — and the $0.00 above needs that
+          said, or it reads as an envelope somebody emptied. The old sentence named the two ways
+          money used to arrive; there is one way now, and it is the button below. %>
       <p class="text-sm text-gray-500 mb-4" data-figure="no-rules">
-        No rule fills this category — its money arrives when you distribute or move some in by hand.
+        No rule claims this category's money, so it claims nothing — its spending comes straight out
+        of what's free to spend. A rule on the Budget page is what gives it a claim.
       </p>
     <% end %>
 
@@ -117,53 +167,39 @@
       <span>Rules on the Budget page</span>
     <% end %>
   <% else %>
-    <%# THE CATEGORY HOLDS NOTHING, so its spending drains AVAILABLE (§2, §4).
+    <%# THE CATEGORY CLAIMS NOTHING (§3.4's unbudgeted row). Not "it holds nothing" — that was a
+        statement about a balance — but that no rule speaks for its spending, so every receipt here
+        comes straight out of `free`, which the hero calls "Free to spend".
 
-        THE REGISTER IS THE APP'S EXISTING ONE for this exact shape — `entries/_impact`'s honest
-        card and `budget_page/_suggestion_rate`'s "currently comes out of what's available", both
-        of which speak about the same population (`Category#holder?` rejected). Three screens, one
-        sentence.
+        ** THE `stranded?` ARM IS DELETED WITH THE MONEY IT WAS ABOUT. ** It printed "This category
+        still holds $400.00, but it isn't set up to hold money" over allocations left in a category
+        whose funding date had been cleared, and named the door back out. Nothing is ever moved into
+        a category now (§5), so a cleared date leaves nothing behind: the state is unplantable rather
+        than merely unreachable, which is why the arm is deleted rather than kept as a belt.
+
+        THE SENTENCE BELOW IS ABOUT SPENDING AND IT IS EXACTLY TRUE OF THIS ARM.
+        `CategoryLedger::ENTRY_CATEGORY_ID` yields NULL for a NULL `funded_since`, so no rule's lane
+        can hold one of this category's receipts. (A rule written on such a category does go on
+        accruing — `accrual_start` falls back to the rule's own birthday — and the Budget page's
+        own band is where that is said. This card's subject is the category.)
 
         NO EDITOR, and the sentence says why rather than leaving a missing button to be noticed:
-        nothing reserves this money, and the way to change that is to give the category a rule on
-        the Budget page — which is what the pointer below offers. %>
-    <h2 class="text-xl font-semibold mb-4">Available</h2>
+        nothing claims this money, and the way to change that is to give the category a rule on the
+        Budget page — which is what the pointer below offers. %>
+    <h2 class="text-xl font-semibold mb-4">Unbudgeted</h2>
 
-    <%# ** THE HONEST ARM FOR A NON-HOLDER THAT STILL HAS MONEY IN IT (final fix wave, I-1, belt). **
-        `CategoryBudgetPresenter#stranded?` carries the whole argument: no live path can produce this
-        state once the stamp and the clearing refusal are in, and a planted or pre-wave row still
-        must not be told $400 of its own money is not there. The figure is printed under the SAME
-        `data-figure="balance"` hook the holding arm uses, because it is the same question with the
-        same answer — what this category holds — and a second hook would let a screen-level assertion
-        pass over a card that shows nothing. %>
-    <% if presenter.stranded? %>
-      <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
-        This category still holds <%= number_to_currency(presenter.balance) %>, but it isn't set up to
-        hold money.
-      </p>
-      <p class="text-sm text-gray-500 mb-4">
-        Money was moved in and then its holding date was removed, so its spending comes out of what's
-        available while this sits here doing nothing. Move it back to available, or set a holding
-        date to start counting this category's spending against it.
-      </p>
-      <p class="text-sm text-gray-900 font-medium mb-4" data-figure="balance">
-        <%= number_to_currency(presenter.balance) %>
-      </p>
-    <% else %>
-      <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
-        This category doesn't hold money yet.
-      </p>
-      <p class="text-sm text-gray-500 mb-4">
-        Its spending comes out of what's available. Nothing reserves money for this category, so
-        nothing here can run out — and nothing tells you when it has cost more than you meant it to.
-      </p>
-    <% end %>
+    <p class="text-sm font-medium text-gray-900 mb-1" data-figure="headline">
+      Nothing claims this category's money.
+    </p>
+    <p class="text-sm text-gray-500 mb-4">
+      Its spending comes straight out of what's free to spend. No rule reserves anything here, so
+      nothing can run out — and nothing tells you when it has cost more than you meant it to.
+    </p>
 
     <%# THE POINTER WHERE THERE IS ONE, AND THE STANDING OFFER WHERE THERE IS NOT — one route to
         /budget either way, never both. This arm IS the rate detector's population, so it is
         precisely the shape the panel is most likely to be proposing a rule for, and the pointer
-        names what is waiting. Without a proposal the card would otherwise be a dead end, so it
-        makes the offer in the impact card's own words. %>
+        names what is waiting. Without a proposal the card would otherwise be a dead end. %>
     <% if presenter.suggested? %>
       <%= render "categories/_partials/show/suggestion_pointer", presenter: presenter %>
     <% else %>

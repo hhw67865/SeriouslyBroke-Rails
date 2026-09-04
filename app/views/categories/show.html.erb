@@ -43,11 +43,14 @@
         move `@category.updated_at` whenever one of those changes — so the key is sound for exactly
         the figures it holds.
 
-        WHAT A CATEGORY HOLDS IS NOT ONE OF THEM. Its balance moves when a distribution writes an
-        `Allocation`, or when money is moved in or out by hand, and neither of those touches the
-        category through an entry: the card would go on printing last week's `$240.00 left` under a
-        live "Rules on the Budget page" link. It is outside the cache, and the left column — the
-        spending figures the period toggle is for — keeps it.
+        WHAT A CATEGORY CLAIMS IS NOT ONE OF THEM, and the computed model makes that SHARPER rather
+        than softer (computed-claims spec §2). A claim is a function of the rules, the CALENDAR, the
+        spending and the dated adjustments: editing a rule on /budget, writing an adjustment, and
+        simply the period rolling over all move the figure without touching this category through an
+        entry. The clock alone is enough — there is no write at all to bust a key with — so the card
+        would go on printing last period's $240.00 under a live "Rules on the Budget page" link. It
+        is outside the cache, and the left column — the spending figures the period toggle is for —
+        keeps it.
 
         `@category.pool` IS OUT OF THE KEY (Task 7). It was there because `_summary_card` printed
         the pool's noun and name, so a renamed pool had to bust this fragment; the summary card

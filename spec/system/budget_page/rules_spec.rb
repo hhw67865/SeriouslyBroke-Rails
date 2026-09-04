@@ -157,16 +157,24 @@ RSpec.describe "Budget page rules", type: :system do
 
     # THE NAME IS PRINTED ONCE (design review, nits). `budget_rule_name` falls back to the
     # CATEGORY for an item-less rule like this one, so the row's own heading already says
-    # "Coffee" — and the reason clause used to say it again, rendering "Coffee · Coffee isn't
-    # holding money yet". The clause names the category only where the heading named an ITEM
-    # instead; the row as a whole still says both, which is what this example checks.
-    it "keeps it out of the fill order and names its category in the panel" do
+    # "Coffee" — and the reason clause used to say it again, rendering "Coffee · Coffee has no
+    # holding date". The clause names the category only where the heading named an ITEM instead;
+    # the row as a whole still says both, which is what this example checks.
+    #
+    # ** THE REASON ITSELF CHANGED WITH THE MODEL (computed-claims spec §6), AND THE OLD ONE WAS
+    # THE FALSE HALF. ** It read "isn't holding money yet — nothing fills it", which was true of a
+    # distribution: no waterfall reached a category with no funding date. Every rule claims now
+    # (`ClaimLedger` counts all of them into `#free`), so the claim is not what is missing — the
+    # SPENDING is: `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its category only
+    # from `funded_since` on, so this rule claims its full $35 every period while nothing the user
+    # spends on Coffee ever comes off it.
+    it "keeps it out of the give-way order and names its category in the panel" do
       expect(category_groups).to eq(["Groceries", "Fun Money"])
       expect(page).to have_no_css("[data-category-group='Coffee']")
       within("[data-not-filling-rule='Coffee']") do
         expect(page).to have_content("Coffee")
-        expect(page).to have_content("isn't holding money yet — nothing fills it")
-        expect(page).to have_no_content("Coffee isn't holding money yet")
+        expect(page).to have_content("has no claiming date — spending here isn't counted against it")
+        expect(page).to have_no_content("Coffee has no claiming date")
         expect(page).to have_content("$35.00 / period")
       end
     end
@@ -226,7 +234,7 @@ RSpec.describe "Budget page rules", type: :system do
       click_link "Budget"
 
       expect(page).to have_current_path(budget_page_path)
-      expect(page).to have_content("The rules that fill your categories")
+      expect(page).to have_content("The rules that claim your money")
     end
 
     it "reaches the page from the entries screen too" do
@@ -234,15 +242,18 @@ RSpec.describe "Budget page rules", type: :system do
       click_link "Budget"
 
       expect(page).to have_current_path(budget_page_path)
-      expect(page).to have_content("The rules that fill your categories")
+      expect(page).to have_content("The rules that claim your money")
     end
 
-    # A literal list, so neither side is derived from the other.
-    it "sits between Distribute and Entries in the Main section" do
+    # A literal list, so neither side is derived from the other. DISTRIBUTE IS GONE FROM IT
+    # (computed-claims spec §6) — the screen and its nav item are deleted, and Budget now sits
+    # directly after Home because it is the first thing a user does with their money rather than
+    # the second.
+    it "sits between Home and Entries in the Main section" do
       visit budget_page_path
 
-      expect(page.all("nav a").map { |link| link.text.strip }.first(4))
-        .to eq(["Home", "Distribute", "Budget", "Entries"])
+      expect(page.all("nav a").map { |link| link.text.strip }.first(3))
+        .to eq(["Home", "Budget", "Entries"])
     end
   end
 
@@ -257,7 +268,7 @@ RSpec.describe "Budget page rules", type: :system do
     end
 
     it "opens a form about the category rather than about a pool" do
-      expect(page).to have_content("How Groceries gets filled each period")
+      expect(page).to have_content("What Groceries claims each period")
       expect(page).to have_field("Rule Amount")
       expect(page).to have_no_select("Pool")
     end
