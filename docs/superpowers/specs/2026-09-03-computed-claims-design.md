@@ -375,13 +375,21 @@ browsing — reading never writes. Figures, formulas and screenshots:
    deliberately clean on that path, so the select below the panel reads "Monthly" while the panel
    says the period is changing to biweekly — and the page carries TWO elements with `id`
    `user_period_cadence` (the pending value as a hidden field, the old value as the select). Threading
-   `BudgetPagePresenter#declaration` through the offer path is the fix.
-6. **A DEFECT found in Task 5's browser pass, not fixed: the hero's last arm asserts "none of it is
-   claimed" without asking whether anything is.** The arm is gated on `!rest_in_checking?`
-   (`in_checking > free_to_spend`), which is false whenever `Σ claims ≤ Σ other accounts` — so a
-   user whose savings cover their claims reads "none of it is claimed" over a screen listing their
-   claims. Live on Ming's Home: `none of it is claimed — more is parked in other accounts` above
-   five rules claiming $1,668.37. Every other sentence on that card is gated on a predicate that
-   establishes its cause; `#anything_claimed?` already exists and is the missing gate (the true
-   sentence being "the rest is parked in other accounts"). Reproduced on a throwaway at the exact
-   tie (Σ claims $500, one other account holding $500).
+   `BudgetPagePresenter#declaration` through the offer path is the fix. *(The duplicate id was
+   closed in the fix wave; the stale select remains.)*
+6. **FIXED in the fix wave (`6c9fcb4`): the hero's last arm asserted "none of it is claimed"
+   without asking.** Found live on Ming's Home above five rules claiming $1,668.37. The arm is now
+   gated on `#anything_claimed?` and, with claims and parked money both present, names both:
+   "$1,668.37 is claimed and more is parked in other accounts." The arm table is pinned in full,
+   including the exact tie (Σ claims == Σ other accounts).
+7. **A settled one-time bill keeps asking until its rule is deleted** (fix wave 2, `233e349`).
+   The structural check prices a one-off at its STANDING ask — `amount ÷ periods from the rule's
+   start through its due date`, a constant of the rule's shape — so that "your budget doesn't fit
+   your income" cannot flip with this afternoon's spending. The cost of that constancy is that a
+   one-off already paid still counts toward `steady_need`; the row beside it reads
+   `$0.00 built up of $600.00`. Whether a fulfilled one-off should retire its standing ask (or
+   its rule) is a design call.
+8. **`spec/system/entries/impact_spec.rb` reads the clock lazily at eight sites** and failed once
+   in a full-suite run that crossed UTC midnight (CLAUDE.md's third cause in its crossing form —
+   the grid slides a day between a fixture and the request). Passes alone, every time. Freezing
+   the clock for the whole file is the only real fix and touches 37 browser fixtures.
