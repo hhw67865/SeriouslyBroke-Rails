@@ -29,6 +29,15 @@ RSpec.describe "Budget page adjustments", type: :system do
 
   def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
+  # ** A FUND: A RULE WHOSE UNSPENT MONEY BUILDS UP, TOWARD A FIGURE IT NAMES ITSELF
+  # (rules-own-the-budget spec §2.1 row 3). ** `carries_over` is what makes the money survive the
+  # period boundary and `budgets.target_amount` is where it stops; the CATEGORY's copy of the figure
+  # is still written by `#holder` because the categories screens read it until the screens task moves
+  # them, but no claim formula does.
+  def fund(category, amount, target:)
+    create(:budget, :capped, category: category, amount: amount, target_amount: target)
+  end
+
   def rule_row(name) = find("[data-rule='#{name}']")
 
   # OPEN THE PANEL FIRST. `<details>` keeps its contents out of the accessibility tree while it is
@@ -56,7 +65,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   # plans `min($150, $1,200 − $0)` = $150 and the fund holds $150.
   describe "a fund that accrues toward a target" do
     before do
-      rate(holder("Vacation", target: 1_200), 150)
+      fund(holder("Vacation", target: 1_200), 150, target: 1_200)
       visit budget_page_path
     end
 
@@ -216,9 +225,10 @@ RSpec.describe "Budget page adjustments", type: :system do
     before do
       create(
         :budget,
-        :per_period_rate,
+        :capped,
         category: holder("Vacation", priority: 1, target: 1_200),
         amount: 150,
+        target_amount: 1_200,
         created_at: 1.month.ago
       )
       rate(holder("Groceries", priority: 2), 400)
@@ -338,7 +348,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   # $150 × 12 ÷ 26 = $69.2307…, which rounds to $69.23.
   describe "changing the period with a per-period rule on a goal beside a dated bill" do
     before do
-      rate(holder("Vacation", priority: 1, target: 1_200), 150)
+      fund(holder("Vacation", priority: 1, target: 1_200), 150, target: 1_200)
       create(
         :budget,
         category: holder("Car Insurance", priority: 2),
@@ -470,7 +480,7 @@ RSpec.describe "Budget page adjustments", type: :system do
     end
 
     it "keeps the open panel and its buttons inside a 375px viewport", :aggregate_failures do
-      rate(holder("Vacation", target: 1_200), 150)
+      fund(holder("Vacation", target: 1_200), 150, target: 1_200)
       visit budget_page_path
       open_adjust("Vacation")
 

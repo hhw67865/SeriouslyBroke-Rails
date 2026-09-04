@@ -22,12 +22,18 @@
 # formula re-plans it on whatever grid exists. Neither is `:per_period`, which is exactly the
 # `#steady_ask` branch that takes an amount VERBATIM as a period's cost.
 #
-# ** THE CATEGORY'S SHAPE IS IRRELEVANT, and that was the defect. ** This used to require
-# `ClaimCalculator#rate?`, which is a question about the CATEGORY: a $150-a-period rule on a
-# category carrying a `target_amount` is shape `:target`, so the identical rule was scaled on a
-# plain envelope and silently left behind on a goal — and it is just as grid-dependent, because
+# ** THE CLAIM SHAPE IS IRRELEVANT, and that was the defect. ** This used to require
+# `ClaimCalculator#rate?`, which was then a question about the CATEGORY: a $150-a-period rule on a
+# category carrying a `target_amount` took the accruing formula, so the identical rule was scaled on
+# a plain envelope and silently left behind on a goal — and it is just as grid-dependent, because
 # `Budget#steady_ask` hands `Budget.steady_need` its amount verbatim either way. The question is
 # what the AMOUNT is denominated in, and `#cadence` is the app's one answer to it.
+#
+# ** THE SAME ANSWER SURVIVES THE MOVE ONTO THE RULE (rules-own-the-budget spec §2.2). ** A building
+# rule — `carries_over`, with or without a target — is `:per_period` like any other per-period rule
+# and SCALES, because $300 a period means $300 of whatever a period now is whether the money resets
+# or accrues. Nothing in this class reads the new columns, and `budget_page_spec` pins that: the
+# building rule is offered and rewritten beside the rate rule, the $0 goal is neither.
 class CadenceChange
   # ONE RULE'S OFFER: what it says now and what it would say after. The rule travels with the pair
   # so the confirm screen and the write are looking at the same record rather than at a name.

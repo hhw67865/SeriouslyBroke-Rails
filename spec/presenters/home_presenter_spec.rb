@@ -50,17 +50,16 @@ RSpec.describe HomePresenter do
     create(:category, :expense, user: user, name: name, priority: priority, funded_since: funded_since)
   end
 
-  # A GOAL IS A HOLDER WITH A TARGET, and under computed claims it is also a RULE with one (§3.2):
-  # every claim comes from a rule, so a goal fed only by hand is a rule whose amount is zero.
-  def savings_goal(name, priority:, target: 1_200)
-    holder(name, priority: priority).tap { |category| category.update!(target_amount: target) }
-  end
+  # ** A GOAL IS A BUILDING RULE WITH A TARGET, NOT A KIND OF CATEGORY (rules-own-the-budget spec
+  # §7). ** The category it sits on is an ordinary holder; the figure to reach and the decision that
+  # unspent money BUILDS UP are both the rule's own columns, and `ClaimCalculator` reads nothing else.
+  def savings_goal(name, priority:) = holder(name, priority: priority)
 
-  # THE RULE A HAND-FED GOAL IS (§3.2's "no rate" spelled as a zero amount), with its birthday planted
-  # for the reason `#bill` states: a rule younger than `today` walks no periods and holds nothing,
-  # however many set-asides are dated inside them.
-  def goal_rule(category, created_at: Time.zone.local(2025, 1, 1))
-    create(:budget, :per_period_rate, category: category, amount: 0, created_at: created_at)
+  # THE RULE A HAND-FED GOAL IS (§3.2's "no rate" spelled as a zero amount, §2.1 row 4), with its
+  # birthday planted for the reason `#bill` states: a rule younger than `today` walks no periods and
+  # holds nothing, however many set-asides are dated inside them.
+  def goal_rule(category, target:, created_at: Time.zone.local(2025, 1, 1))
+    create(:budget, :hand_fed, category: category, target_amount: target, created_at: created_at)
   end
 
   # A flat per-period rule: the catch-all shape, and the one whose claim is exactly `rate − spent`.
@@ -494,12 +493,12 @@ RSpec.describe HomePresenter do
       end
 
       # THE ACCRUING SIDE, so the predicate is not a fact about rate rules alone. PLANTED: a $1,200
-      # goal fed by a single dated adjustment of $400 (§3.3) on a zero-amount target rule — its period
+      # goal fed by a single dated adjustment of $400 (§3.3) on a zero-amount building rule — its period
       # accrues `min(rate 0, gap 1,200)` = $0 plus the $400 delta, capped at the target and with
       # nothing spent, so `built_up` and the claim are **$400.00**.
       it "is true for a fund built up out of set-asides alone", :aggregate_failures do
-        goal = savings_goal("Vacation", priority: 1, target: 1_200)
-        set_aside(goal_rule(goal), 400)
+        goal = savings_goal("Vacation", priority: 1)
+        set_aside(goal_rule(goal, target: 1_200), 400)
 
         expect(presenter.total_claims).to eq(400)
         expect(presenter).to be_anything_claimed
@@ -911,12 +910,12 @@ RSpec.describe HomePresenter do
     end
 
     # A GOAL MEASURES AGAINST ITS TARGET (§3.4), and #filled is what it has BUILT UP rather than its
-    # spending — which is what keeps the row from reading as money to spend. PLANTED: a $2,400 goal on
-    # a zero-amount rule with a single $424 set-aside (§3.3), so `built_up` is $424.00 and the bar is
+    # spending — which is what keeps the row from reading as money to spend. PLANTED: a zero-amount
+    # rule building toward $2,400 with a single $424 set-aside (§3.3), so `built_up` is $424.00 and the bar is
     # `round(424 / 2,400 × 100)` = **18%**.
     it "measures a goal against its target and fills the bar with what it has built up", :aggregate_failures do
-      goal = savings_goal("Vacation", priority: 1, target: 2_400)
-      set_aside(goal_rule(goal), 424)
+      goal = savings_goal("Vacation", priority: 1)
+      set_aside(goal_rule(goal, target: 2_400), 424)
       line = presenter.period_rows.sole.lines.sole
 
       expect(line).not_to be_rate

@@ -487,13 +487,17 @@ RSpec.describe BudgetPagePresenter do
     # BY HAND: the boundaries are Feb 6 minus multiples of 14, so the walk visits Dec 26–Jan 8,
     # Jan 9–22, Jan 23–Feb 5 and Feb 6–19 — four periods at $150 each, which is $600 built up, with
     # $150 planned for the period `today` is in and $1,200 still a long way off.
+    #
+    # ** THE FIGURE AND THE BUILD-UP ARE THE RULE'S OWN (rules-own-the-budget spec §2.1). ** A goal
+    # is a `carries_over` rule that names a `target_amount`; the category it sits on names nothing.
     def goal_rule
       create(
         :budget,
-        :per_period_rate,
+        :capped,
         amount: 150,
+        target_amount: 1_200,
         created_at: today - 1.month,
-        category: holder("Vacation").tap { |c| c.update!(target_amount: 1_200) }
+        category: holder("Vacation")
       )
     end
 
@@ -503,7 +507,11 @@ RSpec.describe BudgetPagePresenter do
       goal_rule
 
       expect(row_for("Vacation")).to have_attributes(
-        shape: :target, built_up: BigDecimal("600"), planned_this_period: BigDecimal("150"), claim: BigDecimal("600")
+        shape: :building,
+        built_up: BigDecimal("600"),
+        planned_this_period: BigDecimal("150"),
+        claim: BigDecimal("600"),
+        target: BigDecimal("1200")
       )
     end
 

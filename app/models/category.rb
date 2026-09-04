@@ -386,8 +386,14 @@ class Category < ApplicationRecord
   #
   # THE FOUR SCREENS THAT ASK IT — the categories index card, the categories page's holdings card,
   # the entry form's impact card and the dashboard's savings strip — ask it here, so a rule-bearing
-  # goal is a goal on every one of them. `ClaimCalculator#shape` answers `:target` off the same column for one RULE; this is the
-  # same question asked of the category a screen is drawing.
+  # goal is a goal on every one of them; this is that question asked of the category a screen is
+  # drawing.
+  #
+  # ** THE COLUMN THIS READS IS ON ITS WAY OUT (rules-own-the-budget spec §5/§7). ** A goal is a
+  # BUILDING RULE with a target now, and `ClaimCalculator#shape` no longer consults this record at
+  # all — it answers `:building` off the rule's own `carries_over`. The four screens above still ask
+  # here, so the column and this reader survive until the screens task moves them; nothing in the
+  # claim formulas reads either any more.
   def saving_toward_a_target? = holder? && target_amount.present?
 
   # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round

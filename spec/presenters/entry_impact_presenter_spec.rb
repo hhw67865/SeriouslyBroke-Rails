@@ -114,10 +114,22 @@ RSpec.describe EntryImpactPresenter do
   # A CATEGORY SAVING TOWARD A FIGURE. `accrues:` is the per-period rule that feeds it — every claim
   # comes from a rule (§3.3), so a goal with no rule is a goal with nothing in it, which is exactly
   # what `accrues: 0` plants — a goal all the same, because the predicate is about the target.
+  #
+  # ** THE FIGURE IS ON BOTH RECORDS, AND FOR THIS ONE TASK THAT IS THE HONEST FIXTURE. ** The WALK
+  # reads the rule (rules-own-the-budget spec §2.1): `carries_over` is what makes the money build up
+  # and `budgets.target_amount` is where it stops. This card's `#goal?` and `#goal_target` still read
+  # `Category#saving_toward_a_target?` and `categories.target_amount`, which the screens task moves —
+  # so the category keeps its copy until then and this helper writes the same number twice rather
+  # than pretending either reader has already moved.
   def goal(name, target:, accrues: 0)
     category = create(:category, :expense, user: user, name: name, funded_since: funded_since, target_amount: target)
-    rate(category, accrues) if accrues.positive?
+    building(category, accrues, target: target) if accrues.positive?
     category
+  end
+
+  # THE RULE A GOAL ACCRUES BY: per-period, unspent money builds up, capped at the goal's figure.
+  def building(category, amount, target:)
+    create(:budget, :capped, category: category, amount: amount, target_amount: target, created_at: born)
   end
 
   def present(category, amount: nil, entry: nil, on: today)

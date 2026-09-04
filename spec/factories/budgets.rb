@@ -50,25 +50,53 @@ FactoryBot.define do
       anchor_date { Date.new(2026, 8, 1) }
     end
 
-    # A TARGET RULE (computed-claims spec §3.2/§3.3): the target lives on the CATEGORY —
-    # `categories.target_amount` — and the rule is what accrues toward it, because every claim comes
-    # from a rule and every adjustment targets one. The anchor is deliberately left OPTIONAL and
-    # unset here: an anchored target rule accrues by the catch-up formula toward its due date, and an
-    # anchorless one accrues at its own rate toward the category's figure until it gets there. Two
-    # shapes, one trait, and each example that wants the dated one adds `anchor_date:` itself.
+    # ** UNSPENT MONEY BUILDS UP (rules-own-the-budget spec §2.1, row 2): the emergency fund. ** The
+    # §3.2 walk with no due date and NO CAP — `gap` is unbounded, so every period plans its plain
+    # rate and the fund grows for as long as the rule lives.
     #
     # `:per_period` BASIS, so the rate is stated in the user's own periods and no example has to
-    # divide a monthly figure by a cadence to say what a period accrues. `target_amount` is a
-    # transient so an example can plant the figure the formula is about in one line.
-    trait :target do
-      transient do
-        target_amount { 1_200 }
-      end
-
+    # divide a monthly figure by a cadence to say what a period accrues. A monthly building rule is
+    # legal (row 5) and the two examples that want one say `basis: :monthly, interval_months: 1`
+    # themselves rather than earning a trait apiece.
+    #
+    # ** IT REPLACES `:target`, WHICH PUT THE FIGURE ON THE CATEGORY. ** A goal is not a kind of
+    # category any more; it is a building rule with a target (§7), and the trait that spelled the old
+    # shape would now build a rule whose claim is computed by a different formula from the one its
+    # name promises.
+    trait :building do
       basis { :per_period }
       interval_months { nil }
       anchor_date { nil }
-      category { association :category, :expense, :funded, target_amount: target_amount }
+      carries_over { true }
+    end
+
+    # THE GOAL (§2.1 row 3): a building rule that names the figure it is building TOWARD, so the walk
+    # caps there and the last contribution is the remainder rather than the rate.
+    trait :capped do
+      building
+      target_amount { 1_200 }
+    end
+
+    # THE GOAL FED BY HAND (§2.1 row 4): a capped building rule with NO standing rate, which is the
+    # one shape `Budget#set_aside_only?` exempts from `amount > 0`. It accrues only by positive
+    # adjustments (§3.3's "set aside").
+    trait :hand_fed do
+      capped
+      amount { 0 }
+    end
+
+    # THE THREE TYPES (§3). `usage` is the column's own default and has a trait all the same, so an
+    # example that means "typed usage on purpose" reads differently from one that never said.
+    trait :bill do
+      rule_type { :bill }
+    end
+
+    trait :usage do
+      rule_type { :usage }
+    end
+
+    trait :choice do
+      rule_type { :choice }
     end
   end
 end

@@ -542,13 +542,19 @@ vacation_costs = vacation.items.create!(name: "Flights & Hotels")
 # periods, your rule says $150" is TRUE of a retirement goal by definition and useless on a money
 # screen. The household actually draws on this one, so the rule and the spending agree and the panel
 # says nothing about it.
-rule.call(category: vacation, amount: 50, basis: :per_period)
+#
+# ** THE GOAL IS THE RULE'S, NOT THE CATEGORY'S (rules-own-the-budget spec §2.1/§9). ** `carries_over`
+# is what makes the money build up and `target_amount` is where it stops; the category's copy of the
+# figure survives only until the screens that still read it are moved. The two columns reproduce this
+# rule's previous shape exactly — it was a fund because its CATEGORY named a figure — so every demo
+# number below is the number it always was.
+rule.call(category: vacation, amount: 50, basis: :per_period, carries_over: true, target_amount: vacation.target_amount)
 
 # ** SHAPE TWO — A GOAL FED ONLY BY HAND (§3.2, Henry's ruling of 2026-09-03). ** "No rate" is
 # spelled as an amount of ZERO: every claim comes from a rule (§3.3), so a goal somebody feeds by
 # hand has to BE a rule, and zero is the only honest way to say it has no standing contribution.
-# `Budget#set_aside_only?` is the predicate that permits it and it names all three columns — no
-# anchor, no interval, a category that names a target — and refuses the zero everywhere else.
+# `Budget#set_aside_only?` is the predicate that permits it and it names all three columns — the
+# rule carries over, names a target, and has no due date — and refuses the zero everywhere else.
 #
 # THIS IS THE SHAPE `DropTheDistribution#mint_rule` MINTS, COLUMN FOR COLUMN, and that is the point
 # of writing it here rather than giving these four goals a rate: a real database that had these
@@ -556,7 +562,7 @@ rule.call(category: vacation, amount: 50, basis: :per_period)
 # migrated database are one shape. Every penny each of these four holds arrives as a positive
 # adjustment below.
 [emergency_fund, house_fund, new_car, retirement].each do |goal|
-  rule.call(category: goal, amount: 0, basis: :per_period)
+  rule.call(category: goal, amount: 0, basis: :per_period, carries_over: true, target_amount: goal.target_amount)
 end
 
 # ---------------------------------------------------------------------------------------------

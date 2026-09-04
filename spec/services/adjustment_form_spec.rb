@@ -22,13 +22,20 @@ RSpec.describe AdjustmentForm, type: :model do
   # `claim_calculator_spec` injects it, because the whole subject is a walk over a calendar.
   let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
   let(:goal) do
-    create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1), target_amount: 1_200)
+    create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1))
   end
 
-  # A $150-a-period rule BORN AUG 1 on a $1,200 goal: the walk visits August (planning
+  # A $150-a-period rule BORN AUG 1 BUILDING TOWARD $1,200: the walk visits August (planning
   # `min($150, $1,200)` = $150) and September (planning `min($150, $1,050)` = $150), so this period
   # accrues $150 and a skip is worth −$150.
-  let(:rule) { create(:budget, :per_period_rate, category: goal, amount: 150, created_at: Time.utc(2026, 8, 1, 9, 0)) }
+  #
+  # ** IT HAS TO BE A RULE THAT WALKS, AND THE FIGURE IS ON THE RULE (rules-own-the-budget §2.1). **
+  # A rate rule's `#periods` is the CURRENT period and nothing else, so its span can never be empty
+  # and the refusal below has no shape to fire on; `carries_over` is what opens the walk now, where a
+  # `target_amount` on the CATEGORY used to.
+  let(:rule) do
+    create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1, 9, 0))
+  end
 
   def form(params, today:) = described_class.new(rule: rule, params: params, name: "Vacation", today: today)
 
@@ -43,7 +50,9 @@ RSpec.describe AdjustmentForm, type: :model do
   # on Sep 10 still walks September when asked about Sep 3 (§3.2's "a period's accrual counts in
   # full the day the period opens"). October is the first period whose OPEN is after this `today`.
   describe "a rule that has not started counting" do
-    let(:rule) { create(:budget, :per_period_rate, category: goal, amount: 150, created_at: Time.utc(2026, 10, 1, 9, 0)) }
+    let(:rule) do
+      create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 10, 1, 9, 0))
+    end
 
     it "refuses, naming the rule rather than a span it could be met inside", :aggregate_failures do
       built = form({ amount: "100", date: "2026-09-02" }, today: Date.new(2026, 9, 3))

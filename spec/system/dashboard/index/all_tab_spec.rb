@@ -183,18 +183,12 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   end
 
   # A GOAL FED BY HAND: the rule that makes the claim possible, and the dated delta that IS the
-  # money. `basis: :per_period` with no anchor and no interval is the only shape `Budget` permits a
-  # zero amount on (`#set_aside_only?`), which is §3.2's "no rate is spelled as zero".
+  # money. Per-period with no anchor and no interval, carrying over toward a figure it names itself,
+  # is the only shape `Budget` permits a zero amount on (`#set_aside_only?`) — §3.2's "no rate is
+  # spelled as zero", read off the RULE since the rules-own-the-budget task rather than off the
+  # category's own `target_amount`, which this tab's savings strip still displays.
   def set_aside(category, amount, on:)
-    rule = create(
-      :budget,
-      category: category,
-      item: nil,
-      amount: 0,
-      basis: :per_period,
-      interval_months: nil,
-      anchor_date: nil
-    )
+    rule = create(:budget, :hand_fed, category: category, item: nil, target_amount: category.target_amount)
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 

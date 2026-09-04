@@ -29,19 +29,23 @@ RSpec.describe ClaimLedger, type: :model do
       :expense,
       user: user,
       name: "Vacation",
-      funded_since: Date.new(2026, 1, 1),
-      target_amount: 1_200
+      funded_since: Date.new(2026, 1, 1)
     )
   end
   let(:groceries_rule) { create(:budget, :per_period_rate, category: groceries, amount: 400) }
-  let(:vacation_rule) { create(:budget, :per_period_rate, category: vacation, amount: 150, created_at: born) }
+  # ** A CAPPED BUILDING RULE, WITH THE FIGURE ON THE RULE (rules-own-the-budget spec §2.1 row 3). **
+  # The category names nothing at all now; `carries_over` is what makes this a fund rather than a
+  # use-it-or-lose-it rate, and `target_amount` is where it stops.
+  let(:vacation_rule) do
+    create(:budget, :capped, category: vacation, amount: 150, target_amount: 1_200, created_at: born)
+  end
   let(:ledger) { described_class.new(user, today: today) }
 
   # $3,000 in on Jan 5, $1,000 of it moved to Ally, $250 of groceries on Sep 2.
   #   pot          = 3000 − 250 − 1000 = 1750
   #   total_money  = 1750 + 1000       = 2750
   #   Groceries    = 400 − 250         =  150
-  #   Vacation     = 9 periods × 150, capped at the category's 1,200
+  #   Vacation     = 9 periods × 150, capped at the rule's 1,200
   #   Σ claims     = 1350
   before do
     create(:pool, :account, user: user, name: "Checking")

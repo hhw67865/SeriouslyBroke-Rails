@@ -141,9 +141,14 @@ RSpec.describe "Home This Period", type: :system do
   # A GOAL IS A RULE WITH A TARGET (computed-claims §3.2), and a goal fed only by hand is a rule with
   # a target and an amount of ZERO — "no rate" spelled as a figure, because every claim comes from a
   # rule and zero is the only honest way to say a rule has no standing contribution.
+  #
+  # ** THE RULE CARRIES BOTH COLUMNS NOW (rules-own-the-budget spec §2.1 row 4): `carries_over` is
+  # what makes the money build up and `target_amount` is where it stops. ** The CATEGORY keeps its
+  # copy of the figure because the screens that read it have not been moved yet; the claim formulas
+  # read only the rule.
   def goal(name, target:, priority: 1)
     holder(name, priority: priority, target_amount: target).tap do |category|
-      create(:budget, :per_period_rate, category: category, amount: 0)
+      create(:budget, :hand_fed, category: category, target_amount: target)
     end
   end
 

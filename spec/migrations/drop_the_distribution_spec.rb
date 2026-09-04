@@ -292,17 +292,34 @@ RSpec.describe DropTheDistribution do
   # beyond tidiness: `CadenceChange#apply` writes `Budget#amount` through an unrescued `update!`, so
   # a rule minted in a shape the model refuses would reach the user as a 500 the first time they
   # changed their period, from a row they never wrote and cannot see.
-  it "mints a rule the model accepts" do
+  #
+  # ** THE MODEL MOVED UNDER THIS MIGRATION, AND THE EXAMPLE SAYS SO RATHER THAN GOING QUIET
+  # (rules-own-the-budget spec §2.1 row 4, §6). ** `Budget#set_aside_only?` reads `carries_over` and
+  # `target_amount` off the RULE now; this migration writes neither, because at ITS moment in the
+  # sequence the columns do not exist — `RulesOwnTheBudgetColumns` runs two days later. So the row it
+  # mints is legal when it is written and a shape the model refuses by the time the next migration
+  # runs, which is an ordinary state for a database mid-sequence and NOT a defect in either file. The
+  # data migration that fills the two columns in is what closes it; both halves are pinned here, so
+  # neither "it stopped being valid" nor "the fix-up shape is wrong" can pass silently.
+  it "mints a rule the model accepts once the target is moved onto it", :aggregate_failures do
     world = plant_the_distribution_era
 
     migrate!
 
-    expect(catch_all_rule_for(world[:vacation])).to be_valid
+    rule = catch_all_rule_for(world[:vacation])
+    expect(rule).not_to be_valid
+    rule.assign_attributes(carries_over: true, target_amount: world[:vacation].target_amount)
+    expect(rule).to be_valid
   end
 
   # BORN NO LATER THAN THE DAY ITS CATEGORY STARTED HOLDING MONEY. `accrual_start` is
   # `max(funded_since, the rule's birthday)`, so a rule minted TODAY would walk no period the July
   # set-aside is dated in and the goal would read $0.00 built up the morning after this runs.
+  #
+  # THE BUILT-UP IS READ THROUGH THE SHAPE THE NEXT MIGRATION GIVES IT, for the reason the example
+  # above states: a rule that neither carries over nor names a figure is a use-it-or-lose-it RATE
+  # rule to today's `ClaimCalculator`, and a rate rule's built-up is zero by definition. The
+  # BIRTHDAY is this migration's own subject and is asserted before anything is assigned.
   it "backdates the minted rule so the history it inherits still counts", :aggregate_failures do
     world = plant_the_distribution_era
 
@@ -310,6 +327,7 @@ RSpec.describe DropTheDistribution do
 
     rule = catch_all_rule_for(world[:vacation])
     expect(user.local_day(rule.created_at)).to be <= Date.new(2026, 6, 1)
+    rule.update!(carries_over: true, target_amount: world[:vacation].target_amount)
     expect(rule.claim_calculator(today: Date.new(2026, 9, 3)).built_up).to eq(540.to_d)
   end
 
@@ -484,12 +502,15 @@ RSpec.describe DropTheDistribution do
   #
   # PLANTED THROUGH THE MODEL, which is the assertion: `create` would raise if `Budget` refused it,
   # and `#valid?` is asserted beside it so the example says out loud which layer is the authority.
+  #
+  # `carries_over` AND `target_amount` ON THE RULE are what make the $0 amount legal today
+  # (rules-own-the-budget spec §2.1 row 4); the CATEGORY's target is what the migration's SQL
+  # verifier reads, and this fixture carries both because the two readers have not yet been moved
+  # onto one column. The verifier's own reading is what this example is about, and it is unchanged.
   it "accepts a pre-existing item-backed $0 rule on a category with a target", :aggregate_failures do
     world = plant_the_distribution_era
     tips = create(:item, category: world[:vacation], name: "Flights")
-    set_aside_only = create(
-      :budget, category: world[:vacation], item: tips, amount: 0, basis: :per_period, interval_months: nil
-    )
+    set_aside_only = create(:budget, :hand_fed, category: world[:vacation], item: tips, target_amount: 1_200)
 
     expect(set_aside_only).to be_valid
     expect { migrate! }.not_to raise_error

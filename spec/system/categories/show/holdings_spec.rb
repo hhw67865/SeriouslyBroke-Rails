@@ -284,11 +284,15 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
   # ------------------------------------------------------------------------------------------
 
   describe "a category saving toward a target", :aggregate_failures do
-    # A GOAL IS A CATEGORY WITH A TARGET AND A RULE THAT ACCRUES TOWARD IT (§3.3: every claim comes
-    # from a rule). `ClaimCalculator#shape` reads `:target` for an anchorless rule whose category
-    # names a figure, which is the branch that makes the money CARRY rather than reset.
+    # A GOAL IS A BUILDING RULE WITH A TARGET (rules-own-the-budget spec §7): `ClaimCalculator#shape`
+    # reads `:building` off the RULE's own `carries_over`, which is the branch that makes the money
+    # CARRY rather than reset, and `budgets.target_amount` is where it stops. The CATEGORY keeps its
+    # copy of the figure because this card's "Goal" heading and its progress bar still read
+    # `Category#saving_toward_a_target?`, which the screens task moves.
     def goal(name, target:, rate_amount:)
-      holder(name, target_amount: target).tap { |category| rate(category, rate_amount) }
+      holder(name, target_amount: target).tap do |category|
+        create(:budget, :capped, category: category, amount: rate_amount, target_amount: target)
+      end
     end
 
     # PLANTED: a $500-per-period rule on a $2,000 goal, funded a year back but written today, so the

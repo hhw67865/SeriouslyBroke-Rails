@@ -675,13 +675,20 @@ class SuggestionEngine
   # ** "IS THIS A RATE RULE" IS `ClaimCalculator#shape`'S QUESTION AND THIS METHOD USED TO ANSWER IT
   # ITSELF (fix wave — MED-2). ** The old spelling was
   # `anchor_date.blank? && item_id.blank? && cadence.in?([:per_period, :monthly])` — which never
-  # reads the CATEGORY's `target_amount`, the very column §3.3 uses to tell a goal from a rate. So
-  # every goal category's item-less rule was a rate rule here while `ClaimCalculator` called it
-  # `:target`, and the detector spoke about money the claim computes by a different formula: a $0
-  # rule minted by Task 4's migration fired "your rule says $0.00" at a fund the user tops up by
+  # reads the column that tells a fund accruing toward a figure from a use-it-or-lose-it rate. So
+  # every goal's item-less rule was a rate rule here while `ClaimCalculator` called it something
+  # else, and the detector spoke about money the claim computes by a different formula: a $0
+  # rule minted by `DropTheDistribution` fired "your rule says $0.00" at a fund the user tops up by
   # hand, and a $50-a-period goal with heavy spending was told to RAISE a contribution that is
   # already accruing toward a fixed figure. `Budget#claim_shape` is the one door onto §3's
-  # classification; a `:target` rule never drifts.
+  # classification; an accruing rule never drifts.
+  #
+  # ** THAT SHAPE IS `:building` SINCE THE RULES-OWN-THE-BUDGET TASK, AND NOTHING HERE MOVED. ** It
+  # was `:target`, read off the CATEGORY's `target_amount`; it is now read off the rule's own
+  # `carries_over`, and an uncapped fund — a building rule naming no figure at all — is the same
+  # silence for the same reason. This method asks `== :rate` and therefore never had to name the
+  # accruing shape; `suggestion_engine_spec` pins both arms of it by symbol so the equivalence
+  # cannot drift.
   #
   # ** AND A $0 RULE NEVER DRIFTS EITHER. ** `#drift_suggestion`'s thresholds are `gap ≥ $10` and
   # `gap ≥ 10% of the rule`, and the second is vacuous against zero — so ANY spending at all on a

@@ -187,9 +187,9 @@ RSpec.describe "Adjustments", type: :request do
     # the accrual start is the later of the category's funding date and the rule's own creation).
     # The rule below was born Aug 1, so July is before the walk opens.
     describe "on a fund that has been building since Aug 1" do
-      let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 1_200) }
+      let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation") }
       let(:target_rule) do
-        create(:budget, :per_period_rate, category: goal, amount: 150, created_at: Time.utc(2026, 8, 1, 9))
+        create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1, 9))
       end
 
       it "refuses a date before it started building", :aggregate_failures do
@@ -217,14 +217,14 @@ RSpec.describe "Adjustments", type: :request do
   # rendered before another delta landed would skip the wrong amount, and the share is a fact the
   # calculator owns.
   #
-  # THE FIXTURE'S ARITHMETIC, BY HAND: a $1,200 target on the category and a $150-a-period rule
+  # THE FIXTURE'S ARITHMETIC, BY HAND: a $150-a-period rule building toward $1,200,
   # born Aug 1, on a monthly grid anchored Jan 1 — so the walk visits August and September (accrual
   # starts at the later of `funded_since` and the rule's own birth). August plans `min($150,
   # $1,200 − $0)` = $150 and September plans `min($150, $1,200 − $150)` = $150.
   describe "skipping a period", :aggregate_failures do
-    let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 1_200) }
+    let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation") }
     let(:target_rule) do
-      create(:budget, :per_period_rate, category: goal, amount: 150, created_at: Time.utc(2026, 8, 1))
+      create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1))
     end
 
     it "writes exactly minus this period's planned share, dated the owner's today" do
@@ -316,8 +316,8 @@ RSpec.describe "Adjustments", type: :request do
     # minus sign doing the work of a verb on the one screen where the user has just pressed
     # "Remove".
     it "names the direction of a removed take-back rather than printing a minus", :aggregate_failures do
-      goal = create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 1_200)
-      goal_rule = create(:budget, :per_period_rate, category: goal, amount: 150)
+      goal = create(:category, :expense, :funded, user: user, name: "Vacation")
+      goal_rule = create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200)
       adjustment = create(:adjustment, rule: goal_rule, amount: -150, date: now)
 
       delete(adjustment_path(adjustment))

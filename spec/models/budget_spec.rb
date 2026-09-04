@@ -63,33 +63,139 @@ RSpec.describe Budget, type: :model do
     # goal fed only by hand. ** Every claim comes from a rule, so a savings goal with no standing
     # contribution has to BE a rule, and "no rate" is spelled with an amount of zero.
     #
-    # THREE REFUSALS BESIDE THE ONE PERMISSION, each varying ONE column of the permitted shape, so
+    # ** THE SHAPE IS READ OFF THE RULE NOW (rules-own-the-budget spec §2.1 row 4). **
+    # `#set_aside_only?` used to ask the CATEGORY for a `target_amount`, which meant a user could
+    # retire a goal — clearing the category's figure — and leave a $0 rule behind that nothing would
+    # ever have accepted. The permitted shape is `carries_over && target_amount && no anchor`, all
+    # three on the rule, and the category is not consulted at all.
+    #
+    # FOUR REFUSALS BESIDE THE ONE PERMISSION, each varying ONE column of the permitted shape, so
     # the exemption cannot be satisfied by a validation that simply stopped checking.
     describe "the set-aside-only goal" do
-      let(:goal) { create(:category, :expense, :funded, target_amount: 2_400) }
+      let(:owner) { create(:category, :expense, :funded) }
 
-      it "takes a zero amount when the category names a target and the rule names no schedule" do
-        expect(build(:budget, :per_period_rate, category: goal, amount: 0)).to be_valid
+      it "takes a zero amount on a capped building rule with no schedule" do
+        expect(build(:budget, :hand_fed, category: owner)).to be_valid
       end
 
-      it "refuses a zero amount on a category with no target" do
-        plain = create(:category, :expense, :funded)
+      it "refuses a zero amount on a building rule that names no target" do
+        expect(build(:budget, :building, category: owner, amount: 0)).not_to be_valid
+      end
 
-        expect(build(:budget, :per_period_rate, category: plain, amount: 0)).not_to be_valid
+      # THE COLUMN THAT MOVED, ASKED IN THE DIRECTION THAT USED TO PASS: a figure on the CATEGORY is
+      # no longer any part of this exemption, so the same $0 rate rule that was legal beside a goal
+      # category is refused now.
+      it "refuses a zero amount for a target that sits on the category instead" do
+        goal = create(:category, :expense, :funded, target_amount: 2_400)
+
+        expect(build(:budget, :per_period_rate, category: goal, amount: 0)).not_to be_valid
       end
 
       it "refuses a zero amount on a rule with a due date" do
-        expect(build(:budget, category: goal, amount: 0, interval_months: nil, anchor_date: Date.new(2026, 6, 1)))
+        expect(build(:budget, category: owner, amount: 0, interval_months: nil, anchor_date: Date.new(2026, 6, 1)))
           .not_to be_valid
       end
 
-      it "refuses a zero amount on a rule with an interval" do
-        expect(build(:budget, :rate, category: goal, amount: 0)).not_to be_valid
+      it "still refuses a negative amount there" do
+        expect(build(:budget, :capped, category: owner, amount: -1)).not_to be_valid
+      end
+    end
+
+    # ** WHAT BECOMES OF UNSPENT MONEY, AND WHAT IT IS BUILDING TOWARD (spec §2.1's validation
+    # list). ** Two rules, each refused and its positive twin accepted, because a validation
+    # asserted only where it fires says nothing about what it lets through.
+    describe "money that builds up" do
+      let(:owner) { create(:category, :expense, :funded) }
+
+      # A DATED RULE'S BUILD-UP IS DEFINED BY ITS DATE (§3.2): it accrues toward its amount by the
+      # catch-up formula and empties when the bill is paid. `carries_over` on top of that would be a
+      # second, contradictory answer to "does this money survive the boundary".
+      it "refuses a rule that both builds up and falls due", :aggregate_failures do
+        rule = build(:budget, category: owner, carries_over: true, interval_months: nil, anchor_date: Date.new(2026, 6, 1))
+
+        expect(rule).not_to be_valid
+        expect(rule.errors[:carries_over]).to include("cannot be set on a rule with a due date")
       end
 
-      it "still refuses a negative amount there" do
-        expect(build(:budget, :per_period_rate, category: goal, amount: -1)).not_to be_valid
+      it "accepts the same building rule once the due date is gone" do
+        expect(build(:budget, :building, category: owner, amount: 300)).to be_valid
       end
+
+      # A CAP ON MONEY THAT RESETS IS MEANINGLESS: a rate rule never carries a penny past the
+      # boundary, so a figure it is "building toward" would be a number no formula could ever read.
+      it "refuses a target on a rule whose money resets", :aggregate_failures do
+        rule = build(:budget, :per_period_rate, category: owner, amount: 200, target_amount: 5_000)
+
+        expect(rule).not_to be_valid
+        expect(rule.errors[:target_amount]).to include("needs a rule whose unspent money builds up")
+      end
+
+      it "accepts the same target once the rule builds up" do
+        expect(build(:budget, :building, category: owner, amount: 200, target_amount: 5_000)).to be_valid
+      end
+
+      # A GOAL OF ZERO IS ALREADY MET AND A NEGATIVE ONE IS MONEY THE BUDGET OWES ITS OWNER —
+      # `categories.target_amount`'s own rule, re-stated on the column's new owner. The database
+      # carries it too (`budgets_positive_target_amount`); this is the half the form can render.
+      it "refuses a target of zero", :aggregate_failures do
+        rule = build(:budget, :building, category: owner, amount: 200, target_amount: 0)
+
+        expect(rule).not_to be_valid
+        expect(rule.errors[:target_amount]).to include("must be greater than 0")
+      end
+
+      it "leaves a building rule with no target alone, which is the shape that grows without limit" do
+        expect(build(:budget, :building, category: owner, amount: 300, target_amount: nil)).to be_valid
+      end
+    end
+  end
+
+  # ** EVERY RULE HAS A TYPE (spec §3): bill, usage or choice. ** The enum's integers are asserted
+  # because they are stored, and the give-way RANK is asserted separately because it is deliberately
+  # NOT the enum's order — money gives way in the order a person would sacrifice it, which is the
+  # reverse of how urgent it is.
+  describe "#rule_type" do
+    it "stores the three types as 0, 1 and 2", :aggregate_failures do
+      expect(described_class.rule_types).to eq("bill" => 0, "usage" => 1, "choice" => 2)
+    end
+
+    it "answers a predicate for each", :aggregate_failures do
+      expect(build(:budget, :bill)).to be_bill
+      expect(build(:budget, :usage)).to be_usage
+      expect(build(:budget, :choice)).to be_choice
+      expect(build(:budget, :bill)).not_to be_choice
+    end
+
+    # THE DEFAULT IS `usage`, and it is a ruling rather than an accident (§6 step 3): it is the
+    # widest of the three, so a rule nobody has typed claims neither that it must be paid nor that
+    # it is discretionary.
+    it "types a rule nobody has typed as usage" do
+      expect(build(:budget).rule_type).to eq("usage")
+    end
+
+    it "refuses a rule with no type at all", :aggregate_failures do
+      rule = build(:budget, rule_type: nil)
+
+      expect(rule).not_to be_valid
+      expect(rule.errors[:rule_type]).to include("can't be blank")
+    end
+
+    # ** CHOICE FIRST, THEN USAGE, THEN BILL (§3's give-way order). ** Spelled ONCE, here, because
+    # the Budget page's reorder copy and the walk that lists uncovered claims both read it and two
+    # spellings is how a screen and a walk come to disagree about which rule gives way. The rank is
+    # asserted as an ORDER as well as three numbers, so renumbering it consistently still passes and
+    # reversing it does not.
+    it "ranks choice ahead of usage ahead of bill", :aggregate_failures do
+      expect(described_class::TYPE_RANK).to eq(choice: 0, usage: 1, bill: 2)
+      expect(build(:budget, :choice).type_rank).to eq(0)
+      expect(build(:budget, :usage).type_rank).to eq(1)
+      expect(build(:budget, :bill).type_rank).to eq(2)
+    end
+
+    it "sorts a mixed set of rules into give-way order" do
+      rules = [build(:budget, :bill), build(:budget, :choice), build(:budget, :usage)]
+
+      expect(rules.sort_by(&:type_rank).map(&:rule_type)).to eq(["choice", "usage", "bill"])
     end
   end
 
@@ -453,8 +559,17 @@ RSpec.describe Budget, type: :model do
     end
 
     it "builds a valid record for every shape trait", :aggregate_failures do
-      [:rate, :per_period_rate, :recurring, :one_time].each do |trait|
+      [:rate, :per_period_rate, :recurring, :one_time, :building, :capped, :hand_fed].each do |trait|
         expect(build(:budget, trait)).to be_valid
+      end
+    end
+
+    # THE TYPE TRAITS, and the assertion is the COLUMN rather than mere validity: a trait that
+    # silently wrote nothing would pass a `be_valid` check, because `usage` is the default.
+    it "builds a valid record typed by each type trait", :aggregate_failures do
+      [:bill, :usage, :choice].each do |trait|
+        expect(build(:budget, trait)).to be_valid
+        expect(build(:budget, trait).rule_type).to eq(trait.to_s)
       end
     end
   end
