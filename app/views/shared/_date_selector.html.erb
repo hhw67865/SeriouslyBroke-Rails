@@ -23,15 +23,17 @@
   # Preserve existing query params for form redirects — SCALARS ONLY.
   #
   # These ride along as `hidden_field key, value: value`, which writes ONE box holding the value's
-  # #to_s. A nested param therefore does not survive: the distribution screen's
-  # `overrides[<pool id>]` hash came out the other side as a single scalar
-  # `overrides=<inspected hash>`, which only DistributionsController#override_params' type guard
-  # kept from being a 500.
+  # #to_s. A NESTED PARAM THEREFORE DOES NOT SURVIVE: a hash arrives on the other side as the single
+  # scalar `<key>=<the hash, inspected>`, which is a string no controller can read back as the hash
+  # it was. The screen that proved it is deleted (Task 4 took the Distribute page and its
+  # `overrides[<pool id>]` hash with it), so this filter now guards no caller in particular — and it
+  # is kept for that reason rather than in spite of it: it is a fact about `hidden_field`, and the
+  # next screen to hang a nested parameter off a URL will not suspect a shared partial.
   #
   # Dropping them is also the right BEHAVIOUR, not just the safe one: a month arrow moves to a
-  # different period, whose proposal has different rows, so an edit carried across it would name
-  # rows that no longer exist. Dropped deliberately here rather than mangled into something a
-  # guard downstream has to catch.
+  # different period, whose rows are different rows, so an edit carried across it would name rows
+  # that no longer exist. Dropped deliberately here rather than mangled into something a guard
+  # downstream has to catch.
   #
   # EVERY HIDDEN FIELD BELOW IS RENDERED `id: nil`, AND THAT IS A CORRECTNESS FIX RATHER THAN
   # TIDINESS. `f.hidden_field :amount` writes `id="amount"` as well as the name, and this partial
@@ -42,14 +44,15 @@
   # That is invalid HTML on its own, and it is a live trap for any screen naming a form field after
   # its own query parameter: `label for=` and `document.getElementById` both resolve to the FIRST
   # match in the document, which is one of these hidden inputs, not the box the user types in.
-  # Measured on Task 7's reallocation screen — `getElementById("amount")` returned
-  # `<input type="hidden" name="amount" value="300">` rather than its number field, and every
-  # system example passed either way because Capybara filters invisible elements and happened to
-  # land on the right one.
+  # MEASURED, on the reallocation screen this branch has since deleted — `getElementById("amount")`
+  # returned `<input type="hidden" name="amount" value="300">` rather than its number field, and
+  # every system example passed either way because Capybara filters invisible elements and happened
+  # to land on the right one. The screen is gone and the trap is not: `amount`, `date` and
+  # `category_id` are all query parameters somewhere in this app and all form field names elsewhere.
   #
   # Fixed HERE and generically rather than by renaming the fields on each screen that trips on it,
-  # for the same reason the nested-param guard below was made generic rather than
-  # distribution-specific: the next screen to hit this will not suspect a shared partial. These
+  # for the same reason the nested-param guard above was made generic rather than written against
+  # the one caller that hit it: the next screen to hit this will not suspect a shared partial. These
   # inputs are pure form payload — nothing in the app targets them by id (no CSS, no JavaScript, no
   # label, no spec), and a form field needs a name to be submitted, never an id.
   base_params = request.query_parameters.deep_dup.symbolize_keys

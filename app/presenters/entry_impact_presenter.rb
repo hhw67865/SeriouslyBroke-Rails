@@ -110,9 +110,22 @@ class EntryImpactPresenter
     @holding = category.present? && category.counts_spending_on?(entry&.date || today) ? category : nil
   end
 
-  # THE HONEST CARD (decision 2). ONE shape reaches it now: a category whose claim this receipt
-  # cannot move, so the spending comes straight out of FREE money — `total − Σ claims`, the money no
-  # rule has spoken for (§2).
+  # THE HONEST CARD (decision 2). TWO WAYS IN, and both say the same thing: no rule's claim can be
+  # moved by this receipt, so the spending comes straight out of FREE money — `total − Σ claims`,
+  # the money no rule has spoken for (§2).
+  #
+  #   * the DATE arm — `#holding` is nil, so either the category has never been funded or this
+  #     receipt predates the day it started counting spending (`Category#counts_spending_on?`);
+  #   * the RULE arm — `Category#budgeted?`: the category carries no rule at all, so it claims
+  #     nothing however much has been spent against it (§3.4).
+  #
+  # ** THE RULE ARM IS FIX ROUND 1's M2 AND IT CLOSED A TWO-SCREEN DISAGREEMENT. ** This read
+  # `holding.nil?` alone, and `#holding` is the category whenever it `counts_spending_on?` the
+  # entry's day — a test that USED to imply the category could be holding money and stopped implying
+  # it the moment claims were computed. A funded category with no rules therefore got `claim` $0.00,
+  # a `balance_after` of `−amount`, `#overdrawn?` true and the danger-red overdraw notice, while
+  # Home's "This period" called the very same category unbudgeted and printed `spent $X` with no
+  # bar. `Category#budgeted?` is now the ONE spelling both screens ask (see its comment).
   #
   # THE TWO SHAPES IT USED TO BE were "no pool at all" and "a pool that IS an account", and they
   # were one sentence because nothing reserved money sitting in an account. That pair was
@@ -121,7 +134,7 @@ class EntryImpactPresenter
   #
   # The register is the Budget page's own — its rate suggestion offers a rule to exactly this
   # population — so a user who meets the sentence here and the offer there is reading one app.
-  def unbudgeted? = holding.nil?
+  def unbudgeted? = holding.nil? || !holding.budgeted?
 
   # A CATEGORY SAVING TOWARD A FIGURE IS A GOAL, so the card takes the goal shape
   # (`$X → $Y of $Z goal`) rather than the envelope's.
@@ -343,24 +356,37 @@ class EntryImpactPresenter
   # layer up, for the same reason.
   def steady_claim = holding.budgets.sum(0.to_d) { |budget| budget.steady_ask(user, today: today) }
 
-  # WHAT THE CATEGORY CLAIMS RIGHT NOW, through the app's ONE unbatched door (`Category#claim` —
-  # `Σ` of its rules' claims, §3). This card describes ONE category, so the batched `ClaimLedger` is
-  # the wrong shape: it builds a walk over every rule the user owns to answer a question about one.
+  # WHAT THE CATEGORY CLAIMS RIGHT NOW — `Category#claim`'s expression, off the calculators this
+  # card has already built (fix round 1 — L5).
   #
-  # `.to_d` on the RESULT even though `Category#claim` seeds its own `sum` with `0.to_d`: this
-  # figure is subtracted, compared and divided by all over this file, and the guarantee costs
-  # nothing to restate at the boundary the card actually reads it through.
-  def claim = @claim ||= holding.claim(today: today).to_d
+  # ** IT WAS `holding.claim(today:)` AND ON THE EDIT PATH THAT BUILT EVERY CALCULATOR TWICE. **
+  # `#balance` asks `#own_contribution` FIRST, which reaches `#counted_by_the_claim?` and therefore
+  # `#claim_calculators`; wherever one of the three gates then closes, the give-back is zero and
+  # `#balance` falls through to this reader — which asked the model for a fresh `ClaimCalculator`
+  # per rule and paid for a second spending query and a second adjustment query on each of them.
+  # Every re-categorised entry and every back-dated one takes that path. Read ONCE, off the
+  # calculators in hand.
+  #
+  # THE ONE-DOOR RULE IS KEPT BY A PIN RATHER THAN BY A DELEGATION, and the distinction matters:
+  # `Budget#claim_calculator` is the same constructor `Category#claim` uses, over the same
+  # `#budgets`, summed with the same `0.to_d` seed — this IS that method's expression, not a second
+  # opinion about it. `entry_impact_presenter_spec`'s "reads the category's own claim and not a
+  # second sum of its rules" asserts the two against each other on a planted literal, so a drift is
+  # a failing example rather than two screens printing different money.
+  #
+  # `.to_d` on the RESULT even though the `sum` is seeded with `0.to_d`: this figure is subtracted,
+  # compared and divided by all over this file, and the guarantee costs nothing to restate at the
+  # boundary the card actually reads it through.
+  def claim = @claim ||= claim_calculators.sum(0.to_d, &:claim).to_d
 
-  # ONE CALCULATOR PER RULE, BUILT ONLY WHEN THE EDIT CASE NEEDS THEM. Nothing on the NEW-entry path
-  # touches this: `#own_contribution` returns zero before it is reached, so the ordinary card costs
-  # exactly the queries `Category#claim` costs and no more.
+  # ONE CALCULATOR PER RULE, BUILT ONCE AND SHARED BY EVERY READER BELOW. The NEW-entry card pays
+  # for exactly what `Category#claim` used to cost it — one calculator per rule — and the edit card
+  # now pays that once instead of twice (see #claim).
   #
-  # ASKED FOR THE SHAPE OF THE CLAIM AND NEVER FOR ITS FIGURE — `#over?`, `#countable_span`,
-  # `#rate?`, `#target`, `#accrued_this_period`. Summing `#claim` off these instead of asking
-  # `Category#claim` would be a SECOND answer to what this category has, free to drift from the one
-  # every other screen reads; `Budget#claim_calculator` is the same constructor that model uses, so
-  # what these objects say about the claim is what that claim is made of.
+  # ASKED FOR THE SHAPE OF THE CLAIM AS WELL AS FOR ITS FIGURE — `#over?`, `#countable_span`,
+  # `#rate?`, `#target`, `#accrued_this_period` and `#claim` itself. `Budget#claim_calculator` is
+  # the same constructor `Category#claim` uses, so what these objects say about the claim is what
+  # that claim is made of.
   def claim_calculators
     @claim_calculators ||= holding.budgets.map { |budget| budget.claim_calculator(today: today) }
   end

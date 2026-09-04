@@ -354,6 +354,34 @@ class Category < ApplicationRecord
   # same question asked of the category a screen is drawing.
   def saving_toward_a_target? = holder? && target_amount.present?
 
+  # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round
+  # 1 — M2). ** Every claim comes from a rule (§3.3), so "budgeted" is exactly "carries a rule": a
+  # category with none claims nothing however much has been spent against it, and §3.4's own
+  # sentence for that shape is `spent $X` with no bar and no envelope.
+  #
+  # IT WAS TWO PREDICATES AND THEY DISAGREED ON A REACHABLE SHAPE. `HomePresenter::PeriodRow
+  # #budgeted?` asked `lines.any?` — one line per rule — while `EntryImpactPresenter#unbudgeted?`
+  # asked `holding.nil?`, and `#holding` is the category whenever `#counts_spending_on?`. Under the
+  # pool layer those agreed, because a funded category was one money had been moved INTO; under
+  # computed claims a FUNDED category with no rules is an ordinary shape (the Budget page's rate
+  # suggestion offers a rule to exactly that population). So the card drew it an envelope claiming
+  # $0.00, made `balance_after` `−amount`, and painted it danger red with an overdraw notice, while
+  # Home called the same category unbudgeted an inch away.
+  #
+  # `budgets.load.any?`, AND THE `load` IS MEASURED RATHER THAN DECORATIVE. Both callers read the
+  # rules themselves straight afterwards — Home eager-loads `:budgets` for its lines, and the impact
+  # card reads the same association twice more (`#steady_claim`, `#claim_calculators`) — and bare
+  # `any?` on an UNLOADED association is `exists?`, which emits `SELECT 1 … LIMIT 1` and then leaves
+  # the full load still to pay for. Measured on the entry card: 5 statements that way against 4 with
+  # the load, for the identical answer. `load` is a no-op where the association is already there, so
+  # Home pays nothing for it.
+  #
+  # NOT `#holder?` AND NOT `#counts_spending_on?`. Those are about the CATEGORY's funding date —
+  # whether this receipt's day is one whose spending counts — and they remain the gate in front of
+  # this one on the entry card (`#holding`). A category can be funded and unbudgeted, or budgeted
+  # and asked about a day before it was funded; the two questions are independent and both are asked.
+  def budgeted? = budgets.load.any?
+
   def calculator(date = today, period: :monthly)
     CategoryCalculator.new(self, date, period: period)
   end

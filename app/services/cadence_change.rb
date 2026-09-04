@@ -37,6 +37,10 @@ class CadenceChange
   # set-aside-only target, which is not a rate rule). A one-cent weekly rule scaled to a monthly
   # grid rounds to nothing, and a confirm that wrote an invalid row would 500 on a button the user
   # was right to press. The floor is the smallest amount the column can hold.
+  #
+  # IT CATCHES A ROUNDING, NEVER A DECLARATION: an amount of zero is not a rate that rounded away,
+  # it is a goal that names no rate at all, and `#scalable_rules` keeps those off this path entirely
+  # so the floor cannot invent one (fix round 1 — Task 4's concern 1).
   SMALLEST_RATE = BigDecimal("0.01")
 
   attr_reader :user, :declaration, :periods_per_year_before
@@ -147,9 +151,24 @@ class CadenceChange
   # dividing branches and are already grid-independent; `:per_period` is the only one the cadence
   # can change the meaning of. It reads three columns off the loaded row and asks nothing.
   #
-  # `includes(:category)` IS FOR THE CONFIRM SCREEN, not for this test: `budget_rule_name` falls
-  # back to the category's name for every item-less rule the panel lists.
+  # ** AND ZERO STAYS ZERO (fix round 1 — Task 4's concern 1). ** A goal fed only by hand is a rule
+  # with `amount: 0` — §3.2's "no rate is spelled as ZERO", the shape `Budget#set_aside_only?`
+  # exempts from `amount > 0` and the shape `DropTheDistribution` mints for every target-only goal
+  # in a real database. Its `#cadence` is `:per_period` (no anchor, no interval), so it landed on
+  # this list, and `#scaled`'s `SMALLEST_RATE` floor then turned `0 × 12/26` into **$0.01** — a
+  # standing contribution the owner never declared, written by a button they pressed about
+  # something else, onto a row they cannot see. The floor is right for a rate that rounds away and
+  # wrong for a rate that was never stated: there is nothing to convert, because zero a month and
+  # zero a fortnight are the same budget.
+  #
+  # NOT OFFERED AND NOT WRITTEN, in that order and by this one clause. `#lines` feeds both the
+  # confirm panel and `#apply`'s write, so excluding the row here is what keeps the question and the
+  # rewrite from disagreeing about which rules a cadence change means something for — the same
+  # single-population rule `#apply`'s `#offered?` guard is built on. A user whose ONLY per-period
+  # rule is a $0 goal is offered nothing, which is correct: there is nothing a cadence change does
+  # to their budget.
   def scalable_rules
-    Budget.for_user(user).includes(:category).select { |rule| rule.cadence == :per_period }
+    Budget.for_user(user).includes(:category)
+      .select { |rule| rule.cadence == :per_period && rule.amount.to_d.positive? }
   end
 end

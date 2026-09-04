@@ -445,6 +445,20 @@ RSpec.describe DropTheDistribution do
     expect { migrate! }.to raise_error(described_class::PreflightFailed, /kind 7/)
   end
 
+  # ** THE ADJUSTMENT CHECK CANNOT BE HIT, AND THIS IS WHY (fix round 1 — L2). ** `adjustments`
+  # carries `amount <> 0::money` (`adjustments_non_zero_amount`), and every row this migration
+  # writes copies a transfer's amount verbatim — so a $0 transfer would be an unrescued
+  # `StatementInvalid` in the middle of `insert_all!`. It cannot exist: `allocations` has carried
+  # `amount > 0::money` since `588c15d` (`allocations_positive_amount`), which is the constraint
+  # asserted here rather than assumed. The migration therefore needs no guard of its own, and this
+  # example is what would fail if the constraint were ever dropped from under it.
+  it "cannot be handed a zero-amount transfer to convert" do
+    world = plant_the_distribution_era
+
+    expect { plant_allocation(to: world[:groceries], amount: 0, on: Time.utc(2026, 9, 1, 13)) }
+      .to raise_error(ActiveRecord::StatementInvalid, /allocations_positive_amount/)
+  end
+
   # ** REFUSING ITS OWN OUTPUT. ** The zero-amount shape is legal only where the category names a
   # target, so a zero-amount rule on a category with none is exactly what `#malformed_minted_rules`
   # is looking for. Planted in SQL because `Budget` refuses the shape at the model, which is the
@@ -459,6 +473,27 @@ RSpec.describe DropTheDistribution do
 
     expect { migrate! }.to raise_error(described_class::VerificationFailed, /Fuel/)
     expect(connection.table_exists?(:allocations)).to be(true)
+  end
+
+  # ** THE OTHER DIRECTION, AND IT IS THE ONE THE VERIFIER GOT WRONG (fix round 1 — M1). ** The SQL
+  # flagged `b.item_id IS NOT NULL` on every zero-amount rule and applied
+  # `#category_may_hold_one_item_less_rule` to item-BACKED rules too, and `Budget` does neither:
+  # `#set_aside_only?` never reads `item_id`, and that validation returns early wherever one is
+  # present. So a per-period, amount-0, item-backed rule on a category with a target is a shape the
+  # app ACCEPTS — and on a restore carrying one the whole migration aborted.
+  #
+  # PLANTED THROUGH THE MODEL, which is the assertion: `create` would raise if `Budget` refused it,
+  # and `#valid?` is asserted beside it so the example says out loud which layer is the authority.
+  it "accepts a pre-existing item-backed $0 rule on a category with a target", :aggregate_failures do
+    world = plant_the_distribution_era
+    tips = create(:item, category: world[:vacation], name: "Flights")
+    set_aside_only = create(
+      :budget, category: world[:vacation], item: tips, amount: 0, basis: :per_period, interval_months: nil
+    )
+
+    expect(set_aside_only).to be_valid
+    expect { migrate! }.not_to raise_error
+    expect(set_aside_only.reload.amount).to eq(0)
   end
 
   # ---------------------------------------------------------------------------------------------

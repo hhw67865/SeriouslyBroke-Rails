@@ -63,6 +63,15 @@
 # first statement and again after the last, and every user must reconcile to the same figure on both
 # sides. A migration that cannot move a number is exactly the one that should be made to prove it.
 #
+# A RE-RUN ON A MIGRATED DATABASE RAISES, LOUDLY AND ON PURPOSE (fix round 1 — L3). `up` drops
+# `allocations`, so running this file a second time without its `down` reaches `#unknown_kinds` —
+# the first statement past `#ledgers` — and gets `PG::UndefinedTable` from Postgres itself. That is
+# the right failure: the alternative is a `to_regclass` guard that turns a second run into a silent
+# no-op, and a silent no-op is indistinguishable from a run that converted nothing because there was
+# nothing to convert. An operator re-running this file is either resuming an aborted run (the whole
+# `up` is one transaction, so there is nothing half-done to resume) or is on the wrong database, and
+# both want a stack trace rather than a shrug.
+#
 # THE `down` IS FOR THE SCHEMA REWIND, NOT FOR PRODUCTION — `DropThePoolLayer#down`'s law, and this
 # file inherits it for the same mechanical reason. `spec/support/schema_rewind.rb` runs
 # `CategoriesHoldTheMoney#up`, whose whole subject is CREATING `allocations` and filling it, so a
@@ -296,6 +305,16 @@ class DropTheDistribution < ActiveRecord::Migration[8.1]
   # `date` IS COPIED VERBATIM, datetime to datetime, so the row lands in whatever period the user's
   # grid puts that instant in — §3.3's "period-cadence changes are free" is exactly the property that
   # makes copying the instant the right move rather than re-keying it to a period.
+  #
+  # ** AND THE AMOUNT NEEDS NO GUARD, WHICH IS A FACT ABOUT THE SCHEMA RATHER THAN AN ASSUMPTION
+  # (fix round 1 — L2). ** `adjustments` carries `amount <> 0::money`
+  # (`adjustments_non_zero_amount`), so a zero copied through here would be an unrescued
+  # `StatementInvalid` in the middle of `insert_all!` — no receipt, no named row, just a raise.
+  # It cannot happen: `allocations` has carried `amount > 0::money`
+  # (`allocations_positive_amount`) since `588c15d`, so every row this loop reads is strictly
+  # positive and `× ±1` keeps it non-zero. `drop_the_distribution_spec`'s "cannot be handed a
+  # zero-amount transfer to convert" asserts the constraint rather than the reasoning, so dropping
+  # it from under this file is a failing example rather than a 500 on somebody's restore.
   def adjustment_rows(transfer, rule_of)
     [[transfer.to_category_id, 1], [transfer.from_category_id, -1]].filter_map do |category_id, sign|
       next if category_id.nil?
@@ -399,15 +418,34 @@ class DropTheDistribution < ActiveRecord::Migration[8.1]
     count.zero? ? [] : ["#{count} allocations were neither converted nor discarded"]
   end
 
-  # ** `Budget`'S VALIDATIONS, RESTATED IN SQL AND ASKED OF WHAT THIS FILE WROTE. ** Four of them, and
-  # each is a shape the app would refuse if a person submitted it:
+  # ** `Budget`'S VALIDATIONS, RESTATED IN SQL — CLAUSE FOR CLAUSE, AND NO CLAUSE MORE (fix round
+  # 1 — M1). ** Every disjunct below names the model method it mirrors, and the SQL says what that
+  # method says about an `amount = 0` rule and nothing else:
   #
-  #   * `#shape_must_be_valid` — a per-period rule carries no anchor and no interval;
-  #   * `validates :amount … greater_than_or_equal_to: 0, if: :set_aside_only?` together with
-  #     `#set_aside_only?` — the zero is legal only where the category names a target and the rule
-  #     names neither an anchor nor an interval;
-  #   * `#category_must_be_an_expense` — an income category holds nothing, ever;
-  #   * `#category_may_hold_one_item_less_rule` — one catch-all per category.
+  #   * `b.basis <> PER_PERIOD`, `b.anchor_date IS NOT NULL`, `b.interval_months IS NOT NULL` —
+  #     `#shape_must_be_valid` (a per-period rule carries no anchor and no interval) closed against
+  #     `#set_aside_only?` (a MONTHLY rule with neither is refused by that same method, so the
+  #     dateless zero can only be per-period);
+  #   * `c.target_amount IS NULL` — `#set_aside_only?`'s third clause, which is what makes
+  #     `validates :amount … greater_than_or_equal_to: 0, if: :set_aside_only?` apply at all;
+  #   * `c.category_type = INCOME` — `#category_must_be_an_expense`, which asks `category&.income?`
+  #     rather than `!expense?` for the reason stated at the model: a third type added later is a
+  #     decision somebody has to make, not one this clause makes silently;
+  #   * the gated `EXISTS` — `#category_may_hold_one_item_less_rule`, INCLUDING ITS `return if
+  #     item_id.present?`, which is the clause this verifier used to be missing.
+  #
+  # ** IT WAS STRICTER THAN THE MODEL AND THAT WAS A LIVE ABORT. ** The SQL flagged
+  # `b.item_id IS NOT NULL` outright and applied the one-catch-all rule to item-BACKED rows too.
+  # `#set_aside_only?` never reads `item_id`, so a per-period, amount-0, item-backed rule on a
+  # category with a `target_amount` is a shape the app ACCEPTS — a goal whose flights line is fed by
+  # hand — and a restore carrying one row of it aborted the whole migration on a verdict `Budget`
+  # does not share. A verifier that refuses what the model accepts is not conservative; it is wrong
+  # in the direction nobody can work around.
+  #
+  # WHAT IS DELIBERATELY NOT RESTATED: `#item_must_belong_to_category` and `#item_must_not_be_claimed`
+  # are about which item a rule names, and this file mints only ITEM-LESS rules — so omitting them
+  # leaves the verifier blind to a shape it cannot itself create, which is the safe direction. Being
+  # STRICTER than `Budget` is the failure mode this method has already had once.
   #
   # WHY THEY ARE COPIED HERE RATHER THAN CALLED. `Budget.new(...).valid?` would make this migration's
   # verdict depend on the model as it stands whenever the file is next run, which is the hazard every
@@ -419,7 +457,8 @@ class DropTheDistribution < ActiveRecord::Migration[8.1]
   # SCOPED BY `amount = 0`, WHICH IS THE ONLY MARK A MINTED RULE CARRIES. It is deliberately wider
   # than "the rules this run minted": a zero-amount rule written by any earlier run of this file, or
   # by the Budget page, is held to the same shape, and there is no id list to carry between two
-  # methods for it to fall out of.
+  # methods for it to fall out of. That width is exactly why the clauses have to match `Budget`
+  # exactly: they are asked of rows this file never wrote.
   def malformed_minted_rules
     named(<<~SQL.squish, "the target-only rule on %<extra>s is a shape the app would refuse (%<id>s)")
       SELECT b.id::text AS id, c.name AS extra, u.email
@@ -430,11 +469,11 @@ class DropTheDistribution < ActiveRecord::Migration[8.1]
          AND (b.basis <> #{PER_PERIOD}
            OR b.anchor_date IS NOT NULL
            OR b.interval_months IS NOT NULL
-           OR b.item_id IS NOT NULL
            OR c.target_amount IS NULL
-           OR c.category_type <> #{EXPENSE}
-           OR EXISTS (SELECT 1 FROM budgets o
-                       WHERE o.category_id = b.category_id AND o.item_id IS NULL AND o.id <> b.id))
+           OR c.category_type = #{INCOME}
+           OR (b.item_id IS NULL
+               AND EXISTS (SELECT 1 FROM budgets o
+                            WHERE o.category_id = b.category_id AND o.item_id IS NULL AND o.id <> b.id)))
        ORDER BY u.email, c.name
     SQL
   end

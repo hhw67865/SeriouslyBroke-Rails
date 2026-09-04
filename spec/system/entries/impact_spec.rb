@@ -337,31 +337,50 @@ RSpec.describe "Entry impact card", type: :system do
   # pointing at an account. There is no savings category, so there is nothing to select and one
   # honest card is left. The negative above is what keeps the deleted copy from creeping back.
 
-  # An empty grey track beside a real figure would say "nothing left" an inch under a figure saying
-  # otherwise, so a category with nothing to claim gets no bar at all.
+  # ** A FUNDED CATEGORY WITH NO RULES IS UNBUDGETED, ON THIS SCREEN AND ON HOME (fix round 1 —
+  # M2). ** Gifts is funded a year back, so its spending DOES count against it the moment a rule
+  # exists — but no rule does, and every claim comes from a rule (§3.3). It therefore has no
+  # envelope, no figure and no bar, and the honest card is what renders.
   #
-  # ** AND ITS FIGURE IS NOW $0.00, WHICH IS THE ONE NUMBER ON THIS SCREEN THAT MOVED (§3.4). ** The
-  # category used to hold $240 that had been allocated into it; every claim comes from a rule
-  # (§3.3), so a category carrying none claims nothing however much has been spent against it. The
-  # example is kept rather than deleted because the ABSENCE OF THE BAR is what it is for, and that
-  # absence is now doubly true: no rules, no denominator, and nothing for a bar to be a fraction of.
-  describe "a category with no rules on it" do
+  # THE SHAPE THIS EXAMPLE USED TO ASSERT WAS THE DEFECT. `#unbudgeted?` was `holding.nil?` and
+  # `#holding` is the category whenever it counts this day's spending, so the card drew an envelope
+  # reading `$0.00 → −$55.00 left` in danger red with "This envelope goes over" underneath — an
+  # envelope going over that nothing had ever claimed — while Home's "This period" printed the same
+  # category as `spent $X` with no bar. `Category#budgeted?` is the one predicate both ask now.
+  describe "a category that is funded but carries no rule" do
     before do
       create(:category, :expense, user: user, name: "Gifts", funded_since: funded_since)
 
       visit new_entry_path
     end
 
-    it "prints a claim of nothing and draws no bar", :aggregate_failures do
+    it "gets the honest card rather than an envelope claiming nothing", :aggregate_failures do
       select_category("Gifts")
 
-      within(card) { expect(figure("balance")).to have_text("$0.00") }
-      expect(page).not_to have_css("[data-figure='bar']", visible: :all)
+      expect(page).to have_css("[data-impact-card='unbudgeted']")
+      expect(figure("headline")).to have_text("Nothing claims this yet")
+      expect(page).to have_no_css("[data-figure='balance']", visible: :all)
+      expect(page).to have_no_css("[data-figure='bar']", visible: :all)
     end
 
-    it "draws one on a category that does claim something", :aggregate_failures do
+    # AND IT STAYS THE HONEST CARD WITH A FIGURE TYPED, which is the half that was painted red: no
+    # overdraw line, because there is no envelope to go over.
+    it "cannot be overdrawn however much is typed", :aggregate_failures do
+      select_category("Gifts")
+      fill_in "Amount", with: "55"
+
+      expect(page).to have_css("[data-impact-card='unbudgeted']")
+      expect(page).to have_no_css("[data-figure='buffer']", visible: :all)
+      expect(page).to have_button("Create Entry")
+      expect(page).to have_no_button("Save anyway")
+    end
+
+    # THE OTHER DIRECTION, ON THE SAME SCREEN: give a category one rule and it is an envelope with a
+    # figure and a bar. The pair is what makes this a pin on the RULE rather than on the copy.
+    it "unlike a category with a rule, which gets the envelope, the figure and the bar", :aggregate_failures do
       select_category("Groceries")
 
+      expect(page).to have_css("[data-impact-card='envelope']")
       within(card) { expect(figure("balance")).to have_text("$240.00") }
       expect(page).to have_css("[data-figure='bar']", visible: :all)
     end

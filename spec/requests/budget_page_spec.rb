@@ -105,7 +105,13 @@ RSpec.describe "Budget page declaration", type: :request do
     # `name="scale"` on the same form, so this is the shape a real answer arrives in.
     def answer_scale(params) = patch(budget_page_user_path, params: { user: params, scale: "1" })
 
-    def holding_category = create(:category, :expense, :funded, user: user)
+    def holding_category = create(:category, :expense, :funded, user: user, name: "Groceries")
+
+    # A GOAL FED ONLY BY HAND: a `target_amount` on the category is what makes `Budget
+    # #set_aside_only?` true and the amount-0 rule legal at the model.
+    def goal_category
+      create(:category, :expense, :funded, user: user, name: "Someday", target_amount: 5_000)
+    end
 
     # A RULE THE CADENCE CANNOT CHANGE THE MEANING OF: "$1,200 every 6 months, next due Dec 1" names
     # an OCCURRENCE, and the catch-up formula re-plans it on whatever grid exists.
@@ -157,6 +163,44 @@ RSpec.describe "Budget page declaration", type: :request do
       expect(flash[:notice]).to eq(
         "Your period is saved and your per-period amounts were scaled to it — every figure below is re-derived."
       )
+    end
+
+    # ** ZERO STAYS ZERO (fix round 1 — Task 4's concern 1). ** A goal fed only by hand is a rule
+    # with `amount: 0` — the shape `Budget#set_aside_only?` exempts from `amount > 0`, the shape the
+    # Budget page can write and `DropThePool`'s successor mints for every target-only goal on a
+    # migrated database. Its `#cadence` is `:per_period`, so it used to be listed and scaled, and
+    # `CadenceChange::SMALLEST_RATE` floored `0 × 12/26` at $0.01: a standing contribution the owner
+    # never declared, from a button they pressed about their period.
+    #
+    # BOTH DIRECTIONS IN ONE REQUEST, which is what makes it a pin on the POPULATION rather than on
+    # the arithmetic: the $400 rate rule beside it is scaled, so a fix that simply stopped scaling
+    # would fail here too.
+    it "leaves a $0 goal rule at zero while scaling the rate rule beside it", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      rate = create(:budget, :per_period_rate, amount: 400, category: holding_category)
+      set_aside_only = create(:budget, :target, amount: 0, category: goal_category)
+
+      answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
+
+      expect(rate.reload.amount).to eq(BigDecimal("184.62"))
+      expect(set_aside_only.reload.amount).to eq(0)
+    end
+
+    # THE OFFER ITSELF, on the screen that makes it (`BudgetPageController#offer_scaling` renders
+    # `show` at 422 rather than redirecting): the $0 rule is not a line, so the confirm panel names
+    # the rate rule and nothing else. Asserted on the rendered page rather than on
+    # `CadenceChange#lines`, because "not offered" is a fact about what the user is shown — and the
+    # panel names an item-less rule by its CATEGORY, which is why both fixtures are named here.
+    it "does not list the $0 goal rule on the confirm it offers", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      create(:budget, :per_period_rate, amount: 400, category: holding_category)
+      create(:budget, :target, amount: 0, category: goal_category)
+
+      patch(budget_page_user_path, params: { user: { period_cadence: "biweekly", period_anchor_date: "2026-02-06" } })
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include('data-cadence-line="Groceries"')
+      expect(response.body).not_to include('data-cadence-line="Someday"')
     end
   end
 

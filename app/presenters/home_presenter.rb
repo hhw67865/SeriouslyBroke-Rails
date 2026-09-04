@@ -123,7 +123,15 @@ class HomePresenter
   # the lanes partition (§3.1's `Entry.on_unruled_items`), so adding them would be the same money
   # said twice.
   PeriodRow = Data.define(:category, :lines, :spent) do
-    def budgeted? = lines.any?
+    # `Category#budgeted?`, WHICH IS THE APP'S ONE SPELLING OF IT SINCE FIX ROUND 1 (M2). This was
+    # `lines.any?` — the same question asked of the rules this screen happened to have loaded — and
+    # the entry form's impact card asked a THIRD thing (`holding.nil?`, which is about the funding
+    # DATE) and drew a funded, ruleless category a red overdrawn envelope while this row called it
+    # unbudgeted. One predicate, on the model, so the two screens cannot part company again.
+    #
+    # The two are the same set by construction (`#claim_lines` groups `ClaimLedger#rules`, which is
+    # `Budget.for_user`) and it costs no query: `#categories` eager-loads `:budgets`.
+    delegate :budgeted?, to: :category
 
     def needs_attention? = lines.any?(&:trouble?)
 

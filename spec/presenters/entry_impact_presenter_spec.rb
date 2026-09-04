@@ -222,9 +222,14 @@ RSpec.describe EntryImpactPresenter do
     # asserted it; every claim comes from a rule now, so the honest figure is zero and there is
     # still no bar — an empty grey track beside a real figure would say "nothing left" an inch
     # under a figure saying otherwise.
+    #
+    # SINCE FIX ROUND 1 (M2) THERE IS NO CARD FOR THE BAR TO BE MISSING FROM: this category is
+    # UNBUDGETED, so the whole figures block is gated off and the honest sentence is what renders.
+    # The bar's own arithmetic is asserted anyway, because `#bar_fraction` is public and divides.
     it "has no bar at all, and does not divide, on a category with no rules on it", :aggregate_failures do
       spend(groceries, 60)
 
+      expect(present(groceries).unbudgeted?).to be(true)
       expect(present(groceries).balance).to eq(0)
       expect(present(groceries).bar?).to be(false)
       expect(present(groceries).denominator).to eq(0)
@@ -456,11 +461,12 @@ RSpec.describe EntryImpactPresenter do
     end
   end
 
-  # ONE SHAPE REACHES THIS CARD, AND IT IS A DATE AS MUCH AS A CATEGORY. `#unbudgeted?` read
+  # TWO SHAPES REACH THIS CARD, AND ONE OF THEM IS A DATE. `#unbudgeted?` read
   # `pool.nil? || pool.pool_type_account?` — no envelope, or an envelope that was really an account,
-  # and both meant "nothing reserves this money". Its successor is `Category#counts_spending_on?`,
-  # which is the ledger's own rule: a category that has never been funded, and a funded one asked
-  # about a day before it started holding, both leave their spending to FREE money (§2).
+  # and both meant "nothing reserves this money". Its successors are `Category#counts_spending_on?`
+  # (the ledger's own rule: a category that has never been funded, and a funded one asked about a
+  # day before it started holding, both leave their spending to FREE money, §2) and
+  # `Category#budgeted?` (fix round 1 — M2: a category with no rule claims nothing at all, §3.4).
   describe "a category no rule claims" do
     let(:unfunded) { create(:category, :expense, user: user, name: "Shopping") }
 
@@ -506,6 +512,40 @@ RSpec.describe EntryImpactPresenter do
 
       expect(present(groceries, amount: "55").unbudgeted?).to be(false)
       expect(present(groceries, amount: "55").figures?).to be(true)
+    end
+
+    # ** THE RULE ARM (fix round 1 — M2), AND IT IS THE SHAPE THE CARD USED TO PAINT RED. **
+    # Groceries here is FUNDED and carries no rule, so `#holding` is the category and the old
+    # `#unbudgeted? = holding.nil?` said "budgeted": the card drew an envelope claiming $0.00, a
+    # `balance_after` of −$55, `#overdrawn?` true and the danger-red overdraw notice — for a
+    # category Home's "This period" was calling unbudgeted an inch away and printing `spent $X`
+    # against with no bar.
+    #
+    # EVERY ARM OF THE ENVELOPE IS ASSERTED OFF, not just the predicate: `#figures?` is what the
+    # view gates the whole figures block on, and `#overdrawn?` is what painted it.
+    it "is unbudgeted when it is funded but carries no rule at all", :aggregate_failures do
+      impact = present(groceries, amount: "55")
+
+      expect(groceries.reload.counts_spending_on?(today)).to be(true)
+      expect(impact.holding).to eq(groceries)
+      expect(impact.unbudgeted?).to be(true)
+      expect(impact.figures?).to be(false)
+      expect(impact.overdrawn?).to be(false)
+      expect(impact.bar?).to be(false)
+    end
+
+    # ** ONE SPELLING, SHARED WITH HOME. ** `Category#budgeted?` is what
+    # `HomePresenter::PeriodRow#budgeted?` asks too, so the two screens cannot answer differently
+    # about one category. Both directions on ONE category, so the example is about the rule and
+    # nothing else.
+    it "asks the same predicate Home's period rows ask", :aggregate_failures do
+      expect(groceries.budgeted?).to be(false)
+      expect(present(groceries, amount: "55").unbudgeted?).to be(true)
+
+      rate(groceries, 300)
+
+      expect(groceries.reload.budgeted?).to be(true)
+      expect(present(groceries.reload, amount: "55").unbudgeted?).to be(false)
     end
   end
 
@@ -565,17 +605,24 @@ RSpec.describe EntryImpactPresenter do
     end
 
     # ** AND THE OTHER HALF OF THE SAME FACT. ** A goal with NO RULE claims nothing at all (§3.3:
-    # every claim comes from a rule), so the card draws it as a goal with an empty bar rather than as
-    # a goal holding money nobody put anywhere. It is still a goal — the predicate is about the
-    # target, not about the money — which is exactly why the deleted `#savings?` could not be the
-    # rendering question.
+    # every claim comes from a rule), so the card has no figures to print for it.
+    #
+    # ** IT GETS THE HONEST CARD SINCE FIX ROUND 1 (M2), AND THAT IS A CHANGE FROM A GOAL WITH AN
+    # EMPTY BAR. ** `#unbudgeted?` used to be `holding.nil?`, so this shape drew a goal card reading
+    # `$0.00 → −$150.00 of $5,000.00 goal` in danger red the moment anything was typed — a fund
+    # going "over" that nothing had ever claimed. Home calls exactly this category unbudgeted, and
+    # the two now agree. `#saving_toward_a_target?` is UNCHANGED and still true: the display
+    # predicate is about the target, which is exactly why the deleted `#savings?` could not be the
+    # rendering question — but `#figures?` is what decides whether any of it is drawn.
     it "claims nothing at all while no rule feeds it", :aggregate_failures do
       empty = goal("Someday", target: 5_000)
 
       expect(empty.saving_toward_a_target?).to be(true)
-      expect(present(empty).goal?).to be(true)
+      expect(empty.budgeted?).to be(false)
       expect(present(empty).balance).to eq(0)
-      expect(present(empty).bar_percent).to eq(0)
+      expect(present(empty).unbudgeted?).to be(true)
+      expect(present(empty).figures?).to be(false)
+      expect(present(empty, amount: "150").overdrawn?).to be(false)
     end
 
     it "is not a goal without a target, and falls back to the category's own rule", :aggregate_failures do
@@ -602,6 +649,113 @@ RSpec.describe EntryImpactPresenter do
 
       expect(present(never).goal?).to be(false)
       expect(present(never).unbudgeted?).to be(true)
+    end
+  end
+
+  # ** WHAT ONE CARD COSTS, AND WHY THE EDIT PATH IS PINNED SEPARATELY (fix round 1 — L5). **
+  # `#balance` asks `#own_contribution` first, which reaches `#claim_calculators`; where one of its
+  # three gates then closes, the give-back is zero and `#balance` falls through to `#claim`. That
+  # reader used to be `holding.claim(today:)` — the MODEL's own door — which built a SECOND
+  # `ClaimCalculator` per rule and asked the database again through it. It reads off the calculators
+  # already in hand now.
+  #
+  # ** THE COST IS ONLY VISIBLE ON GATE 3, AND THE MEASUREMENT IS WHAT SAYS SO. ** A calculator is
+  # lazy, so building one costs nothing on its own: gate 2 (`#countable_span`) is pure calendar
+  # arithmetic, and where it closes the first set is never asked a question that queries — two
+  # objects, one set of statements, before the fix and after it. Gate 3 asks `#over?`, which walks,
+  # and THAT is where the second set used to pay for a second spending query. Measured on the
+  # accruing-and-overspent fixture: 5 statements before, 4 after.
+  #
+  # STRICT EQUALITY, not `be <=`: a card that quietly starts costing one more query is exactly the
+  # thing a `<=` bound waves through, and the whole point of this block is that reading the claim
+  # twice is invisible to every other example in this file.
+  describe "what one card costs" do
+    def count_statements(&block)
+      statements = 0
+      counter = ->(*, payload) { statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/) }
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      statements
+    end
+
+    # A CATEGORY NOTHING HAS TOUCHED YET, so the `budgets` association is unloaded and every
+    # statement the CARD needs falls inside the measured block. The `let` instances are shared across
+    # calls in one example and would answer the second measurement out of their own caches.
+    #
+    # CALLED OUTSIDE `#count_statements`, ALWAYS: it is a `find`, so building the presenter inside
+    # the block adds a statement that is the SPEC's rather than the card's — measured, and it is
+    # exactly the off-by-one this block would otherwise pin as the truth.
+    def fresh(category) = user.categories.find(category.id)
+
+    # THE ENTRY AS THE CONTROLLER HANDS IT OVER — found, with nothing preloaded. The `spend` helper
+    # returns a record whose `item` is already in memory, and reading the card off THAT would hide
+    # the one query the edit path genuinely costs more than the new one.
+    def found(entry) = user.entries.find(entry.id)
+
+    # THE READERS THE VIEW ASKS, in the order `entries/_impact.html.erb` asks them.
+    def read_the_card(impact)
+      impact.render? && impact.unbudgeted?
+      impact.goal? && impact.noun
+      [
+        impact.balance,
+        impact.balance_after,
+        impact.overdrawn?,
+        impact.bar?,
+        impact.bar_percent,
+        impact.period_ends_on,
+        impact.balance_param,
+        impact.denominator_param
+      ]
+    end
+
+    # THE NEW-ENTRY CARD, AS THREE NAMED STATEMENTS. Pinned absolutely as well as relatively: the
+    # comparisons below would both pass on a card that had grown on every path at once.
+    #
+    #   1. `#unbudgeted?` → `Category#budgeted?`, which LOADS the association the readers after it
+    #      use (see that method for the measurement behind the `load`);
+    #   2-3. one `ClaimCalculator` per rule, asking its adjustments and its spending lane.
+    it "costs three statements for a new entry's card" do
+      rate(groceries, 300)
+      spend(groceries, 60)
+      card = present(fresh(groceries), amount: "45")
+
+      expect(count_statements { read_the_card(card) }).to eq(3)
+    end
+
+    # THE ORDINARY EDIT — the give-back applies, so `#claim` is never reached at all. One statement
+    # more than the new card, and it is the edited entry's own `item`, which `#counted_by_holding?`
+    # reads to ask whose category it drains.
+    it "costs one statement more on an edit whose give-back applies", :aggregate_failures do
+      rate(groceries, 300)
+      spend(groceries, 60)
+      counted = found(spend(groceries, 45))
+      new_card = present(fresh(groceries), amount: "45")
+      edit_card = present(fresh(groceries), amount: "45", entry: counted)
+
+      creating = count_statements { read_the_card(new_card) }
+      editing = count_statements { read_the_card(edit_card) }
+
+      expect(editing).to eq(creating + 1)
+      expect(editing).to eq(4)
+    end
+
+    # ** THE PATH THAT PAID TWICE — GATE 3. ** A $600-a-period rule on a $600 target with $750 spent
+    # is `over?`, so the give-back is dropped (see "gives nothing back when an accruing rule is spent
+    # past what it had") and `#balance` falls through to `#claim`. `#over?` has already walked, and
+    # asking the MODEL for the claim built a fresh calculator that walked again — a second spending
+    # query for the same rule, on the same afternoon, for the same figure. FIVE statements before the
+    # fix and four after, which is the same four the ordinary edit above costs.
+    it "reads the claim once where an over-fulfilled accruing rule closes the give-back", :aggregate_failures do
+      vacation = goal("Vacation", target: 600, accrues: 600)
+      overdrew = found(spend(vacation, 750))
+      new_card = present(fresh(vacation), amount: "750")
+      edit_card = present(fresh(vacation), amount: "750", entry: overdrew)
+
+      creating = count_statements { read_the_card(new_card) }
+      editing = count_statements { read_the_card(edit_card) }
+
+      expect(creating).to eq(3)
+      expect(editing).to eq(creating + 1)
+      expect(editing).to eq(4)
     end
   end
 
