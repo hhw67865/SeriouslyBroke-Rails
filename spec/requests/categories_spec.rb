@@ -18,12 +18,14 @@ require "rails_helper"
 # lookup are DELETED, each named in the task report; what stands in their place is the contract of
 # the ones that arrived.
 #
-# ** `target_amount` WAS THE THIRD AND HAS LEFT THE PERMIT (rules-own-the-budget spec §5/§7). ** How
-# much a category is building up toward is a fact about a RULE — `ClaimCalculator` caps at
-# `budgets.target_amount` and has never read the category's — so the field is gone from the form and
-# the key is gone from `category_params`. This layer is the only one that can tell "the form stopped
-# offering it" from "a crafted POST can still write it", which is exactly what the two examples
-# below are for.
+# ** `target_amount` WAS THE THIRD, AND IT HAS LEFT THE PERMIT AND THEN THE SCHEMA
+# (rules-own-the-budget spec §5/§6/§7). ** How much a category is building up toward is a fact about
+# a RULE — `ClaimCalculator` caps at `budgets.target_amount` and has never read the category's — so
+# the field went from the form and the key from `category_params`, and Task 4's migration then
+# dropped `categories.target_amount` itself. The permit is what now stands between a stale client
+# and an `UnknownAttributeError`: this layer is the only one that can tell "the form stopped
+# offering it" from "a crafted POST still reaches the assignment", which is exactly what the two
+# examples below are for.
 #
 # STILL A REQUEST SPEC, for the reason the old one was: these are answers to requests the UI does
 # not make. The form never submits a `pool_id`, and a param dropped silently back to its default
@@ -57,17 +59,19 @@ RSpec.describe "Categories", type: :request do
       expect(response).to redirect_to(categories_path(type: "expense"))
     end
 
-    # ** A TARGET ON THE WIRE IS IGNORED (rules-own-the-budget spec §5/§7). ** The field is off the
-    # form, and the permit is the other half of that deletion: a key left permitted is one a crafted
-    # POST — or a client written against yesterday's form — can still write, silently, into a column
-    # no claim formula reads. The write is not refused, because an unpermitted key is not an error;
-    # it simply does not land. Asserted beside a param that DOES land, so an example that passed
-    # because nothing was written at all would fail.
+    # ** A TARGET ON THE WIRE IS IGNORED, AND THE COLUMN IT NAMED IS GONE (rules-own-the-budget spec
+    # §5/§6/§7). ** The field left the form and the permit together; Task 4's migration then dropped
+    # `categories.target_amount` outright. So the key a crafted POST — or a client written against
+    # yesterday's form — still sends names NOTHING, and the permit is what keeps it from reaching
+    # `Category.new` as an `UnknownAttributeError` 500 rather than an ordinary write. Asserted beside
+    # a param that DOES land, so an example that passed because nothing was written at all would
+    # fail, and beside the column list, so an example that passed because the key was silently
+    # accepted would too.
     it "ignores a target a crafted param names", :aggregate_failures do
       expect { create_category(target_amount: 2_400, priority: 3) }.to change(Category, :count).by(1)
 
       category = user.categories.find_by(name: "Vacation")
-      expect(category.target_amount).to be_nil
+      expect(Category.column_names).not_to include("target_amount")
       expect(category.priority).to eq(3)
       expect(response).to redirect_to(categories_path(type: "expense"))
     end
@@ -274,7 +278,7 @@ RSpec.describe "Categories", type: :request do
 
   describe "PATCH /categories/:id" do
     let!(:category) do
-      create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 500)
+      create(:category, :expense, :funded, user: user, name: "Groceries")
     end
 
     # ** CLEARING `funded_since` STOPS THE CATEGORY HOLDING MONEY (§4). ** A blank has to reach the
@@ -290,13 +294,15 @@ RSpec.describe "Categories", type: :request do
     end
 
     # ** A TARGET ON THE WIRE IS IGNORED ON UPDATE TOO. ** The `create` permit and the `update`
-    # permit are one list, and this is the sharper half: the record EXISTS and already carries a
-    # figure, so a permitted key would rewrite live data rather than merely default a new row.
-    it "leaves a target alone when a crafted param names one", :aggregate_failures do
-      patch category_path(category), params: { category: { name: "Groceries", target_amount: 900 } }
+    # permit are one list, and this is the sharper half: `#update` writes `category.update(...)`
+    # straight from the permitted hash, so a key left in the list would reach a column that no
+    # longer exists and answer a 500 on a save the user was right to make. The name beside it is
+    # what lands, so an example that passed because the whole request was refused would fail.
+    it "ignores a target a crafted param names on update", :aggregate_failures do
+      patch category_path(category), params: { category: { name: "Groceries Fund", target_amount: 900 } }
 
       expect(response).to redirect_to(categories_path(type: "expense"))
-      expect(category.reload.target_amount).to eq(500)
+      expect(category.reload.name).to eq("Groceries Fund")
     end
 
     # THE UPDATE-SHAPED HOLE, and it was the sharper of the two on the pool lookup: the category is

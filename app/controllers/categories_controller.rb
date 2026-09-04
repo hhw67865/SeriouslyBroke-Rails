@@ -145,12 +145,13 @@ class CategoriesController < ApplicationController
   # expense category may carry a funding start), so a bad value is a legible 422 on the form that
   # submitted it rather than a silent write.
   #
-  # ** `target_amount` LEFT THE LIST (rules-own-the-budget spec §5/§7), AND THE PERMIT IS HALF THE
-  # DELETION. ** The field is gone from the form, and a column that stays permitted is one a crafted
-  # POST can still write — silently, since no claim formula has read `categories.target_amount`
-  # since the shapes moved onto the rule. What a category builds up toward is its building rule's
-  # `target_amount`, written on the rules form; the column itself is dropped by Task 4's migration.
-  # Anything that arrives naming it now is simply ignored by `params.expect`.
+  # ** `target_amount` LEFT THE LIST (rules-own-the-budget spec §5/§6/§7), AND THE PERMIT IS THE
+  # HALF THAT STILL MATTERS. ** The field is gone from the form and the COLUMN IS GONE FROM THE
+  # SCHEMA — `RulesOwnTheBudget` dropped `categories.target_amount` once every figure had moved onto
+  # its building rule — so a key that stayed permitted would no longer be a silent write but an
+  # `UnknownAttributeError` 500 on the assignment, from a client written against yesterday's form.
+  # What a category builds up toward is its building rule's `target_amount`, written on the rules
+  # form. Anything that arrives naming it here is simply ignored by `params.expect`.
   #
   # `funded_since` IS USER-EDITABLE, WHICH SPEC §4 REQUIRES AND WHICH MOVES MONEY. It is the day a
   # category starts counting its own spending; earlier spending drains available. Editing it

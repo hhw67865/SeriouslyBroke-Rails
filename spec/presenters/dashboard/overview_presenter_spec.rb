@@ -23,8 +23,8 @@ require "rails_helper"
 # (§3.3), so a category with none asks the ledger nothing at all and five ruleless ones would cost
 # zero statements — the equality would hold trivially and the example would pass against the very
 # thing it forbids. And since rules-own-the-budget §5 the rule is also what puts a category on this
-# strip at all: `Category#building_rule` is the classifier, so a category with a plain rate rule and
-# a figure on its own record is not a fund and has no card.
+# strip at all: `Category#building_rule` is the classifier, so a category carrying a plain rate rule
+# is not a fund and has no card.
 #
 # STRICT EQUALITY AND THE FIGURE NAMED, not "no more than": a bound pins nothing, and a strip that
 # stopped reading claims altogether would satisfy a bare equality while printing nobody's money.
@@ -39,8 +39,8 @@ RSpec.describe Dashboard::OverviewPresenter do
 
   # THE FIGURE IS ON THE RULE (rules-own-the-budget spec §5): `:capped` is a per-period building rule
   # naming a `target_amount`, which is what `Category#building_rule` finds and what
-  # `ClaimCalculator#target` caps the walk at. The CATEGORY's own `target_amount` is deliberately not
-  # set — the column is dropped by Task 4 and nothing on this strip reads it.
+  # `ClaimCalculator#target` caps the walk at. The CATEGORY has no figure of its own to set — Task 4
+  # dropped `categories.target_amount`, and nothing on this strip ever read it.
   def fund(name, target: 5_000, accrues: 1_000)
     category = create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
     create(:budget, :capped, category: category, amount: accrues, target_amount: target)
@@ -117,13 +117,13 @@ RSpec.describe Dashboard::OverviewPresenter do
       expect(row[:target_amount]).to eq(5_000)
     end
 
-    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A category with a
-    # figure on its own record and a rule whose money RESETS every period is an envelope somebody
-    # set a ceiling on — nothing about it builds up, and no claim formula reads that figure. It had
-    # a card under `#saving_toward_a_target?`; it has none now.
-    it "leaves out a category whose rule resets, whatever the category's own column says" do
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A rule whose money
+    # RESETS every period is an envelope — nothing about it builds up. It had a card under
+    # `#saving_toward_a_target?` because its CATEGORY named a figure; this example planted that
+    # exact pair, and `categories.target_amount` is dropped (§6/§7), so the shape is the only
+    # classifier there is and it answers the same.
+    it "leaves out a category whose rule resets" do
       create(:budget, :per_period_rate, category: category("Groceries"), amount: 400)
-      user.categories.find_by(name: "Groceries").update!(target_amount: 5_000)
 
       expect(presenter.savings_summary).to be_empty
     end

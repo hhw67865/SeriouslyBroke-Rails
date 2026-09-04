@@ -169,10 +169,11 @@ RSpec.describe "Categories Index - Cards", type: :system do
     end
 
     # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A figure on the
-    # CATEGORY with a rule whose money RESETS drew a bar against a number no formula reads. It draws
-    # none now: the shape decides, and this shape is an envelope.
-    it "draws no bar for a resetting rule whatever the category's own column says", :aggregate_failures do
-      groceries = create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 5_000)
+    # CATEGORY beside a rule whose money RESETS drew a bar against a number no formula reads. The
+    # shape decides now, and this shape is an envelope — `categories.target_amount` is dropped
+    # (§6/§7), so there is no second number for a classifier to be tempted by.
+    it "draws no bar for a resetting rule", :aggregate_failures do
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
       create(:budget, :per_period_rate, category: groceries, amount: 400)
 
       visit categories_path(type: "expense")

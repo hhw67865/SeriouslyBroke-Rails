@@ -51,19 +51,23 @@ RSpec.describe BudgetPageHelper, type: :helper do
     # exactly one shape — a dateless target rule (`Budget#set_aside_only?`, spec §10.1 ruling 3) —
     # and Task 4's migration minted one for every goal in the database that lacked a rule. The
     # sticker printed "$0.00 / period" for those, beside a real built-up figure on the same row,
-    # which reads as a rule somebody set wrong rather than a rule that was never about a rate. The
-    # category carries the target, because that is the only shape the model lets the amount be zero
-    # on.
+    # which reads as a rule somebody set wrong rather than a rule that was never about a rate.
+    #
+    # ** THE TARGET IS THE RULE'S (rules-own-the-budget spec §2.1 row 4). ** The fixture put it on
+    # the CATEGORY, because that was the only shape the model let the amount be zero on; Task 4
+    # dropped `categories.target_amount` and `#set_aside_only?` reads all three columns off the rule,
+    # so `:hand_fed` is that same shape said on the record that owns it. THE HELPER READS NEITHER —
+    # it branches on the amount alone — which is why the sticker is what this example asserts.
     it "says a $0 goal rule is fed by hand" do
-      goal = build(:category, :expense, :funded, target_amount: 5_000)
+      goal = build(:category, :expense, :funded)
 
-      expect(helper.budget_rule_amount(rule(:per_period_rate, category: goal, amount: 0))).to eq("fed by hand")
+      expect(helper.budget_rule_amount(rule(:hand_fed, category: goal))).to eq("fed by hand")
     end
 
     # THE OTHER DIRECTION, one penny apart: a rule that names ANY rate states it, so the gate cannot
     # be satisfied by a helper that stopped printing figures.
     it "still states a rate of a single cent" do
-      goal = build(:category, :expense, :funded, target_amount: 5_000)
+      goal = build(:category, :expense, :funded)
 
       expect(helper.budget_rule_amount(rule(:per_period_rate, category: goal, amount: 0.01))).to eq("$0.01 / period")
     end

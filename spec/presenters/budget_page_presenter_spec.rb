@@ -320,7 +320,7 @@ RSpec.describe BudgetPagePresenter do
     it "leaves the groups exactly the set apply_fill_order accepts" do
       rate(holder("Groceries"), 400)
       unfunded_rule("Coffee", 35)
-      create(:category, :expense, :savings, user: user, name: "Vacation")
+      create(:category, :expense, :funded, user: user, name: "Vacation")
 
       expect(presenter.category_groups.map { |group| group.category.id })
         .to match_array(user.categories.in_fill_order.with_a_rule.ids)

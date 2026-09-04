@@ -526,9 +526,9 @@ RSpec.describe ClaimCalculator, type: :model do
   # §3.2/§3.3 — the capped building rule (rules-own-the-budget §2.1 row 3): the savings goal,
   # accruing at its rate toward the figure ON THE RULE, with no due date to spread it over.
   #
-  # THE CATEGORY NAMES NOTHING. `categories.target_amount` still exists until the data migration,
-  # and every fixture in this file leaves it NULL on purpose: the walk below is the new reading or
-  # it is nothing.
+  # THE CATEGORY NAMES NOTHING, AND SINCE §6's DATA MIGRATION IT CANNOT: `categories.target_amount`
+  # is dropped. Every fixture in this file already left it NULL on purpose — the walk below is the
+  # new reading or it is nothing — so the drop took away the only way to write the old one.
   # ===========================================================================================
   describe "a capped building rule" do
     let(:vacation) do
@@ -723,11 +723,15 @@ RSpec.describe ClaimCalculator, type: :model do
     end
 
     # ** THE COLUMN THAT MOVED, ASKED IN THE DIRECTION THAT USED TO PASS. ** A figure on the CATEGORY
-    # made a rule `:target`-shaped until this task; the calculator does not read it at all now, so
-    # the identical rule beside the identical category figure is a plain rate rule. Without this the
-    # rows above would all pass against a class that still consulted the category.
-    it "does not read a figure the category names", :aggregate_failures do
-      owner = create(:category, :expense, user: user, name: "Old Goal", funded_since: Date.new(2026, 1, 1), target_amount: 5_000)
+    # made a rule `:target`-shaped until this task; the calculator does not read it at all now, so a
+    # rate rule on a category that was a goal in every other respect is a plain rate rule. Without
+    # this the rows above would all pass against a class that still consulted the category.
+    #
+    # THE FIGURE ITSELF IS GONE FROM THE FIXTURE because §6's migration dropped the column. What is
+    # left is the sharper half of the same statement: the shape comes off `carries_over` and off
+    # nothing else, and there is no longer a second record that could answer.
+    it "reads the shape off the rule and nothing beside it", :aggregate_failures do
+      owner = create(:category, :expense, user: user, name: "Old Goal", funded_since: Date.new(2026, 1, 1))
       rule = create(:budget, :per_period_rate, category: owner, amount: 150, created_at: born)
 
       expect(calc(rule).shape).to eq(:rate)

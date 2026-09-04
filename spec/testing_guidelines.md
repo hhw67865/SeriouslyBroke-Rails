@@ -1170,8 +1170,8 @@ end
 ```ruby
 describe "search by name" do
   # ✅ Main subjects are referenced by name
-  let!(:emergency_fund) { create(:category, :expense, :savings, user: user, name: "Emergency Fund") }
-  let!(:vacation_fund) { create(:category, :expense, :savings, user: user, name: "Vacation Fund") }
+  let!(:emergency_fund) { create(:category, :expense, :funded, user: user, name: "Emergency Fund") }
+  let!(:vacation_fund) { create(:category, :expense, :funded, user: user, name: "Vacation Fund") }
 
   before do
     # ✅ Background data not referenced by variable name

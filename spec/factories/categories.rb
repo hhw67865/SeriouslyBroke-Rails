@@ -30,13 +30,13 @@ FactoryBot.define do
       funded_since { 1.year.ago.to_date }
     end
 
-    # A SAVINGS CATEGORY IS A FUNDED CATEGORY WITH A TARGET AND NO RULE (spec §3) — there is no
-    # savings TYPE any more and this trait sets none. `:funded` is included rather than assumed
-    # because a target on a category that holds nothing is a goal nothing can progress toward.
-    trait :savings do
-      funded
-      target_amount { 500 }
-    end
+    # ** `:savings` IS GONE WITH `categories.target_amount` (rules-own-the-budget spec §7). ** It was
+    # `funded` plus a figure, on the era's reading that a goal is a KIND OF CATEGORY. A goal is a
+    # building rule that names a target now (§2.1 rows 3-4), so the trait's second half has no column
+    # to write and its first half is `:funded` verbatim — a trait that is a synonym for another one
+    # is a second name for one shape, which is how two fixtures come to mean different things by the
+    # same word. Its call sites read `:funded` and reach for `create(:budget, :capped, …)` where the
+    # goal itself is the subject.
 
     trait :with_items_and_entries do
       transient do

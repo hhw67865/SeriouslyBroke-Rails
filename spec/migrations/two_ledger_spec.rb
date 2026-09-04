@@ -28,7 +28,8 @@ RSpec.describe CategoriesHoldTheMoney do
   include_context "with the schema its subject was written for",
                   described_class,
                   DropThePoolLayer,
-                  DropTheDistribution
+                  DropTheDistribution,
+                  RulesOwnTheBudget
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com") }

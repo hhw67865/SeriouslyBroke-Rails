@@ -150,11 +150,12 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
       end
     end
 
-    # ** THE DIRECTION THE OLD CLASSIFIER GOT WRONG. ** A figure on the CATEGORY with a rule whose
-    # unspent money RESETS is an envelope somebody set a ceiling on — nothing here builds up, and no
-    # claim formula reads that column.
-    it "leaves out a category whose rule resets, whatever its own column says" do
-      envelope = create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 5_000)
+    # ** THE DIRECTION THE OLD CLASSIFIER GOT WRONG. ** A rule whose unspent money RESETS is an
+    # envelope, and it is here whatever else is true of its category. The example planted a figure on
+    # the CATEGORY beside it — the exact pair `#saving_toward_a_target?` mistook for a fund — and
+    # `categories.target_amount` is dropped (§6/§7), so the shape is the only classifier left.
+    it "leaves out a category whose rule resets" do
+      envelope = create(:category, :expense, :funded, user: user, name: "Groceries")
       create(:budget, :per_period_rate, category: envelope, amount: 400)
 
       visit reports_path

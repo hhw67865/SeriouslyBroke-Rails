@@ -5,6 +5,7 @@ require Rails.root.join("db/migrate/20260817020000_drop_cap_era_budget_columns")
 require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
+require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -77,6 +78,24 @@ require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 # `down` would honestly be — would leave those three specs with no way to reach the world their own
 # subjects were written for. The converted rows are adjustments now and the discarded ones are gone;
 # a real reversal is a restore from backup, and the migration's own header says so.
+#
+# ** A SIXTH MIGRATION JOINED WITH THE RULE TYPES, AND IT IS NEWER THAN ALL FIVE (rules-own-the-budget
+# §6). ** `RulesOwnTheBudget` (2026-09-05) DROPS `categories.target_amount`, and that column is read
+# or written by TWO migrations already on this list — `CategoriesHoldTheMoney#up` fills it from a
+# pool's own target and its `down` removes it, and `DropTheDistribution#up` reads it in both
+# `#unfundable_ends` and `#malformed_minted_rules`. So its `down` (which re-adds the column and
+# copies each building rule's figure back onto its category) has to run FIRST on the way down, before
+# `CategoriesHoldTheMoney#down` can remove a column that is not there, and LAST on the way back up.
+# Every one of the four older migration specs therefore names it at the END of its own forward list:
+#
+#   include_context "with the schema its subject was written for",
+#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney,
+#                   DropThePoolLayer, DropTheDistribution, RulesOwnTheBudget
+#
+# ITS `down` DOES NOT TOUCH `budgets.carries_over`, `budgets.target_amount` OR `budgets.rule_type`,
+# which is why `RulesOwnTheBudgetColumns` is NOT on this list: those columns belong to that file, no
+# `down` here gives or takes them away, and adding it would put a `down` in the list that no `up` in
+# the list depends on — the dead-entry shape the `CreateAdjustments` paragraph above rules out.
 #
 # ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
 # It is newer than the first four and older than the fifth, so the question is live in both

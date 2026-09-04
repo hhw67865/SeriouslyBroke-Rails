@@ -376,14 +376,14 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       expect(retirement.building_rule).to eq(retirement.budgets.sole)
     end
 
-    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD PREDICATE GOT WRONG. ** A figure on the
-    # CATEGORY with a rule whose money RESETS is an envelope somebody set a ceiling on: nothing about
-    # it builds up, and no claim formula has read that column since the shapes moved onto the rule.
-    # It got the "Goal" heading and a progress bar; it gets neither now.
-    it "calls a category with a figure of its own and a resetting rule an envelope" do
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD PREDICATE GOT WRONG. ** A rule whose money
+    # RESETS is an envelope: nothing about it builds up, and it got the "Goal" heading and a
+    # progress bar under `#saving_toward_a_target?` because its CATEGORY named a figure. The example
+    # planted exactly that pair; `categories.target_amount` is dropped (§6/§7), so the shape is the
+    # only thing left to answer with — and it answers the same.
+    it "calls a category with a resetting rule an envelope" do
       groceries = holder("Groceries")
       create(:budget, :per_period_rate, category: groceries, amount: 400)
-      groceries.update!(target_amount: 5_000)
 
       visit category_path(groceries)
 

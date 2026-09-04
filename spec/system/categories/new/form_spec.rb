@@ -236,13 +236,14 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_content("Category was successfully created")
       category = Category.find_by(name: "Buffer Spending")
       expect(category).not_to be_holder
-      expect([category.target_amount, category.funded_since]).to eq([nil, nil])
+      expect([category.funded_since, category.building_rule]).to eq([nil, nil])
     end
 
-    # ** THE TWO COLUMNS THIS FORM STILL WRITES, and the one it does not (rules-own-the-budget spec
-    # §5/§7). ** `target_amount` is neither on the form nor in `category_params`, so a category made
-    # here names no figure whatever the user does — the figure is the building rule's, written on
-    # the rules form.
+    # ** THE TWO COLUMNS THIS FORM STILL WRITES, and the one that no longer exists to write
+    # (rules-own-the-budget spec §5/§6/§7). ** `target_amount` is neither on the form nor in
+    # `category_params`, and Task 4's migration dropped `categories.target_amount` itself — so the
+    # schema is asserted here rather than a nil, which is the assertion a column merely left blank
+    # could also satisfy. The figure is the building rule's, written on the rules form.
     it "writes the give-way order and the claiming start, and no target", :aggregate_failures do
       submit_holder
 
@@ -250,7 +251,7 @@ RSpec.describe "Categories New - Form", type: :system do
       category = Category.find_by(name: "Vacation")
       expect(category.priority).to eq(3)
       expect(category.funded_since).to eq(Date.new(2026, 2, 6))
-      expect(category.target_amount).to be_nil
+      expect(Category.column_names).not_to include("target_amount")
       expect(category.building_rule).to be_nil
     end
 

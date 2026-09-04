@@ -611,13 +611,17 @@ RSpec.describe "Home Trouble", type: :system do
   # one screen, through the waterfall's `remaining.clamp(0.to_d, needed)`. There is no waterfall; what
   # holds the line now is §3.2's PER-PERIOD CLAMP AT ZERO, and this example is what says so.
   #
-  # PLANTED: a $2,400 goal whose only rule carries −$150, beside a $400 rate rule, against $100 of
-  # income. The goal's period accrues `min(−150, gap 2,400)` = −$150, and the clamp takes its
-  # `built_up` to **$0.00** rather than letting a negative claim ADD to what is free — Σ claims is the
-  # $400 rate rule alone, `unclaimed = 100 − 400` = −$300.00, and free is that. A missing clamp reads
-  # −$150 here and the figure would be −$150.00.
+  # PLANTED: a Vacation category whose only rule carries −$150, beside a $400 rate rule, against $100
+  # of income. §3.1's clamp takes that rule's claim to **$0.00** rather than letting a negative claim
+  # ADD to what is free — Σ claims is the $400 rate rule alone, `unclaimed = 100 − 400` = −$300.00,
+  # and free is that. A missing clamp reads −$150 here and the figure would be −$150.00.
+  #
+  # THE CATEGORY NAMED $2,400 UNTIL THIS TASK and the arithmetic above quoted it as a `gap`. It was
+  # already dead weight — `ClaimCalculator#shape` stopped reading `categories.target_amount` when the
+  # shapes moved onto the rule — and Task 4 dropped the column, so the figure is gone from the
+  # fixture and from the working.
   it "renders when a rule's amount is negative", :aggregate_failures do
-    vacation = holder("Vacation", priority: 2, target_amount: 2_400)
+    vacation = holder("Vacation", priority: 2)
     create(:budget, :per_period_rate, category: vacation, amount: 150)
     vacation.budgets.first.update_column(:amount, -150) # rubocop:disable Rails/SkipsModelValidations
     envelope("Rent", 400)

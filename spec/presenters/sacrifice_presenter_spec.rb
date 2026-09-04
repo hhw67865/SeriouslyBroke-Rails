@@ -124,15 +124,22 @@ RSpec.describe SacrificePresenter do
       expect(ids(presenter.fixed_rows)).to contain_exactly(rent.id, dentist.id)
     end
 
-    # A RULE ON A SAVINGS CATEGORY IS A REAL CLAIM the user declared — it is inside
-    # `Budget.steady_need` — so leaving it out of the cut list would put money in the gap that
-    # nothing on this page could reach. This is the shape that survives the deleted
-    # "includes a rule on a pool with no account": a goal a rate rule refills (§3's "typically no
-    # refill rule" — the demo's Retirement Supplement is exactly the exception), which the pool era
-    # could only express as an account-less pool and `Pool#account_matches_pool_type` then refused.
-    it "includes a rule on a savings category" do
-      goal = create(:category, :expense, :savings, user: user, name: "Retirement Supplement", target_amount: 5_000)
-      goal_rule = rate(goal, 150)
+    # A BUILDING RULE IS A REAL CLAIM the user declared — it is inside `Budget.steady_need` — so
+    # leaving it out of the cut list would put money in the gap that nothing on this page could
+    # reach. This is the shape that survives the deleted "includes a rule on a pool with no account":
+    # a goal a rate refills (§3's "typically no refill rule" — the demo's Retirement Supplement is
+    # exactly the exception), which the pool era could only express as an account-less pool and
+    # `Pool#account_matches_pool_type` then refused.
+    #
+    # ** THE GOAL IS THE RULE'S NOW, NOT THE CATEGORY'S (rules-own-the-budget spec §2.1 row 3). **
+    # It was `create(:category, :expense, :savings, target_amount: 5_000)` carrying a plain rate
+    # rule, which named a goal on a column no formula reads any more. `:capped` is the same
+    # declaration on the record that owns it — `carries_over` with a figure — and it reaches this
+    # page by the same road, because `#reason_for` marks a rule uncuttable by its ANCHOR and a
+    # building rule has none.
+    it "includes a building rule saving toward a target" do
+      goal = create(:category, :expense, :funded, user: user, name: "Retirement Supplement")
+      goal_rule = create(:budget, :capped, category: goal, amount: 150, target_amount: 5_000)
 
       expect(ids(presenter.cuttable_rows)).to include(goal_rule.id)
     end

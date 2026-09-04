@@ -24,7 +24,7 @@ RSpec.describe "Budgets Forms", type: :system do
   # §2.1's seven rows, written by hand
   # ---------------------------------------------------------------------------------------------
   describe "writing every shape by hand", :aggregate_failures do
-    let!(:vacation) { create(:category, :expense, :savings, user: user, name: "Vacation to Europe") }
+    let!(:vacation) { create(:category, :expense, :funded, user: user, name: "Vacation to Europe") }
 
     before do
       visit new_budget_path
@@ -500,7 +500,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # the `before` rather than as a `let!` because the picker's whole option list is the assertion:
     # no example names this record, they name the list it has to appear in.
     before do
-      create(:category, :expense, :savings, user: user, name: "Vacation to Europe")
+      create(:category, :expense, :funded, user: user, name: "Vacation to Europe")
       create(:category, :expense, :funded, user: create(:user), name: "Their Rent")
       visit budget_page_path
     end

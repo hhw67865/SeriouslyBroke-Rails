@@ -84,9 +84,11 @@ RSpec.describe Budget, type: :model do
 
       # THE COLUMN THAT MOVED, ASKED IN THE DIRECTION THAT USED TO PASS: a figure on the CATEGORY is
       # no longer any part of this exemption, so the same $0 rate rule that was legal beside a goal
-      # category is refused now.
-      it "refuses a zero amount for a target that sits on the category instead" do
-        goal = create(:category, :expense, :funded, target_amount: 2_400)
+      # category is refused now. The category names nothing because it CANNOT —
+      # `categories.target_amount` is dropped (§6/§7) — which is a stronger statement of the same
+      # sentence than the fixture that used to plant the figure beside the rule.
+      it "refuses a zero amount on a rate rule, with no category figure left to exempt it" do
+        goal = create(:category, :expense, :funded)
 
         expect(build(:budget, :per_period_rate, category: goal, amount: 0)).not_to be_valid
       end

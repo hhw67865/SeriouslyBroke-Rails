@@ -326,17 +326,24 @@ RSpec.describe "Budget page declaration", type: :request do
       end
 
       # `Category.apply_fill_order` writes through `update!`, so a row that was ALREADY invalid
-      # before the reorder — a `target_amount` a data fix left at zero — raises RecordInvalid from
-      # a reindex that had nothing to do with it. That must be this route's own refusal, naming
-      # the row the user has to fix, rather than an unrescued 500 on a button they were right
-      # to press.
+      # before the reorder — a `funded_since` in the future that a data fix left behind — raises
+      # RecordInvalid from a reindex that had nothing to do with it. That must be this route's own
+      # refusal, naming the row the user has to fix, rather than an unrescued 500 on a button they
+      # were right to press.
+      #
+      # ** IT WAS A `target_amount` OF ZERO until §6's migration dropped `categories.target_amount`
+      # and took `#target_is_a_goal` with it, AND THE COLUMN THAT REPLACES IT MATTERS. ** A negative
+      # `priority` is the obvious substitute and it is the wrong one: the reindex OVERWRITES
+      # `priority`, so the row saves clean and there is nothing left to refuse — measured, this
+      # example passed a 302. `funded_since` is a column the reorder does not touch, which is what
+      # makes it the same class of already-broken row the deleted fixture was.
       it "refuses at 422, naming the row, when a category is already invalid" do
-        rent.update_column(:target_amount, 0) # rubocop:disable Rails/SkipsModelValidations -- the point
+        rent.update_column(:funded_since, Date.current + 1.month) # rubocop:disable Rails/SkipsModelValidations -- the point
 
         reorder([groceries.id, rent.id])
 
         expect(response).to have_http_status(:unprocessable_content)
-        expect(response.body).to include("Rent could not be saved (target amount must be greater than 0)")
+        expect(response.body).to include("Rent could not be saved (funded since can&#39;t be in the future")
         expect(fill_order).to eq([["Rent", 0], ["Groceries", 1]])
       end
     end
@@ -355,7 +362,7 @@ RSpec.describe "Budget page declaration", type: :request do
       before { groceries.update!(priority: 2) }
 
       def goal(name, priority:)
-        create(:category, :expense, :savings, user: user, name: name, priority: priority)
+        create(:category, :expense, :funded, user: user, name: name, priority: priority)
       end
 
       # The pair to "refuses an order missing one of the user's own rule-carrying categories":

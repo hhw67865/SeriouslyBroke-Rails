@@ -185,11 +185,12 @@ RSpec.describe Category, type: :model do
       expect(category.building_rule.target_amount).to be_nil
     end
 
-    # THE OTHER DIRECTION: money that RESETS is an envelope, whatever figure the category's own
-    # column happens to carry. That column is dropped by Task 4 and nothing reads it now.
+    # THE OTHER DIRECTION: money that RESETS is an envelope, and there is no second opinion left for
+    # it to disagree with. This example planted a figure on the CATEGORY beside the resetting rule —
+    # the reading `#saving_toward_a_target?` got wrong — and `categories.target_amount` is dropped
+    # (§7), so the shape is the only classifier there is.
     it "is nil where the rule's unspent money resets" do
       create(:budget, :per_period_rate, category: category, amount: 400)
-      category.update!(target_amount: 5_000)
 
       expect(category.reload.building_rule).to be_nil
     end

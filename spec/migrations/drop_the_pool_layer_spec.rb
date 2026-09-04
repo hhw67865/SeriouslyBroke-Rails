@@ -21,7 +21,10 @@ require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 # WHY EVERY EXAMPLE RE-RESETS COLUMN INFORMATION: the DDL runs INSIDE the example transaction, so
 # `pools.start_date` exists for the length of one example and is gone by the next.
 RSpec.describe DropThePoolLayer do
-  include_context "with the schema its subject was written for", described_class, DropTheDistribution
+  include_context "with the schema its subject was written for",
+                  described_class,
+                  DropTheDistribution,
+                  RulesOwnTheBudget
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com", timezone: "UTC") }

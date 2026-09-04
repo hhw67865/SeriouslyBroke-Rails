@@ -143,13 +143,12 @@ RSpec.describe "Home This Period", type: :system do
   # rule and zero is the only honest way to say a rule has no standing contribution.
   #
   # ** THE RULE CARRIES BOTH COLUMNS NOW (rules-own-the-budget spec §2.1 row 4): `carries_over` is
-  # what makes the money build up and `target_amount` is where it stops. ** The CATEGORY keeps its
-  # copy of the figure because the screens that read it have not been moved yet; the claim formulas
-  # read only the rule.
-  # ** THE FIGURE IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §5). ** The
-  # helper used to write it on both records because four screens still read the category's column;
-  # they read the rule now, and a fixture still writing the category's copy would let a reader that
-  # had quietly stayed behind go on passing. The column is dropped by Task 4 in any case.
+  # what makes the money build up and `target_amount` is where it stops. **
+  #
+  # ** THE FIGURE IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §5/§7). **
+  # The helper used to write it on both records because four screens still read the category's
+  # column; they read the rule now, a fixture still writing the category's copy would let a reader
+  # that had quietly stayed behind go on passing, and Task 4 dropped the column outright.
   def goal(name, target:, priority: 1)
     holder(name, priority: priority).tap do |category|
       create(:budget, :hand_fed, category: category, target_amount: target)
@@ -332,8 +331,14 @@ RSpec.describe "Home This Period", type: :system do
   # rule). ** The categories band's version of this example asserted `have_no_content("of $2,400.00")`
   # on the whole row, because an anchor-dated goal's status was its schedule rather than `saving`. The
   # computed model makes that structural rather than a matter of wording: a rule with an anchor is
-  # DATED, and a dated rule accrues toward ITS OWN amount by ITS OWN deadline — the category's $2,400
-  # target belongs to whatever rule has no anchor, and this row never mentions it.
+  # DATED, and a dated rule accrues toward ITS OWN amount by ITS OWN deadline.
+  #
+  # ** THE SECOND FIGURE THIS EXAMPLE USED TO REFUSE NO LONGER EXISTS (rules-own-the-budget §7). **
+  # It planted `categories.target_amount = 2,400` beside the dated rule and asserted the row never
+  # printed it. That column is dropped, and `Budget#build_up_must_be_valid` refuses `carries_over`
+  # on a dated rule outright — so a dated rule cannot carry a target of its own either, and there is
+  # no rival figure left for the row to quote. What survives is the positive half: the row reads the
+  # BILL.
   #
   # PLANTED, on a fixed grid so no figure here moves with the wall clock. Biweekly anchored Aug 14
   # 2026, `today` Aug 20, the rule born on the boundary it accrues from, a $300 bill due Oct 9.
@@ -341,13 +346,12 @@ RSpec.describe "Home This Period", type: :system do
   # Aug 14, Aug 28, Sep 11, Sep 25, Oct 9 = **5** — so `planned = 300 ÷ 5` = **$60.00**, one period is
   # walked, and `built_up` is **$60.00**.
   it "reads an anchor-dated goal by its schedule, toward the bill and not the target", :aggregate_failures do
-    on_the_fixed_grid("House Deposit", amount: 300).update!(target_amount: 2_400)
+    on_the_fixed_grid("House Deposit", amount: 300)
 
     travel_to(Date.new(2026, 8, 20)) { visit root_path }
 
     expect(figure("House Deposit")).to have_content("$60.00 built up of $300.00")
     expect(clause("House Deposit")).to have_content("next due Oct 9 · $60.00 per period")
-    expect(row("House Deposit")).to have_no_content("$2,400.00")
   end
 
   # ── THE CLAUSE (spec §4: the status vocabulary "where it earns its place") ─────────────────────

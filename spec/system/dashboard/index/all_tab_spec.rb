@@ -178,7 +178,6 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       :expense,
       user: user,
       name: "Emergency Fund",
-      target_amount: 5000,
       funded_since: 1.year.ago.to_date
     )
     expense_cat = create(:category, :expense, user: user, name: "Groceries")
@@ -192,10 +191,14 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
   # A GOAL FED BY HAND: the rule that makes the claim possible, and the dated delta that IS the
   # money. Per-period with no anchor and no interval, carrying over toward a figure it names itself,
   # is the only shape `Budget` permits a zero amount on (`#set_aside_only?`) — §3.2's "no rate is
-  # spelled as zero", read off the RULE since the rules-own-the-budget task rather than off the
-  # category's own `target_amount`, which this tab's savings strip still displays.
-  def set_aside(category, amount, on:)
-    rule = create(:budget, :hand_fed, category: category, item: nil, target_amount: category.target_amount)
+  # spelled as zero".
+  #
+  # ** THE FIGURE IS THE RULE'S AND THE CATEGORY NAMES NONE (rules-own-the-budget §6/§7). ** It was
+  # `target_amount: category.target_amount`, a copy of a column this tab's savings strip read; the
+  # strip reads `Category#building_rule` now and `categories.target_amount` is dropped, so the
+  # ceiling is declared once, here, on the record the walk caps at.
+  def set_aside(category, amount, on:, target: 5_000)
+    rule = create(:budget, :hand_fed, category: category, item: nil, target_amount: target)
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 

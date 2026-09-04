@@ -24,7 +24,12 @@ require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 # so the acceptance test is the PHYSICAL invariant (`pot + Σ accounts == income − expenses`) plus a
 # row-by-row account of where every allocation went. Both are here.
 RSpec.describe DropTheDistribution do
-  include_context "with the schema its subject was written for", described_class
+  # ** `RulesOwnTheBudget` IS ON THE LIST BECAUSE THIS MIGRATION READS `categories.target_amount` AND
+  # THAT ONE DROPS IT. ** Both `#unfundable_ends` and `#malformed_minted_rules` name the column, so
+  # against the current schema this file's own `up` — the one every example here runs — would be a
+  # `PG::UndefinedColumn` rather than a conversion. Newest first on the way down, last on the way
+  # back up, which is what `#step_the_schema` does with the list reversed.
+  include_context "with the schema its subject was written for", described_class, RulesOwnTheBudget
 
   let(:migration) { described_class.new }
   let(:user) do

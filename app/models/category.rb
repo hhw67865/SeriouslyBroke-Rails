@@ -490,19 +490,24 @@ class Category < ApplicationRecord
     moment.is_a?(Date) && !moment.is_a?(DateTime) ? moment : moment.in_time_zone("UTC").to_date
   end
 
-  # THE THREE COLUMNS THAT MAKE A CATEGORY A HOLDER (two-ledger spec §3), in one validator:
+  # THE TWO COLUMNS THAT MAKE A CATEGORY A HOLDER (two-ledger spec §3), in one validator:
   #
   #   * `priority` orders the distribute waterfall. It is NOT NULL with a database default of 0, so
   #     the blank arm only ever fires on a form that submitted an empty string — and a NEGATIVE
   #     priority outranks every category the user meant to fund first. `Pool#priority` carried
   #     exactly this pair of rules for exactly this reason.
-  #   * `target_amount` is a goal, and a goal of zero is already met while a negative one is money
-  #     owed. Optional: a nil target is "no goal", not a missing value.
-  #   * ONLY EXPENSE CATEGORIES HOLD MONEY, so neither `funded_since` nor a target may sit on an
-  #     income category. `Allocation` refuses an income category on either side for the same rule;
-  #     this is the half that covers the columns rather than the rows. `priority` is deliberately
-  #     NOT in that list — every income category in the database already carries the default 0, and
-  #     it orders a waterfall an income category is never in.
+  #   * ONLY EXPENSE CATEGORIES HOLD MONEY, so `funded_since` may not sit on an income category.
+  #     `priority` is deliberately NOT in that list — every income category in the database already
+  #     carries the default 0, and it orders a waterfall an income category is never in.
+  #
+  # ** IT WAS THREE COLUMNS, AND `target_amount` LEFT WITH THE COLUMN (rules-own-the-budget spec
+  # §7). ** `#target_is_a_goal` said "a goal of zero is already met and a negative one is money the
+  # budget owes its owner", and that sentence is now `Budget`'s — `validates :target_amount,
+  # numericality: { greater_than: 0 }, allow_nil: true`, beside the `budgets_positive_target_amount`
+  # CHECK — because how much a category is building up toward is a fact about the RULE that builds
+  # it up (§2.1). `only_expenses_hold_money`'s second half went with it for the same reason: a
+  # target cannot sit on an income category when it cannot sit on a category at all, and
+  # `Budget#category_must_be_an_expense` is what refuses the rule that would carry one there.
   #
   # ONE VALIDATOR RATHER THAN THREE `validates` LINES, AND THE FIRST LINE IS WHY. These columns are
   # YOUNGER THAN THE MIGRATION SPECS THAT PLANT CATEGORIES THROUGH THIS MODEL:
@@ -518,7 +523,6 @@ class Category < ApplicationRecord
     return unless has_attribute?(:priority)
 
     priority_is_a_fill_order
-    target_is_a_goal
     funding_start_is_not_in_the_future
     only_expenses_hold_money
   end
@@ -527,12 +531,6 @@ class Category < ApplicationRecord
     return errors.add(:priority, "can't be blank") if priority.blank?
 
     errors.add(:priority, "must be greater than or equal to 0") if priority.to_i.negative?
-  end
-
-  def target_is_a_goal
-    return if target_amount.blank?
-
-    errors.add(:target_amount, "must be greater than 0") unless target_amount.to_d.positive?
   end
 
   # A FUNDING START IN THE FUTURE IS SCHEDULING, AND NOTHING IN THIS APP SCHEDULES (fix round 1,
@@ -589,6 +587,6 @@ class Category < ApplicationRecord
   def only_expenses_hold_money
     return if category_type.blank? || expense?
 
-    errors.add(:base, "only expense categories hold money") if funded_since.present? || target_amount.present?
+    errors.add(:base, "only expense categories hold money") if funded_since.present?
   end
 end

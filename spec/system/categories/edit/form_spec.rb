@@ -165,21 +165,23 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_no_field("Target")
     end
 
-    # ** A CATEGORY THAT ALREADY CARRIES A FIGURE KEEPS IT THROUGH AN EDIT, AND CANNOT BE GIVEN ONE
-    # HERE. ** The migration that moves those figures onto the rules is Task 4's; until it runs, real
-    # rows still hold the column, and a form that silently blanked it on every save would destroy the
-    # data that migration is going to read. `params.expect` simply never sees the key, so an
-    # untouched column stays untouched.
-    it "leaves a figure the category already carries alone" do
-      vacation = create(:category, :expense, user: user, **holder_attributes, target_amount: 2_400)
+    # ** THE FIGURE A CATEGORY USED TO CARRY IS THE RULE'S NOW, AND AN EDIT HERE LEAVES IT ALONE
+    # (rules-own-the-budget spec §6/§7). ** This example planted `categories.target_amount = 2,400`
+    # and asserted a save did not blank it, because the migration that moves those figures had not
+    # run yet. It has: the column is gone and the goal lives on the category's building rule, so the
+    # question the example is really about — can this form damage a fund by saving something else? —
+    # is asked of the record that now holds the fund.
+    it "leaves the building rule's target alone" do
+      vacation = create(:category, :expense, user: user, **holder_attributes)
+      goal = create(:budget, :capped, category: vacation, amount: 200, target_amount: 2_400)
 
       visit edit_category_path(vacation)
       fill_in "Name", with: "Vacation Fund"
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(vacation.reload.target_amount).to eq(2_400)
-      expect(vacation.name).to eq("Vacation Fund")
+      expect(goal.reload.target_amount).to eq(2_400)
+      expect(vacation.reload.name).to eq("Vacation Fund")
     end
 
     it "still writes the claiming start" do
