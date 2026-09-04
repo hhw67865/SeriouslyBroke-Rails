@@ -5,23 +5,48 @@ require "rails_helper"
 # THE DEMO IS INFRASTRUCTURE, so it gets a spec.
 #
 # `db/seeds.rb` is what every visual check on this plan is performed against and what `bin/ci`
-# replants on every run, and after the drop it is also a CLAIM: that the demo speaks the two-ledger
-# language natively — accounts and categories, allocations and account movements, and not one
-# construct from the pool layer, which no longer has columns to be written into.
+# replants on every run, and since the distribution was dropped it is also a CLAIM: that the demo
+# speaks the COMPUTED-CLAIM language natively — accounts, categories, rules, dated adjustments and
+# account movements, and not one construct from the pool layer or from the distribution, neither of
+# which has columns to be written into any more.
 #
 # THE CLAIM IS CHECKED IN BOTH DIRECTIONS, and that is the point of the file-level half. Grepping
 # the source catches a legacy construct written into the seeds; asserting the database catches one
 # that arrives through a factory, an association callback or a default. Either half alone can be
 # satisfied by a file that does the wrong thing somewhere the other cannot see.
 #
-# EVERY EXPECTED FIGURE IS A PLANTED LITERAL. Reading a count out of the same objects the seeds
-# just created would assert that the seeds equal themselves; these numbers are the demo's state
-# table — the account → screen-state table in `db/seeds.rb`'s own header, beside the data it
-# describes — written down where a change to the seeds has to argue with them.
+# EVERY EXPECTED FIGURE IS A PLANTED LITERAL, and since the purpose side became a computation the
+# working is written beside each one — `spec/services/claim_calculator_spec.rb`'s rule, applied to a
+# fixture the seeds build rather than one the example does. Reading a claim out of the same
+# calculator the app uses would assert that `ClaimCalculator` equals itself; these numbers are the
+# demo's state table — the one in `db/seeds.rb`'s own header, beside the data it describes — written
+# down where a change to the seeds has to argue with them.
 #
 # LOADING THE SEEDS PER EXAMPLE is deliberate and costs about a second. `before(:context)` would
 # put ~200 rows outside the per-example transaction, where DatabaseCleaner cleans them out from
 # under the group; the seeds are cheap enough that the honest version wins.
+#
+# ── DELETED WITH THE DISTRIBUTION (computed-claims spec §§5-6), named here because this file is the
+# only place they were named and a deletion nobody records is a deletion nobody notices:
+#
+#   * "puts the household on a short waterfall with one alert" — it built a `DistributionPresenter`
+#     and pinned `#available` at $1,900.00, `#short?`, `#expanded?`, one alert, twelve waterfall rows
+#     and nineteen categories in the fill order. Every one of those readers is deleted: there is no
+#     distribution, so there is no screen, no cutoff line and no alerts band. WHAT THE EXAMPLE WAS
+#     REALLY ABOUT — this household's rules ask for more than it has — survives as `free < 0`, and
+#     it is carried by "leaves the household short, and names who gives way" below, which asserts the
+#     same fact through §2's definition instead of through a proposal nobody has to confirm.
+#   * the purpose-side half of "conserves the bank balance across both ledgers", which asserted
+#     `Σ holdings + available_at_the_root == 7_461.00` through `Category#status`. The purpose side is
+#     no longer a partition (§2): `free = total_money − Σ claims` is a DEFINITION and claims are
+#     derived, so there is nothing left to conserve and nothing for a second sum to disagree with.
+#     The PHYSICAL half is untouched below, in the same raw SQL, against the same $7,461.00.
+#   * `#available_at_the_root`, `#earned`, `#unheld`, `#allocated_out` and `#allocated_back` — five
+#     helpers whose whole subject was the `allocations` table. The root is not computed from rows any
+#     more; it is `ClaimLedger#free`, and "reports what the claims leave free" reads it.
+#   * `row_counts[:allocations]` — the table is dropped. `:adjustments` takes its place in the same
+#     hash, which is the demo's whole purpose-side write.
+#
 # The subject is a FILE, not a class, so there is no constant to hand `describe` — the same reason
 # `spec/migrations/cutover_spec.rb` disables a path cop rather than renaming itself.
 # rubocop:disable RSpec/DescribeClass
@@ -34,8 +59,8 @@ RSpec.describe "db/seeds.rb" do
   let(:source) { Rails.root.join("db/seeds.rb").read }
 
   # THE CODE ALONE, WITH EVERY COMMENT STRIPPED. The seeds' header explains at length what the pool
-  # layer WAS, so a grep over the raw file finds `categories.pool_id` in prose and fails on a
-  # sentence rather than on a construct. What this file polices is what the demo WRITES.
+  # layer and the distribution WERE, so a grep over the raw file finds `Allocation` in prose and
+  # fails on a sentence rather than on a construct. What this file polices is what the demo WRITES.
   let(:code) { source.lines.reject { |line| line.strip.start_with?("#") }.join }
   let(:user) { User.find_by!(email: "demo@example.com") }
   let(:today) { Time.find_zone!(user.timezone).today }
@@ -44,8 +69,27 @@ RSpec.describe "db/seeds.rb" do
     load Rails.root.join("db/seeds.rb")
   end
 
+  # ONE LEDGER FOR THE WHOLE EXAMPLE, on `ClaimLedger`'s own rule: it is a snapshot, and two of them
+  # over one replant would be two readings of the same rules free to disagree.
+  def ledger = @ledger ||= ClaimLedger.new(user, today: today)
+
+  # ONE RULE, BY THE CATEGORY THAT OWNS IT AND THE ITEM IT NAMES. `item_id: nil` is the catch-all
+  # rule whose lane is the whole category (§3.1's partition), which is the one every set-aside below
+  # lands on and the one a rate row is about.
+  def rule_for(category_name, item_name = nil)
+    category = user.categories.find_by!(name: category_name)
+    item = item_name && category.items.find_by!(name: item_name)
+    Budget.find_by!(category: category, item_id: item&.id)
+  end
+
+  def claim_of(category_name, item_name = nil) = ledger.calculator_for(rule_for(category_name, item_name))
+
   # Every table the demo writes to, in one reading — so the count example and the migration's
   # byte-identical check ask the same question of the same tables rather than two hand-kept lists.
+  #
+  # `allocations` IS GONE AND `adjustments` HAS TAKEN ITS PLACE (computed-claims §5). The one is not
+  # a rename of the other: the demo used to write 61 allocation rows, most of them the distribution
+  # funding a rule it can now compute, and what is left is the 28 hand set-asides §3.3 keeps.
   def row_counts
     {
       users: User.count,
@@ -55,7 +99,7 @@ RSpec.describe "db/seeds.rb" do
       entries: Entry.count,
       budgets: Budget.count,
       movements: AccountMovement.count,
-      allocations: Allocation.count
+      adjustments: Adjustment.count
     }
   end
 
@@ -66,51 +110,6 @@ RSpec.describe "db/seeds.rb" do
   # of the example group.
   def savings_category_type = 2
 
-  # The root, in the app's own tables and nobody's reader: income, minus the spending NO category
-  # holds, minus what has been allocated out of it, plus what has come back.
-  #
-  # "SPENDING NO CATEGORY HOLDS" IS TWO SHAPES, not one, and both arms are here because the second
-  # is the funding-start rule itself (§4): a category with no `funded_since` holds nothing ever, and
-  # a category that has one still sends everything dated BEFORE it to the root. Every seeded holder
-  # starts six months back and nothing is dated earlier, so today the second arm is empty — it is
-  # written anyway, because a spec that only happens to be right on one fixture is a spec that
-  # stops being right the first time the fixture moves.
-  def available_at_the_root
-    (earned - unheld - allocated_out + allocated_back).to_d
-  end
-
-  def earned = user.entries.joins(item: :category).where(categories: { category_type: :income }).sum(:amount)
-
-  # ** THE DAY BOUNDARY IS THE OWNER'S, AND THE TWO `AT TIME ZONE`s ARE WHY (final fix wave, M-5). **
-  # The second arm compared `entries.date` — a naive DATETIME holding a UTC instant — against
-  # `categories.funded_since`, a DATE. `CategoryLedger::ENTRY_CATEGORY_ID` is the app's ONE statement
-  # of that comparison and it re-zones first: the demo user is `America/New_York`, so an entry filed
-  # at 8pm on the funding date is stored `…T00:00Z` the NEXT day and a raw comparison would put it on
-  # the wrong side of the line — this arm would then call the app's answer wrong, or agree with it by
-  # accident. The spelling below is that constant's, with the user's own zone bound rather than read
-  # off a joined `users` row, because this whole reader is already scoped to one user.
-  #
-  # RUNS OVER AN ARM THAT IS EMPTY ON TODAY'S FIXTURE, and is written correctly anyway for the reason
-  # the arm exists at all: a conservation anchor that only happens to be right on one fixture stops
-  # being right the first time the fixture moves, and a timezone-naive one stops being right at 8pm.
-  def unheld
-    user.entries.joins(item: :category).where(categories: { category_type: :expense })
-      .where(
-        "categories.funded_since IS NULL OR " \
-        "(entries.date AT TIME ZONE 'UTC' AT TIME ZONE :zone)::date < categories.funded_since",
-        zone: user.timezone.presence || "UTC"
-      ).sum(:amount)
-  end
-
-  def allocated_out = Allocation.where(from_category_id: nil, to_category_id: user.categories.select(:id)).sum(:amount)
-
-  def allocated_back = Allocation.where(to_category_id: nil, from_category_id: user.categories.select(:id)).sum(:amount)
-
-  # THE FILE-LEVEL HALF IS NOW ABOUT THE POOL LAYER (two-ledger spec §5, Task 8), because that is
-  # what the demo may no longer speak. The cap and the savings category are two schema eras back and
-  # have no columns to be written into at all; a pool CONSTRUCT is different in kind — `pools` still
-  # exists as the accounts table, so `pool_type: :budget` or a `Budget.create!(pool: …)` is a
-  # sentence somebody could still type, and it is the one this grep is for.
   describe "the file itself" do
     it "never writes a pool that is not an account", :aggregate_failures do
       expect(code).not_to match(/pool_type:\s*:(budget|savings)/)
@@ -123,12 +122,41 @@ RSpec.describe "db/seeds.rb" do
       expect(code).not_to match(/\bPoolMovement\b/)
     end
 
-    # A rule belongs to the category that holds the money, and nothing else can own one.
-    it "gives every rule a category", :aggregate_failures do
-      rules = code.scan(/Budget\.create!\((?:[^()]|\([^()]*\))*\)/m)
+    # ** THE DISTRIBUTION'S OWN VOCABULARY, WHICH THE DEMO MAY NO LONGER SPEAK (§§5-6). ** Every name
+    # here is a class or a local the seeds actually used one commit ago — `Allocation.create!` in the
+    # `allocate` builder, `Allocation` at the head of the truncation loop — and every one of them is
+    # deleted code now. A grep is the cheap half of the promise: a `require`-less `load` of a file
+    # naming a missing constant fails loudly, but a local called `allocate` that wrote something
+    # ELSE would not, and neither would a comment-free reintroduction of the word on a screen.
+    it "never writes a construct the distribution took with it", :aggregate_failures do
+      expect(code).not_to match(/\bAllocation\b/)
+      expect(code).not_to match(/\ballocate\b/)
+      expect(code).not_to match(/\bholding_calculator\b/)
+      expect(code).not_to match(/\bHoldingStatus\b/)
+      expect(code).not_to match(/\bDistributionPresenter\b/)
+      expect(code).not_to match(/\bdistribute\b/)
+    end
 
-      expect(rules.length).to eq(16)
-      expect(rules.reject { |rule| rule.include?("category:") }).to eq([])
+    # ** EVERY RULE GOES THROUGH THE ONE BUILDER, AND THE BUILDER IS WHAT BACKDATES ITS BIRTHDAY. **
+    # `ClaimCalculator#accrual_start` is `max(funded_since, the rule's own creation day)`, so a rule
+    # written by the seed run itself walks a single period and every fund on the demo reads $0.00
+    # built up. `db/seeds.rb`'s `rule` lambda stamps `created_at: demo_start`; a bare
+    # `Budget.create!` beside it would be a rule that silently opts out of six months of history, and
+    # the failure would look like a wrong figure rather than like a missing keyword.
+    #
+    # ONE `Budget.create!` IN THE WHOLE FILE, AND IT IS THE BUILDER'S OWN BODY. Counting it rather
+    # than forbidding the string is the only spelling that can tell the builder from a rule written
+    # around it.
+    #
+    # EIGHTEEN CALL SITES FOR TWENTY-ONE RULES: the four hand-fed goals are written by one call
+    # inside a loop, because their shape is identical and four copies of a zero-amount rule is four
+    # places for one ruling to be edited.
+    it "writes every rule through the builder that backdates it", :aggregate_failures do
+      written = code.scan(/rule\.call\((?:[^()]|\([^()]*\))*\)/m)
+
+      expect(code.scan("Budget.create!").length).to eq(1)
+      expect(written.length).to eq(18)
+      expect(written.reject { |call| call.include?("category:") }).to eq([])
     end
 
     it "never writes a savings category", :aggregate_failures do
@@ -143,18 +171,24 @@ RSpec.describe "db/seeds.rb" do
     it "holds exactly the rows the demo is made of" do
       expect(row_counts).to eq(
         users: 1,
+        # 29 SINCE `Streaming` (computed-claims Task 3's band). A category with no holding date
+        # carrying a rule is the one shape `BudgetPagePresenter#unfilled_rules` renders, and the
+        # demo had none while every rule's category was a holder.
+        categories: 29,
         pools: 4,
-        categories: 28,
-        # 25 RATHER THAN 24 SINCE THE VET ITEM (computed-claims rulings of 2026-09-03). Pet Care is
-        # the demo's MIXED case — a rate rule beside a dated bill — and both of those rulings land on
-        # it: a category may carry only ONE rule whose lane is the whole of it, so the vet bill has to
-        # name an item, and the lane PARTITION then keeps the bill's payments out of the rate rule's
-        # figure. The item is what makes both true.
+        # 25 SINCE THE VET ITEM (the rulings of 2026-09-03). Pet Care is the demo's MIXED case — a
+        # rate rule beside a dated bill — and both of those rulings land on it: a category may carry
+        # only ONE rule whose lane is the whole of it, so the vet bill has to name an item, and the
+        # lane PARTITION then keeps the bill's payments out of the rate rule's figure.
         items: 25,
         entries: 75,
-        budgets: 16,
+        # 21 = the 16 the two-ledger demo carried, plus the four target-only rules the hand-fed goals
+        # need under §3.3 ("every adjustment targets a rule"), plus Streaming's.
+        budgets: 21,
         movements: 8,
-        allocations: 61
+        # 28 = four goals × seven periods, and nothing else. The other 33 rows the demo used to
+        # write were the distribution funding rules the app now computes (see the seeds' header).
+        adjustments: 28
       )
     end
 
@@ -165,64 +199,238 @@ RSpec.describe "db/seeds.rb" do
       expect(Entry.joins(item: :category).where(categories: { category_type: savings_category_type }).count).to eq(0)
     end
 
-    # EVERY POOL IS AN ACCOUNT AND EVERY RULE HAS A HOLDER — the two structural promises the drop
-    # leaves the demo with, plus the pot itself, which every entry lands in.
-    it "writes accounts, holders and a nominated pot", :aggregate_failures do
+    # EVERY POOL IS AN ACCOUNT AND EVERY RULE HAS AN OWNER, plus the pot itself, which every entry
+    # lands in.
+    #
+    # EXACTLY ONE RULE'S CATEGORY IS NOT A HOLDER, and it is planted rather than tolerated: that is
+    # the Budget page's "Not in the give-way order" band, whose whole subject is a rule claiming its
+    # full amount every period while nothing spent in its category ever comes off it.
+    it "writes accounts, holders, one unfilled rule and a nominated pot", :aggregate_failures do
       expect(Pool.where.not(pool_type: :account).count).to eq(0)
       expect(Budget.where(category_id: nil).count).to eq(0)
-      expect(Budget.all.map { |rule| rule.category.holder? }.uniq).to eq([true])
+      expect(Budget.all.reject { |rule| rule.category.holder? }.map { |rule| rule.category.name }).to eq(["Streaming"])
       expect(user.default_account).to eq(Pool.find_by!(name: "Checking"))
     end
 
-    # SPEC §2'S INVARIANT, ASKED OF THE DEMO AND IN BOTH PARTITIONS: every dollar the bank says the
-    # household has is sitting in exactly one account AND has exactly one job.
-    #
-    # AVAILABLE IS COMPUTED HERE RATHER THAN READ OFF `AllocationCalculator#available`, and the
-    # difference is the whole reason: that reader adds back what the closed rate categories would
-    # SWEEP ($125.00 on this demo), because the screen it feeds is about to offer the sweep. The
-    # money is still in those categories until the user confirms, so adding it to the holdings would
-    # count it twice. This is the root as it stands — income, less the spending of categories that
-    # hold nothing, less everything allocated out of it and plus everything given back.
+    # ** THE PHYSICAL INVARIANT, AND IT IS THE ONLY ONE LEFT (§2). ** `pot + Σ accounts == income −
+    # expenses`: every dollar the bank says the household has is sitting in exactly one account. The
+    # purpose side is not a partition any more — claims are derived, so there is no second sum to
+    # reconcile — and the example that asserted one is named at the head of this file.
     #
     # `::numeric` on the entry arms: `money` is a fixed-scale Postgres type with no unary minus at
     # all, so the expense arm is a type error rather than a wrong figure.
-    it "conserves the bank balance across both ledgers", :aggregate_failures do
-      ledger = AccountLedger.new(user)
-      physical = user.pools.accounts.sum(0.to_d) { |account| ledger.balance_of(account) }
-      holdings = user.categories.expenses.sum(0.to_d) { |category| category.status(today: today).balance }
+    it "conserves the bank balance", :aggregate_failures do
+      account_ledger = AccountLedger.new(user)
+      physical = user.pools.accounts.sum(0.to_d) { |account| account_ledger.balance_of(account) }
       bank = user.entries.joins(item: :category).sum(
         "CASE WHEN categories.category_type = 1 THEN entries.amount::numeric ELSE -entries.amount::numeric END"
       )
 
       expect(bank).to eq(7_461.00)
       expect(physical).to eq(7_461.00)
-      expect(holdings + available_at_the_root).to eq(7_461.00)
     end
 
-    # ── THE DISTRIBUTION SCREEN, RESTORED (Task 8). This example was INVERTED for four tasks: while
-    # the seeds still planted pools, no category carried a `funded_since`, `Category.in_fill_order`
-    # was empty and the converted waterfall had no rows at all — so it asserted the emptiness and
-    # said in capitals that the seeds were Task 7/8's to convert. They are converted, and this is
-    # what they now put on the app's headline screen.
+    # ** §2'S DEFINITION, ON THE DEMO: `free = min(pot, total_money − Σ claims)`. **
     #
-    # ONE SCREEN CARRIES WHAT FOUR ACCOUNTS USED TO. `AllocationCalculator` walks one root, so SHORT
-    # (the cutoff line), the ALERTS band and both sweep clauses have to coexist on it — see the
-    # table in `db/seeds.rb`'s own header, beside the data it describes.
+    #   total_money   $7,461.00   the physical invariant above, unchanged
+    #   − Σ claims   $10,201.34   over all 21 rules — the sum of the figures the examples below pin
+    #   = unclaimed  -$2,740.34   which is BELOW the pot, so the `min` does not bind
     #
-    # `available` IS $1,900.00 AND IT IS TWO FIGURES: $1,775.00 at the root, plus the $125.00 the
-    # two closed rate categories would sweep back. The root figure is the conservation example's own
-    # arithmetic — income, less spending no category holds, less everything allocated out.
-    it "puts the household on a short waterfall with one alert", :aggregate_failures do
-      presenter = DistributionPresenter.new(user: user, today: today)
+    # FREE IS NEGATIVE, AND THAT IS THIS DEMO'S INHERITANCE RATHER THAN A NEW PESSIMISM. The deleted
+    # waterfall example asserted `short?` for the same household on the same data: its rules ask for
+    # more than it has. §4 says that is a SIGNAL and never a refusal, so the trouble strip states the
+    # figure, walks the uncovered claims in reverse priority and names the per-day pace — which is
+    # the branch this demo exists to put on a screen, exactly as the cutoff line was before it.
+    it "reports what the claims leave free", :aggregate_failures do
+      expect(ledger.total_money).to eq(7_461.00)
+      expect(ledger.pot).to eq(5_561.00)
+      expect(ledger.total_claims).to eq(10_201.34)
+      expect(ledger.free).to eq(-2_740.34)
+      expect(ledger.free_cap_bound?).to be(false)
+    end
 
-      expect(
-        [presenter.available, presenter.short?, presenter.expanded?, presenter.alerts.length, presenter.lines.length]
-      ).to eq([1_900.00, true, true, 1, 12])
-      expect(user.categories.in_fill_order.count).to eq(19)
+    # ** §3.1, ALL THREE WAYS A RATE ROW CAN READ, ON THE MORNING THE PERIOD OPENS. **
+    # `claim = max(0, rate + Σ this period's deltas − spent this period)`, and the demo carries no
+    # deltas on a rate rule, so each of these is `rate − spent`:
+    #
+    #   Household Supplies   120 − 45  = 75.00    UNDER — today's detergent run
+    #   Dining Out           100 − 110 = -10 → 0  OVER  — the claim clamps, `over?` reads the -10
+    #   Groceries            400 − 0   = 400.00   UNTOUCHED — nothing has been spent yet
+    #
+    # THE PERIOD IS ANCHORED ON TODAY, so today is its only elapsed day and the two figures that are
+    # not zero belong to entries dated `today`. That is what makes this a three-state example rather
+    # than three readings of zero.
+    it "puts a rate rule under its rate, over it, and untouched", :aggregate_failures do
+      expect([claim_of("Household Supplies").spent_this_period, claim_of("Household Supplies").claim]).to eq([45, 75])
+      expect([claim_of("Dining Out").spent_this_period, claim_of("Dining Out").claim]).to eq([110, 0])
+      expect(claim_of("Dining Out").over?).to be(true)
+      expect([claim_of("Groceries").spent_this_period, claim_of("Groceries").claim]).to eq([0, 400])
+      expect(claim_of("Groceries").over?).to be(false)
+    end
+
+    # ** §3.2, A FUND BUILDING UP TOWARD A DATE. ** The walk runs from `demo_start` — six months
+    # back, which is where every rule is born (see the seeds' header) — and each period's share is
+    # the catch-up formula, `(target − built up before this period) ÷ periods left including this
+    # one`, so the fund lands whole ON the day rather than after it.
+    #
+    #   RENT             $1,500 a month on the Monthly Rent item, next due ten days out. Three
+    #                    payments have gone through the walk and each was a FULFILMENT that dropped
+    #                    the fund and rolled the cycle; the fund is whole again for the fourth,
+    #                    because with one boundary left before the date `periods_left` is 1 and this
+    #                    period's share IS the whole remaining gap.
+    #   QUARTERLY TAXES  $1,800 every three months, due two months out, nothing ever spent. Two
+    #                    months out is between 59 and 62 days, so the boundaries left from the
+    #                    opening of period k back are `k + 5` on every run day, and the walk starts
+    #                    at k = 13 (`demo_start` is thirteen periods back, which is why it is a
+    #                    boundary and not `6.months`): $1,800 ÷ 18 = $100.00, and the share stays
+    #                    $100.00 every period because the gap and the divisor fall together.
+    #                    Fourteen periods × $100.00 = $1,400.00 built up, $400.00 still to find.
+    it "builds the dated funds up toward their dates", :aggregate_failures do
+      rent = claim_of("Rent", "Monthly Rent")
+      taxes = claim_of("Quarterly Taxes")
+
+      expect([rent.built_up, rent.target, rent.next_due_on]).to eq([1_500, 1_500, today + 10])
+      expect(rent.overdue?).to be(false)
+      expect([taxes.built_up, taxes.target, taxes.next_due_on]).to eq([1_400, 1_800, today + 2.months])
+      expect(taxes.planned_this_period).to eq(100)
+    end
+
+    # ** THE CATCH-UP FORMULA IS NOT `target ÷ periods`, AND THIS IS THE EXAMPLE THAT SAYS SO. **
+    # Car Insurance is $1,200 six-monthly with its next occurrence ONE MONTH out — between 28 and 31
+    # days, so there are always exactly three boundaries left from the current period's open and
+    # `k + 3` from period k back. The walk opens at k = 13 with sixteen periods left and asks for
+    # $1,200 ÷ 16 = $75.00; every period afterwards the gap has fallen by $75.00 and the divisor by
+    # one, so the share stays $75.00 — and after fourteen periods the fund holds $1,050.00 with
+    # $150.00 to find over the three periods that are left. Divided flat over the walk it would read
+    # $1,200 ÷ 14 = $85.71 a period, which is a different rule.
+    it "recomputes the per-period share rather than dividing the target flat", :aggregate_failures do
+      car = claim_of("Car Insurance")
+
+      expect([car.built_up, car.target]).to eq([1_050, 1_200])
+      expect(car.planned_this_period).to eq(75)
+      expect(car.periods_left).to eq(3)
+      expect(car.next_due_on).to eq(today + 1.month)
+    end
+
+    # ** §3.2'S OVERDUE: A DATE THAT PASSED WITH NOBODY PAYING IT. ** The cycle rolls on PAYMENT and
+    # never on the calendar (`ClaimCalculator#due_on`), and the Renters Policy item has no entry at
+    # all — so `cycles paid` is zero, the occurrence stays anchored six days back, and
+    # `next_due_on < today` is `#overdue?` verbatim.
+    #
+    # THE FUND IS WHOLE, WHICH IS THE ORDINARY SHAPE OF AN OVERDUE BILL rather than the exception:
+    # the catch-up formula floors `periods left` at 1 for a date already past, so an unpaid fund
+    # fills in ONE period. That is what makes the strip say "it's all there — pay it and the fund
+    # starts again"; the trigger is the date, not the money.
+    #
+    # AND THE ELECTRIC BILL IS NOT OVERDUE THOUGH ITS ANCHOR IS OLDER, which is the other half of
+    # the same sentence: three $120 bills have been paid since `demo_start`, so one whole cycle is
+    # settled and the next occurrence is a month past the anchor.
+    it "leaves the renters premium overdue with the money already there", :aggregate_failures do
+      renters = claim_of("Renters Insurance", "Renters Policy")
+
+      expect(renters.next_due_on).to eq(today - 6)
+      expect(renters.overdue?).to be(true)
+      expect([renters.built_up, renters.target]).to eq([180, 180])
+      expect(claim_of("Utilities", "Electric Bill").overdue?).to be(false)
+    end
+
+    # ** §3.2'S TWO DATELESS SHAPES, ONE OF EACH. **
+    #
+    #   FED BY HAND     Emergency Fund's rule has an amount of ZERO — "no rate", the only honest way
+    #                   to say a goal has no standing contribution (`Budget#set_aside_only?`) — so
+    #                   its planned accrual is $0.00 every period and the seven $100 set-asides are
+    #                   the WHOLE of what it holds: 7 × 100 = $700.00. This is the shape
+    #                   `DropTheDistribution#mint_rule` mints, column for column.
+    #   FED BY A RULE   Vacation to Europe accrues $50 a period toward $5,000 with no deadline to
+    #                   spread it over, and the $180 flight deposit was a FULFILMENT that came
+    #                   straight off the built-up. Fourteen periods from `demo_start` × $50 = $700,
+    #                   less the $180 = $520.00.
+    #
+    # THE SET-ASIDES ARE DATED ACROSS SEVEN PERIODS AND EVERY ONE COUNTS, which is the accrual-span
+    # ruling doing its work: the rules are born on `demo_start`, so `#countable_span` opens six
+    # months back and each row lands in the period containing its date (§3.3). Born at seed time
+    # instead, this figure would be $100.00 — one period's worth — and the example would still read
+    # like a savings goal.
+    it "feeds four goals by hand and one by its rule", :aggregate_failures do
+      emergency = claim_of("Emergency Fund")
+      vacation = claim_of("Vacation to Europe")
+
+      expect(emergency.planned_this_period).to eq(0)
+      expect([emergency.built_up, emergency.target]).to eq([700, 10_000])
+      expect(emergency.countable_span.first).to eq(today - (13 * 14))
+      expect([vacation.built_up, vacation.target]).to eq([520, 5_000])
+    end
+
+    # THE SAME FOUR GOALS FROM THE OTHER SIDE — the rows themselves, grouped by the category they
+    # feed, so a set-aside that landed on the wrong rule cannot hide inside a built-up figure that
+    # happens to come out right.
+    it "writes every hand-fed goal's set-asides against its own rule" do
+      expect(Adjustment.joins(rule: :category).group("categories.name").sum(:amount)).to eq(
+        "Emergency Fund" => 700,
+        "House Down Payment" => 1_050,
+        "New Car" => 525,
+        "Retirement Supplement" => 1_050
+      )
+    end
+
+    # ** THE BUDGET PAGE'S "NOT IN THE GIVE-WAY ORDER" BAND. ** `Category.in_fill_order` is holders
+    # only, so a rule on a category with no holding date cannot be ranked and cannot be dragged —
+    # while `ClaimLedger` counts it into `#free` like every other rule. $25.00 claimed every period
+    # against spending that is attributed to nobody: the asymmetry the band exists to name.
+    it "leaves one rule outside the give-way order", :aggregate_failures do
+      page = BudgetPagePresenter.new(user: user, today: today)
+
+      expect(page.unfilled_rules.map { |rule| rule.budget.category.name }).to eq(["Streaming"])
+      expect(page.unfilled_rules.sole.claim).to eq(25)
+    end
+
+    # ** FREE BELOW ZERO IS A SIGNAL (§4), AND THE STRIP SAYS WHO GIVES WAY. ** The walk runs
+    # `#budgeted_categories` in REVERSE priority — the category that would have been funded last is
+    # the one that goes without first — taking each rule's claim until the $2,740.34 is absorbed:
+    #
+    #   Retirement Supplement  1,050.00   priority 19, the demo's last, so it yields first
+    #   New Car                  525.00   18
+    #   House Down Payment     1,050.00   17
+    #   Vacation to Europe       115.34   16 — PARTIAL, and the whole reason this is a walk rather
+    #                                     than a filter: "$115.34 of it is uncovered" is a different
+    #                                     sentence from "Vacation is uncovered", and only the walk
+    #                                     can tell them apart
+    #   ────────────────────   2,740.34   which is the headline exactly, so `#uncovered_remainder`
+    #                                     is zero and no part of the shortfall goes unnamed
+    #
+    # THE FOUR GOALS ABSORB THE WHOLE OF IT AND NO BILL IS TOUCHED, which is what a give-way order
+    # is for: this household's savings are what gives, and the rent is never in the list.
+    it "leaves the household short, and says so on every reader the strip renders", :aggregate_failures do
+      home = HomePresenter.new(user: user, today: today)
+
+      expect(home.short?).to be(true)
+      expect(home.claims_outrun_the_money?).to be(true)
+      expect(home.shortfall).to eq(2_740.34)
+      expect(home.per_day_pace).to eq(210.80)
+      expect(home.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :overdue, :structural])
+    end
+
+    # ** AND WHO GIVES WAY, WHICH IS THE HALF THE FIGURE ABOVE CANNOT SAY. ** The walk reads
+    # `Category.in_fill_order` BACKWARDS, so the lowest priority gives way first, and the four goals
+    # absorb the whole $2,740.34 — the last of them PART-COVERED at $115.34, which is why
+    # `#uncovered_remainder` is zero and no part of the shortfall goes unnamed. No bill is touched:
+    # this household's savings are what gives, and the rent is never in the list.
+    it "names the four goals that give way, the last of them part-covered", :aggregate_failures do
+      home = HomePresenter.new(user: user, today: today)
+
+      expect(home.uncovered_claims.map { |claim| [claim.category.name, claim.amount] }).to eq(
+        [
+          ["Retirement Supplement", 1_050],
+          ["New Car", 525],
+          ["House Down Payment", 1_050],
+          ["Vacation to Europe", 115.34]
+        ]
+      )
+      expect(home.uncovered_remainder).to eq(0)
     end
 
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_484.99)
+      expect(Budget.steady_need(user, today: today)).to eq(2_459.99)
       expect(user.typical_income).to eq(2_400.00)
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
@@ -230,22 +438,21 @@ RSpec.describe "db/seeds.rb" do
     # `dated_bill: 3` WAS 6 (answers-first Home spec §7, the occurrence gate). Three of the six
     # were one-off spends — the Body Shop repair, the quarterly tax estimate — that the engine read
     # as annual bills and disclaimed as guesses in their own rows; that shape is deleted, so the
-    # three MEASURED utility bills are what is left. The other three figures are unmoved, which is
-    # the second half of what this example now says: the demo's history runs back far enough that
-    # the new history gate on drift and dead-rule changes nothing for it.
+    # three MEASURED utility bills are what is left.
     #
-    # EVERY DETECTOR FED, AND `drift: 4` IS THE FIGURE THIS EXAMPLE WAS INVERTED AGAINST. While the
-    # seeds planted pools, a seeded rule named no category, `CategoryLedger::ENTRY_CATEGORY_ID` could
-    # not attribute a penny of spending to it, and the demo's four drifting envelopes read as four
-    # zeroes the detector declined to report — so this asserted `dead_rule` without `drift` and said
-    # so. The rules belong to categories now and the four are back.
+    # ** NONE OF THESE FOUR FIGURES MOVED WHEN THE DISTRIBUTION DID, AND THAT IS HALF OF WHAT THIS
+    # EXAMPLE NOW SAYS. ** `SuggestionEngine` reads ENTRIES and RULES and never read an allocation,
+    # so dropping 33 funding rows moved nothing; what DID move is inside the demo's own choices, and
+    # the two changed rows are Dining Out (a $100 rule where the pool era had $150, so the overspend
+    # this period is reachable at all) and Household Supplies (its one receipt moved into today).
     #
-    # WHICH FOUR, AND WHY NOT MORE: Groceries (the one UPWARD suggestion), Dining Out, Household
-    # Supplies and Pet Care are the categories whose spending genuinely diverges from their rules.
-    # Every other rate rule in the demo either has spending that matches it or is dated instead —
-    # `db/seeds.rb` chooses those shapes deliberately, because a rate rule on a category with no
-    # spending at all is drift's starkest sentence and four of those would be four suggestions
-    # telling the demo user to zero rules they simply have not spent from yet.
+    # WHICH FOUR DRIFT, AND WHY NOT MORE: Groceries (the one UPWARD suggestion, $460 a period against
+    # a $400 rule), Dining Out, Household Supplies and Pet Care are the categories whose spending
+    # genuinely diverges from their rules. Every other rate rule in the demo either has spending that
+    # matches it or is dated instead — `db/seeds.rb` chooses those shapes deliberately, because a
+    # rate rule on a category with no spending at all is drift's starkest sentence and four of those
+    # would be four suggestions telling the demo user to zero rules they have not spent from yet.
+    # ONE of them is planted on purpose (Household Supplies), and the seeds' header says why.
     it "feeds all four suggestion detectors" do
       kinds = SuggestionEngine.new(user: user, today: today).suggestions.group_by(&:kind)
         .transform_values(&:length)
@@ -253,14 +460,5 @@ RSpec.describe "db/seeds.rb" do
       expect(kinds).to eq(dated_bill: 3, rate: 4, drift: 4, dead_rule: 1)
     end
   end
-
-  # ── "the cutover migration run against fresh seeds" IS DELETED (two-ledger spec §5, Task 8), and
-  # the reason is the schema rather than the claim. That describe rewound the schema past
-  # `CategoriesHoldTheMoney` and replanted INSIDE the rewind, so it could run
-  # `CutoverToEnvelopeBudgeting` over fresh seeds and prove it found nothing to convert. The seeds
-  # are category-native now: replanting them against a schema with no `categories.funded_since` and
-  # no `allocations` table cannot even build the demo, and the migration it exercised is two schema
-  # eras back — its own idempotence is asserted in `spec/migrations/cutover_spec.rb`, against the
-  # legacy worlds it was written for, which is where a claim about a migration belongs.
 end
 # rubocop:enable RSpec/DescribeClass

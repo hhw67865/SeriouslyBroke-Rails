@@ -1,66 +1,151 @@
 # frozen_string_literal: true
 
-# THE DEMO, CATEGORY-NATIVE (two-ledger spec §2/§5).
+# THE DEMO, ON COMPUTED CLAIMS (computed-claims spec §§2-4).
 #
 # WHAT THIS FILE MAY WRITE, AND WHAT IT MAY NOT. Post-drop shapes only: bank ACCOUNTS, expense and
-# income CATEGORIES, funding rules on categories, ALLOCATIONS (the purpose ledger), ACCOUNT
-# MOVEMENTS (the physical one), income routing, entries, a declared period and a typical income.
-# There is no envelope, no goal pool, no `categories.pool_id` and no paid-from override, because
-# none of those columns exists any more. `spec/seeds_spec.rb` greps this file for the legacy
-# constructs AND asserts the database after a replant, so the two halves of that promise cannot
-# drift apart.
+# income CATEGORIES, funding RULES on categories, dated ADJUSTMENTS on those rules (the purpose
+# side's only writer besides the rules themselves), ACCOUNT MOVEMENTS (the physical ledger), income
+# routing, entries, a declared period and a typical income. There is no envelope, no goal pool, no
+# `categories.pool_id`, no paid-from override AND NO ALLOCATION, because none of those columns or
+# tables exists any more. `spec/seeds_spec.rb` greps this file for the legacy constructs AND asserts
+# the database after a replant, so the two halves of that promise cannot drift apart.
 #
+# ---------------------------------------------------------------------------------------------
 # THE TWO LEDGERS, AND WHERE EACH ONE IS WRITTEN HERE.
+# ---------------------------------------------------------------------------------------------
 #
-#   PHYSICAL — where the money sits. `pot (= Checking) + Σ accounts`. Income and expense ENTRIES
-#     all belong to the pot; the other three accounts are fed by movements alone, which is what
-#     `Entry#route_income_to!` writes when income lands somewhere other than main.
-#   PURPOSE — what the money is FOR. `available + Σ category holdings`. Every `allocate` below is
-#     one row of it: money leaving the root and taking on a job.
+#   PHYSICAL — where the money sits, and it is UNCHANGED by the computed-claims plan.
+#     `pot (= Checking) + Σ accounts`. Income and expense ENTRIES all belong to the pot; the other
+#     three accounts are fed by movements alone, which is what `Entry#route_income_to!` writes when
+#     income lands somewhere other than main. `pot + Σ accounts == income − expenses` is the
+#     invariant, and `spec/seeds_spec.rb` asserts it on the replanted demo, in raw SQL, against
+#     $7,461.00.
 #
-# Both partitions equal bank truth — income minus expenses — and `spec/seeds_spec.rb` asserts that
-# on the replanted demo, in raw SQL, against $7,461.00.
+#   PURPOSE — what the money is FOR, and it is now COMPUTED rather than moved (§2).
+#     `free = min( pot , total_money − Σ claims )`. That is a DEFINITION and not a partition: a
+#     claim is a function of the rule, the calendar, the category's spending and its dated
+#     adjustments (`ClaimCalculator`), so nothing is conserved and there is no second sum for this
+#     file to keep in step. The old `available + Σ holdings == total` identity is gone with the
+#     movements that made it true, and so is every row that used to record one.
 #
+# WHAT THE OLD `allocate` ROWS BECAME, AND THE RULING IS THIS FILE'S OWN. Under the pool and
+# two-ledger eras every set-aside was a row: the household's savings contributions AND the routine
+# funding of every rate rule and every dated bill, all written as `Allocation`. §7 of the
+# computed-claims spec splits that population in two and the demo is re-derived along the same line:
+#
+#   * THE ROUTINE FUNDING OF A RULE IS DISTRIBUTION MECHANICS AND IS SIMPLY GONE. $1,500 into Rent
+#     on the day the rent was paid, $460 into Groceries every fortnight, $318 into Utilities, $180
+#     into Renters Insurance, $60 into the transit pass, $50 into the Vacation goal: every one of
+#     those is now what the rule COMPUTES, and writing it down as well would count it twice. (Not a
+#     hypothetical: a +$400 adjustment on the $400 Groceries rate rule reads `claim = 400 + 400 − 0`,
+#     an $800 envelope on a $400 rule.)
+#   * A HAND SET-ASIDE INTO A GOAL WITH NO RULE OF ITS OWN IS §3.3'S ADJUSTMENT and is converted, at
+#     its own date, with its own sign. Four goals on this demo are fed that way and nothing else
+#     feeds them.
+#
+# THE MIGRATION'S OWN PREFLIGHT DRAWS THE SAME LINE, which is why the two land on one shape.
+# `DropTheDistribution#unfundable_ends` REFUSES a conversion onto a category with no item-less rule
+# and no target — Rent, Utilities, Commuter Pass and Renters Insurance are all exactly that (their
+# only rule names an item), so those rows could not have been converted even in principle. What it
+# DOES convert is a set-aside onto a category that either lends a catch-all rule or can be given
+# one, and `#mint_rule` mints the target-only shape for precisely the four goals below.
+#
+# ---------------------------------------------------------------------------------------------
+# EVERY RULE IS BORN ON `demo_start`, AND THAT IS THE ACCRUAL-SPAN RULING (§3.2).
+# ---------------------------------------------------------------------------------------------
+#
+# `ClaimCalculator#accrual_start` is `max(category.funded_since, the rule's own birthday)` — a rule
+# cannot accrue before it existed — and `#countable_span` is the days that walk visits. A rule
+# created by the seed run itself is born TODAY, so it would walk exactly one period: every fund on
+# this demo would read $0.00 built up the moment it was planted, and every set-aside dated three
+# months back would land outside the span and move no figure on any screen.
+#
+# THE CHOICE IS THE MIGRATION'S, NOT A RE-DATING OF THE HISTORY. `DropTheDistribution#birthday_for`
+# backdates a minted rule's `created_at` to the category's `funded_since` for this exact reason, and
+# every rule here is stamped the same way: born on `demo_start`, the day every holder started
+# holding. So `accrual_start` lands on `funded_since` — §7's "rules and `funded_since` stay and
+# become the accrual anchors" — and the six months of history below is history the claims can see.
+# The alternative, dating every set-aside inside the current period, was rejected: it would put
+# seven periods of savings on one afternoon, which is a false sentence about when the household
+# saved and would make `Vacation to Europe`'s and `Emergency Fund`'s rows read as a windfall.
+#
+# ---------------------------------------------------------------------------------------------
 # THE SCREEN STATES ARE THE DELIVERABLE, AND THE TABLE IS BELOW rather than in a scratch report
-# that is not in the repository.
+# that is not in the repository. Every figure is one OBSERVED after a replant, not one reasoned to.
+# ---------------------------------------------------------------------------------------------
 #
-#   ONE DISTRIBUTE SCREEN, NOT FOUR. The pool era gave each of four ACCOUNTS its own waterfall and
-#   this table listed one screen per account. `AllocationCalculator` walks `Category.in_fill_order`
-#   over ONE root now (§2), so there is one screen and it has to carry every state at once: SHORT,
-#   with the cutoff line drawn, an ALERTS band above it, and both sweep clauses in the sources
-#   breakdown.
+#   HOME'S HERO (answers-first §§2-3 on computed terms). `free` is negative here, and that is this
+#   demo's inheritance from the pool era rather than a new pessimism: the old table led with
+#   "available $1,900.00 against more than that in asks, so the cutoff is drawn", and the household
+#   whose rules outrun its money renders that same fact as §4's shortfall now that there is no
+#   waterfall to draw a cutoff on.
 #
-#     available at the root   $1,775.00   income − unfunded spending − Σ allocations
-#     + swept back              $125.00   Household Supplies $75.00, Pet Care $50.00
-#     = the screen's figure   $1,900.00   against more than that in asks, so the cutoff is drawn
-#     12 waterfall rows, 1 alert (Renters Insurance — overdue and already funded, so it asks for
-#     nothing at all, which is the one shape the alerts band exists for)
+#     In Checking            $5,561.00   the pot — `AccountLedger#pot`, main's balance
+#     Free to spend         -$2,740.34   `min(pot, total_money − Σ claims)`, uncapped and unclamped
+#     Claimed               $10,201.34   Σ over all 21 rules
+#     total money            $7,461.00   pot + the three other accounts ($1,900.00)
 #
-#   THE SIX ROW STATES (§4.4), one category each, all on that one screen:
-#     on track          Rent                — $1,500 held, the bill ten days out
-#     overdue           Utilities           — the electric bill's date passed with nothing paid
-#     won't make it     Dentist             — $300 due in three days, no boundary in between
-#     behind            Car Insurance       — a $1,200 premium a month out with nothing in it yet
-#     overdrawn         Dining Out          — holds -$80.00: $100 allocated, $180 of dinners
-#     left to spend     Groceries           — $400 held against a $400-a-period rule
+#   THE TROUBLE STRIP (§4), and this demo lights four of its five arms:
+#     :overdraft   Side Gig Checking is overdrawn $300.00
+#     :shortfall   $2,740.34 short, at $210.80 a day for the thirteen days left, and the give-way
+#                  walk in REVERSE priority: Retirement Supplement $1,050.00, New Car $525.00,
+#                  House Down Payment $1,050.00 and $115.34 of Vacation to Europe — the last one
+#                  PARTIAL, which is the shape a walk can say and a filter cannot
+#     :over        Dining Out — over by $10.00
+#     :overdue     Renters Insurance — was due 6 days ago, $180.00 built up of $180.00, all there
+#     :structural  rules need $2,459.99 a period against a declared $2,400.00
 #
-#   THE FOUR SUGGESTION DETECTORS, and the categories that feed each:
+#   "THIS PERIOD" (§3.4), one row per category and one line per rule. The period ANCHORS ON TODAY,
+#   so today is the only day of it that has happened — a rate row reads $0.00 unless its money went
+#   out this morning, which is the honest first-day shape and is why the two rows that carry a
+#   figure carry a same-day entry:
+#
+#     RATE, UNDER      Household Supplies   $45.00 of $120.00       today's detergent run
+#     RATE, OVER       Dining Out           $110.00 of $100.00      red, `over by $10.00` beneath
+#     RATE, UNTOUCHED  Groceries            $0.00 of $400.00        the period opened this morning
+#     ACCRUING         Rent                 $1,500.00 built up of $1,500.00 · next due <today+10>
+#     ACCRUING         Car Insurance        $1,050.00 built up of $1,200.00 · next due <today+1mo>
+#                                             · $75.00 per period
+#     ACCRUING         Quarterly Taxes      $1,400.00 built up of $1,800.00 · next due <today+2mo>
+#                                             · $100.00 per period
+#     OVERDUE          Renters Insurance    $180.00 built up of $180.00 · was due <today-6>
+#     GOAL, RATE-FED   Vacation to Europe   $520.00 built up of $5,000.00
+#     GOAL, HAND-FED   Emergency Fund       $700.00 built up of $10,000.00   seven set-asides
+#     UNRULED          Transportation       spent $48.00            no rule, no bar, no pressure
+#
+#   THE BUDGET PAGE — the same two sentences, per rule, beside what the rule SAYS:
+#     `$400.00 per period · $0.00 of $400.00`                       Groceries
+#     `$1,800.00 every 3 months · $1,400.00 built up of $1,800.00 · next due <today+2mo> ·
+#      $100.00 per period`                                          Quarterly Taxes
+#     and one band under the give-way order: "1 rule counting no spending" — Streaming, whose
+#     category has no holding date, so its $25.00 claims every period while nothing spent there
+#     ever comes off it.
+#
+#   THE DASHBOARD'S SAVINGS STRIP reads `Category#saving_toward_a_target?` — a holder with a figure
+#   to reach — so all five goals below appear on it, led by Emergency Fund at $700.00 of $10,000.00
+#   and Vacation to Europe at $520.00 of $5,000.00. Both are claims and neither is money moved.
+#
+#   THE FOUR SUGGESTION DETECTORS, and the categories that feed each. `SuggestionEngine` reads
+#   ENTRIES and RULES and never read an allocation, so the drop moved none of these:
 #     dated_bill (3)  the utility items carrying no rule of their own (Phone, Internet, Water),
 #                     each offering to JOIN the Utilities category — the reuse branch.
-#                     IT WAS SIX (answers-first Home spec §7): the one-off spends the engine used
-#                     to read as annual bills — the Body Shop repair and the quarterly tax estimate
-#                     among them — are single occurrences, and a single payment is no longer a
-#                     schedule. The spends are still planted; they simply propose nothing now.
 #     rate (4)        Transportation, Shopping, Personal Care, Entertainment — the categories that
-#                     hold nothing, so their spending reads straight against available
+#                     hold nothing, so their spending reads straight against free
 #     drift (4)       Groceries (the one UPWARD suggestion, $460 spent against a $400 rule),
-#                     Dining Out, Household Supplies, Pet Care — every other drift says cut
+#                     Dining Out, Household Supplies, Pet Care
 #     dead_rule (1)   Commuter Pass — the fortnightly pass stopped five periods ago
+#
+#   ONE DELIBERATE $0.00 DRIFT, AND IT IS THE BRANCH THE DETECTOR'S OWN HEADER ASKS FOR. Household
+#   Supplies spent nothing in the four complete periods the drift window measures and $45.00 today,
+#   so the panel says "averaged $0.00 for 4 periods, your rule says $120.00" — `SuggestionEngine
+#   #drift_suggestion`'s second half, "the funded category that quietly stopped", which no other
+#   detector can report. The pool era's objection stands against FOUR of them on categories nobody
+#   had spent from YET; one, on a category whose spending really did stop, is the sentence.
 #
 #   THE THREE ACCOUNTS THAT ARE NOT THE POT, and what each one is for on Home:
 #     Ally Savings        +$1,800.00  three routed transfers — the ordinary second account
 #     Health Savings        +$400.00  two payroll contributions straddling the period boundary
-#     Side Gig Checking     -$300.00  OVERDRAWN, which Home's standing band has a line for:
+#     Side Gig Checking     -$300.00  OVERDRAWN, which the trouble strip has a line for:
 #                                     $1,300 of invoices routed in, $1,600 moved back to Checking
 #                                     to pay the quarterly tax bill from the pot
 #
@@ -73,29 +158,33 @@
 # the entries below are placed inside named periods rather than inside calendar months for exactly
 # that reason. The bills that must look monthly — the rent, the four utility items — step by
 # `n.months` from today instead, which is a whole number of months apart on every run day, and they
-# are all dated at least 24 days back so no run day can slide one of them past the Utilities anchor
-# and roll the overdue bill this demo needs.
+# are all dated at least 24 days back so no run day can slide one of them past the Utilities anchor.
 #
 # THE ZONE IS SET BEFORE THE FIRST RECORD IS SAVED, and it has to be.
 #
-# `entries.date`, `allocations.date` and `account_movements.date` are DATETIME columns, so
+# `entries.date`, `adjustments.date` and `account_movements.date` are DATETIME columns, so
 # ActiveRecord casts the Date handed to `date:` through `Time.zone` — which in a rake process is the
 # application default, UTC, because config/application.rb never sets one. Every date-bounded query
 # in the app resolves in the REQUEST zone instead: ApplicationController wraps each request in
-# `Time.use_zone(current_user.timezone)`, and `User#period_datetimes_containing` widens its range
-# with `Date#beginning_of_day`, which reads that zone. Seeded without this line, the demo user's
-# paycheck — dated `today`, the day the period opened — was stored as 00:00 UTC and read back as
-# 20:00 the PREVIOUS evening in New York, four hours before its own period began, and the
-# distribution screen reported `Income this period $0.00` beside it.
+# `Time.use_zone(current_user.timezone)`, `User#period_datetimes_containing` widens its range with
+# `Date#beginning_of_day`, and `Adjustment#local_day` re-zones a delta into the period CONTAINING
+# its date. Seeded without this line, the demo user's paycheck — dated `today`, the day the period
+# opened — was stored as 00:00 UTC and read back as 20:00 the PREVIOUS evening in New York, four
+# hours before its own period began, and the screen reported `Income this period $0.00` beside it.
 #
 # A local rather than a constant: seeds.rb is `load`ed, and `bin/ci` runs it more than once in a
 # session, so a constant here would warn about being reinitialised.
 demo_timezone = "America/New_York"
 Time.zone = demo_timezone
 
-# DELETE IN FOREIGN-KEY ORDER, AND THE TWO LEDGERS COME FIRST. `allocations` has non-cascading keys
-# to `categories` and to `entries`, and `account_movements` has them to `pools` and to `entries`, so
-# either table left standing makes `Entry.delete_all` and `Category.delete_all` violate them.
+# DELETE IN FOREIGN-KEY ORDER, AND THE PURPOSE SIDE COMES FIRST. `adjustments.rule_id` is a
+# NON-CASCADING key to `budgets` (schema.rb: `add_foreign_key "adjustments", "budgets", column:
+# "rule_id"`), so a surviving adjustment makes `Budget.delete_all` raise; `dependent: :destroy` on
+# `Budget#adjustments` does not help, because `delete_all` runs no callbacks. `account_movements`
+# has non-cascading keys to `pools` and to `entries`, so it goes ahead of both.
+#
+# `allocations` IS NOT ON THIS LIST BECAUSE THE TABLE IS GONE (§5, `DropTheDistribution`). It used
+# to lead the list for the same reason `adjustments` does now.
 #
 # `Budget` COMES BEFORE `Item`: `budgets.item_id` is a non-cascading foreign key, so an item-backed
 # funding rule pins its item — with `Item` ahead of `Budget` this loop raised
@@ -104,7 +193,7 @@ Time.zone = demo_timezone
 #
 # `users.default_account_id` nullifies on pool delete, so User can come last.
 Rails.logger.debug "Clearing existing data..."
-[AccountMovement, Allocation, Entry, Budget, Item, Category, Pool, User].each do |model|
+[AccountMovement, Adjustment, Entry, Budget, Item, Category, Pool, User].each do |model|
   Rails.logger.debug { "Deleting #{model.name} records..." }
   model.delete_all
 end
@@ -118,20 +207,25 @@ user = User.create!(
 )
 
 # THE USER'S OWN TODAY, NOT `Date.current`. Every request runs inside the user's timezone
-# (ApplicationController sets it), so Home computes against the New York date while a seed run
-# late in the evening computes against the UTC one — a day apart. Seeded with the UTC date, the
-# Dentist bill below anchored a day late and the period boundary landed INSIDE its window, so the
-# category that state exists to demonstrate rendered as something else entirely.
+# (ApplicationController sets it) and every claim reader takes the OWNER's day (`User#today`), so
+# Home computes against the New York date while a seed run late in the evening computes against the
+# UTC one — a day apart. Seeded with the UTC date, the Dentist bill below anchored a day late and
+# the period boundary landed INSIDE its window, so the category that state exists to demonstrate
+# rendered as something else entirely.
 today = Time.find_zone!(user.timezone).today
 
 # THE ANCHOR IS TODAY, so today is a period boundary and the current period is `today..today+13`.
-# Two things follow, and both are load-bearing. The Dentist bill three days out is genuinely
-# unreachable — no boundary falls between tomorrow and its due date — and every complete period
-# the suggestion engine measures in is exactly `today - 14n .. today - 14(n-1) - 1`.
+# Three things follow, and all three are load-bearing. The Dentist bill three days out is genuinely
+# unreachable — no boundary falls between tomorrow and its due date. Every complete period the
+# suggestion engine measures in is exactly `today - 14n .. today - 14(n-1) - 1`. And TODAY IS THE
+# ONLY ELAPSED DAY OF THE CURRENT PERIOD, which is why every "spent this period" figure on the
+# state table above belongs to an entry dated `today` and every other rate row reads $0.00: a rate
+# claim is `max(0, rate + Σ this period's deltas − this period's spending)` (§3.1) and this period
+# is one morning old.
 #
 # `typical_income` is what the user SAYS they bring in, and it is $200 under the paycheck below on
 # purpose: it is a declaration, not a measurement, and §9's structural check compares it against
-# `Budget.steady_need` — $2,484.99 here — so the demo is structurally underwater and the sacrifice
+# `Budget.steady_need` — $2,459.99 here — so the demo is structurally underwater and the sacrifice
 # view has a screen.
 user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_400)
 
@@ -147,16 +241,27 @@ periods_ago = ->(n) { today - (n * 14) }
 account = ->(name) { user.pools.create!(name: name, pool_type: :account) }
 
 # EVERY HOLDER STARTED HOLDING BEFORE THE HISTORY BELOW, and that is the funding-start rule
-# (two-ledger spec §4) rather than decoration. A category counts its own spending only from
-# `funded_since` on; earlier spending drains AVAILABLE. A demo whose categories all started today
-# would push its entire seeded history onto the root and open every holder empty. Six months clears
-# the deepest thing this file writes (three calendar months of rent, seven biweekly periods of
-# paychecks), so every entry below lands where the sentence around it says it does.
-demo_start = today - 6.months
+# (two-ledger spec §4, kept by §7) rather than decoration. A category counts its own spending only
+# from `funded_since` on; earlier spending drains FREE. A demo whose categories all started today
+# would push its entire seeded history onto the root and open every fund empty. Thirteen periods
+# clears the deepest thing this file writes (three calendar months of rent, seven biweekly periods
+# of paychecks), so every entry below lands where the sentence around it says it does — and it is
+# the day every RULE is born on too, which is what lets a claim walk that history (see the header).
+#
+# ** THIRTEEN PERIODS AND NOT `today - 6.months`, AND THE DIFFERENCE IS WHETHER THE STATE TABLE
+# HOLDS ON EVERY RUN DAY. ** The two are within three days of each other, but `6.months` is 181 to
+# 184 days depending on which months it spans, and `ClaimCalculator`'s walk opens at
+# `user.period_containing(accrual_start)` — so at 184 days back the walk visits FIFTEEN periods and
+# at 181 it visits fourteen. Every accruing figure on the demo is a sum over those periods:
+# measured, `Vacation to Europe` read $570.00 on a fifteen-period run and $520.00 on a fourteen, and
+# a header table naming either would be wrong on most mornings of the year. A boundary is a fixed
+# number of periods back by construction, so the walk is fourteen periods on every run day and the
+# figures below are facts rather than coincidences.
+demo_start = periods_ago[13]
 
 # A CATEGORY THAT HOLDS MONEY — `Category#holder?` is `expense? && funded_since.present?`, and this
-# is the only builder that stamps the column. `priority` is the fill order, over the user's WHOLE
-# holder set now that there is one root to fill from.
+# is the only builder that stamps the column. `priority` survives as the GIVE-WAY order (§4): the
+# same ranking read for the opposite question, which category yields first when the money runs out.
 holder = lambda do |name, priority, color, target: nil|
   user.categories.create!(
     name: name,
@@ -168,33 +273,48 @@ holder = lambda do |name, priority, color, target: nil|
   )
 end
 
-# A CATEGORY THAT HOLDS NOTHING: no `funded_since`, so its spending reads against available and it
-# is outside the waterfall entirely. This is what the app means by "it comes out of what's
+# A CATEGORY THAT HOLDS NOTHING: no `funded_since`, so its spending is attributed to no envelope at
+# all and reads straight against `free`. This is what the app means by "it comes out of what's
 # available", and it is the population the rate detector proposes rules for.
 lane = lambda do |name, type, color|
   user.categories.create!(name: name, category_type: type, color: color)
 end
+
+# ** A FUNDING RULE, BORN ON `demo_start`. ** The one builder every rule goes through, and the
+# `created_at` is the whole reason it exists rather than sixteen bare `Budget.create!` calls each
+# carrying the same subtle column. See the header: `ClaimCalculator#accrual_start` is
+# `max(funded_since, the rule's birthday)`, so a rule born at seed time walks one period and every
+# fund on the demo reads empty.
+#
+# Rails only stamps `created_at` when it is nil, so passing it here is the whole of the override.
+rule = ->(**attributes) { Budget.create!(created_at: demo_start, **attributes) }
 
 log = lambda do |item, amount, on, description|
   item.entries.create!(amount: amount, date: on, description: description)
 end
 
 # INCOME THAT LANDED SOMEWHERE OTHER THAN MAIN. The entry itself always belongs to the pot — income
-# lands in available and is allocated out of it — and this writes the ONE mirroring transfer that
+# lands in the pot and claims are computed over it — and this writes the ONE mirroring transfer that
 # says the cash physically went elsewhere, exactly as the entry form does.
 deposit = lambda do |item, amount, on, description, into|
   log.call(item, amount, on, description).tap { |entry| entry.route_income_to!(into) }
 end
 
-# MONEY LEAVING THE ROOT AND TAKING ON A JOB — one row of the purpose ledger. `from_category` is
-# NULL, which IS available.
+# ** MONEY SET ASIDE BY HAND — ONE DATED, SIGNED DELTA ON ONE RULE (§3.3). ** `accrued(P) =
+# planned(P) + Σ adjustments dated inside P`, so a positive row raises the accrual of whatever
+# period contains its date and a negative one lowers it. This is the only purpose-side WRITE left in
+# the app, and it replaces `allocate` — which wrote an `Allocation` row from NULL (available) into a
+# category, on a table that no longer exists.
 #
-# `kind` STAYS AT ITS DEFAULT `transfer`, which is what every allocation in this demo is. A
-# distribution writes `allocation` and `sweep` rows and DELETES them on a re-run, so seeding the
-# demo's history as distributed would hand the first confirm button a period whose funding it was
-# entitled to replace.
-allocate = lambda do |category, amount, on|
-  Allocation.create!(from_category: nil, to_category: category, amount: amount, date: on)
+# ** IT FINDS THE CATEGORY'S ITEM-LESS RULE AND RAISES IF THERE IS NONE, which is §3.3's "every
+# adjustment targets a rule" made unskippable. ** The catch-all rule is the one whose spending lane
+# is the WHOLE category (§3.1's partition), which is the lane money is set aside for; a category may
+# carry at most one (`Budget#category_may_hold_one_item_less_rule`), so `find_by!` is a total
+# lookup rather than a first-of-many. `DropTheDistribution#resolve_rules` performs the same lookup
+# against real data and mints the rule where there is none — which is what the four goals below do
+# for themselves, in the same target-only shape.
+set_aside = lambda do |category, amount, on|
+  Adjustment.create!(rule: Budget.find_by!(category: category, item_id: nil), amount: amount, date: on)
 end
 
 # MONEY CROSSING BETWEEN TWO OF THE USER'S OWN BANK ACCOUNTS. Net worth is unchanged and no
@@ -218,8 +338,8 @@ health_savings = account.call("Health Savings")
 user.update!(default_account: checking)
 
 # ---------------------------------------------------------------------------------------------
-# THE SIX ROW STATES, one category each. Priorities 1-9 are the household's bills and running
-# costs, in the order a distribution fills them.
+# THE HOUSEHOLD'S BILLS AND RUNNING COSTS. Priorities 1-9, which is the order they GIVE WAY in when
+# the money runs out — read from the bottom (§4).
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the holders and their rules..."
 
@@ -245,87 +365,91 @@ pet_food = pet_care.items.create!(name: "Pet Food")
 vet = pet_care.items.create!(name: "Vet")
 transit_pass = commuter.items.create!(name: "Transit Pass")
 
-# ON TRACK — the rent, held in full, ten days before it is due. ITEM-BACKED, so the rule is
-# genuinely payable and the bill's own history rolls its cycle; without an item the app assumes
-# every bill was paid on time and no rule here could ever read `overdue`. The anchor is ten days
-# out rather than on a calendar day, so the state does not depend on where in the month the seeds
-# are run.
-Budget.create!(category: rent, item: rent_item, amount: 1_500, interval_months: 1, anchor_date: today + 10)
+# A FUND BUILDING UP TOWARD A DATE (§3.2) — the rent, whole, ten days before it is due. ITEM-BACKED,
+# so a payment on the Monthly Rent item is the FULFILMENT that drops the fund and rolls the cycle;
+# the three payments below are all before this anchor, so nothing has rolled and the next occurrence
+# is ten days out. The anchor is ten days out rather than on a calendar day, so the state does not
+# depend on where in the month the seeds are run.
+rule.call(category: rent, item: rent_item, amount: 1_500, interval_months: 1, anchor_date: today + 10)
 
-# OVERDUE — the date passed with no payment recorded against the item. The three earlier electric
-# bills are all before this anchor, so `paid_since_anchor` is zero and the cycle has not rolled:
-# a cycle rolls when a bill is PAID, never when its date goes by.
-Budget.create!(category: utilities, item: electric_item, amount: 120, interval_months: 1, anchor_date: today - 10)
+# THE SAME SHAPE ON A SHORTER LEASH, and the reason the electric bill is not the demo's OVERDUE row.
+# `ClaimCalculator#due_on` rolls the cycle on PAYMENT, counted as `min(paid ÷ target, cycles
+# elapsed)`: three $120 bills have been paid since `demo_start`, so one whole cycle is settled and
+# the next occurrence is a month past this anchor — in the future, and the row reads as accruing
+# toward it. Renters Insurance below is the row whose date really did pass unpaid.
+rule.call(category: utilities, item: electric_item, amount: 120, interval_months: 1, anchor_date: today - 10)
 
-# WON'T MAKE IT — $300 due in three days with no period boundary between tomorrow and then. No
-# amount of future funding reaches it; only moving money already held can, which is what the fix
-# button on Home offers.
-Budget.create!(category: dentist, amount: 300, anchor_date: today + 3)
+# A ONE-TIME BILL, THREE DAYS OUT, with no period boundary between tomorrow and then. Under the
+# distribution this was the `won't make it` state — no future funding could reach it. There is no
+# funding step to miss now: §3.2's catch-up formula has been accruing toward it since `demo_start`,
+# so the fund is simply there, and what the row says is the date.
+rule.call(category: dentist, amount: 300, anchor_date: today + 3)
 
-# BEHIND — a six-monthly premium with nothing in it yet, one month out. Reachable, but the steady
-# schedule says it should already hold most of the $1,200, and that lag is what the row names.
+# A SIX-MONTHLY PREMIUM ONE MONTH OUT — the longest catch-up on the demo, and the row whose
+# `$X per period` clause is worth reading: the share is recomputed every period from what is still
+# owed and how many periods are left, so it is not $1,200 ÷ 13.
+rule.call(category: car_insurance, amount: 1_200, interval_months: 6, anchor_date: today + 1.month)
+
+# ** A RATE RULE SPENT OVER ITS RATE (§3.1) — the demo's one RED row. ** $110 of dinner against a
+# $100 fortnight, so `claim = max(0, 100 − 110)` is zero, the $10 excess came straight out of what
+# is free, and `ClaimCalculator#over?` — which reads the figure BEFORE the clamp — is what puts the
+# row in red and the line "over by $10.00" under it and in the trouble strip.
 #
-# ONE MONTH RATHER THAN THREE, AND THE DATE IS WHAT MAKES THE DEMO SHORT. `BudgetCalculator
-# #required` spreads the shortfall over the boundaries left before the due date, so at three months
-# out this premium asked about $92 a period and the household covered every rule it had — a demo
-# with no shortfall cannot draw the cutoff line, which is the branch this app exists for. At one
-# month it asks ~$600, the asks pass what is available, and the waterfall runs out partway down.
-Budget.create!(category: car_insurance, amount: 1_200, interval_months: 6, anchor_date: today + 1.month)
+# THE RULE IS $100 AND NOT THE $150 THE POOL ERA CARRIED, and the change is what makes the state
+# reachable at all. A rate claim measures THIS period's spending, this period is one morning old,
+# and the only dining money inside it is the $110 dated `today`; at $150 the row would read
+# "$110.00 of $150.00" and the demo would have no `over` anywhere. The second dinner stays where it
+# was, in the period that closed yesterday, because the DRIFT detector measures the four complete
+# periods and a category whose every receipt moved into today would read "averaged $0.00" there.
+rule.call(category: dining, amount: 100, basis: :per_period)
 
-# OVERDRAWN — $100 allocated and $180 spent out of it. The debt belongs to the CATEGORY, not to the
-# bank account, which is the whole shape the two-ledger model exists to express: Checking is fine
-# and Dining Out is not.
-Budget.create!(category: dining, amount: 150, basis: :per_period)
+# THE RATE RULE NOTHING HAS COME OFF YET — the ordinary shape on the morning a period opens, and the
+# one the bar draws at 0%. Its spending runs $460 a period against this $400 rule over the four
+# complete periods behind it, which is the drift detector's one UPWARD suggestion: every other drift
+# on this demo says cut.
+rule.call(category: groceries, amount: 400, basis: :per_period)
 
-# LEFT TO SPEND — a rate category, topped back up every period, and the only state that shows a
-# number you may actually spend. Its spending runs $460 a period against a $400 rule, which is the
-# drift detector's one UPWARD suggestion: every other drift on this demo says cut.
-Budget.create!(category: groceries, amount: 400, basis: :per_period)
-
-# The two whose rate period has ALREADY CLOSED. Funded one period back, so
-# `HoldingCalculator#period_closed?` — which measures from `last_funded_on`, not from today — is
-# true for both, and three shipped features have a screen: the `Swept back from …` line in the
-# sources breakdown, the ` · last period` suffix on a Home row, and the per-row `· $X swept back`
-# clause on the waterfall.
+# ** A RATE RULE SPENT UNDER ITS RATE ** — $45 of detergent this morning against $120 a fortnight,
+# so the claim is the $75 that is left and the row is the only one on the demo that shows a number
+# you may actually still spend.
 #
-# Household Supplies is the PLAIN case: one rate rule, nothing dated, so the whole $75 remainder
-# sweeps. Pet Care is the MIXED case the partial sweep exists for — a live vet bill sharing the
-# category with a rate rule, so `sweepable_amount` gives back the rate rule's $50 and leaves the
-# vet's reserve where it is.
-Budget.create!(category: supplies, amount: 120, basis: :per_period)
-Budget.create!(category: pet_care, amount: 50, basis: :per_period)
-# ITEM-BACKED, because a category may carry only ONE rule whose lane is the whole category
-# (`Budget#category_may_hold_one_item_less_rule`, computed-claims ruling of 2026-09-03) and the
-# rate rule above is it. The vet bill naming the Vet item is the shape the app has always meant
-# by a dated bill anyway; its due date is in the future either way, so no demo state moves.
-Budget.create!(category: pet_care, item: vet, amount: 180, anchor_date: today + 20)
+# IT IS ALSO THE DELIBERATE $0.00 DRIFT (see the header): the receipt moved into today is the only
+# one this category has, so the four complete periods behind it are empty and the panel says
+# "averaged $0.00 for 4 periods, your rule says $120.00" — `SuggestionEngine#drift_suggestion`'s
+# funded-category-that-quietly-stopped branch, which no other detector can report.
+rule.call(category: supplies, amount: 120, basis: :per_period)
+
+# THE MIXED CATEGORY, and it is what §3.1's lane PARTITION exists for: a rate rule whose lane is
+# everything in Pet Care EXCEPT the items that carry their own rule, beside a dated vet bill whose
+# lane is the Vet item alone. Without the partition the kibble and the vet's fee would come off both
+# claims, Σ claims would fall twice for one payment, and `free` would RISE when a bill was paid.
+rule.call(category: pet_care, amount: 50, basis: :per_period)
+rule.call(category: pet_care, item: vet, amount: 180, anchor_date: today + 20)
 
 # A RULE STILL FUNDING SOMETHING THAT STOPPED — detector 4's only subject on this demo, and the
 # one shape the other three cannot report. The household stopped buying the fortnightly transit
-# pass five periods ago and the $60 rule is still reserving for it every period: item-backed (an
+# pass five periods ago and the $60 rule is still claiming for it every period: item-backed (an
 # item is what makes a rule payable and therefore what can stop) and per-period, so it never
 # reads `overdue` and the sentence the panel prints is the whole of what is wrong with it.
-Budget.create!(category: commuter, item: transit_pass, amount: 60, basis: :per_period)
+rule.call(category: commuter, item: transit_pass, amount: 60, basis: :per_period)
 
 # ---------------------------------------------------------------------------------------------
-# THE ALERTS BAND'S ONE SUBJECT, and the reason it needs a category of its own.
+# ** THE OCCURRENCE WHOSE DATE PASSED WITH NOBODY PAYING IT (§3.2, `ClaimCalculator#overdue?`). **
 #
-# The band exists for one shape: a RED category that is ASKING FOR NOTHING. The annual premium was
-# set aside a fortnight ago, on time; the policy renewed six days ago and the payment has simply
-# not been made yet. So the category holds the whole $180, `BudgetCalculator#shortfall` is zero, the
-# rule asks for nothing and `AllocationCalculator#fill` rejects the row — while `HoldingStatus`
-# still reads `overdue`, because a cycle rolls when a bill is PAID.
+# NO PAYMENT HISTORY ON THE POLICY ITEM, AND THAT IS THE WHOLE OF THE STATE. A cycle rolls when a
+# bill is PAID and never when its date goes by, so with nothing ever spent on the Renters Policy
+# item the occurrence stays anchored six days back: `#next_due_on` is a date in the past, which is
+# `#overdue?` verbatim. §3.2's catch-up formula floors `periods_left` at 1 for a date already past,
+# so the fund is WHOLE — which is the ordinary shape of an overdue bill rather than the exception,
+# and it is what makes the trouble strip say "it's all there — pay it and the fund starts again"
+# rather than "the fund is short". Both branches of that sentence exist; this demo plants the one
+# a household that did everything right except write the cheque actually lands in.
 #
-# Deliberately NOT folded into Utilities. That one is the `overdue` ROW — late and UNFUNDED, so it
-# still asks — and the distinction this band draws is exactly between a red category with a row and
-# a red category without one. One category cannot be both.
-#
-# NO PAYMENT HISTORY ON THE POLICY ITEM, deliberately: a single entry a year back would make the
-# dead-rule detector call an annual premium dead, which is a false sentence this demo should not
-# plant on a money screen.
+# It also keeps the dead-rule detector honest: a single entry a year back would make detector 4 call
+# an annual premium dead, which is a false sentence this demo should not plant on a money screen.
 # ---------------------------------------------------------------------------------------------
 renters_insurance = holder.call("Renters Insurance", 10, "#4DB6AC")
-Budget.create!(
+rule.call(
   category: renters_insurance,
   item: renters_insurance.items.create!(name: "Renters Policy"),
   amount: 180,
@@ -335,38 +459,42 @@ Budget.create!(
 
 # FOUR MORE COMMITMENTS, and the SHAPE OF EACH ONE IS CHOSEN SO THE DRIFT PANEL STAYS HONEST.
 #
-# In the pool era these four sat in three different accounts and carried a per-period rate rule
-# each, because every account needed a waterfall of its own to render. There is one waterfall now,
-# and a rate rule on a category with NO spending is exactly what the drift detector calls the
-# starkest drift there is — "Holiday Gifts has averaged $0.00 for 4 periods, your rule says $200".
-# Four of those would be four suggestions telling the demo user to zero four rules they have not
-# spent from YET, on a panel whose whole job is to be believed.
+# A rate rule on a category with NO spending is exactly what the drift detector calls the starkest
+# drift there is — "Holiday Gifts has averaged $0.00 for 4 periods, your rule says $200". One of
+# those is a sentence worth planting (see Household Supplies above); four would be four suggestions
+# telling the demo user to zero four rules they have not spent from YET, on a panel whose whole job
+# is to be believed.
 #
 # So the two that are genuinely SAVED FOR are dated (a dated rule is not in drift's population at
-# all), and the two that are genuinely SPENT every period carry the spending to match. What is left
-# drifting is the four categories whose spending really has drifted, which is what the panel is for.
+# all), and the two that are genuinely SPENT every period carry the spending to match.
 holiday_gifts = holder.call("Holiday Gifts", 11, "#F06292")
-Budget.create!(category: holiday_gifts, amount: 1_200, interval_months: 12, anchor_date: today + 2.months)
+rule.call(category: holiday_gifts, amount: 1_200, interval_months: 12, anchor_date: today + 2.months)
 
 quarterly_taxes = holder.call("Quarterly Taxes", 12, "#78909C")
-Budget.create!(category: quarterly_taxes, amount: 1_800, interval_months: 3, anchor_date: today + 2.months)
+rule.call(category: quarterly_taxes, amount: 1_800, interval_months: 3, anchor_date: today + 2.months)
 
-# The two that ARE spent every period, at the rate their rules claim — so they read as ordinary
-# funded categories and the drift panel has nothing to say about either.
+# The two that ARE spent every period, at the rate their rules claim — so the drift panel has
+# nothing to say about either, which is the half of the detector only a category it DECLINES to
+# report can prove. Their money went out inside the four complete periods behind us, so this period
+# they read $0.00 of their rate like every other untouched envelope.
 medical_copays = holder.call("Medical Copays", 13, "#4FC3F7")
-Budget.create!(category: medical_copays, amount: 60, basis: :per_period)
+rule.call(category: medical_copays, amount: 60, basis: :per_period)
 copay_visits = medical_copays.items.create!(name: "Copays")
 
 prescriptions = holder.call("Prescriptions", 14, "#4DD0E1")
-Budget.create!(category: prescriptions, amount: 35, basis: :per_period)
+rule.call(category: prescriptions, amount: 35, basis: :per_period)
 pharmacy = prescriptions.items.create!(name: "Pharmacy")
 
 # ---------------------------------------------------------------------------------------------
-# THE GOALS. A savings category is a holder with a TARGET (spec §3) — no separate pool, no separate
-# type, and money never sweeps out of one because a target switches use-it-or-lose-it off.
+# THE GOALS — §3.2's DATELESS TARGET, in both of the two shapes it comes in.
 #
-# Priorities 15 and up leave the household's bills ahead of them: a goal funded before the rent is
-# not a budget anybody runs.
+# A savings category is a holder with a TARGET: no separate pool, no separate type, and nothing
+# sweeps out of one because a target switches use-it-or-lose-it off. `ClaimCalculator#shape` reads
+# `:target` off exactly that pair — no anchor on the rule, a figure on the category — and walks the
+# same accrual as a dated fund with no deadline to spread it over.
+#
+# Priorities 15 and up leave the household's bills ahead of them: a goal that gives way LAST, ahead
+# of the rent, is not a budget anybody runs.
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the savings goals..."
 
@@ -377,30 +505,58 @@ new_car = holder.call("New Car", 18, "#64B5F6", target: 15_000)
 retirement = holder.call("Retirement Supplement", 19, "#AED581", target: 100_000)
 
 # SPENDING OUT OF A GOAL — the one lane on the demo that reaches the entry form's goal arm, where
-# the bar is drawn against the TARGET rather than against a per-period claim.
+# the bar is drawn against the TARGET rather than against a per-period rate.
 vacation_costs = vacation.items.create!(name: "Flights & Hotels")
 
-# THE ONLY GOAL WITH A RULE, so it is the only one that ASKS. A dateless goal's ask is
-# `min(its per-period rate, what is left to save)`, so a goal with no rule asks nothing and never
-# reaches the waterfall — which is right, and which is why the other four are quiet rows.
+# SHAPE ONE — A GOAL WITH A STANDING RATE. $50 a period toward $5,000, accruing by itself since
+# `demo_start` and dropped by the $180 flight deposit inside the drift window. It is the VACATION
+# and not the retirement goal, and the reason is the drift panel: a rate rule on a category with no
+# spending at all is drift's starkest sentence, and "Retirement Supplement has averaged $0.00 for 4
+# periods, your rule says $150" is TRUE of a retirement goal by definition and useless on a money
+# screen. The household actually draws on this one, so the rule and the spending agree and the panel
+# says nothing about it.
+rule.call(category: vacation, amount: 50, basis: :per_period)
+
+# ** SHAPE TWO — A GOAL FED ONLY BY HAND (§3.2, Henry's ruling of 2026-09-03). ** "No rate" is
+# spelled as an amount of ZERO: every claim comes from a rule (§3.3), so a goal somebody feeds by
+# hand has to BE a rule, and zero is the only honest way to say it has no standing contribution.
+# `Budget#set_aside_only?` is the predicate that permits it and it names all three columns — no
+# anchor, no interval, a category that names a target — and refuses the zero everywhere else.
 #
-# IT IS THE VACATION AND NOT THE RETIREMENT GOAL, and the reason is the drift panel. A rate rule on
-# a category with no spending at all is drift's starkest sentence, and "Retirement Supplement has
-# averaged $0.00 for 4 periods, your rule says $150" is a sentence that is TRUE of a retirement
-# goal by definition and useless on a money screen. Vacation to Europe is the one goal the
-# household actually draws on — a $180 flight deposit inside the drift window, against a $50 rule —
-# so the rule and the spending agree and the panel says nothing about it.
-Budget.create!(category: vacation, amount: 50, basis: :per_period)
+# THIS IS THE SHAPE `DropTheDistribution#mint_rule` MINTS, COLUMN FOR COLUMN, and that is the point
+# of writing it here rather than giving these four goals a rate: a real database that had these
+# set-asides as `transfer` rows comes out of the migration holding exactly this, so the demo and the
+# migrated database are one shape. Every penny each of these four holds arrives as a positive
+# adjustment below.
+[emergency_fund, house_fund, new_car, retirement].each do |goal|
+  rule.call(category: goal, amount: 0, basis: :per_period)
+end
 
 # ---------------------------------------------------------------------------------------------
-# THE CATEGORIES THAT HOLD NOTHING — no `funded_since`, so their spending reads straight against
-# available. This is what the app means by "it comes out of what's available", and it is the
-# population the rate detector proposes rules for. Four flows, one entry a period, deliberately
-# UNEVEN — amounts inside 25% of each other on a whole number of months apart are what the DATED
-# BILL detector looks for, and a fortnightly flow that happened to land on even amounts would be
-# proposed as a bill instead of as a rate.
+# ** THE RULE OUTSIDE THE GIVE-WAY ORDER — the Budget page's "Not in the give-way order" band. **
+#
+# A category with NO holding date carrying a rule. `Category.in_fill_order` is holders only, so this
+# rule cannot be ranked and cannot be dragged — but `ClaimLedger` counts EVERY rule into `#free`, so
+# its $25 is subtracted from the household's money every period while `CategoryLedger
+# ::ENTRY_CATEGORY_ID` attributes nothing spent here against it. That is the exact asymmetry the
+# band exists to name, and one field on the category form fixes it.
+#
+# NO SPENDING AT ALL, deliberately: the rate detector's population is the categories that hold
+# nothing, and three periods of receipts here would make the panel propose a rule for a category
+# that already has one.
 # ---------------------------------------------------------------------------------------------
-Rails.logger.debug "Creating the spending that comes out of what's available..."
+streaming = lane.call("Streaming", :expense, "#9CCC65")
+rule.call(category: streaming, amount: 25, basis: :per_period)
+
+# ---------------------------------------------------------------------------------------------
+# THE CATEGORIES THAT HOLD NOTHING — no `funded_since`, so their spending is attributed to no
+# envelope and reads straight against `free`. This is what the app means by "it comes out of what's
+# available", and it is the population the rate detector proposes rules for. Four flows, one entry a
+# period, deliberately UNEVEN — amounts inside 25% of each other on a whole number of months apart
+# are what the DATED BILL detector looks for, and a fortnightly flow that happened to land on even
+# amounts would be proposed as a bill instead of as a rate.
+# ---------------------------------------------------------------------------------------------
+Rails.logger.debug "Creating the spending that comes out of what's free..."
 
 transportation = lane.call("Transportation", :expense, "#64B5F6")
 shopping = lane.call("Shopping", :expense, "#F06292")
@@ -435,34 +591,38 @@ end
 # floor (SuggestionEngine::BILL_MIN_OCCURRENCES). It is seeded to hold that silence honest.
 log.call(body_shop, 530, periods_ago[3] + 6, "Rear bumper repair")
 
-# A DAY-OF spend inside the CURRENT period, so the sources breakdown's "Spent and moved this
-# period" line has something of its own to report beside the allocations.
+# A DAY-OF spend inside the CURRENT period, on a category no rule claims — the UNRULED row on Home's
+# "This period" section: `spent $48.00`, no bar and no pressure, because there is nothing for a bar
+# to be a fraction of.
 log.call(fuel, 48, today, "Fill-up on payday")
 
 # ---------------------------------------------------------------------------------------------
 # THE HISTORY. Six complete periods of it, which is exactly the window the widest detector reads.
-# Every allocation below is money the household set aside, and every entry is money it actually
-# spent — the balances the screens report are the arithmetic of this section, not an opening
-# figure chosen to make a screen look right.
+# Every entry is money the household actually spent, and the claims the screens report are computed
+# over it — not an opening figure chosen to make a screen look right.
 # ---------------------------------------------------------------------------------------------
 Rails.logger.debug "Creating the paycheck and the history it paid for..."
 
 paycheck = lane.call("Paycheck", :income, "#66BB6A")
 direct_deposit = paycheck.items.create!(name: "Direct Deposit")
 
-# $2,600 on every boundary from six periods back to today. The one today is `Income this period`
-# on the distribution screen; the six before it are what available carried in.
+# $2,600 on every boundary from six periods back to today. The one today is this period's income;
+# the six before it are what the pot carried in.
 (0..6).each do |n|
   log.call(direct_deposit, 2_600, periods_ago[n], "Paycheck deposited to Checking")
 end
 
-# THE RENT, THREE MONTHS OF IT. Set aside and paid on the same day each month — the household
-# assigns the money when the bill lands — so the category nets to zero over the history and holds
-# exactly the $1,500 allocated to it today. Every payment is before the rule's anchor, which is
-# what keeps `paid_since_anchor` at zero and the next due date ten days out.
+# THE RENT, THREE MONTHS OF IT — and each payment is a FULFILMENT (§3.2), which is the only thing
+# that drops the fund and rolls the cycle. Every one is before the rule's anchor, so the occurrence
+# the household is saving for is still the one ten days out.
+#
+# THE SET-ASIDE THAT USED TO SIT BESIDE EACH PAYMENT IS GONE, and Rent is the clearest case of the
+# header's ruling: the $1,500 was the distribution handing the envelope its money, which §3.2's
+# catch-up formula now computes on its own. It could not have become an adjustment even if it should
+# have — Rent's only rule names an item, and `DropTheDistribution#unfundable_ends` refuses exactly
+# that shape.
 (1..3).each do |n|
   on = today - n.months
-  allocate.call(rent, 1_500, on)
   log.call(rent_item, 1_500, on, "Rent for #{on.strftime("%B")}")
 end
 
@@ -470,82 +630,79 @@ end
 # household shape: a rule may only name an item of the category it funds, so item-named categories
 # would be mutually exclusive. Electric carries the rule; Phone, Internet and Water carry none, so
 # each of them is a dated-bill suggestion offering to JOIN this category — the reuse branch, which
-# the proposals on unfunded categories can never reach.
+# proposals on unfunded categories can never reach.
 utility_bills_by_item = [[electric_item, 120, 0], [phone_item, 85, 2], [internet_item, 65, 4], [water_item, 48, 6]]
 
 (1..3).each do |n|
-  allocate.call(utilities, 318, today - n.months)
   utility_bills_by_item.each do |item, amount, offset|
     on = (today - n.months) + offset
     log.call(item, amount, on, "#{item.name} for #{on.strftime("%B")}")
   end
 end
 
-# THE GROCERIES, FOUR PERIODS OF IT — the drift window exactly. $460 set aside and $460 spent every
-# period against a $400 rule, so the observed rate is $60 over the rule and the panel says so. Two
-# shops a period rather than one, because that is what a fortnight of groceries is.
+# THE GROCERIES, FOUR PERIODS OF IT — the drift window exactly. $460 spent every period against a
+# $400 rule, so the observed rate is $60 over the rule and the panel says so. Two shops a period
+# rather than one, because that is what a fortnight of groceries is. Nothing lands in the CURRENT
+# period, which is why the row reads `$0.00 of $400.00` on the morning it opened.
 (1..4).each do |n|
   opened_on = periods_ago[n]
-  allocate.call(groceries, 460, opened_on)
   log.call(supermarket, 230, opened_on + 3, "Supermarket shop")
   log.call(supermarket, 230, opened_on + 9, "Supermarket shop")
 end
 
 # THE TRANSIT PASSES THAT STOPPED. Two periods of a fortnightly pass, six and five periods back,
-# and nothing since — three complete empty periods is what detector 4 calls dead, and the category
-# nets to zero so the rule is the only thing left of it.
-[6, 5].each do |n|
-  allocate.call(commuter, 60, periods_ago[n])
-  log.call(transit_pass, 60, periods_ago[n] + 2, "Fortnightly transit pass")
-end
+# and nothing since — three complete empty periods is what detector 4 calls dead, and the rule is
+# the only thing left of it.
+[6, 5].each { |n| log.call(transit_pass, 60, periods_ago[n] + 2, "Fortnightly transit pass") }
 
-# THE SAVINGS CONTRIBUTIONS. Money the household set aside for its goals, every period, out of the
-# same root everything else is funded from — which is the whole of what a savings category is now.
-contributions = [[emergency_fund, 100], [vacation, 50], [house_fund, 150], [new_car, 75], [retirement, 150]]
+# ** THE SET-ASIDES — the only purpose-side rows this demo writes (§3.3). ** Four goals, seven
+# periods each, every one a positive adjustment on that goal's target-only rule. These four rules
+# have an amount of ZERO, so their planned accrual is zero every period and the adjustments are the
+# WHOLE of what each goal holds: `Emergency Fund` reads $700.00 built up of $10,000.00, which is
+# 7 × $100 and nothing else.
+#
+# DATED ON THE BOUNDARIES, SIX PERIODS BACK THROUGH TODAY, and every one of them counts — which is
+# the accrual-span ruling in the header doing its work. The rules are born on `demo_start`, so
+# `ClaimCalculator#countable_span` opens six months back and each row lands in the period its date
+# falls in. Dated inside the current period instead, all seven would sum onto one afternoon.
+contributions = [[emergency_fund, 100], [house_fund, 150], [new_car, 75], [retirement, 150]]
 
 (0..6).each do |n|
-  contributions.each { |category, amount| allocate.call(category, amount, periods_ago[n]) }
+  contributions.each { |category, amount| set_aside.call(category, amount, periods_ago[n]) }
 end
 
-# A weekend of the trip already booked, out of the money set aside for it — and the spending the
-# Vacation rule above is measured against. Single-occurrence too, so no dated bill comes of it.
+# A weekend of the trip already booked, out of the money the Vacation rule has been accruing — a
+# FULFILMENT on a dateless target, which drops the built-up by what was spent and leaves the goal to
+# go on accruing toward the same $5,000. Single-occurrence, so no dated bill comes of it.
 log.call(vacation_costs, 180, periods_ago[3] + 5, "Flight deposit")
 
-# THE TWO CATEGORIES THAT ARE SPENT AT EXACTLY THE RATE THEY CLAIM. One period's worth in and one
-# period's worth out, over the four complete periods the drift detector measures: the rule is
-# right, so the panel is silent about them, which is the half of the detector that is only proved
-# by a category it declines to report.
+# THE TWO CATEGORIES THAT ARE SPENT AT EXACTLY THE RATE THEY CLAIM, over the four complete periods
+# the drift detector measures: the rule is right, so the panel is silent about them.
 (1..4).each do |n|
-  allocate.call(medical_copays, 60, periods_ago[n])
   log.call(copay_visits, 60, periods_ago[n] + 4, "Clinic copay")
-  allocate.call(prescriptions, 35, periods_ago[n])
   log.call(pharmacy, 35, periods_ago[n] + 6, "Pharmacy refill")
 end
 
-# THE PREMIUM SET ASIDE ON TIME, a fortnight ago — the alerts band's whole subject (see above).
-allocate.call(renters_insurance, 180, periods_ago[1])
-
 # ---------------------------------------------------------------------------------------------
-# THIS PERIOD'S OWN ALLOCATIONS. Everything above is history; these three are what the household
-# did with today's pay, and they are what leaves the root short.
-#
-# `on: today` matters for all three: `HoldingCalculator#period_closed?` measures from
-# `last_funded_on`, so a category funded today is current by definition and nothing sweeps out from
-# under the states these exist to show.
+# THIS PERIOD'S OWN SPENDING. Everything above is history; these three receipts are dated `today`,
+# which is the only elapsed day of the current period, and they are the whole of what makes the
+# "This period" rows read anything but $0.00.
 # ---------------------------------------------------------------------------------------------
-allocate.call(rent, 1_500, today)
-allocate.call(groceries, 400, today)
-allocate.call(dining, 100, today)
 
-# The overspend that puts Dining Out in the red — $180 out of a category holding $100, both entries
-# in the period that closed yesterday.
-log.call(restaurants, 110, today - 6, "Dinner out")
+# THE OVERSPEND, on the fortnight's first evening: $110 against a $100 rule, so the claim clamps to
+# zero and the $10 excess came out of what is free.
+log.call(restaurants, 110, today, "Dinner out")
+
+# The dinner in the period that closed yesterday — left where it is deliberately, so Dining Out has
+# a receipt inside the four complete periods the drift detector measures and the panel says
+# "averaged $17.50" rather than "averaged $0.00".
 log.call(restaurants, 70, today - 2, "Dinner out")
 
-# The two closed categories' own spending, inside the period they were funded in.
-allocate.call(supplies, 120, periods_ago[1])
-log.call(cleaning, 45, periods_ago[1] + 4, "Detergent, paper towels, bin bags")
-allocate.call(pet_care, 150, periods_ago[1])
+# THE RATE ROW WITH ROOM LEFT: $45 of a $120 fortnight, so $75.00 is still claimable.
+log.call(cleaning, 45, today, "Detergent, paper towels, bin bags")
+
+# Pet Care's own lane, inside the four complete periods — kibble on the rate rule and nothing on the
+# vet's, whose $180 bill is still twenty days out.
 log.call(pet_food, 34, periods_ago[1] + 2, "Kibble and litter")
 
 # ---------------------------------------------------------------------------------------------
@@ -568,9 +725,9 @@ hsa_payroll = hsa_contributions.items.create!(name: "Payroll Contribution")
 deposit.call(hsa_payroll, 200, today - 10, "Pre-tax HSA contribution", health_savings)
 deposit.call(hsa_payroll, 200, today, "Pre-tax HSA contribution", health_savings)
 
-# SIDE GIG CHECKING — THE ONLY ACCOUNT IN THE RED, and the shape Home's standing band has a line
-# for. `AccountLedger#balance_of` is movements only for an account that is not the pot, so the way
-# an account goes negative is a movement OUT of it that its inflows do not cover.
+# SIDE GIG CHECKING — THE ONLY ACCOUNT IN THE RED, and the shape the trouble strip's :overdraft arm
+# has a line for. `AccountLedger#balance_of` is movements only for an account that is not the pot,
+# so the way an account goes negative is a movement OUT of it that its inflows do not cover.
 #
 # The story is the household's freelance income: $1,300 of invoices routed into the side account,
 # then $1,600 moved back to Checking to pay the quarterly estimated tax bill out of the pot,
@@ -581,8 +738,8 @@ invoices = side_gig_income.items.create!(name: "Client Invoice")
 deposit.call(invoices, 900, periods_ago[2], "Invoice #114 paid", side_gig)
 deposit.call(invoices, 400, today, "Invoice #117 paid", side_gig)
 
-# THE TAX BILL ITSELF — an expense out of what's available, on a category that holds nothing. Like
-# the bumper repair above it is a single occurrence, so the dated-bill detector says nothing of it.
+# THE TAX BILL ITSELF — an expense out of what's free, on a category that holds nothing. Like the
+# bumper repair above it is a single occurrence, so the dated-bill detector says nothing of it.
 estimated_taxes = lane.call("Estimated Taxes", :expense, "#78909C")
 log.call(estimated_taxes.items.create!(name: "Federal Estimate"), 1_600, today - 3, "Q3 estimated tax payment")
 move.call(side_gig, checking, 1_600, today - 3)
