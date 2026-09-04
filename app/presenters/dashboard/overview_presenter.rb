@@ -62,7 +62,7 @@ module Dashboard
       @envelope_categories_breakdown ||= @parent.build_category_breakdown(@parent.tracked_enveloped_categories)
     end
 
-    # === The goals strip ===
+    # === The savings strip ===
     #
     # SAVINGS ARE CATEGORIES (two-ledger spec §3, Task 7). This read `pools.savings_pools` through
     # `PoolCalculator`, and both are gone with the screens: a savings goal is now just a category
@@ -70,23 +70,25 @@ module Dashboard
     # `#total_pools_balance` are renamed with the thing they describe, and the strip they feed
     # (`dashboard/_pools_strip` → `dashboard/_savings_strip`) went with them.
     #
-    # ** `Category#saving_toward_a_target?` IS THE CLASSIFIER — a funding start and a figure to
-    # reach — AND IT REPLACED `#savings?`, WHICH INVERTED UNDER THE COMPUTED MODEL. ** That
-    # predicate added `budgets.none?`, and the third clause had a real job while a waterfall
-    # existed: a Retirement Supplement a rate rule refilled every period was being SPENT toward a
-    # rate rather than SAVED toward a figure, and it belonged with the envelopes on a page organised
-    # by where money went.
+    # ** THE CLASSIFIER IS A BUILDING RULE (rules-own-the-budget spec §5), CAPPED OR NOT. ** It was
+    # `Category#saving_toward_a_target?` — a funding start and a figure on the CATEGORY — and that
+    # column is one no claim formula reads: `ClaimCalculator#shape` answers `:building` off the
+    # RULE's `carries_over`. "Which money is being saved" is answered by the SHAPE, which is exactly
+    # the open question §5 closes: an emergency fund with no ceiling is money being saved, and the
+    # old classifier could not see it because it had no figure to name.
     #
-    # Nothing refills anything now, and every claim comes from a RULE (§3.3) — so `budgets.none?`
-    # selected exactly the goals that claim $0.00, and `DropTheDistribution` (§7) mints the
-    # zero-amount target rule for every goal in a real database that lacked one. Kept as it was,
-    # this strip rendered NOTHING on migrated data and a truthful zero on everything else: two
-    # honest answers, neither useful, and a band that silently stops appearing is indistinguishable
-    # from one that broke. `#savings?` is deleted with its last caller.
+    # ** THE FUNDING START SURVIVES AS A CLAUSE. ** A category with a building rule and no
+    # `funded_since` is one the Budget page already has a band for ("not filling") — its rules accrue
+    # from their own birthday but nothing counts spending against it — and a strip about money being
+    # saved is not the place a user should first learn that. Both halves are the two facts this strip
+    # has always required: something is building up, and the category is counting.
     #
-    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY, which the third clause is what used to prevent:
-    # `expenses.where.not(funded_since: nil).where.not(target_amount: nil)` IS
-    # `#saving_toward_a_target?`, one row set, no `budgets` preload and no Ruby pass.
+    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: an `IN (SELECT category_id …)` over the item-less
+    # building rules is `Category#building_rule` as a row set, with no `budgets` preload and no Ruby
+    # pass. The two spellings are pinned against each other in the presenter's spec.
+    #
+    # THE TARGET IS THE RULE'S AND IT MAY BE NIL, which is the strip's one new arm: an uncapped fund
+    # has no denominator, so its card gets its figure and no bar (see the partial).
     #
     # `ClaimLedger` RATHER THAN `Category#claim`, because this is a strip of many categories and the
     # unbatched door costs a spending query and an adjustment query PER RULE. The two are pinned
@@ -95,12 +97,13 @@ module Dashboard
     def savings_summary
       @savings_summary ||= savings_categories.map do |category|
         claim = claim_ledger.claim_of_category(category)
+        target = category.building_rule&.target_amount
         {
           id: category.id,
           name: category.name,
           balance: claim,
-          target_amount: category.target_amount,
-          progress_percentage: progress_percentage(claim, category.target_amount)
+          target_amount: target,
+          progress_percentage: progress_percentage(claim, target)
         }
       end
     end
@@ -158,11 +161,15 @@ module Dashboard
       (claim / target * 100).round.clamp(0, 100)
     end
 
+    # `includes(:budgets)` BECAUSE THE ROW READS THE RULE. `#building_rule` is `budgets.detect`, so
+    # without the preload this strip costs one statement per card for a rule the row is about — the
+    # very per-row cost `ClaimLedger` exists to keep off this page.
     def savings_categories
       @savings_categories ||= @user.categories
         .expenses
         .where.not(funded_since: nil)
-        .where.not(target_amount: nil)
+        .where(id: Budget.where(item_id: nil, carries_over: true).select(:category_id))
+        .includes(:budgets)
         .order(:name)
     end
   end

@@ -146,9 +146,23 @@ RSpec.describe "Home This Period", type: :system do
   # what makes the money build up and `target_amount` is where it stops. ** The CATEGORY keeps its
   # copy of the figure because the screens that read it have not been moved yet; the claim formulas
   # read only the rule.
+  # ** THE FIGURE IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §5). ** The
+  # helper used to write it on both records because four screens still read the category's column;
+  # they read the rule now, and a fixture still writing the category's copy would let a reader that
+  # had quietly stayed behind go on passing. The column is dropped by Task 4 in any case.
   def goal(name, target:, priority: 1)
-    holder(name, priority: priority, target_amount: target).tap do |category|
+    holder(name, priority: priority).tap do |category|
       create(:budget, :hand_fed, category: category, target_amount: target)
+    end
+  end
+
+  # ** A FUND THAT ADDS A RATE EVERY PERIOD (§2.1 rows 2 and 3), CAPPED OR NOT. ** `target:` nil is
+  # the emergency fund with no ceiling; a figure is the goal that stops there. Written TODAY, so the
+  # walk opens in the current period and visits exactly one whatever the cadence — every figure the
+  # examples below plant is then one period's rate.
+  def fund(name, amount:, target: nil, priority: 1)
+    holder(name, priority: priority).tap do |category|
+      create(:budget, :building, category: category, amount: amount, target_amount: target)
     end
   end
 
@@ -281,15 +295,37 @@ RSpec.describe "Home This Period", type: :system do
   # The negative is the "of" itself, so a fix that printed "of $0.00" would fail here.
   it "states an uncapped fund's built-up with nothing to be a fraction of", :aggregate_failures do
     deposit(500)
-    emergency = holder("Emergency", priority: 1)
-    create(:budget, :building, category: emergency, amount: 300)
+    fund("Emergency", amount: 300)
 
     visit root_path
 
     expect(figure("Emergency")).to have_content("$300.00 built up")
     expect(figure("Emergency")).to have_no_content("built up of")
-    expect(clause("Emergency")).to have_content("$300.00 per period")
+    expect(clause("Emergency")).to have_content("+$300.00 per period")
     expect(row("Emergency")).to have_no_css("[data-period-bar]")
+  end
+
+  # ** THE BUILDING ROW'S SECOND LINE IS `+$X per period`, AND IT NEVER SAYS "NEXT DUE"
+  # (rules-own-the-budget spec §5). ** A building rule cannot carry an `anchor_date` at all
+  # (`Budget#build_up_must_be_valid` refuses the pair), so the clause is not the dated sentence with
+  # its date missing — it is a different sentence, and the LEADING PLUS is what a reader tells them
+  # apart by: a dated rule's `$200.00 per period` is a share of a bill that stops when the bill is
+  # whole, this is money added for as long as the rule lives.
+  #
+  # PLANTED: a $200-a-period rule toward $5,000, written today, so the walk visits one period with
+  # nothing spent — `planned = min(rate 200, gap 5,000)` = $200 and `built_up` is **$200.00**. The
+  # bar is `round(200 / 5,000 × 100)` = **4%**.
+  it "says what a capped fund adds each period, and never says a date", :aggregate_failures do
+    deposit(500)
+    fund("Vacation", amount: 200, target: 5_000)
+
+    visit root_path
+
+    expect(figure("Vacation")).to have_content("$200.00 built up of $5,000.00")
+    expect(clause("Vacation")).to have_content("+$200.00 per period")
+    expect(row("Vacation")).to have_no_content("next due")
+    expect(row("Vacation")).to have_no_content("was due")
+    expect(row("Vacation")).to have_css("[data-period-bar='4']")
   end
 
   # ** AN ANCHOR-DATED GOAL READS BY ITS SCHEDULE, AND THE ANCHOR WINS OVER THE TARGET (§3's shape
@@ -547,6 +583,27 @@ RSpec.describe "Home This Period", type: :system do
 
       panel = page.find("[data-this-period]").native.rect
       amount = page.find("[data-period-row='Groceries'] [data-period-figure]").native.rect
+
+      expect(panel.x + panel.width).to be <= 375
+      expect(amount.x + amount.width).to be <= panel.x + panel.width
+    end
+
+    # ** THE BUILDING ROW IS THE WIDEST SENTENCE THIS SECTION PRINTS (rules-own-the-budget spec §5)
+    # ** — `$1,234.56 built up of $5,000.00` on one line with `+$200.00 per period` beneath it — and
+    # it is new, so it is measured rather than assumed to inherit the rate row's fit. Same CDP
+    # override, same Selenium geometry, no `evaluate_script`.
+    it "fits a capped fund's figure and its clause inside a 375px viewport", :aggregate_failures do
+      deposit(2_000)
+      vacation = fund("Vacation", amount: 200, target: 5_000)
+      set_aside(vacation, 1_034.56)
+
+      visit root_path
+
+      expect(figure("Vacation")).to have_content("$1,234.56 built up of $5,000.00")
+      expect(clause("Vacation")).to have_content("+$200.00 per period")
+
+      panel = page.find("[data-this-period]").native.rect
+      amount = page.find("[data-period-row='Vacation'] [data-period-figure]").native.rect
 
       expect(panel.x + panel.width).to be <= 375
       expect(amount.x + amount.width).to be <= panel.x + panel.width

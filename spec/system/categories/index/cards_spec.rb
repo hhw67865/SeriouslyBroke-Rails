@@ -127,8 +127,10 @@ RSpec.describe "Categories Index - Cards", type: :system do
   # (computed-claims spec §2, Task 4). It was deleted with the savings TYPE in plan 3 task 5 — its
   # two examples read a "Monthly Contribution" figure and a "Savings Pool: Main Pool" line off a card
   # arm that no longer existed — and savings now live here, on the screen that replaced the Pools
-  # index. The classifier is `Category#saving_toward_a_target?`, the same one the show page's
-  # holdings card and the entry form's impact card ask.
+  # index. The classifier is `Category#building_rule` (rules-own-the-budget spec §5) — the item-less
+  # rule whose unspent money carries — the same reader the show page's holdings card and the entry
+  # form's impact card ask. It replaced `Category#saving_toward_a_target?`, a question about a figure
+  # on the CATEGORY that no claim formula has read since the shapes moved onto the rule.
   #
   # ** BOTH FIXTURES USED TO BE ALLOCATIONS AND ARE NOW RULES. ** Nothing moves on the purpose side
   # (§5), so the $500 that was moved into Vacation and the $400 moved into Groceries are written the
@@ -140,16 +142,43 @@ RSpec.describe "Categories Index - Cards", type: :system do
     # but written today, so the accrual walk opens in the current period and visits exactly one.
     # `planned = min(rate, gap)` = `min(500, 2,000)` = **$500.00**, nothing is spent, so the claim is
     # $500.00 and the bar is `(500 ÷ 2,000 × 100).round` = **25**.
-    it "shows a goal's claim and its progress toward the target" do
-      vacation = create(:category, :expense, :funded, user: user, name: "Vacation", target_amount: 2_000)
-      create(:budget, :per_period_rate, category: vacation, amount: 500)
+    it "shows a fund's claim and its progress toward the rule's target" do
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
+      create(:budget, :capped, category: vacation, amount: 500, target_amount: 2_000)
 
       visit categories_path(type: "expense")
 
       expect(page).to have_content("Claimed")
       expect(page).to have_content(currency(500))
-      expect(page).to have_css("[data-goal-progress]")
+      expect(page).to have_css("[data-building-progress]")
       expect(page).to have_content("25% of #{currency(2_000)}")
+    end
+
+    # ** AN UNCAPPED FUND HAS NO TRACK (rules-own-the-budget spec §2.1 row 2). ** Same shape, same
+    # walk, no ceiling: `planned` is the plain rate because there is no `gap` to bound it, so the
+    # claim is **$500.00** and there is nothing for a bar to be a fraction of. Both halves, so a card
+    # that drew an empty or a full track against no figure would fail here.
+    it "shows an uncapped fund's claim and no bar", :aggregate_failures do
+      emergency = create(:category, :expense, :funded, user: user, name: "Emergency")
+      create(:budget, :building, category: emergency, amount: 500)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content(currency(500))
+      expect(page).to have_no_css("[data-building-progress]")
+    end
+
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A figure on the
+    # CATEGORY with a rule whose money RESETS drew a bar against a number no formula reads. It draws
+    # none now: the shape decides, and this shape is an envelope.
+    it "draws no bar for a resetting rule whatever the category's own column says", :aggregate_failures do
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries", target_amount: 5_000)
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content(currency(400))
+      expect(page).to have_no_css("[data-building-progress]")
     end
 
     # An envelope claims money too — it just has no target for a bar to be a fraction of.
@@ -163,7 +192,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
 
       expect(page).to have_content("Claimed")
       expect(page).to have_content(currency(400))
-      expect(page).to have_no_css("[data-goal-progress]")
+      expect(page).to have_no_css("[data-building-progress]")
     end
 
     # ** AND A HOLDER WITH NO RULE CLAIMS NOTHING (§3.3: every claim comes from a rule). ** Under the

@@ -442,41 +442,38 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # THE GOAL ARM, KEYED ON THE CATEGORY. It asked `Category#savings?` — a holder, with a target,
-  # carrying NO refill rule — and now asks `Category#saving_toward_a_target?`, the RENDERING level
-  # of the two-level classification: a goal is a goal whatever feeds it. Under §3.3 that is no
-  # longer a nicety, it is the only reachable shape — every claim comes from a rule, so a goal with
-  # anything in it HAS one and `#savings?` is false for it. Spending from a goal is still spending
-  # against a goal, so the card takes the goal shape and measures against the target.
-  describe "a savings goal" do
+  # ** THE FUND ARM, KEYED ON THE RULE (rules-own-the-budget spec §5/§7). ** It asked
+  # `Category#savings?` — a holder, with a target, carrying NO refill rule — then
+  # `Category#saving_toward_a_target?`, a figure on the CATEGORY. Both were questions about a
+  # column no claim formula reads: `ClaimCalculator#shape` answers `:building` off the RULE's
+  # `carries_over`, and the ceiling it accrues toward is the RULE's `target_amount`. The card asks
+  # `Category#building_rule` now, so the noun and the bar come from the same record the figures do.
+  #
+  # "GOAL" IS RETIRED WITH THE NOUN (§7). A goal was a kind of category; "fund" is what the rule
+  # does with money the period did not spend, and it is true of the capped shape and the uncapped
+  # one alike.
+  describe "a fund" do
     before do
-      vacation = create(
-        :category,
-        :expense,
-        user: user,
-        name: "Vacation",
-        funded_since: funded_since,
-        target_amount: 2_400
-      )
-      # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $600-a-period rule on a category that
-      # names a figure is a `:target`-shaped rule, and one walked period accrues
-      # `min(0 + 600, 2400)` = $600. The rule is what gives the goal a claim at all — an allocation
-      # used to put the money there, and nothing moves.
-      create(:budget, :per_period_rate, category: vacation, amount: 600)
+      vacation = create(:category, :expense, user: user, name: "Vacation", funded_since: funded_since)
+      # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $600-a-period BUILDING rule capped at
+      # $2,400, and one walked period accrues `min(0 + 600, 2400)` = $600. The CATEGORY names no
+      # figure at all — the column is dropped by Task 4, and a fixture still writing it would let a
+      # reader that had quietly stayed behind go on passing.
+      create(:budget, :capped, category: vacation, amount: 600, target_amount: 2_400)
 
       visit new_entry_path
       select_category("Vacation")
     end
 
-    it "takes the goal shape and subtracts what is spent", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='goal']")
+    it "takes the fund shape and subtracts what is spent", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='fund']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("Vacation goal")
+        expect(figure("envelope")).to have_text("Vacation fund")
         expect(figure("balance")).to have_text("$600.00")
         expect(figure("balance-after")).to have_text("$450.00")
-        expect(figure("goal")).to have_text("of $2,400.00 goal")
+        expect(figure("target")).to have_text("of $2,400.00")
       end
     end
 
@@ -488,7 +485,7 @@ RSpec.describe "Entry impact card", type: :system do
       within(card) { expect(figure("balance-after")).to have_text("$450.00") }
     end
 
-    it "measures the bar against the goal", :aggregate_failures do
+    it "measures the bar against the rule's target", :aggregate_failures do
       fill_in "Amount", with: "150"
       within(card) { expect(figure("balance-after")).to have_text("$450.00") }
 
@@ -497,9 +494,9 @@ RSpec.describe "Entry impact card", type: :system do
       expect(page).not_to have_css("[data-figure='bar'][style*='width: 100%']")
     end
 
-    # THE OTHER DIRECTION ON THE SURVIVING ARM: a goal CAN go negative, and it says so in the app's
+    # THE OTHER DIRECTION ON THE SURVIVING ARM: a fund CAN go negative, and it says so in the app's
     # ordinary overdraw vocabulary rather than being exempted from it.
-    it "reads as the goal going negative when it is emptied", :aggregate_failures do
+    it "reads as the fund going negative when it is emptied", :aggregate_failures do
       fill_in "Amount", with: "5000"
 
       within(card) { expect(figure("balance-after")).to have_text("-$4,400.00") }
@@ -507,47 +504,67 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # ** THE ANCHOR-DATED GOAL, PINNED AT THE BROWSER (fix round 1, MED-2). ** A goal whose rule names
-  # a DUE DATE takes §3.2's dated shape — it accrues toward the RULE's own amount by the catch-up
-  # formula, not toward the category's figure — while the CARD's classification asks only
-  # `Category#saving_toward_a_target?`, a holder with a figure to reach. So the chrome must not
-  # inherit the rule's shape: this is still a goal, and it still measures against $2,400.
+  # ** A FUND THAT NAMES NO FIGURE IS STILL A FUND (rules-own-the-budget spec §2.1 row 2), AND THAT
+  # IS THE SHAPE THE OLD PREDICATE COULD NOT SEE. ** `#saving_toward_a_target?` was a question about
+  # a figure, so an emergency fund with no ceiling read as an ENVELOPE here: the noun was wrong and
+  # the trailing phrase said "left" over money the rule carries from period to period. What the
+  # missing figure takes away is only the "of": the card says what has built up, which is Home's own
+  # sentence for the same shape.
   #
-  # PLANTED: a $600 bill due three days out, which is INSIDE the period anchored on today, so
-  # `periods_left` is 1 and the catch-up formula asks for the whole $600 now —
-  # `min(0 + 600, 600)` built up in one walked period. Anchoring it two months out instead would
-  # make the figure a function of how many fortnights fall between today and then, which is a
-  # different number every day of the year.
-  describe "a goal whose rule carries a due date" do
+  # PLANTED: a $600-a-period uncapped building rule, one walked period, no `gap` to bound the plan —
+  # **$600.00** built up, $150 typed, **$450.00** after.
+  describe "a fund that names no figure" do
     before do
-      house = create(
-        :category,
-        :expense,
-        user: user,
-        name: "House Deposit",
-        funded_since: funded_since,
-        target_amount: 2_400
-      )
-      create(
-        :budget,
-        category: house,
-        amount: 600,
-        interval_months: 1,
-        anchor_date: Date.current + 3.days
-      )
+      emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: funded_since)
+      create(:budget, :building, category: emergency, amount: 600)
+
+      visit new_entry_path
+      select_category("Emergency")
+    end
+
+    it "takes the fund shape with nothing to be a fraction of", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='fund']")
+      fill_in "Amount", with: "150"
+
+      within(card) do
+        expect(figure("envelope")).to have_text("Emergency fund")
+        expect(figure("balance-after")).to have_text("$450.00")
+        expect(figure("target")).to have_text("built up")
+        expect(page).to have_no_content("of $")
+        expect(page).to have_no_content("left")
+      end
+    end
+  end
+
+  # ** A DATED BILL IS AN ENVELOPE ON THIS CARD, AND THAT IS THE CLASSIFICATION MOVING ONTO THE RULE
+  # (rules-own-the-budget spec §5). ** This example used to plant a category with a $2,400 figure and
+  # a dated rule, and pin that the CHROME did not inherit the rule's shape — the card said "goal" and
+  # measured against the category's $2,400 while the rule accrued toward its own $600. There is no
+  # second record to disagree with any more: `Budget#build_up_must_be_valid` refuses `carries_over`
+  # beside an `anchor_date`, so a dated rule can never be a building one, the category has no
+  # building rule, and the honest noun is "envelope".
+  #
+  # PLANTED: a $600 bill due three days out, INSIDE the period anchored on today, so `periods_left`
+  # is 1 and the catch-up formula asks the whole $600 now — `min(0 + 600, 600)` built up in one
+  # walked period. $150 typed leaves **$450.00**.
+  describe "a category whose only rule is a dated bill" do
+    before do
+      house = create(:category, :expense, user: user, name: "House Deposit", funded_since: funded_since)
+      create(:budget, category: house, amount: 600, interval_months: 1, anchor_date: Date.current + 3.days)
 
       visit new_entry_path
       select_category("House Deposit")
     end
 
-    it "still takes the goal shape and still measures against the target", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='goal']")
+    it "takes the envelope shape and says what is left", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='envelope']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("House Deposit goal")
-        expect(figure("goal")).to have_text("of $2,400.00 goal")
+        expect(figure("envelope")).to have_text("House Deposit envelope")
         expect(figure("balance-after")).to have_text("$450.00")
+        expect(page).to have_content("left")
+        expect(page).to have_no_content("fund")
       end
     end
   end

@@ -9,6 +9,13 @@
     what a screen reader has to hear — a button whose only text is ▲ says nothing about what
     moves or where.
 
+    ** WHAT THE ARROWS SET IS THE TIE-BREAK INSIDE A TYPE (rules-own-the-budget spec §3), which is
+    what the instruction above the list says: within each type, lower rules give way first. The type
+    itself is set on the rule, not here — every choice rule gives way before any usage rule whatever
+    these arrows say — so moving a card changes the order among rules of the SAME kind. The title
+    below says as much, because a control whose effect a user has to infer from a paragraph is a
+    control they will infer wrongly.
+
     THE LIST BAKED IN HERE IS AS OLD AS THE PAGE, and that is the accepted cost of the two
     builders: a button pressed after a rule was added or deleted in another tab submits a set
     that is no longer the user's `in_fill_order.with_a_rule` set, and `Category.apply_fill_order`
@@ -33,7 +40,7 @@
                   disabled: reorder_edge?(groups, group, offset),
                   form_class: "inline-block leading-none",
                   aria: { label: "Move #{group.category.name} #{direction}" },
-                  title: "Move #{group.category.name} #{direction}",
+                  title: "Move #{group.category.name} #{direction} — within each type, lower rules give way first",
                   class: "inline-flex h-11 w-11 items-center justify-center text-xs rounded " \
                          "border border-gray-200 text-gray-700 transition-colors " \
                          "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \

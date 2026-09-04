@@ -136,41 +136,47 @@ class EntryImpactPresenter
   # population — so a user who meets the sentence here and the offer there is reading one app.
   def unbudgeted? = holding.nil? || !holding.budgeted?
 
-  # A CATEGORY SAVING TOWARD A FIGURE IS A GOAL, so the card takes the goal shape
-  # (`$X → $Y of $Z goal`) rather than the envelope's.
+  # ** A CATEGORY WHOSE MONEY BUILDS UP IS A FUND, so the card takes the fund shape (`$X → $Y of
+  # $Z`) rather than the envelope's (`$X → $Y left`). **
   #
-  # IT ASKED `Category#savings?` AND THAT WAS THE CARRIED INCONSISTENCY (Task 7's ruling). That
-  # predicate is holder + target + NO RULE, so a goal the user ALSO refills at a rate — the demo's
-  # Retirement Supplement, $150 a period against a $100,000 target — was classified as an envelope
-  # HERE and as a goal on Home. One category, two screens, two answers, and the bar was the visible
-  # half: this card drew Σ steady_ask as the denominator of a $100,000 goal.
+  # ** IT IS THE RULE THAT SAYS SO NOW (rules-own-the-budget spec §5/§7). ** This asked
+  # `Category#saving_toward_a_target?` — `holder? && categories.target_amount.present?` — and that
+  # column is one no claim formula has read since the shapes moved onto the rule:
+  # `ClaimCalculator#shape` answers `:building` off `carries_over` and caps at the RULE's
+  # `target_amount`. Reading the category's figure here would draw a bar against a number nothing
+  # computes, and — because `#denominator` is that figure — it would have gone on doing so after
+  # Task 4 drops the column.
   #
-  # `Category#saving_toward_a_target?` IS THE RENDERING PREDICATE, and it is the same expression
-  # asked of the category itself — a holder with a figure to reach. It lives on the model rather
-  # than on a calculator because the question is about the CATEGORY a screen is drawing and not
-  # about any one rule: `ClaimCalculator#shape` answers `:building` off the RULE's own `carries_over`
-  # for a single rule, and a category may carry a building rule beside a `:dated` one without ceasing to be a
-  # goal to look at. The categories index card, the categories page's holdings card and this card
-  # all ask the one predicate, so a rule-bearing goal is a goal on every one of them.
+  # `Category#building_rule` IS THE ONE READER, asked of the CATEGORY this card is drawing: it is
+  # the item-less rule, the category's own lane, so a fund carved out for one item does not make the
+  # whole category a fund. The categories index card and the categories page's holdings card ask the
+  # same rule, so a fund is a fund on all three.
   #
-  # `Category#savings?` IS DELETED (Task 4) AND THERE IS NO SECOND PREDICATE LEFT TO DISAGREE WITH.
-  # It was the INDEX question — which rows belong in a band headed "Savings" — and its extra clause
-  # inverted under §3.3: a goal with money in it always has a rule, so `budgets.none?` selected
-  # exactly the goals claiming nothing. The dashboard's savings strip, its last caller, asks this
-  # predicate too.
+  # ** IT IS TWO QUESTIONS WHERE `#goal?` WAS ONE, because a building rule may name NO figure (§2.1
+  # row 2). ** `#building?` decides the NOUN and the card's shape; `#building_target` decides the
+  # trailing phrase and the bar's denominator, and it is nil for an uncapped fund — which falls back
+  # to `#steady_claim`, the ordinary envelope denominator, because what an uncapped fund adds per
+  # period is the only thing there is to measure a period's spending against.
   #
-  # Spending from a goal is still spending against a goal, which is why this arm exists at all: the
+  # Spending from a fund is still spending against a fund, which is why this arm exists at all: the
   # figures are the same two figures, and only the trailing phrase differs.
-  def goal? = holding.present? && holding.saving_toward_a_target?
+  def building? = holding.present? && holding.building_rule.present?
 
-  def goal_target = goal? ? category.target_amount.to_d : nil
+  def building_target
+    rule = holding&.building_rule
+    rule&.target_amount&.to_d
+  end
 
-  # "envelope" or "goal" — the noun the header uses.
+  # "envelope" or "fund" — the noun the header uses.
+  #
+  # ** "GOAL" IS RETIRED (§7). ** A goal was a kind of CATEGORY; what this names is what the rule
+  # does with money the period did not spend. "Fund" is true of the capped shape and the uncapped
+  # one alike, where "goal" was true of neither without a figure to be a goal toward.
   #
   # `Pool#noun` IS GONE with the type it read: a pool had three types and a word for each, and a
   # category has one type and a question. "envelope" is the right word for a category that holds its
   # own spending money, and it is also the fallback the honest card's own headline is written in.
-  def noun = goal? ? "goal" : "envelope"
+  def noun = building? ? "fund" : "envelope"
 
   # WHAT THE CATEGORY CLAIMS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #
@@ -234,7 +240,7 @@ class EntryImpactPresenter
   #
   # AND A CEILING OVER THE LOT (#most_it_could_claim), for the clamp at the OTHER end: an accruing
   # rule's built-up is capped at its target, so giving an old fulfilment back to a fund that has
-  # since refilled would print `$750.00 of $600.00 goal`. Nothing a category claims can exceed what
+  # since refilled would print `$750.00 of $600.00`. Nothing a category claims can exceed what
   # its rules could hold at most, so the corrected figure is capped there too.
   def balance
     @balance ||= begin
@@ -257,8 +263,8 @@ class EntryImpactPresenter
   # `#direction` was `+1` for a savings category and `-1` otherwise, because a contribution used to
   # RAISE the pool it filled. Contributions are gone and there is no savings category to sign: every
   # card this class renders describes an expense (income is silent — see `#render?`), and an expense
-  # is what §3 subtracts from a claim. The GOAL arm is unaffected and still renders — spending from
-  # a goal is spending against a goal, which is `#goal?`'s own note.
+  # is what §3 subtracts from a claim. The FUND arm is unaffected and still renders — spending from
+  # a fund is spending against a fund, which is `#building?`'s own note.
   #
   # UNCLAMPED, AND THAT IS THE POINT OF THE RIGHT-HAND FIGURE. §3 clamps a claim at zero and this
   # subtraction does not, because "what this spending leaves" and "what the rules will claim
@@ -267,7 +273,7 @@ class EntryImpactPresenter
   # card — and it is why `#overdrawn?` below can be true at all.
   def balance_after = @balance_after ||= (balance - amount).to_d
 
-  # WHETHER THERE ARE FIGURES TO PRINT AT ALL — the envelope and goal cards have them, the honest
+  # WHETHER THERE ARE FIGURES TO PRINT AT ALL — the envelope and fund cards have them, the honest
   # nothing-claims-this card has none. Every money reader below is gated on it, because a receipt no
   # rule's claim can move has no "left" figure to offer: it comes out of free money and that is the
   # whole of what the card can say about it.
@@ -286,28 +292,34 @@ class EntryImpactPresenter
   # this branch (a $1,500-a-month rule claims $692.31 of a biweekly period, and a bar denominated in
   # sticker prices would draw a full envelope as a fifth of one).
   #
-  # A GOAL MEASURES AGAINST ITS TARGET INSTEAD, and this is a CORRECTION to the plan's wording
-  # ("the bar's denominator is Σ steady_ask") rather than an exception to its ruling — the ruling is
-  # that the card invents no normaliser, and the CATEGORY's `target_amount` is the existing goal
-  # reader that this bar and the categories page's goal
-  # bar already measures against. Measured on the demo seeds, both halves:
+  # A CAPPED FUND MEASURES AGAINST ITS TARGET INSTEAD, and this is a CORRECTION to the plan's
+  # wording ("the bar's denominator is Σ steady_ask") rather than an exception to its ruling — the
+  # ruling is that the card invents no normaliser, and the fund's target is an existing reader that
+  # this bar and the categories page's bar already measure against. Measured on the demo seeds, both
+  # halves:
   #
-  #   * Retirement Supplement claims $545 against a $100,000 goal and $150 a period of rules. Under
-  #     the steady_ask denominator its bar is drawn FULL while the line directly above it reads
-  #     "of $100,000.00 goal" — two answers to one question, an inch apart, on the same card.
-  #   * The other four savings goals (Emergency Fund, House Down Payment, New Car, Vacation to
-  #     Europe) carry NO rules at all, so Σ steady_ask is zero and their bars could never move —
-  #     empty on a goal the user is watching fill. Under §3.3 such a goal claims nothing either, so
-  #     the bar is empty for a second and better reason; the target denominator is what lets it
-  #     start moving the moment a rule is written.
+  #   * Retirement Supplement claims $545 against a $100,000 target and $150 a period of rules.
+  #     Under the steady_ask denominator its bar is drawn FULL while the line directly above it
+  #     reads "of $100,000.00" — two answers to one question, an inch apart, on the same card.
+  #   * The other four funds (Emergency Fund, House Down Payment, New Car, Vacation to Europe)
+  #     carry only hand-fed rules, so Σ steady_ask is zero and their bars could never move — empty
+  #     on a fund the user is watching fill. Such a fund claims nothing at the start either, so the
+  #     bar is empty for a second and better reason; the target denominator is what lets it start
+  #     moving the moment money is set aside.
+  #
+  # ** AN UNCAPPED FUND FALLS BACK TO Σ steady_ask (rules-own-the-budget spec §2.1 row 2). **
+  # `#building_target` is nil for it — there is no ceiling — and the honest denominator for a card
+  # asking "can I afford this" is then the same one an envelope gets: what the category's rules ask
+  # of a period. It is not the target arm wearing a different figure; it is the absence of a target,
+  # and the fallback is what the `||` has always meant.
   #
   # The rate case is untouched: a budgeted category's bar is Σ steady_ask, exactly as ruled.
-  def denominator = @denominator ||= goal_target || steady_claim
+  def denominator = @denominator ||= building_target || steady_claim
 
   # WHETHER THERE IS A BAR AT ALL. An envelope with no rules on it has no per-period claim, so
   # there is nothing for a bar to be a fraction OF — and an empty track drawn beside real figures
   # says "nothing left" an inch under a line saying $240.00, which is the same two-answers-on-one-
-  # card defect that moved the goal's denominator. No denominator, no bar.
+  # card defect that moved the fund's denominator. No denominator, no bar.
   #
   # ** A CATEGORY WHOSE ONLY RULE IS A SETTLED ONE-TIME BILL DRAWS A BAR AGAIN (fix wave 2 — LOW-2).
   # ** For one wave `#steady_claim` read §3.2's catch-up share, which is ZERO once a one-off has been
@@ -434,7 +446,7 @@ class EntryImpactPresenter
   # the ceiling itself negative), and a CAPPED accruing rule's target (§3.2 caps its built-up there).
   # `#ceiling_for` carries the third arm and why it is what it is.
   #
-  # A CATEGORY CARRYING TWO ACCRUING RULES AGAINST ONE CATEGORY TARGET COUNTS THAT TARGET TWICE, and
+  # A CATEGORY CARRYING TWO CAPPED ACCRUING RULES COUNTS BOTH CEILINGS, and
   # that is accepted rather than corrected: it makes the ceiling LOOSER, never tighter, so it cannot
   # cut a figure that was true, and the ceiling is the second line of defence behind the three gates
   # on #own_contribution rather than the thing doing the work.

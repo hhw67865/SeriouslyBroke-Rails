@@ -42,12 +42,14 @@
 # building the thirtieth copy of it. Nothing is passed on the show page and this class builds its
 # own; either way there is one ledger per screen.
 #
-# THE GOAL TEST IS `Category#saving_toward_a_target?` (`holder? && target_amount.present?`), which is
-# `HoldingCalculator`'s predicate re-homed on the model. It is deliberately NOT the deleted `#savings?` —
-# that additionally requires the category to carry NO rule, and a goal the user also refills at a
-# rate (the demo's Retirement Supplement) is still a goal to look at. The show card's heading and
-# bar, the index card's bar and the entry form's impact card all ask the one predicate, so a
-# rule-bearing goal is a goal on every one of them.
+# ** THE TEST IS `Category#building_rule` (rules-own-the-budget spec §5/§7), AND IT IS A QUESTION
+# ABOUT A RULE. ** It was `#saving_toward_a_target?` — `holder? && target_amount.present?` — and the
+# column it read is one no claim formula consults: `ClaimCalculator#shape` answers `:building` off
+# the RULE's `carries_over`, and caps at the RULE's `target_amount`. So the card asks the rule, and
+# it asks TWO things where there used to be one — is money building up here, and is there a figure
+# it is aiming at — because a building rule may name no target at all (§2.1 row 2). The show card's
+# heading, the index card's bar and the entry form's impact card all read the same rule, so a fund
+# is a fund on every one of them.
 #
 # See docs/superpowers/specs/2026-09-03-computed-claims-design.md §2-§5.
 class CategoryBudgetPresenter
@@ -79,6 +81,11 @@ class CategoryBudgetPresenter
     :overdue
   ) do
     def rate? = shape == :rate
+
+    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5). The same
+    # reader the other two §3.4 rows carry: `HomeHelper#claim_schedule` renders all three and asks
+    # this to tell a building rule's `+$300.00 per period` from a dated rule's `next due Mar 1`.
+    def building? = shape == :building
 
     # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
     # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
@@ -182,19 +189,50 @@ class CategoryBudgetPresenter
   # past what the rule had (§3.1), or a due date gone by with the bill unpaid (§3.2).
   def needs_attention? = lines.any?(&:trouble?)
 
-  # ---- The goal arm -----------------------------------------------------------------------------
+  # ---- The building arm -------------------------------------------------------------------------
 
-  # IS THIS A GOAL — the DISPLAY question, asked of the model (see the header). Also the gate on the
-  # progress bar, because `#progress_percentage` measures a claim against a target and a category
-  # without one has nothing for a bar to be a fraction of.
-  delegate :saving_toward_a_target?, to: :category
+  # ** IS THIS CATEGORY BUILDING MONEY UP — AND IS THERE A FIGURE IT IS AIMING AT? TWO QUESTIONS
+  # (rules-own-the-budget spec §5). ** They used to be one, `Category#saving_toward_a_target?`, and
+  # the reason they can no longer be is that a building rule may name NO target (§2.1 row 2): an
+  # emergency fund grows for as long as the user keeps it. So the card's heading asks the first
+  # question and its bar asks the second, and neither is the other's proxy.
+  #
+  # ** BOTH ARE READ OFF THE RULE. ** `categories.target_amount` is on its way out (§7) and no claim
+  # formula has read it since Task 1 — `ClaimCalculator#shape` answers `:building` off the RULE's
+  # `carries_over` and caps at the RULE's `target_amount` — so a card reading the category's column
+  # would be drawing a bar against a figure nothing computes.
+  def building? = building_rule.present?
 
-  def target = category.target_amount.to_d
+  # ** FOUND AMONG THE RULES THIS CARD ALREADY HOLDS, NOT THROUGH `Category#building_rule`. ** The
+  # test is the same one (`Budget#builds_up_the_category?`, spelled once on the model); the
+  # POPULATION is the page's ledger rather than the category's association, because the categories
+  # INDEX renders one of these per card and `category.budgets` is not preloaded there — reading the
+  # model's door would be a `SELECT budgets` per card on the one screen that draws every category
+  # the user owns. `#lines` is already built from `ClaimLedger#rules_of`, one statement for the whole
+  # page, so this costs nothing at all.
+  #
+  # `defined?` rather than `||=`: nil is the ordinary answer (an envelope), and a truthiness memo
+  # would re-scan the lines on every one of the four readers below that consult it.
+  def building_rule
+    return @building_rule if defined?(@building_rule)
+
+    @building_rule = lines.map(&:rule).detect(&:builds_up_the_category?)
+  end
+
+  # THE FIGURE THE FUND IS AIMING AT, or NIL where it names none. Nil rather than zero, exactly as
+  # `ClaimCalculator#target` answers it and for the same reason: zero is a ceiling that has already
+  # been reached, and every reader below asks presence before it divides.
+  def target = building_rule&.target_amount&.to_d
 
   # HOW FULL, AS A WHOLE PERCENT, CLAMPED AT BOTH ENDS — `HoldingCalculator#progress_percentage`'s
   # arithmetic verbatim, with `#claim` where `#balance` stood. Kept to the digit deliberately: the
   # money the numerator names changed, the reading of it did not, and a figure that moved here would
   # have moved for a reason nobody asked for.
+  #
+  # ZERO FOR AN UNCAPPED FUND, and the card draws no bar there at all (see `#bar?`): a fund with no
+  # ceiling is not a fraction of anything, and a track whose fullness means nothing is worse than no
+  # track. The guard is `#target&.positive?` — presence AND sign — because nil is now a reachable
+  # answer where it used to be `nil.to_f` quietly reading as zero.
   #
   # THE FLOOR IS AT THE READER, and it is what keeps every render site from drawing a bar of negative
   # width. A claim cannot itself go below zero — `ClaimCalculator` clamps at zero per period — but
@@ -204,16 +242,20 @@ class CategoryBudgetPresenter
   # The type is Integer at both bounds by construction — `.round` on the quotient, and two Integer
   # clamp bounds.
   def progress_percentage
-    return 0 unless category.target_amount.to_f.positive?
+    return 0 unless bar?
 
-    (claim / category.target_amount * 100).round.clamp(0, 100)
+    (claim / target * 100).round.clamp(0, 100)
   end
 
-  # `to_d`, not `to_f`: nil-safe in exactly the same way (`nil.to_d` is 0, and an envelope
-  # legitimately has no target) without routing a money value through binary floating point.
-  def remaining_amount
-    [category.target_amount.to_d - claim, 0.to_d].max
-  end
+  # A BAR NEEDS SOMETHING TO BE A FRACTION OF — `HomePresenter::ClaimLine#bar?`'s rule, asked of the
+  # category. Both render sites gate on this rather than on `#building?`, so an uncapped fund gets
+  # its heading and its figure and no track.
+  def bar? = target&.positive? || false
+
+  # ** `#remaining_amount` IS DELETED. ** `target − claim`, floored at zero — and it was callerless
+  # (grepped across `app` and `spec`): the card prints a percentage and the target itself, never the
+  # gap. Under §2.1 row 2 it would have needed a nil arm of its own, and adding one to a reader
+  # nothing calls is inventing an answer to a question no screen asks.
 
   # ---- What the card says about the rules -------------------------------------------------------
 

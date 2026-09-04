@@ -65,6 +65,17 @@ class BudgetPagePresenter
 
     def rate? = shape == :rate
 
+    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5). The same
+    # reader `HomePresenter::ClaimLine` carries and for the same caller: `HomeHelper#claim_schedule`
+    # prints `+$300.00 per period` for this shape and `next due Mar 1 · $200.00 per period` for a
+    # dated one, and it renders this row and Home's alike.
+    def building? = shape == :building
+
+    # WHICH KIND OF RULE THIS IS — bill, usage or choice (spec §3). Off the record rather than a
+    # member, because it is a column the row already holds: the label beside the row and the
+    # overview above the groups are two readings of one answer.
+    delegate :rule_type, to: :budget
+
     # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
     # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
     # question the calculator already answers and a second spelling here would be free to drift. An
@@ -202,6 +213,47 @@ class BudgetPagePresenter
     @unfilled_rules ||= (rules - grouped_rules)
       .map { |budget| build_rule(budget) }
       .sort_by { |rule| [owner_name(rule.budget), *rule_order(rule)] }
+  end
+
+  # ** WHAT EACH KIND OF RULE COSTS A PERIOD (rules-own-the-budget spec §3) — the overview above the
+  # groups. ** `[[:bill, 1_400], [:usage, 600], [:choice, 300]]`, which the partial renders as
+  # `Bills $1,400.00 · Usage $600.00 · Choice $300.00 a period`.
+  #
+  # ** `#standing_ask` AND NOT `#claim`, WHICH IS THE SAME CHOICE §9'S STRUCTURAL CHECK MAKES. ** The
+  # overview is a sentence about the SHAPE of the budget — how much of a typical period is spoken for
+  # by things that must be paid — and `Σ claims` is this afternoon's answer: catch-up on anything
+  # behind, zero on anything already full, so the same three rules would report different splits on
+  # two consecutive days with nothing edited. `ClaimCalculator#standing_ask` is a constant of the rule
+  # and the grid, which is what makes these three figures add up to `#rules_need` two blocks down.
+  #
+  # OVER `#rules` — EVERY RULE THE USER OWNS, the same population `Budget.steady_need` sums and
+  # therefore the same one the structural check compares against income. It deliberately includes
+  # `#unfilled_rules`: those are claims on income that no group can show, and an overview that
+  # omitted them would split a total the check below prints whole.
+  #
+  # ** OFF THE PAGE'S ONE LEDGER (§3.3). ** `claim_ledger.calculator_for` rather than
+  # `Budget#steady_ask`, whose one-off arm BUILDS a calculator of its own — that is the second-door
+  # defect `EntryImpactPresenter#steady_claim` closed, and it would be a fresh calculator per dated
+  # bill on the one page that already holds one for every rule. `#standing_ask` reads no rows, so
+  # this costs no statement at all and the page's strict-`eq` cost pin is unmoved.
+  #
+  # BILL, USAGE, CHOICE — THE READING ORDER, WHICH IS `Budget::TYPE_RANK` BACKWARDS. The give-way
+  # order runs the other way (choice gives way first, §3), and that is not a contradiction: this
+  # line is read as "what is unavoidable, then what moves with how you live, then what you choose",
+  # heaviest commitment first. A TYPE WITH NO RULES IS OMITTED rather than printed as `$0.00` — a
+  # figure that is true and reports nothing, on a line whose whole job is the split.
+  TYPE_OVERVIEW_ORDER = [:bill, :usage, :choice].freeze
+
+  def type_overview
+    @type_overview ||= begin
+      asks = rules.group_by { |budget| budget.rule_type.to_sym }
+      TYPE_OVERVIEW_ORDER.filter_map do |type|
+        group = asks[type]
+        next if group.nil?
+
+        [type, group.sum(0.to_d) { |budget| claim_ledger.calculator_for(budget).standing_ask }]
+      end
+    end
   end
 
   # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user

@@ -1,0 +1,38 @@
+<%# ** THE TYPE OVERVIEW (rules-own-the-budget spec §3). ** Local: `overview`
+    (`BudgetPagePresenter#type_overview` — `[[:bill, 1_400], [:usage, 600], [:choice, 300]]`).
+
+      Bills $1,400.00 · Usage $600.00 · Choice $300.00 a period
+
+    WHY IT IS AT THE TOP OF THE PAGE. A budget's shape is not the list of its rules, it is how much
+    of a period is already spoken for by things that cannot be moved — and until a rule carried a
+    type there was no way to ask. `bill` is a must-pay, `usage` is a real need whose amount moves
+    with how you live, `choice` is discretionary; the same ranking decides who gives way when the
+    money runs short, which is what the give-way order below says in the other direction.
+
+    THE FIGURES ARE `standing_ask`, NOT THIS PERIOD'S CLAIMS — a constant of the rules and the
+    calendar (see the presenter), so this line does not move because a bill was paid this morning.
+    That is also what makes the three add up to the structural check's "your rules ask" below.
+
+    A TYPE WITH NO RULES IS ABSENT, and the whole section is absent when there are no rules at all
+    (the caller gates on it): a split of nothing is a heading about nothing.
+
+    ONE LINE, WRAPPING. The three figures are one sentence rather than three cards — a card apiece
+    would read as three budgets — and `flex-wrap` is what lets it break at 375px without the
+    separators stranding. %>
+<section class="bg-white border border-gray-200 rounded px-6 py-3" data-type-overview>
+  <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">What each kind asks</h2>
+  <p class="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-gray-700">
+    <% overview.each_with_index do |(type, amount), index| %>
+      <%# THE SEPARATOR IS ITS OWN ELEMENT AND `aria-hidden`, so a screen reader reads three figures
+          rather than three interpuncts. It leads every entry but the first. %>
+      <% unless index.zero? %>
+        <span class="text-gray-400" aria-hidden="true">·</span>
+      <% end %>
+      <span data-type-total="<%= type %>">
+        <span class="text-gray-500"><%= rule_type_heading(type) %></span>
+        <span class="font-medium text-gray-900 tabular-nums"><%= number_to_currency(amount) %></span>
+      </span>
+    <% end %>
+    <span class="text-gray-500">a period</span>
+  </p>
+</section>

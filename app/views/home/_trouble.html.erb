@@ -78,10 +78,21 @@
             <%= number_to_currency(trouble.subject.built_up) %> built up of
             <%= number_to_currency(trouble.subject.target) %> — the fund is short
             <%= number_to_currency(trouble.subject.fund_gap) %> — this needs paying.
-          <% else %>
+          <%# ** THE WHOLE-FUND ARM ASKS `#capped?` LIKE EVERY OTHER READER OF `#target` (Task 1's
+              fix round — MED). ** Reaching here means `#fund_short?` was false, which an UNCAPPED
+              rule answers false for the other reason — there is no figure to be short OF — so an
+              un-gated `of $target` printed `of ` with nothing after it. It is unreachable today
+              (this arm is only entered on an OVERDUE rule, which has a date and is therefore always
+              capped) and it is gated anyway, because "unreachable" is a fact about the trigger
+              above and this is a sentence about a row. The uncapped fallback says the built-up
+              alone, which is `HomeHelper#claim_figure`'s own answer for that shape. %>
+          <% elsif trouble.subject.capped? %>
             <%= number_to_currency(trouble.subject.built_up) %> built up of
             <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and the
             fund starts again.
+          <% else %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up — pay it and the fund
+            starts again.
           <% end %>
         </p>
       </div>

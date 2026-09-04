@@ -12,11 +12,18 @@ require "rails_helper"
 # it with a `current_user.pools.find`, and this file pinned the 404-vs-422 line that lookup drew.
 #
 # THE PARAM IS GONE, SO THE HAZARD CLASS IS TOO. Nothing reads `categories.pool_id` any more, the
-# form offers no picker, and `category_params` permits no foreign id of any kind — the three
-# attributes that replaced it (`target_amount`, `priority`, `funded_since`) are plain columns of
-# the record itself, so there is no "whose is this" question for a request to get wrong. The six
-# examples that pinned the pool lookup are DELETED, each named in the task report; what stands in
-# their place is the contract of the three that arrived.
+# form offers no picker, and `category_params` permits no foreign id of any kind — the attributes
+# that replaced it (`priority`, `funded_since`) are plain columns of the record itself, so there is
+# no "whose is this" question for a request to get wrong. The six examples that pinned the pool
+# lookup are DELETED, each named in the task report; what stands in their place is the contract of
+# the ones that arrived.
+#
+# ** `target_amount` WAS THE THIRD AND HAS LEFT THE PERMIT (rules-own-the-budget spec §5/§7). ** How
+# much a category is building up toward is a fact about a RULE — `ClaimCalculator` caps at
+# `budgets.target_amount` and has never read the category's — so the field is gone from the form and
+# the key is gone from `category_params`. This layer is the only one that can tell "the form stopped
+# offering it" from "a crafted POST can still write it", which is exactly what the two examples
+# below are for.
 #
 # STILL A REQUEST SPEC, for the reason the old one was: these are answers to requests the UI does
 # not make. The form never submits a `pool_id`, and a param dropped silently back to its default
@@ -40,13 +47,28 @@ RSpec.describe "Categories", type: :request do
 
     # THE REACH DIRECTION, first. Without it every refusal below would pass just as well against a
     # controller that wrote nothing at all.
-    it "writes the three holding columns", :aggregate_failures do
-      expect { create_category(target_amount: 2_400, priority: 3, funded_since: "2026-02-06") }
+    it "writes the two holding columns", :aggregate_failures do
+      expect { create_category(priority: 3, funded_since: "2026-02-06") }
         .to change(Category, :count).by(1)
 
       category = user.categories.find_by(name: "Vacation")
-      expect([category.target_amount, category.priority]).to eq([2_400, 3])
+      expect(category.priority).to eq(3)
       expect(category.funded_since).to eq(Date.new(2026, 2, 6))
+      expect(response).to redirect_to(categories_path(type: "expense"))
+    end
+
+    # ** A TARGET ON THE WIRE IS IGNORED (rules-own-the-budget spec §5/§7). ** The field is off the
+    # form, and the permit is the other half of that deletion: a key left permitted is one a crafted
+    # POST — or a client written against yesterday's form — can still write, silently, into a column
+    # no claim formula reads. The write is not refused, because an unpermitted key is not an error;
+    # it simply does not land. Asserted beside a param that DOES land, so an example that passed
+    # because nothing was written at all would fail.
+    it "ignores a target a crafted param names", :aggregate_failures do
+      expect { create_category(target_amount: 2_400, priority: 3) }.to change(Category, :count).by(1)
+
+      category = user.categories.find_by(name: "Vacation")
+      expect(category.target_amount).to be_nil
+      expect(category.priority).to eq(3)
       expect(response).to redirect_to(categories_path(type: "expense"))
     end
 
@@ -61,23 +83,25 @@ RSpec.describe "Categories", type: :request do
     end
 
     # THE MODEL'S OWN LINE, WHICH IS THE ONE THAT SURVIVES. `Category#holding_columns_are_sane`
-    # refuses a target on a category that cannot hold money, and a shape refusal is a 422 — the
-    # same division the deleted pool examples drew between "whose" (404) and "what shape" (422).
-    it "answers a target on an income category with a 422", :aggregate_failures do
-      expect { create_category(category_type: "income", target_amount: 2_400) }
+    # refuses a funding start on a category that cannot hold money, and a shape refusal is a 422 —
+    # the same division the deleted pool examples drew between "whose" (404) and "what shape" (422).
+    #
+    # IT IS THE FUNDING START AND NOT THE TARGET NOW: the target cannot reach the record at all, so
+    # the refusal it used to trigger is unreachable from a request. `only_expenses_hold_money` still
+    # names both columns, because Task 4 has not dropped the second one yet.
+    it "answers a funding start on an income category with a 422", :aggregate_failures do
+      expect { create_category(category_type: "income", funded_since: "2026-02-06") }
         .not_to change(Category, :count)
 
       expect(response).to have_http_status(:unprocessable_content)
     end
 
-    # A CATEGORY THAT HOLDS NOTHING IS THE HONEST DEFAULT (§4): its spending drains available until
-    # it gets a rule or an allocation. Blank is not a refusal.
-    it "accepts all three blank", :aggregate_failures do
-      expect { create_category(target_amount: "", funded_since: "") }.to change(Category, :count).by(1)
+    # A CATEGORY THAT HOLDS NOTHING IS THE HONEST DEFAULT (§4): its spending drains free money until
+    # it gets a rule. Blank is not a refusal.
+    it "accepts both blank", :aggregate_failures do
+      expect { create_category(priority: "", funded_since: "") }.not_to change(Category, :count)
 
-      category = user.categories.find_by(name: "Vacation")
-      expect(category).not_to be_holder
-      expect(category.target_amount).to be_nil
+      expect(response).to have_http_status(:unprocessable_content)
     end
   end
 
@@ -220,10 +244,14 @@ RSpec.describe "Categories", type: :request do
       expect(category).not_to be_holder
     end
 
-    it "clears the target the same way" do
-      patch category_path(category), params: { category: { target_amount: "" } }
+    # ** A TARGET ON THE WIRE IS IGNORED ON UPDATE TOO. ** The `create` permit and the `update`
+    # permit are one list, and this is the sharper half: the record EXISTS and already carries a
+    # figure, so a permitted key would rewrite live data rather than merely default a new row.
+    it "leaves a target alone when a crafted param names one", :aggregate_failures do
+      patch category_path(category), params: { category: { name: "Groceries", target_amount: 900 } }
 
-      expect(category.reload.target_amount).to be_nil
+      expect(response).to redirect_to(categories_path(type: "expense"))
+      expect(category.reload.target_amount).to eq(500)
     end
 
     # THE UPDATE-SHAPED HOLE, and it was the sharper of the two on the pool lookup: the category is

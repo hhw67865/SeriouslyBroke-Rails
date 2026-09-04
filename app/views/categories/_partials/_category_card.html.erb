@@ -71,9 +71,11 @@
               would be the thirtieth copy. Everything on it is lazy, so an index of income
               categories — none of which reaches this branch — runs no query for it at all.
 
-              THE GOAL TEST IS `Category#saving_toward_a_target?`, the same predicate the show
-              page's holdings card and the entry form's impact card ask, so a rule-bearing goal is
-              a goal on every one of them. %>
+              THE FUND TEST IS `Category#building_rule` (rules-own-the-budget spec §5), read through
+              the presenter's `#bar?` — the same reader the show page's holdings card and the entry
+              form's impact card ask, so a fund is a fund on every one of them. The BAR is the
+              CAPPED fund's alone: a building rule with no target names no figure, and there is
+              nothing for a track to be a fraction of. %>
           <% if category.holder? %>
             <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger) %>
             <div class="flex justify-between text-xs mt-2" data-holding-line>
@@ -82,15 +84,15 @@
                 <%= number_to_currency(money.claim) %>
               </span>
             </div>
-            <% if category.saving_toward_a_target? %>
+            <% if money.bar? %>
               <% progress = money.progress_percentage %>
-              <div class="mt-2" data-goal-progress>
+              <div class="mt-2" data-building-progress>
                 <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                   <div class="h-1.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand-dark" %>"
                        style="width: <%= progress %>%;"></div>
                 </div>
                 <p class="text-xs text-gray-500 mt-1">
-                  <%= progress %>% of <%= number_to_currency(category.target_amount) %>
+                  <%= progress %>% of <%= number_to_currency(money.target) %>
                 </p>
               </div>
             <% end %>

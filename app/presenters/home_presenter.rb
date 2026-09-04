@@ -60,6 +60,13 @@ class HomePresenter
   ) do
     def rate? = shape == :rate
 
+    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5) —
+    # `ClaimCalculator#building?`, read off the `shape` this row already carries. It is the third
+    # sentence §5 gives the three shapes (`built up $X · +$rate per period`), and `HomeHelper
+    # #claim_schedule` asks it to tell that clause from a DATED rule's `next due Mar 1 · $200.00 per
+    # period` — the two are the same walk and completely different news.
+    def building? = shape == :building
+
     # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
     # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
     # question the calculator already answers and a second spelling here would be free to drift. An
@@ -551,12 +558,11 @@ class HomePresenter
 
   # ** WHICH CLAIMS THE SHORTFALL EATS, IN GIVE-WAY ORDER (§4), AND THE WALK IS SPELLED ONCE. **
   #
-  # PRIORITY KEEPS ITS JOB AS THE GIVE-WAY ORDER (§4), which is the fill order read for the opposite
-  # question: the category that would have been funded LAST is the one that goes without first. So the
-  # walk runs `#budgeted_categories` in reverse — REVERSE PRIORITY — taking each rule's claim until
-  # the shortfall is absorbed. The last claim reached is usually only PARTLY uncovered, which is why
-  # this is a walk rather than a filter: "Car repair is short $120" is a different sentence from "Car
-  # repair is uncovered", and only the walk can tell them apart.
+  # THE ORDER IS `#give_way_order`'s (rules-own-the-budget spec §3): type first, then priority. The
+  # walk takes each rule's claim until the shortfall is absorbed. The last claim reached is usually
+  # only PARTLY uncovered, which is why this is a walk rather than a filter: "Car repair is short
+  # $120" is a different sentence from "Car repair is uncovered", and only the walk can tell them
+  # apart.
   #
   # ZERO CLAIMS ARE SKIPPED rather than listed as covered: a rate rule spent flat claims nothing, and
   # a row saying "$0.00 of it is uncovered" is a line that reports nothing.
@@ -671,6 +677,34 @@ class HomePresenter
   # BOTH HALVES OF THE DECLARATION, income AND cadence — the same gate `BudgetPagePresenter#declared?`
   # applies, because it is the same question.
   #
+  # ** THE ORDER CLAIMS GIVE WAY IN (rules-own-the-budget spec §3), AND IT IS ONE SORT OVER EVERY
+  # CLAIM LINE. ** It was `budgeted_categories.reverse.flat_map { … }` — a category-level walk that
+  # could only rank whole categories against each other — and the type is a fact about a RULE: one
+  # category may carry a bill beside a choice, and under the old walk both gave way together at
+  # whatever rank their category held. Every line is now ranked individually, on one key:
+  #
+  #   1. `Budget#type_rank` — `{ choice: 0, usage: 1, bill: 2 }`, spelled once on the model (§3).
+  #      Discretionary money goes first and a must-pay is the last thing reached, which is the whole
+  #      point of giving rules a type. It DECIDES BEFORE PRIORITY DOES, which closes §3's open
+  #      question about intra-category order: a restaurant rule on a high-priority category gives way
+  #      before the rent does.
+  #   2. THE CATEGORY, IN REVERSE FILL ORDER — `#budgeted_categories` read backwards, which is
+  #      `[priority, name]` reversed and is exactly what the old walk did. The category that would
+  #      have been funded LAST is the one that goes without first, so a HIGHER priority number gives
+  #      way sooner; a tie on priority breaks on the later NAME. Both are unchanged, and both are
+  #      taken as an INDEX into the list this screen already sorted rather than re-spelled here —
+  #      `Category.in_fill_order`'s key exists in one place and a second copy of it could rank the
+  #      trouble strip differently from the section below it.
+  #   3. `Category.rule_order` — the app's one within-category key (see #claim_lines), so two rules
+  #      of one type on one category give way in the order the rows are printed in.
+  #
+  # PUBLIC, because it is a produced interface of this plan and because `#uncovered_claims` is not
+  # the only honest reader of it: the order is a fact about the screen, and a spec that had to reach
+  # it through `send` would be pinning a private accident.
+  def give_way_order
+    @give_way_order ||= claim_lines.values.flatten.sort_by { |line| give_way_key(line) }
+  end
+
   # Memoised, and the `false` case has to be memoised too — `||=` would recompute the whole sum on
   # every call for exactly the users who answer false.
   def structurally_underwater?
@@ -745,9 +779,22 @@ class HomePresenter
     @trouble_lines ||= budgeted_categories.flat_map { |category| claim_lines_for(category) }.select(&:trouble?)
   end
 
-  # REVERSE PRIORITY — the give-way order (§4). See #uncovered_claims.
-  def give_way_order
-    budgeted_categories.reverse.flat_map { |category| claim_lines_for(category) }
+  # ONE LINE'S PLACE IN THE GIVE-WAY ORDER. See #give_way_order for what each term is and why.
+  def give_way_key(line)
+    [
+      line.rule.type_rank,
+      give_way_rank.fetch(line.category.id),
+      Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id)
+    ]
+  end
+
+  # ** THE CATEGORY HALF OF THE KEY: `#budgeted_categories` READ BACKWARDS, AS AN INDEX. ** The
+  # negated position in a list already sorted `[priority, name]`, so the reverse-fill order arrives
+  # as one comparable number and `Category.in_fill_order`'s key is not written out a second time.
+  # Every line's category is in that list by construction — it is `categories + the rules' own
+  # categories` — so `fetch` is a claim rather than a lookup with a default.
+  def give_way_rank
+    @give_way_rank ||= budgeted_categories.each_with_index.to_h { |category, index| [category.id, -index] }
   end
 
   def spent_this_period(category) = holder_spending_this_period.fetch(category.id, 0.to_d)

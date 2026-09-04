@@ -1259,6 +1259,68 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(calculator.over_by).to eq(-90)
       expect(calculator.over?).to be(false)
     end
+
+    # ** ON AN ACCRUING SHAPE THE TWO FIGURES ARE DIFFERENT EXCESSES, AND `#over_by` USED TO REPORT
+    # THE WRONG ONE (Task 1's concern 5). ** `#over?` reads the WALK's pre-clamp figure — the fund's
+    # whole running total less what was spent — while `#raw_rate` is THIS PERIOD's accrual less this
+    # period's spending. On a rate rule they are the same subtraction; on a building or dated rule
+    # they are not, because the fund carries money in from earlier periods that `#raw_rate` cannot
+    # see. `#over_by` negated `#raw_rate` for every shape, so Home fired the label off one figure
+    # and printed the other.
+    #
+    # BOTH ARMS ARE THE SAME `#rate?` SPLIT `#over?` MAKES, so the predicate and the amount are now
+    # answers about one subtraction. The DATED shape takes the identical arm (`shape != :rate`);
+    # what varies between the two accruing shapes is the walk, which the groups above pin.
+    #
+    # PLANTED, re-derived by hand. A $1,000-a-period UNCAPPED building rule on a category funded
+    # Jan 1, born Jan 1, read on Feb 15 of a monthly grid — so the walk visits January and February:
+    #
+    #   Jan  planned 1,000 · accrued 0 + 1,000 = 1,000 · spent 0     → raw  1,000 · built up 1,000
+    #   Feb  planned 1,000 · accrued 1,000 + 1,000 = 2,000 · spent 2,600
+    #                                                              → raw   −600 · built up     0
+    #
+    # So the fund was spent **$600** past everything it had, which is what the strip must say. This
+    # period's own arithmetic is `1,000 − 2,600` = **−$1,600**, and the old reader printed
+    # "over by $1,600.00" about a fund that had $1,000 carried in.
+    describe "on an accruing shape" do
+      let(:emergency) do
+        create(:category, :expense, user: user, name: "Emergency", funded_since: Date.new(2026, 1, 1))
+      end
+
+      def fund = create(:budget, :building, category: emergency, amount: 1_000, created_at: born)
+
+      def spend_in_february(amount)
+        create(:entry, item: create(:item, category: emergency), amount: amount, date: Date.new(2026, 2, 10))
+      end
+
+      it "reports the excess the walk measured and not this period's", :aggregate_failures do
+        rule = fund
+        spend_in_february(2_600)
+        calculator = described_class.new(rule, today: Date.new(2026, 2, 15))
+
+        expect(calculator.over?).to be(true)
+        expect(calculator.over_by).to eq(600)
+        # The figure the old reader would have negated, asserted so the two cannot silently converge.
+        expect(calculator.raw_rate).to eq(-1_600)
+        expect(calculator.claim).to eq(0)
+      end
+
+      # ** THE OTHER DIRECTION, AND IT IS THE HALF THAT WAS ACTIVELY WRONG. ** $1,600 spent against
+      # $2,000 accrued leaves the fund $400 in hand — `raw` is +400, so `#over?` is FALSE — while
+      # this period's own arithmetic is `1,000 − 1,600` = −$600. The old `#over_by` answered a
+      # positive $600 for a fund nothing had overspent; a caller that printed it without asking
+      # `#over?` first would have invented an overspend outright.
+      it "is what the fund has left, signed the other way, while nothing is overspent", :aggregate_failures do
+        rule = fund
+        spend_in_february(1_600)
+        calculator = described_class.new(rule, today: Date.new(2026, 2, 15))
+
+        expect(calculator.over?).to be(false)
+        expect(calculator.over_by).to eq(-400)
+        expect(calculator.built_up).to eq(400)
+        expect(calculator.raw_rate).to eq(-600)
+      end
+    end
   end
 
   # ===========================================================================================

@@ -145,31 +145,50 @@ RSpec.describe "Categories Edit - Form", type: :system do
   end
 
   # ── WHAT CLAIMS THIS CATEGORY (two-ledger spec §3, §4, Task 7; re-labelled onto computed claims by
-  # Task 4). The three columns that replaced the pool picker, and the two of them that move
-  # something. `Holding since` is `Claiming since` and `Funding priority` is `Give-way order`,
-  # because nothing is held and there is no distribution to be funded first in — see
+  # Task 4). `Holding since` is `Claiming since` and `Funding priority` is `Give-way order`, because
+  # nothing is held and there is no distribution to be funded first in — see
   # `categories/_form.html.erb` for the whole of both renamings.
+  #
+  # ** TWO COLUMNS NOW (rules-own-the-budget spec §5/§7): `target_amount` has left the form and the
+  # permit. ** How much a category builds up toward is a fact about a RULE, and the column this
+  # field wrote is one no claim formula has read since the shapes moved onto the rule.
   describe "the claiming fields", :aggregate_failures do
-    let(:goal_attributes) do
-      { name: "Vacation", target_amount: 2_400, priority: 3, funded_since: Date.new(2026, 2, 6) }
+    let(:holder_attributes) do
+      { name: "Vacation", priority: 3, funded_since: Date.new(2026, 2, 6) }
     end
 
-    it "pre-fills the target, the give-way order and the claiming start" do
-      visit edit_category_path(create(:category, :expense, user: user, **goal_attributes))
+    it "pre-fills the give-way order and the claiming start, and offers no target" do
+      visit edit_category_path(create(:category, :expense, user: user, **holder_attributes))
 
-      expect(page).to have_field("Target", with: "2400.0")
       expect(page).to have_field("Give-way order", with: "3")
       expect(page).to have_field("Claiming since", with: "2026-02-06")
+      expect(page).to have_no_field("Target")
     end
 
-    it "turns an ordinary category into a goal" do
+    # ** A CATEGORY THAT ALREADY CARRIES A FIGURE KEEPS IT THROUGH AN EDIT, AND CANNOT BE GIVEN ONE
+    # HERE. ** The migration that moves those figures onto the rules is Task 4's; until it runs, real
+    # rows still hold the column, and a form that silently blanked it on every save would destroy the
+    # data that migration is going to read. `params.expect` simply never sees the key, so an
+    # untouched column stays untouched.
+    it "leaves a figure the category already carries alone" do
+      vacation = create(:category, :expense, user: user, **holder_attributes, target_amount: 2_400)
+
+      visit edit_category_path(vacation)
+      fill_in "Name", with: "Vacation Fund"
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(vacation.reload.target_amount).to eq(2_400)
+      expect(vacation.name).to eq("Vacation Fund")
+    end
+
+    it "still writes the claiming start" do
       visit edit_category_path(category)
-      fill_in "Target", with: "2400"
       fill_in "Claiming since", with: Date.new(2026, 2, 6)
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(category.reload).to be_saving_toward_a_target
+      expect(category.reload.funded_since).to eq(Date.new(2026, 2, 6))
     end
   end
 

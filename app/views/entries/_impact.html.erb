@@ -71,7 +71,7 @@
         be the constant -1 on every render, and a constant handed to the browser is a decision
         nobody is making. `EntryImpactPresenter#balance_after` and `impact_controller.js` subtract. %>
     <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
-         data-impact-card="<%= impact.goal? ? "goal" : "envelope" %>"
+         data-impact-card="<%= impact.noun %>"
          data-app--entry--impact-target="figures"
          data-balance="<%= impact.balance_param %>"
          data-denominator="<%= impact.denominator_param %>">
@@ -94,10 +94,18 @@
         <span class="font-semibold <%= "text-status-danger" if impact.overdrawn? %>"
               data-app--entry--impact-target="after"
               data-figure="balance-after"><%= number_to_currency(impact.balance_after) %></span>
-        <%# A goal says what it is filling; an envelope says what is left in it. Both are the same
-            two figures with the same arrow — only the trailing phrase differs. %>
-        <% if impact.goal? %>
-          <span class="text-sm text-gray-600" data-figure="goal">of <%= number_to_currency(impact.goal_target) %> goal</span>
+        <%# A FUND SAYS WHAT IT IS FILLING; AN ENVELOPE SAYS WHAT IS LEFT IN IT. Both are the same
+            two figures with the same arrow — only the trailing phrase differs.
+
+            ** THREE ARMS, BECAUSE A FUND MAY NAME NO FIGURE (rules-own-the-budget spec §2.1 row 2;
+            §5). ** An uncapped building rule has no target, so "of $0.00" would be a ceiling it
+            never set and "left" would call a fund an envelope. What is true of it is that the
+            figure IS the built-up, which is the same sentence Home's row says for the same shape
+            (`$450.00 built up`, no "of"). %>
+        <% if impact.building_target.present? %>
+          <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.building_target) %></span>
+        <% elsif impact.building? %>
+          <span class="text-sm text-gray-600" data-figure="target">built up</span>
         <% else %>
           <span class="text-sm text-gray-600">left</span>
         <% end %>

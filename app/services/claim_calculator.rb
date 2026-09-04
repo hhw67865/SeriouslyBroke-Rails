@@ -229,10 +229,23 @@ class ClaimCalculator
   # is the same expression they have always used, with the `private` taken off it.
   def raw_rate = accrued_this_period - spent_this_period
 
-  # HOW FAR PAST WHAT IT HAD — `#raw_rate` negated, so the strip and the row print a POSITIVE excess
-  # ("over by $60.00") without either of them owning the subtraction. Meaningful only where `#over?`
-  # is true; below that it is simply what is left, with the sign the other way round.
-  def over_by = -raw_rate
+  # HOW FAR PAST WHAT IT HAD — a POSITIVE excess ("over by $60.00"), so the strip and the row can
+  # print it without either of them owning the subtraction. Meaningful only where `#over?` is true;
+  # below that it is simply what is left, with the sign the other way round.
+  #
+  # ** IT IS THE SAME FIGURE `#over?` READ, PER SHAPE, AND IT WAS NOT (Task 1's concern 5). ** This
+  # was `-raw_rate` for every shape while `#over?` above asks `walk.raw` on the two accruing ones —
+  # so on a building or dated rule the predicate and the amount described DIFFERENT excesses, and
+  # Home's row printed one after firing on the other. Measured on a $1,000-a-period building rule
+  # holding $1,000 from an earlier period and spending $1,600 this one: the walk's `raw` is
+  # `1,000 + 1,000 − 1,600` = **$400**, which is not negative and does not read over; `raw_rate` is
+  # `1,000 − 1,600` = **−$600**, so the old reader answered "over by $600.00" about a fund that was
+  # $400 in hand. The two now split on `#rate?` exactly as `#over?` does, which is what makes "over
+  # by $X" the amount of the thing the label fired on.
+  #
+  # THE RATE ARM IS UNCHANGED, and `EntryImpactPresenter#pre_clamp_claim` still reads `#raw_rate`
+  # directly for its own (different) question — what the period's arithmetic was before the clamp.
+  def over_by = rate? ? -raw_rate : -walk.raw
 
   # THE OCCURRENCE THIS RULE IS CURRENTLY SAVING FOR, or nil where there is no deadline to save
   # toward. It ROLLS ON PAYMENT and not on the calendar — `BudgetCalculator#due_date`'s rule, kept

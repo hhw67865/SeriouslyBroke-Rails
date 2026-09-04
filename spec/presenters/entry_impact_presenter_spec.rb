@@ -15,7 +15,7 @@ require "rails_helper"
 # same $300-a-period rule, the same $185 left — re-derived from §3's formulas rather than carried:
 #
 #   * `$240 held` became `$300 a period with $60 of it spent` — `claim = max(0, 300 − 60)`.
-#   * `$600 in a goal` became `a $600-a-period rule on a $2,400 target, one period walked` —
+#   * `$600 in a fund` became `a $600-a-period rule on a $2,400 target, one period walked` —
 #     `built_up = min(0 + 600, 2400)`.
 #   * `$600 held against a $300 claim` became `$300 a period with a +$300 adjustment` —
 #     `claim = max(0, 300 + 300 − 0)`, which is §3.3's delta doing what an allocation used to.
@@ -27,10 +27,10 @@ require "rails_helper"
 #     `#balance` has no negative to sign. CONVERTED rather than dropped: "never writes a negative
 #     figure at all" asserts the clamp in its place, on the same overspent fixture.
 #   * "is still a goal once a refill rule fills it" — it planted a goal with NO rule and then added
-#     one, to show the classification did not change. A goal with no rule claims nothing at all now
-#     (every claim comes from a rule, §3.3), so the two halves are no longer one category's before
-#     and after. Both facts survive as their own examples: "a goal with no rule claims nothing" and
-#     "is a goal on the one predicate every screen now asks".
+#     one, to show the classification did not change. A category with no rule claims nothing at all
+#     now (every claim comes from a rule, §3.3), and since rules-own-the-budget §5 it is not a fund
+#     either: the classifier IS the rule. Both facts survive as their own examples, "is not a fund
+#     while nothing builds up here" and "is a fund on the one reader every screen now asks".
 #
 # ── NEW, AND EACH PINS ONE HALF OF #balance's GIVE-BACK RULING (see that method's comment):
 #   "gives the whole entry back through the clamp when the envelope is overspent", "gives nothing
@@ -111,23 +111,21 @@ RSpec.describe EntryImpactPresenter do
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
-  # A CATEGORY SAVING TOWARD A FIGURE. `accrues:` is the per-period rule that feeds it — every claim
-  # comes from a rule (§3.3), so a goal with no rule is a goal with nothing in it, which is exactly
-  # what `accrues: 0` plants — a goal all the same, because the predicate is about the target.
+  # A CATEGORY WHOSE MONEY BUILDS UP, WITH THE FIGURE ON THE RULE (rules-own-the-budget spec §5).
+  # `accrues:` is the per-period rule that feeds it — every claim comes from a rule (§3.3).
   #
-  # ** THE FIGURE IS ON BOTH RECORDS, AND FOR THIS ONE TASK THAT IS THE HONEST FIXTURE. ** The WALK
-  # reads the rule (rules-own-the-budget spec §2.1): `carries_over` is what makes the money build up
-  # and `budgets.target_amount` is where it stops. This card's `#goal?` and `#goal_target` still read
-  # `Category#saving_toward_a_target?` and `categories.target_amount`, which the screens task moves —
-  # so the category keeps its copy until then and this helper writes the same number twice rather
-  # than pretending either reader has already moved.
-  def goal(name, target:, accrues: 0)
-    category = create(:category, :expense, user: user, name: name, funded_since: funded_since, target_amount: target)
+  # ** THE CATEGORY'S OWN `target_amount` IS NO LONGER WRITTEN, AND THAT IS THE POINT OF THIS TASK.
+  # ** The helper used to set the same number on both records because the card's `#goal?` and
+  # `#goal_target` read the CATEGORY while the walk read the rule. Both readers are the rule's now
+  # (`#building?`, `#building_target`), so a fixture still writing the column would let a reader
+  # that had quietly stayed behind go on passing — and the column is dropped by Task 4 anyway.
+  def fund(name, target:, accrues: 0)
+    category = create(:category, :expense, user: user, name: name, funded_since: funded_since)
     building(category, accrues, target: target) if accrues.positive?
     category
   end
 
-  # THE RULE A GOAL ACCRUES BY: per-period, unspent money builds up, capped at the goal's figure.
+  # THE RULE A FUND ACCRUES BY: per-period, unspent money builds up, capped at the rule's figure.
   def building(category, amount, target:)
     create(:budget, :capped, category: category, amount: amount, target_amount: target, created_at: born)
   end
@@ -409,13 +407,13 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.figures?).to be(false)
     end
 
-    # AN EXPENSE ALREADY COUNTED AGAINST A GOAL, re-read on the edit form. Spending from a goal is
-    # still spending against a goal, and the give-back works the same way there.
+    # AN EXPENSE ALREADY COUNTED AGAINST A FUND, re-read on the edit form. Spending from a fund is
+    # still spending against a fund, and the give-back works the same way there.
     #
     # PLANTED: a $600-a-period rule on a $2,400 target, born as the period opened, so the walk
     # visits ONE period — `built_up = min(0 + 600, 2400) − 150` = $450. Without this entry: $600.
-    it "gives back an expense already counted against a goal rather than spending it twice", :aggregate_failures do
-      vacation = goal("Vacation", target: 2_400, accrues: 600)
+    it "gives back an expense already counted against a fund rather than spending it twice", :aggregate_failures do
+      vacation = fund("Vacation", target: 2_400, accrues: 600)
       spent = spend(vacation, 150)
 
       impact = present(vacation, amount: "150", entry: spent)
@@ -510,9 +508,9 @@ RSpec.describe EntryImpactPresenter do
     #   Feb 20–…  planned min(600, gap 150) = 150 · accrued min(450 + 150, 600) = 600 · spent 0 → 600
     #
     # The fund has refilled to its target, so giving the old $150 back would print $750 of a $600
-    # goal. The ceiling is what the rules could hold at most, and it is $600.
+    # fund. The ceiling is what the rules could hold at most, and it is $600.
     it "caps the give-back at what the rules could hold", :aggregate_failures do
-      vacation = goal("Vacation", target: 600, accrues: 600)
+      vacation = fund("Vacation", target: 600, accrues: 600)
       spent = spend(vacation, 150)
       later = Date.new(2026, 2, 20)
 
@@ -534,7 +532,7 @@ RSpec.describe EntryImpactPresenter do
     # afford this", understating a fund already spent past zero is the safe direction, and the
     # alternative — adding the $750 back to a zero — would offer $750 that is provably not there.
     it "gives nothing back when an accruing rule is spent past what it had", :aggregate_failures do
-      vacation = goal("Vacation", target: 600, accrues: 600)
+      vacation = fund("Vacation", target: 600, accrues: 600)
       overdrew = spend(vacation, 750)
 
       impact = present(vacation, amount: "750", entry: overdrew)
@@ -659,106 +657,141 @@ RSpec.describe EntryImpactPresenter do
     end
   end
 
-  describe "a savings goal" do
-    # A GOAL IS `Category#saving_toward_a_target?` — a holder with a figure to reach — and since
-    # Task 4 that is the ONLY goal predicate in the app. Its rival `#savings?` additionally required
-    # the category to carry no rule, which under §3.3 selects exactly the goals that claim nothing;
-    # it is deleted, and this card, Home, the categories page and the savings strip all ask this one.
+  describe "a fund" do
+    # ** A FUND IS `Category#building_rule` (rules-own-the-budget spec §5/§7): the item-less rule
+    # whose unspent money carries. ** It replaces `Category#saving_toward_a_target?`, which read a
+    # figure on the CATEGORY — a column no claim formula consults, since `ClaimCalculator#shape`
+    # answers `:building` off the rule's own `carries_over` and caps at the rule's `target_amount`.
+    # The card, the categories index, the categories page and the dashboard's savings strip all read
+    # the same rule, so a fund is a fund on every one of them.
     #
-    # $600 of a $2,400 target: a $600-a-period rule born as the period opened, one period walked.
-    let(:vacation) { goal("Vacation", target: 2_400, accrues: 600) }
+    # $600 of a $2,400 target: a $600-a-period building rule born as the period opened, one period
+    # walked.
+    let(:vacation) { fund("Vacation", target: 2_400, accrues: 600) }
 
     before { vacation }
 
-    it "takes the goal shape and measures against the target", :aggregate_failures do
+    it "takes the fund shape and measures against the rule's target", :aggregate_failures do
       impact = present(vacation, amount: "150")
 
-      expect(impact.goal?).to be(true)
-      expect(impact.noun).to eq("goal")
+      expect(impact.building?).to be(true)
+      expect(impact.noun).to eq("fund")
       expect(impact.balance).to eq(BigDecimal("600"))
       expect(impact.balance_after).to eq(BigDecimal("450"))
-      expect(impact.goal_target).to eq(BigDecimal("2400"))
+      expect(impact.building_target).to eq(BigDecimal("2400"))
     end
 
     it "measures its bar against the target, which no rule could ever be", :aggregate_failures do
       # 450 of 2,400. Measured against the $600-a-period rule instead, the bar would read 75% of a
-      # goal that is a quarter full — which is the defect the target arm exists to fix.
+      # fund that is a quarter full — which is the defect the target arm exists to fix.
       expect(present(vacation, amount: "150").denominator).to eq(BigDecimal("2400"))
       expect(present(vacation, amount: "150").bar_percent).to eq(19)
       expect(present(vacation, amount: "150").bar?).to be(true)
     end
 
-    # BOTH DIRECTIONS ON THE SURVIVING ARM: a goal empties, and it says so in red once it is empty.
+    # BOTH DIRECTIONS ON THE SURVIVING ARM: a fund empties, and it says so in red once it is empty.
     it "goes negative and reports the overdraw like any other category", :aggregate_failures do
       impact = present(vacation, amount: "900")
 
-      expect(impact.goal?).to be(true)
+      expect(impact.building?).to be(true)
       expect(impact.balance_after).to eq(BigDecimal("-300"))
       expect(impact.overdrawn?).to be(true)
     end
 
-    # ** THE CARRIED INCONSISTENCY, REVERSED IN TASK 7 AND NOW STRUCTURALLY GONE. ** This card once
-    # asked `Category#savings?` — holder + target + NO RULE — so a goal a rate rule also refills
-    # drew the ENVELOPE bar here while Home called the same category a goal. One category, two
-    # screens, two answers, and the bar was the visible half.
-    #
-    # `#savings?` IS DELETED (Task 4): under §3.3 every claim comes from a rule, so a goal with money
-    # in it HAS one by construction and the third clause selected exactly the goals that claim
-    # nothing. What is left is `Category#saving_toward_a_target?` — a funding start and a figure to
-    # reach — which this card, Home, the categories page and the dashboard's savings strip now ALL
-    # ask, so the inconsistency has no second predicate left to be an inconsistency with.
-    it "is a goal on the one predicate every screen now asks", :aggregate_failures do
-      expect(vacation.reload.saving_toward_a_target?).to be(true)
-      expect(present(vacation).goal?).to be(true)
-      expect(present(vacation).goal_target).to eq(BigDecimal("2400"))
+    # ** THE CARD READS THE RULE THE WALK READS, AND UNTIL THIS TASK IT DID NOT. ** The claim came
+    # from `carries_over` + the rule's `target_amount` while the NOUN and the BAR came from
+    # `categories.target_amount` — two records, one question, and after Task 4 drops the column the
+    # second answer would have been nil for every fund in the app. Asserted here as the identity it
+    # is: the rule the category hands back IS the rule the figures are computed from.
+    it "is a fund on the one reader every screen now asks", :aggregate_failures do
+      expect(vacation.reload.building_rule).to eq(vacation.budgets.sole)
+      expect(present(vacation).building?).to be(true)
+      expect(present(vacation).building_target).to eq(BigDecimal("2400"))
       expect(present(vacation).denominator).to eq(BigDecimal("2400"))
     end
 
-    # ** AND THE OTHER HALF OF THE SAME FACT. ** A goal with NO RULE claims nothing at all (§3.3:
-    # every claim comes from a rule), so the card has no figures to print for it.
-    #
-    # ** IT GETS THE HONEST CARD SINCE FIX ROUND 1 (M2), AND THAT IS A CHANGE FROM A GOAL WITH AN
-    # EMPTY BAR. ** `#unbudgeted?` used to be `holding.nil?`, so this shape drew a goal card reading
-    # `$0.00 → −$150.00 of $5,000.00 goal` in danger red the moment anything was typed — a fund
-    # going "over" that nothing had ever claimed. Home calls exactly this category unbudgeted, and
-    # the two now agree. `#saving_toward_a_target?` is UNCHANGED and still true: the display
-    # predicate is about the target, which is exactly why the deleted `#savings?` could not be the
-    # rendering question — but `#figures?` is what decides whether any of it is drawn.
-    it "claims nothing at all while no rule feeds it", :aggregate_failures do
-      empty = goal("Someday", target: 5_000)
+    # ** AN UNCAPPED FUND IS STILL A FUND (rules-own-the-budget spec §2.1 row 2), AND THAT IS THE
+    # SHAPE THE OLD PREDICATE COULD NOT SEE. ** `#saving_toward_a_target?` was a question about a
+    # FIGURE, so an emergency fund that names none read as an envelope: the noun was wrong and the
+    # trailing phrase said "left" over money the rule carries from period to period. The noun is now
+    # a question about the SHAPE and only the denominator falls back — to `Σ standing_ask`, the
+    # $600-a-period rule, which is the same figure an envelope's bar uses and the only honest one
+    # left when there is no ceiling.
+    it "keeps the fund shape when the rule names no figure", :aggregate_failures do
+      vacation.budgets.sole.update!(target_amount: nil)
 
-      expect(empty.saving_toward_a_target?).to be(true)
-      expect(empty.budgeted?).to be(false)
+      expect(present(vacation.reload).building?).to be(true)
+      expect(present(vacation.reload).noun).to eq("fund")
+      expect(present(vacation.reload).building_target).to be_nil
+      expect(present(vacation.reload).denominator).to eq(BigDecimal("600"))
+    end
+
+    # ** A CATEGORY WITH NO RULE AT ALL IS NOT A FUND, AND IT NEVER HAD BEEN ONE (fix round 1 — M2).
+    # ** It claims nothing (§3.3: every claim comes from a rule), so the card has no figures to
+    # print — and now it has no NOUN either, which is the change: under the old predicate a figure
+    # on the category made this a "goal" whose card was suppressed by `#figures?` alone. Home calls
+    # exactly this category unbudgeted, and the two agree at both readers.
+    it "is not a fund while nothing builds up here", :aggregate_failures do
+      empty = fund("Someday", target: 5_000)
+
+      expect(empty.building_rule).to be_nil
+      expect(present(empty).building?).to be(false)
       expect(present(empty).balance).to eq(0)
       expect(present(empty).unbudgeted?).to be(true)
       expect(present(empty).figures?).to be(false)
       expect(present(empty, amount: "150").overdrawn?).to be(false)
     end
 
-    it "is not a goal without a target, and falls back to the category's own rule", :aggregate_failures do
-      vacation.update!(target_amount: nil)
+    # ** THE FUND FED ONLY BY HAND (§2.1 row 4) IS A FUND FROM THE DAY ITS RULE IS WRITTEN. ** Amount
+    # zero, capped at $5,000: it accrues only by positive adjustments, so its claim is $0.00 — and
+    # unlike the ruleless category above it HAS a rule, so the card draws figures, a noun and an
+    # empty track against a real ceiling. This is the row that used to be invisible: `#savings?`
+    # required no rule and `#saving_toward_a_target?` required a category figure, and the shape that
+    # actually holds the money satisfied neither.
+    it "is a fund from the moment a hand-fed rule names it", :aggregate_failures do
+      someday = create(:category, :expense, user: user, name: "Someday", funded_since: funded_since)
+      create(:budget, :hand_fed, category: someday, target_amount: 5_000, created_at: born)
 
-      expect(present(vacation).goal?).to be(false)
-      expect(present(vacation).goal_target).to be_nil
-      expect(present(vacation).denominator).to eq(BigDecimal("600"))
+      impact = present(someday.reload)
+
+      expect(impact.building?).to be(true)
+      expect(impact.building_target).to eq(BigDecimal("5000"))
+      expect(impact.balance).to eq(0)
+      expect(impact.figures?).to be(true)
+      expect(impact.bar?).to be(true)
+      expect(impact.bar_percent).to eq(0)
     end
 
-    it "is not a goal on an ordinary spending category", :aggregate_failures do
+    # THE OTHER DIRECTION ON THE SHAPE: the same money, the same category, a rule that RESETS. It is
+    # an envelope, and the card says "left".
+    it "is not a fund where the rule's unspent money resets", :aggregate_failures do
       rate(groceries, 300)
 
-      expect(present(groceries).goal?).to be(false)
-      expect(present(groceries).goal_target).to be_nil
+      expect(present(groceries).building?).to be(false)
+      expect(present(groceries).noun).to eq("envelope")
+      expect(present(groceries).building_target).to be_nil
     end
 
-    # A TARGET ON A CATEGORY THAT HOLDS NOTHING IS NOT A GOAL either, because there is nothing for
-    # it to be progress toward — `Category#saving_toward_a_target?` carries `holder?` for exactly
-    # this reason, and the card falls to the honest arm rather than drawing a bar against a target
-    # no rule can reach.
-    it "is not a goal on a category that has never been funded", :aggregate_failures do
-      never = create(:category, :expense, user: user, name: "Never", target_amount: 5_000)
+    # AN ITEM-BACKED BUILDING RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money set
+    # aside for one item does not make the whole category a fund, which is why
+    # `Category#building_rule` reads the ITEM-LESS rule.
+    it "is not a fund where the only building rule pays one item", :aggregate_failures do
+      item = create(:item, category: groceries)
+      create(:budget, :capped, category: groceries, item: item, amount: 100, target_amount: 900, created_at: born)
 
-      expect(present(never).goal?).to be(false)
-      expect(present(never).unbudgeted?).to be(true)
+      expect(present(groceries.reload).building?).to be(false)
+      expect(present(groceries.reload).noun).to eq("envelope")
+    end
+
+    # A BUILDING RULE ON A CATEGORY THAT HOLDS NOTHING IS NOT A FUND ON THIS CARD either, because
+    # `#holding` is nil — no receipt on that day can move any claim — and the card falls to the
+    # honest arm rather than drawing a bar against a target nothing counts toward.
+    it "is not a fund on a category that has never been funded", :aggregate_failures do
+      never = create(:category, :expense, user: user, name: "Never")
+      create(:budget, :capped, category: never, amount: 100, target_amount: 5_000, created_at: born)
+
+      expect(present(never.reload).building?).to be(false)
+      expect(present(never.reload).unbudgeted?).to be(true)
     end
   end
 
@@ -804,7 +837,7 @@ RSpec.describe EntryImpactPresenter do
     # THE READERS THE VIEW ASKS, in the order `entries/_impact.html.erb` asks them.
     def read_the_card(impact)
       impact.render? && impact.unbudgeted?
-      impact.goal? && impact.noun
+      impact.building? && impact.noun
       [
         impact.balance,
         impact.balance_after,
@@ -855,7 +888,7 @@ RSpec.describe EntryImpactPresenter do
     # query for the same rule, on the same afternoon, for the same figure. FIVE statements before the
     # fix and four after, which is the same four the ordinary edit above costs.
     it "reads the claim once where an over-fulfilled accruing rule closes the give-back", :aggregate_failures do
-      vacation = goal("Vacation", target: 600, accrues: 600)
+      vacation = fund("Vacation", target: 600, accrues: 600)
       overdrew = found(spend(vacation, 750))
       new_card = present(fresh(vacation), amount: "750")
       edit_card = present(fresh(vacation), amount: "750", entry: overdrew)

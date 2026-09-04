@@ -24,8 +24,16 @@
   <% if @presenter.no_rules? %>
     <%= render "empty" %>
   <% else %>
-    <%# The give-way order itself: category by category, top to bottom, exactly as the shortfall
-        spends. One list — the account bands are gone with the per-account waterfall. %>
+    <%# ** THE TYPE OVERVIEW, ABOVE THE GROUPS (rules-own-the-budget spec §3). ** What each kind of
+        rule asks of a period, before the list of which rules they are — the one thing on this page
+        that is about the SHAPE of the budget rather than about a rule. Inside the `no_rules?`
+        branch's else, because a split of nothing has nothing to say; the structural check below is
+        the block that deliberately renders for a user with no rules at all. %>
+    <%= render "type_overview", overview: @presenter.type_overview %>
+
+    <%# The give-way order itself: category by category, and the shortfall walks these cards from
+        the BOTTOM up (see `_fill_order`). One list — the account bands are gone with the
+        per-account waterfall. %>
     <% groups = @presenter.category_groups %>
     <%= render "fill_order", groups: groups if groups.any? %>
 

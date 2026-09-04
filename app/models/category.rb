@@ -313,8 +313,8 @@ class Category < ApplicationRecord
   # "no rate" is spelled for a goal fed only by set-asides — so `budgets.none?` selected exactly the
   # goals that claim nothing, and `DropTheDistribution` mints that zero-amount rule for every goal
   # in a real database that lacked one. Its last caller, the dashboard's savings strip, rendered
-  # NOTHING on migrated data; it asks `#saving_toward_a_target?` now, which is the same question
-  # without the clause that inverted.
+  # NOTHING on migrated data; it asks `#building_rule` now, which is the same question asked of the
+  # record that answers it — the rule, whose `carries_over` IS "this money builds up".
 
   # THE RUBY MIRROR OF `CategoryLedger::ENTRY_CATEGORY_ID`, and the ONLY one (Task 2's global
   # constraint): every other reader in this app asks the SQL. Spending counts against this category
@@ -377,24 +377,36 @@ class Category < ApplicationRecord
     [next_due_on.present? ? 0 : 1, next_due_on || NEVER_DUE, -amount.to_d, id]
   end
 
-  # ** IS THIS ROW A GOAL — THE DISPLAY QUESTION (computed-claims spec §3.4). **
-  # `HoldingCalculator#saving_toward_a_target?` re-homed, and it was always this expression: a holder
-  # with a figure to reach. It REPLACED `#savings?`, which additionally required the category to
-  # carry NO rule — a goal the user also refills at a rate (the demo's Retirement Supplement) is
-  # still a goal to look at, and under §3.3 a goal with money in it always HAS a rule, so that
-  # clause selected exactly the goals claiming nothing. See its tombstone above.
+  # ** THE RULE THAT BUILDS THIS CATEGORY'S MONEY UP, OR NIL (rules-own-the-budget spec §5/§7). **
+  # It REPLACES `#saving_toward_a_target?` (`holder? && target_amount.present?`), which read a column
+  # no claim formula consults any more: `ClaimCalculator#shape` answers `:building` off the RULE's
+  # own `carries_over`, and the figure a fund is aiming at is that rule's `target_amount`. A category
+  # asked "what are you saving toward" has to ask the rule, or the four screens that draw a fund
+  # would be reading a number nothing computes.
   #
-  # THE FOUR SCREENS THAT ASK IT — the categories index card, the categories page's holdings card,
-  # the entry form's impact card and the dashboard's savings strip — ask it here, so a rule-bearing
-  # goal is a goal on every one of them; this is that question asked of the category a screen is
-  # drawing.
+  # ** THE ITEM-LESS RULE, WHICH IS THE CATEGORY'S OWN LANE (§3.1's partition). ** An item-backed
+  # rule speaks for one item's spending — a fund carved out for the phone handset is not what the
+  # CATEGORY is building up — and `Budget#category_may_hold_one_item_less_rule` allows exactly one
+  # item-less rule, so this answers a single record rather than picking one of a set.
   #
-  # ** THE COLUMN THIS READS IS ON ITS WAY OUT (rules-own-the-budget spec §5/§7). ** A goal is a
-  # BUILDING RULE with a target now, and `ClaimCalculator#shape` no longer consults this record at
-  # all — it answers `:building` off the rule's own `carries_over`. The four screens above still ask
-  # here, so the column and this reader survive until the screens task moves them; nothing in the
-  # claim formulas reads either any more.
-  def saving_toward_a_target? = holder? && target_amount.present?
+  # NIL IS THE ORDINARY ANSWER, AND `#target_amount` ON THE RESULT IS NIL AGAIN FOR AN UNCAPPED
+  # FUND (§2.1 row 2) — two different nils and each screen asks both questions: is anything building
+  # up here, and is there a ceiling to draw a bar against. `ClaimCalculator#capped?` is the rule-level
+  # spelling of the second.
+  #
+  # `#holder?` IS NOT PART OF IT, and that is the one clause `#saving_toward_a_target?` had that
+  # does not survive: whether a category has started COUNTING is a fact about `funded_since` that
+  # every caller already asks where it matters (the index card and the holdings card both branch on
+  # `#holder?` before they reach here). Folding it in would make one predicate answer two questions
+  # and hide the second.
+  #
+  # `detect` OVER THE ASSOCIATION rather than a `where`, and the TEST is `Budget
+  # #builds_up_the_category?` rather than two clauses written out here — because a second population
+  # asks the same question. `CategoryBudgetPresenter` finds the rule among the ones its `ClaimLedger`
+  # has ALREADY loaded for the whole page: going through this reader there would load `budgets` once
+  # per card on the categories index, which is exactly the per-row cost that ledger exists to avoid.
+  # One spelling of the test, two ways in.
+  def building_rule = budgets.detect(&:builds_up_the_category?)
 
   # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round
   # 1 — M2). ** Every claim comes from a rule (§3.3), so "budgeted" is exactly "carries a rule": a

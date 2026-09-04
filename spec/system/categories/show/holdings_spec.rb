@@ -141,8 +141,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       expect(find("[data-figure='funded-since']").text).to eq(groceries.funded_since.strftime("%b %-d, %Y"))
     end
 
-    it "draws no goal bar on an envelope" do
-      expect(card).to have_no_css("[data-goal-progress]")
+    it "draws no fund bar on an envelope" do
+      expect(card).to have_no_css("[data-building-progress]")
     end
   end
 
@@ -280,17 +280,18 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
   end
 
   # ------------------------------------------------------------------------------------------
-  # The goal arm
+  # The fund arm
   # ------------------------------------------------------------------------------------------
 
-  describe "a category saving toward a target", :aggregate_failures do
-    # A GOAL IS A BUILDING RULE WITH A TARGET (rules-own-the-budget spec §7): `ClaimCalculator#shape`
-    # reads `:building` off the RULE's own `carries_over`, which is the branch that makes the money
-    # CARRY rather than reset, and `budgets.target_amount` is where it stops. The CATEGORY keeps its
-    # copy of the figure because this card's "Goal" heading and its progress bar still read
-    # `Category#saving_toward_a_target?`, which the screens task moves.
-    def goal(name, target:, rate_amount:)
-      holder(name, target_amount: target).tap do |category|
+  describe "a category whose money builds up", :aggregate_failures do
+    # ** A FUND IS A BUILDING RULE (rules-own-the-budget spec §5/§7), AND THE CATEGORY NAMES NOTHING.
+    # ** `ClaimCalculator#shape` reads `:building` off the RULE's own `carries_over` — the branch
+    # that makes money CARRY rather than reset — and `budgets.target_amount` is where it stops. This
+    # card's heading and its bar read `Category#building_rule` now, so the fixture stops writing the
+    # category's copy of the figure: a fixture that still wrote it would let a reader that had
+    # quietly stayed behind go on passing, and Task 4 drops the column in any case.
+    def fund(name, target:, rate_amount:)
+      holder(name).tap do |category|
         create(:budget, :capped, category: category, amount: rate_amount, target_amount: target)
       end
     end
@@ -300,59 +301,97 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # **$500.00**, nothing is spent, so `built_up` = $500.00 and the claim is that. The bar is
     # `(500 ÷ 2,000 × 100).round` = **25** — the same 25% the moved-money version of this example
     # asserted over a $500 allocation, which is the point of keeping the figure.
-    it "calls it a goal and states its built-up against the target" do
-      visit category_path(goal("Vacation", target: 2_000, rate_amount: 500))
+    it "calls it a fund and states its built-up against the rule's target" do
+      visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
-      within(card) do
-        expect(page).to have_content("Goal")
-        expect(page).to have_no_content("Envelope")
-      end
+      within(card) { expect(page).to have_content("Fund") }
+      expect(card).to have_no_content("Envelope")
+      expect(card).to have_no_content("Goal")
       expect(find("[data-figure='claim']").text).to eq("$500.00")
-      within("[data-goal-progress]") do
+      within("[data-building-progress]") do
         expect(page).to have_content("25% complete")
         expect(page).to have_content("Target: $2,000.00")
       end
     end
 
+    # ** AN UNCAPPED FUND IS STILL A FUND, AND IT DRAWS NO TRACK (rules-own-the-budget spec §2.1 row
+    # 2; §5). ** The old classifier was a question about a FIGURE, so an emergency fund that names
+    # none read as an envelope on this card — the wrong heading over money that carries. The heading
+    # is a question about the SHAPE now; what the missing figure takes away is the BAR, because there
+    # is nothing for one to be a fraction of. Both halves asserted, so a fix that printed a full or
+    # an empty track against $0.00 would fail here.
+    #
+    # PLANTED: a $500-a-period uncapped building rule, funded a year back but written today, so the
+    # walk visits one period and plans its plain rate — `built_up` = **$500.00**, with no `gap` to
+    # bound it.
+    it "calls an uncapped fund a fund and draws no track at all" do
+      emergency = holder("Emergency")
+      create(:budget, :building, category: emergency, amount: 500)
+
+      visit category_path(emergency)
+
+      within(card) do
+        expect(page).to have_content("Fund")
+        expect(page).to have_no_content("Envelope")
+      end
+      expect(find("[data-figure='claim']").text).to eq("$500.00")
+      expect(page).to have_no_css("[data-building-progress]")
+    end
+
     # ** THE ROW READS THE GOAL AS A FUND, NEVER AS MONEY TO SPEND. ** The figure is
     # `built up of target` and the schedule is the rate the goal is filling at; a dateless goal has
     # no due date, so `claim_schedule` drops that half and prints the per-period share alone.
-    it "keeps a goal's built-up against its target, with the rate it fills at" do
-      visit category_path(goal("Vacation", target: 2_000, rate_amount: 500))
+    it "keeps a fund's built-up against its target, with the rate it fills at" do
+      visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
       within(rule_row("Per period")) do
         expect(page).to have_css("[data-rule-figure]", text: "$500.00 built up of $2,000.00")
-        expect(page).to have_css("[data-rule-schedule]", text: "$500.00 per period")
+        expect(page).to have_css("[data-rule-schedule]", text: "+$500.00 per period")
         expect(page).to have_no_content("due")
       end
     end
 
-    # ** THE CARRIED INCONSISTENCY, NOW RESOLVED STRUCTURALLY (Task 7's ruling, re-homed on the
-    # model). ** A goal the user ALSO refills at a rate — the demo's Retirement Supplement — was
-    # `Category#savings?` FALSE, because that predicate additionally required the category to carry
-    # NO rule; the entry form's impact card therefore drew it as an envelope while Home called it
-    # saving. `#savings?` is DELETED with the computed model, and the reason is the model's own: every
-    # claim comes from a rule (§3.3), so a goal with no rule accrues nothing and "a goal is a category
-    # with no rule" has become a description of a goal that does not work. There is one predicate
-    # left, `Category#saving_toward_a_target?`, which is what all three screens ask — so the two
-    # readings that could disagree are now one reading, and the assertion that used to pin the
-    # disagreement (`expect(retirement).not_to be_savings`) has nothing left to say.
+    # ** THE CARRIED INCONSISTENCY, NOW RESOLVED STRUCTURALLY. ** A goal the user ALSO refills at a
+    # rate — the demo's Retirement Supplement — was `Category#savings?` FALSE, because that predicate
+    # additionally required the category to carry NO rule; the entry form's impact card therefore
+    # drew it as an envelope while Home called it saving. Every claim comes from a rule (§3.3), so
+    # "a goal is a category with no rule" had become a description of a goal that does not work, and
+    # the successor reads the rule outright: `Category#building_rule` is what all three screens ask,
+    # so the two readings that could disagree are one reading.
     #
     # PLANTED: `min(rate, gap)` = `min(150, 100,000)` = **$150.00** after one period, which is
     # `(150 ÷ 100,000 × 100).round` = **0**% — a bar drawn at zero, which is exactly the row that
     # would have been unassertable if the percentage rode on the fill rather than on the track.
-    it "is still a goal when a rate rule fills it" do
-      retirement = goal("Retirement", target: 100_000, rate_amount: 150)
+    it "is still a fund when a rate fills it" do
+      retirement = fund("Retirement", target: 100_000, rate_amount: 150)
 
       visit category_path(retirement)
 
       within(card) do
-        expect(page).to have_content("Goal")
+        expect(page).to have_content("Fund")
         expect(page).to have_no_content("Envelope")
       end
       expect(find("[data-figure='claim']").text).to eq("$150.00")
-      within("[data-goal-progress]") { expect(page).to have_content("0% complete") }
-      expect(retirement).to be_saving_toward_a_target
+      within("[data-building-progress]") { expect(page).to have_content("0% complete") }
+      expect(retirement.building_rule).to eq(retirement.budgets.sole)
+    end
+
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD PREDICATE GOT WRONG. ** A figure on the
+    # CATEGORY with a rule whose money RESETS is an envelope somebody set a ceiling on: nothing about
+    # it builds up, and no claim formula has read that column since the shapes moved onto the rule.
+    # It got the "Goal" heading and a progress bar; it gets neither now.
+    it "calls a category with a figure of its own and a resetting rule an envelope" do
+      groceries = holder("Groceries")
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+      groceries.update!(target_amount: 5_000)
+
+      visit category_path(groceries)
+
+      within(card) do
+        expect(page).to have_content("Envelope")
+        expect(page).to have_no_content("Fund")
+      end
+      expect(page).to have_no_css("[data-building-progress]")
     end
   end
 
@@ -404,7 +443,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       visit category_path(streaming)
 
       expect(card).to have_no_css("[data-figure='claim']")
-      expect(card).to have_no_css("[data-goal-progress]")
+      expect(card).to have_no_css("[data-building-progress]")
       expect(card).to have_no_css("[data-holdings-rules]")
       within(card) { expect(page).to have_no_content("Claiming since") }
     end

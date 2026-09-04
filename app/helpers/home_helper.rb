@@ -44,9 +44,8 @@ module HomeHelper
   # ** AN UNCAPPED FUND HAS NOTHING TO BE "OF" (rules-own-the-budget spec §2.1 row 2; fix round 1 —
   # MED). ** A building rule that names no target has `ClaimCalculator#target` NIL — there is no
   # ceiling — and this printed `$450.00 built up of ` with an empty figure after a dangling
-  # preposition. The sentence for that shape is the built-up alone; §5's fuller copy ("built up $X ·
-  # +$rate per period") is the screens task's, and the `· $300.00 per period` half is already
-  # supplied by `#claim_schedule` under the same row.
+  # preposition. The sentence for that shape is the built-up alone, and §5's second half
+  # (`· +$300.00 per period`) comes from `#claim_schedule` under the same row.
   def claim_figure(line)
     return "#{number_to_currency(line.spent)} of #{number_to_currency(line.accrued)}" if line.rate?
     return "#{number_to_currency(line.built_up)} built up" unless line.capped?
@@ -69,9 +68,36 @@ module HomeHelper
   # exactly the row a user with an unpaid bill needs. nil is returned for a RATE rule only, which has
   # neither half: use-it-or-lose-it accrues toward nothing and is due on no day. The view renders no
   # element at all where this is nil.
+  #
+  # ** A BUILDING RULE HAS NO DATE AT ALL, SO IT SAYS WHAT IT ADDS (rules-own-the-budget spec §5). **
+  # `+$300.00 per period`, and the two halves of that are both deliberate. The "next due" clause is
+  # only ever a DATED rule's — `Budget#build_up_must_be_valid` refuses `carries_over` beside an
+  # `anchor_date`, so `#next_due_on` is nil for this shape and the clause could not render anyway;
+  # stating it here is what keeps the sentence a fact about the shape rather than an accident of a
+  # nil. The LEADING PLUS is the difference a reader needs between the two accruing rows: a dated
+  # rule's `$200.00 per period` is a share of a fixed bill that stops when the bill is whole, and a
+  # building rule's is money added every period for as long as the rule lives (uncapped) or until
+  # the cap is reached. The figure above it already says where it has got to.
   def claim_schedule(line)
     return nil if line.rate?
+    return building_schedule(line) if line.building?
 
+    dated_schedule(line)
+  end
+
+  # THE BUILDING ROW'S WHOLE CLAUSE: what this period adds, and nothing else. Nil for a capped fund
+  # already at its cap, whose per-period share is zero — the figure above it says it is whole, and
+  # `+$0.00 per period` under that would be a line reporting nothing.
+  def building_schedule(line)
+    return nil unless line.per_period.positive?
+
+    "+#{number_to_currency(line.per_period)} per period"
+  end
+
+  # THE DATED ROW'S: the occurrence, in the tense the date's own side of `today` gives it, and the
+  # catch-up share where there is still one to ask for. Either half may drop; both dropping is the
+  # settled one-off, which renders no element at all.
+  def dated_schedule(line)
     [
       line.next_due_on && "#{line.overdue? ? "was due" : "next due"} #{line.next_due_on.strftime("%b %-d")}",
       line.per_period.positive? && "#{number_to_currency(line.per_period)} per period"
@@ -122,15 +148,12 @@ module HomeHelper
     end
   end
 
-  # Both forms of the seventh state read as accumulation; NEITHER may read as money to spend,
-  # which is the entire reason the state exists (principle 2). Progress against the goal when
-  # there is one, because "$424 of $2,400" answers the question a saver is actually asking;
-  # "saved" when there is no target to measure against, since "$424 of $0.00" answers nothing.
-  def saving_label(status)
-    return "#{number_to_currency(status.amount)} saved" unless status.target.to_d.positive?
-
-    "#{number_to_currency(status.amount)} of #{number_to_currency(status.target)}"
-  end
+  # ── `#saving_label` IS DELETED (rules-own-the-budget spec §7), and it was the last of the status
+  # vocabulary standing. It read a `HoldingStatus` — a class deleted with the movements it described
+  # — and printed the accumulation state of MOVED money; `spec/helpers/home_helper_spec.rb`'s
+  # tombstone had already listed it among the twelve, so what survived was the method and not its
+  # caller. `#claim_figure` above is what says a fund's running total now, and it says it off a
+  # claim.
 
   # ── `#fix_button_label` AND `#fix_gap_sentence` ARE DELETED (computed-claims Task 3), with the
   # whole fix apparatus they labelled. A "fix" was an ALLOCATION — money moved from one category, or

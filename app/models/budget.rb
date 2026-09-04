@@ -175,6 +175,19 @@ class Budget < ApplicationRecord
   # `today:` default walks `category.user`, which every caller of this method already preloads.
   def claim_shape = claim_calculator.shape
 
+  # ** IS THIS THE RULE THAT BUILDS THE WHOLE CATEGORY'S MONEY UP (rules-own-the-budget spec §5)? **
+  # The test behind `Category#building_rule`, spelled HERE because it is a fact about a rule and
+  # because two populations ask it: the category's own association, and the set a `ClaimLedger` has
+  # already loaded for a whole page (`CategoryBudgetPresenter#building_rule`, which must not cost a
+  # `budgets` statement per card on the categories index). One spelling, two callers.
+  #
+  # TWO CLAUSES AND NO THIRD. `carries_over` is what makes unspent money survive the boundary — the
+  # target is a CAP on that and may be absent (§2.1 row 2), so asking about it here would be the old
+  # `Category#saving_toward_a_target?` in a new place, blind to an emergency fund. `item_id.nil?` is
+  # §3.1's lane partition: an item-backed rule speaks for one item's spending, so a fund carved out
+  # for the phone handset is not the CATEGORY building up.
+  def builds_up_the_category? = item_id.nil? && carries_over?
+
   # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`
   # are three columns whose COMBINATION is the shape (§3.1), and reading the shape off them takes
   # a four-branch cascade in an order that is a hazard in itself — so the cascade lives once,

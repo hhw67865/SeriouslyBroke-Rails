@@ -56,8 +56,15 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expect(page).to have_no_content("% used")
     end
 
-    it "shows the savings strip with the goal's card" do
-      expect(page).to have_content("Savings Goals")
+    # ** THE BAND LISTS BUILDING RULES (rules-own-the-budget spec §5), AND ITS HEADING IS "Savings".
+    # ** "Savings Goals" named a kind of CATEGORY, and §7 retires the noun: what puts Emergency Fund
+    # here is its rule's `carries_over` — money that survives the period boundary — rather than a
+    # figure on the category record. The fixture's rule is the hand-fed shape (§2.1 row 4), so this
+    # also pins that a fund with no standing rate is on the band.
+    it "shows the savings strip with the fund's card", :aggregate_failures do
+      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings Goals")
+      expect(user.categories.find_by(name: "Emergency Fund").building_rule).to be_present
       within("[data-savings-strip]") { expect(page).to have_content("Emergency Fund") }
     end
 

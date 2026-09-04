@@ -97,9 +97,12 @@ RSpec.describe "Home Trouble", type: :system do
     )
   end
 
-  def envelope(name, amount, priority: 1)
+  # `type:` DEFAULTS TO `usage`, THE COLUMN'S OWN DEFAULT (rules-own-the-budget spec §6 step 3) — so
+  # every fixture written before rules had a type keeps the order it had, and an example that names
+  # one is saying so on purpose.
+  def envelope(name, amount, priority: 1, type: :usage)
     holder(name, priority: priority).tap do |category|
-      create(:budget, :per_period_rate, category: category, amount: amount)
+      create(:budget, :per_period_rate, category: category, amount: amount, rule_type: type)
     end
   end
 
@@ -190,6 +193,51 @@ RSpec.describe "Home Trouble", type: :system do
     # THE ORDER IS THE WALK'S, and asserting the list's text catches a strip that found the right two
     # claims by luck and printed them highest-priority-first.
     expect(find("[data-uncovered]").text).to match(/Fun.*Groceries/m)
+  end
+
+  # ** THE TYPE DECIDES BEFORE PRIORITY DOES (rules-own-the-budget spec §3), AND THE STRIP IS WHERE A
+  # USER MEETS IT. ** The same three rules and the same $260 shortfall as above, with the priorities
+  # INVERTED against the types: the choice rule is on priority 1 — the most protected category under
+  # the old reverse-priority walk — and the bill on priority 3. So the two orders disagree about
+  # every row, and this fixture answered `Rent short $260.00` before the type was read: the app
+  # naming the rent as the thing to go without.
+  #
+  # PLANTED, re-derived from §3.1: Fun $200, Groceries $400, Rent $1,000, nothing spent, Σ claims
+  # $1,600.00 against a $1,340 deposit → `unclaimed` −$260.00 and the shortfall $260.00. CHOICE goes
+  # whole ($200), USAGE is split at the remaining **$60.00**, and the BILL is never reached.
+  it "gives way by type before priority — choice whole, usage split, a bill never", :aggregate_failures do
+    deposit(1_340)
+    envelope("Fun", 200, priority: 1, type: :choice)
+    envelope("Groceries", 400, priority: 2, type: :usage)
+    envelope("Rent", 1_000, priority: 3, type: :bill)
+
+    visit root_path
+
+    expect(find("[data-shortfall-amount]")).to have_content("short $260.00")
+    expect(uncovered("Fun")).to have_content("nothing covers its $200.00")
+    expect(uncovered("Groceries")).to have_content("short $60.00 of $400.00")
+    expect(page).to have_no_css("[data-uncovered-claim='Rent']")
+    expect(find("[data-uncovered]").text).to match(/Fun.*Groceries/m)
+  end
+
+  # ** WITHIN ONE TYPE, PRIORITY STILL DECIDES AND STILL DECIDES BACKWARDS. ** Two CHOICE rules, so
+  # the type term ties and the category term does all the work: the one that would have been funded
+  # LAST goes without FIRST.
+  #
+  # PLANTED: Dining priority 1 and Hobbies priority 3, $300 a period each, against a $200 deposit.
+  # Σ claims $600.00 → `unclaimed` −$400.00, shortfall $400.00. Hobbies gives its whole $300 and
+  # Dining is short the remaining **$100.00**.
+  it "gives way in reverse priority order inside one type", :aggregate_failures do
+    deposit(200)
+    envelope("Dining", 300, priority: 1, type: :choice)
+    envelope("Hobbies", 300, priority: 3, type: :choice)
+
+    visit root_path
+
+    expect(find("[data-shortfall-amount]")).to have_content("short $400.00")
+    expect(uncovered("Hobbies")).to have_content("nothing covers its $300.00")
+    expect(uncovered("Dining")).to have_content("short $100.00 of $300.00")
+    expect(find("[data-uncovered]").text).to match(/Hobbies.*Dining/m)
   end
 
   # THE REMEDY IS A RULE, NOT A MOVE (§4). There is nothing to take money FROM — no claim is money

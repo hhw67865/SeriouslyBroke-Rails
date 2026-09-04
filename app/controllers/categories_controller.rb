@@ -42,9 +42,9 @@ class CategoriesController < ApplicationController
   #
   # NOTHING IS DEFAULTED ANY MORE. This built `categories.new(pool: current_user.default_account)`
   # because `pool_id` was required and a blank picker made every create a 422; the picker is gone
-  # with the pool layer (two-ledger spec §5), and the three columns that replaced it —
-  # `target_amount`, `priority`, `funded_since` — are all legitimately blank on an ordinary new
-  # category. A category that holds nothing is the honest default: its spending drains available
+  # with the pool layer (two-ledger spec §5), and the two columns that replaced it — `priority` and
+  # `funded_since` — are both legitimately blank on an ordinary new category (`target_amount` was
+  # the third and is gone, rules-own-the-budget §7). A category that holds nothing is the honest default: its spending drains available
   # until the user gives it a rule or an allocation, which is exactly what §4 says.
   #
   # `?type=` IS CHECKED AGAINST THE ENUM (plan 3, task 5), and this arm is a 500 rather than a
@@ -138,11 +138,18 @@ class CategoriesController < ApplicationController
   # user), so the parameter is not narrowed, it is gone: the whole IDOR class it guarded against
   # cannot be expressed through this form.
   #
-  # THE THREE THAT ARRIVE ARE ALL PLAIN COLUMNS OF THE RECORD ITSELF, so none of them needs an
-  # ownership check — there is no foreign id to point at somebody else's row. Each is validated by
-  # `Category#holding_columns_are_sane` (a target must be positive, a priority a non-negative
-  # integer, and only an expense category may carry any of them), so a bad value is a legible 422
-  # on the form that submitted it rather than a silent write.
+  # THE TWO THAT ARRIVE ARE PLAIN COLUMNS OF THE RECORD ITSELF, so neither needs an ownership check
+  # — there is no foreign id to point at somebody else's row. Both are validated by
+  # `Category#holding_columns_are_sane` (a priority must be a non-negative integer, and only an
+  # expense category may carry a funding start), so a bad value is a legible 422 on the form that
+  # submitted it rather than a silent write.
+  #
+  # ** `target_amount` LEFT THE LIST (rules-own-the-budget spec §5/§7), AND THE PERMIT IS HALF THE
+  # DELETION. ** The field is gone from the form, and a column that stays permitted is one a crafted
+  # POST can still write — silently, since no claim formula has read `categories.target_amount`
+  # since the shapes moved onto the rule. What a category builds up toward is its building rule's
+  # `target_amount`, written on the rules form; the column itself is dropped by Task 4's migration.
+  # Anything that arrives naming it now is simply ignored by `params.expect`.
   #
   # `funded_since` IS USER-EDITABLE, WHICH SPEC §4 REQUIRES AND WHICH MOVES MONEY. It is the day a
   # category starts counting its own spending; earlier spending drains available. Editing it
@@ -151,7 +158,7 @@ class CategoriesController < ApplicationController
   # distribution waterfall and onto the Budget page's "Not in the fill order" band. The form says
   # both things beside the field; this is where the value is allowed in.
   def category_params
-    params.expect(category: [:name, :category_type, :color, :target_amount, :priority, :funded_since])
+    params.expect(category: [:name, :category_type, :color, :priority, :funded_since])
   end
 
   # THE ONE CHECK BOTH `?type=` READERS RUN. A type the enum does not hold is a stale bookmark now

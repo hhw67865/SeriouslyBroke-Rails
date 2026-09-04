@@ -9,6 +9,14 @@
     ranks every holder against every other over ONE list, and what is inside this element is
     exactly what `PATCH /budget/reorder` rewrites.
 
+    ** THE TYPE DECIDES BEFORE THIS LIST DOES (rules-own-the-budget spec §3). ** Every rule carries a
+    type — bill, usage, choice — and the give-way walk sorts on it FIRST: every choice rule in the
+    app gives way before any usage rule, and a bill is the last thing reached. So this list is no
+    longer the whole order, it is the tie-break INSIDE each type, which is what the instruction now
+    says. That is deliberate rather than a loss: what a user is willing to go without is a fact about
+    the KIND of spending, and dragging one card could never have said "restaurants before rent"
+    across two categories at once. `HomePresenter#give_way_order` is the one sort that combines them.
+
     The form is EMPTY and hidden: reorder_controller fills it with one `category_ids[]` per card in
     DOM order at drop time. The ▲▼ buttons carry their own already-swapped list (see
     BudgetPageHelper#reordered_category_ids) so the order is reachable with no JavaScript at all —
@@ -23,7 +31,9 @@
       white — a hint nobody could read is not a quieter hint. %>
   <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Give-way order</h2>
-    <p class="text-xs text-gray-500">Drag a card, or use the arrows, to set which gives way first when you run short</p>
+    <p class="text-xs text-gray-500">
+      Drag a card, or use the arrows — within each type, lower rules give way first when you run short
+    </p>
   </div>
 
   <% groups.each do |group| %>

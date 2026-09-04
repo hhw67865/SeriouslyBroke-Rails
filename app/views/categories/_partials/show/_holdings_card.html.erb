@@ -38,10 +38,17 @@
      data-holdings-card
      data-holdings-state="<%= presenter.state %>">
   <% if presenter.holding? %>
-    <%# THE CATEGORY HAS A CLAIM. The heading names what it is — a goal, or an envelope — from the
-        one predicate, so the word and the bar below it cannot describe different things. %>
+    <%# THE CATEGORY HAS A CLAIM. The heading names what it is — a FUND, or an envelope — from the
+        one reader, so the word and the bar below it cannot describe different things.
+
+        ** "GOAL" IS RETIRED (rules-own-the-budget spec §7). ** A goal was a kind of CATEGORY, told
+        apart by a figure on the category record; what tells these two apart now is what the rule
+        says becomes of money the period did not spend — it builds up, or it resets. "Fund" is the
+        word for the first and it is true whether or not the rule names a ceiling, which "Goal" was
+        not: an emergency fund with no target was never a goal and had nowhere to be called
+        anything. %>
     <h2 class="text-xl font-semibold mb-4">
-      <%= presenter.saving_toward_a_target? ? "Goal" : "Envelope" %>
+      <%= presenter.building? ? "Fund" : "Envelope" %>
     </h2>
 
     <%# WHAT THE FIGURE BELOW IS MADE OF, SAID PLAINLY. It is the one thing about the computed model
@@ -50,9 +57,9 @@
         or the spending moves. The two arms differ only in what the money is FOR, which is what the
         heading above them already said. %>
     <p class="text-sm text-gray-500 mb-4">
-      <% if presenter.saving_toward_a_target? %>
-        This category is saving toward a figure. Nothing was moved here to put it there — what it
-        has is what its rules have built up since
+      <% if presenter.building? %>
+        This category's money builds up instead of resetting each period. Nothing was moved here to
+        put it there — what it has is what its rules have built up since
         <%= presenter.funded_since.strftime("%b %-d, %Y") %>, less what has been spent here.
       <% else %>
         Nothing was moved here. What this category claims is worked out from its rules on the Budget
@@ -90,12 +97,18 @@
       </div>
     </dl>
 
-    <%# THE PROGRESS BAR IS THE GOAL'S ALONE, and it measures the CLAIM against the target.
-        `progress_percentage` clamps at both ends, so a goal whose rules claim more than the figure
-        it is saving toward draws a full bar rather than "130% complete". %>
-    <% if presenter.saving_toward_a_target? %>
+    <%# THE PROGRESS BAR IS THE CAPPED FUND'S ALONE, and it measures the CLAIM against the rule's
+        target. `progress_percentage` clamps at both ends, so a fund whose rules claim more than the
+        figure they are aiming at draws a full bar rather than "130% complete".
+
+        ** THE GATE IS `#bar?` AND NOT `#building?` (rules-own-the-budget spec §5). ** An UNCAPPED
+        building rule names no figure, so there is nothing for a bar to be a fraction of — the same
+        rule Home's row applies to the same shape. The heading above still says "Fund" and the
+        Claimed figure still says what it has; what is absent is the track, because a track drawn
+        against nothing reports nothing. %>
+    <% if presenter.bar? %>
       <% progress = presenter.progress_percentage %>
-      <div class="mb-4" data-goal-progress>
+      <div class="mb-4" data-building-progress>
         <div class="h-2.5 bg-gray-200 rounded-full overflow-hidden">
           <div class="h-2.5 rounded-full <%= progress >= 100 ? "bg-status-success" : "bg-brand-dark" %>"
                style="width: <%= progress %>%;"></div>

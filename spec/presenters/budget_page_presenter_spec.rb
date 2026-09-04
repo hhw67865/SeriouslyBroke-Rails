@@ -590,8 +590,15 @@ RSpec.describe BudgetPagePresenter do
 
       # A FRESH PRESENTER EACH TIME. Every reader on this class is memoised, so a second read
       # through the same instance would answer out of memory and hide the statements this pins.
+      # ** THE TYPE OVERVIEW IS READ THROUGH THIS PIN TOO (rules-own-the-budget spec §3). ** It sums
+      # `ClaimCalculator#standing_ask` over every rule the user owns, off the page's ONE ledger — a
+      # reader that reached for `Budget#steady_ask` instead would build a second calculator per
+      # dated bill, and a reader that built a ledger of its own would cost the whole set of grouped
+      # aggregates twice. Neither is visible to any other example in this file.
       def read_every_row
-        described_class.new(user: user, today: today).category_groups.each do |group|
+        page = described_class.new(user: user, today: today)
+        page.type_overview
+        page.category_groups.each do |group|
           group.rules.each { |rule| [rule.claim, rule.built_up, rule.planned_this_period, rule.adjustments.size] }
         end
       end
@@ -618,6 +625,100 @@ RSpec.describe BudgetPagePresenter do
         expect(count_statements { read_every_row }).to eq(one_rule)
         expect(one_rule).to be_positive
       end
+    end
+  end
+
+  # ── ** WHAT EACH KIND OF RULE ASKS OF A PERIOD (rules-own-the-budget spec §3) ** ────────────────
+  #
+  # The line above the groups: `Bills $1,400.00 · Usage $600.00 · Choice $300.00 a period`. Every
+  # figure is `ClaimCalculator#standing_ask` — a constant of the rule and the grid — and not `Σ
+  # claims`, which is this afternoon's answer and would report a different split tomorrow with
+  # nothing edited.
+  #
+  # EVERY RULE BELOW IS PER-PERIOD, so `standing_ask` IS the rule's own amount and no example has to
+  # divide a monthly figure by a cadence to say what a period asks. `Budget#steady_ask`'s
+  # normalisation is `budget_steady_ask_spec`'s subject, not this one's.
+  describe "#type_overview" do
+    def typed(category, amount, type)
+      create(:budget, :per_period_rate, category: category, amount: amount, rule_type: type)
+    end
+
+    # PLANTED: Rent $1,000 and Insurance $400 as bills, Groceries $600 as usage, Fun $300 as choice.
+    # Bills sum to **$1,400.00**, which is the spec's own example line, and the three arrive in
+    # reading order — bills, usage, choice — whatever order the rules were written in.
+    it "sums the standing ask of each kind, heaviest commitment first" do
+      typed(holder("Fun"), 300, :choice)
+      typed(holder("Groceries"), 600, :usage)
+      typed(holder("Rent"), 1_000, :bill)
+      typed(holder("Insurance"), 400, :bill)
+
+      expect(presenter.type_overview).to eq([[:bill, 1_400], [:usage, 600], [:choice, 300]])
+    end
+
+    # ** A TYPE WITH NO RULES IS ABSENT, NOT $0.00. ** A figure that is true and reports nothing, on
+    # a line whose whole job is the split. Both directions live in one file: the example above has
+    # all three.
+    it "omits a type no rule carries" do
+      typed(holder("Groceries"), 600, :usage)
+      typed(holder("Fun"), 300, :choice)
+
+      expect(presenter.type_overview).to eq([[:usage, 600], [:choice, 300]])
+    end
+
+    # THE EMPTY USER. The caller renders this only inside the `no_rules?` else-branch, so the empty
+    # array is what that gate is asked about rather than a row of zeroes.
+    it "is empty for a user with no rules at all" do
+      expect(presenter.type_overview).to eq([])
+    end
+
+    # ** IT COUNTS A RULE NO GROUP CAN SHOW, and that is the same population `Budget.steady_need`
+    # sums. ** A rule on a category with no `funded_since` is a claim on income that the fill order
+    # cannot reach — `#unfilled_rules` is the band that says so — and an overview that omitted it
+    # would split a total the structural check two blocks down prints whole.
+    it "counts a rule whose category is not filling yet", :aggregate_failures do
+      typed(holder("Groceries"), 600, :usage)
+      typed(create(:category, :expense, user: user, name: "Someday"), 300, :choice)
+
+      expect(presenter.unfilled_rules.map { |rule| rule.budget.category.name }).to eq(["Someday"])
+      expect(presenter.type_overview).to eq([[:usage, 600], [:choice, 300]])
+    end
+
+    # ** THE THREE FIGURES ARE THE STRUCTURAL CHECK'S ONE FIGURE, SPLIT. ** `#rules_need` is
+    # `Budget.steady_need`, which sums `Budget#steady_ask` over the same rules; this sums
+    # `ClaimCalculator#standing_ask`, which IS that method's own one-off arm and delegates to it for
+    # every other shape. Asserted as an identity on a fixture carrying all three types AND a dated
+    # bill — the one shape where the two spellings could part company — so a reader that quietly
+    # switched to `Σ claims` would print a split that does not add up to the total beneath it.
+    # ONE OF EACH TYPE, AND THE BILL IS DATED — the shape where `standing_ask` and `steady_ask` could
+    # part company, since a one-off's standing figure is the calendar arm rather than the rate.
+    def one_rule_of_every_type
+      typed(holder("Groceries"), 600, :usage)
+      typed(holder("Fun"), 300, :choice)
+      rolling(
+        holder("Insurance"),
+        amount: 1_200,
+        anchor: Date.new(2026, 8, 1),
+        every: 6,
+        created_at: Time.zone.local(2025, 9, 1)
+      )
+    end
+
+    it "adds up to what the structural check says the rules need", :aggregate_failures do
+      one_rule_of_every_type
+
+      expect(presenter.type_overview.sum { |(_type, amount)| amount }).to eq(presenter.rules_need)
+      expect(presenter.rules_need).to be_positive
+    end
+  end
+
+  # ** EACH ROW SAYS WHICH KIND IT IS (spec §3). ** The label beside a rule and the overview above
+  # the groups are two readings of one column, so the row carries `rule_type` off the record rather
+  # than as a member a build step could fill in differently.
+  describe "Rule#rule_type" do
+    it "carries the rule's own type onto the row" do
+      create(:budget, :per_period_rate, category: holder("Fun"), amount: 300, rule_type: :choice)
+
+      expect(presenter.category_groups.sole.rules.sole.rule_type).to eq("choice")
     end
   end
 end

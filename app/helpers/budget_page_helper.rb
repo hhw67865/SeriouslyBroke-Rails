@@ -8,6 +8,22 @@ module BudgetPageHelper
   # `Category#claim`, and §3.4's row prints `spent of rate` or `built up of target` — one figure,
   # named, with nothing left for a second clause to fill in. The status class it read is deleted.
 
+  # ** THE THREE KINDS OF RULE, IN THE TWO REGISTERS THE PAGE NEEDS (rules-own-the-budget spec §3).
+  # ** The overview's line is a heading over a SUM of rules, so `bill` pluralises there; the label on
+  # one row names ONE rule and does not. `usage` and `choice` are mass nouns and are the same word in
+  # both registers, which is exactly why the pair is a table rather than an `if` on pluralisation —
+  # "Usages" is not a word this app should be one edit away from printing.
+  #
+  # `fetch`, SO A FOURTH TYPE FAILS LOUDLY rather than rendering a blank label beside a real figure.
+  # `Budget::TYPE_RANK` is spelled with the same discipline and for the same reason.
+  TYPE_HEADINGS = { "bill" => "Bills", "usage" => "Usage", "choice" => "Choice" }.freeze
+
+  TYPE_LABELS = { "bill" => "Bill", "usage" => "Usage", "choice" => "Choice" }.freeze
+
+  def rule_type_heading(type) = TYPE_HEADINGS.fetch(type.to_s)
+
+  def rule_type_label(type) = TYPE_LABELS.fetch(type.to_s)
+
   # WHAT A RULE IS CALLED. The item it pays is the truest name — "Rent Bill" says what the money
   # does — and where there is none the rule is named by whatever owns it, because a rule with no
   # item is the category's own rate and the owner IS the subject.

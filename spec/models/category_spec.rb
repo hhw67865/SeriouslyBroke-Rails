@@ -159,6 +159,67 @@ RSpec.describe Category, type: :model do
     end
   end
 
+  # ** WHICH RULE IS BUILDING THIS CATEGORY'S MONEY UP (rules-own-the-budget spec §5/§7). **
+  # `#building_rule` REPLACES `#saving_toward_a_target?` (`holder? && target_amount.present?`),
+  # which read a column no claim formula consults: `ClaimCalculator#shape` answers `:building` off
+  # the RULE's `carries_over`, and caps at the RULE's `target_amount`. The four screens that draw a
+  # fund — the categories index card, the categories page's holdings card, the entry form's impact
+  # card and the dashboard's savings strip — all ask this, so a fund is a fund on every one.
+  describe "#building_rule" do
+    let(:user) { create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1)) }
+    let(:category) { create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1)) }
+
+    it "answers the item-less rule whose unspent money builds up" do
+      rule = create(:budget, :capped, category: category, amount: 200, target_amount: 5_000)
+
+      expect(category.building_rule).to eq(rule)
+    end
+
+    # ** UNCAPPED IS STILL BUILDING (§2.1 row 2), and this is the whole reason the reader is not a
+    # question about a figure. ** An emergency fund that names no ceiling is money being saved; the
+    # old predicate could not see it, because it had no target to be `present?`.
+    it "answers a building rule that names no figure at all", :aggregate_failures do
+      rule = create(:budget, :building, category: category, amount: 300)
+
+      expect(category.building_rule).to eq(rule)
+      expect(category.building_rule.target_amount).to be_nil
+    end
+
+    # THE OTHER DIRECTION: money that RESETS is an envelope, whatever figure the category's own
+    # column happens to carry. That column is dropped by Task 4 and nothing reads it now.
+    it "is nil where the rule's unspent money resets" do
+      create(:budget, :per_period_rate, category: category, amount: 400)
+      category.update!(target_amount: 5_000)
+
+      expect(category.reload.building_rule).to be_nil
+    end
+
+    # ** THE ITEM-LESS RULE, WHICH IS THE CATEGORY'S OWN LANE (§3.1's partition). ** A fund carved
+    # out for one item is not the category building up, and `Budget#category_may_hold_one_item_less
+    # _rule` allows exactly one item-less rule — so this answers a single record rather than picking
+    # one of a set.
+    it "ignores a building rule that pays one item" do
+      item = create(:item, category: category, name: "Flights")
+      create(:budget, :capped, category: category, item: item, amount: 100, target_amount: 900)
+
+      expect(category.building_rule).to be_nil
+    end
+
+    # AND IT FINDS THE CATEGORY'S OWN LANE PAST ONE. Both rules build up; only the item-less one is
+    # the category's, so the reader cannot be `budgets.detect(&:carries_over?)`.
+    it "finds the category's own rule beside an item-backed one", :aggregate_failures do
+      item = create(:item, category: category, name: "Flights")
+      create(:budget, :capped, category: category, item: item, amount: 100, target_amount: 900)
+      own = create(:budget, :capped, category: category, amount: 200, target_amount: 5_000)
+
+      expect(category.reload.building_rule).to eq(own)
+    end
+
+    it "is nil on a category with no rules at all" do
+      expect(category.building_rule).to be_nil
+    end
+  end
+
   # FIVE BLOCKS ARE DELETED HERE, ALL ABOUT `categories.pool_id` (two-ledger spec §5, Task 8):
   # `#buffer_funded?` (the rate detector's population, re-aimed at `#holder?` in Task 7),
   # `#effective_pool` and its default-account fallback, the pool-ownership pair, the reachability

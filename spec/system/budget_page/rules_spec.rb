@@ -25,7 +25,11 @@ RSpec.describe "Budget page rules", type: :system do
     create(:category, :expense, :funded, user: user, name: name, priority: priority)
   end
 
-  def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
+  # `type:` DEFAULTS TO `usage`, THE COLUMN'S OWN DEFAULT (rules-own-the-budget spec §6 step 3), so
+  # every fixture written before rules had a type keeps the label the migration would have given it.
+  def rate(category, amount, type: :usage)
+    create(:budget, :per_period_rate, category: category, amount: amount, rule_type: type)
+  end
 
   def rolling(category, amount:, anchor:, every: 1)
     create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
@@ -198,12 +202,113 @@ RSpec.describe "Budget page rules", type: :system do
 
     # The first screen every real user meets. The sentence points at the two ways a rule is
     # actually made and promises nothing this page does not yet do.
+    #
+    # THE TYPE OVERVIEW IS ABSENT TOO (rules-own-the-budget spec §3): a split of nothing is a heading
+    # about nothing, and the caller gates it on the same `no_rules?` branch this state renders.
     it "sees the frame, one sentence and no groups at all" do
       expect(page).to have_content("No funding rules yet")
       expect(page).to have_content("A rule claims part of every period's income for one category")
       expect(page).to have_no_content("Nothing is in the fill order yet")
       expect(page).to have_no_css("[data-category-group]")
       expect(page).to have_no_css("[data-rule]")
+      expect(page).to have_no_css("[data-type-overview]")
+    end
+  end
+
+  # ── ** THE TYPE OVERVIEW AND THE ROW LABELS (rules-own-the-budget spec §3) ** ───────────────────
+  #
+  # `Bills $1,400.00 · Usage $600.00 · Choice $300.00 a period`, above the groups, with each row
+  # carrying the type it is counted in. EVERY RULE HERE IS PER-PERIOD, so `standing_ask` IS its own
+  # amount and no example has to divide a monthly figure by a cadence: `Budget#steady_ask`'s
+  # normalisation is `budget_steady_ask_spec`'s subject.
+  describe "the type overview", :aggregate_failures do
+    def three_types
+      rate(holder("Rent", priority: 1), 1_000, type: :bill)
+      rate(holder("Insurance", priority: 2), 400, type: :bill)
+      rate(holder("Groceries", priority: 3), 600, type: :usage)
+      rate(holder("Fun", priority: 4), 300, type: :choice)
+    end
+
+    # THE SPEC'S OWN LINE, to the character: two bills summing to $1,400.00, and the three read in
+    # order of how unavoidable they are.
+    it "states what each kind of rule asks of a period" do
+      three_types
+      visit budget_page_path
+
+      within("[data-type-overview]") do
+        expect(page).to have_content("Bills $1,400.00")
+        expect(page).to have_content("Usage $600.00")
+        expect(page).to have_content("Choice $300.00")
+        expect(page).to have_content("a period")
+      end
+      expect(find("[data-type-overview]").text).to match(/Bills.*Usage.*Choice/m)
+    end
+
+    # A TYPE WITH NO RULES IS ABSENT, NOT $0.00 — a figure that is true and reports nothing, on a
+    # line whose whole job is the split. The example above is the other direction.
+    it "omits a kind no rule carries", :aggregate_failures do
+      rate(holder("Groceries"), 600, type: :usage)
+      visit budget_page_path
+
+      within("[data-type-overview]") do
+        expect(page).to have_content("Usage $600.00")
+        expect(page).to have_no_content("Bills")
+        expect(page).to have_no_content("Choice")
+      end
+    end
+
+    # ** EACH ROW SAYS WHICH SUM IT IS IN. ** Without the label the overview is three figures a user
+    # cannot trace to any rule, and the give-way order — which reads this word FIRST — would be
+    # invisible on the page that sets it.
+    it "labels every rule row with its own type" do
+      three_types
+      visit budget_page_path
+
+      within(rule_row("Rent")) { expect(page).to have_css("[data-rule-type='bill']", text: "Bill") }
+      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-type='usage']", text: "Usage") }
+      within(rule_row("Fun")) { expect(page).to have_css("[data-rule-type='choice']", text: "Choice") }
+    end
+
+    # THE REORDER COPY SAYS WHAT THE ARROWS ACTUALLY DO NOW: the type is read before this list is,
+    # so dragging a card sets the order among rules of the SAME kind.
+    it "says the arrows order rules within each type" do
+      three_types
+      visit budget_page_path
+
+      expect(find("[data-fill-order]")).to have_content("within each type, lower rules give way first")
+    end
+  end
+
+  # ** A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE — Chrome refuses a headless
+  # window narrower than 500px, so every `resize_to(375, …)` in this suite is really a 500px test.
+  # The mechanism is `spec/system/home/hero_spec.rb`'s, copied deliberately rather than re-derived,
+  # and there is NO `evaluate_script` in the example: a trailing JS call leaves the session in a
+  # state Capybara's teardown navigation does not survive. **
+  #
+  # THE OVERVIEW IS THE WIDEST SINGLE LINE THIS PAGE PRINTS — three labels, three currency figures
+  # and a trailing "a period" — and the type label is a NEW element on a row that already stacked at
+  # `sm`. Both are measured with Selenium's own geometry.
+  describe "on a narrow screen" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    it "fits the overview and a labelled row inside a 375px viewport", :aggregate_failures do
+      rate(holder("Rent", priority: 1), 1_000, type: :bill)
+      rate(holder("Groceries", priority: 2), 600, type: :usage)
+      rate(holder("Fun", priority: 3), 300, type: :choice)
+
+      visit budget_page_path
+
+      expect(find("[data-type-overview]")).to have_content("Bills $1,000.00")
+
+      overview = find("[data-type-overview]").native.rect
+      label = find("[data-rule='Groceries'] [data-rule-type]").native.rect
+
+      expect(overview.x + overview.width).to be <= 375
+      expect(label.x + label.width).to be <= 375
     end
   end
 

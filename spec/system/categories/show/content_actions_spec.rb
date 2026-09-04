@@ -73,23 +73,27 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     end
   end
 
-  # A SAVINGS GOAL IS A CATEGORY (two-ledger spec §3, Task 7). This described a category POINTING
-  # AT a savings pool — the shape the pool layer made possible — and the pool is gone: a goal is a
-  # category with a target and a funding start, and its own page is the only page about it. The
-  # claim worth keeping is the noun one: the app calls it a Goal and never a "Savings Pool".
-  describe "a category saving toward a goal", :aggregate_failures do
+  # A FUND IS A CATEGORY WITH A BUILDING RULE (two-ledger spec §3, Task 7; rules-own-the-budget spec
+  # §5/§7). This described a category POINTING AT a savings pool — the shape the pool layer made
+  # possible — and the pool is gone. The claim worth keeping is the noun one, and the noun itself
+  # has moved: §7 retires "goal", which named a kind of CATEGORY, in favour of what the RULE does
+  # with money the period did not spend. So the fixture plants the rule, not a figure on the record.
+  describe "a category whose money builds up", :aggregate_failures do
     let!(:category) do
-      create(:category, :expense, :funded, user: user, name: "Emergency Fund", target_amount: 2_000)
+      create(:category, :expense, :funded, user: user, name: "Emergency Fund").tap do |fund|
+        create(:budget, :capped, category: fund, amount: 200, target_amount: 2_000)
+      end
     end
 
     before { visit category_path(category) }
 
-    it "shows key sections and the goal's one noun" do
+    it "shows key sections and the fund's one noun" do
       expect(page).to have_content("Emergency Fund")
       expect(page).to have_content("Expense category details and management")
       expect(page).to have_content("Summary")
-      expect(page).to have_content("Goal")
+      expect(page).to have_content("Fund")
       expect(page).to have_no_content("Savings Pool")
+      expect(page).to have_no_content("Goal")
     end
 
     it "navigates with Edit button" do

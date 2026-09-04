@@ -63,8 +63,14 @@ RSpec.describe HomePresenter do
   end
 
   # A flat per-period rule: the catch-all shape, and the one whose claim is exactly `rate − spent`.
-  def rate(category, amount)
-    create(:budget, :per_period_rate, category: category, amount: amount)
+  #
+  # `type:` DEFAULTS TO `usage`, WHICH IS THE COLUMN'S OWN DEFAULT (rules-own-the-budget spec §6
+  # step 3) — so every example written before rules had a type keeps the order it had, and an
+  # example that names a type is saying so on purpose. `item:` because a category may carry only ONE
+  # item-less rule (`Budget#category_may_hold_one_item_less_rule`), and the give-way examples need
+  # two rules of different types under one heading.
+  def rate(category, amount, type: :usage, item: nil)
+    create(:budget, :per_period_rate, category: category, amount: amount, rule_type: type, item: item)
   end
 
   def lane(category, name) = create(:item, category: category, name: name)
@@ -1243,11 +1249,17 @@ RSpec.describe HomePresenter do
       expect(presenter.uncovered_remainder).to eq(0)
     end
 
-    # ** A PRIORITY TIE IS BROKEN BY NAME, AND THE WALK REVERSES THAT (fix round 1 — LOW-2). **
-    # `#budgeted_categories` sorts on `[priority, name]` — `Category.in_fill_order`'s own key, because
-    # priority alone is not a total order — and the give-way walk reads it BACKWARDS. So at one
-    # priority the LATER name gives way FIRST, which is what this pins: the order is a fact about the
-    # screen rather than whatever the database returned this morning.
+    # ** A PRIORITY TIE IS BROKEN BY NAME, AND THE WALK REVERSES THAT (fix round 1 — LOW-2), AND THE
+    # NEW KEY KEEPS IT (rules-own-the-budget spec §3). ** `#budgeted_categories` sorts on
+    # `[priority, name]` — `Category.in_fill_order`'s own key, because priority alone is not a total
+    # order — and `#give_way_order`'s second term is that list's index NEGATED. So at one priority
+    # the LATER name still gives way FIRST; what changed is that the reversal is now a term in one
+    # sort rather than a `.reverse` on a category walk, and the TYPE is asked before it.
+    #
+    # RE-DERIVED UNDER THE NEW KEY: both rules are `usage` (the column's default), so `type_rank` is
+    # 1 for each and the tie falls straight through to the category term. `#budgeted_categories` is
+    # `[Alpha, Zed]`, so the ranks are `0` and `−1` and Zed sorts first — the same order the old
+    # `.reverse` produced, on the same fixture.
     #
     # PLANTED: two $300-a-period rules at priority 2 against $200 of income. Σ claims $600.00,
     # `unclaimed = 200 − 600` = −$400.00, `free = min(200, −400)` = −$400.00. Zed's whole $300 goes
@@ -1260,6 +1272,92 @@ RSpec.describe HomePresenter do
       expect(presenter.shortfall).to eq(400)
       expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] })
         .to eq([["Zed", 300], ["Alpha", 100]])
+    end
+  end
+
+  # ── ** THE TYPE DECIDES BEFORE PRIORITY DOES (rules-own-the-budget spec §3) ** ──────────────────
+  #
+  # `#give_way_order` is ONE sort over every claim line: `[Budget#type_rank, the category's place in
+  # `#budgeted_categories` negated, Category.rule_order]`. It replaced a category-level walk
+  # (`budgeted_categories.reverse.flat_map`), which could only rank whole categories — so a bill and
+  # a restaurant fund sitting on one category gave way together, at whatever rank their category
+  # held.
+  #
+  # EVERY FIXTURE BELOW PUTS THE TYPE AND THE PRIORITY IN OPPOSITION, deliberately: the choice rule
+  # is on the LOWEST priority number (the most protected category under the old order) and the bill
+  # on the highest. Under `budgeted_categories.reverse` the bill would have been eaten first and the
+  # choice never reached, which is the exact inversion these examples are for.
+  describe "#give_way_order" do
+    # PLANTED, and every figure re-derived from §3.1:
+    #   Fun       priority 1, CHOICE, $200 a period, nothing spent → claim   $200.00
+    #   Groceries priority 2, USAGE,  $400 a period, nothing spent → claim   $400.00
+    #   Rent      priority 3, BILL, $1,000 a period, nothing spent → claim $1,000.00
+    #   Σ claims $1,600.00 against $1,340 of income → `unclaimed` −$260.00, so the shortfall is $260.
+    #
+    # CHOICE FIRST: Fun gives its whole $200; $60 is left, so GROCERIES IS SPLIT at $60 of its $400
+    # and RENT — a bill — is never reached at all. Under the old reverse-priority walk this fixture
+    # answered `[["Rent", 260]]`, which is the app naming the rent as the thing to go without.
+    it "eats a choice whole, splits a usage and never reaches a bill", :aggregate_failures do
+      income(1_340)
+      rate(holder("Fun", priority: 1), 200, type: :choice)
+      rate(holder("Groceries", priority: 2), 400, type: :usage)
+      rate(holder("Rent", priority: 3), 1_000, type: :bill)
+
+      expect(presenter.shortfall).to eq(260)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] })
+        .to eq([["Fun", 200], ["Groceries", 60]])
+      expect(presenter.uncovered_claims.map(&:whole?)).to eq([true, false])
+    end
+
+    # THE ORDER ITSELF, which is the produced interface and is asserted whole rather than through
+    # the walk that consumes it: the walk stops when the shortfall is absorbed, so a list read only
+    # through `#uncovered_claims` can never show what comes AFTER the split. Same three rules, no
+    # shortfall at all.
+    it "lists every line choice first and bill last, whatever the priorities say" do
+      income(4_000)
+      rate(holder("Fun", priority: 1), 200, type: :choice)
+      rate(holder("Groceries", priority: 2), 400, type: :usage)
+      rate(holder("Rent", priority: 3), 1_000, type: :bill)
+
+      expect(presenter.give_way_order.map { |line| line.category.name }).to eq(["Fun", "Groceries", "Rent"])
+    end
+
+    # ** WITHIN A TYPE, PRIORITY STILL DECIDES, AND IT DECIDES THE SAME WAY IT ALWAYS HAS: the
+    # category that would have been funded LAST goes without FIRST. ** Two CHOICE rules, so the
+    # first term of the key is a tie and the second does all the work.
+    #
+    # PLANTED: Dining priority 1 and Hobbies priority 3, $300 a period each, against $200 of income.
+    # Σ claims $600.00, `unclaimed = 200 − 600` = −$400.00, `free = min(200, −400)` = −$400.00.
+    # `#budgeted_categories` is `[Dining, Hobbies]`, so the ranks are `0` and `−1`: Hobbies gives its
+    # whole $300 and Dining is split at the remaining **$100.00**.
+    it "gives way in reverse priority order inside one type", :aggregate_failures do
+      income(200)
+      rate(holder("Dining", priority: 1), 300, type: :choice)
+      rate(holder("Hobbies", priority: 3), 300, type: :choice)
+
+      expect(presenter.shortfall).to eq(400)
+      expect(presenter.uncovered_claims.map { |u| [u.category.name, u.amount] })
+        .to eq([["Hobbies", 300], ["Dining", 100]])
+    end
+
+    # ** THE OPEN QUESTION §3 CLOSES: TWO RULES OF DIFFERENT TYPES ON ONE CATEGORY. ** The old walk
+    # could not answer it — a category was ranked once and all of its rules gave way together — and
+    # the honest answer is that the type decides here exactly as it decides between categories.
+    #
+    # PLANTED: Household, priority 1, funded. Its ITEM-LESS rule is a $300-a-period CHOICE and an
+    # ITEM-BACKED one is a $500-a-period BILL (a category may hold only one item-less rule). Both
+    # are rate rules with nothing spent, so Σ claims is $800.00 against $700 of income: `unclaimed`
+    # −$100.00 and the shortfall is $100. The CHOICE rule is split at $100 and the bill on the very
+    # same heading is never reached.
+    it "ranks two rules on one category by their own types", :aggregate_failures do
+      household = holder("Household", priority: 1)
+      income(700)
+      rate(household, 300, type: :choice)
+      rate(household, 500, type: :bill, item: lane(household, "Insurance"))
+
+      expect(presenter.shortfall).to eq(100)
+      expect(presenter.uncovered_claims.map { |u| [u.line.rule.rule_type, u.amount] })
+        .to eq([["choice", 100]])
     end
   end
 

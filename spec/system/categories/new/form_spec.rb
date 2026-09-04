@@ -44,37 +44,46 @@ RSpec.describe "Categories New - Form", type: :system do
       expect(page).to have_link("Cancel")
     end
 
-    # THE THREE COLUMNS THAT REPLACED THE PICKER (two-ledger spec §3, §4; re-labelled onto claims by
-    # computed-claims Task 4), all three blank on a new category: a category nothing claims is the
-    # honest default, and its spending comes straight out of what's free to spend until it gets a
-    # rule. `Funding priority` is `Give-way order` now — there is no distribution to be funded first
-    # in (§6), and what priority ranks is who gives way when the claims outrun the money (§4).
+    # ** TWO COLUMNS NOW, WHERE THERE WERE THREE (rules-own-the-budget spec §5/§7). ** Both blank on a
+    # new category: a category nothing claims is the honest default, and its spending comes straight
+    # out of what's free to spend until it gets a rule. `Funding priority` is `Give-way order` — there
+    # is no distribution to be funded first in (§6), and what priority ranks is who gives way when
+    # the claims outrun the money (§4).
+    #
+    # ** THE TARGET FIELD IS GONE, AND ITS ABSENCE IS ASSERTED RATHER THAN LEFT TO THE OTHER
+    # EXAMPLES. ** It wrote `categories.target_amount`, a column no claim formula reads:
+    # `ClaimCalculator#shape` answers `:building` off the RULE's `carries_over` and caps at the
+    # RULE's `target_amount`. A control that wrote nothing any screen reads, with a hint beside it
+    # promising otherwise, is the one thing worse than no control. The question is asked on the rules
+    # form now — "Unspent money: builds up", and the Target it reveals.
     it "asks what claims the category, and opens on nothing", :aggregate_failures do
-      expect(page).to have_field("Target", with: "")
       expect(page).to have_field("Claiming since", with: "")
       # `categories.priority` is NOT NULL DEFAULT 0, so the box opens at the front of the order
       # rather than on a blank — the column has no "unset" to render.
       expect(page).to have_field("Give-way order", with: "0")
+      expect(page).to have_no_field("Target")
       expect(page).to have_no_select("Where this money lives")
     end
 
-    # ** THE TWO HINTS THAT DESCRIBE A CONSEQUENCE, not a field. ** Both promises survive the move to
-    # computed claims; one of them changes its reason.
+    # ** THE HINT THAT DESCRIBES A CONSEQUENCE, not a field. ** The START DATE MOVES HISTORY in TWO
+    # sums: it is the period the accrual walk opens in (`ClaimCalculator#accrual_start`) and the day
+    # `Entry.draining` starts attributing this category's receipts.
     #
-    # A TARGET STILL SWITCHES OFF USE-IT-OR-LOSE-IT, and now structurally rather than by a guard: it
-    # used to be that `HoldingCalculator#compute_period_closed` refused to sweep a target-bearing
-    # category, and there is no sweep. `ClaimCalculator#shape` reads `:target` for any ANCHORLESS
-    # rule on a category that names a figure and `:rate` for the same rule where it does not — so a
-    # target moves the category's undated rules off §3.1's reset-every-period arithmetic and onto
-    # §3.2's accrual, which carries.
-    #
-    # THE START DATE STILL MOVES HISTORY, and now in TWO sums rather than one: it is the period the
-    # accrual walk opens in (`ClaimCalculator#accrual_start`) and the day `Entry.draining` starts
-    # attributing this category's receipts.
-    it "says a target makes the money carry and a start date moves history", :aggregate_failures do
-      expect(page).to have_content("they build up toward this figure and what has built up carries")
+    # THE TARGET'S HINT IS GONE WITH THE FIELD, and both halves are asserted: the promise it made
+    # ("they build up toward this figure") was true of a RULE and false of this form, so a page that
+    # deleted the input and kept the sentence would still be lying.
+    it "says a start date moves history and promises nothing about a target", :aggregate_failures do
       expect(page).to have_content("changing it moves history in both directions")
+      expect(page).to have_no_content("they build up toward this figure")
       expect(page).to have_no_content("swept")
+    end
+
+    # ** THE GIVE-WAY HINT NAMES THE TYPE FIRST (rules-own-the-budget spec §3). ** The number in this
+    # box no longer decides the whole order: `HomePresenter#give_way_order` reads a rule's TYPE
+    # before it reads any category's priority, so a hint that promised "the highest number gives way
+    # first" full stop would be describing a ranking the app stopped using.
+    it "says a rule's type is read before this number is" do
+      expect(page).to have_content("A rule's type goes first — choice, then usage, then bills")
     end
   end
 
@@ -226,20 +235,24 @@ RSpec.describe "Categories New - Form", type: :system do
       expect([category.target_amount, category.funded_since]).to eq([nil, nil])
     end
 
-    it "writes the target, the give-way order and the claiming start", :aggregate_failures do
-      submit_goal
+    # ** THE TWO COLUMNS THIS FORM STILL WRITES, and the one it does not (rules-own-the-budget spec
+    # §5/§7). ** `target_amount` is neither on the form nor in `category_params`, so a category made
+    # here names no figure whatever the user does — the figure is the building rule's, written on
+    # the rules form.
+    it "writes the give-way order and the claiming start, and no target", :aggregate_failures do
+      submit_holder
 
       expect(page).to have_content("Category was successfully created")
       category = Category.find_by(name: "Vacation")
-      expect([category.target_amount, category.priority]).to eq([2_400, 3])
+      expect(category.priority).to eq(3)
       expect(category.funded_since).to eq(Date.new(2026, 2, 6))
-      expect(category).to be_saving_toward_a_target
+      expect(category.target_amount).to be_nil
+      expect(category.building_rule).to be_nil
     end
 
-    def submit_goal
+    def submit_holder
       fill_in "Name", with: "Vacation"
       find("label", text: "Expense").click
-      fill_in "Target", with: "2400"
       fill_in "Give-way order", with: "3"
       # A `Date`, NOT a formatted string: Capybara sends a String into a date input as KEYSTROKES,
       # which reads back as the year 60206. See spec/system/budget_page/suggestions_spec.rb.
