@@ -422,18 +422,38 @@ class SuggestionEngine
     )
   end
 
-  # THE WHOLE RULE, AND THE OWNER IS ONE OF ITS FIELDS. Every key here is a `budgets` column and a
-  # permitted parameter of `BudgetsController::BUDGET_FIELDS`, which is what lets the accept link
-  # be `new_budget_path(budget: …)` with nothing renamed on the way.
+  # THE WHOLE RULE, AND THE OWNER IS ONE OF ITS FIELDS. Every key here is a permitted parameter of
+  # `BudgetsController::BUDGET_FIELDS`, which is what lets the accept link be
+  # `new_budget_path(budget: …)` with nothing renamed on the way.
+  #
+  # ** IT IS BUILT AS A `Budget` AND TRANSLATED, RATHER THAN SPELLED IN THE FORM'S WORDS HERE
+  # (rules-own-the-budget spec §4). ** The wire carries `schedule` and `unspent` now, not `basis`
+  # and `carries_over`, and this class measures COLUMNS — an interval and a due date read off the
+  # entries. Writing "every_n" here would put a second copy of §2.1's table in a file whose subject
+  # is spending history; `RuleForm.from` is the one translator, and it is the same one the edit form
+  # goes through.
+  #
+  # ** A DATED BILL PROPOSES `bill` (§3). ** It was measured from payments that actually landed on a
+  # cycle, which is what "must be paid" means; the user still confirms on the radio before anything
+  # is written. `carries_over false` because a dated rule's build-up is defined by its DATE — §3.2's
+  # catch-up walk holds the money until the bill is paid — and `Budget#build_up_must_be_valid`
+  # refuses the pair outright.
+  #
+  # `.compact` so the accept URL carries the fields this proposal actually states. A key it omits is
+  # a key `RuleForm` never assigns, which is exactly the same outcome as sending it blank.
   def bill_rule(shape, due_on, item, category)
-    {
-      amount: shape[:amount],
-      basis: "monthly",
-      interval_months: shape[:interval_months],
-      anchor_date: due_on,
-      item_id: item.id,
-      category_id: category.id
-    }
+    RuleForm.from(
+      Budget.new(
+        amount: shape[:amount],
+        basis: :monthly,
+        interval_months: shape[:interval_months],
+        anchor_date: due_on,
+        item_id: item.id,
+        category_id: category.id,
+        rule_type: :bill,
+        carries_over: false
+      )
+    ).compact
   end
 
   # WHAT A PROPOSED BILL WOULD COST A PERIOD, through `Budget#steady_ask` on an UNSAVED rule of the
@@ -603,8 +623,28 @@ class SuggestionEngine
         # rather than branching on the kind to decide which question to ask.
         starts_holding: starts_holding?(category)
       },
-      prefill: { budget: { amount: amount, basis: "per_period", category_id: category.id } }
+      prefill: { budget: rate_rule(category, amount) }
     )
+  end
+
+  # ** A RATE PROPOSES `usage` (§3). ** What this detector found is a category the user spends in
+  # every period without a rule for it — a real need whose amount moves with how they live, which is
+  # `usage`'s own definition — and it is the column's default besides, so a suggestion that guessed
+  # `bill` would be claiming something the history does not say. The radio is on the accept form
+  # either way.
+  #
+  # `carries_over false`: a rate is §2.1's row 1, the shape whose money resets at the boundary. A
+  # fund is a deliberate act, not something measured out of spending that already happened.
+  def rate_rule(category, amount)
+    RuleForm.from(
+      Budget.new(
+        amount: amount,
+        basis: :per_period,
+        category_id: category.id,
+        rule_type: :usage,
+        carries_over: false
+      )
+    ).compact
   end
 
   # ---------------------------------------------------------------------------------------------

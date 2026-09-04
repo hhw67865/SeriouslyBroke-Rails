@@ -264,6 +264,16 @@ RSpec.describe SuggestionEngine do
     # to mint (name, type, account) plus a top-level `category_id` to be RE-POINTED at it, because
     # none of that was a `Budget` column. The owner IS a column now, so `category_id` travels inside
     # the budget half like any other field and there is no envelope half at all.
+    # ** IT CARRIES THE FORM'S WORDS, NOT THE COLUMNS (rules-own-the-budget spec §4). ** `basis` is
+    # no longer a permitted parameter of `BudgetsController::BUDGET_FIELDS`; `schedule` and `unspent`
+    # are, and `RuleForm.from` is the one translator — so a payload spelled in columns here would be
+    # a second copy of §2.1's table in a file whose subject is spending history, and would arrive at
+    # the form as fields it drops on the floor.
+    #
+    # A DATED BILL PROPOSES `bill` (§3) AND `resets`. The type is what the give-way order is built
+    # on, and the accept form shows the radio so the user confirms before anything is written;
+    # `unspent` is `resets` because a dated rule's build-up is defined by its DATE, which
+    # `Budget#build_up_must_be_valid` refuses to have said twice.
     it "carries a prefill for the rule the proposal would create, owner included", :aggregate_failures do
       bills = category("Bills")
       water = item("Water", in_category: bills)
@@ -271,9 +281,10 @@ RSpec.describe SuggestionEngine do
       spend(water, 210, on: Date.new(2026, 1, 15))
 
       prefill = of_kind(:dated_bill).sole.prefill
+      due = Date.new(2026, 4, 15)
 
       expect(prefill.keys).to eq([:budget])
-      expect(prefill[:budget]).to eq(amount: 210, basis: "monthly", interval_months: 3, anchor_date: Date.new(2026, 4, 15), item_id: water.id, category_id: bills.id)
+      expect(prefill[:budget]).to eq(amount: 210, schedule: "every_n", interval_months: 3, anchor_date: due, item_id: water.id, category_id: bills.id, rule_type: "bill", unspent: "resets")
     end
 
     # TWO BILLS IN ONE CATEGORY ARE TWO RULES ON ONE OWNER, and that is now the ordinary case rather
@@ -446,12 +457,20 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:rate).sole.amount).not_to eq(475) # 2,850 over six periods, rent included
     end
 
+    # A RATE PROPOSES `usage` (§3) AND `resets`: what this detector found is a category the user
+    # spends in every period with no rule for it — a real need whose amount moves with how they live
+    # — and §2.1's row 1 is the shape whose money goes back to free money at the boundary. A fund is
+    # a deliberate act, not something measured out of spending that already happened.
     it "carries a prefill naming the category and the rate", :aggregate_failures do
       coffee = category("Coffee")
       beans = item("Beans", in_category: coffee)
       in_last_three_periods(beans, 120)
 
-      expect(of_kind(:rate).sole.prefill).to eq(budget: { amount: 120, basis: "per_period", category_id: coffee.id })
+      expect(of_kind(:rate).sole.prefill).to eq(
+        budget: {
+          amount: 120, schedule: "per_period", category_id: coffee.id, rule_type: "usage", unspent: "resets"
+        }
+      )
     end
   end
 

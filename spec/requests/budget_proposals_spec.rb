@@ -145,14 +145,22 @@ RSpec.describe "Budget proposals", type: :request do
   # hash, the owner included. The `envelope:` half the panel used to send beside it is gone, and
   # with it the keyword-splitting `#accept(budget:, envelope:)` this helper needed to keep the two
   # apart.
+  #
+  # ** IT IS SPELLED IN THE FORM'S WORDS SINCE RULES-OWN-THE-BUDGET §4. ** `basis` is no longer a
+  # permitted parameter; a monthly bill WITH a due date is `schedule: "every_n"` with an N of 1 —
+  # the same control the half-yearly bill uses — and `RuleForm` maps the pair onto the columns. The
+  # `rule_type` is `bill`, which is what a dated-bill suggestion proposes (§3), and `unspent` is
+  # `resets`, because a dated rule's build-up is defined by its date.
   def accept(**overrides)
     post budgets_path,
          params: {
            budget: {
              amount: "85.00",
-             basis: "monthly",
+             rule_type: "bill",
+             schedule: "every_n",
              interval_months: 1,
              anchor_date: Date.current + 1.month,
+             unspent: "resets",
              item_id: phone.id,
              category_id: utilities.id
            }.merge(overrides)

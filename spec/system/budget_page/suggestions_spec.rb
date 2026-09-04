@@ -287,7 +287,35 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_content("What Utilities claims each period")
       expect(page).to have_field("Rule Amount", with: "85.0")
       expect(page).to have_field("Comes round every (months)", with: "1")
-      expect(page).to have_content("Pays").and have_content("Phone")
+      expect(page).to have_select("Pays", selected: "Phone")
+    end
+
+    # ** WHICH TYPE A SUGGESTION PROPOSES (rules-own-the-budget spec §3): A DATED BILL PROPOSES
+    # `bill`. ** It was measured from payments that actually landed on a cycle, which is what "must
+    # be paid" means — and the radio is on screen, checked, so the user confirms before anything is
+    # written rather than discovering the classification on the Budget page afterwards. The type
+    # decides the GIVE-WAY ORDER when free money goes below zero, so a proposal that guessed
+    # silently would be answering a question about what this person is willing to sacrifice.
+    it "preselects the type it proposes, and writes it" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_checked_field("Bill")
+
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(Budget.find_by(item_id: phone.id)).to be_bill
+    end
+
+    # THE SCHEDULE ARRIVES AS THE FORM'S OWN WORDS TOO. A monthly bill WITH a due date is "every N
+    # months" with an N of 1 — the same control the half-yearly bill uses — so the radio is checked
+    # and both of its fields are revealed rather than the shape riding hidden.
+    it "opens on the every-N-months row with both of its fields revealed" do
+      accept(:dated_bill, phone)
+
+      expect(page).to have_checked_field("Every N months")
+      expect(page).to have_field("First due")
+      expect(page).to have_no_content("Unspent money")
     end
 
     # THE OWNER IS ALREADY IN CONTEXT HERE, so the hand-made form's category picker (Henry's ruling
@@ -367,6 +395,27 @@ RSpec.describe "Budget page suggestions", type: :system do
 
       expect(page).to have_field("Rule Amount", with: "300.0")
       expect(page).to have_no_field("First due")
+    end
+
+    # ** A RATE PROPOSES `usage` (§3). ** What this detector found is a category the user spends in
+    # every period with no rule for it — a real need whose amount moves with how they live, which is
+    # `usage`'s own definition and the column's default besides. A rate that proposed `bill` would
+    # be claiming something the spending history does not say, and the give-way order is built on
+    # the answer.
+    it "preselects usage, and opens on the per-period row that resets" do
+      accept(:rate, groceries)
+
+      expect(page).to have_checked_field("Usage")
+      expect(page).to have_checked_field("Per period")
+      expect(page).to have_checked_field("Resets each period")
+    end
+
+    it "writes the type it proposed" do
+      accept(:rate, groceries)
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole).to be_usage
     end
   end
 

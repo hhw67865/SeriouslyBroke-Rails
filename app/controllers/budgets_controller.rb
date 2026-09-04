@@ -3,13 +3,15 @@
 class BudgetsController < ApplicationController
   before_action :set_budget, only: [:edit, :update, :destroy]
 
-  # EVERY COLUMN THIS FORM MAY WRITE. `basis`, `interval_months`, `anchor_date` and `item_id`
-  # joined the list for §8's suggestion panel: a proposed dated bill is "$85 every month, next due
-  # Sep 21, paying the Phone item", and none of those four is derivable from the amount.
+  # ** EVERY FIELD THIS FORM MAY SUBMIT, AND THEY ARE THE USER'S WORDS RATHER THAN THE COLUMNS
+  # (rules-own-the-budget spec §4). ** `basis` has LEFT the list and `schedule` (`per_period` /
+  # `monthly` / `every_n` / `once`) and `unspent` (`resets` / `builds`) have joined it, beside the
+  # two columns a person can be asked about directly (`rule_type`, `target_amount`).
   #
-  # Each carries a validation consequence — `shape_must_be_valid` on the first three,
-  # `item_must_belong_to_category` and `item_must_not_be_claimed` on the last — so shape is answered
-  # by `Budget` and only OWNERSHIP is answered below.
+  # The wire used to carry `basis`, `interval_months` and `anchor_date` raw, which made every caller
+  # a second author of §2.1's table — and the form could reach only two of its seven rows. The
+  # mapping is `RuleForm`'s, spelled once and in both directions, so what a submission carries is
+  # what the screen asked.
   #
   # `pool_id` LEFT THE LIST AND `category_id` TOOK ITS PLACE (two-ledger spec §3). A rule belongs to
   # the thing that holds the money, and `category_id` is not the cap-era key of the same name: that
@@ -20,51 +22,63 @@ class BudgetsController < ApplicationController
   #
   # `prorated` LEFT WITH THE CAP (plan 3, task 3) and has not come back: the daily ramp it fed is
   # deleted.
-  BUDGET_FIELDS = [:amount, :category_id, :basis, :interval_months, :anchor_date, :item_id].freeze
+  BUDGET_FIELDS = [
+    :category_id,
+    :item_id,
+    :rule_type,
+    :amount,
+    :schedule,
+    :interval_months,
+    :anchor_date,
+    :unspent,
+    :target_amount
+  ].freeze
 
   # GET /budgets/new
   #
   # PREFILLED FROM THE QUERY STRING when the suggestion panel sent the user here, and the prefill
   # goes through the same ownership scoping the POST does — a stranger's `item_id` in a GET would
   # render THEIR item's name on this user's form, which is the read-shaped half of the same leak.
-  # A BARE `/budgets/new` IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it opens as a
-  # PER-PERIOD RATE. `basis` defaults to `monthly` on the column, which with no interval and no
-  # anchor is the one combination `Budget#shape_must_be_valid` refuses outright — so a form that
-  # asked only for the category and the amount could never save. `per_period` is §3.1's row 1: no
-  # interval, no anchor, valid on its own, and the shape a user typing a rule from scratch means.
   #
-  # ASSIGNED BEFORE THE PREFILL, never after: a proposal states its own `basis` and must overwrite
-  # this rather than be overwritten by it.
+  # A BARE `/budgets/new` IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it opens as a
+  # PER-PERIOD RATE THAT RESETS — `RuleForm::DEFAULT_SCHEDULE`, not a `basis:` assigned here. The
+  # column's own default is `monthly`, which with no interval and no anchor is the one combination
+  # `Budget#shape_must_be_valid` refuses outright, so the default has to be stated somewhere; it is
+  # stated once, on the class that owns the mapping, and a proposal's own `schedule` simply
+  # overwrites it.
   def new
-    @budget = Budget.new(basis: :per_period)
-    @budget.assign_attributes(prefill_attributes)
+    @rule_form = RuleForm.new(current_user, prefill_attributes)
     @owner_picker = prefill_attributes[:category_id].blank?
   end
 
   # GET /budgets/1/edit
   #
-  # A DRIFT SUGGESTION PREFILLS THE AMOUNT AND THE FORM SHOWS THE CURRENT ONE BESIDE IT. The
-  # figure arrives in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts
-  # `Budget#steady_ask` before putting it on the wire, precisely so nothing downstream converts —
-  # so this assigns it and the form LABELS it with the rule's basis. Nothing is written: the
-  # assignment is to the in-memory record the form renders, and the user still has to submit.
+  # THE WHOLE RULE, READ BACK AS THE WORDS THAT WROTE IT (`RuleForm.from`). Every control §4 lists
+  # renders on this path except the category, and a shape change here is legal: the claim is
+  # computed, so the walk re-runs from the rule's accrual start under whatever shape is saved.
+  #
+  # A DRIFT SUGGESTION PREFILLS THE AMOUNT AND THE FORM SHOWS THE CURRENT ONE BESIDE IT — hence the
+  # merge order, the prefill last. The figure arrives in THE RULE'S OWN UNIT
+  # (`SuggestionEngine#rule_unit_amount` inverts `Budget#steady_ask` before putting it on the wire,
+  # precisely so nothing downstream converts), and the form labels it with the rule's own basis.
+  # Nothing is written: the user still has to submit.
   def edit
     @current_amount = @budget.amount
-    @budget.amount = prefill_attributes[:amount] if prefill_attributes.key?(:amount)
+    @rule_form = RuleForm.new(current_user, RuleForm.from(@budget).merge(prefill_attributes), budget: @budget)
   end
 
   # POST /budgets
   #
   # ONE FORM AND ONE POST for the whole accept flow. What accepting makes happen — the
   # `funded_since` stamp beside the rule — is `BudgetProposal`'s to explain and this action does not
-  # restate it; here it is only that both outcomes render the same two branches they always did.
+  # restate it; `RuleForm#save` is the one door onto both writes.
   def create
-    @budget = Budget.new(budget_params)
+    @rule_form = RuleForm.new(current_user, budget_params)
 
-    if BudgetProposal.new(budget: @budget).save
+    if @rule_form.save
       redirect_to budget_page_path, notice: "Budget was successfully created."
     else
-      # THE PICKER SURVIVES A REFUSAL, AND ON EVERY PATH. `@budget.category_id` is now whatever the
+      # THE PICKER SURVIVES A REFUSAL, AND ON EVERY PATH. `category_id` is now whatever the
       # request carried, so it cannot answer "was this form asking for an owner" the way it can on
       # the GET — and the honest answer for a refused create is that it may as well be. A suggestion
       # accept that fails validation (an item already claimed) comes back with the picker
@@ -78,8 +92,22 @@ class BudgetsController < ApplicationController
   end
 
   # PATCH/PUT /budgets/1
+  #
+  # THE SAME DOOR AS `#create`, on a rule that already exists. `RuleForm#save` writes it plainly —
+  # no `funded_since` stamp, because the category is already holding and re-stamping it would move
+  # the date every time somebody corrected an amount.
+  #
+  # ** OVER THE RULE'S OWN WORDS, NOT OVER THE FORM'S DEFAULTS. ** `RuleForm` reads a schedule of
+  # `per_period` when nothing says otherwise, which is right for a blank form and catastrophic for a
+  # PATCH: a request naming only an amount would silently strip a six-monthly bill of its interval
+  # and its due date. §4's form submits every control on every save, so the merge changes nothing
+  # about what a user's own submission does — a field they CLEARED arrives as a blank and still
+  # clears — and it makes a partial write mean what it says.
   def update
-    if @budget.update(budget_params)
+    words = RuleForm.from(@budget).merge(budget_params.to_h.symbolize_keys)
+    @rule_form = RuleForm.new(current_user, words, budget: @budget)
+
+    if @rule_form.save
       redirect_to budget_page_path, notice: "Budget was successfully updated."
     else
       render :edit, status: :unprocessable_content
@@ -119,12 +147,15 @@ class BudgetsController < ApplicationController
   # THE SAME LIST AND THE SAME SCOPING, read off a GET. `expect` raises ParameterMissing on a
   # bare `/budgets/new`, which is the ordinary way this form is reached, so the absence of the
   # key is an empty prefill rather than a 400.
+  #
+  # A PLAIN SYMBOL-KEYED HASH, because `#edit` MERGES it over `RuleForm.from` — the rule's own words
+  # first, the suggestion's correction on top — and `Hash#merge` cannot take `Parameters`.
   def prefill_attributes
     @prefill_attributes ||=
       if params[:budget].blank?
         {}
       else
-        scoped_owners(params.expect(budget: BUDGET_FIELDS))
+        scoped_owners(params.expect(budget: BUDGET_FIELDS)).to_h.symbolize_keys
       end
   end
 

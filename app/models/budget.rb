@@ -51,6 +51,16 @@ class Budget < ApplicationRecord
   # otherwise surface as every new rule silently ranking `nil` and blowing up in the comparator.
   def type_rank = TYPE_RANK.fetch(rule_type.to_sym)
 
+  # ** ONE CATEGORY, ONE CATCH-ALL RULE — the sentence, hoisted to a constant so it has an IDENTITY
+  # and not just a spelling (rules-own-the-budget §4). ** `#category_may_hold_one_item_less_rule`
+  # states it on `:base`, because it is a fact about the whole record; `RuleForm` has to move it
+  # onto the "Pays" control, because on that form it is a fact about a control — the sentence's own
+  # second half ("or point this rule at a single item") IS that select. Routing it by comparing the
+  # message text would be a copy of the sentence living in a second file, one rewording away from
+  # silently landing back in the form's banner.
+  CATCH_ALL_TAKEN = "this category already has a rule covering all of its spending — change that " \
+                    "one instead, or point this rule at a single item"
+
   # EVERY RULE A USER OWNS, IN ONE RELATION — the reader `User has_many :budgets, through:
   # :categories` cannot be. That association walks the category link only, which after the cutover
   # reaches NOTHING at all, and every rule the Budget page manages is invisible to it.
@@ -469,11 +479,7 @@ class Budget < ApplicationRecord
     return if item_id.present?
     return unless Budget.where(category_id: category_id, item_id: nil).where.not(id: id).exists?
 
-    errors.add(
-      :base,
-      "this category already has a rule covering all of its spending — change that one instead, " \
-      "or point this rule at a single item"
-    )
+    errors.add(:base, CATCH_ALL_TAKEN)
   end
 
   # THE ONE SHAPE THAT MAY DEMAND NOTHING (computed-claims spec §3.2): a goal fed only by hand. The

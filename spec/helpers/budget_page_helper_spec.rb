@@ -69,6 +69,56 @@ RSpec.describe BudgetPageHelper, type: :helper do
     end
   end
 
+  # ** THE SAME FACT IN A SENTENCE, AND IT NOW SAYS WHAT BECOMES OF THE MONEY (rules-own-the-budget
+  # spec §2.1). ** The cadence alone was the whole story while every dateless rule reset at the
+  # boundary; a rule may now BUILD UP, and "$300.00 per period" says exactly the same words about a
+  # fund that keeps every unspent penny as about a grocery budget that keeps none.
+  describe "#budget_rule_basis_phrase" do
+    # THE RESETTING ARMS ARE UNTOUCHED, which is the direction that keeps every figure already
+    # pinned on the drift accept form ("Currently $150.00 per period", "Currently $260.00 a month").
+    it "says per period for a rate rule" do
+      expect(helper.budget_rule_basis_phrase(rule(:per_period_rate, amount: 400))).to eq("per period")
+    end
+
+    it "says a month for a monthly rate rule" do
+      expect(helper.budget_rule_basis_phrase(rule(:rate, amount: 260))).to eq("a month")
+    end
+
+    # §2.1 row 2 — the fund that grows without limit. There is no figure to name, so it names none
+    # rather than printing an empty one.
+    it "says a per-period fund builds up" do
+      expect(helper.budget_rule_basis_phrase(rule(:building, amount: 300))).to eq("per period, builds up")
+    end
+
+    # §2.1 row 3 — the goal. "builds up" and "builds up toward $1,200.00" are different promises:
+    # the first grows for as long as the rule lives, the second stops.
+    it "names the figure a capped fund is building toward" do
+      expect(helper.budget_rule_basis_phrase(rule(:capped, amount: 200))).to eq("per period, builds up toward $1,200.00")
+    end
+
+    it "says the same of a monthly rule that builds up" do
+      budget = rule(basis: :monthly, interval_months: 1, carries_over: true, amount: 260)
+
+      expect(helper.budget_rule_basis_phrase(budget)).to eq("a month, builds up")
+    end
+  end
+
+  # ** THE HINT'S SECOND CLAUSE IS GONE WITH THE FORM IT DESCRIBED (spec §7). ** It read "— the
+  # schedule itself is already set on this rule", which was true of exactly one form: the edit form
+  # that refused to re-offer a rule's shape. §4's form offers every control on both paths, so the
+  # sentence would now point away from a radio the user is looking straight at.
+  describe "#budget_amount_hint" do
+    it "names the unit and nothing about where the schedule lives" do
+      expect(helper.budget_amount_hint(rule(:per_period_rate, amount: 400)))
+        .to eq("What this rule asks for per period.")
+    end
+
+    it "carries the build-up into the hint" do
+      expect(helper.budget_amount_hint(rule(:capped, amount: 200)))
+        .to eq("What this rule asks for per period, builds up toward $1,200.00.")
+    end
+  end
+
   # ** `#pool_balance_clause` AND ITS TWO EXAMPLES ARE DELETED (computed-claims spec §6). ** They
   # asserted, over all seven `HoldingStatus` states, that a group said its BALANCE exactly once:
   # the clause `· holds $250.00` printed for the three states whose label named a bill's shortfall

@@ -117,6 +117,18 @@
     cursor: pointer;
   }
 
+  /* The rules form's three radio groups (rules-own-the-budget §4). Same size and same accent as the
+     checkbox beside it — the only difference is the shape, which is the one thing a radio and a
+     checkbox are supposed to differ in. */
+  .form-radio {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    accent-color: var(--color-sage-600);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
   /* #8b897c was 3.52:1 on a white card at 12px — the hint under every field in the app, and the
      only place several rules ("a target switches off use-it-or-lose-it") are ever stated. Same
      warm grey, darkened to 5.2:1. */

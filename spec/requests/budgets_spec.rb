@@ -47,6 +47,17 @@ RSpec.describe "Budgets", type: :request do
     end
   end
 
+  # ** THE WIRE CARRIES THE USER'S WORDS SINCE RULES-OWN-THE-BUDGET §4. ** `basis` is no longer a
+  # permitted parameter; `schedule` (`per_period` / `monthly` / `every_n` / `once`) and `unspent`
+  # (`resets` / `builds`) are, and `RuleForm` turns them into the columns. Every payload below is
+  # therefore spelled as a person would answer the form, and the ASSERTIONS are on the columns —
+  # which is the only way a request spec can tell the mapping from a mapping that agrees with itself.
+  #
+  # The words a bare form submits, so each example states only the fields it is about.
+  def rule_words(**overrides)
+    { amount: "40.00", rule_type: "usage", schedule: "per_period", unspent: "resets" }.merge(overrides)
+  end
+
   # THE OTHER HALF OF §7a: a scoped READ beside an unscoped WRITE is not ownership, it is ownership
   # on the way in only. `budget[category_id]` is a wire parameter, and `Budget` itself cannot object
   # to a foreign category — it validates that the shape is legal and that the item belongs to the
@@ -60,10 +71,110 @@ RSpec.describe "Budgets", type: :request do
     it "writes a rule on the user's own category", :aggregate_failures do
       own = create(:category, :expense, :funded, user: user, name: "Dining Out")
 
-      expect { post budgets_path, params: { budget: { amount: "40.00", category_id: own.id, basis: "monthly", interval_months: 1 } } }
+      expect { post budgets_path, params: { budget: rule_words(category_id: own.id, schedule: "monthly") } }
         .to change(Budget, :count).by(1)
       expect(response).to redirect_to(budget_page_path)
       expect(own.budgets.reload.sole.amount).to eq(40)
+    end
+
+    # ** ONE EXAMPLE PER ROW OF §2.1, THROUGH THE FULL STACK. ** The unit pins are in
+    # `spec/services/rule_form_spec.rb`; these are here because a permitted-parameter list is the
+    # other half of the mapping, and a field dropped from `BUDGET_FIELDS` is a control that silently
+    # writes nothing.
+    {
+      "a per-period rate" => [
+        { schedule: "per_period", unspent: "resets", amount: "400.00" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: false, target_amount: nil }
+      ],
+      "an uncapped fund" => [
+        { schedule: "per_period", unspent: "builds", target_amount: "", amount: "300.00" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: nil }
+      ],
+      "a goal with a target" => [
+        { schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "200.00" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000 }
+      ],
+      "a goal fed by hand" => [
+        { schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "0" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000 }
+      ],
+      "a monthly rate" => [
+        { schedule: "monthly", unspent: "resets", amount: "260.00" },
+        { basis: "monthly", interval_months: 1, anchor_date: nil, carries_over: false, target_amount: nil }
+      ],
+      "a bill every 6 months" => [
+        { schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", amount: "600.00" },
+        {
+          basis: "monthly",
+          interval_months: 6,
+          anchor_date: Date.new(2026, 12, 1),
+          carries_over: false,
+          target_amount: nil
+        }
+      ],
+      "a one-time bill" => [
+        { schedule: "once", anchor_date: "2026-12-01", amount: "600.00" },
+        {
+          basis: "monthly",
+          interval_months: nil,
+          anchor_date: Date.new(2026, 12, 1),
+          carries_over: false,
+          target_amount: nil
+        }
+      ]
+    }.each do |name, (submitted, columns)|
+      it "writes #{name}", :aggregate_failures do
+        own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+        post budgets_path, params: { budget: rule_words(category_id: own.id, **submitted) }
+
+        expect(response).to redirect_to(budget_page_path)
+        expect(own.budgets.reload.sole.slice(*columns.keys)).to eq(columns.stringify_keys)
+      end
+    end
+
+    # EVERY RULE HAS A TYPE (§3), and the give-way order is built on it — so the radio is required
+    # and a submission with none is refused rather than defaulted.
+    it "refuses a rule with no type", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      expect { post budgets_path, params: { budget: rule_words(category_id: own.id, rule_type: "") } }
+        .not_to change(Budget, :count)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("can&#39;t be blank")
+    end
+
+    it "writes the type the form chose", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      post budgets_path, params: { budget: rule_words(category_id: own.id, rule_type: "choice") }
+
+      expect(own.budgets.reload.sole).to be_choice
+    end
+
+    # ** A CONTRADICTION IS REFUSED, NOT LAUNDERED (§4). ** `per period` writes no anchor, so this
+    # payload could have been saved by dropping the date on the floor — and a bill whose due date
+    # vanished on the way in is a rule that silently is not the one the user described. The message
+    # lands under "How often", which is the control that decided against the date.
+    it "refuses a per-period rule carrying a due date, under How often", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      expect { post budgets_path, params: { budget: rule_words(category_id: own.id, anchor_date: "2026-12-01") } }
+        .not_to change(Budget, :count)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("How often does not take a due date")
+    end
+
+    # `basis` IS NOT A PERMITTED PARAMETER ANY MORE. Silent, as an unpermitted key always is: the
+    # request is exactly the one above it, and the shape comes from `schedule` alone — so a client
+    # written against the old wire cannot set a basis behind the form's back.
+    it "ignores a basis on the wire and takes the schedule's own", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      post budgets_path, params: { budget: rule_words(category_id: own.id, basis: "monthly") }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(own.budgets.reload.sole.basis).to eq("per_period")
     end
 
     # AMENDMENT B, TRIPPED ON PURPOSE. This slot and its PATCH twin used to pin the OWNER parameter
@@ -71,7 +182,7 @@ RSpec.describe "Budgets", type: :request do
     # them. The Budget page's form submits a rule's own owner back, so the permitted list was
     # widened, and at that moment "whose is this" became the question.
     it "refuses a stranger's category and writes nothing", :aggregate_failures do
-      expect { post budgets_path, params: { budget: { amount: "40.00", category_id: stranger_category.id } } }
+      expect { post budgets_path, params: { budget: rule_words(category_id: stranger_category.id) } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:not_found)
       expect(stranger_category.budgets.reload).to be_empty
@@ -92,7 +203,7 @@ RSpec.describe "Budgets", type: :request do
     it "answers the user's own income category with a 422, not a 404", :aggregate_failures do
       income = create(:category, :income, user: user)
 
-      expect { post budgets_path, params: { budget: { amount: "40.00", category_id: income.id, basis: "per_period" } } }
+      expect { post budgets_path, params: { budget: rule_words(category_id: income.id) } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("only expense categories hold money")
@@ -103,7 +214,7 @@ RSpec.describe "Budgets", type: :request do
     # `Budget#must_have_an_owner` answers with a legible 422 on `:base`, which is where the form
     # renders it, and the sentence names the CATEGORY because that is the control the form offers.
     it "answers a rule with no owner at all with a 422", :aggregate_failures do
-      expect { post budgets_path, params: { budget: { amount: "40.00" } } }
+      expect { post budgets_path, params: { budget: rule_words } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("must belong to a category")
@@ -120,7 +231,7 @@ RSpec.describe "Budgets", type: :request do
     # spending. The model answers on `:base`, which is where `budgets/_form` prints it, and the
     # controller turns that into the same 422 every other shape refusal gets.
     it "refuses a second rule covering the whole of one category", :aggregate_failures do
-      expect { post budgets_path, params: { budget: { amount: "40.00", category_id: groceries.id, basis: "per_period" } } }
+      expect { post budgets_path, params: { budget: rule_words(category_id: groceries.id) } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("already has a rule covering all of its spending")
@@ -132,14 +243,13 @@ RSpec.describe "Budgets", type: :request do
       phone = create(:item, category: groceries, name: "Phone")
 
       expect do
-        post budgets_path,
-             params: { budget: { amount: "40.00", category_id: groceries.id, basis: "per_period", item_id: phone.id } }
+        post budgets_path, params: { budget: rule_words(category_id: groceries.id, item_id: phone.id) }
       end.to change(Budget, :count).by(1)
       expect(response).to redirect_to(budget_page_path)
     end
 
     it "ignores a pool_id entirely and writes no rule", :aggregate_failures do
-      expect { post budgets_path, params: { budget: { amount: "40.00", pool_id: SecureRandom.uuid } } }
+      expect { post budgets_path, params: { budget: rule_words(pool_id: SecureRandom.uuid) } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
     end
@@ -202,6 +312,60 @@ RSpec.describe "Budgets", type: :request do
       expect(response.body).to include("must be an expense category")
       expect(rule.reload.category).to eq(groceries)
       expect(income.budgets.reload).to be_empty
+    end
+
+    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§4), AND THE CLAIM SIMPLY RE-RUNS. ** The
+    # "the schedule itself is already set on this rule" form is gone: a rate rule becoming a
+    # building one is a decision the user is now allowed to make, and because the claim is COMPUTED
+    # the walk re-runs from the rule's accrual start under the new shape with nothing migrated.
+    # `Budget#claim_shape` is the one door onto that reading, and it is what is asserted — the three
+    # columns beside it are what the form actually wrote.
+    it "turns a rate rule into a building one and the claim reads the new shape", :aggregate_failures do
+      patch budget_path(rule),
+            params: { budget: rule_words(schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "200") }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(rule.reload.carries_over).to be true
+      expect(rule.target_amount).to eq(5_000)
+      expect(rule.claim_shape).to eq(:building)
+    end
+
+    # THE OTHER DIRECTION, because a target left behind on a rule whose money now resets is a figure
+    # no formula reads sitting on a row that looks like progress.
+    it "turns a building rule back into a rate rule and drops the target", :aggregate_failures do
+      fund = create(:budget, :capped, category: create(:category, :expense, :funded, user: user), amount: 200)
+
+      patch budget_path(fund), params: { budget: rule_words(unspent: "resets", amount: "200") }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(fund.reload.carries_over).to be false
+      expect(fund.target_amount).to be_nil
+      expect(fund.claim_shape).to eq(:rate)
+    end
+
+    # A PARTIAL PATCH KEEPS THE SHAPE IT DID NOT MENTION. `RuleForm` reads `per_period` when nothing
+    # says otherwise — right for a blank form, catastrophic for a request naming only an amount —
+    # so `#update` merges the submission over the rule's OWN words. §4's form submits every control
+    # on every save, so this changes nothing about what a user's submission does.
+    it "leaves a dated bill's schedule alone when only the amount is sent", :aggregate_failures do
+      bill = create(:budget, :recurring, category: create(:category, :expense, :funded, user: user), amount: 800)
+
+      patch budget_path(bill), params: { budget: { amount: "900" } }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(bill.reload.amount).to eq(900)
+      expect(bill.interval_months).to eq(6)
+      expect(bill.anchor_date).to eq(Date.new(2026, 6, 1))
+    end
+
+    # THE SAME CONTRADICTION AS THE POST, ON THE UPDATE PATH: a due date that the chosen schedule
+    # does not take is refused under "How often" rather than dropped on the way in.
+    it "refuses a per-period rule carrying a due date, under How often", :aggregate_failures do
+      patch budget_path(rule), params: { budget: rule_words(schedule: "per_period", anchor_date: "2026-12-01") }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("How often does not take a due date")
+      expect(rule.reload.anchor_date).to be_nil
     end
   end
 

@@ -67,8 +67,21 @@ module BudgetPageHelper
   # notation stranded in an English sentence. Only the `:per_period` arm differs — the other three
   # already read as words — so this delegates rather than restating the classification, and a fifth
   # cadence cannot be added to one of the two and forgotten in the other.
+  #
+  # ** IT SAYS WHAT BECOMES OF THE MONEY TOO (rules-own-the-budget spec §2.1). ** The cadence alone
+  # was the whole story while every dateless rule reset at the boundary; a rule may now BUILD UP,
+  # and "$300.00 per period" says exactly the same words about a fund that keeps every unspent penny
+  # as about a grocery budget that keeps none. The clause is only ever added — the four cadence
+  # words are untouched — so every figure a resetting rule prints is the figure it printed before.
+  #
+  # THE TARGET IS NAMED WHERE THERE IS ONE, because "builds up" and "builds up toward $5,000" are
+  # different promises: the first grows for as long as the rule lives, the second stops.
   def budget_rule_basis_phrase(budget)
-    budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
+    phrase = budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
+    return phrase unless budget.carries_over?
+    return "#{phrase}, builds up" if budget.target_amount.blank?
+
+    "#{phrase}, builds up toward #{number_to_currency(budget.target_amount)}"
   end
 
   # THE LIST `PATCH /budget/reorder` TAKES, with one category moved one place. `offset` is -1 for ▲
@@ -131,22 +144,17 @@ module BudgetPageHelper
     "#{subject} no claiming date — spending here isn't counted against it"
   end
 
-  # WHAT THE AMOUNT FIELD IS AN AMOUNT OF, and the second clause is about WHERE THE SCHEDULE IS. It
-  # is true on the EDIT form, where the shape is not on screen and a user reading "$1,200.00 every
-  # 6 months" needs to know the six months is not something this form is asking them for. It stops
-  # being true the moment the form RENDERS the schedule, which a new dated rule does: the interval
-  # is a field three rows below and the anchor is stated beside it, so the clause would point away
-  # from a control the user is looking straight at.
+  # WHAT THE AMOUNT FIELD IS AN AMOUNT OF.
   #
-  # IT NAMED THE POOL AND NAMES THE RULE (two-ledger spec §3). "— the schedule itself is set on the
-  # pool" was never quite true even then: `basis`, `interval_months` and `anchor_date` are the
-  # RULE's own columns and always were, and the pool it pointed at is the layer being deleted.
-  #
-  # Keyed on `schedule_shown:` rather than on "is this a proposal", because the two are not the
-  # same set — a hand-made rate renders no schedule and is still a proposal of the user's own.
-  def budget_amount_hint(budget, schedule_shown: false)
-    basis = "What this rule asks for #{budget_rule_basis_phrase(budget)}"
-    schedule_shown ? "#{basis}." : "#{basis} — the schedule itself is already set on this rule."
+  # ** THE SECOND CLAUSE AND ITS `schedule_shown:` SWITCH ARE GONE (rules-own-the-budget spec §7).
+  # ** It read "— the schedule itself is already set on this rule", and it was true of exactly one
+  # form: the edit form that refused to re-offer a rule's shape. §4's form offers every control on
+  # both paths, so the sentence now points away from a radio the user is looking straight at, four
+  # rows down. What is left is the clause that was always the point — the amount's UNIT — and it now
+  # carries the build-up too, because "$300 per period" means one thing for a fund and another for a
+  # grocery budget.
+  def budget_amount_hint(budget)
+    "What this rule asks for #{budget_rule_basis_phrase(budget)}."
   end
 
   # -----------------------------------------------------------------------------------------
