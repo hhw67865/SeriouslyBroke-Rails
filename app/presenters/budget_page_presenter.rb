@@ -52,6 +52,7 @@ class BudgetPagePresenter
     :accrued_this_period,
     :built_up,
     :target,
+    :capped,
     :next_due_on,
     :planned_this_period,
     :over,
@@ -63,6 +64,13 @@ class BudgetPagePresenter
     def anchored? = next_due_on.present?
 
     def rate? = shape == :rate
+
+    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
+    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
+    # question the calculator already answers and a second spelling here would be free to drift. An
+    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — and `HomeHelper#claim_figure`
+    # renders this Data as well as Home's, so it asks this before it prints "of".
+    def capped? = capped
 
     # THE THREE ALIASES THE SHARED §3.4 HELPERS ASK FOR. `accrued_this_period` and
     # `planned_this_period` are the writer's names — `AdjustmentForm` skips one and the panel prints
@@ -355,6 +363,7 @@ class BudgetPagePresenter
       accrued_this_period: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
+      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,

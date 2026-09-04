@@ -148,8 +148,8 @@ class EntryImpactPresenter
   # `Category#saving_toward_a_target?` IS THE RENDERING PREDICATE, and it is the same expression
   # asked of the category itself — a holder with a figure to reach. It lives on the model rather
   # than on a calculator because the question is about the CATEGORY a screen is drawing and not
-  # about any one rule: `ClaimCalculator#shape` answers `:target` off the same column for a single
-  # rule, and a category may carry a `:target` rule beside a `:dated` one without ceasing to be a
+  # about any one rule: `ClaimCalculator#shape` answers `:building` off the RULE's own `carries_over`
+  # for a single rule, and a category may carry a building rule beside a `:dated` one without ceasing to be a
   # goal to look at. The categories index card, the categories page's holdings card and this card
   # all ask the one predicate, so a rule-bearing goal is a goal on every one of them.
   #
@@ -288,8 +288,8 @@ class EntryImpactPresenter
   #
   # A GOAL MEASURES AGAINST ITS TARGET INSTEAD, and this is a CORRECTION to the plan's wording
   # ("the bar's denominator is Σ steady_ask") rather than an exception to its ruling — the ruling is
-  # that the card invents no normaliser, and `target_amount` is the existing goal reader that
-  # `ClaimCalculator#target` takes for a `:target`-shaped rule and that the categories page's goal
+  # that the card invents no normaliser, and the CATEGORY's `target_amount` is the existing goal
+  # reader that this bar and the categories page's goal
   # bar already measures against. Measured on the demo seeds, both halves:
   #
   #   * Retirement Supplement claims $545 against a $100,000 goal and $150 a period of rules. Under
@@ -431,16 +431,34 @@ class EntryImpactPresenter
 
   # THE MOST THIS CATEGORY COULD POSSIBLY CLAIM — a rate rule's whole accrual for the period (§3.1's
   # `rate + Σ adjustments`, floored at zero because a big enough negative delta would otherwise make
-  # the ceiling itself negative), and an accruing rule's target (§3.2 caps its built-up there).
+  # the ceiling itself negative), and a CAPPED accruing rule's target (§3.2 caps its built-up there).
+  # `#ceiling_for` carries the third arm and why it is what it is.
   #
   # A CATEGORY CARRYING TWO ACCRUING RULES AGAINST ONE CATEGORY TARGET COUNTS THAT TARGET TWICE, and
   # that is accepted rather than corrected: it makes the ceiling LOOSER, never tighter, so it cannot
   # cut a figure that was true, and the ceiling is the second line of defence behind the three gates
   # on #own_contribution rather than the thing doing the work.
   def most_it_could_claim
-    claim_calculators.sum(0.to_d) do |calculator|
-      calculator.rate? ? [calculator.accrued_this_period, 0.to_d].max : calculator.target
-    end
+    claim_calculators.sum(0.to_d) { |calculator| ceiling_for(calculator) }
+  end
+
+  # ** AN UNCAPPED BUILDING RULE HAS NO TARGET TO BE THE CEILING (rules-own-the-budget spec §2.1 row
+  # 2; fix round 1 — MED). ** `ClaimCalculator#target` is NIL for a fund that names no figure, and a
+  # `BigDecimal + nil` raised on the entry form the moment a category held one.
+  #
+  # THE CEILING FOR THAT SHAPE IS `built_up + this period's rate`, and the reasoning is the one this
+  # method is built on: the ceiling exists to stop a give-back printing money that is provably not
+  # there, so it has to be the most the rule COULD hold on the day the card is drawn. An uncapped
+  # rule's built-up is whatever the walk has reached; the only thing that can be added to it before
+  # the next boundary is this period's own share, and there is no deadline and no cap that could
+  # take it higher. It is also the LOOSEST honest bound rather than the tightest, which is the
+  # direction this method's own header argues for — the three gates on `#own_contribution` do the
+  # work, and the ceiling is the second line of defence behind them.
+  def ceiling_for(calculator)
+    return [calculator.accrued_this_period, 0.to_d].max if calculator.rate?
+    return calculator.target if calculator.capped?
+
+    calculator.built_up + calculator.planned_this_period
   end
 
   # WHAT THIS ENTRY HAS ALREADY TAKEN OUT OF THE CLAIM, in the claim's own sign. Zero for a new

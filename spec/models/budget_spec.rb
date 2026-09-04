@@ -99,6 +99,25 @@ RSpec.describe Budget, type: :model do
       it "still refuses a negative amount there" do
         expect(build(:budget, :capped, category: owner, amount: -1)).not_to be_valid
       end
+
+      # ** A MONTHLY HAND-FED GOAL IS LEGAL NOW, AND IT IS THE SPEC'S OWN SHAPE (rules-own-the-budget
+      # §2.1 row 5; fix round 1 — LOW). ** The old predicate ALSO required `interval_months.blank?`,
+      # because the target lived on the category and "no anchor and no interval" was the only way to
+      # spell the dateless shape. The three columns are the rule's own now and they say it
+      # positively, so `basis: monthly, interval 1` — "$0 a month, building toward $5,000" — is
+      # accepted where it used to be refused. §2.1 row 5 says a monthly rule may build up either way,
+      # and nothing about the amount changes that.
+      #
+      # BOTH DIRECTIONS ON ONE INTERVAL, so the widening is a fact about the target and not about the
+      # column that used to be tested: the same monthly rule with no target is still refused.
+      it "takes a zero amount on a monthly building rule that names a target" do
+        expect(build(:budget, :rate, category: owner, amount: 0, carries_over: true, target_amount: 5_000))
+          .to be_valid
+      end
+
+      it "refuses the same monthly rule once the target is gone" do
+        expect(build(:budget, :rate, category: owner, amount: 0, carries_over: true)).not_to be_valid
+      end
     end
 
     # ** WHAT BECOMES OF UNSPENT MONEY, AND WHAT IT IS BUILDING TOWARD (spec §2.1's validation

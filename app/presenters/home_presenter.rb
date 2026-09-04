@@ -51,6 +51,7 @@ class HomePresenter
     :accrued,
     :built_up,
     :target,
+    :capped,
     :next_due_on,
     :per_period,
     :over,
@@ -58,6 +59,14 @@ class HomePresenter
     :overdue
   ) do
     def rate? = shape == :rate
+
+    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
+    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
+    # question the calculator already answers and a second spelling here would be free to drift. An
+    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — so every reader of `target`
+    # asks this first; without it Home raised `NoMethodError` on `nil.positive?` the moment a rule
+    # said "build up without limit".
+    def capped? = capped
 
     # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, which reads the figure BEFORE the clamp
     # at zero and is therefore the only reader that can tell "spent it exactly" from "spent more than
@@ -83,21 +92,32 @@ class HomePresenter
     # is which SENTENCE the strip says about it: "the fund is short $200.00 — this needs paying" is a
     # different instruction from "the money is set aside — pay it and the fund starts again", and only
     # this pair can tell them apart.
-    def fund_short? = built_up < target
+    # BOTH READ `#target`, SO BOTH ASK `#capped?` FIRST. The strip only reaches them on an OVERDUE
+    # rule, which has a due date and is therefore always capped — so the uncapped arms below are
+    # unreachable from `_trouble.html.erb` today and are stated anyway, because "unreachable" is a
+    # fact about one caller and this is a fact about the row.
+    def fund_short? = capped? && built_up < target
 
-    def fund_gap = target - built_up
+    def fund_gap = capped? ? target - built_up : 0.to_d
 
     # WHAT THE BAR MEASURES: spending against the rate for an envelope, the running total against the
     # target for a fund (§3.4). One pair of readers rather than a signed number, because the two
     # halves are read by different parts of the row.
     def filled = rate? ? spent : built_up
 
-    def denominator = rate? ? accrued : target
+    # NIL FOR AN UNCAPPED BUILDING RULE, which is the honest answer: a fund that names no figure is
+    # not a fraction of anything, and inventing a denominator would draw a track whose fullness means
+    # nothing at all.
+    def denominator
+      return accrued if rate?
+
+      capped? ? target : nil
+    end
 
     # A BAR NEEDS SOMETHING TO BE A FRACTION OF. A rate rule skipped to nothing this period, and a
-    # dateless goal with no target at all, have no denominator — the row prints the fact and no
+    # building rule with no target at all, have no denominator — the row prints the fact and no
     # track, `EntryImpactPresenter#bar?`'s rule for its reason.
-    def bar? = denominator.positive?
+    def bar? = !denominator.nil? && denominator.positive?
 
     # WHOLE PERCENT, CLAMPED, matching `HomePresenter::Progress#percent` and
     # `HoldingCalculator#progress_percentage` — the app's other bars — so all of them draw alike.
@@ -710,6 +730,7 @@ class HomePresenter
       accrued: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
+      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       per_period: calculator.planned_this_period,
       over: calculator.over?,

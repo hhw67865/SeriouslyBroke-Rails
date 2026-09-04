@@ -268,6 +268,30 @@ RSpec.describe "Home This Period", type: :system do
     expect(row("Vacation")).to have_css("[data-period-bar='18']")
   end
 
+  # ** A FUND THAT NAMES NO FIGURE HAS NO DENOMINATOR AND NO BAR (rules-own-the-budget spec §2.1 row
+  # 2; fix round 1 — MED). ** `ClaimCalculator#target` is NIL for an uncapped building rule, and the
+  # row printed `$300.00 built up of ` — a dangling preposition over an empty figure — while
+  # `HomePresenter::ClaimLine#bar?` raised `NoMethodError` on `nil.positive?` and took the whole of
+  # Home down with it. The sentence is the built-up alone, with the rate said by the clause under it.
+  #
+  # PLANTED: a $300-a-period emergency fund written TODAY, so the walk opens in the current period
+  # and visits exactly one (a rule accrues from the later of its category's funding date and its own
+  # birthday, and this category was funded a year back). Nothing is spent, and `planned` is the plain
+  # rate because there is no `gap` to bound it — so `built_up` is **$300.00** on every cadence.
+  # The negative is the "of" itself, so a fix that printed "of $0.00" would fail here.
+  it "states an uncapped fund's built-up with nothing to be a fraction of", :aggregate_failures do
+    deposit(500)
+    emergency = holder("Emergency", priority: 1)
+    create(:budget, :building, category: emergency, amount: 300)
+
+    visit root_path
+
+    expect(figure("Emergency")).to have_content("$300.00 built up")
+    expect(figure("Emergency")).to have_no_content("built up of")
+    expect(clause("Emergency")).to have_content("$300.00 per period")
+    expect(row("Emergency")).to have_no_css("[data-period-bar]")
+  end
+
   # ** AN ANCHOR-DATED GOAL READS BY ITS SCHEDULE, AND THE ANCHOR WINS OVER THE TARGET (§3's shape
   # rule). ** The categories band's version of this example asserted `have_no_content("of $2,400.00")`
   # on the whole row, because an anchor-dated goal's status was its schedule rather than `saving`. The

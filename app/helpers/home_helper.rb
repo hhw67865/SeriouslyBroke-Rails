@@ -41,8 +41,15 @@ module HomeHelper
   # for a fund. ONE method for both because the two are the same shape said about different money,
   # and the caller must not choose the noun — a row that printed "spent" over a fund's running total
   # would be the money screen's oldest lie, that savings are money to spend.
+  # ** AN UNCAPPED FUND HAS NOTHING TO BE "OF" (rules-own-the-budget spec §2.1 row 2; fix round 1 —
+  # MED). ** A building rule that names no target has `ClaimCalculator#target` NIL — there is no
+  # ceiling — and this printed `$450.00 built up of ` with an empty figure after a dangling
+  # preposition. The sentence for that shape is the built-up alone; §5's fuller copy ("built up $X ·
+  # +$rate per period") is the screens task's, and the `· $300.00 per period` half is already
+  # supplied by `#claim_schedule` under the same row.
   def claim_figure(line)
     return "#{number_to_currency(line.spent)} of #{number_to_currency(line.accrued)}" if line.rate?
+    return "#{number_to_currency(line.built_up)} built up" unless line.capped?
 
     "#{number_to_currency(line.built_up)} built up of #{number_to_currency(line.target)}"
   end

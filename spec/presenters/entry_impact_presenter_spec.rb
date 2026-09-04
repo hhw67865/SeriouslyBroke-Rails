@@ -543,6 +543,32 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance).to eq(0)
       expect(impact.balance).not_to eq(BigDecimal("750"))
     end
+
+    # ** AN UNCAPPED FUND HAS NO TARGET TO BE THE CEILING (rules-own-the-budget spec §2.1 row 2; fix
+    # round 1 — MED). ** `#most_it_could_claim` read `ClaimCalculator#target` for every accruing rule
+    # and that reader is NIL for a building rule naming no figure, so `BigDecimal + nil` raised a
+    # TypeError on the entry form the moment a category held an emergency fund. `#ceiling_for` is
+    # what answers now, and the arm it takes for this shape is `built_up + this period's rate`: the
+    # most the rule COULD hold on the day the card is drawn, since nothing but this period's own
+    # share can be added before the next boundary and there is no cap that could take it higher.
+    #
+    # BY HAND, on a $600-a-period fund born as the period opened with $150 spent on it:
+    #   walk      planned 600 (uncapped: `gap` is unbounded) · accrued 600 · spent 150 → built 450
+    #   ceiling   450 + 600 = 1,050
+    #   balance   (pre-clamp 450 + the $150 given back).clamp(0, 1,050) = **$600.00**
+    # The give-back is not clipped, which is the point: the ceiling is real and it is above the
+    # figure, so the card states what the rule actually had before this receipt.
+    it "gives an uncapped fund's spending back against a ceiling of its own", :aggregate_failures do
+      emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: funded_since)
+      create(:budget, :building, category: emergency, amount: 600, created_at: born)
+      drawn = spend(emergency, 150)
+
+      impact = present(emergency, amount: "150", entry: drawn)
+
+      expect(emergency.claim(today: today)).to eq(BigDecimal("450"))
+      expect(impact.balance).to eq(BigDecimal("600"))
+      expect(impact.balance_after).to eq(BigDecimal("450"))
+    end
   end
 
   # TWO SHAPES REACH THIS CARD, AND ONE OF THEM IS A DATE. `#unbudgeted?` read

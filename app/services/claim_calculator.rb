@@ -436,10 +436,23 @@ class ClaimCalculator
   # shape and the subtraction below would raise — and because "the gap is infinite" is the honest
   # sentence: every period plans its full rate, for ever, which is what an emergency fund is.
   #
-  # THIS IS ALSO WHERE "ADJUSTMENTS TOUCH ONLY THEIR PERIOD" COMES FROM (§2.1, ruled 2026-09-04).
-  # There is no `due`, so there is no catch-up to re-plan: a −$150 in September lowers September's
-  # accrual and October opens asking its plain $300. A DATED rule re-plans against its deadline on
-  # the very next period, which is the opposite behaviour and the ruling of 2026-09-03.
+  # ** THIS IS WHERE "ADJUSTMENTS ON A BUILDING RULE TOUCH ONLY THEIR PERIOD" COMES FROM, AND THE
+  # SENTENCE IS TRUE OF THE UNCAPPED SHAPE (§2.1, ruled 2026-09-04; fix round 1 — LOW). ** There is
+  # no `due` on either building shape, so there is no catch-up share to re-plan — no later period
+  # ever asks for MORE than the rate to make up for a delta. What the two shapes do with the fund
+  # afterwards is not the same thing, and the earlier wording ran them together:
+  #
+  #   UNCAPPED — a −$150 in September lowers September's accrual and October opens asking its plain
+  #     $300, because `gap` is unbounded and this method returns above.
+  #   CAPPED AT ITS CAP — the same −$150 leaves the fund $150 short of the target, so October's
+  #     `gap` is $150 and it plans `min(rate, 150)` where it had been planning ZERO. The fund
+  #     REFILLS. That is not catch-up (it never exceeds the rate, and there is no deadline it is
+  #     racing); it is the cap's own arithmetic, and it is the right behaviour — a goal the user
+  #     raided is a goal that goes on filling.
+  #
+  # A DATED rule is the shape that really does re-plan, raising every later share against its
+  # deadline — the opposite behaviour, and the ruling of 2026-09-03. All three arms are pinned in
+  # `claim_calculator_spec`.
   def planned_for(period, state, due)
     return 0.to_d if settled?(state.paid)
     return rate_per_period unless capped?

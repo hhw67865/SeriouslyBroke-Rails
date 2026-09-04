@@ -71,6 +71,7 @@ class CategoryBudgetPresenter
     :accrued_this_period,
     :built_up,
     :target,
+    :capped,
     :next_due_on,
     :planned_this_period,
     :over,
@@ -78,6 +79,13 @@ class CategoryBudgetPresenter
     :overdue
   ) do
     def rate? = shape == :rate
+
+    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
+    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
+    # question the calculator already answers and a second spelling here would be free to drift. An
+    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — and `HomeHelper#claim_figure`
+    # renders this Data as well as Home's, so it asks this before it prints "of".
+    def capped? = capped
 
     def accrued = accrued_this_period
 
@@ -270,6 +278,7 @@ class CategoryBudgetPresenter
       accrued_this_period: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
+      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,

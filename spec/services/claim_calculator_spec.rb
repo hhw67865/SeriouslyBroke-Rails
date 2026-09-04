@@ -660,7 +660,7 @@ RSpec.describe ClaimCalculator, type: :model do
     # ROW 2 — $300 a period, builds up, no ceiling. The emergency fund: the §3.2 walk with `gap`
     # unbounded, so `#target` is NIL and not zero. The difference is load-bearing — zero would make
     # `gap` negative on the first period and the walk would plan nothing for ever.
-    it "calls a per-period rule that builds up a building rule, uncapped", :aggregate_failures do
+    it "calls a per-period rule that builds up an uncapped building rule", :aggregate_failures do
       rule = rule_for("Emergency", :building, amount: 300)
 
       expect(calc(rule).shape).to eq(:building)
@@ -670,7 +670,7 @@ RSpec.describe ClaimCalculator, type: :model do
     end
 
     # ROW 3 — $200 a period toward $5,000. Today's goal, reading the RULE.
-    it "calls a building rule with a figure a capped building rule", :aggregate_failures do
+    it "calls a building rule that names a figure a capped one", :aggregate_failures do
       rule = rule_for("Vacation", :building, amount: 200, target_amount: 5_000)
 
       expect(calc(rule).shape).to eq(:building)
@@ -782,6 +782,62 @@ RSpec.describe ClaimCalculator, type: :model do
     # still be there next period.
     it "claims what it has built rather than what is left of this period" do
       expect(calc(Date.new(2026, 3, 20)).claim).to eq(650)
+    end
+  end
+
+  # ===========================================================================================
+  # ** THE CAP REFILLS, AND THAT IS NOT CATCH-UP (fix round 1 — LOW). ** The comment on
+  # `#planned_for` used to say "adjustments on a building rule touch only their period" flat, which
+  # is true of the UNCAPPED shape and only half true of the capped one: a capped rule sitting AT its
+  # cap plans nothing, and a −$150 leaves a $150 gap that the next period plans `min(rate, gap)`
+  # against — the fund refills. It never exceeds the rate and there is no deadline it is racing, so
+  # it is the cap's own arithmetic rather than §3.2's catch-up. Both arms are pinned, because the
+  # sentence is only meaningful as the pair.
+  # ===========================================================================================
+  describe "a negative adjustment on a capped building rule at its cap" do
+    # $150 a period toward $1,200 from Jan 1: eight periods fill it, so August closes full and
+    # September opens planning nothing.
+    let(:full_goal) do
+      create(
+        :budget,
+        :capped,
+        category: create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1)),
+        amount: 150,
+        target_amount: 1_200,
+        created_at: born
+      )
+    end
+
+    def calc(on) = described_class.new(full_goal, today: on)
+
+    before { adjust(full_goal, -150, on: Time.utc(2026, 9, 10, 12)) }
+
+    # SEPTEMBER: `gap` is zero when the period opens, so it plans $0; the −$150 lands after the plan
+    # and takes the fund to $1,050.
+    it "takes the money out of the period it is dated in", :aggregate_failures do
+      september = calc(Date.new(2026, 9, 20))
+
+      expect(september.planned_this_period).to eq(0)
+      expect(september.built_up).to eq(1_050)
+    end
+
+    # OCTOBER: the gap is $150, so it plans `min($150, $150)` and the fund is whole again. This is
+    # the arm the old comment denied.
+    it "plans the gap back up to the cap in the next period, and no faster", :aggregate_failures do
+      october = calc(Date.new(2026, 10, 20))
+
+      expect(october.planned_this_period).to eq(150)
+      expect(october.built_up).to eq(1_200)
+    end
+
+    # AND IT IS BOUNDED BY THE RATE, which is what makes it the cap's arithmetic rather than
+    # catch-up: a −$600 leaves a $600 gap and October still plans only its $150.
+    it "never asks for more than its rate to close a bigger gap", :aggregate_failures do
+      create(:adjustment, rule: full_goal, amount: -450, date: Time.utc(2026, 9, 11, 12))
+      october = calc(Date.new(2026, 10, 20))
+
+      expect(october.planned_this_period).to eq(150)
+      expect(october.built_up).to eq(750)
     end
   end
 

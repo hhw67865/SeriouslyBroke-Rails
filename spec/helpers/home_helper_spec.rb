@@ -110,12 +110,20 @@ RSpec.describe HomeHelper, type: :helper do
     # `over?` IS HARD-FALSE HERE and is not a parameter: an accruing rule that has been overspent is
     # the `:over` trouble, whose label reads `spent − accrued` off a RATE line's members — so no
     # example in this group has ever passed one, and a sixth keyword would be a knob with no caller.
+    #
+    # `capped?` IS DERIVED FROM `target:` RATHER THAN TAKEN AS A SIXTH KEYWORD, and on the real
+    # `HomePresenter::ClaimLine` the two are exactly this pair: `ClaimCalculator#target` is nil for
+    # the one shape `#capped?` is false on that ever reaches this helper — an uncapped building rule
+    # — so a fixture naming a figure is capped and one naming none is not. (A RATE rule is also
+    # uncapped and has a `target` of zero, and it takes `#claim_figure`'s first branch before either
+    # reader is asked; `rate_line` is what those examples use.)
     def accruing_line(built_up:, target:, per_period:, next_due_on: nil, overdue: false)
       instance_double(
         HomePresenter::ClaimLine,
         rate?: false,
         built_up: built_up,
         target: target,
+        capped?: !target.nil?,
         per_period: per_period,
         next_due_on: next_due_on,
         over?: false,
@@ -140,6 +148,17 @@ RSpec.describe HomeHelper, type: :helper do
         line = accruing_line(built_up: 450, target: 1_200, per_period: 200)
 
         expect(helper.claim_figure(line)).to eq("$450.00 built up of $1,200.00")
+      end
+
+      # ** AN UNCAPPED FUND HAS NOTHING TO BE "OF" (rules-own-the-budget spec §2.1 row 2; fix round 1
+      # — MED). ** `ClaimCalculator#target` is NIL for a building rule that names no figure, and this
+      # printed `$450.00 built up of ` — a dangling preposition over an empty figure. Both directions
+      # on one built-up, so a helper that had simply stopped printing the denominator would fail the
+      # example above.
+      it "says built up alone on a fund with no target to reach" do
+        line = accruing_line(built_up: 450, target: nil, per_period: 300)
+
+        expect(helper.claim_figure(line)).to eq("$450.00 built up")
       end
     end
 

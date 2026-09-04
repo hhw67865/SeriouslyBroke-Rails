@@ -924,6 +924,40 @@ RSpec.describe HomePresenter do
       expect(line.percent).to eq(18)
     end
 
+    # ** A FUND THAT NAMES NO FIGURE HAS NO BAR, AND ASKING FOR ONE MUST NOT RAISE (rules-own-the-
+    # budget spec §2.1 row 2; fix round 1 — MED). ** `ClaimCalculator#target` is NIL for an uncapped
+    # building rule, and `#denominator` handed that nil straight to `.positive?` — every Home render
+    # for a user holding an emergency fund was a 500. There is nothing for a track to be a fraction
+    # OF, so the row prints the figure and no bar; §5's fuller copy is the screens task's.
+    #
+    # PLANTED: a $300-a-period building rule with no target, born as the category was funded, walked
+    # from Jan 2025 — the exact figure the walk reaches is not the subject and is not asserted; what
+    # is asserted is that the row EXISTS, carries a nil target, draws no bar and answers zero percent
+    # rather than dividing by nothing.
+    it "gives an uncapped fund a row with no bar rather than raising", :aggregate_failures do
+      fund = holder("Emergency", priority: 1)
+      create(:budget, :building, category: fund, amount: 300, created_at: Time.zone.local(2025, 1, 1))
+      line = presenter.period_rows.sole.lines.sole
+
+      expect(line).not_to be_rate
+      expect(line).not_to be_capped
+      expect(line.target).to be_nil
+      expect(line.denominator).to be_nil
+      expect(line).not_to be_bar
+      expect(line.percent).to eq(0)
+    end
+
+    # THE OTHER DIRECTION ON THE SAME PAIR OF READERS: the capped fund above DOES draw one, so a
+    # presenter that had simply stopped drawing bars would fail there.
+    it "still draws a bar for a fund that names a figure", :aggregate_failures do
+      goal = savings_goal("Vacation", priority: 1)
+      set_aside(goal_rule(goal, target: 2_400), 424)
+      line = presenter.period_rows.sole.lines.sole
+
+      expect(line).to be_capped
+      expect(line).to be_bar
+    end
+
     # ** A ROW PER CATEGORY, A LINE PER RULE — THE RULING (see HomePresenter::PeriodRow). ** A rate
     # rule beside an item-backed bill cannot honestly print one figure: `spent of rate` and `built up
     # of target` are denominated in different things and summing them would state a number that is
