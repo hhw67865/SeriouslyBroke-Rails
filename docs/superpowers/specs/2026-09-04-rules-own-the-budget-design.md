@@ -1,6 +1,6 @@
 # Rules Own the Budget: targets on rules, money that builds up, and a type on every rule
 
-**Status:** DRAFT — awaiting Henry's review
+**Status:** APPROVED (Henry, 2026-09-04) — plan in `docs/superpowers/plans/2026-09-04-rules-own-the-budget.md`
 **Date:** 2026-09-04
 **Builds on:** `2026-09-03-computed-claims-design.md` (DELIVERED). The claim formulas, the
 adjustments, the physical ledger and the screens all survive; this changes WHAT A RULE CAN SAY and
