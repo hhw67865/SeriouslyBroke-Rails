@@ -127,7 +127,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
   # (computed-claims spec §2, Task 4). It was deleted with the savings TYPE in plan 3 task 5 — its
   # two examples read a "Monthly Contribution" figure and a "Savings Pool: Main Pool" line off a card
   # arm that no longer existed — and savings now live here, on the screen that replaced the Pools
-  # index. The classifier is `Category#building_rule` (rules-own-the-budget spec §5) — the item-less
+  # index. The classifier is `Budget.saving_toward_a_date` (two-shapes spec §2) — the item-less
   # rule whose unspent money carries — the same reader the show page's holdings card and the entry
   # form's impact card ask. It replaced `Category#saving_toward_a_target?`, a question about a figure
   # on the CATEGORY that no claim formula has read since the shapes moved onto the rule.
@@ -138,13 +138,22 @@ RSpec.describe "Categories Index - Cards", type: :system do
   # are re-derived below. The 25% is deliberately the SAME 25% the allocation version asserted: the
   # reading of a goal against its target did not change, only what the numerator is made of.
   describe "what a card says about the money the category claims", :aggregate_failures do
-    # PLANTED (§3.2's dateless branch): a $500-per-period rule on a $2,000 goal, funded a year back
+    # ** THE PERIOD IS DECLARED FOR THIS BLOCK, AND IT IS THE GRID THE FALLBACK ALREADY USED
+    # (two-shapes §2). ** A goal is a DATED rule now, and `ClaimCalculator#periods_left_from` counts
+    # `User#period_boundaries` — which is EMPTY for an undeclared user, so the catch-up floors at one
+    # period and asks the whole target in the first one. Monthly anchored the 1st is exactly the
+    # calendar month `User#period_containing` falls back to, so every other figure in this block is
+    # untouched and the goal below has a real number of periods to spread itself over.
+    before { user.update!(period_cadence: :monthly, period_anchor_date: Date.current.beginning_of_month) }
+
+    # PLANTED: a $2,000 goal due at the close of the FOURTH month from this one, funded a year back
     # but written today, so the accrual walk opens in the current period and visits exactly one.
-    # `planned = min(rate, gap)` = `min(500, 2,000)` = **$500.00**, nothing is spent, so the claim is
-    # $500.00 and the bar is `(500 ÷ 2,000 × 100).round` = **25**.
+    # Four boundaries remain, so `planned = 2,000 ÷ 4` = **$500.00**, nothing is spent, the claim is
+    # $500.00 and the bar is `(500 ÷ 2,000 × 100).round` = **25** — the same figures the retired
+    # `min(rate 500, gap 2,000)` shape produced.
     it "shows a fund's claim and its progress toward the rule's target" do
       vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
-      create(:budget, :capped, category: vacation, amount: 500, target_amount: 2_000)
+      goal_on(vacation)
 
       visit categories_path(type: "expense")
 
@@ -169,9 +178,22 @@ RSpec.describe "Categories Index - Cards", type: :system do
     # period, so the walk falls back to the calendar month and a dated rule's catch-up would depend
     # on which day of the month the suite ran (CLAUDE.md's third flake cause). What the gate reads is
     # that a SECOND rule exists, and a rate rule is the cheapest honest way to say so.
+    # THE GOAL, WITH ITS HORIZON DERIVED: the last day of the fourth month from this one leaves four
+    # boundaries from this period's open, so §3.2 asks `2,000 ÷ 4` = $500 in each of them.
+    def goal_on(category)
+      create(
+        :budget,
+        category: category,
+        amount: 2_000,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: (Date.current.beginning_of_month + 4.months) - 1.day
+      )
+    end
+
     def vacation_fund_beside_a_second_rule
       vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
-      create(:budget, :capped, category: vacation, amount: 500, target_amount: 2_000)
+      goal_on(vacation)
       create(
         :budget,
         :per_period_rate,
@@ -192,24 +214,45 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_no_content("of #{currency(2_000)}")
     end
 
-    # ** AN UNCAPPED FUND HAS NO TRACK (rules-own-the-budget spec §2.1 row 2). ** Same shape, same
-    # walk, no ceiling: `planned` is the plain rate because there is no `gap` to bound it, so the
-    # claim is **$500.00** and there is nothing for a bar to be a fraction of. Both halves, so a card
-    # that drew an empty or a full track against no figure would fail here.
-    it "shows an uncapped fund's claim and no bar", :aggregate_failures do
-      emergency = create(:category, :expense, :funded, user: user, name: "Emergency")
-      create(:budget, :building, category: emergency, amount: 500)
+    # ** A RULE THAT REPEATS IS A RECURRING BILL AND NOT A FUND (two-shapes §2). ** It accrues by
+    # exactly the same walk as the goal above, and this card draws no track for it: the water rates
+    # every six months are not something being saved toward, which is the one clause
+    # `Budget.saving_toward_a_date` can draw and the retired classifier could not — a building rule
+    # had no date to repeat on.
+    #
+    # ** IT REPLACES "shows an uncapped fund's claim and no bar" (§7), ** which planted the fund that
+    # named no ceiling: `planned` was the plain rate with no `gap` to bound it, the claim was $500 and
+    # there was nothing for a bar to be a fraction of. That shape is gone; this is the surviving way
+    # for an ACCRUING category to have no track.
+    #
+    # PLANTED: $2,400 every six months, first due at the close of the fourth month from this one, so
+    # four boundaries remain and `planned = 2,400 ÷ 4` = **$600.00** in the one period walked.
+    # THE SAME HORIZON AS THE GOAL ABOVE, so the only difference between the two cards is the
+    # interval — which is exactly the clause under test.
+    def repeating_bill_on(category)
+      create(
+        :budget,
+        category: category,
+        amount: 2_400,
+        basis: :monthly,
+        interval_months: 6,
+        anchor_date: (Date.current.beginning_of_month + 4.months) - 1.day
+      )
+    end
+
+    it "shows a repeating bill's claim and no bar", :aggregate_failures do
+      repeating_bill_on(create(:category, :expense, :funded, user: user, name: "Emergency"))
 
       visit categories_path(type: "expense")
 
-      expect(page).to have_content(currency(500))
+      expect(page).to have_content(currency(600))
       expect(page).to have_no_css("[data-building-progress]")
     end
 
     # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A figure on the
     # CATEGORY beside a rule whose money RESETS drew a bar against a number no formula reads. The
-    # shape decides now, and this shape is an envelope — `categories.target_amount` is dropped
-    # (§6/§7), so there is no second number for a classifier to be tempted by.
+    # shape decides now, and this shape is an envelope — the category-side target column is dropped,
+    # so there is no second number for a classifier to be tempted by.
     it "draws no bar for a resetting rule", :aggregate_failures do
       groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
       create(:budget, :per_period_rate, category: groceries, amount: 400)

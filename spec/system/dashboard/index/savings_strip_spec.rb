@@ -21,14 +21,13 @@ require "rails_helper"
 # that rule for every goal in a real database that lacked one. **The strip rendered nothing at all on
 # migrated data.**
 #
-# ** THE CLASSIFIER IS `Category#building_rule` (rules-own-the-budget spec §5), CAPPED OR NOT. ** The
-# intermediate reader, `#saving_toward_a_target?`, was a question about a FIGURE on the CATEGORY — a
-# column no claim formula consults, since `ClaimCalculator#shape` answers `:building` off the RULE's
-# `carries_over` and caps at the RULE's `target_amount`. "Which money is being saved" is answered by
-# the SHAPE, which is what lets an emergency fund with no ceiling onto this strip for the first time:
-# it is money being saved and it has no figure to have been classified by. The population is pinned
-# in five directions below, because a band that silently stops appearing is indistinguishable from
-# one that broke.
+# ** THE CLASSIFIER IS `Budget.saving_toward_a_date` (two-shapes spec §2): an item-less rule with an
+# anchor and NO interval. ** It has moved twice — a FIGURE on the CATEGORY, then the rule whose
+# unspent money carried over — and "which money is being saved" is answered by the SHAPE either way.
+# What the date adds is the one clause neither predecessor could draw: a rule that REPEATS is a
+# recurring bill rather than something being saved toward, and it accrues by exactly the same walk.
+# The population is pinned in five directions below, because a band that silently stops appearing is
+# indistinguishable from one that broke.
 #
 # ── DELETED (computed-claims §3):
 #
@@ -68,23 +67,20 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
   # THE RULE IS BORN AS THE PERIOD OPENS and the category was funded a year back, so
   # `ClaimCalculator#accrual_start` is `max(funded_since, the rule's birthday)` = today, and the walk
   # visits exactly one period.
-  # ** THE FIGURE IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §5). ** The
-  # helper used to write it on the category, because that column was the classifier; the rule's own
-  # `target_amount` is both the classifier's ceiling and the walk's, and a fixture still writing the
-  # category's copy would let a reader that had quietly stayed behind go on passing.
+  # ** A GOAL IS A ONE-OFF DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes spec §2 row 5), AND THE
+  # HORIZON REPLACES THE RATE. ** The helper takes the same `accrues:` and DERIVES the day: this
+  # file's grid is biweekly anchored today, so `target ÷ accrues` fortnights out leaves exactly that
+  # many boundaries and §3.2's catch-up asks `accrues` in each — every literal below is unchanged.
   def goal(name, target, accrues:)
     category = create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
-    create(:budget, :capped, category: category, amount: accrues, target_amount: target)
-    category
-  end
-
-  # A FUND FED ONLY BY HAND (§2.1 row 4): a capped building rule with NO standing rate. It accrues
-  # only by positive adjustments, so it claims exactly nothing — and it IS on the strip, because
-  # something here builds up. This is the shape that used to be a "goal no rule feeds"; every claim
-  # comes from a rule, so "no rule" is spelled as an amount of zero.
-  def hand_fed_goal(name, target)
-    category = create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
-    create(:budget, :hand_fed, category: category, target_amount: target)
+    create(
+      :budget,
+      category: category,
+      amount: target,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.current + ((14 * (target / accrues)) - 1).days
+    )
     category
   end
 
@@ -114,46 +110,59 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
       end
     end
 
-    # AND IT STILL HOLDS THE OTHER SHAPE, claiming a truthful nothing: what puts a category here is
-    # that something builds up, so a fund nobody has fed yet is a card with an empty bar rather than
-    # an absent row.
-    it "holds a fund fed only by hand, at nothing" do
-      someday = hand_fed_goal("Someday", 5_000)
+    # ** THE "fund fed only by hand" EXAMPLE IS DELETED WITH THE SHAPE (two-shapes §7). ** It planted
+    # a capped rule with an amount of ZERO — "no rate", the one shape `Budget` permitted a zero on —
+    # and asserted the card was there claiming a truthful $0.00. Every rule has a positive amount now
+    # and a goal accrues its first share the period it is written in, so the state cannot be reached
+    # from a rule alone. What it was really pinning — a card on the strip for a fund barely started —
+    # is the "barely started" arm below, where a distant date makes the first share nearly nothing.
+    it "holds a goal whose date is far enough out that it has barely started", :aggregate_failures do
+      someday = goal("Someday", 5_000, accrues: 5)
 
       visit reports_path
 
-      expect(someday.claim).to eq(0)
+      expect(someday.claim).to eq(5)
       within(card(someday)) do
-        expect(page).to have_content("$0.00")
+        expect(page).to have_content("$5.00")
         expect(page).to have_content("of $5,000.00")
       end
     end
 
-    # ** AN UNCAPPED FUND HAS A CARD FOR THE FIRST TIME (rules-own-the-budget spec §2.1 row 2; §5). **
-    # It names no figure, so the old classifier could not see it at all — an emergency fund the user
-    # was visibly filling had no row on the one band about money being saved. What it does NOT get is
-    # a bar or an "of": there is nothing for a track to be a fraction of, which is the rule Home's
-    # rows and the categories cards apply to the same shape.
+    # ** A RULE THAT REPEATS IS A RECURRING BILL AND HAS NO CARD (two-shapes spec §2). ** It accrues
+    # by exactly the same walk as a goal — the same catch-up share against the same kind of date —
+    # and it is not savings: the water rates every six months are a bill that comes round. This is
+    # the one clause `Budget.saving_toward_a_date` draws that neither predecessor could, because a
+    # rule whose money merely carried over had no date to repeat on.
     #
-    # PLANTED: a $1,000-a-period uncapped building rule born as the period opens, so the walk visits
-    # one period and plans its plain rate — **$1,000.00** built up, with no `gap` to bound it.
-    it "holds a fund that names no figure, with its built-up and no bar", :aggregate_failures do
-      emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: 1.year.ago.to_date)
-      create(:budget, :building, category: emergency, amount: 1_000)
+    # ** IT REPLACES "holds a fund that names no figure" (§7), ** which planted the uncapped fund and
+    # asserted a card with a built-up and NO "of": there was nothing for a track to be a fraction of.
+    # Every accruing rule names a figure now.
+    # FOUR FORTNIGHTS OUT, the same horizon `#goal` derives — so the only difference between this
+    # rule and a goal is the interval, which is the clause under test.
+    def repeating_bill(name, amount)
+      category = create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
+      create(
+        :budget,
+        category: category,
+        amount: amount,
+        basis: :monthly,
+        interval_months: 6,
+        anchor_date: Date.current + 55.days
+      )
+    end
+
+    it "leaves out a category whose only dated rule repeats" do
+      repeating_bill("Water", 1_000)
 
       visit reports_path
 
-      within(card(emergency)) do
-        expect(page).to have_content("$1,000.00")
-        expect(page).to have_content("built up")
-        expect(page).to have_no_content("of $")
-      end
+      expect(page).to have_no_css("[data-savings-strip]")
     end
 
-    # ** THE DIRECTION THE OLD CLASSIFIER GOT WRONG. ** A rule whose unspent money RESETS is an
+    # ** THE DIRECTION THE OLD CLASSIFIER GOT WRONG. ** A rule that RESETS every period is an
     # envelope, and it is here whatever else is true of its category. The example planted a figure on
-    # the CATEGORY beside it — the exact pair `#saving_toward_a_target?` mistook for a fund — and
-    # `categories.target_amount` is dropped (§6/§7), so the shape is the only classifier left.
+    # the CATEGORY beside it — the exact pair `#saving_toward_a_target?` mistook for a fund — and that
+    # column is dropped, so the shape is the only classifier left.
     it "leaves out a category whose rule resets" do
       envelope = create(:category, :expense, :funded, user: user, name: "Groceries")
       create(:budget, :per_period_rate, category: envelope, amount: 400)
@@ -163,13 +172,13 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
       expect(page).to have_no_css("[data-savings-strip]")
     end
 
-    # A BUILDING RULE ON A CATEGORY THAT HAS NOT STARTED COUNTING is not money being saved yet:
+    # A GOAL ON A CATEGORY THAT HAS NOT STARTED COUNTING is not money being saved yet:
     # `funded_since` is where `ClaimCalculator`'s walk opens, and the Budget page's "not filling"
     # band is where that state is named. A strip about savings is not where a user should first
     # learn it.
-    it "leaves out a building rule on a category with no holding date" do
+    it "leaves out a goal on a category with no holding date" do
       one_day = create(:category, :expense, user: user, name: "One Day", funded_since: nil)
-      create(:budget, :capped, category: one_day, amount: 100, target_amount: 5_000)
+      create(:budget, :by_date, category: one_day, amount: 5_000)
 
       visit reports_path
 
@@ -246,8 +255,8 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
     # PLANTED, RE-DERIVED. The period is biweekly anchored today and both rules are written now, so
     # each walks exactly ONE period:
     #
-    #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600 →
-    #             built up **$600.00**
+    #   the FUND  item-less, $2,400 four fortnights out → planned `2,400 ÷ 4` = 600 → built up
+    #             **$600.00**
     #   the BILL  on the item "Insurance", $600 due three days out — inside this period, so
     #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
     #
@@ -258,8 +267,7 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
     # THE BILL IS ITEM-BACKED BECAUSE IT HAS TO BE: `Budget#category_may_hold_one_item_less_rule`
     # allows exactly one rule whose lane is the whole category, and the fund is it.
     def car_fund_beside_its_insurance_bill
-      car = create(:category, :expense, user: user, name: "Car Fund", funded_since: 1.year.ago.to_date)
-      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400)
+      car = goal("Car Fund", 2_400, accrues: 600)
       create(
         :budget,
         category: car,

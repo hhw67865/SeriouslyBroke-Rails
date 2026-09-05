@@ -56,15 +56,14 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
       expect(page).to have_no_content("% used")
     end
 
-    # ** THE BAND LISTS BUILDING RULES (rules-own-the-budget spec §5), AND ITS HEADING IS "Savings".
-    # ** "Savings Goals" named a kind of CATEGORY, and §7 retires the noun: what puts Emergency Fund
-    # here is its rule's `carries_over` — money that survives the period boundary — rather than a
-    # figure on the category record. The fixture's rule is the hand-fed shape (§2.1 row 4), so this
-    # also pins that a fund with no standing rate is on the band.
+    # ** THE BAND LISTS RULES SAVING TOWARD A DAY (two-shapes spec §2), AND ITS HEADING IS "Savings".
+    # ** "Savings Goals" named a kind of CATEGORY and the noun is retired; what puts Emergency Fund
+    # here has been a figure on the category, then a rule whose unspent money carried, and is a rule
+    # with a DATE and no interval now — `Budget.saving_toward_a_date`.
     it "shows the savings strip with the fund's card", :aggregate_failures do
       expect(page).to have_content("Savings")
       expect(page).to have_no_content("Savings Goals")
-      expect(user.categories.find_by(name: "Emergency Fund").building_rule).to be_present
+      expect(Budget.saving_toward_a_date.map { |rule| rule.category.name }).to include("Emergency Fund")
       within("[data-savings-strip]") { expect(page).to have_content("Emergency Fund") }
     end
 
@@ -188,17 +187,24 @@ RSpec.describe "Dashboard Index - All Tab", type: :system do
     set_aside(goal, 500.00, on: base_date + 4.days)
   end
 
-  # A GOAL FED BY HAND: the rule that makes the claim possible, and the dated delta that IS the
-  # money. Per-period with no anchor and no interval, carrying over toward a figure it names itself,
-  # is the only shape `Budget` permits a zero amount on (`#set_aside_only?`) — §3.2's "no rate is
-  # spelled as zero".
+  # A GOAL: the rule that makes the claim possible, and the dated delta on top of it. It was the
+  # hand-fed shape — per-period, amount ZERO, carrying over toward a figure it named itself, the one
+  # shape `Budget` permitted a zero amount on — and there is no such shape (two-shapes §2/§7): a goal
+  # is a DATED rule whose amount IS the figure, and every rule has a positive amount.
   #
-  # ** THE FIGURE IS THE RULE'S AND THE CATEGORY NAMES NONE (rules-own-the-budget §6/§7). ** It was
-  # `target_amount: category.target_amount`, a copy of a column this tab's savings strip read; the
-  # strip reads `Category#building_rule` now and `categories.target_amount` is dropped, so the
-  # ceiling is declared once, here, on the record the walk caps at.
+  # THE DATE IS FAR OUT so the walk's own accrual is small beside the delta and no figure on this tab
+  # depends on which day of the month the suite runs; what this fixture is for is a category ON the
+  # savings band, which `Budget.saving_toward_a_date` decides off the shape alone.
   def set_aside(category, amount, on:, target: 5_000)
-    rule = create(:budget, :hand_fed, category: category, item: nil, target_amount: target)
+    rule = create(
+      :budget,
+      category: category,
+      item: nil,
+      amount: target,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.current + 10.years
+    )
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 

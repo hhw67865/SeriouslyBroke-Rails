@@ -186,10 +186,18 @@ RSpec.describe "Adjustments", type: :request do
     # AN ACCRUING RULE REACHES BACK TO ITS OWN BIRTH AND NO FURTHER (§3.2: "never retroactively";
     # the accrual start is the later of the category's funding date and the rule's own creation).
     # The rule below was born Aug 1, so July is before the walk opens.
-    describe "on a fund that has been building since Aug 1" do
+    describe "on a goal that has been saving since Aug 1" do
       let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation") }
       let(:target_rule) do
-        create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1, 9))
+        create(
+          :budget,
+          category: goal,
+          amount: 1_200,
+          basis: :monthly,
+          interval_months: nil,
+          anchor_date: Date.new(2027, 3, 31),
+          created_at: Time.utc(2026, 8, 1, 9)
+        )
       end
 
       it "refuses a date before it started building", :aggregate_failures do
@@ -217,14 +225,22 @@ RSpec.describe "Adjustments", type: :request do
   # rendered before another delta landed would skip the wrong amount, and the share is a fact the
   # calculator owns.
   #
-  # THE FIXTURE'S ARITHMETIC, BY HAND: a $150-a-period rule building toward $1,200,
-  # born Aug 1, on a monthly grid anchored Jan 1 — so the walk visits August and September (accrual
-  # starts at the later of `funded_since` and the rule's own birth). August plans `min($150,
-  # $1,200 − $0)` = $150 and September plans `min($150, $1,200 − $150)` = $150.
+  # THE FIXTURE'S ARITHMETIC, BY HAND: a $1,200 goal due Mar 31 2027, born Aug 1, on a monthly grid
+  # anchored Jan 1 — so the walk visits August and September (accrual starts at the later of
+  # `funded_since` and the rule's own birth). Eight boundaries remain in August (Aug 1 … Mar 1), so
+  # it plans `1,200 ÷ 8` = $150; September has seven against a gap of $1,050 and plans $150 too.
   describe "skipping a period", :aggregate_failures do
     let(:goal) { create(:category, :expense, :funded, user: user, name: "Vacation") }
     let(:target_rule) do
-      create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1))
+      create(
+        :budget,
+        category: goal,
+        amount: 1_200,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.new(2027, 3, 31),
+        created_at: Time.utc(2026, 8, 1)
+      )
     end
 
     it "writes exactly minus this period's planned share, dated the owner's today" do
@@ -317,7 +333,7 @@ RSpec.describe "Adjustments", type: :request do
     # "Remove".
     it "names the direction of a removed take-back rather than printing a minus", :aggregate_failures do
       goal = create(:category, :expense, :funded, user: user, name: "Vacation")
-      goal_rule = create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200)
+      goal_rule = create(:budget, :by_date, category: goal, amount: 1_200)
       adjustment = create(:adjustment, rule: goal_rule, amount: -150, date: now)
 
       delete(adjustment_path(adjustment))

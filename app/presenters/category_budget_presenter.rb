@@ -42,20 +42,19 @@
 # building the thirtieth copy of it. Nothing is passed on the show page and this class builds its
 # own; either way there is one ledger per screen.
 #
-# ** THE TEST IS `Category#building_rule` (rules-own-the-budget spec §5/§7), AND IT IS A QUESTION
-# ABOUT A RULE. ** It was `#saving_toward_a_target?` — `holder? && target_amount.present?` — and the
-# column it read is one no claim formula consults: `ClaimCalculator#shape` answers `:building` off
-# the RULE's `carries_over`, and caps at the RULE's `target_amount`. So the card asks the rule, and
-# it asks TWO things where there used to be one — is money building up here, and is there a figure
-# it is aiming at — because a building rule may name no target at all (§2.1 row 2). The show card's
-# heading, the index card's bar and the entry form's impact card all read the same rule, so a fund
-# is a fund on every one of them.
+# ** THE TEST IS "IS A RULE HERE SAVING TOWARD A DAY" (two-shapes spec §2), AND IT IS ONE QUESTION
+# WHERE THERE WERE TWO. ** It was `Category#building-rule` — the item-less rule whose `carries-over`
+# said its money survives the boundary — plus a second question about whether that rule named a
+# ceiling at all, because a building rule could name none (an emergency fund that grew for ever). A
+# fund IS a dated one-off now, its ceiling is its own `amount`, and `Budget.saving_toward_a_date` is
+# the one spelling of the population; `#fund_line` below is that same test asked of the rows this
+# card already holds.
 #
-# ** AND THE TARGET IS THE FUND'S ALONE (spec §10.5; fix wave — MED-1). ** A ceiling is a ceiling on
-# the FUND's built-up, so it is printed only where the building rule is the category's ONLY rule —
-# `Category.fund_is_the_whole_category?`, the same test the impact card and the dashboard's savings
-# strip apply to their own populations. Beside a sibling bill, Σ claims is not the fund's money and a
-# bar drawn against the target would be a fraction of the wrong number.
+# ** AND THE TARGET IS STILL THE FUND'S ALONE (spec §10.5; fix wave — MED-1). ** A ceiling is a
+# ceiling on the FUND's built-up, so it is printed only where the fund is the category's ONLY rule.
+# Beside a sibling bill, Σ claims is not the fund's money and a bar drawn against the target would be
+# a fraction of the wrong number. The guard survives the change of shape unchanged, because what made
+# it necessary — `#claim` being a SUM — is unchanged.
 #
 # See docs/superpowers/specs/2026-09-03-computed-claims-design.md §2-§5.
 class CategoryBudgetPresenter
@@ -79,7 +78,6 @@ class CategoryBudgetPresenter
     :accrued_this_period,
     :built_up,
     :target,
-    :capped,
     :next_due_on,
     :planned_this_period,
     :over,
@@ -88,17 +86,10 @@ class CategoryBudgetPresenter
   ) do
     def rate? = shape == :rate
 
-    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5). The same
-    # reader the other two §3.4 rows carry: `HomeHelper#claim_schedule` renders all three and asks
-    # this to tell a building rule's `+$300.00 per period` from a dated rule's `next due Mar 1`.
-    def building? = shape == :building
-
-    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
-    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
-    # question the calculator already answers and a second spelling here would be free to drift. An
-    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — and `HomeHelper#claim_figure`
-    # renders this Data as well as Home's, so it asks this before it prints "of".
-    def capped? = capped
+    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2). The same reader the other two §3.4 rows
+    # carry: `HomeHelper#claim_schedule` renders all three and asks `#rate?` to tell this shape's
+    # `next due Mar 1 · $200.00 per period` from an allowance that says nothing at all.
+    def dated? = shape == :dated
 
     def accrued = accrued_this_period
 
@@ -195,66 +186,68 @@ class CategoryBudgetPresenter
   # past what the rule had (§3.1), or a due date gone by with the bill unpaid (§3.2).
   def needs_attention? = lines.any?(&:trouble?)
 
-  # ---- The building arm -------------------------------------------------------------------------
+  # ---- The fund arm -------------------------------------------------------------------------
 
-  # ** IS THIS CATEGORY BUILDING MONEY UP — AND IS THERE A FIGURE IT IS AIMING AT? TWO QUESTIONS
-  # (rules-own-the-budget spec §5). ** They used to be one, `Category#saving_toward_a_target?`, and
-  # the reason they can no longer be is that a building rule may name NO target (§2.1 row 2): an
-  # emergency fund grows for as long as the user keeps it. So the card's heading asks the first
-  # question and its bar asks the second, and neither is the other's proxy.
+  # ** IS THIS CATEGORY SAVING TOWARD A DAY (two-shapes spec §2)? ** One question where there were
+  # two: it was `#building` (is money building up here) plus `#target` (is there a figure it is
+  # aiming at), and the pair existed because a building rule could name no ceiling. A fund is a dated
+  # one-off and its ceiling is its own amount, so the shape answers both at once.
   #
-  # ** BOTH ARE READ OFF THE RULE. ** `categories.target_amount` is on its way out (§7) and no claim
-  # formula has read it since Task 1 — `ClaimCalculator#shape` answers `:building` off the RULE's
-  # `carries_over` and caps at the RULE's `target_amount` — so a card reading the category's column
-  # would be drawing a bar against a figure nothing computes.
-  def building? = building_rule.present?
+  # THE NOUN THE SHOW CARD'S HEADING PRINTS — "Fund" or "Envelope" — and the gate on its sentence
+  # about money that keeps.
+  def fund? = fund_line.present?
 
-  # ** FOUND AMONG THE RULES THIS CARD ALREADY HOLDS, NOT THROUGH `Category#building_rule`. ** The
-  # test is the same one (`Budget#builds_up_the_category?`, spelled once on the model); the
-  # POPULATION is the page's ledger rather than the category's association, because the categories
-  # INDEX renders one of these per card and `category.budgets` is not preloaded there — reading the
-  # model's door would be a `SELECT budgets` per card on the one screen that draws every category
-  # the user owns. `#lines` is already built from `ClaimLedger#rules_of`, one statement for the whole
-  # page, so this costs nothing at all.
+  # ** FOUND AMONG THE ROWS THIS CARD ALREADY HOLDS, and the test is `Budget.saving_toward_a_date`'s
+  # in Ruby: an item-less rule with an anchor and no interval. ** A rule that REPEATS is a recurring
+  # bill rather than something being saved toward, a rate rule saves toward nothing at all, and an
+  # item-backed one speaks for one item's spending rather than for the category (§3.1's partition).
   #
-  # ** THE LINE AND NOT ONLY THE RULE, since the fix wave. ** The bar's numerator is the FUND's own
-  # built-up (`#fund_figure`), which is on the row this card already built — going back to a
-  # calculator for it would be the second reading this class was written to avoid.
+  # THE POPULATION IS THE PAGE'S LEDGER rather than the category's association, because the
+  # categories INDEX renders one of these per card and `category.budgets` is not preloaded there —
+  # a model-side door would be a `SELECT budgets` per card on the one screen that draws every
+  # category the user owns. `#lines` is already built from `ClaimLedger#rules_of`, one statement for
+  # the whole page, so this costs nothing at all.
+  #
+  # ** THE LINE AND NOT ONLY THE RULE. ** The bar's numerator is the FUND's own built-up
+  # (`#fund_figure`) and its denominator the fund's own target, and both are on the row this card
+  # already built — going back to a calculator for either would be the second reading this class was
+  # written to avoid.
   #
   # `defined?` rather than `||=`: nil is the ordinary answer (an envelope), and a truthiness memo
-  # would re-scan the lines on every one of the five readers below that consult it.
-  def building_line
-    return @building_line if defined?(@building_line)
+  # would re-scan the lines on every one of the readers below that consult it.
+  def fund_line
+    return @fund_line if defined?(@fund_line)
 
-    @building_line = lines.detect { |line| line.rule.builds_up_the_category? }
+    @fund_line = lines.detect do |line|
+      line.rule.item_id.nil? && line.rule.anchor_date.present? && line.rule.interval_months.nil?
+    end
   end
 
-  def building_rule = building_line&.rule
+  def fund_rule = fund_line&.rule
 
   # ** IS THE FUND THE WHOLE CATEGORY — THE GATE ON EVERY TARGET THIS CARD PRINTS (fix wave —
-  # MED-1; spec §10.5). ** `Category.fund_is_the_whole_category?` asked of the rules the page's ONE
-  # ledger fetched, which is the same test the entry form's impact card asks of the association and
-  # the dashboard's strip asks of its preload — see the model for why the target is a sentence about
-  # the fund and not about the category whenever a sibling rule exists.
-  def fund_is_the_whole_category? = Category.fund_is_the_whole_category?(rules)
+  # MED-1; spec §10.5). ** It was `Category.fund-is-the-whole-category`, which is deleted with the
+  # building shape; the clause it held is not, because what made it necessary is `#claim` being Σ
+  # every rule's claim. One rule, and that rule the fund, is the whole of it.
+  def fund_is_the_only_rule? = rules.one? && fund?
 
   # ** WHAT THE FUND ITSELF HAS BUILT UP — the numerator of every bar this card draws. ** `#claim` is
   # Σ EVERY rule's claim, and on a category carrying a fund beside a bill those are different money;
   # this is the fund's own figure, off the row already built. The two are equal wherever a bar is
-  # drawn at all (`#bar?` requires the fund to be the whole category, and a building rule's claim IS
-  # its built-up — `ClaimCalculator#claim`), so no figure on any screen moves: what the spelling buys
-  # is that loosening the gate could never silently change what the percentage is a percentage OF.
-  def fund_figure = building_line&.built_up
+  # drawn at all (`#bar?` requires the fund to be the category's only rule), so no figure on any
+  # screen moves: what the spelling buys is that loosening the gate could never silently change what
+  # the percentage is a percentage OF.
+  def fund_figure = fund_line&.built_up
 
-  # THE FIGURE THE FUND IS AIMING AT, or NIL where it names none — AND NIL AGAIN WHERE THE FUND IS
-  # NOT THE WHOLE CATEGORY (fix wave — MED-1), because a ceiling printed beside Σ claims is a
-  # ceiling on the wrong number. Nil rather than zero, exactly as `ClaimCalculator#target` answers it
-  # and for the same reason: zero is a ceiling that has already been reached, and every reader below
-  # asks presence before it divides.
+  # THE FIGURE THE FUND IS AIMING AT — its own amount, read off the row's `#target`
+  # (`ClaimCalculator#target`, which for a dated rule IS the amount) — AND NIL WHERE THE FUND IS NOT
+  # THE CATEGORY'S ONLY RULE (fix wave — MED-1), because a ceiling printed beside Σ claims is a
+  # ceiling on the wrong number. Nil rather than zero: zero is a ceiling already reached, and every
+  # reader below asks presence before it divides.
   def target
-    return nil unless fund_is_the_whole_category?
+    return nil unless fund_is_the_only_rule?
 
-    building_rule.target_amount&.to_d
+    fund_line.target
   end
 
   # HOW FULL, AS A WHOLE PERCENT, CLAMPED AT BOTH ENDS — `HoldingCalculator#progress_percentage`'s
@@ -263,10 +256,9 @@ class CategoryBudgetPresenter
   # would have moved for a reason nobody asked for. (It read `#claim` until the fix wave; the two are
   # the same figure on every fixture that reaches this line — see `#fund_figure`.)
   #
-  # ZERO FOR AN UNCAPPED FUND, and the card draws no bar there at all (see `#bar?`): a fund with no
-  # ceiling is not a fraction of anything, and a track whose fullness means nothing is worse than no
-  # track. The guard is `#target&.positive?` — presence AND sign — because nil is now a reachable
-  # answer where it used to be `nil.to_f` quietly reading as zero.
+  # ZERO WHERE THERE IS NO TARGET TO DIVIDE BY, and the card draws no bar there at all (see `#bar?`).
+  # The guard is `#target&.positive?` — presence AND sign — because nil is a reachable answer (a fund
+  # with a sibling rule) where it used to be `nil.to_f` quietly reading as zero.
   #
   # THE FLOOR IS AT THE READER, and it is what keeps every render site from drawing a bar of negative
   # width. A claim cannot itself go below zero — `ClaimCalculator` clamps at zero per period — but
@@ -282,9 +274,9 @@ class CategoryBudgetPresenter
   end
 
   # A BAR NEEDS SOMETHING TO BE A FRACTION OF — `HomePresenter::ClaimLine#bar?`'s rule, asked of the
-  # category. Both render sites gate on this rather than on `#building?`, so an uncapped fund gets
-  # its heading and its figure and no track — and so does a fund with a sibling rule, whose target
-  # `#target` withholds (fix wave — MED-1).
+  # category. Both render sites gate on this rather than on `#fund?`, so a fund with a sibling rule
+  # gets its heading and its figure and no track, its target being what `#target` withholds (fix
+  # wave — MED-1).
   def bar? = target&.positive? || false
 
   # ** `#remaining_amount` IS DELETED. ** `target − claim`, floored at zero — and it was callerless
@@ -355,7 +347,6 @@ class CategoryBudgetPresenter
       accrued_this_period: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
-      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,

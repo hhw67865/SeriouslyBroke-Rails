@@ -427,17 +427,17 @@ class SuggestionEngine
   # `new_budget_path(budget: …)` with nothing renamed on the way.
   #
   # ** IT IS BUILT AS A `Budget` AND TRANSLATED, RATHER THAN SPELLED IN THE FORM'S WORDS HERE
-  # (rules-own-the-budget spec §4). ** The wire carries `schedule` and `unspent` now, not `basis`
-  # and `carries_over`, and this class measures COLUMNS — an interval and a due date read off the
-  # entries. Writing "every_n" here would put a second copy of §2.1's table in a file whose subject
+  # (two-shapes spec §5; rules-own-the-budget §4). ** The wire carries `schedule` and `repeats`, not
+  # `basis` and an interval, and this class measures COLUMNS — an interval and a due date read off
+  # the entries. Writing "by_date" here would put a second copy of §2's table in a file whose subject
   # is spending history; `RuleForm.from` is the one translator, and it is the same one the edit form
   # goes through.
   #
   # ** A DATED BILL PROPOSES `bill` (§3). ** It was measured from payments that actually landed on a
   # cycle, which is what "must be paid" means; the user still confirms on the radio before anything
-  # is written. `carries_over false` because a dated rule's build-up is defined by its DATE — §3.2's
-  # catch-up walk holds the money until the bill is paid — and `Budget#build_up_must_be_valid`
-  # refuses the pair outright.
+  # is written. Nothing says what becomes of unspent money any more (two-shapes §7): a dated rule's
+  # build-up is defined by its DATE and always was — §3.2's catch-up walk holds the money until the
+  # bill is paid — so the column that used to be written `false` here is simply gone.
   #
   # `.compact` so the accept URL carries the fields this proposal actually states. A key it omits is
   # a key `RuleForm` never assigns, which is exactly the same outcome as sending it blank.
@@ -450,8 +450,7 @@ class SuggestionEngine
         anchor_date: due_on,
         item_id: item.id,
         category_id: category.id,
-        rule_type: :bill,
-        carries_over: false
+        rule_type: :bill
       )
     ).compact
   end
@@ -633,16 +632,16 @@ class SuggestionEngine
   # `bill` would be claiming something the history does not say. The radio is on the accept form
   # either way.
   #
-  # `carries_over false`: a rate is §2.1's row 1, the shape whose money resets at the boundary. A
-  # fund is a deliberate act, not something measured out of spending that already happened.
+  # A RATE IS §2'S ROW 1, the allowance that resets with the paycheck. A fund is a deliberate act —
+  # it names a day — not something measured out of spending that already happened, which is why no
+  # detector here ever proposes one.
   def rate_rule(category, amount)
     RuleForm.from(
       Budget.new(
         amount: amount,
         basis: :per_period,
         category_id: category.id,
-        rule_type: :usage,
-        carries_over: false
+        rule_type: :usage
       )
     ).compact
   end
@@ -723,18 +722,16 @@ class SuggestionEngine
   # already accruing toward a fixed figure. `Budget#claim_shape` is the one door onto §3's
   # classification; an accruing rule never drifts.
   #
-  # ** THAT SHAPE IS `:building` SINCE THE RULES-OWN-THE-BUDGET TASK, AND NOTHING HERE MOVED. ** It
-  # was `:target`, read off the CATEGORY's `target_amount`; it is now read off the rule's own
-  # `carries_over`, and an uncapped fund — a building rule naming no figure at all — is the same
-  # silence for the same reason. This method asks `== :rate` and therefore never had to name the
-  # accruing shape; `suggestion_engine_spec` pins both arms of it by symbol so the equivalence
-  # cannot drift.
+  # ** THE ACCRUING SHAPE HAS BEEN NAMED THREE THINGS AND NOTHING HERE MOVED. ** It read the
+  # CATEGORY's figure, then the rule's own carry-over column, and it is `:dated` since the two shapes
+  # (two-shapes §2). This method asks `== :rate` and therefore never had to name the accruing shape;
+  # `suggestion_engine_spec` pins both arms of it by symbol so the equivalence cannot drift.
   #
-  # ** AND A $0 RULE NEVER DRIFTS EITHER. ** `#drift_suggestion`'s thresholds are `gap ≥ $10` and
-  # `gap ≥ 10% of the rule`, and the second is vacuous against zero — so ANY spending at all on a
-  # rule that declares no standing contribution clears both and reports a rule "drifting" from a
-  # figure it never claimed. Zero is §3.3's honest way of saying "this fund has no rate", not a rate
-  # of nothing (spec §10.1 ruling 3), and there is nothing there to have drifted from.
+  # ** THE `amount > 0` CLAUSE IS A GUARD AND NO LONGER REACHABLE FROM THE DATA. ** A $0 rule cleared
+  # both of `#drift_suggestion`'s thresholds vacuously (`gap ≥ $10` and `gap ≥ 10% of the rule`), so
+  # ANY spending reported it "drifting" from a figure it never claimed. Zero was how a hand-fed fund
+  # said "no rate"; `Budget` validates `amount > 0` on every shape now, so nothing can plant one —
+  # the clause stays because a detector that read a zero would be wrong in exactly that way again.
   def rate_shape?(budget)
     budget.claim_shape == :rate && budget.item_id.blank? && budget.amount.to_d.positive?
   end

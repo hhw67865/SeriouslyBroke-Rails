@@ -70,60 +70,73 @@ module Dashboard
     # `#total_pools_balance` are renamed with the thing they describe, and the strip they feed
     # (`dashboard/_pools_strip` → `dashboard/_savings_strip`) went with them.
     #
-    # ** THE CLASSIFIER IS A BUILDING RULE (rules-own-the-budget spec §5), CAPPED OR NOT. ** It was
-    # `Category#saving_toward_a_target?` — a funding start and a figure on the CATEGORY — and that
-    # column is one no claim formula reads: `ClaimCalculator#shape` answers `:building` off the
-    # RULE's `carries_over`. "Which money is being saved" is answered by the SHAPE, which is exactly
-    # the open question §5 closes: an emergency fund with no ceiling is money being saved, and the
-    # old classifier could not see it because it had no figure to name.
+    # ** THE CLASSIFIER IS A ONE-OFF DATED RULE (two-shapes spec §2/§7). ** It was a rule whose
+    # unspent money survived the boundary — the retired building shape — and before that a figure on
+    # the CATEGORY. "Which money is being saved" is answered by the SHAPE, and the shape that means
+    # it is a target with a DAY on it: an anchor and NO interval, which is `Budget.saving_toward_a_date`
+    # and is §2's row 5. A rule that REPEATS is a recurring bill — the water rates every two months
+    # are not something being saved toward — which is the one clause the old classifier had no way to
+    # draw, because a building rule had no date to repeat on.
     #
-    # ** THE FUNDING START SURVIVES AS A CLAUSE. ** A category with a building rule and no
-    # `funded_since` is one the Budget page already has a band for ("not filling") — its rules accrue
-    # from their own birthday but nothing counts spending against it — and a strip about money being
-    # saved is not the place a user should first learn that. Both halves are the two facts this strip
-    # has always required: something is building up, and the category is counting.
+    # ** THE FUNDING START SURVIVES AS A CLAUSE. ** A category with such a rule and no `funded_since`
+    # is one the Budget page already has a band for ("not filling") — its rules accrue from their own
+    # birthday but nothing counts spending against it — and a strip about money being saved is not the
+    # place a user should first learn that. Both halves are the two facts this strip has always
+    # required: something is being saved toward a day, and the category is counting.
     #
-    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: `Budget.builds_up_the_category` as an
-    # `IN (SELECT category_id …)` subquery is `Category#building_rule` as a row set, in one statement
-    # and with no Ruby pass over every category the user owns. It is the SAME conditions
-    # (`Budget::BUILDS_UP_THE_CATEGORY`) the predicate reads, so the population here and the rule
-    # each row prints cannot disagree — pinned equal in `budget_spec` and again in this file.
+    # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: the scope as an `IN (SELECT category_id …)`
+    # subquery is one statement with no Ruby pass over every category the user owns, and it is the
+    # ONE spelling of the population — `CategoryBudgetPresenter#fund_line` asks the same two clauses
+    # of rows already loaded, and this file pins the pair.
     #
-    # THE TARGET IS THE RULE'S AND IT MAY BE NIL, which is the strip's one new arm: an uncapped fund
-    # has no denominator, so its card gets its figure and no bar (see the partial).
-    #
-    # ** AND IT IS NIL AGAIN WHERE THE FUND IS NOT THE WHOLE CATEGORY (spec §10.5; fix wave —
-    # MED-1). ** `Category.fund_is_the_whole_category?` — the same test the entry form's impact card
-    # and `CategoryBudgetPresenter` apply to their own populations. A target is a ceiling on the
-    # FUND's built-up, so printing it beside a figure that also contains a sibling bill's accrual is
-    # a fraction of the wrong number: a "Car" fund of $600 a period toward $2,400, beside a $600
-    # insurance bill on one of its items, read `$1,200.00 of $2,400.00` — half full, over a fund a
-    # quarter full.
+    # ** THE TARGET IS THE RULE'S OWN AMOUNT, AND IT IS NIL WHERE THE FUND IS NOT THE WHOLE CATEGORY
+    # (spec §10.5; fix wave — MED-1). ** A target is a ceiling on the FUND's built-up, so printing it
+    # beside a figure that also contains a sibling bill's accrual is a fraction of the wrong number:
+    # a "Car" fund of $2,400 by March, beside a $600 insurance bill on one of its items, read
+    # `$1,200.00 of $2,400.00` — half full, over a fund a quarter full. The uncapped arm this reader
+    # also used to carry is gone with the shape: a dated rule always names a figure.
     #
     # ** THE ROW'S FIGURE IS THE FUND'S OWN BUILT-UP, NOT Σ THE CATEGORY'S CLAIMS (fix wave —
     # MED-1). ** This is a strip of FUNDS: each card names one, and `#total_savings_balance` sums
     # them under the word "Claimed". `claim_of_category` counted that sibling bill's accrual as
-    # savings in both. `ClaimCalculator#claim` IS `#built_up` for a building rule, so the two are one
+    # savings in both. `ClaimCalculator#claim` IS `#built_up` for a dated rule, so the two are one
     # figure wherever the fund is the whole category — every row this strip has ever drawn — and what
     # changes is only the mixed shape, which is where the old figure was wrong.
+    #
+    # THE RULE IS PICKED OUT OF THE PRELOADED ASSOCIATION with the scope's own two clauses in Ruby,
+    # and `#sole` is deliberate: one category can hold only one rule saving toward a day in any shape
+    # this strip draws a single card for, and a second would mean the card silently named one of two.
+    # (`#first` would; a raise says so.)
     #
     # `ClaimLedger` RATHER THAN `Category#claim`, because this is a strip of many categories and the
     # unbatched door costs a spending query and an adjustment query PER RULE. The two are pinned
     # against each other figure for figure in `claim_ledger_spec`, so the batching cannot make this
     # page disagree with a category's own.
     def savings_summary
-      @savings_summary ||= savings_categories.map do |category|
-        rule = category.building_rule
-        built_up = claim_ledger.calculator_for(rule).built_up
-        target = category.fund_is_the_whole_category? ? rule.target_amount : nil
-        {
-          id: category.id,
-          name: category.name,
-          balance: built_up,
-          target_amount: target,
-          progress_percentage: progress_percentage(built_up, target)
-        }
-      end
+      @savings_summary ||= savings_categories.map { |category| savings_row(category) }
+    end
+
+    # ONE CARD, off the rules the preload already fetched. `#sole` is deliberate — see the header:
+    # `Budget.saving_toward_a_date`'s `item_id IS NULL` clause makes it single-valued per category,
+    # and a `#first` would silently name one of two where a raise says so.
+    def savings_row(category)
+      rules = category.budgets.to_a
+      rule = rules.select { |budget| saving_toward_a_date?(budget) }.sole
+      built_up = claim_ledger.calculator_for(rule).built_up
+      target = rules.one? ? rule.amount.to_d : nil
+
+      {
+        id: category.id,
+        name: category.name,
+        balance: built_up,
+        target: target,
+        progress_percentage: progress_percentage(built_up, target)
+      }
+    end
+
+    # `Budget.saving_toward_a_date`'s three clauses in Ruby, asked of a row already loaded.
+    def saving_toward_a_date?(budget)
+      budget.item_id.nil? && budget.anchor_date.present? && budget.interval_months.nil?
     end
 
     def total_savings_balance = savings_summary.sum { |row| row[:balance] }
@@ -179,14 +192,14 @@ module Dashboard
       (claim / target * 100).round.clamp(0, 100)
     end
 
-    # `includes(:budgets)` BECAUSE THE ROW READS THE RULE. `#building_rule` is `budgets.detect`, so
-    # without the preload this strip costs one statement per card for a rule the row is about — the
-    # very per-row cost `ClaimLedger` exists to keep off this page.
+    # `includes(:budgets)` BECAUSE THE ROW READS THE RULES — the fund itself, and how many siblings
+    # it has. Without the preload this strip costs one statement per card for rows the ledger has
+    # already fetched, which is the very per-row cost `ClaimLedger` exists to keep off this page.
     def savings_categories
       @savings_categories ||= @user.categories
         .expenses
         .where.not(funded_since: nil)
-        .where(id: Budget.builds_up_the_category.select(:category_id))
+        .where(id: Budget.saving_toward_a_date.select(:category_id))
         .includes(:budgets)
         .order(:name)
     end

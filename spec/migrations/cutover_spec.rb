@@ -43,7 +43,8 @@ RSpec.describe CutoverToEnvelopeBudgeting do
                   CategoriesHoldTheMoney,
                   DropThePoolLayer,
                   DropTheDistribution,
-                  RulesOwnTheBudget
+                  RulesOwnTheBudget,
+                  TwoShapes
 
   # Four worlds, planted in creation order — the migration walks users by `created_at`, and the
   # sabotage examples below name which user is expected to raise first.

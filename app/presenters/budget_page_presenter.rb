@@ -52,7 +52,6 @@ class BudgetPagePresenter
     :accrued_this_period,
     :built_up,
     :target,
-    :capped,
     :next_due_on,
     :planned_this_period,
     :over,
@@ -65,23 +64,21 @@ class BudgetPagePresenter
 
     def rate? = shape == :rate
 
-    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5). The same
-    # reader `HomePresenter::ClaimLine` carries and for the same caller: `HomeHelper#claim_schedule`
-    # prints `+$300.00 per period` for this shape and `next due Mar 1 · $200.00 per period` for a
-    # dated one, and it renders this row and Home's alike.
-    def building? = shape == :building
+    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2) — a bill and a goal, which are one shape. The
+    # same reader `HomePresenter::ClaimLine` carries and for the same caller: `HomeHelper
+    # #claim_schedule` prints `next due Mar 1 · $200.00 per period` for it and renders this row and
+    # Home's alike.
+    def dated? = shape == :dated
 
     # WHICH KIND OF RULE THIS IS — bill, usage or choice (spec §3). Off the record rather than a
     # member, because it is a column the row already holds: the label beside the row and the
     # overview above the groups are two readings of one answer.
     delegate :rule_type, to: :budget
 
-    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
-    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
-    # question the calculator already answers and a second spelling here would be free to drift. An
-    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — and `HomeHelper#claim_figure`
-    # renders this Data as well as Home's, so it asks this before it prints "of".
-    def capped? = capped
+    # ** `#capped` LEFT WITH `ClaimCalculator#capped` (two-shapes spec §7). ** It was carried onto
+    # the row because an UNCAPPED building rule's `#target` was NIL and `HomeHelper#claim_figure` —
+    # which renders this Data as well as Home's — had to ask before it printed "of". Every accruing
+    # rule has a figure now.
 
     # THE THREE ALIASES THE SHARED §3.4 HELPERS ASK FOR. `accrued_this_period` and
     # `planned_this_period` are the writer's names — `AdjustmentForm` skips one and the panel prints
@@ -415,7 +412,6 @@ class BudgetPagePresenter
       accrued_this_period: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
-      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       planned_this_period: calculator.planned_this_period,
       over: calculator.over?,

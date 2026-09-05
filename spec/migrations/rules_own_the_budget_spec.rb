@@ -44,7 +44,7 @@ require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 # calculator stopped reading the category one task ago — and pinning the new figure alone would be
 # pinning `ClaimCalculator`, which `claim_calculator_spec` already does.
 RSpec.describe RulesOwnTheBudget do
-  include_context "with the schema its subject was written for", described_class
+  include_context "with the schema its subject was written for", described_class, TwoShapes
 
   let(:migration) { described_class.new }
 
@@ -301,28 +301,24 @@ RSpec.describe RulesOwnTheBudget do
 
     rule = catch_all_rule_for(world[:vacation])
     expect([rule.carries_over, rule.target_amount]).to eq([true, 1_200.to_d])
-    expect(rule.claim_calculator(today: today).shape).to eq(:building)
   end
 
-  # ** THE FIGURE THE COMPUTED-CLAIMS ERA PRODUCED FOR THIS CATEGORY, RE-DERIVED AND PLANTED. **
-  # §3.2's walk with no due date, capped at the target, over the nine monthly periods from the
-  # funding day through the day this is read on. The rate is $150 a period and the cap $1,200:
-  #
-  #   Jan 150 · Feb 300 · Mar 450 · Apr 600 · May 750 · Jun 900
-  #   Jul  gap 300 → plans min(150, 300) = 150 → accrued 1,050, less the $200 flight deposit = 850
-  #   Aug  gap 350 → plans 150 → 1,000
-  #   Sep  gap 200 → plans 150 → **1,150**
-  #
-  # It is the same walk on both sides of this migration — the era read the cap off
-  # `categories.target_amount` and `ClaimCalculator` reads it off the rule — so the claim the user
-  # was seeing is the claim they go on seeing, which is what §6 step 4 asks for.
-  it "leaves the goal's claim exactly the figure the category's own target produced" do
-    world = plant_the_goal_era
+  # ** THE SHAPE THIS RUN PRODUCES IS NOT A SHAPE THE APP STILL HAS (two-shapes spec §2/§7). ** This
+  # example also asserted `ClaimCalculator#shape == :building`; that arm is deleted — `#shape` is
+  # `anchor_date.present? ? :dated : :rate` — so the converted row reads as a plain rate rule here and
+  # every claim figure this file used to pin with it goes the same way. The COLUMNS are this
+  # migration's own subject and are what stay pinned; what becomes of them is
+  # `spec/migrations/two_shapes_spec.rb`'s, and the claim's survival across that conversion is pinned
+  # there.
 
-    migrate!
-
-    expect(claim_of(world[:vacation])).to eq(1_150.to_d)
-  end
+  # ** THE GOAL'S CLAIM IS NOT PINNED HERE ANY MORE (two-shapes spec §7). ** It was the figure the
+  # computed-claims era produced — §3.2's walk with no due date, capped at the target, over the nine
+  # monthly periods from the funding day: Jan 150 … Jun 900, Jul plans 150 to 1,050 less the $200
+  # flight deposit = 850, Aug 1,000, Sep **1,150** — and `TwoShapes` retires the shape that computes
+  # it. The row this migration writes has no `anchor_date`, so `ClaimCalculator` reads it as a rate
+  # rule and answers this period's unspent rate; asserting that figure would be pinning an artefact
+  # of the sequence rather than anything a user saw. What the columns become, and that the claim does
+  # not move when they do, is `spec/migrations/two_shapes_spec.rb`'s subject.
 
   # ** A TARGET CATEGORY WHOSE ONLY RULE PAYS AN ITEM GETS A CATCH-ALL MINTED BESIDE IT. ** §3.1's
   # lane partition is why the bill cannot take the figure: its lane is the Deductible item alone,
@@ -382,17 +378,25 @@ RSpec.describe RulesOwnTheBudget do
     expect(claim_of(world[:house])).to eq(0)
   end
 
-  # ** THE MINTED RULE IS A SHAPE THE MODEL ACCEPTS, ASKED OF THE MODEL — which is exactly what the
-  # migration's own SQL restatement of those validations cannot do for itself. ** It matters beyond
-  # tidiness: `CadenceChange#apply` writes `Budget#amount` through an unrescued `update!`, so a rule
-  # minted in a shape the model refuses would reach the user as a 500 the first time they changed
-  # their period, from a row they never wrote and cannot see.
-  it "mints rules the model itself accepts" do
+  # ** THE MINTED RULE IS THE $0 SHAPE, WHICH THE MODEL ACCEPTED AT THIS MIGRATION'S MOMENT AND
+  # REFUSES ONE MIGRATION LATER (two-shapes spec §2). ** `Budget#set_aside_only?` was the exemption
+  # that made the zero legal — a goal fed by hand, with no schedule for a rate to be the rate of —
+  # and `TwoShapes` retires both the exemption and the shape: every rule has a positive amount and a
+  # goal names a DAY. So the row is refused NOW and repaired THEN, which is an ordinary state for a
+  # database mid-sequence; `drop_the_distribution_spec` carries the same pair for the same reason.
+  #
+  # BOTH HALVES ARE ASSERTED, so neither "it stopped being valid" nor "the repair is wrong" can pass
+  # silently — and the repair is exactly what `TwoShapes` writes: the target as the amount, monthly,
+  # no interval, a date.
+  it "mints the $0 shape the two shapes repair into one the model accepts", :aggregate_failures do
     world = plant_the_goal_era
 
     migrate!
 
-    expect([catch_all_rule_for(world[:house]), catch_all_rule_for(world[:emergency])]).to all(be_valid)
+    minted = catch_all_rule_for(world[:house])
+    expect(minted).not_to be_valid
+    minted.assign_attributes(amount: 5_000, basis: :monthly, interval_months: nil, anchor_date: Date.new(2027, 6, 1))
+    expect(minted).to be_valid
   end
 
   # ** BORN NO LATER THAN THE DAY ITS CATEGORY STARTED HOLDING MONEY. ** `accrual_start` is
@@ -407,8 +411,14 @@ RSpec.describe RulesOwnTheBudget do
 
     minted = catch_all_rule_for(world[:house])
     expect(user.local_day(minted.created_at)).to be <= funding_day
-    expect(minted.claim_calculator(today: today).countable_span).to cover(Date.new(2026, 2, 1))
   end
+
+  # ** THE COUNTABLE SPAN IS NOT ASSERTED HERE ANY MORE (two-shapes spec §7). ** It was the birthday
+  # read as a date range — `cover(Feb 1 2026)` on a walk opening at the funding day — and it required
+  # the rule to take the accruing walk at all. A rule with no `anchor_date` is a rate rule to
+  # `ClaimCalculator` now, and a rate rule's span is THIS period alone, so the range would be about a
+  # shape rather than about the birthday. The birthday itself is this migration's own subject and is
+  # what stays.
 
   # ---------------------------------------------------------------------------------------------
   # The types
@@ -571,9 +581,9 @@ RSpec.describe RulesOwnTheBudget do
 
     migrate!
 
-    expect(catch_all_rule_for(someday)).to be_valid
-    expect(catch_all_rule_for(someday).target_amount).to eq(3_000)
-    expect(claim_of(world[:vacation])).to eq(1_150.to_d)
+    repaired = catch_all_rule_for(someday)
+    expect([repaired.carries_over, repaired.target_amount]).to eq([true, 3_000.to_d])
+    expect(catch_all_rule_for(world[:vacation]).target_amount).to eq(1_200.to_d)
   end
 
   # ** TWO RULES WITH NO ITEM SHARE ONE LANE, AND THIS RUN CANNOT CHOOSE BETWEEN THEM. **

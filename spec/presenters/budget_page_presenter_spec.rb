@@ -488,14 +488,20 @@ RSpec.describe BudgetPagePresenter do
     # Jan 9–22, Jan 23–Feb 5 and Feb 6–19 — four periods at $150 each, which is $600 built up, with
     # $150 planned for the period `today` is in and $1,200 still a long way off.
     #
-    # ** THE FIGURE AND THE BUILD-UP ARE THE RULE'S OWN (rules-own-the-budget spec §2.1). ** A goal
-    # is a `carries_over` rule that names a `target_amount`; the category it sits on names nothing.
+    # ** A GOAL IS A DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes spec §2 row 5). ** It was a
+    # $150-a-period rule that carried its money over toward $1,200; the horizon replaces the rate.
+    # THE PERIODS, on the biweekly grid anchored Feb 6: the rule is born Jan 6, which sits in
+    # Dec 26 – Jan 8, and there are EIGHT boundaries from there through Apr 16 (Dec 26, Jan 9, Jan 23,
+    # Feb 6, Feb 20, Mar 6, Mar 20, Apr 3). So §3.2's share is `1,200 ÷ 8` = **$150.00** every period
+    # and today — the fourth — holds **$600.00**: every figure below is the one the retired shape
+    # produced.
     def goal_rule
       create(
         :budget,
-        :capped,
-        amount: 150,
-        target_amount: 1_200,
+        amount: 1_200,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.new(2026, 4, 16),
         created_at: today - 1.month,
         category: holder("Vacation")
       )
@@ -507,7 +513,7 @@ RSpec.describe BudgetPagePresenter do
       goal_rule
 
       expect(row_for("Vacation")).to have_attributes(
-        shape: :building,
+        shape: :dated,
         built_up: BigDecimal("600"),
         planned_this_period: BigDecimal("150"),
         claim: BigDecimal("600"),

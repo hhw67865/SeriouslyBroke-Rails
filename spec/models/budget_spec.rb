@@ -59,114 +59,46 @@ RSpec.describe Budget, type: :model do
       end
     end
 
-    # ** ZERO IS LEGAL FOR EXACTLY ONE SHAPE (computed-claims spec §3.2, ruling of 2026-09-03): a
-    # goal fed only by hand. ** Every claim comes from a rule, so a savings goal with no standing
-    # contribution has to BE a rule, and "no rate" is spelled with an amount of zero.
+    # ** ZERO IS LEGAL FOR NO SHAPE AT ALL (two-shapes spec §2, Henry's ruling of 2026-09-05). **
     #
-    # ** THE SHAPE IS READ OFF THE RULE NOW (rules-own-the-budget spec §2.1 row 4). **
-    # `#set_aside_only?` used to ask the CATEGORY for a `target_amount`, which meant a user could
-    # retire a goal — clearing the category's figure — and leave a $0 rule behind that nothing would
-    # ever have accepted. The permitted shape is `carries_over && target_amount && no anchor`, all
-    # three on the rule, and the category is not consulted at all.
+    # ** THE "set-aside-only goal" GROUP IS DELETED WITH THE EXEMPTION (§7). ** It was the one shape
+    # `Budget#set_aside_only?` let past `amount > 0`: a goal fed only by hand, whose "no standing
+    # rate" was spelled as an amount of ZERO because there was no deadline for a rate to be derived
+    # from. A goal names a DAY now, so its per-period share is `remaining ÷ periods until the date`
+    # and its amount IS the target — there is nothing left for a zero to mean, and `TwoShapes`
+    # converted every such row.
     #
-    # FOUR REFUSALS BESIDE THE ONE PERMISSION, each varying ONE column of the permitted shape, so
-    # the exemption cannot be satisfied by a validation that simply stopped checking.
-    describe "the set-aside-only goal" do
+    # ** AND THE "money that builds up" GROUP GOES WITH THE COLUMNS IT REFEREED. ** It pinned both
+    # halves of `#build_up_must_be_valid` — a dated rule may not also carry over, and a cap may not
+    # sit on money that resets — plus the positive-target rule. All three are about
+    # `budgets.carries_over` and `budgets.target_amount`, which `TwoShapes` drops. What is left is one
+    # sentence about the amount, asserted in both directions on every shape the app still has, so a
+    # validation that quietly stopped firing on one of them would fail here.
+    describe "the amount" do
       let(:owner) { create(:category, :expense, :funded) }
 
-      it "takes a zero amount on a capped building rule with no schedule" do
-        expect(build(:budget, :hand_fed, category: owner)).to be_valid
+      it "refuses zero on a per-period rule" do
+        expect(build(:budget, :per_period_rate, category: owner, amount: 0)).not_to be_valid
       end
 
-      it "refuses a zero amount on a building rule that names no target" do
-        expect(build(:budget, :building, category: owner, amount: 0)).not_to be_valid
+      it "refuses zero on an anchorless monthly rule" do
+        expect(build(:budget, :rate, category: owner, amount: 0)).not_to be_valid
       end
 
-      # THE COLUMN THAT MOVED, ASKED IN THE DIRECTION THAT USED TO PASS: a figure on the CATEGORY is
-      # no longer any part of this exemption, so the same $0 rate rule that was legal beside a goal
-      # category is refused now. The category names nothing because it CANNOT —
-      # `categories.target_amount` is dropped (§6/§7) — which is a stronger statement of the same
-      # sentence than the fixture that used to plant the figure beside the rule.
-      it "refuses a zero amount on a rate rule, with no category figure left to exempt it" do
-        goal = create(:category, :expense, :funded)
-
-        expect(build(:budget, :per_period_rate, category: goal, amount: 0)).not_to be_valid
+      it "refuses zero on a dated rule" do
+        expect(build(:budget, :by_date, category: owner, amount: 0)).not_to be_valid
       end
 
-      it "refuses a zero amount on a rule with a due date" do
-        expect(build(:budget, category: owner, amount: 0, interval_months: nil, anchor_date: Date.new(2026, 6, 1)))
-          .not_to be_valid
+      it "refuses a negative amount" do
+        expect(build(:budget, :by_date, category: owner, amount: -1)).not_to be_valid
       end
 
-      it "still refuses a negative amount there" do
-        expect(build(:budget, :capped, category: owner, amount: -1)).not_to be_valid
-      end
-
-      # ** A MONTHLY HAND-FED GOAL IS LEGAL NOW, AND IT IS THE SPEC'S OWN SHAPE (rules-own-the-budget
-      # §2.1 row 5; fix round 1 — LOW). ** The old predicate ALSO required `interval_months.blank?`,
-      # because the target lived on the category and "no anchor and no interval" was the only way to
-      # spell the dateless shape. The three columns are the rule's own now and they say it
-      # positively, so `basis: monthly, interval 1` — "$0 a month, building toward $5,000" — is
-      # accepted where it used to be refused. §2.1 row 5 says a monthly rule may build up either way,
-      # and nothing about the amount changes that.
-      #
-      # BOTH DIRECTIONS ON ONE INTERVAL, so the widening is a fact about the target and not about the
-      # column that used to be tested: the same monthly rule with no target is still refused.
-      it "takes a zero amount on a monthly building rule that names a target" do
-        expect(build(:budget, :rate, category: owner, amount: 0, carries_over: true, target_amount: 5_000))
-          .to be_valid
-      end
-
-      it "refuses the same monthly rule once the target is gone" do
-        expect(build(:budget, :rate, category: owner, amount: 0, carries_over: true)).not_to be_valid
-      end
-    end
-
-    # ** WHAT BECOMES OF UNSPENT MONEY, AND WHAT IT IS BUILDING TOWARD (spec §2.1's validation
-    # list). ** Two rules, each refused and its positive twin accepted, because a validation
-    # asserted only where it fires says nothing about what it lets through.
-    describe "money that builds up" do
-      let(:owner) { create(:category, :expense, :funded) }
-
-      # A DATED RULE'S BUILD-UP IS DEFINED BY ITS DATE (§3.2): it accrues toward its amount by the
-      # catch-up formula and empties when the bill is paid. `carries_over` on top of that would be a
-      # second, contradictory answer to "does this money survive the boundary".
-      it "refuses a rule that both builds up and falls due", :aggregate_failures do
-        rule = build(:budget, category: owner, carries_over: true, interval_months: nil, anchor_date: Date.new(2026, 6, 1))
-
-        expect(rule).not_to be_valid
-        expect(rule.errors[:carries_over]).to include("cannot be set on a rule with a due date")
-      end
-
-      it "accepts the same building rule once the due date is gone" do
-        expect(build(:budget, :building, category: owner, amount: 300)).to be_valid
-      end
-
-      # A CAP ON MONEY THAT RESETS IS MEANINGLESS: a rate rule never carries a penny past the
-      # boundary, so a figure it is "building toward" would be a number no formula could ever read.
-      it "refuses a target on a rule whose money resets", :aggregate_failures do
-        rule = build(:budget, :per_period_rate, category: owner, amount: 200, target_amount: 5_000)
-
-        expect(rule).not_to be_valid
-        expect(rule.errors[:target_amount]).to include("needs a rule whose unspent money builds up")
-      end
-
-      it "accepts the same target once the rule builds up" do
-        expect(build(:budget, :building, category: owner, amount: 200, target_amount: 5_000)).to be_valid
-      end
-
-      # A GOAL OF ZERO IS ALREADY MET AND A NEGATIVE ONE IS MONEY THE BUDGET OWES ITS OWNER —
-      # `categories.target_amount`'s own rule, re-stated on the column's new owner. The database
-      # carries it too (`budgets_positive_target_amount`); this is the half the form can render.
-      it "refuses a target of zero", :aggregate_failures do
-        rule = build(:budget, :building, category: owner, amount: 200, target_amount: 0)
-
-        expect(rule).not_to be_valid
-        expect(rule.errors[:target_amount]).to include("must be greater than 0")
-      end
-
-      it "leaves a building rule with no target alone, which is the shape that grows without limit" do
-        expect(build(:budget, :building, category: owner, amount: 300, target_amount: nil)).to be_valid
+      # THE POSITIVE TWIN OF ALL FOUR, because a validation asserted only where it fires says nothing
+      # about what it lets through.
+      it "accepts a positive amount on every shape", :aggregate_failures do
+        expect(build(:budget, :per_period_rate, category: owner, amount: 400)).to be_valid
+        expect(build(:budget, :rate, category: create(:category, :expense, :funded), amount: 260)).to be_valid
+        expect(build(:budget, :by_date, category: create(:category, :expense, :funded), amount: 5_000)).to be_valid
       end
     end
   end
@@ -220,55 +152,51 @@ RSpec.describe Budget, type: :model do
     end
   end
 
-  # ** THE RULE THAT BUILDS ITS CATEGORY'S MONEY UP, ASKED IN SQL AND IN MEMORY (rules-own-the-budget
-  # spec §5; fix round 1 — LOW-7). ** Two readers exist because two populations ask: the dashboard's
-  # savings strip composes `.builds_up_the_category` as a subquery over every category a user owns,
-  # while `Category#building_rule` and `CategoryBudgetPresenter#building_rule` ask the predicate of
-  # rows something else has already loaded (a relational reader there is a `SELECT budgets` per card
-  # on the categories index).
+  # ** WHICH CATEGORIES ARE SAVING TOWARD A DAY (two-shapes spec §2/§7) — ONE SCOPE, AND ONE ONLY. **
   #
-  # BOTH ARE DERIVED FROM `BUILDS_UP_THE_CATEGORY`, so they cannot diverge by construction — and
-  # they are pinned equal anyway, over a planted set that covers all four combinations of the two
-  # clauses, because a derivation nobody checks is a derivation waiting to grow an argument.
-  describe "which rule builds a category's money up" do
+  # ** IT WAS `BUILDS_UP_THE_CATEGORY` AND A PAIR OF DERIVED READERS. ** The hash was
+  # `item_id: nil, carries_over: true` and it had two spellings — a scope for the dashboard's
+  # `IN (SELECT category_id …)` subquery and a predicate for rows already loaded — which this group
+  # pinned equal over all four combinations of the two clauses. Both columns are dropped, and the
+  # question is a different one: what the Savings band is about is a target with a DAY on it, which
+  # is an anchor with NO interval (§2's row 5). A rule that REPEATS is a recurring bill.
+  #
+  # ONE SCOPE AND NO IN-MEMORY TWIN, so there is no equality left to pin — the two readers that
+  # needed the predicate are deleted with the shape. What this group pins instead is the population,
+  # over one of each way to fail the two clauses.
+  describe "the categories saving toward a day" do
     let(:groceries) { create(:category, :expense, :funded, name: "Groceries") }
 
-    # ONE OF EACH ARM. The item-less BUILDING rule is the only one either reader may answer; the
-    # other three are the three ways to fail the two clauses.
     def lane(name) = create(:item, category: groceries, name: name)
-
-    def building(**attrs) = create(:budget, :capped, category: groceries, target_amount: 900, **attrs)
-
-    def resetting(**attrs) = create(:budget, :per_period_rate, amount: 400, **attrs)
 
     def planted
       {
-        own_building: building(amount: 200, target_amount: 5_000),
-        item_backed_building: building(amount: 100, item: lane("Flights")),
-        own_resetting: resetting(category: create(:category, :expense, :funded, name: "Fun")),
-        item_backed_resetting: resetting(category: groceries, item: lane("Bread"))
+        one_off: create(:budget, :by_date, category: groceries, amount: 5_000),
+        item_backed_one_off: create(:budget, :by_date, category: groceries, amount: 900, item: lane("Flights")),
+        repeating: create(:budget, :recurring, category: create(:category, :expense, :funded, name: "Insurance"), amount: 600),
+        resetting: create(:budget, :per_period_rate, category: create(:category, :expense, :funded, name: "Fun"), amount: 400)
       }
     end
 
-    it "selects the same rules in SQL as the predicate does in memory", :aggregate_failures do
+    # ONE OF EACH WAY TO FAIL THE THREE CLAUSES: a rule that repeats is a recurring bill, a rate rule
+    # saves toward nothing, and an item-backed one speaks for one item's spending rather than for the
+    # category (§3.1's partition — the clause the retired pair carried, asked of the new columns).
+    it "selects the item-less one-off dated rules and nothing else", :aggregate_failures do
       rules = planted
 
-      expect(described_class.builds_up_the_category.to_a).to eq([rules.fetch(:own_building)])
-      expect(rules.transform_values(&:builds_up_the_category?))
-        .to eq(
-          own_building: true,
-          item_backed_building: false,
-          own_resetting: false,
-          item_backed_resetting: false
-        )
+      expect(described_class.saving_toward_a_date.to_a).to eq([rules.fetch(:one_off)])
+      expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:item_backed_one_off))
+      expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:repeating))
+      expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:resetting))
     end
 
-    # AND THE CATEGORY'S OWN DOOR ANSWERS THE ROW THE SCOPE FOUND — the identity the dashboard's
-    # population and each of its rows' targets both stand on.
-    it "hands back the row the scope names" do
+    # THE FORM THE DASHBOARD COMPOSES IT IN, because a scope that cannot be a subquery is a scope
+    # that reader cannot use.
+    it "composes as a category subquery" do
       rules = planted
 
-      expect(groceries.reload.building_rule).to eq(rules.fetch(:own_building))
+      expect(Category.where(id: described_class.saving_toward_a_date.select(:category_id)))
+        .to contain_exactly(rules.fetch(:one_off).category)
     end
   end
 
@@ -632,7 +560,7 @@ RSpec.describe Budget, type: :model do
     end
 
     it "builds a valid record for every shape trait", :aggregate_failures do
-      [:rate, :per_period_rate, :recurring, :one_time, :building, :capped, :hand_fed].each do |trait|
+      [:rate, :per_period_rate, :recurring, :one_time, :by_date].each do |trait|
         expect(build(:budget, trait)).to be_valid
       end
     end

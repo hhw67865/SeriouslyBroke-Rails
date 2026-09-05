@@ -41,16 +41,29 @@ RSpec.describe CategoryBudgetPresenter do
   # ** THE MIXED FIXTURE, RE-DERIVED BY HAND (§10.5's own example). ** "Car", funded Jan 1 2025, both
   # rules born as the current period opens, so each walks exactly ONE period:
   #
-  #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600, nothing
-  #             spent → built up **$600.00**
+  #   the FUND  item-less, $2,400 by Apr 2 — FOUR biweekly boundaries from Feb 6 (Feb 6, Feb 20,
+  #             Mar 6, Mar 20), so the catch-up share is `2,400 ÷ 4` = $600 and nothing is spent →
+  #             built up **$600.00**
   #   the BILL  on the item "Insurance", $600 due Feb 9 — inside the Feb 6–19 period, so
   #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
   #
   # Σ claims **$1,200.00**, which against the fund's $2,400 reads `50% of $2,400.00` — half full over
   # a fund that is a QUARTER full.
+  #
+  # ** THE FUND WAS A $600-A-PERIOD RULE CAPPED AT $2,400 (two-shapes §2). ** The horizon replaces the
+  # rate and every figure here is unchanged, which is what let the shape be retired rather than
+  # replaced.
   def car_fund
     car = create(:category, :expense, user: user, name: "Car", funded_since: funded_since)
-    create(:budget, :capped, category: car, amount: 600, target_amount: 2_400, created_at: born)
+    create(
+      :budget,
+      category: car,
+      amount: 2_400,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.new(2026, 4, 2),
+      created_at: born
+    )
     car
   end
 
@@ -79,10 +92,9 @@ RSpec.describe CategoryBudgetPresenter do
 
       money = present(car)
 
-      expect(money.building?).to be(true)
+      expect(money.fund?).to be(true)
       expect(money.claim).to eq(BigDecimal("1200"))
-      expect(money.fund_is_the_whole_category?).to be(false)
-      expect(money.fund_figure).to eq(BigDecimal("600"))
+      expect(money.fund_is_the_only_rule?).to be(false)
       expect(money.target).to be_nil
       expect(money.bar?).to be(false)
       expect(money.progress_percentage).to eq(0)
@@ -95,24 +107,31 @@ RSpec.describe CategoryBudgetPresenter do
       money = present(car_fund)
 
       expect(money.claim).to eq(BigDecimal("600"))
-      expect(money.fund_is_the_whole_category?).to be(true)
+      expect(money.fund_is_the_only_rule?).to be(true)
       expect(money.fund_figure).to eq(money.claim)
       expect(money.target).to eq(BigDecimal("2400"))
       expect(money.bar?).to be(true)
       expect(money.progress_percentage).to eq(25)
     end
 
-    # ** AN UNCAPPED FUND IS THE WHOLE CATEGORY AND STILL DRAWS NO BAR (§2.1 row 2). ** The two nils
-    # are different nils and this is what keeps them apart: the fund IS the category, and what is
-    # missing is the ceiling. `planned` is the plain $600 rate with no `gap` to bound it.
-    it "draws no bar for an uncapped fund that is the whole category" do
-      emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: funded_since)
-      create(:budget, :building, category: emergency, amount: 600, created_at: born)
+    # ** THE UNCAPPED-FUND EXAMPLE IS DELETED WITH THE SHAPE (two-shapes §7). ** It planted a fund
+    # that named no ceiling — the whole category, `#target` nil, and NO bar — because the two nils
+    # `#target` could answer were different nils and this is what kept them apart. There is one nil
+    # left, the one the example above pins: a fund with a sibling rule, whose ceiling is real and
+    # whose neighbour makes it the wrong denominator.
 
-      money = present(emergency)
+    # ** A REPEATING BILL IS NOT A FUND, which is the one clause `Budget.saving_toward_a_date` has
+    # that its predecessor could not draw. ** The water rates every two months are not something
+    # being saved toward, so the card is an ENVELOPE and there is no ceiling to print — even though
+    # the rule accrues exactly as a goal does.
+    it "is an envelope for a rule that repeats", :aggregate_failures do
+      water = create(:category, :expense, user: user, name: "Water", funded_since: funded_since)
+      create(:budget, :recurring, category: water, amount: 600, anchor_date: Date.new(2026, 4, 2), created_at: born)
 
-      expect(money.fund_is_the_whole_category?).to be(true)
-      expect(money.fund_figure).to eq(BigDecimal("600"))
+      money = present(water)
+
+      expect(money.fund?).to be(false)
+      expect(money.fund_is_the_only_rule?).to be(false)
       expect(money.target).to be_nil
       expect(money.bar?).to be(false)
     end
@@ -125,8 +144,8 @@ RSpec.describe CategoryBudgetPresenter do
 
       money = present(groceries)
 
-      expect(money.building?).to be(false)
-      expect(money.fund_is_the_whole_category?).to be(false)
+      expect(money.fund?).to be(false)
+      expect(money.fund_is_the_only_rule?).to be(false)
       expect(money.fund_figure).to be_nil
       expect(money.target).to be_nil
     end

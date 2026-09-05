@@ -9,8 +9,10 @@ require "rails_helper"
 # "Prorate daily" checkbox — and all of it was deleted with the cap in plan 3. What replaced it was
 # a POOL-mode rule form; that went with the pool layer. What is added here is the half the form
 # never had: a hand-made rule could only ever be a per-period rate ("Rules form needs to be able to
-# set the complex rules too, not just the per period catchall", Henry, 2026-09-04), and the six
-# controls of §4 reach all seven rows of §2.1.
+# set the complex rules too, not just the per period catchall", Henry, 2026-09-04), and the controls
+# reach every row of the shape table. THE TABLE IS TWO SHAPES NOW (two-shapes spec §2) — an allowance
+# that resets, and money saved toward a day — so the "Unspent money" step and its Target are gone
+# with `budgets.carries_over` and `budgets.target_amount` (§7).
 #
 # ONE BROWSER PASS PER SHAPE, and each asserts the COLUMNS rather than a flash: a form that posts
 # the right words to a mapping that has quietly changed still says "successfully created".
@@ -41,93 +43,66 @@ RSpec.describe "Budgets Forms", type: :system do
 
       expect(page).to have_content("Budget was successfully created")
       rule = groceries.budgets.sole
-      expect(rule).to have_attributes(basis: "per_period", carries_over: false, target_amount: nil, amount: 400)
+      expect(rule).to have_attributes(basis: "per_period", interval_months: nil, anchor_date: nil, amount: 400)
     end
 
-    # §2.1 row 2 — "a number saved per period … that you could allow to infinitely grow". The
-    # Target is revealed by "Builds up" and left BLANK, which is the declaration and not an
-    # omission.
-    it "writes an uncapped fund that builds up" do
-      fill_in "Rule Amount", with: "300"
-      choose "Builds up"
+    # ** ROWS 2, 3 AND 4 ARE DELETED WITH THE SHAPE THEY WROTE (two-shapes spec §2/§7). ** They were
+    # the uncapped fund ("a number saved per period … that you could allow to infinitely grow"), the
+    # goal that built toward a target, and the goal fed by hand at a $0 rate — all three written by
+    # choosing "Builds up" and filling (or leaving blank) a Target. That step is gone from the form
+    # and its two columns from the table: a fund IS a dated rule whose amount is its target, so a goal
+    # is written as "$5,000 by Jun 1, 2027" and appears below as a one-off.
 
-      expect(page).to have_field("Target")
+    # ** "Every month" IS NOT ON THE FORM ANY MORE (two-shapes §5's ruling). ** `monthly` with no due
+    # date is a legal row and `SuggestionEngine` still writes one; it is not a shape people write by
+    # hand, so the two options cover what they do write and `RuleForm.from` reads an existing one back
+    # as "Every period". The example that wrote it by hand goes with the option.
 
-      click_button "Create rule"
-
-      expect(page).to have_content("Budget was successfully created")
-      expect(groceries.budgets.sole).to have_attributes(basis: "per_period", carries_over: true, target_amount: nil)
-    end
-
-    # §2.1 row 3 — the goal, which is a building rule with a target now that it is not a kind of
-    # category.
-    it "writes a goal that builds toward a target" do
-      fill_in "Rule Amount", with: "200"
-      choose "Builds up"
-      fill_in "Target", with: "5000"
-      click_button "Create rule"
-
-      expect(page).to have_content("Budget was successfully created")
-      expect(groceries.budgets.sole).to have_attributes(carries_over: true, target_amount: 5_000, amount: 200)
-    end
-
-    # §2.1 row 4 — the goal fed by hand. Zero is legal on exactly this shape, and until now the only
-    # way to get one was a data migration.
-    it "writes a $0 goal fed by hand" do
-      fill_in "Rule Amount", with: "0"
-      choose "Builds up"
-      fill_in "Target", with: "5000"
-      click_button "Create rule"
-
-      expect(page).to have_content("Budget was successfully created")
-      expect(groceries.budgets.sole).to have_attributes(amount: 0, carries_over: true, target_amount: 5_000)
-    end
-
-    # §2.1 row 5. THE INTERVAL OF 1 IS NEVER ASKED FOR: `Budget#shape_must_be_valid` pins an
-    # anchorless monthly rule to exactly one month, so the form asks the question once and the
-    # mapping answers the column.
-    it "writes a monthly rate with no due date" do
-      fill_in "Rule Amount", with: "260"
-      choose "Every month"
-
-      expect(page).to have_no_field("First due")
-      expect(page).to have_no_field("Comes round every (months)")
-
-      click_button "Create rule"
-
-      expect(page).to have_content("Budget was successfully created")
-      expect(groceries.budgets.sole).to have_attributes(basis: "monthly", interval_months: 1, anchor_date: nil)
-    end
-
-    # §2.1 row 6 — the half-yearly bill, which could only ever arrive MEASURED from the suggestion
-    # panel before this form.
-    it "writes a bill that comes round every N months from a date" do
+    # §2 row 4 — the half-yearly bill, which could only ever arrive MEASURED from the suggestion panel
+    # before this form. The checkbox is what adds the interval.
+    it "writes a bill that repeats every N months from a date" do
       fill_in "Rule Amount", with: "600"
-      choose "Every N months"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      check "Repeats every N months"
       fill_in "Comes round every (months)", with: "6"
-      fill_in "First due", with: Date.new(2026, 12, 1)
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(groceries.budgets.sole).to have_attributes(
-        basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1), carries_over: false
+        basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1)
       )
     end
 
-    # §2.1 row 7. A NULL interval beside a date is the whole of "one-time" (§1: no one-time concept
-    # beyond this), and the form defaults to recurring so choosing it is deliberate.
+    # §2 row 3. A NULL interval beside a date is the whole of "one-time", and the box is UNTICKED by
+    # default so a repeating rule is the deliberate choice.
     it "writes a one-time bill on a date" do
       fill_in "Rule Amount", with: "600"
-      choose "Once"
+      choose "By a date"
 
       expect(page).to have_no_field("Comes round every (months)")
 
-      fill_in "First due", with: Date.new(2026, 12, 1)
+      fill_in "Due", with: Date.new(2026, 12, 1)
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(groceries.budgets.sole).to have_attributes(
         basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1)
+      )
+    end
+
+    # ** §2 ROW 5 — A GOAL, AND IT IS ROW 3 WITH A LONGER HORIZON. ** This is the whole of what §2
+    # changed for this form: "$5,000 by Jun 1, 2027" writes the same three columns a bill does, so
+    # there is no second question to ask about what becomes of the money.
+    it "writes a goal as a one-off with a distant date" do
+      fill_in "Rule Amount", with: "5000"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2027, 6, 1)
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole).to have_attributes(
+        amount: 5_000, basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1)
       )
     end
 
@@ -159,72 +134,41 @@ RSpec.describe "Budgets Forms", type: :system do
       select "Groceries", from: "Category"
     end
 
-    # THE FORM OPENS ON `per period`, so the two dated fields are away and "Unspent money" is on
-    # screen. A blank date input on a per-period form is an invitation to write a shape the model
-    # refuses.
-    it "opens with the dated fields away and the unspent choice on screen" do
-      expect(page).to have_no_field("First due")
+    # THE FORM OPENS ON "Every period", so all three dated controls are away. A blank date input on a
+    # per-period form is an invitation to write a shape the model refuses.
+    it "opens with the dated fields away" do
+      expect(page).to have_no_field("Due")
+      expect(page).to have_no_field("Repeats every N months")
       expect(page).to have_no_field("Comes round every (months)")
-      expect(page).to have_no_field("Target")
-      expect(page).to have_content("Unspent money")
     end
 
-    it "reveals the number of months and the date for every N months" do
-      choose "Every N months"
+    # ** "By a date" REVEALS THE DATE AND THE CHECKBOX, AND THE CHECKBOX REVEALS THE INTERVAL. **
+    # Two steps rather than one, because "every 6 months" is a detail OF "by a date" and not a
+    # different answer to when the money is needed.
+    it "reveals the date and the repeats box, and the interval only when it is ticked", :aggregate_failures do
+      choose "By a date"
+
+      expect(page).to have_field("Due")
+      expect(page).to have_field("Repeats every N months")
+      expect(page).to have_no_field("Comes round every (months)")
+
+      check "Repeats every N months"
 
       expect(page).to have_field("Comes round every (months)")
-      expect(page).to have_field("First due")
     end
 
-    it "reveals only the date for a one-time rule" do
-      choose "Once"
+    # ** THE "Unspent money" EXAMPLES ARE DELETED WITH THE STEP (two-shapes §5/§7). ** Four of them
+    # pinned that the radios and the Target were on screen for a dateless schedule, hidden AND
+    # DISABLED for a dated one (the state a browser with no JavaScript is served), live again on the
+    # way back, and that the Target appeared only under "Builds up". There is no such control: a fund
+    # IS a dated rule, so there is nothing about unspent money left to ask and nothing to disable.
 
-      expect(page).to have_field("First due")
+    it "takes the interval away again when the box is unticked" do
+      choose "By a date"
+      check "Repeats every N months"
+      uncheck "Repeats every N months"
+
       expect(page).to have_no_field("Comes round every (months)")
-    end
-
-    # A DATED RULE'S BUILD-UP IS DEFINED BY ITS DATE (`Budget#build_up_must_be_valid`), so the
-    # question is not asked at all rather than asked and refused.
-    it "hides the unspent choice entirely on a dated schedule" do
-      choose "Once"
-
-      expect(page).to have_no_content("Unspent money")
-      expect(page).to have_no_field("Target")
-    end
-
-    # ** AND IT DISABLES THEM, WHICH IS THE STATE A BROWSER WITH NO JAVASCRIPT IS SERVED (fix round
-    # 1 — L2). ** The `<noscript>` rule forces every hidden block visible, so "hidden" alone left the
-    # radios live for a user without JavaScript and `RuleForm` dropped their choice in silence. The
-    # server renders them disabled on a dated schedule and this controller keeps in step, so the two
-    # readings of the same form can never diverge. `visible: :all`, because with JavaScript the block
-    # they sit in is away — the disabled state is what is being asserted, not the hiding.
-    it "disables the unspent radios and the target on a dated schedule", :aggregate_failures do
-      choose "Once"
-
-      expect(find("#budget_unspent_builds", visible: :all)).to be_disabled
-      expect(find("#budget_target_amount", visible: :all)).to be_disabled
-    end
-
-    it "makes them live again when the schedule goes back to a dateless one", :aggregate_failures do
-      choose "Once"
-      choose "Per period"
-
-      expect(find("#budget_unspent_builds", visible: :all)).not_to be_disabled
-      expect(page).to have_field("Resets each period")
-
-      choose "Builds up"
-
-      expect(page).to have_field("Target")
-    end
-
-    it "reveals the target only when the money builds up" do
-      expect(page).to have_no_field("Target")
-
-      choose "Builds up"
-      expect(page).to have_field("Target")
-
-      choose "Resets each period"
-      expect(page).to have_no_field("Target")
     end
 
     # ** A HIDDEN FIELD STILL SUBMITS, SO THE CONTROLLER CLEARS IT. ** A user who typed a due date
@@ -233,9 +177,9 @@ RSpec.describe "Budgets Forms", type: :system do
     # refusal would be about a control that is not on screen. Asserted through the SAVE, because
     # that is the only place the leftover value could do harm.
     it "forgets a date the user typed and then chose away from" do
-      choose "Once"
-      fill_in "First due", with: Date.new(2026, 12, 1)
-      choose "Per period"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      choose "Every period"
       choose "Usage"
       fill_in "Rule Amount", with: "400"
       click_button "Create rule"
@@ -246,12 +190,12 @@ RSpec.describe "Budgets Forms", type: :system do
 
     # AND IT PUTS THE VALUE BACK, so a toggle back and forth does not cost the user their typing.
     it "puts a typed date back when the schedule returns to it" do
-      choose "Once"
-      fill_in "First due", with: Date.new(2026, 12, 1)
-      choose "Per period"
-      choose "Once"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      choose "Every period"
+      choose "By a date"
 
-      expect(page).to have_field("First due", with: "2026-12-01")
+      expect(page).to have_field("Due", with: "2026-12-01")
     end
 
     # "PAYS" IS FILTERED BY THE CATEGORY IN FORCE, in the browser and with no round trip. Every item
@@ -330,26 +274,27 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(Budget.count).to eq(0)
     end
 
-    # THE SHAPE ERRORS LAND UNDER "HOW OFTEN", which is the control that chose them — `Budget`
-    # states them on `interval_months`, a column this form does not render.
-    it "refuses every N months with no number of months, under How often" do
+    # THE SHAPE ERRORS LAND UNDER "WHEN IS IT NEEDED?", which is the question they are details of —
+    # `Budget` states them on `interval_months`, a column this form does not render.
+    it "refuses a repeating rule with no number of months, under When it is needed" do
       choose "Usage"
-      choose "Every N months"
-      fill_in "First due", with: Date.new(2026, 12, 1)
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      check "Repeats every N months"
       fill_in "Rule Amount", with: "600"
       click_button "Create rule"
 
-      expect(page).to have_content("How often needs the number of months")
+      expect(page).to have_content("When it is needed needs the number of months")
       expect(Budget.count).to eq(0)
     end
 
-    it "refuses a one-time rule with no date, under How often" do
+    it "refuses a dated rule with no date, under When it is needed" do
       choose "Usage"
-      choose "Once"
+      choose "By a date"
       fill_in "Rule Amount", with: "600"
       click_button "Create rule"
 
-      expect(page).to have_content("How often needs the date it is first due")
+      expect(page).to have_content("When it is needed needs the date it is first due")
       expect(Budget.count).to eq(0)
     end
   end
@@ -389,16 +334,15 @@ RSpec.describe "Budgets Forms", type: :system do
 
       expect(page).to have_select("Pays")
       expect(page).to have_field("Bill")
-      expect(page).to have_field("Per period")
-      expect(page).to have_field("Every N months")
-      expect(page).to have_content("Unspent money")
+      expect(page).to have_field("Every period")
+      expect(page).to have_field("By a date")
+      expect(page).to have_no_content("Unspent money")
       expect(page).to have_no_content("the schedule itself is already set")
     end
 
-    it "pre-fills the amount and the choices the rule was written with" do
+    it "pre-fills the amount and the choices the rule was written with", :aggregate_failures do
       expect(page).to have_field("Amount", with: "400.0")
-      expect(page).to have_checked_field("Per period")
-      expect(page).to have_checked_field("Resets each period")
+      expect(page).to have_checked_field("Every period")
       expect(page).to have_checked_field("Usage")
     end
 
@@ -413,23 +357,31 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(rule.reload.amount).to eq(750.00)
     end
 
-    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§4). ** The claim is computed, so the walk
+    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§5). ** The claim is computed, so the walk
     # re-runs from the rule's accrual start under the new shape — nothing is migrated and nothing is
     # stale, which is the whole reason the edit form may now offer the schedule at all.
-    it "turns a rate rule into a fund with a target" do
-      choose "Builds up"
-      fill_in "Target", with: "5000"
+    #
+    # ** "turns a rate rule into a fund with a target" IS THIS EXAMPLE NOW (two-shapes §2). ** It
+    # chose "Builds up" and typed a Target; a fund IS a dated rule whose amount is its target, so an
+    # allowance becomes a goal by naming the day the money is needed.
+    it "turns an allowance into a goal" do
+      fill_in "Amount", with: "5000"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2027, 6, 1)
       click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
-      expect(rule.reload).to have_attributes(carries_over: true, target_amount: 5_000)
-      expect(rule.claim_shape).to eq(:building)
+      expect(rule.reload).to have_attributes(
+        amount: 5_000, basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1)
+      )
+      expect(rule.claim_shape).to eq(:dated)
     end
 
-    it "turns a rate rule into a dated bill" do
-      choose "Every N months"
+    it "turns a rate rule into a repeating dated bill" do
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      check "Repeats every N months"
       fill_in "Comes round every (months)", with: "6"
-      fill_in "First due", with: Date.new(2026, 12, 1)
       click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
@@ -470,11 +422,12 @@ RSpec.describe "Budgets Forms", type: :system do
 
     before { visit edit_budget_path(bill) }
 
-    it "opens on the schedule it was written with" do
-      expect(page).to have_checked_field("Every N months")
+    it "opens on the schedule it was written with", :aggregate_failures do
+      expect(page).to have_checked_field("By a date")
+      expect(page).to have_checked_field("Repeats every N months")
       expect(page).to have_checked_field("Bill")
       expect(page).to have_field("Comes round every (months)", with: "6")
-      expect(page).to have_field("First due", with: "2026-06-01")
+      expect(page).to have_field("Due", with: "2026-06-01")
       expect(page).to have_no_content("Unspent money")
     end
 
@@ -484,7 +437,7 @@ RSpec.describe "Budgets Forms", type: :system do
 
       expect(page).to have_content("Budget was successfully updated")
       expect(bill.reload).to have_attributes(
-        amount: 900, basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 6, 1), carries_over: false
+        amount: 900, basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 6, 1)
       )
     end
   end
@@ -570,16 +523,16 @@ RSpec.describe "Budgets Forms", type: :system do
     end
 
     # THE RADIO ROWS ARE THE THING AT RISK. Each is a control, a title and a line of help on one
-    # line, which is the shape that pushes a page sideways when it cannot wrap — and there are three
-    # such groups on this form now where there were none before.
+    # line, which is the shape that pushes a page sideways when it cannot wrap — and there are two
+    # such groups on this form where there were none before.
     it "fits the form and its radio rows inside a 375px viewport", :aggregate_failures do
       visit new_budget_path
 
-      expect(page).to have_content("How often")
+      expect(page).to have_content("When is it needed?")
       expect(page).to have_field("Rule Amount")
 
       card = page.find("form[action=\"#{budgets_path}\"]").native.rect
-      radio = page.find("label", text: "a bill that comes round on a date").native.rect
+      radio = page.find("label", text: "money saved up toward a day").native.rect
 
       expect(card.x + card.width).to be <= 375
       expect(radio.x + radio.width).to be <= card.x + card.width

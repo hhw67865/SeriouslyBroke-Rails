@@ -442,24 +442,28 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # ** THE FUND ARM, KEYED ON THE RULE (rules-own-the-budget spec §5/§7). ** It asked
-  # `Category#savings?` — a holder, with a target, carrying NO refill rule — then
-  # `Category#saving_toward_a_target?`, a figure on the CATEGORY. Both were questions about a
-  # column no claim formula reads: `ClaimCalculator#shape` answers `:building` off the RULE's
-  # `carries_over`, and the ceiling it accrues toward is the RULE's `target_amount`. The card asks
-  # `Category#building_rule` now, so the noun and the bar come from the same record the figures do.
+  # ** THE FUND ARM, KEYED ON THE RULE'S SHAPE (two-shapes spec §2). ** It asked `Category#savings?`
+  # — a holder, with a target, carrying NO refill rule — then a figure on the CATEGORY, then the rule
+  # whose unspent money carried over. It asks `ClaimCalculator#dated?` now, of the calculators the
+  # card already builds, so the noun and the bar come from the same objects the figures do.
   #
-  # "GOAL" IS RETIRED WITH THE NOUN (§7). A goal was a kind of category; "fund" is what the rule
-  # does with money the period did not spend, and it is true of the capped shape and the uncapped
-  # one alike.
+  # "GOAL" IS RETIRED WITH THE NOUN. A goal was a kind of category; "fund" is what an accruing rule
+  # does with money — it saves it toward a day — and a bill's fund and a savings goal are ONE shape.
   describe "a fund" do
     before do
       vacation = create(:category, :expense, user: user, name: "Vacation", funded_since: funded_since)
-      # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $600-a-period BUILDING rule capped at
-      # $2,400, and one walked period accrues `min(0 + 600, 2400)` = $600. The CATEGORY names no
-      # figure at all — the column is dropped by Task 4, and a fixture still writing it would let a
-      # reader that had quietly stayed behind go on passing.
-      create(:budget, :capped, category: vacation, amount: 600, target_amount: 2_400)
+      # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $2,400 goal FOUR fortnights out on this
+      # file's biweekly grid, so the boundaries left are four and one walked period accrues
+      # `2,400 ÷ 4` = $600 — the figures a $600-a-period rule capped at $2,400 produced before the
+      # shape was retired.
+      create(
+        :budget,
+        category: vacation,
+        amount: 2_400,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.current + 55.days
+      )
 
       visit new_entry_path
       select_category("Vacation")
@@ -504,37 +508,11 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # ** A FUND THAT NAMES NO FIGURE IS STILL A FUND (rules-own-the-budget spec §2.1 row 2), AND THAT
-  # IS THE SHAPE THE OLD PREDICATE COULD NOT SEE. ** `#saving_toward_a_target?` was a question about
-  # a figure, so an emergency fund with no ceiling read as an ENVELOPE here: the noun was wrong and
-  # the trailing phrase said "left" over money the rule carries from period to period. What the
-  # missing figure takes away is only the "of": the card says what has built up, which is Home's own
-  # sentence for the same shape.
-  #
-  # PLANTED: a $600-a-period uncapped building rule, one walked period, no `gap` to bound the plan —
-  # **$600.00** built up, $150 typed, **$450.00** after.
-  describe "a fund that names no figure" do
-    before do
-      emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: funded_since)
-      create(:budget, :building, category: emergency, amount: 600)
-
-      visit new_entry_path
-      select_category("Emergency")
-    end
-
-    it "takes the fund shape with nothing to be a fraction of", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='fund']")
-      fill_in "Amount", with: "150"
-
-      within(card) do
-        expect(figure("envelope")).to have_text("Emergency fund")
-        expect(figure("balance-after")).to have_text("$450.00")
-        expect(figure("target")).to have_text("built up")
-        expect(page).to have_no_content("of $")
-        expect(page).to have_no_content("left")
-      end
-    end
-  end
+  # ** THE "fund that names no figure" DESCRIBE IS DELETED WITH THE SHAPE (two-shapes spec §7). **
+  # It planted an uncapped fund — a rule that carried its money over toward no ceiling — and pinned
+  # that the card kept the fund NOUN while the trailing phrase dropped its "of": there was nothing
+  # for a fraction to be of. Every accruing rule names a figure now, so the state is unreachable; the
+  # surviving way for this card to withhold a ceiling is a fund with a sibling rule, below.
 
   # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING, AT THE BROWSER (fix round 1 — MED-4). ** This is
   # the premise the rewrite of "a goal whose rule carries a due date" lost: that describe planted a
@@ -549,13 +527,20 @@ RSpec.describe "Entry impact card", type: :system do
   #
   # PLANTED, both rules written now so each walks exactly ONE period (a rule accrues from the later
   # of its category's funding date and its own birthday, and this category was funded a year back):
-  # the item-less fund plans `min(600, 2,400)` = **$600.00**, and the $600 bill due three days out
+  # the item-less goal plans `2,400 ÷ 4` = **$600.00**, and the $600 bill due three days out
   # is inside this period so `periods_left` is 1 and the catch-up asks the whole **$600.00**.
   # Σ **$1,200.00**; $150 typed leaves **$1,050.00**.
   describe "a fund with a bill beside it" do
     before do
       car = create(:category, :expense, user: user, name: "Car", funded_since: funded_since)
-      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400)
+      create(
+        :budget,
+        category: car,
+        amount: 2_400,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.current + 55.days
+      )
       create(
         :budget,
         category: car,
@@ -583,13 +568,16 @@ RSpec.describe "Entry impact card", type: :system do
     end
   end
 
-  # ** A DATED BILL IS AN ENVELOPE ON THIS CARD, AND THAT IS THE CLASSIFICATION MOVING ONTO THE RULE
-  # (rules-own-the-budget spec §5). ** This example used to plant a category with a $2,400 figure and
-  # a dated rule, and pin that the CHROME did not inherit the rule's shape — the card said "goal" and
-  # measured against the category's $2,400 while the rule accrued toward its own $600. There is no
-  # second record to disagree with any more: `Budget#build_up_must_be_valid` refuses `carries_over`
-  # beside an `anchor_date`, so a dated rule can never be a building one, the category has no
-  # building rule, and the honest noun is "envelope".
+  # ** A DATED BILL IS A FUND ON THIS CARD NOW, AND THAT IS §2's WIDENING (two-shapes spec §2). **
+  # The example asserted "envelope" and "left": the classifier was the rule whose unspent money
+  # carried over, and a dated bill was not one — so the card called money that was demonstrably being
+  # SAVED UP toward a day an envelope, and said what was "left" of it. A bill's fund and a savings
+  # goal are one shape, so the noun follows the walk: this money is built up toward $600 on a day.
+  #
+  # ** THE CATEGORY-LEVEL SCREENS STILL SAY ENVELOPE HERE, and the difference is deliberate. ** The
+  # index card, the holdings card and the dashboard's band require an ITEM-LESS ONE-OFF (§3.1's lane
+  # partition and "a bill is not a thing being saved toward"); this card is about what a RECEIPT does
+  # to the money, and a receipt on this lane lands on a rule that accrues toward a date.
   #
   # PLANTED: a $600 bill due three days out, INSIDE the period anchored on today, so `periods_left`
   # is 1 and the catch-up formula asks the whole $600 now — `min(0 + 600, 600)` built up in one
@@ -603,15 +591,15 @@ RSpec.describe "Entry impact card", type: :system do
       select_category("House Deposit")
     end
 
-    it "takes the envelope shape and says what is left", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='envelope']")
+    it "takes the fund shape and measures against the bill", :aggregate_failures do
+      expect(page).to have_css("[data-impact-card='fund']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("House Deposit envelope")
+        expect(figure("envelope")).to have_text("House Deposit fund")
         expect(figure("balance-after")).to have_text("$450.00")
-        expect(page).to have_content("left")
-        expect(page).to have_no_content("fund")
+        expect(figure("target")).to have_text("of $600.00")
+        expect(page).to have_no_content("left")
       end
     end
   end

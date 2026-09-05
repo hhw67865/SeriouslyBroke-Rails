@@ -95,7 +95,6 @@ RSpec.describe HomeHelper, type: :helper do
       instance_double(
         HomePresenter::ClaimLine,
         rate?: true,
-        building?: false,
         spent: spent,
         accrued: accrued,
         over?: over,
@@ -112,26 +111,21 @@ RSpec.describe HomeHelper, type: :helper do
     # the `:over` trouble, whose label reads `spent − accrued` off a RATE line's members — so no
     # example in this group has ever passed one, and a sixth keyword would be a knob with no caller.
     #
-    # `capped?` IS DERIVED FROM `target:` RATHER THAN TAKEN AS A SIXTH KEYWORD, and on the real
-    # `HomePresenter::ClaimLine` the two are exactly this pair: `ClaimCalculator#target` is nil for
-    # the one shape `#capped?` is false on that ever reaches this helper — an uncapped building rule
-    # — so a fixture naming a figure is capped and one naming none is not. (A RATE rule is also
-    # uncapped and has a `target` of zero, and it takes `#claim_figure`'s first branch before either
-    # reader is asked; `rate_line` is what those examples use.)
-    # ** `building?` IS DERIVED FROM `next_due_on:` FOR THE SAME REASON `capped?` IS DERIVED FROM
-    # `target:` (rules-own-the-budget spec §2.1). ** The two accruing shapes are told apart by a
-    # DATE and the model refuses the pair outright — `Budget#build_up_must_be_valid` will not let a
-    # rule carry `carries_over` beside an `anchor_date` — so a fixture with a date IS the dated
-    # shape and one without IS the building shape. A seventh keyword could state the two
-    # independently and would then be free to state a combination no `Budget` can hold.
+    # ** `capped?` AND `building?` HAVE LEFT THE DOUBLE WITH THE READERS THEY STOOD FOR (two-shapes
+    # spec §7). ** There was one accruing shape without a date — the fund whose money carried over —
+    # and `#capped?` said whether it named a ceiling at all; both were derived from the other keywords
+    # here precisely because no `Budget` could hold the combinations they could state independently.
+    # There is ONE accruing shape now, it always has a date and it always has a figure, so the double
+    # states what the line carries and nothing more.
+    #
+    # `next_due_on:` IS STILL DEFAULTED, because a settled one-off answers nil to it — see "renders no
+    # clause for a rule that is settled".
     def accruing_line(built_up:, target:, per_period:, next_due_on: nil, overdue: false)
       instance_double(
         HomePresenter::ClaimLine,
         rate?: false,
-        building?: next_due_on.nil?,
         built_up: built_up,
         target: target,
-        capped?: !target.nil?,
         per_period: per_period,
         next_due_on: next_due_on,
         over?: false,
@@ -158,16 +152,11 @@ RSpec.describe HomeHelper, type: :helper do
         expect(helper.claim_figure(line)).to eq("$450.00 built up of $1,200.00")
       end
 
-      # ** AN UNCAPPED FUND HAS NOTHING TO BE "OF" (rules-own-the-budget spec §2.1 row 2; fix round 1
-      # — MED). ** `ClaimCalculator#target` is NIL for a building rule that names no figure, and this
-      # printed `$450.00 built up of ` — a dangling preposition over an empty figure. Both directions
-      # on one built-up, so a helper that had simply stopped printing the denominator would fail the
-      # example above.
-      it "says built up alone on a fund with no target to reach" do
-        line = accruing_line(built_up: 450, target: nil, per_period: 300)
-
-        expect(helper.claim_figure(line)).to eq("$450.00 built up")
-      end
+      # ** THE "built up alone" ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** It was the
+      # uncapped fund, whose `ClaimCalculator#target` was NIL — an un-gated sentence printed
+      # `$450.00 built up of `, a dangling preposition over an empty figure — and there is no such
+      # shape: every accruing rule has a day and a figure, so both halves of the "of" are always
+      # there.
     end
 
     describe "#claim_schedule" do
@@ -178,31 +167,17 @@ RSpec.describe HomeHelper, type: :helper do
         expect(helper.claim_schedule(line)).to eq("next due Mar 1 · $200.00 per period")
       end
 
-      # ** A BUILDING RULE SAYS WHAT IT ADDS, WITH A LEADING PLUS AND NO DATE (rules-own-the-budget
-      # spec §5). ** It has no due date to have — `carries_over` and `anchor_date` cannot both be
-      # set — so this is not "the half that is true" of a dated sentence, it is a different
-      # sentence: `+$150.00 per period` is money added every period for as long as the rule lives,
-      # where a dated rule's `$200.00 per period` is a share of a bill that stops when the bill is
-      # whole. The plus is what a reader has to tell them apart by, since neither prints a date.
-      it "says what a capped fund adds each period" do
-        expect(helper.claim_schedule(accruing_line(built_up: 650, target: 2_400, per_period: 150)))
-          .to eq("+$150.00 per period")
-      end
-
-      # THE UNCAPPED SHAPE GETS THE SAME CLAUSE, which is the point of it: the FIGURE above differs
-      # ("$450.00 built up", no "of") and what the rule adds does not. Both directions in the file:
-      # the capped example above, and this one, produce the identical schedule.
-      it "says what an uncapped fund adds each period" do
-        expect(helper.claim_schedule(accruing_line(built_up: 450, target: nil, per_period: 300)))
-          .to eq("+$300.00 per period")
-      end
-
-      # A CAPPED FUND AT ITS CAP ADDS NOTHING, and it has no date for the clause to fall back on —
-      # so the whole element is absent rather than reading `+$0.00 per period` under a figure that
-      # already says the fund is whole. This is the arm the dated shape does NOT take (see "drops
-      # the share on a fund that is already full", which keeps its date).
-      it "renders no clause for a fund that has reached its cap" do
-        expect(helper.claim_schedule(accruing_line(built_up: 1_200, target: 1_200, per_period: 0))).to be_nil
+      # ** `#building_schedule` AND ITS THREE EXAMPLES ARE DELETED (two-shapes spec §7). ** A building
+      # rule had no date at all, so its whole clause was `+$150.00 per period` — money added every
+      # period for as long as the rule lived — and the leading PLUS was what told it from a dated
+      # rule's `$200.00 per period`, a share of a bill that stops when the bill is whole. A goal names
+      # a day now and takes the dated clause like every other accruing rule, which says the same thing
+      # with the deadline the share is derived from.
+      #
+      # THE ARM THOSE EXAMPLES ALSO COVERED — a rule accruing nothing more — survives as the settled
+      # one-off below, which is the only way `#next_due_on` and `#per_period` are now both empty.
+      it "renders no clause for a rule that is settled" do
+        expect(helper.claim_schedule(accruing_line(built_up: 0, target: 600, per_period: 0))).to be_nil
       end
 
       # A FULL FUND ACCRUES NOTHING MORE, so "$0.00 per period" would be a line reporting nothing.

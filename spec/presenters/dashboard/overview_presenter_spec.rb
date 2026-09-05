@@ -19,12 +19,11 @@ require "rails_helper"
 # reader under test: one grouped statement from the ledger, or one per rule from a per-goal
 # calculator.
 #
-# EVERY FUND CARRIES A BUILDING RULE, which is not decoration twice over. A claim comes from a rule
-# (§3.3), so a category with none asks the ledger nothing at all and five ruleless ones would cost
-# zero statements — the equality would hold trivially and the example would pass against the very
-# thing it forbids. And since rules-own-the-budget §5 the rule is also what puts a category on this
-# strip at all: `Category#building_rule` is the classifier, so a category carrying a plain rate rule
-# is not a fund and has no card.
+# EVERY FUND CARRIES A RULE, which is not decoration twice over. A claim comes from a rule (§3.3), so
+# a category with none asks the ledger nothing at all and five ruleless ones would cost zero
+# statements — the equality would hold trivially and the example would pass against the very thing it
+# forbids. And the rule is also what puts a category on this strip at all: `Budget.saving_toward_a_date`
+# is the classifier (two-shapes §2), so a category carrying a plain rate rule has no card.
 #
 # STRICT EQUALITY AND THE FIGURE NAMED, not "no more than": a bound pins nothing, and a strip that
 # stopped reading claims altogether would satisfy a bare equality while printing nobody's money.
@@ -37,13 +36,13 @@ RSpec.describe Dashboard::OverviewPresenter do
   end
   let(:presenter) { DashboardPresenter.new(user: user, date: Date.current).overview }
 
-  # THE FIGURE IS ON THE RULE (rules-own-the-budget spec §5): `:capped` is a per-period building rule
-  # naming a `target_amount`, which is what `Category#building_rule` finds and what
-  # `ClaimCalculator#target` caps the walk at. The CATEGORY has no figure of its own to set — Task 4
-  # dropped `categories.target_amount`, and nothing on this strip ever read it.
-  def fund(name, target: 5_000, accrues: 1_000)
+  # ** A FUND IS A ONE-OFF DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes §2 row 5). ** It was a
+  # per-period rule that carried its money over toward a separate figure; the horizon replaces the
+  # rate. FOUR biweekly boundaries from today through `today + 7.weeks` (today, +2w, +4w, +6w), so
+  # §3.2's share is `5,000 ÷ 5` in the first period — see each example for what it re-derives.
+  def fund(name, target: 5_000, due: Date.current + 9.weeks)
     category = create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
-    create(:budget, :capped, category: category, amount: accrues, target_amount: target)
+    create(:budget, category: category, amount: target, basis: :monthly, interval_months: nil, anchor_date: due)
     category
   end
 
@@ -66,14 +65,16 @@ RSpec.describe Dashboard::OverviewPresenter do
       ["Roof", "Car", "Trip", "Rainy Day"].each { |name| fund(name) }
       five = adjustment_statements
 
-      expect(user.categories.count { |category| category.building_rule.present? }).to eq(5)
+      expect(Budget.saving_toward_a_date.count).to eq(5)
       expect(five).to eq(one)
       expect(five).to eq(1)
     end
 
     # THE REACH DIRECTION, so the count above cannot be one because nothing was read. Five funds,
-    # five rows, each carrying the figure §3.2's walk produces: one period at $1,000 against a
-    # $5,000 target.
+    # five rows, each carrying the figure §3.2's walk produces. RE-DERIVED: the grid is biweekly
+    # anchored today and the rule is born today, so the walk visits ONE period; the boundaries from
+    # today through `today + 9.weeks` are today, +2w, +4w, +6w and +8w = FIVE, so the share is
+    # `5,000 ÷ 5` = **$1,000.00**.
     it "reads every fund's claim off that one statement", :aggregate_failures do
       ["Vacation", "Roof", "Car", "Trip", "Rainy Day"].each { |name| fund(name) }
 
@@ -82,59 +83,51 @@ RSpec.describe Dashboard::OverviewPresenter do
     end
   end
 
-  # ** WHICH CATEGORIES THE STRIP IS ABOUT (rules-own-the-budget spec §5). ** The classifier moved
-  # from `Category#saving_toward_a_target?` — a funding start and a figure on the CATEGORY — to
-  # `Category#building_rule`, the item-less rule whose unspent money carries. "Which money is being
-  # saved" is answered by the SHAPE, which is what lets an emergency fund with no ceiling onto this
-  # strip for the first time.
+  # ** WHICH CATEGORIES THE STRIP IS ABOUT (two-shapes §2). ** The classifier has moved twice: from a
+  # figure on the CATEGORY, to the item-less rule whose unspent money carried, to
+  # `Budget.saving_toward_a_date` — an item-less rule with an anchor and NO interval. "Which money is
+  # being saved" is answered by the SHAPE, and the shape that means it is a target with a DAY.
   describe "#savings_summary — which categories are on it" do
     def category(name)
       create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
     end
 
-    # PLANTED, re-derived: a $1,000-a-period building rule on a category funded a year ago, read on
-    # its anchor day. `#as_of` is `min(this month's end, user.today)` = today, and the period grid is
-    # biweekly anchored today — so the walk visits every fortnight from a year ago through today,
-    # 27 of them, and an UNCAPPED rule plans its plain $1,000 in each: 27 × 1,000 = $27,000 with
-    # nothing spent. The figure is not what this example is about, so it asserts only that the row
-    # is THERE and that its target is nil; the claim arithmetic is `claim_calculator_spec`'s.
-    it "lists a fund that names no figure at all", :aggregate_failures do
-      create(:budget, :building, category: category("Emergency Fund"), amount: 1_000)
+    # THE ROW IS THERE AND CARRIES THE RULE'S OWN AMOUNT AS ITS TARGET, which is the whole of what §2
+    # changed here: the ceiling used to be a separate column and is the amount now.
+    it "lists a goal and carries its own amount as the target", :aggregate_failures do
+      fund("Vacation")
 
       row = presenter.savings_summary.sole
 
-      expect(row[:name]).to eq("Emergency Fund")
-      expect(row[:target_amount]).to be_nil
-      expect(row[:progress_percentage]).to eq(0)
+      expect(row[:name]).to eq("Vacation")
+      expect(row[:target]).to eq(5_000)
     end
 
-    # THE CAPPED HALF, so the example above cannot pass because the strip lists everything.
-    it "carries the rule's own target on a capped fund", :aggregate_failures do
-      create(:budget, :capped, category: category("Vacation"), amount: 500, target_amount: 5_000)
-
-      row = presenter.savings_summary.sole
-
-      expect(row[:target_amount]).to eq(5_000)
-    end
-
-    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A rule whose money
-    # RESETS every period is an envelope — nothing about it builds up. It had a card under
-    # `#saving_toward_a_target?` because its CATEGORY named a figure; this example planted that
-    # exact pair, and `categories.target_amount` is dropped (§6/§7), so the shape is the only
-    # classifier there is and it answers the same.
+    # ** A RULE WHOSE MONEY RESETS IS AN ENVELOPE, which no classifier this strip has ever had would
+    # put on it. ** Kept because it is the half that stops the example above passing against a strip
+    # that lists everything.
     it "leaves out a category whose rule resets" do
       create(:budget, :per_period_rate, category: category("Groceries"), amount: 400)
 
       expect(presenter.savings_summary).to be_empty
     end
 
-    # AN ITEM-BACKED BUILDING RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money set aside
-    # for one item is not the category building up, and `Category#building_rule` reads the item-less
-    # rule for exactly that reason.
-    it "leaves out a category whose only building rule pays one item" do
+    # ** A RULE THAT REPEATS IS A RECURRING BILL, NOT A THING BEING SAVED TOWARD (two-shapes §2). **
+    # The water rates every two months accrue exactly as a goal does — the same walk, the same
+    # catch-up share — and are not savings. This is the one clause the retired classifier could not
+    # draw, because a building rule had no date to repeat on.
+    it "leaves out a category whose only dated rule repeats" do
+      create(:budget, :recurring, category: category("Water"), amount: 600, anchor_date: Date.current + 9.weeks)
+
+      expect(presenter.savings_summary).to be_empty
+    end
+
+    # AN ITEM-BACKED RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money saved for one item
+    # is not the category saving, which is the clause the retired pair carried and this scope keeps.
+    it "leaves out a category whose only goal pays one item" do
       groceries = category("Groceries")
       item = create(:item, category: groceries)
-      create(:budget, :building, category: groceries, item: item, amount: 100)
+      create(:budget, :by_date, category: groceries, item: item, amount: 100)
 
       expect(presenter.savings_summary).to be_empty
     end
@@ -151,8 +144,8 @@ RSpec.describe Dashboard::OverviewPresenter do
   # ** PLANTED, RE-DERIVED. ** "Car", funded a year back, both rules written now — the period is
   # biweekly anchored today, so each walks exactly ONE period:
   #
-  #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600, nothing
-  #             spent → built up **$600.00**
+  #   the FUND  item-less, $2,400 due `today + 7.weeks` — FOUR boundaries (today, +2w, +4w, +6w), so
+  #             the share is `2,400 ÷ 4` = 600, nothing spent → built up **$600.00**
   #   the BILL  on the item "Insurance", $600 due three days out — inside this period, so
   #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
   #
@@ -161,7 +154,14 @@ RSpec.describe Dashboard::OverviewPresenter do
   describe "#savings_summary — a fund that is not the whole category", :aggregate_failures do
     def car_fund
       car = create(:category, :expense, user: user, name: "Car", funded_since: 1.year.ago.to_date)
-      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400)
+      create(
+        :budget,
+        category: car,
+        amount: 2_400,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.current + 7.weeks
+      )
       car
     end
 
@@ -184,7 +184,7 @@ RSpec.describe Dashboard::OverviewPresenter do
       row = presenter.savings_summary.sole
 
       expect(row[:balance]).to eq(BigDecimal("600"))
-      expect(row[:target_amount]).to be_nil
+      expect(row[:target]).to be_nil
       expect(row[:progress_percentage]).to eq(0)
       expect(presenter.total_savings_balance).to eq(BigDecimal("600"))
     end
@@ -198,7 +198,7 @@ RSpec.describe Dashboard::OverviewPresenter do
       row = presenter.savings_summary.sole
 
       expect(row[:balance]).to eq(BigDecimal("600"))
-      expect(row[:target_amount]).to eq(2_400)
+      expect(row[:target]).to eq(2_400)
       expect(row[:progress_percentage]).to eq(25)
       expect(presenter.total_savings_balance).to eq(BigDecimal("600"))
     end

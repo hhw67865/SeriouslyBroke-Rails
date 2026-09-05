@@ -50,17 +50,28 @@ RSpec.describe ClaimCalculator, type: :model do
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
-  # A $150-a-period goal on a category of its OWN, born on the moment given. A category may carry only
-  # one rule whose lane is the whole of it (`Budget#category_may_hold_one_item_less_rule`), so two
-  # birth dates need two categories.
+  # A $1,200 GOAL DUE AUG 31 on a category of its OWN, born on the moment given. A category may carry
+  # only one rule whose lane is the whole of it (`Budget#category_may_hold_one_item_less_rule`), so
+  # two birth dates need two categories.
   #
-  # ** THE TARGET IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §2.1). ** It
-  # used to be the other way round, and planting the figure only where the calculator no longer looks
-  # is what makes every walk below a pin on the new reading rather than a pin that would pass either
-  # way.
-  def goal_born_on(name, moment)
-    goal = create(:category, :expense, user: user, name: name, funded_since: Date.new(2026, 1, 1))
-    create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: moment)
+  # ** IT WAS A $150-A-PERIOD CAPPED BUILDING RULE, AND THE HORIZON IS WHAT REPLACES THE RATE
+  # (two-shapes §2). ** A stated rate with no deadline became a stated deadline with a derived share:
+  # `1,200 ÷ periods left`, recomputed every period. MAR 31 2027 is eight monthly periods from Aug
+  # 2026, which is the month every group below opens its walk in — so the share there is exactly the
+  # $150 the old rate was and those literals are unchanged. The two groups whose walk opens in a
+  # DIFFERENT month re-derive their own figures beside the example, because a catch-up share is a
+  # fact about the horizon and not about the rule alone: that is the whole difference §2 introduced.
+  def goal_born_on(name, moment, funded_since: Date.new(2026, 1, 1))
+    goal = create(:category, :expense, user: user, name: name, funded_since: funded_since)
+    create(
+      :budget,
+      category: goal,
+      amount: 1_200,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.new(2027, 3, 31),
+      created_at: moment
+    )
   end
 
   # ===========================================================================================
@@ -523,14 +534,33 @@ RSpec.describe ClaimCalculator, type: :model do
   end
 
   # ===========================================================================================
-  # §3.2/§3.3 — the capped building rule (rules-own-the-budget §2.1 row 3): the savings goal,
-  # accruing at its rate toward the figure ON THE RULE, with no due date to spread it over.
+  # ** THE GOAL (two-shapes spec §2 row 5) — A DATED RULE WITH NO INTERVAL, AND NOTHING ELSE. **
+  # $1,200 by Aug 31, from a category funded Jan 1: eight monthly periods, so §3.2's catch-up share
+  # is `1,200 ÷ 8` = **$150.00** every period and stays there — the gap and the periods left fall
+  # together. That is what makes "a savings goal" and "a bill" one shape: the walk is the same walk,
+  # and the only thing a goal adds is a longer horizon.
   #
-  # THE CATEGORY NAMES NOTHING, AND SINCE §6's DATA MIGRATION IT CANNOT: `categories.target_amount`
-  # is dropped. Every fixture in this file already left it NULL on purpose — the walk below is the
-  # new reading or it is nothing — so the drop took away the only way to write the old one.
+  # ** IT WAS A CAPPED BUILDING RULE (`carries over` + a target, §2.1 row 3), AND EVERY FIGURE BELOW
+  # IS THE ONE THAT SHAPE PRODUCED. ** The rate was stated and the horizon derived; here the horizon
+  # is stated and the share derived, and on this fixture they are the same $150. What DID change is
+  # the recovery after a raid — see "gives money back on a negative delta" — because a deadline
+  # re-plans and a standing rate does not.
+  #
+  # ** THREE WHOLE GROUPS WENT WITH THE SHAPE (§7), AND THEY ARE NAMED HERE RATHER THAN DELETED
+  # QUIETLY: **
+  #
+  #   "with no rate at all" — the goal fed only by set-asides, spelled as an amount of ZERO. There is
+  #     no such shape: every rule has a positive amount, and a goal with no standing contribution is
+  #     a target with a date the owner has not started saving for.
+  #   "an uncapped building rule" — the fund with no ceiling, whose share was its plain rate for ever
+  #     and whose adjustments touched only their own period. A rule that names no day it is needed is
+  #     a rule nothing can be short for; §2 retires it.
+  #   "a negative adjustment on a capped building rule at its cap" / "at the cap" — the cap's own
+  #     refill arithmetic (`min(rate, gap)`, never faster than the rate) and the `#capped?` pair.
+  #     There is one cap now, the rule's own amount, and the recovery after a raid is the catch-up
+  #     share, which the group below pins.
   # ===========================================================================================
-  describe "a capped building rule" do
+  describe "a goal" do
     let(:vacation) do
       create(
         :category,
@@ -540,7 +570,17 @@ RSpec.describe ClaimCalculator, type: :model do
         funded_since: Date.new(2026, 1, 1)
       )
     end
-    let(:rule) { create(:budget, :capped, category: vacation, amount: 150, target_amount: 1_200, created_at: born) }
+    let(:rule) do
+      create(
+        :budget,
+        category: vacation,
+        amount: 1_200,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.new(2026, 8, 31),
+        created_at: born
+      )
+    end
 
     def calc(on) = described_class.new(rule, today: on)
 
@@ -548,49 +588,57 @@ RSpec.describe ClaimCalculator, type: :model do
       create(:entry, item: create(:item, category: vacation), amount: amount, date: on)
     end
 
-    it "accrues at its own rate, one period at a time" do
+    it "accrues its share, one period at a time" do
       expect(calc(Date.new(2026, 4, 15)).built_up).to eq(600) # four periods of $150
     end
 
-    it "has no due date and no periods to count down to one", :aggregate_failures do
+    # ** THE HORIZON IS THE DIFFERENCE, AND IT IS THE WHOLE OF WHAT THE OLD SHAPE LACKED. ** The
+    # capped building rule answered NIL to both of these — no due date, no periods to count down to
+    # one — which is why a fund could be neither early nor late and Home could say nothing about when
+    # it would arrive. April is the fourth of eight periods, so five remain including its own.
+    it "names the share, the day it is needed and the periods left", :aggregate_failures do
       april = calc(Date.new(2026, 4, 15))
 
-      expect(april.next_due_on).to be_nil
-      expect(april.periods_left).to be_nil
+      expect(april.next_due_on).to eq(Date.new(2026, 8, 31))
+      expect(april.periods_left).to eq(5)
       expect(april.planned_this_period).to eq(150)
     end
 
-    # THE CAP IS THE RULE'S OWN FIGURE, and the final contribution is the remainder rather than the
-    # rate: eight periods reach $1,200 and the ninth asks for nothing.
-    it "stops at the target the rule names", :aggregate_failures do
+    # THE CEILING IS THE RULE'S OWN AMOUNT, and the ninth period asks for nothing: eight periods of
+    # $150 reach $1,200 exactly.
+    it "stops at the figure the rule names", :aggregate_failures do
       september = calc(Date.new(2026, 9, 15))
 
       expect(september.built_up).to eq(1_200)
       expect(september.planned_this_period).to eq(0)
     end
 
-    it "takes a set-aside on top of its rate" do
+    it "takes a set-aside on top of its share" do
       adjust(rule, 500, on: Time.utc(2026, 2, 10, 12))
 
       expect(calc(Date.new(2026, 2, 20)).built_up).to eq(800) # 150 + 150 + 500
     end
 
-    # THE CAP HOLDS AGAINST A SET-ASIDE TOO, which is the one way an accrual can arrive above the
-    # target at all: the catch-up formula and the rate are both bounded by the gap, so without this
-    # example nothing in the matrix could tell a capped walk from an uncapped one.
+    # THE CEILING HOLDS AGAINST A SET-ASIDE TOO, which is the one way an accrual can arrive above the
+    # target at all: the catch-up share is itself bounded by the gap, so without this example nothing
+    # would exercise the `min` in `#accrued_in`.
     it "does not build past the target on a set-aside that overshoots it" do
       adjust(rule, 2_000, on: Time.utc(2026, 2, 10, 12))
 
       expect(calc(Date.new(2026, 2, 20)).built_up).to eq(1_200)
     end
 
-    # A RAID IS A NEGATIVE DELTA, and the rate rebuilds from where it left off — there is no due
-    # date to catch up to, so the recovery is the rate and nothing faster.
-    it "gives money back on a negative delta", :aggregate_failures do
+    # ** A RAID IS A NEGATIVE DELTA, AND THE DEADLINE IS WHAT DECIDES THE RECOVERY (two-shapes §2). **
+    # March: 150 + 150 + 150 − 200 = $250. APRIL RECOVERS FASTER THAN THE OLD RATE, and that is the
+    # change of shape rather than a change of arithmetic: the gap is $950 with five periods left
+    # (Apr … Aug), so the share is **$190.00** and the fund reaches $440 — where a standing rate
+    # rebuilt at $150 to $400 and would still have been $200 short on the day. A deadline re-plans.
+    it "gives money back on a negative delta, and re-plans to make the date", :aggregate_failures do
       adjust(rule, -200, on: Time.utc(2026, 3, 10, 12))
 
-      expect(calc(Date.new(2026, 3, 20)).built_up).to eq(250) # 150 + 150 + 150 − 200
-      expect(calc(Date.new(2026, 4, 20)).built_up).to eq(400)
+      expect(calc(Date.new(2026, 3, 20)).built_up).to eq(250)
+      expect(calc(Date.new(2026, 4, 20)).planned_this_period).to eq(190)
+      expect(calc(Date.new(2026, 4, 20)).built_up).to eq(440)
     end
 
     it "drops by what is spent out of the goal" do
@@ -598,46 +646,25 @@ RSpec.describe ClaimCalculator, type: :model do
 
       expect(calc(Date.new(2026, 3, 20)).built_up).to eq(150) # 450 accrued, 300 taken
     end
-
-    # ** A GOAL FED ONLY BY HAND (§3.2's "otherwise only by positive adjustments"; §2.1 row 4). ** A
-    # capped building rule with an amount of ZERO is the shape that says "no standing rate": it
-    # accrues nothing on its own and every penny it holds arrived as a set-aside. Both directions —
-    # the rate arm is the group above, and this arm is the same walk with the rate taken out.
-    describe "with no rate at all" do
-      let(:rule) { create(:budget, :hand_fed, category: vacation, target_amount: 1_200, created_at: born) }
-
-      it "accrues nothing of its own" do
-        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(0)
-      end
-
-      it "builds up out of its set-asides and nothing else", :aggregate_failures do
-        adjust(rule, 400, on: Time.utc(2026, 2, 10, 12))
-        adjust(rule, 250, on: Time.utc(2026, 3, 10, 12))
-
-        expect(calc(Date.new(2026, 2, 20)).built_up).to eq(400)
-        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(650)
-      end
-
-      it "still stops at the target the rule names" do
-        adjust(rule, 5_000, on: Time.utc(2026, 2, 10, 12))
-
-        expect(calc(Date.new(2026, 4, 15)).built_up).to eq(1_200)
-      end
-    end
   end
 
   # ===========================================================================================
-  # ** THE SHAPE MATRIX (rules-own-the-budget spec §2.1), ROW BY ROW. ** Seven ways a user can
-  # write a rule and the three formulas they map onto, read off the rule's OWN columns and no
-  # neighbouring record's. `#shape`, `#capped?` and `#target` are asserted together on each row
-  # because they are one classification: the shape says which formula, `capped?` says whether that
-  # formula has a ceiling, and `#target` is the ceiling — a row that got one of the three right and
-  # the others wrong would be a walk that ran the right arithmetic against the wrong bound.
+  # ** THE SHAPE TABLE (two-shapes spec §2), ROW BY ROW. ** Five ways a user can write a rule and the
+  # TWO formulas they map onto, read off ONE column of the rule's own. `#shape` and `#target` are
+  # asserted together on each row because they are one classification: the shape says which formula,
+  # and `#target` is the ceiling that formula runs against — a row that got one right and the other
+  # wrong would be a walk running the right arithmetic against the wrong bound.
+  #
+  # ** IT WAS SEVEN ROWS, THREE FORMULAS AND `#capped?` BESIDE THEM (§2.1). ** Two rows were the
+  # building shape (a fund with a ceiling and one without) and `#capped?` existed because the second
+  # had no ceiling at all — `#target` was NIL there, and every reader of it had to ask a second
+  # question first. Both are retired: a dated rule's target is its own amount and a rate rule's is
+  # zero, so `#target` is always a figure and there is nothing left for a third predicate to say.
   #
   # ONE CATEGORY PER ROW, because `Budget#category_may_hold_one_item_less_rule` allows a category
   # exactly one rule whose lane is the whole of it.
   # ===========================================================================================
-  describe "#shape, #capped? and #target across §2.1" do
+  describe "#shape and #target across §2" do
     def rule_for(name, *traits, **attrs)
       owner = create(:category, :expense, user: user, name: name, funded_since: Date.new(2026, 1, 1))
       create(:budget, *traits, category: owner, created_at: born, **attrs)
@@ -645,259 +672,78 @@ RSpec.describe ClaimCalculator, type: :model do
 
     def calc(rule) = described_class.new(rule, today: Date.new(2026, 9, 3))
 
-    # ROW 1 — $400 a period, resets. Today's rate rule, and `carries_over false` is what it has
-    # always meant. `#target` is ZERO rather than nil, unchanged: a rate rule accrues toward nothing,
-    # and zero is what `#standing_ask`'s siblings have always read there.
-    it "calls a per-period rule whose money resets a rate rule", :aggregate_failures do
+    # ROW 1 — $400 every period. The allowance that resets with the paycheck. `#target` is ZERO
+    # rather than nil: a rate rule accrues toward nothing, and zero is what the walk's siblings have
+    # always read there.
+    it "calls a per-period rule a rate rule", :aggregate_failures do
       rule = rule_for("Groceries", :per_period_rate, amount: 400)
 
       expect(calc(rule).shape).to eq(:rate)
       expect(calc(rule)).to be_rate
-      expect(calc(rule)).not_to be_capped
       expect(calc(rule).target).to eq(0)
     end
 
-    # ROW 2 — $300 a period, builds up, no ceiling. The emergency fund: the §3.2 walk with `gap`
-    # unbounded, so `#target` is NIL and not zero. The difference is load-bearing — zero would make
-    # `gap` negative on the first period and the walk would plan nothing for ever.
-    it "calls a per-period rule that builds up an uncapped building rule", :aggregate_failures do
-      rule = rule_for("Emergency", :building, amount: 300)
+    # ROW 2 — $260 every month, no due date. The same formula on a different unit: `Budget#steady_ask`
+    # is what divides the month over the user's grid, and the SHAPE is untouched by the basis. The
+    # form does not offer this row (§5's ruling) and `SuggestionEngine` still writes it, which is why
+    # the classification has to keep answering for it.
+    it "calls an anchorless monthly rule a rate rule too", :aggregate_failures do
+      rule = rule_for("Power", :rate, amount: 260)
 
-      expect(calc(rule).shape).to eq(:building)
-      expect(calc(rule)).to be_building
-      expect(calc(rule)).not_to be_capped
-      expect(calc(rule).target).to be_nil
+      expect(calc(rule).shape).to eq(:rate)
+      expect(calc(rule).target).to eq(0)
     end
 
-    # ROW 3 — $200 a period toward $5,000. Today's goal, reading the RULE.
-    it "calls a building rule that names a figure a capped one", :aggregate_failures do
-      rule = rule_for("Vacation", :building, amount: 200, target_amount: 5_000)
-
-      expect(calc(rule).shape).to eq(:building)
-      expect(calc(rule)).to be_capped
-      expect(calc(rule).target).to eq(5_000)
-    end
-
-    # ROW 4 — $0 a period toward $5,000: fed by hand, and the only shape `Budget#set_aside_only?`
-    # exempts from `amount > 0`. It is a capped building rule like row 3 in every respect but its
-    # rate, which is what makes the classification independent of the amount.
-    it "calls a hand-fed goal a capped building rule too", :aggregate_failures do
-      rule = rule_for("Someday", :hand_fed, target_amount: 5_000)
-
-      expect(calc(rule).shape).to eq(:building)
-      expect(calc(rule)).to be_capped
-      expect(calc(rule).target).to eq(5_000)
-    end
-
-    # ROW 5 — $260 a month, both ways. The BASIS is not part of the classification: a monthly rule
-    # that carries is a building rule exactly as a per-period one is, and `Budget#steady_ask` is what
-    # divides the month over the user's grid. Both arms in one example, because the row's whole
-    # content is that `carries_over` is the only column that moves.
-    it "reads carries_over on a monthly rule and nothing else", :aggregate_failures do
-      resets = rule_for("Power", :rate, amount: 260)
-      builds = rule_for("Repairs", :rate, amount: 260, carries_over: true)
-
-      expect(calc(resets).shape).to eq(:rate)
-      expect(calc(builds).shape).to eq(:building)
-      expect(calc(builds)).not_to be_capped
-    end
-
-    # ROW 6 — $600 every 6 months from Dec 1. Unchanged: the anchor wins over everything, and a
-    # dated rule's target IS its amount — what has to be there on the day.
-    it "calls an anchored interval rule dated, capped at its own amount", :aggregate_failures do
-      rule = rule_for("Insurance", amount: 600, interval_months: 6, anchor_date: Date.new(2026, 12, 1))
-
-      expect(calc(rule).shape).to eq(:dated)
-      expect(calc(rule)).to be_capped
-      expect(calc(rule).target).to eq(600)
-    end
-
-    # ROW 7 — $600 once on Dec 1. The one-time bill, which §1 rules is all the "one-time concept"
-    # there is: a date and no interval.
-    it "calls an anchored rule with no interval dated as well", :aggregate_failures do
+    # ROW 3 — $600 by Dec 1, once. The one-time bill: a date and no interval.
+    it "calls an anchored rule with no interval dated, aiming at its own amount", :aggregate_failures do
       rule = rule_for("Registration", amount: 600, interval_months: nil, anchor_date: Date.new(2026, 12, 1))
 
       expect(calc(rule).shape).to eq(:dated)
-      expect(calc(rule)).to be_capped
+      expect(calc(rule)).to be_dated
       expect(calc(rule).target).to eq(600)
     end
 
-    # ** THE COLUMN THAT MOVED, ASKED IN THE DIRECTION THAT USED TO PASS. ** A figure on the CATEGORY
-    # made a rule `:target`-shaped until this task; the calculator does not read it at all now, so a
-    # rate rule on a category that was a goal in every other respect is a plain rate rule. Without
-    # this the rows above would all pass against a class that still consulted the category.
-    #
-    # THE FIGURE ITSELF IS GONE FROM THE FIXTURE because §6's migration dropped the column. What is
-    # left is the sharper half of the same statement: the shape comes off `carries_over` and off
-    # nothing else, and there is no longer a second record that could answer.
-    it "reads the shape off the rule and nothing beside it", :aggregate_failures do
+    # ROW 4 — $600 by Dec 1, every 6 months. The interval is what rolls the occurrence on payment; it
+    # changes neither the shape nor the target.
+    it "calls an anchored interval rule dated as well", :aggregate_failures do
+      rule = rule_for("Insurance", amount: 600, interval_months: 6, anchor_date: Date.new(2026, 12, 1))
+
+      expect(calc(rule).shape).to eq(:dated)
+      expect(calc(rule).target).to eq(600)
+    end
+
+    # ** ROW 5 — $5,000 by Jun 1, 2027: A GOAL, AND IT IS ROW 3 WITH A LONGER HORIZON. ** This is the
+    # whole of what §2 changed. The same columns, the same formula, the same target — "the goal" is a
+    # word for a dated rule whose date is far away, not a shape the model has to know about.
+    it "calls a goal the same dated shape as a one-off bill", :aggregate_failures do
+      goal = rule_for("Vacation", :by_date, amount: 5_000)
+      bill = rule_for("Registration", amount: 5_000, interval_months: nil, anchor_date: Date.new(2026, 12, 1))
+
+      expect(calc(goal).shape).to eq(calc(bill).shape)
+      expect(calc(goal).shape).to eq(:dated)
+      expect(calc(goal).target).to eq(5_000)
+    end
+
+    # ** THE THIRD SHAPE CANNOT BE BUILT, WHICH IS THE SHARPEST FORM THE RETIREMENT CAN TAKE (§7). **
+    # `:building`, `:capped` and `:hand_fed` are deleted from the factory with the columns they wrote,
+    # so an example that reached for one would not merely fail — it cannot be written at all. Asserted
+    # rather than left implied, because "the trait is gone" is exactly the fact a later reader
+    # re-adding the shape would have to overturn on purpose.
+    it "cannot construct the building shape at all" do
+      expect { create(:budget, :building, category: groceries) }
+        .to raise_error(KeyError, /building/)
+    end
+
+    # ** AND A RULE WITH NO ANCHOR IS A RATE RULE WHATEVER ELSE IS TRUE OF IT. ** The shape used to be
+    # a fact about a NEIGHBOURING record (the category's figure), then about two of the rule's own
+    # columns; it is one column now, so there is nothing left that could answer differently.
+    it "reads the shape off the anchor and nothing beside it", :aggregate_failures do
       owner = create(:category, :expense, user: user, name: "Old Goal", funded_since: Date.new(2026, 1, 1))
       rule = create(:budget, :per_period_rate, category: owner, amount: 150, created_at: born)
 
       expect(calc(rule).shape).to eq(:rate)
       expect(calc(rule).target).to eq(0)
       expect(calc(rule).built_up).to eq(0)
-    end
-  end
-
-  # ===========================================================================================
-  # ** THE UNCAPPED BUILDING RULE (§2.1 row 2) — THE WALK WITH NO CEILING. ** `gap` is unbounded, so
-  # `planned_for` returns the plain rate every period and `accrued_in` applies no `min`. Three
-  # periods, planted literals, with spending and a negative adjustment in the middle one.
-  # ===========================================================================================
-  describe "an uncapped building rule" do
-    let(:emergency) do
-      create(:category, :expense, user: user, name: "Emergency", funded_since: Date.new(2026, 1, 1))
-    end
-    let(:rule) { create(:budget, :building, category: emergency, amount: 300, created_at: born) }
-
-    def calc(on) = described_class.new(rule, today: on)
-
-    def withdraw(amount, on:)
-      create(:entry, item: create(:item, category: emergency), amount: amount, date: on)
-    end
-
-    # BY HAND, and it is the whole of the group's arithmetic:
-    #   Jan  planned 300, accrued 0 + 300           → built 300
-    #   Feb  planned 300, accrued 300 + 300 − 150   → 450, less 100 spent → built 350
-    #   Mar  planned 300, accrued 350 + 300         → built 650
-    before do
-      adjust(rule, -150, on: Time.utc(2026, 2, 10, 12))
-      withdraw(100, on: Date.new(2026, 2, 12))
-    end
-
-    it "keeps every period's plain rate and never stops growing", :aggregate_failures do
-      expect(calc(Date.new(2026, 1, 20)).built_up).to eq(300)
-      expect(calc(Date.new(2026, 2, 20)).built_up).to eq(350)
-      expect(calc(Date.new(2026, 3, 20)).built_up).to eq(650)
-    end
-
-    # ** ADJUSTMENTS ON A BUILDING RULE TOUCH ONLY THEIR PERIOD (§2.1, ruled 2026-09-04). ** There is
-    # no catch-up without a deadline — `planned_for` returns the rate and never `gap ÷ periods_left`
-    # — so the −$150 dated in February leaves March asking its plain $300 rather than $450. This is
-    # the exact opposite of a DATED rule, whose "after a period is skipped" group above raises every
-    # later share to recover the due date, and the two are pinned against each other by name.
-    it "asks the plain rate in the period after a negative adjustment", :aggregate_failures do
-      expect(calc(Date.new(2026, 2, 20)).planned_this_period).to eq(300)
-      expect(calc(Date.new(2026, 3, 20)).planned_this_period).to eq(300)
-    end
-
-    # THE CLAIM IS THE BUILT-UP, not this period's leftover rate: the money's whole purpose is to
-    # still be there next period.
-    it "claims what it has built rather than what is left of this period" do
-      expect(calc(Date.new(2026, 3, 20)).claim).to eq(650)
-    end
-  end
-
-  # ===========================================================================================
-  # ** THE CAP REFILLS, AND THAT IS NOT CATCH-UP (fix round 1 — LOW). ** The comment on
-  # `#planned_for` used to say "adjustments on a building rule touch only their period" flat, which
-  # is true of the UNCAPPED shape and only half true of the capped one: a capped rule sitting AT its
-  # cap plans nothing, and a −$150 leaves a $150 gap that the next period plans `min(rate, gap)`
-  # against — the fund refills. It never exceeds the rate and there is no deadline it is racing, so
-  # it is the cap's own arithmetic rather than §3.2's catch-up. Both arms are pinned, because the
-  # sentence is only meaningful as the pair.
-  # ===========================================================================================
-  describe "a negative adjustment on a capped building rule at its cap" do
-    # $150 a period toward $1,200 from Jan 1: eight periods fill it, so August closes full and
-    # September opens planning nothing.
-    let(:full_goal) do
-      create(
-        :budget,
-        :capped,
-        category: create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1)),
-        amount: 150,
-        target_amount: 1_200,
-        created_at: born
-      )
-    end
-
-    def calc(on) = described_class.new(full_goal, today: on)
-
-    before { adjust(full_goal, -150, on: Time.utc(2026, 9, 10, 12)) }
-
-    # SEPTEMBER: `gap` is zero when the period opens, so it plans $0; the −$150 lands after the plan
-    # and takes the fund to $1,050.
-    it "takes the money out of the period it is dated in", :aggregate_failures do
-      september = calc(Date.new(2026, 9, 20))
-
-      expect(september.planned_this_period).to eq(0)
-      expect(september.built_up).to eq(1_050)
-    end
-
-    # OCTOBER: the gap is $150, so it plans `min($150, $150)` and the fund is whole again. This is
-    # the arm the old comment denied.
-    it "plans the gap back up to the cap in the next period, and no faster", :aggregate_failures do
-      october = calc(Date.new(2026, 10, 20))
-
-      expect(october.planned_this_period).to eq(150)
-      expect(october.built_up).to eq(1_200)
-    end
-
-    # AND IT IS BOUNDED BY THE RATE, which is what makes it the cap's arithmetic rather than
-    # catch-up: a −$600 leaves a $600 gap and October still plans only its $150.
-    it "never asks for more than its rate to close a bigger gap", :aggregate_failures do
-      create(:adjustment, rule: full_goal, amount: -450, date: Time.utc(2026, 9, 11, 12))
-      october = calc(Date.new(2026, 10, 20))
-
-      expect(october.planned_this_period).to eq(150)
-      expect(october.built_up).to eq(750)
-    end
-  end
-
-  # ===========================================================================================
-  # ** THE CAP, WITH AND WITHOUT (§2.1 rows 2 and 3). ** The same rate, the same grid, the same six
-  # periods — one rule names $5,000 and stops there, the other names nothing and keeps going. The
-  # pair is the whole content of `#capped?`, and neither half means anything alone: a walk that
-  # ignored the target would pass the second and a walk that capped everything would pass the first.
-  # ===========================================================================================
-  describe "at the cap" do
-    def thousand_a_period(name, **attrs)
-      owner = create(:category, :expense, user: user, name: name, funded_since: Date.new(2026, 1, 1))
-      create(:budget, :building, category: owner, amount: 1_000, created_at: born, **attrs)
-    end
-
-    def calc(rule) = described_class.new(rule, today: Date.new(2026, 6, 15))
-
-    # Jan through May is five periods of $1,000, which is the target exactly; June's share is the
-    # remainder, which is nothing.
-    it "stops a capped rule at its target and asks for nothing more", :aggregate_failures do
-      capped = thousand_a_period("Vacation", target_amount: 5_000)
-
-      expect(calc(capped).built_up).to eq(5_000)
-      expect(calc(capped).planned_this_period).to eq(0)
-    end
-
-    # THE SAME SIX PERIODS WITH NO CEILING: $6,000, and June still asks its full rate.
-    it "lets an uncapped rule pass the same figure and go on asking", :aggregate_failures do
-      uncapped = thousand_a_period("Emergency")
-
-      expect(calc(uncapped).built_up).to eq(6_000)
-      expect(calc(uncapped).planned_this_period).to eq(1_000)
-    end
-
-    # AND A SET-ASIDE THAT OVERSHOOTS IS NOT CLIPPED EITHER, which is the `min` in `accrued_in` —
-    # the other of the two sites `#capped?` gates. $6,000 of accrual plus a $2,000 delta is $8,000.
-    it "does not clip an uncapped rule's set-aside" do
-      uncapped = thousand_a_period("Emergency")
-      adjust(uncapped, 2_000, on: Time.utc(2026, 3, 10, 12))
-
-      expect(calc(uncapped).built_up).to eq(8_000)
-    end
-
-    # ** SPENT PAST WHAT IT HAD BUILT (§3.2's spill, on the new shape). ** Jan builds $1,000; February
-    # accrues another $1,000 for $2,000 and $2,500 goes out of the category — the pre-clamp figure is
-    # −$500, so the rule reads OVER and the fund starts March from zero rather than from minus five
-    # hundred.
-    it "reads over when the spending outruns the build-up", :aggregate_failures do
-      uncapped = thousand_a_period("Emergency")
-      create(:entry, item: create(:item, category: uncapped.category), amount: 2_500, date: Date.new(2026, 2, 12))
-      february = described_class.new(uncapped, today: Date.new(2026, 2, 20))
-
-      expect(february).to be_over
-      expect(february.built_up).to eq(0)
-      expect(february.claim).to eq(0)
-      expect(described_class.new(uncapped, today: Date.new(2026, 3, 20)).built_up).to eq(1_000)
     end
   end
 
@@ -919,28 +765,24 @@ RSpec.describe ClaimCalculator, type: :model do
     def calc(rule, on) = described_class.new(rule, today: on)
 
     # The category has held money for two years. A rule written on Sep 1 this year has not, so it
-    # walks ONE period and holds one period's rate — not the two years the category could show.
+    # walks ONE period — not the two years the category could show. ONE period of a $1,200 goal due
+    # Mar 31 2027: the boundaries left from Sep 1 are Sep, Oct, Nov, Dec, Jan, Feb, Mar = 7, so the
+    # share is `1,200 ÷ 7` = **$171.43**.
     it "starts on the day the rule was written, not on the day the category was funded" do
-      born_today = create(
-        :budget,
-        :capped,
-        category: vacation,
-        amount: 150,
-        target_amount: 1_200,
-        created_at: Time.utc(2026, 9, 1, 9, 0)
-      )
+      born_today = goal_born_on("Vacation", Time.utc(2026, 9, 1, 9, 0), funded_since: Date.new(2024, 9, 1))
 
-      expect(calc(born_today, Date.new(2026, 9, 3)).built_up).to eq(150)
+      expect(calc(born_today, Date.new(2026, 9, 3)).built_up).to eq(171.43)
     end
 
     # THE OTHER DIRECTION, and it is what says the ruling did not simply replace one date with the
     # other: the FIRST rule on a category is written the day the category starts holding, so the two
-    # dates coincide and the whole history is walked. Four periods of $150 from a June start.
+    # dates coincide and the whole history is walked. FOUR periods from a June start, with ten
+    # boundaries left in June (Jun … Mar) and one fewer each month — so the share is `1,200 ÷ 10` =
+    # $120 every period and four of them hold **$480.00**.
     it "starts on the funding date for the rule that put it there" do
-      fresh = create(:category, :expense, user: user, name: "Trip", funded_since: Date.new(2026, 6, 1))
-      first = create(:budget, :capped, category: fresh, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 6, 1, 9, 0))
+      first = goal_born_on("Trip", Time.utc(2026, 6, 1, 9, 0), funded_since: Date.new(2026, 6, 1))
 
-      expect(calc(first, Date.new(2026, 9, 3)).built_up).to eq(600)
+      expect(calc(first, Date.new(2026, 9, 3)).built_up).to eq(480)
     end
 
     # ** A RULE BORN MID-PERIOD ACCRUES THAT WHOLE PERIOD. ** The birth date decides which period the
@@ -972,8 +814,10 @@ RSpec.describe ClaimCalculator, type: :model do
 
   # ===========================================================================================
   # ** THE BIRTH DAY IS THE OWNER'S, NOT UTC'S — ruling 1's timezone arm. ** 15:00 UTC on Aug 31 is
-  # midnight on Sep 1 in Tokyo, so one instant opens the walk in two different months. A TARGET rule,
-  # so the walk actually runs: two periods against one, by Sep 3.
+  # midnight on Sep 1 in Tokyo, so one instant opens the walk in two different months. A DATED rule,
+  # so the walk actually runs: two periods against one, by Sep 3 — and the two owners read DIFFERENT
+  # figures rather than the same one twice, because a catch-up share is derived from the periods left
+  # to the deadline and August has one more of them than September does.
   # ===========================================================================================
   describe "a rule written at 15:00 UTC on the last day of August" do
     def written_then = goal_born_on("Trip", Time.utc(2026, 8, 31, 15, 0))
@@ -987,8 +831,10 @@ RSpec.describe ClaimCalculator, type: :model do
         create(:user, period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1), timezone: "Asia/Tokyo")
       end
 
+      # ONE period, opened in September: seven boundaries left to Mar 31 2027, so `1,200 ÷ 7` =
+      # **$171.43**. The UTC owner's two periods above are `1,200 ÷ 8` = $150 twice.
       it "opens it in September, the day the owner was living in" do
-        expect(described_class.new(written_then, today: Date.new(2026, 9, 3)).built_up).to eq(150)
+        expect(described_class.new(written_then, today: Date.new(2026, 9, 3)).built_up).to eq(171.43)
       end
     end
   end
@@ -1167,28 +1013,17 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(described_class.new(rate, today: march).standing_ask).to eq(rate.steady_ask(user, today: march))
     end
 
-    # ** A BUILDING RULE'S STANDING ASK IS ITS RATE (rules-own-the-budget spec §2.2), CONSTANT LIKE A
-    # RATE RULE'S. ** It has no deadline, so there is nothing for a divisor to be the periods UNTIL —
-    # what it costs a typical period is simply what it puts in every period, for as long as the user
-    # keeps it. §9's structural check counts it on those terms.
-    it "asks its plain rate for an uncapped building rule, whatever it has built", :aggregate_failures do
-      fund = create(
-        :budget,
-        :building,
-        category: create(:category, :expense, user: user, name: "Emergency", funded_since: Date.new(2026, 1, 1)),
-        amount: 300,
-        created_at: born
-      )
-
-      expect(described_class.new(fund, today: Date.new(2026, 3, 15)).standing_ask).to eq(300)
-      expect(described_class.new(fund, today: Date.new(2026, 8, 15)).standing_ask).to eq(300)
-    end
-
-    # AND A CAPPED ONE GOES ON DECLARING ITS COST AFTER THE GOAL IS MET, which is the settled
-    # one-off's ruling asked of the other accruing shape: eight periods of $150 fill a $1,200 target
-    # by August, so September's SHARE is zero and its standing cost is still $150. Both on one
-    # calculator, so the pair cannot pass by the two readers having become the same method.
-    it "keeps asking once a capped building rule is full, though this period's share is nothing",
+    # ** THE BUILDING RULE'S ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** It said a fund's
+    # standing ask is its plain rate, constant like a rate rule's, because it had no deadline for a
+    # divisor to be the periods UNTIL. A goal has a deadline now and takes the ONE-OFF arm above —
+    # `target ÷ periods to fund` — which is constant for exactly the same reason and is derived from
+    # the rule and the grid rather than declared.
+    #
+    # WHAT SURVIVES IS THE HALF THAT WAS NEVER ABOUT THE SHAPE: a goal goes on declaring its cost
+    # after it is MET, which is the settled one-off's own ruling. Eight periods of $150 fill a $1,200
+    # goal due Aug 31 by August, so September's SHARE is zero and its standing cost is still $150.
+    # Both on one calculator, so the pair cannot pass by the two readers having become one method.
+    it "keeps asking once a goal is full, though this period's share is nothing",
        :aggregate_failures do
          september = described_class.new(full_goal, today: Date.new(2026, 9, 15))
 
@@ -1197,15 +1032,16 @@ RSpec.describe ClaimCalculator, type: :model do
          expect(september.standing_ask).to eq(150)
        end
 
-    # Eight periods of $150 from a Jan 1 start fill a $1,200 target by August, so September's share
-    # is nothing and its standing cost is still $150.
+    # $1,200 due Aug 31 from a Jan 1 start is eight periods of $150, so September's share is nothing
+    # and its standing cost is still $150.
     def full_goal
       create(
         :budget,
-        :capped,
         category: create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1)),
-        amount: 150,
-        target_amount: 1_200,
+        amount: 1_200,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.new(2026, 8, 31),
         created_at: born
       )
     end
@@ -1291,7 +1127,22 @@ RSpec.describe ClaimCalculator, type: :model do
         create(:category, :expense, user: user, name: "Emergency", funded_since: Date.new(2026, 1, 1))
       end
 
-      def fund = create(:budget, :building, category: emergency, amount: 1_000, created_at: born)
+      # ** A $12,000 GOAL DUE DEC 31, WHICH IS $1,000 A PERIOD FROM JANUARY. ** Twelve monthly
+      # boundaries from Jan 1 through Dec 31, one fewer each month against a gap falling by the same
+      # share — so the catch-up share is `12,000 ÷ 12` = $1,000 and stays there. It was a $1,000-a-
+      # period building rule with no ceiling; the walk's figures are identical and the shape is one
+      # the app still has.
+      def fund
+        create(
+          :budget,
+          category: emergency,
+          amount: 12_000,
+          basis: :monthly,
+          interval_months: nil,
+          anchor_date: Date.new(2026, 12, 31),
+          created_at: born
+        )
+      end
 
       def spend_in_february(amount)
         create(:entry, item: create(:item, category: emergency), amount: amount, date: Date.new(2026, 2, 10))
@@ -1428,14 +1279,24 @@ RSpec.describe ClaimCalculator, type: :model do
     #
     # BY HAND: the 520th period opens 3,633 days after Jan 1 2010 (519 strides of seven) and closes
     # six days later — Dec 13 to Dec 19, 2019.
-    describe "a fund on a weekly grid that has been building since 2010" do
+    describe "a goal on a weekly grid that has been saving since 2010" do
       let(:user) { create(:user, period_cadence: :weekly, period_anchor_date: Date.new(2010, 1, 1)) }
 
-      it "ends where the truncated walk stopped rather than at today", :aggregate_failures do
+      def ark_goal
         ark = create(:category, :expense, user: user, name: "Ark", funded_since: Date.new(2010, 1, 1))
-        rule = create(:budget, :capped, category: ark, amount: 5, target_amount: 100_000, created_at: Time.utc(2010, 1, 1, 9, 0))
+        create(
+          :budget,
+          category: ark,
+          amount: 100_000,
+          basis: :monthly,
+          interval_months: nil,
+          anchor_date: Date.new(2030, 1, 1),
+          created_at: Time.utc(2010, 1, 1, 9, 0)
+        )
+      end
 
-        span = described_class.new(rule, today: today).countable_span
+      it "ends where the truncated walk stopped rather than at today", :aggregate_failures do
+        span = described_class.new(ark_goal, today: today).countable_span
 
         expect(span).to eq(Date.new(2010, 1, 1)..Date.new(2019, 12, 19))
         expect(span).not_to cover(today)

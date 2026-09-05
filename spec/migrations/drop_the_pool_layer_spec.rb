@@ -24,7 +24,8 @@ RSpec.describe DropThePoolLayer do
   include_context "with the schema its subject was written for",
                   described_class,
                   DropTheDistribution,
-                  RulesOwnTheBudget
+                  RulesOwnTheBudget,
+                  TwoShapes
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com", timezone: "UTC") }

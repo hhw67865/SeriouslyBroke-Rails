@@ -6,7 +6,7 @@
 #
 #   THE PHYSICAL SIDE — the accounts, each showing what the bank says. `AccountLedger#balance_of`,
 #                       and main's balance IS the pot. Untouched by this plan.
-#   THE PURPOSE SIDE  — CLAIMS. `free = min(pot, total_money − Σ claims)`, computed from the rules,
+#   THE PURPOSE SIDE  — CLAIMS. `free = pot − Σ claims` (two-shapes §2), computed from the rules,
 #                       the calendar, the spending and the dated adjustments. Nothing moved to put
 #                       the money anywhere, so there is no balance to read and nothing to distribute.
 #
@@ -39,9 +39,15 @@ class HomePresenter
   # `ClaimCalculator`, from the page's ONE `ClaimLedger`, so a row cannot pair one rule's figure with
   # another's state and cannot cost a walk of its own.
   #
-  # `shape` RATHER THAN TWO BOOLEANS, because §3.4 gives the three shapes three different sentences:
-  # a rate rule says `spent of rate`, an accruing one says `built up of target · next due · $X per
-  # period`, and the classification lives in exactly one place (`ClaimCalculator#shape`).
+  # `shape` RATHER THAN A BOOLEAN, because §3.4 gives the two shapes two different sentences: a rate
+  # rule says `spent of rate`, a dated one says `built up of target · next due · $X per period`, and
+  # the classification lives in exactly one place (`ClaimCalculator#shape`).
+  #
+  # ** `capped` LEFT THE MEMBER LIST WITH `ClaimCalculator#capped` (two-shapes spec §7). ** It was
+  # carried onto the row because an UNCAPPED building rule's `#target` was NIL and every reader of
+  # `target` had to ask a second question first. There is no such shape: a dated rule's target is its
+  # own amount and a rate rule's is zero, so `#target` is always a figure and `#dated?` is the only
+  # question a reader has left.
   ClaimLine = Data.define(
     :category,
     :rule,
@@ -51,7 +57,6 @@ class HomePresenter
     :accrued,
     :built_up,
     :target,
-    :capped,
     :next_due_on,
     :per_period,
     :over,
@@ -60,20 +65,8 @@ class HomePresenter
   ) do
     def rate? = shape == :rate
 
-    # MONEY THAT SURVIVES THE PERIOD BOUNDARY (rules-own-the-budget spec §2.1 rows 2-5) —
-    # `ClaimCalculator#building?`, read off the `shape` this row already carries. It is the third
-    # sentence §5 gives the three shapes (`built up $X · +$rate per period`), and `HomeHelper
-    # #claim_schedule` asks it to tell that clause from a DATED rule's `next due Mar 1 · $200.00 per
-    # period` — the two are the same walk and completely different news.
-    def building? = shape == :building
-
-    # ** IS THERE A FIGURE TO MEASURE AGAINST (fix round 1 — MED)? ** `ClaimCalculator#capped?`,
-    # carried onto the row rather than re-derived from `target.nil?`, because "uncapped" is one
-    # question the calculator already answers and a second spelling here would be free to drift. An
-    # UNCAPPED building rule's `#target` is NIL — there is no ceiling — so every reader of `target`
-    # asks this first; without it Home raised `NoMethodError` on `nil.positive?` the moment a rule
-    # said "build up without limit".
-    def capped? = capped
+    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2) — a bill or a goal, which are one shape.
+    def dated? = shape == :dated
 
     # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, which reads the figure BEFORE the clamp
     # at zero and is therefore the only reader that can tell "spent it exactly" from "spent more than
@@ -99,32 +92,27 @@ class HomePresenter
     # is which SENTENCE the strip says about it: "the fund is short $200.00 — this needs paying" is a
     # different instruction from "the money is set aside — pay it and the fund starts again", and only
     # this pair can tell them apart.
-    # BOTH READ `#target`, SO BOTH ASK `#capped?` FIRST. The strip only reaches them on an OVERDUE
-    # rule, which has a due date and is therefore always capped — so the uncapped arms below are
+    # BOTH READ `#target`, SO BOTH ASK `#dated?` FIRST. The strip only reaches them on an OVERDUE
+    # rule, which has a due date and is therefore always dated — so the rate arms below are
     # unreachable from `_trouble.html.erb` today and are stated anyway, because "unreachable" is a
     # fact about one caller and this is a fact about the row.
-    def fund_short? = capped? && built_up < target
+    def fund_short? = dated? && built_up < target
 
-    def fund_gap = capped? ? target - built_up : 0.to_d
+    def fund_gap = dated? ? target - built_up : 0.to_d
 
     # WHAT THE BAR MEASURES: spending against the rate for an envelope, the running total against the
     # target for a fund (§3.4). One pair of readers rather than a signed number, because the two
     # halves are read by different parts of the row.
     def filled = rate? ? spent : built_up
 
-    # NIL FOR AN UNCAPPED BUILDING RULE, which is the honest answer: a fund that names no figure is
-    # not a fraction of anything, and inventing a denominator would draw a track whose fullness means
-    # nothing at all.
-    def denominator
-      return accrued if rate?
+    # THIS PERIOD'S ACCRUAL FOR A RATE RULE, THE TARGET FOR A DATED ONE. Never nil since the two
+    # shapes: the uncapped fund that had no figure to be a fraction of is retired (§7).
+    def denominator = rate? ? accrued : target
 
-      capped? ? target : nil
-    end
-
-    # A BAR NEEDS SOMETHING TO BE A FRACTION OF. A rate rule skipped to nothing this period, and a
-    # building rule with no target at all, have no denominator — the row prints the fact and no
-    # track, `EntryImpactPresenter#bar?`'s rule for its reason.
-    def bar? = !denominator.nil? && denominator.positive?
+    # A BAR NEEDS SOMETHING TO BE A FRACTION OF, and a rate rule skipped to nothing this period has
+    # no denominator — the row prints the fact and no track, `EntryImpactPresenter#bar?`'s rule for
+    # its reason.
+    def bar? = denominator.positive?
 
     # WHOLE PERCENT, CLAMPED, matching `HomePresenter::Progress#percent` and
     # `HoldingCalculator#progress_percentage` — the app's other bars — so all of them draw alike.
@@ -318,143 +306,58 @@ class HomePresenter
   # ── THE HERO CARD (answers-first §§2-3, on computed-claims' terms) ─────────────────────────────
 
   # THE NUMBER THE USER'S BANK APP SHOWS — `AccountLedger#pot`, which is main's balance and only
-  # main's (§2). Named for what the card calls it, off the same ledger `free` is capped by, so the two
+  # main's (§2). Named for what the card calls it, off the same ledger `free` subtracts from, so the two
   # figures on one screen cannot come from two snapshots.
   def in_checking = claim_ledger.pot
 
-  # ** THE ONE DERIVED NUMBER (§2): `free = min(pot, total_money − Σ claims)`. **
+  # ** THE ONE DERIVED NUMBER (two-shapes spec §2): `free = pot − Σ claims`. **
   #
-  # IT IS A DEFINITION NOW, NOT A SUBTRACTION OF TWO MOVING PARTS. This was
-  # `available − remaining_plan` — the distribution's post-sweep root less the rest of the period's
-  # unfunded ask — and both operands were the distribution's own arithmetic. Claims are computed, so
-  # there is nothing to have been handed out and nothing still owed: the money is either claimed by a
-  # rule or it is free.
+  # IT IS A DEFINITION, NOT A SUBTRACTION OF TWO MOVING PARTS. This was `available − remaining_plan`
+  # — the distribution's post-sweep root less the rest of the period's unfunded ask — and both
+  # operands were the distribution's own arithmetic. Claims are computed, so there is nothing to have
+  # been handed out and nothing still owed: the money in checking is either claimed by a rule or it
+  # is free.
   #
-  # THE CAP AT THE POT IS THE ANSWERS-FIRST RULING, KEPT (§3 there, §2 here): money you would have to
-  # transfer out of savings before you could spend it is not free in the moment. #free_cap_bound? is
-  # which side won.
+  # ** THE CAP AND THE OTHER-ACCOUNTS TERM ARE BOTH GONE (§2, Henry's ruling of 2026-09-05). ** It
+  # was `min(pot, total_money − Σ claims)`, which folded savings into the subtraction and then capped
+  # the answer at the pot — so for every user whose other accounts covered their rules the two hero
+  # figures were the SAME NUMBER, and the claims were invisible in the one figure that is about them.
+  # Money elsewhere is shown, never subtracted from or added to anything: `#other_accounts_total` is
+  # its own sentence.
   #
-  # NEVER CLAMPED. A period whose rules claim more than the user has renders a negative figure in red
-  # with a sentence that says why; rounding it up to zero would be the app telling the user they are
-  # fine (§4: free below zero is a signal, never a refusal).
+  # NEVER CLAMPED. A period whose rules claim more than checking holds renders a negative figure in
+  # red with a sentence that says why; rounding it up to zero would be the app telling the user they
+  # are fine (§4: free below zero is a signal, never a refusal).
   def free_to_spend = claim_ledger.free
-
-  # DID THE CAP BIND — the subline's gate, and the reason it is a predicate rather than the view
-  # comparing the two figures itself: a screen that re-spelled the `min`'s condition could print
-  # "more is parked in other accounts" beside a figure the other branch produced.
-  #
-  # A STRICT `<`, so equality is not "parked somewhere else": with $1,000 in checking and exactly
-  # $1,000 unclaimed there is one pile of money, and the card would be inventing a second.
-  delegate :free_cap_bound?, to: :claim_ledger
 
   # EVERYTHING THE RULES CLAIM — `Σ ClaimCalculator#claim` over every rule the user owns. The strip's
   # shortfall walk and the subline's cause both read it.
   delegate :total_claims, to: :claim_ledger
 
-  # ** WHICH KIND OF NEGATIVE THIS IS, AND IT IS A REAL BRANCH RATHER THAN A SHADE OF ONE. **
-  # `#free_to_spend` goes below zero for two completely different reasons:
+  # ── THE SUBLINE'S TWO ARMS (two-shapes spec §2) ────────────────────────────────────────────────
   #
-  #   THE CLAIMS OUTRUN THE MONEY — true trouble. Every rule together wants more than the user has
-  #     anywhere, so there genuinely is nothing spare and spending goes further under.
-  #   THE MONEY IS IN THE WRONG ACCOUNT — NOT that. $1,000 of income with $1,200 walked over to a
-  #     savings account and nothing budgeted at all leaves the pot at −$200 while $1,000 is unclaimed.
-  #     "More is claimed than you have" would be false ($0 is claimed) and "nothing is free until
-  #     money comes in" would be false too — the user is one transfer away from $1,000.
+  # ** IT WAS A FOUR-ARM TABLE WITH SEVEN SENTENCES, AND THE `min` IS WHAT MADE IT ONE. **
+  # `free = min(pot, total_money − Σ claims)` could go negative for two completely different reasons
+  # — the claims outrun the money, or the money is in the wrong account — and could be POSITIVE with
+  # or without a "rest" in checking depending on which term bound. Each of the four arms then needed
+  # a predicate that ESTABLISHED its cause rather than inferring one from the signs of two figures,
+  # which is what `#claims_outrun_the_money?`, `#rest_in_checking?` and `#free-cap-bound` were for.
+  # All three are deleted with the `min`.
   #
-  # THE SIGN OF `unclaimed`, WHICH IS `#free_to_spend` BEFORE THE POT CAPS IT, is the only thing that
-  # tells them apart: the capped figure cannot, because the cap is exactly what erases the difference.
-  # `#free_cap_bound?` is NOT this question and must not be used for it — a pot of −$500 against an
-  # unclaimed −$100 is cap-bound AND genuinely out of money.
+  # `free = pot − Σ claims` has one cause per sign, so the card says TWO facts and never guesses
+  # between them — how much of checking is claimed, and (separately) how much sits elsewhere:
   #
-  # IT WAS `#plan_outruns_the_money?`, AND THE RENAME IS THE MODEL RATHER THAN A TIDY-UP: what
-  # outran the money was "the rest of this period's PLAN", a distribution-shaped quantity that no
-  # longer exists. What can outrun it now is the claims.
-  def claims_outrun_the_money? = claim_ledger.unclaimed.negative?
-
-  # ── THE SUBLINE'S CAUSES, AND WHY THE SIGNS ALONE CANNOT ESTABLISH THEM ────────────────────────
+  #   free ≥ 0   →  "$X of checking is claimed by your rules."
+  #                 + ", and $Y sits in N other accounts"        (#money_parked_elsewhere?)
+  #   free < 0   →  "Your rules claim $X more than checking holds."     (red)
+  #                 + "Move some in from your other accounts."   (#money_parked_elsewhere?)
+  #                 else "You have spent past what you had."
   #
-  # Every sentence on the free subline asserts a CAUSE, and the answers-first review (M-1, §10.8 of
-  # that spec) found three of them gated on the SIGNS of two figures, which do not carry one. That
-  # discipline survives the change of readers; only the identity underneath it is new:
-  #
-  #     unclaimed − pot  =  Σ other accounts  −  Σ claims
-  #
-  # TWO TERMS NOW, WHERE THE OLD CAP HAD THREE. The old identity carried "net moves out of main" and
-  # "what the next distribution sweeps back" and the arms attributed the whole difference to the
-  # first; both terms are gone with the distribution. What survives is that a cap-bound card must not
-  # say "more is parked in other accounts" on the strength of the arithmetic alone — the SECOND term
-  # can produce the same inequality with no second account in existence.
-  #
-  # THE ARM TABLE. Rows are the signs; columns are the causes the sentence needs, each established by
-  # a predicate rather than inferred from the signs. Both directions of every arm are pinned in
-  # `spec/presenters/home_presenter_spec.rb` and in `spec/system/home/hero_spec.rb`.
-  #
-  #   unclaimed < 0            anything claimed at all       → "More is claimed than you have.
-  #   (the claims outrun the      (#anything_claimed?)            Anything you spend now takes you
-  #    money; free is negative                                    further under."
-  #    either way)             no rule claims a penny        → "You have spent past what you had.
-  #                              (the pure overspend)             Anything you spend now takes you
-  #                                                               further under."
-  #
-  #   free < 0, claims do      established BY REACHING THE   → "The money that isn't claimed is
-  #    not outrun (so the pot     ARM — see below              sitting outside checking — nothing here
-  #    is negative and the                                     is free until some of it moves in."
-  #    cap bound)
-  #
-  # ** THAT ARM HAS NO SECOND SENTENCE, AND THE MISSING BRANCH IS THE FINDING (Task 3). ** The old
-  # card asked `#money_parked_elsewhere?` here and said "Nothing here is free until money comes in"
-  # where it was false — the single-account corner. With the identity down to two terms that corner
-  # cannot exist: the arm needs `free < 0` with `unclaimed ≥ 0`, which forces `pot < 0` and therefore
-  # `Σ other accounts ≥ Σ claims − pot > 0`. A second account IS holding money whenever this arm
-  # renders. The branch is deleted rather than gated, because an unreachable branch on a money screen
-  # is a sentence waiting to be believed; the single-account user in the red reads the claims-outrun
-  # arm above, which is pinned.
-  #
-  #   free ≥ 0, there IS a     anything claimed at all       → "the rest is claimed."
-  #    rest (pot > unclaimed)     (#rest_in_checking? +
-  #                                #anything_claimed?)
-  #                            nothing claimed               → "the rest isn't claimed." The rest is
-  #                              (an OTHER account in the         `Σ claims − Σ other accounts`, so
-  #                               red — see below)                with nothing claimed a positive rest
-  #                                                               is an overdrawn second account. It
-  #                                                               is there, it is not earmarked, and
-  #                                                               the card does not guess what it is;
-  #                                                               the accounts line and the strip name
-  #                                                               that account.
-  #
-  #   free ≥ 0, no rest        something IS claimed          → "$1,668.37 is claimed and more is
-  #    (pot ≤ unclaimed)          (#anything_claimed?)            parked in other accounts."
-  #                            nothing claimed AND money     → "none of it is claimed — more is parked
-  #                              elsewhere                        in other accounts."
-  #                              (#money_parked_elsewhere?)
-  #                            nothing claimed, nothing      → "none of it is claimed."
-  #                              elsewhere (the fresh signup)
-  #
-  # ** THE FIRST OF THOSE THREE IS THE FIX WAVE'S HIGH, AND IT WAS A SENTENCE ASSERTING A CAUSE
-  # NOBODY ASKED ABOUT. ** The arm was reached on `!rest_in_checking?` alone and said "none of it is
-  # claimed" — which is not what `pot ≤ unclaimed` establishes. That inequality is
-  # `Σ claims ≤ Σ other accounts`: a statement about WHERE the money is. It is satisfied by a user
-  # whose savings cover their rules, and Ming's Home printed it above five rules claiming $1,668.37
-  # (Task 5's browser pass; spec §10.6 item 6). The true sentence names both facts, and the second
-  # needs no gate of its own: `Σ claims ≤ Σ other accounts` with `Σ claims > 0` forces
-  # `Σ other accounts > 0`, so money IS parked whenever anything is claimed on this arm — including
-  # at the exact tie `Σ claims == Σ other accounts`, where the pot is entirely free and a second
-  # account holds the rest. An unreachable "claimed but nothing parked" branch is not written, for
-  # the reason the arm above deleted its own.
-  #
-  # WHY THE OTHER TWO ROWS ARE HONEST: with nothing claimed the inequality forces
-  # `Σ other accounts ≥ 0`, so the only question left is whether that sum is POSITIVE — which is
-  # `#money_parked_elsewhere?`, the accounts line's own figure, rather than `#free_cap_bound?`
-  # (which said the same thing here only because `Σ claims` was zero). Both directions pinned.
+  # THE SECOND CLAUSE IS ABOUT A DIFFERENT PILE OF MONEY, which is the whole point of separating
+  # them: what is in savings is neither added to `free` nor subtracted from it, so the card can state
+  # it as a fact rather than as an explanation of an arithmetic the reader cannot see.
   #
   # ONE PREDICATE PER CAUSE, ASKED HERE. The view branches and never compares figures.
-
-  # IS THERE A REST AT ALL — the gate on BOTH "the rest…" sentences. A predicate for
-  # `#free_cap_bound?`'s reason: `in_checking > free_to_spend` is the `min`'s own condition read
-  # backwards, and a view spelling it could print a sentence about a rest the figures did not leave.
-  # NOT the negation of `#free_cap_bound?` — at exact equality both are false, which is the
-  # fresh-signup corner and gets its own sentence.
-  def rest_in_checking? = in_checking > free_to_spend
 
   # IS THERE MONEY IN ANOTHER ACCOUNT AT ALL — the cause both "parked" sentences assert, and the
   # figure is `#other_accounts_total`: THE SAME SUM THE ACCOUNTS LINE PRINTS (answers-first §6), so
@@ -570,16 +473,15 @@ class HomePresenter
   # `break` RATHER THAN A `take_while`, because the boundary claim is IN the list with a REDUCED
   # amount — a filter can only decide whether the whole row belongs.
   #
-  # ** IT RUNS ONLY WHERE THE CLAIMS ACTUALLY OUTRUN THE MONEY (fix round 1 — HIGH-1). ** `free < 0`
-  # has two causes and this walk is about one of them. Where the CAP bound on a negative pot —
-  # `unclaimed ≥ 0`, which is `total_money ≥ Σ claims` — every claim the user has IS covered by money
-  # they own; it is merely sitting outside checking. Walking there named Groceries as uncovered while
-  # the savings account holding its money was two inches further down the same screen. The gate is
-  # `#claims_outrun_the_money?` — the SAME predicate the hero's arm table branches on — so the strip
-  # and the card cannot come to two different accounts of one negative figure.
+  # ** IT RUNS ON `free < 0` AND NOTHING ELSE (two-shapes spec §2). ** The gate was
+  # `#claims_outrun_the_money?`, because the capped `free` could go negative for a reason this walk is
+  # not about — the money sitting outside checking while every claim was covered — and walking there
+  # named Groceries as uncovered with the savings account holding its money two inches further down
+  # the same screen. `free = pot − Σ claims` has ONE cause per sign, so `#short?` IS that predicate
+  # and the second one is deleted rather than kept as a synonym.
   def uncovered_claims
     @uncovered_claims ||= begin
-      remaining = claims_outrun_the_money? ? shortfall : 0.to_d
+      remaining = short? ? shortfall : 0.to_d
       list = []
       give_way_order.each do |line|
         break unless remaining.positive?
@@ -764,7 +666,6 @@ class HomePresenter
       accrued: calculator.accrued_this_period,
       built_up: calculator.built_up,
       target: calculator.target,
-      capped: calculator.capped?,
       next_due_on: calculator.next_due_on,
       per_period: calculator.planned_this_period,
       over: calculator.over?,

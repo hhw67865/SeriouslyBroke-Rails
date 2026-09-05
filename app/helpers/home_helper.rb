@@ -41,14 +41,12 @@ module HomeHelper
   # for a fund. ONE method for both because the two are the same shape said about different money,
   # and the caller must not choose the noun — a row that printed "spent" over a fund's running total
   # would be the money screen's oldest lie, that savings are money to spend.
-  # ** AN UNCAPPED FUND HAS NOTHING TO BE "OF" (rules-own-the-budget spec §2.1 row 2; fix round 1 —
-  # MED). ** A building rule that names no target has `ClaimCalculator#target` NIL — there is no
-  # ceiling — and this printed `$450.00 built up of ` with an empty figure after a dangling
-  # preposition. The sentence for that shape is the built-up alone, and §5's second half
-  # (`· +$300.00 per period`) comes from `#claim_schedule` under the same row.
+  # ** THE UNCAPPED ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** A building rule that named
+  # no target had `ClaimCalculator#target` NIL — no ceiling — and an un-gated sentence printed
+  # `$450.00 built up of ` with an empty figure after a dangling preposition. Every accruing rule has
+  # a day and a figure now, so both halves of the "of" are always there.
   def claim_figure(line)
     return "#{number_to_currency(line.spent)} of #{number_to_currency(line.accrued)}" if line.rate?
-    return "#{number_to_currency(line.built_up)} built up" unless line.capped?
 
     "#{number_to_currency(line.built_up)} built up of #{number_to_currency(line.target)}"
   end
@@ -69,29 +67,15 @@ module HomeHelper
   # neither half: use-it-or-lose-it accrues toward nothing and is due on no day. The view renders no
   # element at all where this is nil.
   #
-  # ** A BUILDING RULE HAS NO DATE AT ALL, SO IT SAYS WHAT IT ADDS (rules-own-the-budget spec §5). **
-  # `+$300.00 per period`, and the two halves of that are both deliberate. The "next due" clause is
-  # only ever a DATED rule's — `Budget#build_up_must_be_valid` refuses `carries_over` beside an
-  # `anchor_date`, so `#next_due_on` is nil for this shape and the clause could not render anyway;
-  # stating it here is what keeps the sentence a fact about the shape rather than an accident of a
-  # nil. The LEADING PLUS is the difference a reader needs between the two accruing rows: a dated
-  # rule's `$200.00 per period` is a share of a fixed bill that stops when the bill is whole, and a
-  # building rule's is money added every period for as long as the rule lives (uncapped) or until
-  # the cap is reached. The figure above it already says where it has got to.
+  # ** THE BUILDING ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** A building rule had no
+  # date at all, so its clause was `+$300.00 per period` — money added every period for as long as
+  # the rule lived — and `#building_schedule` was where that sentence lived. A goal names a day now,
+  # so it takes the dated clause like every other accruing rule: `next due Jun 1 · $148.15 per
+  # period`, which says the same thing with the deadline the share is derived from.
   def claim_schedule(line)
     return nil if line.rate?
-    return building_schedule(line) if line.building?
 
     dated_schedule(line)
-  end
-
-  # THE BUILDING ROW'S WHOLE CLAUSE: what this period adds, and nothing else. Nil for a capped fund
-  # already at its cap, whose per-period share is zero — the figure above it says it is whole, and
-  # `+$0.00 per period` under that would be a line reporting nothing.
-  def building_schedule(line)
-    return nil unless line.per_period.positive?
-
-    "+#{number_to_currency(line.per_period)} per period"
   end
 
   # THE DATED ROW'S: the occurrence, in the tense the date's own side of `today` gives it, and the

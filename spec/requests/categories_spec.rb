@@ -207,12 +207,12 @@ RSpec.describe "Categories", type: :request do
 
     # ** THE FUND BAR IS DRAWN WITHOUT A SECOND `budgets` READ (fix round 1 — LOW-13). ** The
     # example above plants rules whose money RESETS, so `#bar?` answers false before it needs a
-    # target — the arm that costs a query is the one a FUND takes. Five capped building rules, five
+    # target — the arm that costs a query is the one a FUND takes. Five goals, five
     # bars, and the same two statements.
     it "draws five fund bars on the same two statements", :aggregate_failures do
       5.times do |index|
         category = create(:category, :expense, :funded, user: user, name: "Fund #{index}")
-        create(:budget, :capped, category: category, amount: 100, target_amount: 1_000)
+        create(:budget, :by_date, category: category, amount: 1_000)
       end
       get categories_path(type: "expense") # warm
 

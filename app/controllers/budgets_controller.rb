@@ -4,9 +4,13 @@ class BudgetsController < ApplicationController
   before_action :set_budget, only: [:edit, :update, :destroy]
 
   # ** EVERY FIELD THIS FORM MAY SUBMIT, AND THEY ARE THE USER'S WORDS RATHER THAN THE COLUMNS
-  # (rules-own-the-budget spec §4). ** `basis` has LEFT the list and `schedule` (`per_period` /
-  # `monthly` / `every_n` / `once`) and `unspent` (`resets` / `builds`) have joined it, beside the
-  # two columns a person can be asked about directly (`rule_type`, `target_amount`).
+  # (two-shapes spec §5; rules-own-the-budget §4). ** `basis` is not on the list; `schedule`
+  # (`per_period` / `by_date`) and `repeats` are, beside the one column a person is asked about
+  # directly (`rule_type`).
+  #
+  # ** `unspent` AND `target-amount` LEFT WITH THE COLUMNS (two-shapes §7), AND THE KEYS ARE DROPPED
+  # RATHER THAN IGNORED. ** An unpermitted key is the only spelling of "this is not writable" that a
+  # hand-made POST also obeys, which is the same reasoning `pool_id` and `prorated` left under.
   #
   # The wire used to carry `basis`, `interval_months` and `anchor_date` raw, which made every caller
   # a second author of §2.1's table — and the form could reach only two of its seven rows. The
@@ -28,10 +32,9 @@ class BudgetsController < ApplicationController
     :rule_type,
     :amount,
     :schedule,
+    :repeats,
     :interval_months,
-    :anchor_date,
-    :unspent,
-    :target_amount
+    :anchor_date
   ].freeze
 
   # GET /budgets/new

@@ -138,30 +138,26 @@ RSpec.describe "Home This Period", type: :system do
     )
   end
 
-  # A GOAL IS A RULE WITH A TARGET (computed-claims §3.2), and a goal fed only by hand is a rule with
-  # a target and an amount of ZERO — "no rate" spelled as a figure, because every claim comes from a
-  # rule and zero is the only honest way to say a rule has no standing contribution.
+  # ** A GOAL IS A DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes spec §2 row 5). ** It was a rule
+  # that carried its unspent money over toward a separate figure, and before that a figure on the
+  # CATEGORY; the horizon replaces the rate.
   #
-  # ** THE RULE CARRIES BOTH COLUMNS NOW (rules-own-the-budget spec §2.1 row 4): `carries_over` is
-  # what makes the money build up and `target_amount` is where it stops. **
-  #
-  # ** THE FIGURE IS ON THE RULE AND THE CATEGORY NAMES NONE (rules-own-the-budget spec §5/§7). **
-  # The helper used to write it on both records because four screens still read the category's
-  # column; they read the rule now, a fixture still writing the category's copy would let a reader
-  # that had quietly stayed behind go on passing, and Task 4 dropped the column outright.
-  def goal(name, target:, priority: 1)
+  # `periods:` IS WHAT THE SHARE IS DERIVED FROM, and the anchor is computed from it rather than
+  # written: on the biweekly grid this file declares, `periods` fortnights from today closes on
+  # `today + 14 × periods − 1`, so §3.2's catch-up asks `target ÷ periods` in the first period and
+  # every literal below is that division. Written TODAY, so the walk opens in the current period and
+  # visits exactly one — a rule accrues from the later of its category's funding date and its own
+  # birthday, and every category here was funded a year back.
+  def goal(name, target:, periods: 1, priority: 1)
     holder(name, priority: priority).tap do |category|
-      create(:budget, :hand_fed, category: category, target_amount: target)
-    end
-  end
-
-  # ** A FUND THAT ADDS A RATE EVERY PERIOD (§2.1 rows 2 and 3), CAPPED OR NOT. ** `target:` nil is
-  # the emergency fund with no ceiling; a figure is the goal that stops there. Written TODAY, so the
-  # walk opens in the current period and visits exactly one whatever the cadence — every figure the
-  # examples below plant is then one period's rate.
-  def fund(name, amount:, target: nil, priority: 1)
-    holder(name, priority: priority).tap do |category|
-      create(:budget, :building, category: category, amount: amount, target_amount: target)
+      create(
+        :budget,
+        category: category,
+        amount: target,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.current + ((14 * periods) - 1).days
+      )
     end
   end
 
@@ -264,14 +260,14 @@ RSpec.describe "Home This Period", type: :system do
   # rather than what was spent: "$424.00 of $2,400.00" is the row the categories band printed, at the
   # same two figures, and the word "left" must stay off it for the reason that state exists at all.
   #
-  # ** THE $424 IS AN ADJUSTMENT NOW, NOT AN ALLOCATION (computed-claims §3.3). ** A goal fed by hand
-  # is a zero-amount rule with a target, and a set-aside is a dated `+$424` on it. PLANTED: §3.2's
-  # walk over one period — `planned = min(rate 0, gap 2,400) = 0`, `accrued = 0 + 424`, capped at the
-  # target and with nothing spent — so `built_up` is **$424.00** and the bar is
-  # `round(424 / 2,400 × 100)` = **18%**, both unchanged from the allocation era.
+  # ** THE $424 IS AN ACCRUAL AND AN ADJUSTMENT (computed-claims §3.3). ** PLANTED: a $2,400 goal six
+  # fortnights out, so §3.2's first period plans `2,400 ÷ 6` = $400, plus a dated `+$24` set-aside,
+  # capped at the target and with nothing spent — `built_up` is **$424.00** and the bar is
+  # `round(424 / 2,400 × 100)` = **18%**, both unchanged from the allocation era and from the retired
+  # hand-fed shape that reached the same figure with a rate of zero and a $424 set-aside.
   it "keeps a savings goal's target bar", :aggregate_failures do
     deposit(500)
-    set_aside(goal("Vacation", target: 2_400), 424)
+    set_aside(goal("Vacation", target: 2_400, periods: 6), 24)
 
     visit root_path
 
@@ -281,48 +277,30 @@ RSpec.describe "Home This Period", type: :system do
     expect(row("Vacation")).to have_css("[data-period-bar='18']")
   end
 
-  # ** A FUND THAT NAMES NO FIGURE HAS NO DENOMINATOR AND NO BAR (rules-own-the-budget spec §2.1 row
-  # 2; fix round 1 — MED). ** `ClaimCalculator#target` is NIL for an uncapped building rule, and the
-  # row printed `$300.00 built up of ` — a dangling preposition over an empty figure — while
-  # `HomePresenter::ClaimLine#bar?` raised `NoMethodError` on `nil.positive?` and took the whole of
-  # Home down with it. The sentence is the built-up alone, with the rate said by the clause under it.
+  # ** THE "uncapped fund" EXAMPLE IS DELETED WITH THE SHAPE (two-shapes spec §7). ** It planted a
+  # fund naming no figure and asserted the row said `$300.00 built up` with NO "of" and no bar —
+  # `ClaimCalculator#target` was nil there, the row printed a dangling preposition over an empty
+  # figure and `HomePresenter::ClaimLine#bar?` raised on `nil.positive?`, taking the whole of Home
+  # down. Every accruing rule names a figure now, so `#target` is never nil and the arm is gone
+  # rather than guarded.
+
+  # ** A GOAL'S SECOND LINE IS THE DATED CLAUSE (two-shapes §2), AND THAT IS THE CHANGE. ** It read
+  # `+$200.00 per period` with a LEADING PLUS and no date, because a fund had no date to have; a goal
+  # names a day, so it says `next due <date> · $200.00 per period` like every other accruing rule —
+  # the same figure with the deadline the share is derived from.
   #
-  # PLANTED: a $300-a-period emergency fund written TODAY, so the walk opens in the current period
-  # and visits exactly one (a rule accrues from the later of its category's funding date and its own
-  # birthday, and this category was funded a year back). Nothing is spent, and `planned` is the plain
-  # rate because there is no `gap` to bound it — so `built_up` is **$300.00** on every cadence.
-  # The negative is the "of" itself, so a fix that printed "of $0.00" would fail here.
-  it "states an uncapped fund's built-up with nothing to be a fraction of", :aggregate_failures do
+  # PLANTED: a $5,000 goal twenty-five fortnights out, written today, so the walk visits one period
+  # with nothing spent — `planned = 5,000 ÷ 25` = $200 and `built_up` is **$200.00**. The bar is
+  # `round(200 / 5,000 × 100)` = **4%**.
+  it "says what a goal adds each period, beside the day it is needed", :aggregate_failures do
     deposit(500)
-    fund("Emergency", amount: 300)
-
-    visit root_path
-
-    expect(figure("Emergency")).to have_content("$300.00 built up")
-    expect(figure("Emergency")).to have_no_content("built up of")
-    expect(clause("Emergency")).to have_content("+$300.00 per period")
-    expect(row("Emergency")).to have_no_css("[data-period-bar]")
-  end
-
-  # ** THE BUILDING ROW'S SECOND LINE IS `+$X per period`, AND IT NEVER SAYS "NEXT DUE"
-  # (rules-own-the-budget spec §5). ** A building rule cannot carry an `anchor_date` at all
-  # (`Budget#build_up_must_be_valid` refuses the pair), so the clause is not the dated sentence with
-  # its date missing — it is a different sentence, and the LEADING PLUS is what a reader tells them
-  # apart by: a dated rule's `$200.00 per period` is a share of a bill that stops when the bill is
-  # whole, this is money added for as long as the rule lives.
-  #
-  # PLANTED: a $200-a-period rule toward $5,000, written today, so the walk visits one period with
-  # nothing spent — `planned = min(rate 200, gap 5,000)` = $200 and `built_up` is **$200.00**. The
-  # bar is `round(200 / 5,000 × 100)` = **4%**.
-  it "says what a capped fund adds each period, and never says a date", :aggregate_failures do
-    deposit(500)
-    fund("Vacation", amount: 200, target: 5_000)
+    goal("Vacation", target: 5_000, periods: 25)
 
     visit root_path
 
     expect(figure("Vacation")).to have_content("$200.00 built up of $5,000.00")
-    expect(clause("Vacation")).to have_content("+$200.00 per period")
-    expect(row("Vacation")).to have_no_content("next due")
+    expect(clause("Vacation")).to have_content("$200.00 per period")
+    expect(clause("Vacation")).to have_content("next due")
     expect(row("Vacation")).to have_no_content("was due")
     expect(row("Vacation")).to have_css("[data-period-bar='4']")
   end
@@ -333,12 +311,11 @@ RSpec.describe "Home This Period", type: :system do
   # computed model makes that structural rather than a matter of wording: a rule with an anchor is
   # DATED, and a dated rule accrues toward ITS OWN amount by ITS OWN deadline.
   #
-  # ** THE SECOND FIGURE THIS EXAMPLE USED TO REFUSE NO LONGER EXISTS (rules-own-the-budget §7). **
-  # It planted `categories.target_amount = 2,400` beside the dated rule and asserted the row never
-  # printed it. That column is dropped, and `Budget#build_up_must_be_valid` refuses `carries_over`
-  # on a dated rule outright — so a dated rule cannot carry a target of its own either, and there is
-  # no rival figure left for the row to quote. What survives is the positive half: the row reads the
-  # BILL.
+  # ** THE SECOND FIGURE THIS EXAMPLE USED TO REFUSE NO LONGER EXISTS (two-shapes §7). ** It planted
+  # a target on the CATEGORY beside the dated rule and asserted the row never printed it. That column
+  # is dropped, and so is the rule-side one that briefly replaced it — a dated rule's target IS its
+  # own amount (§2), so there is no rival figure left for the row to quote. What survives is the
+  # positive half: the row reads the BILL.
   #
   # PLANTED, on a fixed grid so no figure here moves with the wall clock. Biweekly anchored Aug 14
   # 2026, `today` Aug 20, the rule born on the boundary it accrues from, a $300 bill due Oct 9.
@@ -592,19 +569,18 @@ RSpec.describe "Home This Period", type: :system do
       expect(amount.x + amount.width).to be <= panel.x + panel.width
     end
 
-    # ** THE BUILDING ROW IS THE WIDEST SENTENCE THIS SECTION PRINTS (rules-own-the-budget spec §5)
-    # ** — `$1,234.56 built up of $5,000.00` on one line with `+$200.00 per period` beneath it — and
-    # it is new, so it is measured rather than assumed to inherit the rate row's fit. Same CDP
-    # override, same Selenium geometry, no `evaluate_script`.
-    it "fits a capped fund's figure and its clause inside a 375px viewport", :aggregate_failures do
+    # ** THE ACCRUING ROW IS THE WIDEST SENTENCE THIS SECTION PRINTS ** — `$1,234.56 built up of
+    # $5,000.00` on one line with its dated clause beneath it — so it is measured rather than assumed
+    # to inherit the rate row's fit. Same CDP override, same Selenium geometry, no `evaluate_script`.
+    it "fits a goal's figure and its clause inside a 375px viewport", :aggregate_failures do
       deposit(2_000)
-      vacation = fund("Vacation", amount: 200, target: 5_000)
+      vacation = goal("Vacation", target: 5_000, periods: 25)
       set_aside(vacation, 1_034.56)
 
       visit root_path
 
       expect(figure("Vacation")).to have_content("$1,234.56 built up of $5,000.00")
-      expect(clause("Vacation")).to have_content("+$200.00 per period")
+      expect(clause("Vacation")).to have_content("$200.00 per period")
 
       panel = page.find("[data-this-period]").native.rect
       amount = page.find("[data-period-row='Vacation'] [data-period-figure]").native.rect

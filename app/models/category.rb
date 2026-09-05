@@ -303,7 +303,7 @@ class Category < ApplicationRecord
   end
 
   # ** `#savings?` IS DELETED (computed-claims spec §3.3), AND ITS THIRD CLAUSE IS WHY. ** It was
-  # `holder? && target_amount.present? && budgets.none?` — a goal is a holder with a target and NO
+  # `holder? && target-amount.present? && budgets.none?` — a goal is a holder with a target and NO
   # RULE — and that clause existed to tell a goal apart from an envelope somebody also set a ceiling
   # on: a category the waterfall refilled every period was being SPENT toward a rate, not SAVED
   # toward a figure.
@@ -313,8 +313,9 @@ class Category < ApplicationRecord
   # "no rate" is spelled for a goal fed only by set-asides — so `budgets.none?` selected exactly the
   # goals that claim nothing, and `DropTheDistribution` mints that zero-amount rule for every goal
   # in a real database that lacked one. Its last caller, the dashboard's savings strip, rendered
-  # NOTHING on migrated data; it asks `#building_rule` now, which is the same question asked of the
-  # record that answers it — the rule, whose `carries_over` IS "this money builds up".
+  # NOTHING on migrated data; it composes `Budget.saving_toward_a_date` now (two-shapes §2), which is
+  # the same question asked of the record that answers it — the rule, whose date IS "this is being
+  # saved toward a day".
 
   # THE RUBY MIRROR OF `CategoryLedger::ENTRY_CATEGORY_ID`, and the ONLY one (Task 2's global
   # constraint): every other reader in this app asks the SQL. Spending counts against this category
@@ -377,71 +378,19 @@ class Category < ApplicationRecord
     [next_due_on.present? ? 0 : 1, next_due_on || NEVER_DUE, -amount.to_d, id]
   end
 
-  # ** THE RULE THAT BUILDS THIS CATEGORY'S MONEY UP, OR NIL (rules-own-the-budget spec §5/§7). **
-  # It REPLACES `#saving_toward_a_target?` (`holder? && target_amount.present?`), which read a column
-  # no claim formula consults any more: `ClaimCalculator#shape` answers `:building` off the RULE's
-  # own `carries_over`, and the figure a fund is aiming at is that rule's `target_amount`. A category
-  # asked "what are you saving toward" has to ask the rule, or the four screens that draw a fund
-  # would be reading a number nothing computes.
+  # ** `#building-rule` AND `.fund-is-the-whole-category` ARE DELETED (two-shapes spec §7). ** The
+  # first found the item-less rule whose unspent money built up — the category's fund — and the second
+  # asked whether that fund was the category's ONLY rule, which was the gate on every "of $X" and
+  # every bar drawn against a target. Both questions were about `budgets.carries-over`, which
+  # `TwoShapes` drops: a fund is a dated rule now, its target is its own `amount`, and its progress is
+  # `ClaimCalculator#built_up` of `#target` — one rule's two figures, so there is no category-level Σ
+  # for a target to be a false denominator of and nothing for the `one?` guard to protect.
   #
-  # ** THE ITEM-LESS RULE, WHICH IS THE CATEGORY'S OWN LANE (§3.1's partition). ** An item-backed
-  # rule speaks for one item's spending — a fund carved out for the phone handset is not what the
-  # CATEGORY is building up — and `Budget#category_may_hold_one_item_less_rule` allows exactly one
-  # item-less rule, so this answers a single record rather than picking one of a set.
-  #
-  # NIL IS THE ORDINARY ANSWER, AND `#target_amount` ON THE RESULT IS NIL AGAIN FOR AN UNCAPPED
-  # FUND (§2.1 row 2) — two different nils and each screen asks both questions: is anything building
-  # up here, and is there a ceiling to draw a bar against. `ClaimCalculator#capped?` is the rule-level
-  # spelling of the second.
-  #
-  # `#holder?` IS NOT PART OF IT, and that is the one clause `#saving_toward_a_target?` had that
-  # does not survive: whether a category has started COUNTING is a fact about `funded_since` that
-  # every caller already asks where it matters (the index card and the holdings card both branch on
-  # `#holder?` before they reach here). Folding it in would make one predicate answer two questions
-  # and hide the second.
-  #
-  # `detect` OVER THE ASSOCIATION rather than a `where`, and the TEST is
-  # `Budget#builds_up_the_category?` rather than two clauses written out here. Both halves are
-  # measured rather than stylistic: every caller has the association loaded (the entry card reads it
-  # twice more, the dashboard's strip preloads it) and `budgets.merge(scope).first` issues a
-  # statement on a LOADED association, so a relational reader here is one query per card on the
-  # screens that draw many. `CategoryBudgetPresenter` asks the same predicate of a different
-  # population — the rules its page's ONE `ClaimLedger` already fetched — and
-  # `Budget::BUILDS_UP_THE_CATEGORY` is the one place the two clauses are written down, with
-  # `Budget.builds_up_the_category` the SQL side the dashboard's strip composes.
-  def building_rule = budgets.detect(&:builds_up_the_category?)
-
-  # ** IS THIS CATEGORY'S FUND THE WHOLE CATEGORY — THE ONE TEST BEHIND EVERY BAR AND EVERY "of $X"
-  # (rules-own-the-budget spec §10.5; fix wave — MED-1). **
-  #
-  # A fund's TARGET is a ceiling on the FUND's built-up, and every screen that prints it prints it
-  # beside a figure. On a category carrying the fund ALONE those are one figure — `Σ claims` IS the
-  # building rule's built-up — and the sentence is true. Beside a sibling rule they are two: a "Car"
-  # category with a $600-a-period fund toward $2,400 and a $600 insurance bill on one of its items
-  # claims $1,200 after one period, and `$1,200 of $2,400` reads half full while the FUND is a
-  # quarter full and the other $600 is a bill's accrual with nothing to do with the target.
-  #
-  # ** IT WAS SPELLED ON THE ENTRY FORM'S IMPACT CARD ONLY, and the other three screens divided Σ
-  # every rule's claim by ONE rule's target. ** `EntryImpactPresenter#building_target` carried
-  # `budgets.load.one?` inline; the categories index card, the categories show page's holdings card
-  # and the dashboard's savings strip each gated on `target&.positive?` alone. Hoisted here so the
-  # four cannot answer differently about one category on one afternoon.
-  #
-  # ** TWO POPULATIONS, ONE TEST — `#building_rule`'s own arrangement, for `#building_rule`'s own
-  # measured reason. ** The class method takes the ROWS: callers holding the `:budgets` association
-  # (this card, the impact card, the strip's `includes(:budgets)`) pass it, and
-  # `CategoryBudgetPresenter` passes the rules its page's ONE `ClaimLedger` already fetched — a
-  # presenter reading `category.budgets` would be a `SELECT budgets` per card on the categories
-  # index, which is the cost `categories_spec`'s `eq([1, 1])` pin forbids.
-  #
-  # `rules.one?` AND NOT `#building_rule` PLUS A COUNT: one rule that builds up is the whole of it,
-  # and asking the question in one clause is what keeps a future caller from checking only half.
-  def self.fund_is_the_whole_category?(rules) = rules.one? && rules.first.builds_up_the_category?
-
-  # `budgets.load` and not a `count`: every caller here already has the association loaded, and a
-  # relational `one?` on an unloaded association is a statement per card on the screens that draw
-  # many.
-  def fund_is_the_whole_category? = Category.fund_is_the_whole_category?(budgets.load)
+  # WHAT REPLACED EACH CALLER, so a later reader can find them: the entry form's impact card asks its
+  # own calculator's `#dated?` and `#target` (with the sole-rule guard kept, for the same measured
+  # reason — `Σ claims` is still the category's whole figure); the dashboard's Savings band composes
+  # `Budget.saving_toward_a_date`; the Budget page's card and Home's rows read the per-rule `ClaimLine`
+  # they already carry.
 
   # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round
   # 1 — M2). ** Every claim comes from a rule (§3.3), so "budgeted" is exactly "carries a rule": a
@@ -532,10 +481,10 @@ class Category < ApplicationRecord
   #     `priority` is deliberately NOT in that list — every income category in the database already
   #     carries the default 0, and it orders a waterfall an income category is never in.
   #
-  # ** IT WAS THREE COLUMNS, AND `target_amount` LEFT WITH THE COLUMN (rules-own-the-budget spec
+  # ** IT WAS THREE COLUMNS, AND `target-amount` LEFT WITH THE COLUMN (rules-own-the-budget spec
   # §7). ** `#target_is_a_goal` said "a goal of zero is already met and a negative one is money the
-  # budget owes its owner", and that sentence is now `Budget`'s — `validates :target_amount,
-  # numericality: { greater_than: 0 }, allow_nil: true`, beside the `budgets_positive_target_amount`
+  # budget owes its owner", and that sentence is now `Budget`'s — `validates :target-amount,
+  # numericality: { greater_than: 0 }, allow_nil: true`, beside the `budgets_positive_target-amount`
   # CHECK — because how much a category is building up toward is a fact about the RULE that builds
   # it up (§2.1). `only_expenses_hold_money`'s second half went with it for the same reason: a
   # target cannot sit on an income category when it cannot sit on a category at all, and

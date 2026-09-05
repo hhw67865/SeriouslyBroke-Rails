@@ -168,8 +168,8 @@ RSpec.describe "Home Trouble", type: :system do
   #   Rent      priority 1, $1,000 a period, nothing spent → claim `max(0, 1,000 − 0)` = $1,000.00
   #   Groceries priority 2,   $400 a period, nothing spent → claim   $400.00
   #   Fun       priority 3,   $200 a period, nothing spent → claim   $200.00
-  #   Σ claims = $1,600.00; total money = the $1,340 deposit; pot = the same.
-  #   unclaimed = 1,340 − 1,600 = −$260.00; free = min(1,340, −260) = **−$260.00**; shortfall $260.00.
+  #   Σ claims = $1,600.00; the pot is the $1,340 deposit.
+  #   free = 1,340 − 1,600 = **−$260.00**; shortfall $260.00.
   #
   # THE WALK RUNS IN REVERSE PRIORITY — priority is the GIVE-WAY order (§4), so the category that
   # would have been funded LAST goes without FIRST. Fun's whole $200 is uncovered; $60 of the $260 is
@@ -203,7 +203,7 @@ RSpec.describe "Home Trouble", type: :system do
   # naming the rent as the thing to go without.
   #
   # PLANTED, re-derived from §3.1: Fun $200, Groceries $400, Rent $1,000, nothing spent, Σ claims
-  # $1,600.00 against a $1,340 deposit → `unclaimed` −$260.00 and the shortfall $260.00. CHOICE goes
+  # $1,600.00 against a $1,340 deposit → `free` −$260.00 and the shortfall $260.00. CHOICE goes
   # whole ($200), USAGE is split at the remaining **$60.00**, and the BILL is never reached.
   it "gives way by type before priority — choice whole, usage split, a bill never", :aggregate_failures do
     deposit(1_340)
@@ -225,7 +225,7 @@ RSpec.describe "Home Trouble", type: :system do
   # LAST goes without FIRST.
   #
   # PLANTED: Dining priority 1 and Hobbies priority 3, $300 a period each, against a $200 deposit.
-  # Σ claims $600.00 → `unclaimed` −$400.00, shortfall $400.00. Hobbies gives its whole $300 and
+  # Σ claims $600.00 → `free` −$400.00, shortfall $400.00. Hobbies gives its whole $300 and
   # Dining is short the remaining **$100.00**.
   it "gives way in reverse priority order inside one type", :aggregate_failures do
     deposit(200)
@@ -266,54 +266,56 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_no_css("[data-trouble]")
   end
 
-  # ── THE THREE ARMS OF `free < 0`, WHICH ARE THE HERO'S (fix round 1 — HIGH-1) ──────────────────
+  # ── THE TWO ARMS OF `free < 0`, WHICH ARE THE HERO'S (two-shapes spec §2) ──────────────────────
   #
-  # The strip said "Your rules claim more than you have" on `#short?` alone, and `free < 0` is a SIGN
-  # that carries no cause: an inch above, the hero card was already splitting the same negative three
-  # ways on predicates that establish one. The three examples below are the three FALSE states the
-  # review found, each converted from the answers-first fixture that named it, and each asserting the
-  # wrong sentence ABSENT as well as the right one present — the failure was a strip printing a
-  # true-sounding sentence, not a missing one.
+  # ** IT WAS THREE ARMS AND THE `min` IS WHAT MADE IT SO. ** `free = min(pot, total_money − Σ
+  # claims)` went below zero for two unrelated reasons — the claims outrun the money, or the money is
+  # in another account — so the strip needed a "Checking is short" headline for the second and a
+  # predicate that ESTABLISHED which. `free = pot − Σ claims` has one cause per sign: the rules claim
+  # more than checking holds. What splits the headline now is whether anything is claimed AT ALL, and
+  # what money elsewhere buys is a REMEDY rather than an explanation.
+  #
+  # Each example asserts the wrong sentence ABSENT as well as the right one present — the failure
+  # these were written for was a strip printing a true-sounding sentence, not a missing one.
 
-  # ** ARM 1: THE CLAIMS REALLY DO OUTRUN THE MONEY, ** which is the one arm the give-way walk belongs
-  # to. The three-rule fixture above, asked for its headline: $1,600 claimed against $1,340.
-  it "heads the shortfall with the rules where the claims outrun the money", :aggregate_failures do
+  # ** ARM 1: SOMETHING IS CLAIMED, AND THE GIVE-WAY WALK BELONGS TO IT. ** The three-rule fixture
+  # above, asked for its headline: $1,600 claimed against $1,340 in checking.
+  it "heads the shortfall with the figure the rules claim past checking", :aggregate_failures do
     deposit(1_340)
     three_rules
 
     visit root_path
 
-    expect(find("[data-shortfall-headline]")).to have_content("Your rules claim more than you have")
+    expect(find("[data-shortfall-headline]")).to have_content("Your rules claim $260.00 more than checking holds")
     expect(page).to have_no_css("[data-shortfall-elsewhere]")
     expect(page).to have_css("[data-uncovered]")
   end
 
-  # ** ARM 3: THE MONEY IS IN THE WRONG ACCOUNT. ** `hero_spec`'s own measured fixture — $1,000 of
-  # income, $1,200 walked over to Ally, NOT ONE RULE. Total money is still $1,000 and nothing is
-  # claimed, so `unclaimed` is $1,000 (the claims do NOT outrun) and the CAP took `free` to the pot's
-  # **−$200.00**. The card says the money is outside checking; the strip used to say the rules claim
-  # too much, about a user with no rules. What this user needs is a TRANSFER.
-  it "says the money is outside checking rather than blaming rules that do not exist", :aggregate_failures do
+  # ** MONEY IN ANOTHER ACCOUNT IS THE REMEDY, NOT THE CAUSE (§2). ** $1,000 of income, $1,200 walked
+  # over to Ally, NOT ONE RULE: the pot is −$200 and nothing is claimed, so the headline is the pure
+  # overspend's and the second line is what to do about it. The strip used to say "Checking is short"
+  # with a sentence about money "sitting outside checking", which was an account of the arithmetic
+  # rather than an instruction — and the arm it lived on was the cap's.
+  it "offers the transfer when another account holds money", :aggregate_failures do
     deposit(1_000)
     move_out(1_200)
 
     visit root_path
 
-    expect(find("[data-shortfall-headline]")).to have_content("Checking is short")
+    expect(find("[data-shortfall-headline]")).to have_content("You have spent past what you had")
     expect(find("[data-shortfall-amount]")).to have_content("short $200.00")
     expect(find("[data-shortfall-elsewhere]"))
-      .to have_content("$1,200.00 of your money is sitting outside checking — move some into checking")
-    expect(strip).to have_no_content("Your rules claim more than you have")
+      .to have_content("$1,200.00 of your money is sitting outside checking — move some in from your other accounts")
     expect(page).to have_no_css("[data-uncovered]")
-    # THE PACE SURVIVES EVERY ARM: spending less lands the figure at zero whichever way it got there.
+    # THE PACE SURVIVES BOTH ARMS: spending less lands the figure at zero whichever way it got there.
     expect(page).to have_css("[data-shortfall-pace]")
   end
 
-  # ** ARM 2: THE PURE OVERSPEND. ** `hero_spec`'s "is honest when spending has drained the root",
-  # asked of the strip. PLANTED: $100 spent on a funded category carrying NO rule and no income at
-  # all — Σ claims is $0.00, total money is −$100.00, so `unclaimed` is −$100 (the claims DO outrun,
-  # vacuously) and `free = min(−100, −100)` is −$100.00. "Your rules claim more than you have" would
-  # name something that does not exist, and there is nothing for a give-way walk to list.
+  # ** ARM 2: THE PURE OVERSPEND, WITH NOWHERE TO MOVE MONEY IN FROM. ** `hero_spec`'s "is honest
+  # when spending has drained the root", asked of the strip. PLANTED: $100 spent on a funded category
+  # carrying NO rule and no income at all — Σ claims is $0.00 and the pot is −$100.00, so `free` is
+  # −$100.00. "Your rules claim $X more" would name something that does not exist, and there is
+  # nothing for a give-way walk to list.
   it "says the account was spent past zero when no rule claims a penny", :aggregate_failures do
     spend(holder("Groceries"), 100)
 
@@ -322,37 +324,41 @@ RSpec.describe "Home Trouble", type: :system do
     expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
     expect(find("[data-shortfall-headline]")).to have_content("You have spent past what you had")
     expect(find("[data-shortfall-amount]")).to have_content("short $100.00")
-    expect(strip).to have_no_content("Your rules claim more than you have")
+    expect(strip).to have_no_content("Your rules claim")
     expect(page).to have_no_css("[data-uncovered]")
     # One account, and the money was SPENT rather than moved: there is nowhere to send this user.
     expect(page).to have_no_css("[data-shortfall-elsewhere]")
   end
 
-  # ** ARM 3 AGAIN, WITH CLAIMS THAT THE SAVINGS COVER — the give-way list's own false state. **
+  # ** THE WALK RUNS WHEREVER CHECKING IS SHORT, WHATEVER ANOTHER ACCOUNT HOLDS (§2). ** It was gated
+  # on `#claims_outrun_the_money?`, because the capped `free` could go below zero with every claim
+  # covered by money outside checking — and the walk ran there anyway, naming Groceries as uncovered
+  # with the account holding its money printed two inches below. There is one cause per sign now, so
+  # the gate is `#short?` and the walk is honest about CHECKING.
+  #
   # PLANTED: $800 of income, $1,000 walked to Ally, one $500-a-period rule with nothing spent (claim
-  # **$500.00**). Total money is $800, so `unclaimed = 800 − 500` = $300.00 — every claim IS covered
-  # by money this user owns — while the pot is −$200.00 and `free = min(−200, 300)` is −$200.00. The
-  # walk used to run on the shortfall regardless and name Groceries as uncovered, with the account
-  # holding its money printed two inches below.
-  it "names no uncovered claim when the money for it is in another account", :aggregate_failures do
+  # **$500.00**). The pot is −$200.00 and Σ claims $500.00, so `free` is **−$700.00**: Groceries'
+  # whole $500 is uncovered and the remaining **$200.00** is past every claim there is. The transfer
+  # line is what tells the user the money exists.
+  it "walks the claims and offers the transfer when the money is in another account", :aggregate_failures do
     deposit(800)
     move_out(1_000)
     envelope("Groceries", 500)
 
     visit root_path
 
-    expect(find("[data-shortfall-amount]")).to have_content("short $200.00")
+    expect(find("[data-shortfall-amount]")).to have_content("short $700.00")
     expect(find("[data-shortfall-elsewhere]")).to have_content("$1,000.00 of your money is sitting outside")
-    expect(page).to have_no_css("[data-uncovered-claim='Groceries']")
-    expect(page).to have_no_css("[data-uncovered]")
+    expect(uncovered("Groceries")).to have_content("nothing covers its $500.00")
+    expect(find("[data-uncovered-remainder]")).to have_content("$200.00 past everything the rules claim")
   end
 
   # ** THE PART OF THE SHORTFALL NO CLAIM ACCOUNTS FOR (fix round 1 — LOW-1). ** The walk runs out of
   # claims and the list then sums to LESS than the headline, with nothing naming the difference.
   #
   # PLANTED: $400 spent on a funded category with no rule and no income, beside a $500-a-period rule
-  # with nothing spent. Σ claims $500.00 against −$400.00 of money → `unclaimed = −400 − 500` =
-  # −$900.00 and `free = min(−400, −900)` is −$900.00. Groceries' whole $500 goes; `900 − 500` =
+  # with nothing spent. Σ claims $500.00 against a pot of −$400.00 → `free = −400 − 500` =
+  # **−$900.00**. Groceries' whole $500 goes; `900 − 500` =
   # **$400.00** is past every claim there is.
   it "names the part of the shortfall that is past every claim", :aggregate_failures do
     spend(holder("Coffee", priority: 3), 400)
@@ -382,7 +388,7 @@ RSpec.describe "Home Trouble", type: :system do
   # there is no "rest of the period" to spread a shortfall over. The figure and the list survive,
   # because both are true whatever calendar the user keeps.
   #
-  # PLANTED: one $1,000-a-period rule against $100 of income. `unclaimed = 100 − 1,000` = −$900.00, so
+  # PLANTED: one $1,000-a-period rule against $100 of income. `free = 100 − 1,000` = −$900.00, so
   # the shortfall is $900 and the single claim is SPLIT by it — short $900 of its $1,000, not wholly
   # uncovered, which is the walk's `min(claim, remaining)` said on one row.
   it "states the shortfall without a pace before a period is declared", :aggregate_failures do
@@ -469,12 +475,11 @@ RSpec.describe "Home Trouble", type: :system do
   # to the full $1,200 in ONE period. Under the old `built_up < target` gate that user — who had
   # saved every penny and simply not paid the bill — got SILENCE, and their row printed `next due`
   # over a date ten days gone. The bill still has to be paid; what changes is the sentence.
-  # ** AND IT IS THE REACHABLE HALF OF `_trouble.html.erb`'s `capped?` GATE (fix round 1 — LOW-8). **
-  # That arm has an `else` for an UNCAPPED rule, which is a guard rather than a branch: a rule is
-  # only overdue if it has a due date, a dated rule is always capped (its target is its own amount),
-  # and `Budget#build_up_must_be_valid` refuses `carries_over` beside an `anchor_date` — so the
-  # uncapped arm is unplantable, not merely unreached. This example and the one above it are what
-  # the gate actually renders.
+  # ** AND THE `else` IT USED TO SHARE WITH AN UNCAPPED FUND IS GONE (two-shapes §7). ** The arm
+  # carried a second branch for a rule that named no figure — unreachable even then, since only a
+  # DATED rule can be overdue and a dated rule's target is its own amount — and the shape that could
+  # have reached it is retired. This example and the one above it are the whole of what the gate
+  # renders.
   it "names a bill whose date has passed even with the fund whole", :aggregate_failures do
     deposit(2_000)
     due = Date.current - 10.days
@@ -613,13 +618,12 @@ RSpec.describe "Home Trouble", type: :system do
   #
   # PLANTED: a Vacation category whose only rule carries −$150, beside a $400 rate rule, against $100
   # of income. §3.1's clamp takes that rule's claim to **$0.00** rather than letting a negative claim
-  # ADD to what is free — Σ claims is the $400 rate rule alone, `unclaimed = 100 − 400` = −$300.00,
-  # and free is that. A missing clamp reads −$150 here and the figure would be −$150.00.
+  # ADD to what is free — Σ claims is the $400 rate rule alone, `free = 100 − 400` = **−$300.00**.
+  # A missing clamp reads −$150 here and the figure would be −$150.00.
   #
-  # THE CATEGORY NAMED $2,400 UNTIL THIS TASK and the arithmetic above quoted it as a `gap`. It was
-  # already dead weight — `ClaimCalculator#shape` stopped reading `categories.target_amount` when the
-  # shapes moved onto the rule — and Task 4 dropped the column, so the figure is gone from the
-  # fixture and from the working.
+  # THE CATEGORY NAMED $2,400 UNTIL THE SHAPES MOVED ONTO THE RULE and the arithmetic above quoted it
+  # as a `gap`. It was already dead weight before the column was dropped, so the figure is gone from
+  # the fixture and from the working.
   it "renders when a rule's amount is negative", :aggregate_failures do
     vacation = holder("Vacation", priority: 2)
     create(:budget, :per_period_rate, category: vacation, amount: 150)

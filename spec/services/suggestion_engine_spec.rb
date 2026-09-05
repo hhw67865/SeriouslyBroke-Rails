@@ -272,8 +272,9 @@ RSpec.describe SuggestionEngine do
     #
     # A DATED BILL PROPOSES `bill` (§3) AND `resets`. The type is what the give-way order is built
     # on, and the accept form shows the radio so the user confirms before anything is written;
-    # `unspent` is `resets` because a dated rule's build-up is defined by its DATE, which
-    # `Budget#build_up_must_be_valid` refuses to have said twice.
+    # `repeats` IS TRUE because the proposal names an interval: `by_date` + `repeats` is §2's row 4,
+    # and the same pair with the box off is the one-off. There is no "unspent money" word on the wire
+    # any more (two-shapes §7) — a dated rule's build-up has always been defined by its DATE.
     it "carries a prefill for the rule the proposal would create, owner included", :aggregate_failures do
       bills = category("Bills")
       water = item("Water", in_category: bills)
@@ -284,7 +285,7 @@ RSpec.describe SuggestionEngine do
       due = Date.new(2026, 4, 15)
 
       expect(prefill.keys).to eq([:budget])
-      expect(prefill[:budget]).to eq(amount: 210, schedule: "every_n", interval_months: 3, anchor_date: due, item_id: water.id, category_id: bills.id, rule_type: "bill", unspent: "resets")
+      expect(prefill[:budget]).to eq(amount: 210, schedule: "by_date", repeats: true, interval_months: 3, anchor_date: due, item_id: water.id, category_id: bills.id, rule_type: "bill")
     end
 
     # TWO BILLS IN ONE CATEGORY ARE TWO RULES ON ONE OWNER, and that is now the ordinary case rather
@@ -457,10 +458,10 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:rate).sole.amount).not_to eq(475) # 2,850 over six periods, rent included
     end
 
-    # A RATE PROPOSES `usage` (§3) AND `resets`: what this detector found is a category the user
-    # spends in every period with no rule for it — a real need whose amount moves with how they live
-    # — and §2.1's row 1 is the shape whose money goes back to free money at the boundary. A fund is
-    # a deliberate act, not something measured out of spending that already happened.
+    # A RATE PROPOSES `usage` (§3): what this detector found is a category the user spends in every
+    # period with no rule for it — a real need whose amount moves with how they live — and §2's row 1
+    # is the allowance that resets with the paycheck. A fund names a DAY and is a deliberate act, not
+    # something measured out of spending that already happened, which is why no detector proposes one.
     it "carries a prefill naming the category and the rate", :aggregate_failures do
       coffee = category("Coffee")
       beans = item("Beans", in_category: coffee)
@@ -468,7 +469,7 @@ RSpec.describe SuggestionEngine do
 
       expect(of_kind(:rate).sole.prefill).to eq(
         budget: {
-          amount: 120, schedule: "per_period", category_id: coffee.id, rule_type: "usage", unspent: "resets"
+          amount: 120, schedule: "per_period", repeats: false, category_id: coffee.id, rule_type: "usage"
         }
       )
     end
@@ -617,41 +618,32 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:drift)).to be_empty
     end
 
-    # ** A GOAL'S RULE IS NOT A RATE RULE, AND THE DETECTOR USED TO THINK IT WAS (fix wave — MED-2).
-    # ** `SuggestionEngine#rate_shape?` read `anchor_date`, `item_id` and `cadence` and never the
-    # column that tells a fund accruing toward a figure from a use-it-or-lose-it rate.
-    # `ClaimCalculator#shape` calls this rule `:building`, so the detector was describing money
-    # computed by a formula it does not know.
+    # ** `SuggestionEngine#rate_shape?` READ `anchor_date`, `item_id` AND `cadence` AND NEVER THE
+    # COLUMN THAT TOLD AN ACCRUING RULE FROM A USE-IT-OR-LOSE-IT RATE, so the detector described money
+    # computed by a formula it does not know. ** `Budget#claim_shape` is the one door onto §3's
+    # classification, and the accruing shape has been named three things — `:target` off the
+    # CATEGORY's figure, `:building` off the rule's own carry-over column, and `:dated` since the two
+    # shapes (§2). This method asks `== :rate` either way; the shape symbol is asserted BY NAME here
+    # so a drift back to an old spelling fails in this file.
     #
-    # ** THE COLUMN MOVED IN THE RULES-OWN-THE-BUDGET TASK AND THE SHAPE WAS RENAMED WITH IT. ** It
-    # was `:target`, read off the CATEGORY's `target_amount`; it is `:building`, read off the rule's
-    # own `carries_over`. `#rate_shape?` is `claim_shape == :rate` either way and must go on treating
-    # the accruing shape exactly as it treated `:target` — this example is where that is pinned, and
-    # the shape symbol is asserted by name so a drift back to the old spelling fails here.
-    #
-    # PLANTED AT THE BACKWARDS SENTENCE: a $50-a-period rule building toward $5,000 with $200 a
-    # period of spending. As a rate rule the gap is $150 — past both thresholds — and the panel says
-    # RAISE your contribution, which is exactly wrong: the fund is being drained, not underfunded.
-    it "does not fire on a goal's rule, whose claim accrues toward a target", :aggregate_failures do
+    # PLANTED AT THE BACKWARDS SENTENCE: a $5,000 goal with $200 a period of spending. Read as a rate
+    # rule the gap is past both thresholds and the panel says RAISE your contribution, which is
+    # exactly wrong: the fund is being drained, not underfunded.
+    it "does not fire on a goal, whose claim accrues toward a date", :aggregate_failures do
       vacation = funded_category("Vacation")
-      rule = create(:budget, :capped, category: vacation, amount: 50, target_amount: 5_000)
+      rule = create(:budget, :by_date, category: vacation, amount: 5_000)
       in_drift_window(item("Flights", in_category: vacation), 200)
 
-      expect(rule.claim_shape).to eq(:building)
+      expect(rule.claim_shape).to eq(:dated)
       expect(of_kind(:drift)).to be_empty
     end
 
-    # AND AN UNCAPPED FUND IS THE SAME SILENCE. A rule that builds up without naming a figure is
-    # `:building` too, so the gate is the SHAPE and not the presence of a target — without this arm
-    # a detector that had merely learnt to skip rules with a `target_amount` would pass.
-    it "does not fire on a fund that builds up toward no figure at all", :aggregate_failures do
-      emergency = funded_category("Emergency")
-      rule = create(:budget, :building, category: emergency, amount: 50)
-      in_drift_window(item("Repairs", in_category: emergency), 200)
-
-      expect(rule.claim_shape).to eq(:building)
-      expect(of_kind(:drift)).to be_empty
-    end
+    # ** THE "uncapped fund" AND "hand-fed $0 rule" EXAMPLES ARE DELETED WITH THEIR SHAPES (§7). **
+    # The first was a rule that built up without naming a figure, planted to show the gate was the
+    # SHAPE rather than the presence of a target; the second was the $0 rule `DropTheDistribution`
+    # minted eight of, whose thresholds are both vacuous against zero. Neither can be written now: a
+    # dated rule always names a figure and `Budget` validates `amount > 0` on every shape. The
+    # `amount.positive?` gate is still exercised, on the row only a database can hold, below.
 
     # THE OTHER DIRECTION, one column apart: the same rule and the same spending on a rule whose
     # money RESETS is a rate rule, and it drifts. Without this the examples above would pass against
@@ -665,29 +657,15 @@ RSpec.describe SuggestionEngine do
       expect(of_kind(:drift).sole.detail[:direction]).to eq(:up)
     end
 
-    # ** A $0 RULE HAS NO RATE TO HAVE DRIFTED FROM (fix wave — MED-2). ** `DropTheDistribution`
-    # minted eight of these — a capped rule whose amount is zero, which is §3.3's honest way of
-    # saying "this fund is fed by hand" (spec §10.1 ruling 3). Both drift thresholds are vacuous
-    # against zero: any spending at all is $10 away and infinitely far in percentage terms, so the
-    # panel said "your rule says $0.00 a period, you spend $200.00" about a rule that claims nothing
-    # by design. The shape is now the rule's own three columns (§2.1 row 4).
-    it "does not fire on a hand-fed $0 rule, whatever is spent", :aggregate_failures do
-      emergency = funded_category("Emergency Fund")
-      create(:budget, :hand_fed, category: emergency, target_amount: 5_000)
-      in_drift_window(item("Repairs", in_category: emergency), 200)
-
-      expect(of_kind(:drift)).to be_empty
-    end
-
     # ** THE `amount.positive?` GATE ON ITS OWN, ON A ROW ONLY A DATABASE CAN HOLD. ** A $0 rule
     # whose money RESETS is shape `:rate`, so the shape gate lets it through and only the amount gate
     # can silence it — and it must, because there is no rate there to have drifted from.
     #
-    # WRITTEN PAST THE MODEL DELIBERATELY, and the bypass is the assertion: `Budget#set_aside_only?`
-    # reads `carries_over` and `target_amount` off the RULE since the rules-own-the-budget task, so
-    # this shape can no longer be SAVED at all. It used to be one edit away — the target lived on the
-    # category and clearing it re-validated nothing, so a user who retired a goal left exactly this
-    # row behind — and a migrated database can still be holding one.
+    # WRITTEN PAST THE MODEL DELIBERATELY, and the bypass is the assertion: `Budget` validates
+    # `amount > 0` on every shape since the two shapes (§2), so this row can no longer be SAVED at
+    # all. It used to be one edit away — the target lived on the category and clearing it
+    # re-validated nothing, so a user who retired a goal left exactly this row behind — and a
+    # database restored from before `TwoShapes` can still be holding one.
     it "does not fire on a $0 rule whose money resets", :aggregate_failures do
       emergency = funded_category("Rainy Day")
       rule = create(:budget, :per_period_rate, category: emergency, amount: 25)

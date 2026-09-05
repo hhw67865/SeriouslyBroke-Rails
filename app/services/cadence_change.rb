@@ -24,29 +24,28 @@
 #
 # ** THE CLAIM SHAPE IS IRRELEVANT, and that was the defect. ** This used to require
 # `ClaimCalculator#rate?`, which was then a question about the CATEGORY: a $150-a-period rule on a
-# category carrying a `target_amount` took the accruing formula, so the identical rule was scaled on
+# category carrying a target took the accruing formula, so the identical rule was scaled on
 # a plain envelope and silently left behind on a goal — and it is just as grid-dependent, because
 # `Budget#steady_ask` hands `Budget.steady_need` its amount verbatim either way. The question is
 # what the AMOUNT is denominated in, and `#cadence` is the app's one answer to it.
 #
-# ** THE SAME ANSWER SURVIVES THE MOVE ONTO THE RULE (rules-own-the-budget spec §2.2). ** A building
-# rule — `carries_over`, with or without a target — is `:per_period` like any other per-period rule
-# and SCALES, because $300 a period means $300 of whatever a period now is whether the money resets
-# or accrues. Nothing in this class reads the new columns, and `budget_page_spec` pins that: the
-# building rule is offered and rewritten beside the rate rule, the $0 goal is neither.
+# ** THE TWO SHAPES CHANGED NOTHING HERE (two-shapes spec §2). ** The building shape is retired and
+# a goal is a DATED rule, whose `#cadence` is `:one_off` — already grid-independent, and already
+# excluded by the one clause below. Nothing in this class ever read `carries-over` or
+# `target-amount`, so their deletion touches no line of it; what did go is the `amount > 0` filter
+# this list used to carry, because there are no zero-amount rules left to filter.
 class CadenceChange
   # ONE RULE'S OFFER: what it says now and what it would say after. The rule travels with the pair
   # so the confirm screen and the write are looking at the same record rather than at a name.
   Line = Data.define(:rule, :amount, :scaled_amount)
 
-  # A RATE MAY NOT BE ZERO (`Budget` validates `amount > 0` for every shape but the dateless
-  # set-aside-only target, which is not a rate rule). A one-cent weekly rule scaled to a monthly
-  # grid rounds to nothing, and a confirm that wrote an invalid row would 500 on a button the user
-  # was right to press. The floor is the smallest amount the column can hold.
+  # A RATE MAY NOT BE ZERO (`Budget` validates `amount > 0` on every shape since the two shapes). A
+  # one-cent weekly rule scaled to a monthly grid rounds to nothing, and a confirm that wrote an
+  # invalid row would 500 on a button the user was right to press. The floor is the smallest amount
+  # the column can hold.
   #
-  # IT CATCHES A ROUNDING, NEVER A DECLARATION: an amount of zero is not a rate that rounded away,
-  # it is a goal that names no rate at all, and `#scalable_rules` keeps those off this path entirely
-  # so the floor cannot invent one (fix round 1 — Task 4's concern 1).
+  # IT CATCHES A ROUNDING AND THERE IS NOTHING ELSE LEFT FOR IT TO CATCH: the zero-amount goal it
+  # used to be able to invent a rate for cannot be written any more.
   SMALLEST_RATE = BigDecimal("0.01")
 
   attr_reader :user, :declaration, :periods_per_year_before
@@ -157,24 +156,19 @@ class CadenceChange
   # dividing branches and are already grid-independent; `:per_period` is the only one the cadence
   # can change the meaning of. It reads three columns off the loaded row and asks nothing.
   #
-  # ** AND ZERO STAYS ZERO (fix round 1 — Task 4's concern 1). ** A goal fed only by hand is a rule
-  # with `amount: 0` — §3.2's "no rate is spelled as ZERO", the shape `Budget#set_aside_only?`
-  # exempts from `amount > 0` and the shape `DropTheDistribution` mints for every target-only goal
-  # in a real database. Its `#cadence` is `:per_period` (no anchor, no interval), so it landed on
-  # this list, and `#scaled`'s `SMALLEST_RATE` floor then turned `0 × 12/26` into **$0.01** — a
-  # standing contribution the owner never declared, written by a button they pressed about
-  # something else, onto a row they cannot see. The floor is right for a rate that rounds away and
-  # wrong for a rate that was never stated: there is nothing to convert, because zero a month and
-  # zero a fortnight are the same budget.
+  # ** THE ZERO CLAUSE IS DELETED WITH THE SHAPE THAT NEEDED IT (two-shapes spec §2/§7). ** It read
+  # `&& rule.amount.to_d.positive?`, and it existed for the goal fed only by hand: a rule with
+  # `amount: 0` — "no rate is spelled as ZERO", the one shape `Budget#set-aside-only` exempted from
+  # `amount > 0`. Its `#cadence` was `:per_period` (no anchor, no interval), so it landed on this
+  # list, and `#scaled`'s `SMALLEST_RATE` floor turned `0 × 12/26` into $0.01 — a standing
+  # contribution the owner never declared, written by a button they pressed about something else.
   #
-  # NOT OFFERED AND NOT WRITTEN, in that order and by this one clause. `#lines` feeds both the
-  # confirm panel and `#apply`'s write, so excluding the row here is what keeps the question and the
-  # rewrite from disagreeing about which rules a cadence change means something for — the same
-  # single-population rule `#apply`'s `#offered?` guard is built on. A user whose ONLY per-period
-  # rule is a $0 goal is offered nothing, which is correct: there is nothing a cadence change does
-  # to their budget.
+  # THERE ARE NO ZERO RULES. `Budget` validates `amount > 0` unconditionally now and `TwoShapes`
+  # converted every hand-fed goal to a dated rule whose amount is its target, so the clause can
+  # exclude nothing — and a filter that can never match reads as a check somebody is relying on.
+  # `SMALLEST_RATE` stays: it is still right for a one-cent weekly rule that rounds away on a monthly
+  # grid, which is the rounding it was always for.
   def scalable_rules
-    Budget.for_user(user).includes(:category)
-      .select { |rule| rule.cadence == :per_period && rule.amount.to_d.positive? }
+    Budget.for_user(user).includes(:category).select { |rule| rule.cadence == :per_period }
   end
 end

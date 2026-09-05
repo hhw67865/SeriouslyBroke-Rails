@@ -29,14 +29,23 @@ RSpec.describe "Budget page adjustments", type: :system do
 
   def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
 
-  # ** A FUND: A RULE WHOSE UNSPENT MONEY BUILDS UP, TOWARD A FIGURE IT NAMES ITSELF
-  # (rules-own-the-budget spec §2.1 row 3). ** `carries_over` is what makes the money survive the
-  # period boundary and `budgets.target_amount` is where it stops. `#holder` wrote a copy of the
-  # figure onto the CATEGORY while the categories screens still read one; those screens read the
-  # rule now and `categories.target_amount` is dropped (§6/§7), so the rule is the only place a
-  # target is written here.
-  def fund(category, amount, target:)
-    create(:budget, :capped, category: category, amount: amount, target_amount: target)
+  # ** A FUND: A DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes spec §2 row 5). ** It was a rule
+  # whose unspent money survived the period boundary toward a separate figure, and a figure on the
+  # CATEGORY before that; the horizon replaces the rate. THE ANCHOR IS DERIVED FROM THE SHARE THE
+  # CALLER ASKS FOR: this file's grid is MONTHLY anchored the 1st, so the last day of the month
+  # `target ÷ amount` periods out leaves exactly that many boundaries from this period's open — and
+  # §3.2's catch-up then asks `amount` in every one of them, which is the same figure the retired
+  # shape declared as a rate.
+  def fund(category, amount, target:, born: nil)
+    create(
+      :budget,
+      category: category,
+      amount: target,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: (Date.current.beginning_of_month + (target / amount).months) - 1.day,
+      created_at: born || Time.current
+    )
   end
 
   def rule_row(name) = find("[data-rule='#{name}']")
@@ -61,9 +70,11 @@ RSpec.describe "Budget page adjustments", type: :system do
 
   # ── §3.3, THE ACCRUING SHAPE: set aside, take back, skip ──────────────────────────────────────
 
-  # A $1,200 goal fed by a $150-a-period rule written today: the walk visits ONE period (accrual
-  # starts at the later of the category's funding date and the rule's own birth), so this period
-  # plans `min($150, $1,200 − $0)` = $150 and the fund holds $150.
+  # A $1,200 goal due at the close of the EIGHTH month from this one, written today: the walk visits
+  # ONE period (accrual starts at the later of the category's funding date and the rule's own birth)
+  # and eight boundaries remain, so this period plans `1,200 ÷ 8` = $150 and the fund holds $150 —
+  # the same figures a $150-a-period rule building toward $1,200 produced before the shape was
+  # retired (two-shapes §2).
   describe "a fund that accrues toward a target" do
     before do
       fund(holder("Vacation"), 150, target: 1_200)
@@ -224,14 +235,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   # the same for both and fail one half.
   describe "where a delta may be dated" do
     before do
-      create(
-        :budget,
-        :capped,
-        category: holder("Vacation", priority: 1),
-        amount: 150,
-        target_amount: 1_200,
-        created_at: 1.month.ago
-      )
+      fund(holder("Vacation", priority: 1), 150, target: 1_200, born: 1.month.ago)
       rate(holder("Groceries", priority: 2), 400)
       visit budget_page_path
     end
@@ -337,19 +341,24 @@ RSpec.describe "Budget page adjustments", type: :system do
     end
   end
 
-  # ** EVERY RULE DENOMINATED PER PERIOD SCALES, WHATEVER ITS CATEGORY'S SHAPE (fix round MED-3). **
-  # The offer used to require `ClaimCalculator#rate?`, which is a question about the CATEGORY — a
-  # $150-a-period rule on a $1,200 goal is shape `:target`, so it was silently left behind while
-  # the identical rule on a category with no target was scaled. `Budget#steady_ask` is what settles
-  # this: its `:per_period` branch takes the amount VERBATIM per period, so the grid is exactly
-  # what that rule's cost depends on. A dated bill on the same screen is not offered — it names an
+  # ** EVERY RULE DENOMINATED PER PERIOD SCALES, WHATEVER ELSE IS TRUE OF IT (fix round MED-3). **
+  # The offer used to require `ClaimCalculator#rate?`, which was then a question about the CATEGORY —
+  # a $150-a-period rule on a category carrying a target took the accruing formula, so it was
+  # silently left behind while the identical rule elsewhere was scaled. `Budget#steady_ask` is what
+  # settles it: its `:per_period` branch takes the amount VERBATIM per period, so the grid is exactly
+  # what that rule's cost depends on. A DATED rule on the same screen is not offered — it names an
   # occurrence, and the catch-up formula re-plans it on whatever grid exists — so a confirm that
   # simply listed every rule would fail this too.
   #
+  # ** THE FIXTURE'S FIRST RULE WAS A PER-PERIOD RULE ON A GOAL, AND THERE IS NO SUCH PAIR ANY MORE
+  # (two-shapes §2). ** A goal IS the dated rule now, so the two fixtures would be one shape twice;
+  # what the example is about — per-period offered, dated withheld — is unchanged, and the rate rule
+  # is planted on an ordinary envelope instead.
+  #
   # $150 × 12 ÷ 26 = $69.2307…, which rounds to $69.23.
-  describe "changing the period with a per-period rule on a goal beside a dated bill" do
+  describe "changing the period with a per-period rule beside a dated bill" do
     before do
-      fund(holder("Vacation", priority: 1), 150, target: 1_200)
+      rate(holder("Dining Out", priority: 1), 150)
       create(
         :budget,
         category: holder("Car Insurance", priority: 2),
@@ -363,8 +372,8 @@ RSpec.describe "Budget page adjustments", type: :system do
       click_button "Save period and income"
     end
 
-    it "offers the goal's per-period rule and not the dated bill", :aggregate_failures do
-      within("[data-cadence-line='Vacation']") do
+    it "offers the per-period rule and not the dated bill", :aggregate_failures do
+      within("[data-cadence-line='Dining Out']") do
         expect(page).to have_css("[data-cadence-now]", text: "$150.00")
         expect(page).to have_css("[data-cadence-scaled]", text: "$69.23")
       end

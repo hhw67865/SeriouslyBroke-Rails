@@ -94,10 +94,11 @@ RSpec.describe EntryImpactPresenter do
   # `ClaimCalculator#standing_ask`: the amount over the periods from the accrual start's period
   # through the one the anchor falls in, which is the only shape whose denominator this card cannot
   # read off the rule's own columns.
-  def one_off(category, amount, anchor:)
+  def one_off(category, amount, anchor:, item: nil)
     create(
       :budget,
       category: category,
+      item: item,
       amount: amount,
       interval_months: nil,
       anchor_date: anchor,
@@ -121,13 +122,26 @@ RSpec.describe EntryImpactPresenter do
   # that had quietly stayed behind go on passing — and the column is dropped by Task 4 anyway.
   def fund(name, target:, accrues: 0)
     category = create(:category, :expense, user: user, name: name, funded_since: funded_since)
-    building(category, accrues, target: target) if accrues.positive?
+    saving(category, target, accrues: accrues) if accrues.positive?
     category
   end
 
-  # THE RULE A FUND ACCRUES BY: per-period, unspent money builds up, capped at the rule's figure.
-  def building(category, amount, target:)
-    create(:budget, :capped, category: category, amount: amount, target_amount: target, created_at: born)
+  # ** THE RULE A FUND ACCRUES BY: A ONE-OFF DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes §2
+  # row 5). ** It was a per-period rule that carried its money over toward a separate figure, and the
+  # horizon replaces the rate — so the helper takes the same `accrues` and DERIVES the day the rule
+  # reaches its target at it. The grid is biweekly anchored `today` and the rule is born today, so
+  # `target ÷ accrues` periods of 14 days land the anchor on the last day of the last one, and
+  # §3.2's catch-up share in every period from here to there is exactly `accrues`.
+  def saving(category, target, accrues:)
+    create(
+      :budget,
+      category: category,
+      amount: target,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: today + (14 * (target / accrues)).days - 1.day,
+      created_at: born
+    )
   end
 
   def present(category, amount: nil, entry: nil, on: today)
@@ -276,12 +290,18 @@ RSpec.describe EntryImpactPresenter do
     end
 
     # ** A SETTLED ONE-TIME BILL STILL GIVES THE BAR SOMETHING TO MEASURE AGAINST (fix wave 2 —
-    # LOW-2). ** The denominator is `Σ ClaimCalculator#standing_ask`, and for one wave it was §3.2's
-    # catch-up share — which is ZERO once a one-off has been paid — so the track under an envelope
-    # that had drawn one all along simply stopped rendering the afternoon the bill cleared. $600 due
-    # Mar 6, born Feb 6: three biweekly periods (Feb 6, Feb 20, Mar 6), so $200 a period whatever
-    # has been spent. The $0 is asserted as an absence so a denominator that fell back to zero
-    # cannot pass.
+    # LOW-2). ** For one wave the denominator was §3.2's catch-up share, which is ZERO once a one-off
+    # has been paid, so the track under an envelope that had drawn one all along simply stopped
+    # rendering the afternoon the bill cleared. The $0 is asserted as an absence so a denominator
+    # that fell back to zero cannot pass.
+    #
+    # ** THE FIGURE MOVED FROM $200 TO $600 WITH THE TWO SHAPES (§2), AND IT IS THE `#fund_target`
+    # ARM REACHING A ROW IT COULD NOT REACH BEFORE. ** A bill and a goal are one shape now, so this
+    # category's SOLE dated rule names a ceiling — its own $600 — and the bar measures against it
+    # exactly as a goal's does. It used to fall through to `Σ standing_ask` ($600 over the three
+    # biweekly periods Feb 6, Feb 20, Mar 6 = $200 a period) because a "target" then meant a
+    # `carries over` rule's separate figure, which a bill never had. Both are honest denominators;
+    # the ceiling is the better one, because it is the figure the line above the bar prints.
     it "draws a bar for a category whose only rule is a one-time bill already paid", :aggregate_failures do
       repairs = create(:category, :expense, user: user, name: "Repairs", funded_since: funded_since)
       one_off(repairs, 600, anchor: today + 28.days)
@@ -289,7 +309,7 @@ RSpec.describe EntryImpactPresenter do
       card = present(repairs)
 
       expect(card.balance).to eq(0)
-      expect(card.denominator).to eq(BigDecimal("200"))
+      expect(card.denominator).to eq(BigDecimal("600"))
       expect(card.denominator).not_to eq(0)
       expect(card.bar?).to be(true)
     end
@@ -542,23 +562,22 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.balance).not_to eq(BigDecimal("750"))
     end
 
-    # ** AN UNCAPPED FUND HAS NO TARGET TO BE THE CEILING (rules-own-the-budget spec §2.1 row 2; fix
-    # round 1 — MED). ** `#most_it_could_claim` read `ClaimCalculator#target` for every accruing rule
-    # and that reader is NIL for a building rule naming no figure, so `BigDecimal + nil` raised a
-    # TypeError on the entry form the moment a category held an emergency fund. `#ceiling_for` is
-    # what answers now, and the arm it takes for this shape is `built_up + this period's rate`: the
-    # most the rule COULD hold on the day the card is drawn, since nothing but this period's own
-    # share can be added before the next boundary and there is no cap that could take it higher.
+    # ** THE CEILING IS THE RULE'S TARGET, AND THE UNCAPPED ARM IS DELETED (two-shapes §7). **
+    # `#most_it_could_claim` read `ClaimCalculator#target` for every accruing rule, and that reader
+    # was NIL for a fund naming no figure — so `BigDecimal + nil` raised a TypeError on the entry
+    # form the moment a category held an emergency fund. `#ceiling_for` grew an arm for it
+    # (`built_up + this period's share`, the most such a rule COULD hold on the day the card is
+    # drawn); the shape is retired, every accruing rule names a figure, and the arm goes with it.
     #
-    # BY HAND, on a $600-a-period fund born as the period opened with $150 spent on it:
-    #   walk      planned 600 (uncapped: `gap` is unbounded) · accrued 600 · spent 150 → built 450
-    #   ceiling   450 + 600 = 1,050
-    #   balance   (pre-clamp 450 + the $150 given back).clamp(0, 1,050) = **$600.00**
+    # BY HAND, on a $2,400 goal four periods out with $150 spent on it:
+    #   walk      planned 2,400 ÷ 4 = 600 · accrued 600 · spent 150 → built **450**
+    #   ceiling   the target, **2,400**
+    #   balance   (pre-clamp 450 + the $150 given back).clamp(0, 2,400) = **$600.00**
     # The give-back is not clipped, which is the point: the ceiling is real and it is above the
     # figure, so the card states what the rule actually had before this receipt.
-    it "gives an uncapped fund's spending back against a ceiling of its own", :aggregate_failures do
+    it "gives a goal's spending back against the ceiling its own target sets", :aggregate_failures do
       emergency = create(:category, :expense, user: user, name: "Emergency", funded_since: funded_since)
-      create(:budget, :building, category: emergency, amount: 600, created_at: born)
+      saving(emergency, 2_400, accrues: 600)
       drawn = spend(emergency, 150)
 
       impact = present(emergency, amount: "150", entry: drawn)
@@ -658,15 +677,14 @@ RSpec.describe EntryImpactPresenter do
   end
 
   describe "a fund" do
-    # ** A FUND IS `Category#building_rule` (rules-own-the-budget spec §5/§7): the item-less rule
-    # whose unspent money carries. ** It replaces `Category#saving_toward_a_target?`, which read a
-    # figure on the CATEGORY — a column no claim formula consults, since `ClaimCalculator#shape`
-    # answers `:building` off the rule's own `carries_over` and caps at the rule's `target_amount`.
-    # The card, the categories index, the categories page and the dashboard's savings strip all read
-    # the same rule, so a fund is a fund on every one of them.
+    # ** A FUND IS A RULE THAT ACCRUES TOWARD A DAY (two-shapes spec §2), asked of the calculators
+    # this card already builds. ** The classifier has moved twice: from a figure on the CATEGORY, to
+    # the item-less rule whose unspent money carried, to `ClaimCalculator#dated?`. A bill's fund and a
+    # savings goal are ONE shape now, so a category accruing toward any date takes the fund shape —
+    # which is a real widening and is asserted below rather than left to be discovered.
     #
-    # $600 of a $2,400 target: a $600-a-period building rule born as the period opened, one period
-    # walked.
+    # $600 of a $2,400 target: a goal born as the period opened with FOUR periods to run, so §3.2's
+    # share is `2,400 ÷ 4` = $600 and one period is walked.
     let(:vacation) { fund("Vacation", target: 2_400, accrues: 600) }
 
     before { vacation }
@@ -674,16 +692,16 @@ RSpec.describe EntryImpactPresenter do
     it "takes the fund shape and measures against the rule's target", :aggregate_failures do
       impact = present(vacation, amount: "150")
 
-      expect(impact.building?).to be(true)
+      expect(impact.fund?).to be(true)
       expect(impact.noun).to eq("fund")
       expect(impact.balance).to eq(BigDecimal("600"))
       expect(impact.balance_after).to eq(BigDecimal("450"))
-      expect(impact.building_target).to eq(BigDecimal("2400"))
+      expect(impact.fund_target).to eq(BigDecimal("2400"))
     end
 
     it "measures its bar against the target, which no rule could ever be", :aggregate_failures do
-      # 450 of 2,400. Measured against the $600-a-period rule instead, the bar would read 75% of a
-      # fund that is a quarter full — which is the defect the target arm exists to fix.
+      # 450 of 2,400. Measured against the rule's $600-a-period share instead, the bar would read 75%
+      # of a fund that is a quarter full — which is the defect the target arm exists to fix.
       expect(present(vacation, amount: "150").denominator).to eq(BigDecimal("2400"))
       expect(present(vacation, amount: "150").bar_percent).to eq(19)
       expect(present(vacation, amount: "150").bar?).to be(true)
@@ -693,38 +711,26 @@ RSpec.describe EntryImpactPresenter do
     it "goes negative and reports the overdraw like any other category", :aggregate_failures do
       impact = present(vacation, amount: "900")
 
-      expect(impact.building?).to be(true)
+      expect(impact.fund?).to be(true)
       expect(impact.balance_after).to eq(BigDecimal("-300"))
       expect(impact.overdrawn?).to be(true)
     end
 
-    # ** THE CARD READS THE RULE THE WALK READS, AND UNTIL THIS TASK IT DID NOT. ** The claim came
-    # from `carries_over` + the rule's `target_amount` while the NOUN and the BAR came from
-    # `categories.target_amount` — two records, one question, and after Task 4 drops the column the
-    # second answer would have been nil for every fund in the app. Asserted here as the identity it
-    # is: the rule the category hands back IS the rule the figures are computed from.
-    it "is a fund on the one reader every screen now asks", :aggregate_failures do
-      expect(vacation.reload.building_rule).to eq(vacation.budgets.sole)
-      expect(present(vacation).building?).to be(true)
-      expect(present(vacation).building_target).to eq(BigDecimal("2400"))
+    # ** THE CARD READS THE RULE THE WALK READS, WHICH IS NOW THE SAME OBJECT. ** The claim came off
+    # the rule's own columns while the NOUN and the BAR came off `categories.target_amount` — two
+    # records, one question. Both come off ONE `ClaimCalculator` here, so the identity is
+    # structural rather than asserted between two readers.
+    it "takes its noun, its ceiling and its denominator off one calculator", :aggregate_failures do
+      expect(present(vacation).fund?).to be(true)
+      expect(present(vacation).fund_target).to eq(BigDecimal("2400"))
       expect(present(vacation).denominator).to eq(BigDecimal("2400"))
     end
 
-    # ** AN UNCAPPED FUND IS STILL A FUND (rules-own-the-budget spec §2.1 row 2), AND THAT IS THE
-    # SHAPE THE OLD PREDICATE COULD NOT SEE. ** `#saving_toward_a_target?` was a question about a
-    # FIGURE, so an emergency fund that names none read as an envelope: the noun was wrong and the
-    # trailing phrase said "left" over money the rule carries from period to period. The noun is now
-    # a question about the SHAPE and only the denominator falls back — to `Σ standing_ask`, the
-    # $600-a-period rule, which is the same figure an envelope's bar uses and the only honest one
-    # left when there is no ceiling.
-    it "keeps the fund shape when the rule names no figure", :aggregate_failures do
-      vacation.budgets.sole.update!(target_amount: nil)
-
-      expect(present(vacation.reload).building?).to be(true)
-      expect(present(vacation.reload).noun).to eq("fund")
-      expect(present(vacation.reload).building_target).to be_nil
-      expect(present(vacation.reload).denominator).to eq(BigDecimal("600"))
-    end
+    # ** THE "keeps the fund shape when the rule names no figure" EXAMPLE IS DELETED WITH THE SHAPE
+    # (two-shapes §7). ** It planted a fund whose ceiling was absent — the noun stayed and only the
+    # denominator fell back to Σ standing_ask — and that shape cannot be written: a dated rule's
+    # target is its own amount. The fallback itself is still exercised, by the sibling-rule example
+    # below, which is the one way `#fund_target` can be nil now.
 
     # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING, BECAUSE THE FIGURE BESIDE IT IS NOT THE
     # FUND'S (fix round 1 — MED-4). ** `#balance` is the WHOLE CATEGORY's claim — §3.1's lane ruling
@@ -734,20 +740,20 @@ RSpec.describe EntryImpactPresenter do
     # PLANTED, re-derived by hand. "Car", funded Jan 1 2025, both rules born as the current period
     # opens (Feb 6), so each walks exactly ONE period:
     #
-    #   the FUND      item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600,
-    #                 nothing spent → built up **$600.00**
+    #   the FUND      item-less, $2,400 due Apr 2 — four boundaries (Feb 6, 20, Mar 6, 20), so the
+    #                 catch-up share is 600, nothing spent → built up **$600.00**
     #   the BILL      on the item "Insurance", $600 due Feb 9 — inside the Feb 6–19 period, so
     #                 `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
     #
     # Σ claims **$1,200.00**. Against the fund's $2,400 that reads half full while the fund is a
     # QUARTER full, and the other $600 is a bill's accrual with nothing to do with the target. The
-    # denominator falls back to Σ standing_ask — `600` (the fund's rate) + `600` (the bill's amount
-    # over the one period it has to fund) = **$1,200.00** — and the trailing phrase to `built up`,
-    # which stays true: both contributions are money this category has accrued.
+    # denominator falls back to Σ standing_ask — `600` (the goal's amount over its four periods) +
+    # `600` (the bill's amount over the one period it has to fund) = **$1,200.00** — and the trailing
+    # phrase to `built up`, which stays true: both contributions are money this category has accrued.
     # THE FUND, ON A CATEGORY OF ITS OWN. The sibling is added by the example that wants one.
     def car_fund
       car = create(:category, :expense, user: user, name: "Car", funded_since: funded_since)
-      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400, created_at: born)
+      saving(car, 2_400, accrues: 600)
       car
     end
 
@@ -771,11 +777,11 @@ RSpec.describe EntryImpactPresenter do
 
       impact = present(car.reload, amount: "150")
 
-      expect(impact.building?).to be(true)
+      expect(impact.fund?).to be(true)
       expect(impact.noun).to eq("fund")
       expect(impact.balance).to eq(BigDecimal("1200"))
       expect(impact.balance_after).to eq(BigDecimal("1050"))
-      expect(impact.building_target).to be_nil
+      expect(impact.fund_target).to be_nil
       expect(impact.denominator).to eq(BigDecimal("1200"))
     end
 
@@ -785,75 +791,62 @@ RSpec.describe EntryImpactPresenter do
       impact = present(car_fund.reload, amount: "150")
 
       expect(impact.balance).to eq(BigDecimal("600"))
-      expect(impact.building_target).to eq(BigDecimal("2400"))
+      expect(impact.fund_target).to eq(BigDecimal("2400"))
       expect(impact.denominator).to eq(BigDecimal("2400"))
     end
 
-    # ** A CATEGORY WITH NO RULE AT ALL IS NOT A FUND, AND IT NEVER HAD BEEN ONE (fix round 1 — M2).
-    # ** It claims nothing (§3.3: every claim comes from a rule), so the card has no figures to
-    # print — and now it has no NOUN either, which is the change: under the old predicate a figure
-    # on the category made this a "goal" whose card was suppressed by `#figures?` alone. Home calls
-    # exactly this category unbudgeted, and the two agree at both readers.
-    it "is not a fund while nothing builds up here", :aggregate_failures do
+    # ** A CATEGORY WITH NO RULE AT ALL IS NOT A FUND (fix round 1 — M2). ** It claims nothing (§3.3:
+    # every claim comes from a rule), so the card has no figures to print and no NOUN either. Home
+    # calls exactly this category unbudgeted, and the two agree at both readers.
+    it "is not a fund while nothing accrues here", :aggregate_failures do
       empty = fund("Someday", target: 5_000)
 
-      expect(empty.building_rule).to be_nil
-      expect(present(empty).building?).to be(false)
+      expect(present(empty).fund?).to be(false)
       expect(present(empty).balance).to eq(0)
       expect(present(empty).unbudgeted?).to be(true)
       expect(present(empty).figures?).to be(false)
       expect(present(empty, amount: "150").overdrawn?).to be(false)
     end
 
-    # ** THE FUND FED ONLY BY HAND (§2.1 row 4) IS A FUND FROM THE DAY ITS RULE IS WRITTEN. ** Amount
-    # zero, capped at $5,000: it accrues only by positive adjustments, so its claim is $0.00 — and
-    # unlike the ruleless category above it HAS a rule, so the card draws figures, a noun and an
-    # empty track against a real ceiling. This is the row that used to be invisible: `#savings?`
-    # required no rule and `#saving_toward_a_target?` required a category figure, and the shape that
-    # actually holds the money satisfied neither.
-    it "is a fund from the moment a hand-fed rule names it", :aggregate_failures do
-      someday = create(:category, :expense, user: user, name: "Someday", funded_since: funded_since)
-      create(:budget, :hand_fed, category: someday, target_amount: 5_000, created_at: born)
-
-      impact = present(someday.reload)
-
-      expect(impact.building?).to be(true)
-      expect(impact.building_target).to eq(BigDecimal("5000"))
-      expect(impact.balance).to eq(0)
-      expect(impact.figures?).to be(true)
-      expect(impact.bar?).to be(true)
-      expect(impact.bar_percent).to eq(0)
-    end
+    # ** THE "hand-fed rule" EXAMPLE IS DELETED WITH THE SHAPE (two-shapes §7). ** It planted an
+    # amount-ZERO rule capped at $5,000 — the goal fed only by set-asides — to show a fund whose claim
+    # is $0.00 still drawing figures, a noun and an empty track against a real ceiling. `Budget`
+    # refuses a zero amount on every shape now, and a goal that names a day accrues its first share
+    # the period it is written in, so the state cannot be reached from a rule alone.
 
     # THE OTHER DIRECTION ON THE SHAPE: the same money, the same category, a rule that RESETS. It is
     # an envelope, and the card says "left".
-    it "is not a fund where the rule's unspent money resets", :aggregate_failures do
+    it "is not a fund where the rule resets every period", :aggregate_failures do
       rate(groceries, 300)
 
-      expect(present(groceries).building?).to be(false)
+      expect(present(groceries).fund?).to be(false)
       expect(present(groceries).noun).to eq("envelope")
-      expect(present(groceries).building_target).to be_nil
+      expect(present(groceries).fund_target).to be_nil
     end
 
-    # AN ITEM-BACKED BUILDING RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money set
-    # aside for one item does not make the whole category a fund, which is why
-    # `Category#building_rule` reads the ITEM-LESS rule.
-    it "is not a fund where the only building rule pays one item", :aggregate_failures do
+    # ** AN ITEM-BACKED GOAL MAKES THIS CARD A FUND, AND THAT IS THE WIDENING §2 BROUGHT. ** The
+    # example read "is not a fund where the only building rule pays one item": §3.1's lane partition
+    # says money set aside for ONE item is not the CATEGORY building up, which is why the three
+    # category-level readers (the index card, the holdings card, the dashboard's band) still require
+    # an item-less rule. This card is not one of them — it is about what a RECEIPT does to the money,
+    # and a receipt on that item lands on a rule that accrues toward a day, which is a fund whatever
+    # lane it speaks for. Asserted rather than left to be discovered.
+    it "is a fund even where the only dated rule pays one item", :aggregate_failures do
       item = create(:item, category: groceries)
-      create(:budget, :capped, category: groceries, item: item, amount: 100, target_amount: 900, created_at: born)
+      create(:budget, :by_date, category: groceries, item: item, amount: 900, created_at: born)
 
-      expect(present(groceries.reload).building?).to be(false)
-      expect(present(groceries.reload).noun).to eq("envelope")
+      expect(present(groceries.reload).fund?).to be(true)
+      expect(present(groceries.reload).noun).to eq("fund")
     end
 
-    # A BUILDING RULE ON A CATEGORY THAT HOLDS NOTHING IS NOT A FUND ON THIS CARD either, because
+    # A DATED RULE ON A CATEGORY THAT HOLDS NOTHING IS NOT A FUND ON THIS CARD either, because
     # `#holding` is nil — no receipt on that day can move any claim — and the card falls to the
     # honest arm rather than drawing a bar against a target nothing counts toward.
     it "is not a fund on a category that has never been funded", :aggregate_failures do
       never = create(:category, :expense, user: user, name: "Never")
-      create(:budget, :capped, category: never, amount: 100, target_amount: 5_000, created_at: born)
+      create(:budget, :by_date, category: never, amount: 5_000, created_at: born)
 
-      expect(present(never.reload).building?).to be(false)
+      expect(present(never.reload).fund?).to be(false)
       expect(present(never.reload).unbudgeted?).to be(true)
     end
   end
@@ -900,7 +893,7 @@ RSpec.describe EntryImpactPresenter do
     # THE READERS THE VIEW ASKS, in the order `entries/_impact.html.erb` asks them.
     def read_the_card(impact)
       impact.render? && impact.unbudgeted?
-      impact.building? && impact.noun
+      impact.fund? && impact.noun
       [
         impact.balance,
         impact.balance_after,
@@ -977,14 +970,21 @@ RSpec.describe EntryImpactPresenter do
     # (`#standing_ask` reads no rows), so this example pins the count that stays right either way and
     # the ONE-DOOR argument is what the fix is really for. `#standing_ask` off the calculators in hand
     # is the same figure — asserted here too, so a cheaper card that stopped answering could not pass.
+    # ** THE FIXTURE CARRIES A SECOND RULE SINCE THE TWO SHAPES, and it is what keeps the example
+    # about `#steady_claim` at all. ** `#denominator` is `fund_target || steady_claim`, and a
+    # category whose SOLE rule is dated now has a target — its own amount — so a one-rule fixture
+    # would short-circuit before the branch this pins is ever reached. A rate rule beside the bill
+    # withholds the ceiling (§10.5's sole-rule guard) and sends the denominator down the sum:
+    # `600 ÷ 3 periods` = $200 for the bill plus $100 for the rate = **$300.00**.
     it "costs no extra statement for a one-time bill's denominator", :aggregate_failures do
       repairs = create(:category, :expense, user: user, name: "Repairs", funded_since: funded_since)
-      one_off(repairs, 600, anchor: today + 28.days)
+      one_off(repairs, 600, anchor: today + 28.days, item: create(:item, category: repairs, name: "Roof"))
+      rate(repairs, 100)
       spend(repairs, 60)
       card = present(fresh(repairs), amount: "45")
 
-      expect(count_statements { read_the_card(card) }).to eq(3)
-      expect(card.denominator).to eq(BigDecimal("200"))
+      expect(count_statements { read_the_card(card) }).to eq(5)
+      expect(card.denominator).to eq(BigDecimal("300"))
     end
   end
 

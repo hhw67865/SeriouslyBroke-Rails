@@ -1,6 +1,6 @@
 import { Controller } from "@hotwired/stimulus"
 
-// THE RULES FORM'S REVEALS (rules-own-the-budget spec §4).
+// THE RULES FORM'S REVEALS (two-shapes spec §5; rules-own-the-budget §4).
 //
 // Two jobs, and neither of them is a gate. The server renders every control with the `hidden` state
 // the current choice implies and validates whatever comes back, so a browser with no JavaScript
@@ -10,9 +10,13 @@ import { Controller } from "@hotwired/stimulus"
 //   * "Pays" lists EVERY item the user owns, each stamped with its own category, and the ones that
 //     belong to some other category are hidden as the category changes. Filtering here rather than
 //     re-fetching is what makes the category select feel immediate.
-//   * "every N months" reveals the interval and the date, "once" reveals the date, "builds up"
-//     reveals the target, and the dated schedules hide "Unspent money" entirely — a dated rule's
-//     build-up is defined by its date, and `Budget#build_up_must_be_valid` refuses the pair.
+//   * "By a date" reveals the due date and the "repeats" checkbox, and the checkbox reveals the
+//     interval. "Every period" hides all three.
+//
+// ** THE UNSPENT-MONEY REVEAL AND ITS TARGET ARE DELETED (§7). ** They asked what became of money
+// the period did not spend, and the dated schedules DISABLED them as well as hiding them because a
+// dated rule's build-up is defined by its date. A fund is a dated rule now, so there is no second
+// question to keep in step and `#setDisabled` goes with the pair that needed it.
 //
 // ** A HIDDEN FIELD IS CLEARED, AND ITS VALUE IS PUT BACK WHEN IT RETURNS. ** A hidden input still
 // submits, so a user who typed a due date and then chose "per period" would send a date the form no
@@ -25,8 +29,7 @@ export default class extends Controller {
     "item",
     "intervalField",
     "anchorField",
-    "unspentField",
-    "targetField"
+    "repeatsField"
   ]
 
   // THE OWNER, WHERE NO INPUT CARRIES IT. On an EDIT the category is read-only and the form submits
@@ -54,9 +57,11 @@ export default class extends Controller {
     return checked ? checked.value : "per_period"
   }
 
-  get unspent() {
-    const checked = this.element.querySelector('input[name="budget[unspent]"]:checked')
-    return checked ? checked.value : "resets"
+  // THE CHECKBOX'S OWN STATE. `:checked` on the element rather than its `value`, which is the
+  // constant "1" a checkbox submits when it is on and says nothing at all when it is off.
+  get repeats() {
+    const box = this.element.querySelector('input[type=checkbox][name="budget[repeats]"]')
+    return box ? box.checked : false
   }
 
   filterItems() {
@@ -77,29 +82,11 @@ export default class extends Controller {
   }
 
   revealFields() {
-    const dateless = this.schedule === "per_period" || this.schedule === "monthly"
+    const dated = this.schedule === "by_date"
 
-    this.toggle(this.intervalFieldTarget_, this.schedule === "every_n")
-    this.toggle(this.anchorFieldTarget_, this.schedule === "every_n" || this.schedule === "once")
-    this.toggle(this.unspentFieldTarget_, dateless)
-    this.toggle(this.targetFieldTarget_, dateless && this.unspent === "builds")
-
-    // ** THE SAME REFUSAL THE SERVER RENDERS (fix round 1 - L2). ** A dated rule cannot carry money
-    // over at all, so its "Unspent money" radios and the Target below them are DISABLED as well as
-    // away - the state a browser with no JavaScript is served, and the one this has to keep in step
-    // with as the schedule moves. Disabled is not the same question as hidden: the Target is hidden
-    // under "Resets each period" and still enabled, because moving the radio one line up is how a
-    // JavaScript-less user reaches it.
-    this.setDisabled(this.unspentFieldTarget_, !dateless)
-    this.setDisabled(this.targetFieldTarget_, !dateless)
-  }
-
-  setDisabled(field, disabled) {
-    if (!field) return
-
-    field.querySelectorAll("input").forEach((input) => {
-      input.disabled = disabled
-    })
+    this.toggle(this.anchorFieldTarget_, dated)
+    this.toggle(this.repeatsFieldTarget_, dated)
+    this.toggle(this.intervalFieldTarget_, dated && this.repeats)
   }
 
   get intervalFieldTarget_() {
@@ -110,12 +97,8 @@ export default class extends Controller {
     return this.hasAnchorFieldTarget ? this.anchorFieldTarget : null
   }
 
-  get unspentFieldTarget_() {
-    return this.hasUnspentFieldTarget ? this.unspentFieldTarget : null
-  }
-
-  get targetFieldTarget_() {
-    return this.hasTargetFieldTarget ? this.targetFieldTarget : null
+  get repeatsFieldTarget_() {
+    return this.hasRepeatsFieldTarget ? this.repeatsFieldTarget : null
   }
 
   // Nothing happens when the state already matches, which is what keeps `connect()` from clearing a

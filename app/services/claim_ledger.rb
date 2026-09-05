@@ -3,19 +3,26 @@
 # EVERY CLAIM A USER HAS, AND WHAT IS LEFT OVER (computed-claims spec §2) — the batched door onto
 # `ClaimCalculator`, and the one place `free` is defined.
 #
-#     free = min( pot , total_money − Σ claims )        where total_money = pot + Σ accounts
+#     free = pot − Σ claims        (two-shapes spec §2, Henry's ruling of 2026-09-05)
 #
 # THAT IS A DEFINITION AND NOT A PARTITION, which is the whole of what changed. The purpose side used
 # to conserve — `available + Σ holdings == total` — because money was MOVED into envelopes; claims are
-# DERIVED, so nothing is conserved and `free` is simply what the total is not spoken for by. The
+# DERIVED, so nothing is conserved and `free` is simply what the pot is not spoken for by. The
 # PHYSICAL invariant (`pot + Σ accounts == income − expenses`) is untouched and this class cannot see
 # it: `AccountLedger` owns it, and nothing here writes anything at all.
 #
-# THE CAP AT `pot` IS THE ANSWERS-FIRST RULING (§3 of that spec, kept): money sitting in a savings
-# account is not free to spend out of checking this afternoon, so however little is claimed, `free`
-# never promises more than the pot actually holds. `#free_cap_bound?` is the reader that says which of
-# the two terms is doing the work, because "you have $1,800 free" means two different things depending
-# on the answer and the hero has to say which.
+# ** IT WAS `min(pot, total_money − Σ claims)` AND THE CAP IS GONE (§2). ** Henry: "Why is free to
+# spend and the number in checking the same when some is claimed? Shouldn't checking show the full
+# number and free to spend is minus the claimed?" The answers-first cap folded money in OTHER accounts
+# into the subtraction and then capped the result at the pot, which made the two hero figures identical
+# for every user whose savings covered their rules — the claims were invisible in the one figure that
+# is about them. Money in another account is now SHOWN and never subtracted from or added to anything
+# (the hero says how much sits elsewhere, in its own sentence), and `free` answers exactly one
+# question: of the money in checking, how much is not claimed. The uncapped-half reader and the one that
+# said which of the `min`'s two terms was binding both die with the `min` that needed them.
+#
+# `#total_money` SURVIVES: it is what the user physically has everywhere, which the seeds spec pins and
+# which is a different question from `free`.
 #
 # ** THREE STATEMENTS FOR A WHOLE USER, AND THEY ARE THE `terms:` SEAM IN THE SHAPE §3.3 NEEDS. **
 # `CategoryLedger` batches SUMS because a holding is one number; a claim is a WALK over periods, so
@@ -102,32 +109,22 @@ class ClaimLedger
 
   # MEMOISED, AND MEASURED RATHER THAN ASSUMED (Task 3). `AccountLedger#pot` is `#balance_of(main)`
   # and that method's entry term is NOT memoised inside the ledger — it is two SUMs over the user's
-  # entries every time it is asked. Home asks three times over (the "In Checking" figure, `#free`'s
-  # `min` and `#free_cap_bound?`'s comparison), which measured as six statements before this memo.
+  # entries every time it is asked. Home asks twice over (the "In Checking" figure and `#free`'s own
+  # subtraction), which measured as six statements over three readers before this memo.
   # `||=` is safe where `defined?` would be needed for a falsy answer: a zero pot is
   # `BigDecimal("0")`, which is truthy.
   def pot = @pot ||= account_ledger.pot
 
-  # ** THE UNCAPPED HALF OF `#free`, SPELLED ONCE. ** Three readers need it — `#free` takes the `min`
-  # of it and the pot, `#free_cap_bound?` asks which of the two that was, and the hero's
-  # `HomePresenter#claims_outrun_the_money?` asks for its SIGN, which is the one thing the capped
-  # figure cannot answer (the cap is exactly what erases the difference). A second spelling of the
-  # subtraction is a screen whose figure and whose subline describe different arithmetic.
-  def unclaimed = total_money - total_claims
+  # ** MONEY IN CHECKING WITH NO JOB — ONE SUBTRACTION, AND IT IS THE WHOLE OF `free` (§2). **
+  #
+  # BELOW ZERO IT IS A SIGNAL, NEVER A REFUSAL (§4). Nothing here clamps: a negative `free` is exactly
+  # the fact the trouble strip exists to report, and hiding it behind a `max(0, …)` would leave the app
+  # telling a user they have nothing free when what is true is that they are $120 short. It is
+  # negative in exactly one way now — the rules claim more than checking holds — where the capped
+  # figure had two causes the hero had to tell apart with four arms.
+  def free = pot - total_claims
 
-  # MONEY WITH NO JOB — and BELOW ZERO IT IS A SIGNAL, NEVER A REFUSAL (§4). Nothing here clamps: a
-  # negative `free` is exactly the fact the trouble strip exists to report, and hiding it behind a
-  # `max(0, …)` would leave the app telling a user they have nothing free when what is true is that
-  # they are $120 short.
-  def free = [pot, unclaimed].min
-
-  # WHICH TERM IS DOING THE WORK. True when the money is spoken for by WHERE IT IS rather than by
-  # what it is for — the claims leave room, but the room is in a savings account rather than in
-  # checking. False when the claims themselves are the binding constraint, which is the state §4's
-  # per-day pace is about.
-  def free_cap_bound? = pot < unclaimed
-
-  # THE PHYSICAL LEDGER THIS ONE IS CAPPED BY, and it is PUBLIC so a screen reading both sides reads
+  # THE PHYSICAL LEDGER THIS ONE READS ITS POT FROM, and it is PUBLIC so a screen reading both sides reads
   # ONE snapshot (Task 3). Home prints every account's balance beside a `free` whose cap is main's,
   # and an `AccountLedger` of the presenter's own would be a second reading of the same two SUMs —
   # free, on a screen that writes nothing, to disagree with the pot the hero prints. Handing it out is

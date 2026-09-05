@@ -29,7 +29,10 @@ RSpec.describe DropTheDistribution do
   # against the current schema this file's own `up` — the one every example here runs — would be a
   # `PG::UndefinedColumn` rather than a conversion. Newest first on the way down, last on the way
   # back up, which is what `#step_the_schema` does with the list reversed.
-  include_context "with the schema its subject was written for", described_class, RulesOwnTheBudget
+  include_context "with the schema its subject was written for",
+                  described_class,
+                  RulesOwnTheBudget,
+                  TwoShapes
 
   let(:migration) { described_class.new }
   let(:user) do
@@ -298,22 +301,28 @@ RSpec.describe DropTheDistribution do
   # a rule minted in a shape the model refuses would reach the user as a 500 the first time they
   # changed their period, from a row they never wrote and cannot see.
   #
-  # ** THE MODEL MOVED UNDER THIS MIGRATION, AND THE EXAMPLE SAYS SO RATHER THAN GOING QUIET
-  # (rules-own-the-budget spec §2.1 row 4, §6). ** `Budget#set_aside_only?` reads `carries_over` and
-  # `target_amount` off the RULE now; this migration writes neither, because at ITS moment in the
-  # sequence the columns do not exist — `RulesOwnTheBudgetColumns` runs two days later. So the row it
-  # mints is legal when it is written and a shape the model refuses by the time the next migration
-  # runs, which is an ordinary state for a database mid-sequence and NOT a defect in either file. The
-  # data migration that fills the two columns in is what closes it; both halves are pinned here, so
-  # neither "it stopped being valid" nor "the fix-up shape is wrong" can pass silently.
-  it "mints a rule the model accepts once the target is moved onto it", :aggregate_failures do
+  # ** THE MODEL HAS MOVED UNDER THIS MIGRATION TWICE, AND THE EXAMPLE SAYS SO RATHER THAN GOING
+  # QUIET. ** The row this file mints is a $0 per-period rule, which was legal at ITS moment in the
+  # sequence and is a shape the model refuses two migrations later — an ordinary state for a database
+  # mid-sequence and NOT a defect in any of the three files.
+  #
+  #   `RulesOwnTheBudget` (2026-09-05) made the zero legal again by filling in the rule's own
+  #     build-up columns: a goal fed by hand had no schedule for a rate to be the rate of.
+  #   `TwoShapes` (2026-09-06) retired that shape outright (two-shapes §2): every rule has a positive
+  #     amount and a goal names a DAY, so the zero is refused for good and the row is repaired by
+  #     becoming its own target, due on a date.
+  #
+  # So what makes this minted row valid is the LAST of the three, and that is what the example
+  # asserts — the repair restated here, so neither "it stopped being valid" nor "the repair is wrong"
+  # can pass silently.
+  it "mints a rule the two shapes can repair into one the model accepts", :aggregate_failures do
     world = plant_the_distribution_era
 
     migrate!
 
     rule = catch_all_rule_for(world[:vacation])
     expect(rule).not_to be_valid
-    rule.assign_attributes(carries_over: true, target_amount: world[:vacation].target_amount)
+    rule.assign_attributes(amount: 1_200, basis: :monthly, interval_months: nil, anchor_date: Date.new(2027, 6, 1))
     expect(rule).to be_valid
   end
 
@@ -321,10 +330,16 @@ RSpec.describe DropTheDistribution do
   # `max(funded_since, the rule's birthday)`, so a rule minted TODAY would walk no period the July
   # set-aside is dated in and the goal would read $0.00 built up the morning after this runs.
   #
-  # THE BUILT-UP IS READ THROUGH THE SHAPE THE NEXT MIGRATION GIVES IT, for the reason the example
-  # above states: a rule that neither carries over nor names a figure is a use-it-or-lose-it RATE
-  # rule to today's `ClaimCalculator`, and a rate rule's built-up is zero by definition. The
-  # BIRTHDAY is this migration's own subject and is asserted before anything is assigned.
+  # ** THE BUILT-UP IS NO LONGER READABLE FROM THIS ROW, AND WHAT IS LEFT IS THE SUBJECT. ** This
+  # used to fill the rule's build-up columns in and assert $540 — the July $500 and the August $40
+  # set-asides on a $1,200 goal, nothing spent — which is the figure the retired building shape
+  # produced. `TwoShapes` deleted that shape (two-shapes §2/§7): a rule with no `anchor_date` is a
+  # use-it-or-lose-it RATE rule to `ClaimCalculator` and a rate rule's built-up is zero by
+  # definition, so there is no shape this row can be given here that reproduces it. What survives is
+  # the BIRTHDAY, which is this migration's own subject and the reason it matters: `accrual_start` is
+  # `max(funded_since, the rule's birthday)`, so a rule minted TODAY would walk no period the July
+  # set-aside is dated in — and the DELTAS this migration converted, which is what it would then be
+  # walking over, are asserted beside it.
   it "backdates the minted rule so the history it inherits still counts", :aggregate_failures do
     world = plant_the_distribution_era
 
@@ -332,12 +347,8 @@ RSpec.describe DropTheDistribution do
 
     rule = catch_all_rule_for(world[:vacation])
     expect(user.local_day(rule.created_at)).to be <= Date.new(2026, 6, 1)
-    rule.update!(carries_over: true, target_amount: world[:vacation].target_amount)
-    expect(rule.claim_calculator(today: Date.new(2026, 9, 3)).built_up).to eq(540.to_d)
+    expect(Adjustment.where(rule_id: rule.id).sum(:amount)).to eq(540.to_d)
   end
-
-  # $500 in on Jul 5 and $40 in on Aug 20 is $540 built up of a $1,200 target, with nothing spent
-  # against it — the figure the example above pins, restated as the thing a user would read.
 
   # ---------------------------------------------------------------------------------------------
   # The mechanics, deleted
@@ -505,21 +516,26 @@ RSpec.describe DropTheDistribution do
   # present. So a per-period, amount-0, item-backed rule on a category with a target is a shape the
   # app ACCEPTS — and on a restore carrying one the whole migration aborted.
   #
-  # PLANTED THROUGH THE MODEL, which is the assertion: `create` would raise if `Budget` refused it,
-  # and `#valid?` is asserted beside it so the example says out loud which layer is the authority.
-  #
-  # `carries_over` AND `target_amount` ON THE RULE are what make the $0 amount legal today
-  # (rules-own-the-budget spec §2.1 row 4); the CATEGORY's target is what the migration's SQL
-  # verifier reads, and this fixture carries both because the two readers have not yet been moved
-  # onto one column. The verifier's own reading is what this example is about, and it is unchanged.
+  # ** PLANTED IN SQL SINCE THE TWO SHAPES, AND THE MODEL IS NO LONGER THE AUTHORITY HERE. ** It was
+  # `create(:budget, :hand_fed, …)` with `#valid?` asserted beside it, so the example said out loud
+  # which layer accepted the shape. `Budget` validates `amount > 0` on every shape from `TwoShapes`
+  # (two-shapes §2) and the trait is deleted with the shape, so the row can only be written past the
+  # model — which is the ordinary way this file plants a world older than today's rules, and does not
+  # touch what the example is about. THE VERIFIER'S OWN READING is the subject and it is unchanged: a
+  # per-period, amount-0, item-BACKED rule on a category with a target is a row this migration must
+  # not abort over.
   it "accepts a pre-existing item-backed $0 rule on a category with a target", :aggregate_failures do
     world = plant_the_distribution_era
     tips = create(:item, category: world[:vacation], name: "Flights")
-    set_aside_only = create(:budget, :hand_fed, category: world[:vacation], item: tips, target_amount: 1_200)
+    id = SecureRandom.uuid
+    sql(<<~SQL.squish, id: id, cid: world[:vacation].id, iid: tips.id)
+      INSERT INTO budgets (id, category_id, item_id, amount, basis, interval_months, anchor_date,
+                           created_at, updated_at)
+      VALUES (:id, :cid, :iid, 0, 1, NULL, NULL, NOW(), NOW())
+    SQL
 
-    expect(set_aside_only).to be_valid
     expect { migrate! }.not_to raise_error
-    expect(set_aside_only.reload.amount).to eq(0)
+    expect(Budget.find(id).amount).to eq(0)
   end
 
   # ---------------------------------------------------------------------------------------------

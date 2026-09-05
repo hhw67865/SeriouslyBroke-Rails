@@ -43,7 +43,7 @@ class CategoriesController < ApplicationController
   # NOTHING IS DEFAULTED ANY MORE. This built `categories.new(pool: current_user.default_account)`
   # because `pool_id` was required and a blank picker made every create a 422; the picker is gone
   # with the pool layer (two-ledger spec §5), and the two columns that replaced it — `priority` and
-  # `funded_since` — are both legitimately blank on an ordinary new category (`target_amount` was
+  # `funded_since` — are both legitimately blank on an ordinary new category (`target-amount` was
   # the third and is gone, rules-own-the-budget §7). A category that holds nothing is the honest
   # default: its spending drains free money until the user gives it a rule, which is exactly what
   # §4 says.
@@ -145,12 +145,12 @@ class CategoriesController < ApplicationController
   # expense category may carry a funding start), so a bad value is a legible 422 on the form that
   # submitted it rather than a silent write.
   #
-  # ** `target_amount` LEFT THE LIST (rules-own-the-budget spec §5/§6/§7), AND THE PERMIT IS THE
+  # ** `target-amount` LEFT THE LIST (rules-own-the-budget spec §5/§6/§7), AND THE PERMIT IS THE
   # HALF THAT STILL MATTERS. ** The field is gone from the form and the COLUMN IS GONE FROM THE
-  # SCHEMA — `RulesOwnTheBudget` dropped `categories.target_amount` once every figure had moved onto
+  # SCHEMA — `RulesOwnTheBudget` dropped `categories.target-amount` once every figure had moved onto
   # its building rule — so a key that stayed permitted would no longer be a silent write but an
   # `UnknownAttributeError` 500 on the assignment, from a client written against yesterday's form.
-  # What a category builds up toward is its building rule's `target_amount`, written on the rules
+  # What a category builds up toward is its building rule's `target-amount`, written on the rules
   # form. Anything that arrives naming it here is simply ignored by `params.expect`.
   #
   # `funded_since` IS USER-EDITABLE, WHICH SPEC §4 REQUIRES AND WHICH MOVES MONEY. It is the day a

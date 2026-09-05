@@ -16,107 +16,85 @@ RSpec.describe RuleForm do
   let(:user) { create(:user, :biweekly, typical_income: 2_400) }
   let!(:groceries) { create(:category, :expense, :funded, user: user, name: "Groceries") }
 
-  # The words a bare form would submit with the two radios left at their defaults, so each example
-  # below states only the fields it is about.
+  # The words a bare form would submit with the radio left at its default, so each example below
+  # states only the fields it is about.
   def words(**overrides)
     {
       category_id: groceries.id,
       rule_type: "usage",
       amount: "400",
-      schedule: "per_period",
-      unspent: "resets"
+      schedule: "per_period"
     }.merge(overrides)
   end
 
   def form(**overrides) = described_class.new(user, words(**overrides))
 
+  # ** THREE COLUMNS WHERE THERE WERE FIVE (two-shapes spec §5/§7). ** `carries_over` and
+  # `target_amount` are dropped, so what the words map onto is the CADENCE and nothing else.
   def columns_of(budget)
     {
       basis: budget.basis,
       interval_months: budget.interval_months,
-      anchor_date: budget.anchor_date,
-      carries_over: budget.carries_over,
-      target_amount: budget.target_amount
+      anchor_date: budget.anchor_date
     }
   end
 
   # ---------------------------------------------------------------------------------------------
-  # The words → the columns: every schedule against every unspent choice
+  # The words → the columns: both schedules, and the checkbox that tells the dated pair apart
   # ---------------------------------------------------------------------------------------------
   describe "the columns each combination writes", :aggregate_failures do
-    # §2.1 row 1 — groceries. The shape a hand-made rule means, and the one the form opens on.
-    it "writes a per-period rule that resets" do
-      expect(columns_of(form.budget)).to eq(
-        basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: false, target_amount: nil
-      )
+    # §2 row 1 — the allowance that resets with the paycheck. The shape a hand-made rule means, and
+    # the one the form opens on.
+    it "writes a per-period rule" do
+      expect(columns_of(form.budget)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
     end
 
-    # §2.1 row 2 — the emergency fund, uncapped. A blank target is a DECLARATION ("allow it to
-    # infinitely grow"), not an omission, so it must reach the column as nil rather than as a refusal.
-    it "writes a per-period rule that builds up with no cap" do
-      expect(columns_of(form(unspent: "builds", target_amount: "").budget)).to eq(
-        basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: nil
-      )
-    end
-
-    # §2.1 row 3 — the vacation goal.
-    it "writes a per-period rule that builds toward a target" do
-      expect(columns_of(form(unspent: "builds", target_amount: "5000", amount: "200").budget)).to eq(
-        basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000
-      )
-    end
-
-    # §2.1 row 4 — the goal fed by hand. Zero is legal on exactly this shape
-    # (`Budget#set_aside_only?`), and the form has to be able to reach it.
-    it "writes a $0 rule that builds toward a target" do
-      form = form(unspent: "builds", target_amount: "5000", amount: "0")
-
-      expect(form.save).to be true
-      expect(columns_of(form.budget)).to eq(
-        basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000
-      )
-      expect(form.budget.amount).to eq(0)
-    end
-
-    # §2.1 row 5 — "$260 a month". THE INTERVAL OF 1 IS DERIVED AND NOT ASKED FOR: `monthly` is
-    # `shape_must_be_valid`'s row 2, which pins an anchorless monthly rule to exactly one month.
-    it "writes a monthly rule that resets, with an interval of one it was never given" do
-      expect(columns_of(form(schedule: "monthly", amount: "260").budget)).to eq(
-        basis: "monthly", interval_months: 1, anchor_date: nil, carries_over: false, target_amount: nil
-      )
-    end
-
-    it "writes a monthly rule that builds up" do
-      expect(columns_of(form(schedule: "monthly", unspent: "builds", target_amount: "1200").budget)).to eq(
-        basis: "monthly", interval_months: 1, anchor_date: nil, carries_over: true, target_amount: 1_200
-      )
-    end
-
-    # §2.1 row 6 — "$600 every 6 months from Dec 1".
-    it "writes a rule that comes round every N months from a date" do
-      form = form(schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", amount: "600")
+    # ** §2 rows 3 AND 5 ARE ONE COMBINATION, WHICH IS THE WHOLE OF WHAT THIS TASK CHANGED. ** "$600
+    # by Dec 1" and "$5,000 by Jun 1, 2027" are a bill and a goal, and the form writes exactly the
+    # same three columns for both: a `monthly` basis, NO interval, and the date. There is no
+    # "unspent money" question left to ask, because a fund IS this shape.
+    it "writes a by-date rule with no interval when it does not repeat" do
+      form = form(schedule: "by_date", anchor_date: "2026-12-01", amount: "600")
 
       expect(columns_of(form.budget)).to eq(
-        basis: "monthly",
-        interval_months: 6,
-        anchor_date: Date.new(2026, 12, 1),
-        carries_over: false,
-        target_amount: nil
+        basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1)
       )
     end
 
-    # §2.1 row 7 — "$600 once on Dec 1". A NULL interval beside a date is what makes it one-time;
-    # there is no one-time concept beyond that (§1).
-    it "writes a one-time rule as a date with no interval" do
-      form = form(schedule: "once", anchor_date: "2026-12-01", amount: "600")
+    it "writes a goal as the same shape with a longer horizon" do
+      form = form(schedule: "by_date", anchor_date: "2027-06-01", amount: "5000")
 
       expect(columns_of(form.budget)).to eq(
-        basis: "monthly",
-        interval_months: nil,
-        anchor_date: Date.new(2026, 12, 1),
-        carries_over: false,
-        target_amount: nil
+        basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1)
       )
+    end
+
+    # §2 row 4 — "$600 every 6 months from Dec 1". The checkbox is what adds the interval.
+    it "writes an interval when the rule repeats" do
+      form = form(schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "2026-12-01", amount: "600")
+
+      expect(columns_of(form.budget)).to eq(
+        basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1)
+      )
+    end
+
+    # ** AN UNCHECKED BOX SUBMITS `"0"`, NOT NOTHING, and a truthiness test would read it as ticked. **
+    # `ActiveModel::Type::Boolean` is the same cast a boolean column applies, which is why
+    # `#repeats?` uses it — without it a one-off would silently carry an interval.
+    it "writes no interval when the box submits an unchecked zero" do
+      form = form(schedule: "by_date", repeats: "0", interval_months: "6", anchor_date: "2026-12-01")
+
+      expect(form.budget.interval_months).to be_nil
+    end
+
+    # ** THE INTERVAL IS IGNORED ON A PER-PERIOD RULE ONLY WHERE THE FORM NEVER OFFERED IT. ** It is
+    # REFUSED here rather than dropped — see "where the errors land" — because dropping it would
+    # change when the money is needed. This example is the checkbox's own arm: `repeats` off means
+    # the control is not on screen, so its number is not an opinion.
+    it "leaves a per-period rule with neither date nor interval" do
+      form = form(schedule: "per_period", repeats: "1", interval_months: "6")
+
+      expect(columns_of(form.budget)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
     end
 
     # `item_id` BLANK IS THE WHOLE CATEGORY, and blank means blank rather than "".
@@ -132,72 +110,27 @@ RSpec.describe RuleForm do
   end
 
   # ---------------------------------------------------------------------------------------------
-  # `unspent` is a RADIO with a default, so on a dated schedule it is ignored rather than refused
-  # ---------------------------------------------------------------------------------------------
-  describe "a dated schedule and the unspent radio", :aggregate_failures do
-    # A DATED RULE'S BUILD-UP IS DEFINED BY ITS DATE — §3.2's catch-up walk holds the money until
-    # the bill is paid — and `Budget#build_up_must_be_valid` refuses the pair outright. The control
-    # is not on screen for these two schedules, so the value it would have carried is not an
-    # opinion; forcing `resets` is what stops a hidden default from producing a 422 about a radio
-    # nobody saw.
-    it "forces resets on an every-N-months rule, whatever the radio said" do
-      form = form(schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", unspent: "builds")
-
-      expect(form.save).to be true
-      expect(form.budget.carries_over).to be false
-    end
-
-    it "forces resets on a one-time rule, whatever the radio said" do
-      form = form(schedule: "once", anchor_date: "2026-12-01", unspent: "builds")
-
-      expect(form.save).to be true
-      expect(form.budget.carries_over).to be false
-    end
-
-    it "clears a target left on an every-N-months rule" do
-      form = form(schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", target_amount: "5000")
-
-      expect(form.save).to be true
-      expect(form.budget.target_amount).to be_nil
-    end
-
-    # ** THE OTHER HALF OF THE SAME RULING, AND IT IS THE ONE A CHANGE OF MIND GOES THROUGH. ** The
-    # radio and the field it reveals are ONE control, so "resets" is a complete answer about both:
-    # a figure typed under "builds up" and left behind when the radio moved is cleared rather than
-    # refused, because there is exactly one reading of it. `anchor_date` gets the opposite treatment
-    # three examples down, and the difference is that a due date has no such reading.
-    it "clears the target when the money resets" do
-      form = form(unspent: "resets", target_amount: "5000")
-
-      expect(form.save).to be true
-      expect(form.budget.target_amount).to be_nil
-      expect(form.budget.carries_over).to be false
-    end
-  end
-
-  # ---------------------------------------------------------------------------------------------
   # The columns → the words: the edit form's own reading, round-tripped
   # ---------------------------------------------------------------------------------------------
   describe ".from" do
-    # EVERY ROW OF §2.1, AND THE ASSERTION IS THE FULL ROUND TRIP: the words this reads off a rule,
-    # fed back through the form, must land on the columns it started from. A reverse mapping that
-    # loses one of them re-shapes a saved rule the moment its edit form is opened, with no save and
-    # no message.
+    # EVERY ROW OF §2 THE FORM CAN WRITE, AND THE ASSERTION IS THE FULL ROUND TRIP: the words this
+    # reads off a rule, fed back through the form, must land on the columns it started from. A
+    # reverse mapping that loses one of them re-shapes a saved rule the moment its edit form is
+    # opened, with no save and no message.
+    #
+    # ** THE MONTHLY-NO-ANCHOR ROW IS DELIBERATELY ABSENT FROM THIS TABLE, and it has an example of
+    # its own two below: it is the ONE row that does not round-trip, by ruling rather than by
+    # accident. **
     {
-      "a per-period rule that resets" => { basis: :per_period, interval_months: nil },
-      "a per-period rule that builds up" => { basis: :per_period, interval_months: nil, carries_over: true },
-      "a per-period rule with a target" => {
-        basis: :per_period, interval_months: nil, carries_over: true, target_amount: 5_000
-      },
-      "a monthly rule that resets" => { basis: :monthly, interval_months: 1 },
-      "a monthly rule that builds up" => { basis: :monthly, interval_months: 1, carries_over: true },
+      "a per-period rule" => { basis: :per_period, interval_months: nil },
       "a rule every 6 months from a date" => {
         basis: :monthly, interval_months: 6, anchor_date: Date.new(2026, 12, 1)
       },
       "a monthly rule WITH a date" => {
         basis: :monthly, interval_months: 1, anchor_date: Date.new(2026, 12, 1)
       },
-      "a one-time rule" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2026, 12, 1) }
+      "a one-time bill" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2026, 12, 1) },
+      "a goal" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2027, 6, 1) }
     }.each do |name, attributes|
       it "round-trips #{name}" do
         rule = create(:budget, **attributes, category: groceries, amount: 600, rule_type: :choice)
@@ -209,30 +142,50 @@ RSpec.describe RuleForm do
       end
     end
 
-    # A MONTHLY BILL WITH A DUE DATE IS "EVERY N MONTHS" WITH N OF 1, and that is not the same
-    # question `Budget#cadence` answers. `#cadence` calls that shape `:monthly` because it is saying
-    # what a PERIOD of the rule is; this is saying which control the user set, and the two part
-    # company on exactly this row — the suggestion panel's own proposed bills are all of it.
-    it "reads a dated monthly rule as every N months, with the N it carries" do
+    # A MONTHLY BILL WITH A DUE DATE REPEATS WITH AN N OF 1, and that is not the same question
+    # `Budget#cadence` answers. `#cadence` calls that shape `:monthly` because it is saying what a
+    # PERIOD of the rule is; this is saying which controls the user set, and the two part company on
+    # exactly this row — the suggestion panel's own proposed bills are all of it.
+    it "reads a dated monthly rule as repeating, with the N it carries", :aggregate_failures do
       rule = build(:budget, basis: :monthly, interval_months: 1, anchor_date: Date.new(2026, 12, 1))
 
-      expect(described_class.from(rule)).to include(schedule: "every_n", interval_months: 1)
+      expect(described_class.from(rule)).to include(schedule: "by_date", repeats: true, interval_months: 1)
     end
 
-    # AND THE ANCHORLESS ONE HANDS BACK NO INTERVAL AT ALL. The 1 on that row is DERIVED — nobody
-    # typed it — so handing it back would fill a control that is not on screen, which the form then
-    # refuses as a number of months a monthly rule does not take.
-    it "hands back no interval for an anchorless monthly rule" do
-      rule = build(:budget, :rate)
+    # ** AN ANCHORLESS `monthly` ROW READS BACK AS "Every period", AND THE SHAPE DOES NOT SURVIVE A
+    # SAVE (two-shapes §5's ruling). ** "$260 every month" with no due date is a legal row and
+    # `SuggestionEngine` still writes one; the form's two options do not include it, so opening such a
+    # rule and saving it unchanged CONVERTS it to a per-period rate stated in the same figure. That is
+    # the ruling taken rather than a defect hidden — the shape stays reachable for existing rows and
+    # for the engine, it is not offered, and the second option covers what people actually write.
+    #
+    # BOTH HALVES ARE ASSERTED, so neither "it reads back as something else" nor "the conversion is
+    # silent" can change without this example saying so.
+    it "reads an anchorless monthly rule back as per-period, and converts it on save", :aggregate_failures do
+      rule = create(:budget, :rate, category: groceries, amount: 260)
 
-      expect(described_class.from(rule)).to include(schedule: "monthly", interval_months: nil)
+      expect(described_class.from(rule)).to include(schedule: "per_period", repeats: false, interval_months: nil)
+
+      rebuilt = described_class.new(user, described_class.from(rule), budget: rule)
+
+      expect(rebuilt.save).to be true
+      expect(columns_of(rule.reload)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
+      expect(rule.amount).to eq(260)
     end
 
-    it "reads a building rule's target and its type", :aggregate_failures do
-      rule = build(:budget, :capped, rule_type: :choice, amount: 200)
+    # NO INTERVAL IS HANDED BACK WHERE THE CHECKBOX IS OFF, because the control is not on screen and
+    # a value in it is a value the user never typed — which `#check_interval` then refuses.
+    it "hands back no interval for a one-off", :aggregate_failures do
+      rule = build(:budget, :by_date)
+
+      expect(described_class.from(rule)).to include(schedule: "by_date", repeats: false, interval_months: nil)
+    end
+
+    it "reads a goal's amount, its date and its type", :aggregate_failures do
+      rule = build(:budget, :by_date, rule_type: :choice, amount: 5_000)
 
       expect(described_class.from(rule)).to include(
-        unspent: "builds", target_amount: 1_200, rule_type: "choice", amount: 200
+        schedule: "by_date", anchor_date: Date.new(2027, 6, 1), rule_type: "choice", amount: 5_000
       )
     end
   end
@@ -259,10 +212,10 @@ RSpec.describe RuleForm do
       expect(form.errors[:schedule]).to include(/does not take a number of months/)
     end
 
-    # THE MONTHLY ROW DERIVES ITS OWN INTERVAL, so a number typed beside it is a choice the user did
-    # not make — `every N months` is the control that takes one.
-    it "refuses a number of months on the monthly row" do
-      form = form(schedule: "monthly", interval_months: "3")
+    # THE CHECKBOX IS WHAT REVEALS THE INTERVAL, so a number typed with the box off is a choice the
+    # user did not make.
+    it "refuses a number of months on a by-date rule that does not repeat" do
+      form = form(schedule: "by_date", anchor_date: "2026-12-01", interval_months: "3")
 
       expect(form.save).to be false
       expect(form.errors[:schedule]).to include(/does not take a number of months/)
@@ -271,59 +224,34 @@ RSpec.describe RuleForm do
     # `shape_must_be_valid` RETURNS EARLY ON ANY ANCHORED RULE, so a blank N with a date is a valid
     # `Budget` — it is a one-time rule. It is not the rule the user described, which is why this
     # question is the FORM's and not the model's.
-    it "refuses every N months with no N, under How often" do
-      form = form(schedule: "every_n", anchor_date: "2026-12-01", interval_months: "")
+    it "refuses a repeating rule with no N, under When it is needed" do
+      form = form(schedule: "by_date", repeats: "1", anchor_date: "2026-12-01", interval_months: "")
 
       expect(form.save).to be false
       expect(form.errors[:schedule]).to include(/needs the number of months/)
     end
 
-    it "refuses every N months with no date, under How often" do
-      form = form(schedule: "every_n", interval_months: "6", anchor_date: "")
+    it "refuses a repeating rule with no date, under When it is needed" do
+      form = form(schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "")
 
       expect(form.save).to be false
       expect(form.errors[:schedule]).to include(/needs the date it is first due/)
     end
 
-    it "refuses a one-time rule with no date, under How often" do
-      form = form(schedule: "once", anchor_date: "")
+    it "refuses a one-off with no date, under When it is needed" do
+      form = form(schedule: "by_date", anchor_date: "")
 
       expect(form.save).to be false
       expect(form.errors[:schedule]).to include(/needs the date it is first due/)
     end
 
     # AN N OF ZERO IS `Budget`'s OWN REFUSAL, re-keyed: `interval_months` numericality lands on the
-    # column, and the column is a consequence of "How often".
-    it "carries a zero interval onto How often" do
-      form = form(schedule: "every_n", interval_months: "0", anchor_date: "2026-12-01")
+    # column, and the column is a consequence of "When is it needed?".
+    it "carries a zero interval onto When it is needed" do
+      form = form(schedule: "by_date", repeats: "1", interval_months: "0", anchor_date: "2026-12-01")
 
       expect(form.save).to be false
       expect(form.errors[:schedule]).to include(/greater than 0/)
-    end
-
-    # ** `Budget`'s NUMERICALITY LANDS UNDER THE INPUT THE FIGURE WAS TYPED INTO (fix round 1 — L4).
-    # ** Routed to `:unspent` it printed "Unspent money must be greater than 0" over a pair of radios
-    # that were perfectly well chosen, while the box holding the 0 said nothing at all. `Target` is a
-    # control on this form and owns its own refusals.
-    it "carries a target of zero onto the Target field" do
-      form = form(unspent: "builds", target_amount: "0")
-
-      expect(form.save).to be false
-      expect(form.errors[:target_amount]).to include(/greater than 0/)
-      expect(form.errors[:unspent]).to be_empty
-    end
-
-    # `carries_over` KEEPS `:unspent`, and it is the only build-up column that does — it IS the
-    # radio, so it has no input of its own to be worded under. It is unreachable from this form
-    # (`#build_up_columns` never writes `carries_over` beside an anchor), which is why the mapping
-    # rather than a refusal is what there is to say about it, and why the two keys must not collapse
-    # into one. The radio's own refusal still lands there:
-    it "keeps a choice this form does not recognise under Unspent money" do
-      form = form(unspent: "rolls over")
-
-      expect(form.save).to be false
-      expect(form.errors[:unspent]).to include(/is not one of the choices/)
-      expect(form.errors[:target_amount]).to be_empty
     end
 
     it "keeps an amount error on the amount" do
@@ -442,39 +370,39 @@ RSpec.describe RuleForm do
       expect { form(amount: "").save }.not_to change(Budget, :count)
     end
 
-    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§4). ** The claim is computed, so the walk
+    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§5). ** The claim is computed, so the walk
     # simply re-runs from the rule's accrual start under the new shape — `#claim_shape` is the one
     # door onto that reading and it answers the new shape immediately.
-    it "changes a rate rule into a building one" do
+    it "changes an allowance into a goal", :aggregate_failures do
       rule = create(:budget, :per_period_rate, category: groceries, amount: 400)
-      form = described_class.new(user, words(unspent: "builds", target_amount: "5000"), budget: rule)
+      form = described_class.new(user, words(schedule: "by_date", anchor_date: "2027-06-01", amount: "5000"), budget: rule)
 
       expect(form.save).to be true
-      expect(rule.reload.carries_over).to be true
-      expect(rule.target_amount).to eq(5_000)
-      expect(rule.claim_shape).to eq(:building)
+      expect(columns_of(rule.reload))
+        .to eq(basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1))
+      expect(rule.claim_shape).to eq(:dated)
     end
 
-    # AND BACK THE OTHER WAY, target and all: a fund that becomes an ordinary rate rule must not
-    # leave a figure behind that no formula reads.
-    it "changes a building rule back into a rate rule" do
-      rule = create(:budget, :capped, category: groceries, amount: 200)
-      form = described_class.new(user, words(unspent: "resets", amount: "200"), budget: rule)
+    # AND BACK THE OTHER WAY, date and all: a goal that becomes an ordinary allowance must not leave
+    # a date behind that would go on making it a fund.
+    it "changes a goal back into an allowance", :aggregate_failures do
+      rule = create(:budget, :by_date, category: groceries, amount: 5_000)
+      form = described_class.new(user, words(schedule: "per_period", amount: "200"), budget: rule)
 
       expect(form.save).to be true
-      expect(rule.reload.carries_over).to be false
-      expect(rule.target_amount).to be_nil
+      expect(columns_of(rule.reload)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
       expect(rule.claim_shape).to eq(:rate)
     end
 
-    # The dated direction of the same fact — a rate rule given a date drops the build-up columns
-    # rather than carrying a `carries_over` the model would refuse beside an anchor.
-    it "changes a rate rule into a dated bill" do
-      rule = create(:budget, :building, category: groceries, amount: 300)
-      dated = words(schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", amount: "600")
+    # And a one-off given the checkbox picks up its interval, which is the only difference between
+    # §2's rows 3 and 4.
+    it "changes a one-off into a repeating bill", :aggregate_failures do
+      rule = create(:budget, :by_date, category: groceries, amount: 600)
+      repeating = words(schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "2026-12-01", amount: "600")
 
-      expect(described_class.new(user, dated, budget: rule).save).to be true
-      expect(columns_of(rule.reload)).to eq(basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1), carries_over: false, target_amount: nil)
+      expect(described_class.new(user, repeating, budget: rule).save).to be true
+      expect(columns_of(rule.reload))
+        .to eq(basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1))
       expect(rule.claim_shape).to eq(:dated)
     end
   end

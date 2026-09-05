@@ -41,12 +41,12 @@ require "rails_helper"
 #   * "states the gap when you're short" — "$250.00 short this period" over "You need … You have …"
 #     is the system talking about itself. The same fixture is now "-$250.00 free" with the honest
 #     sentence, in "is honest when the plan asks for more than there is".
-#   * "does not call a deficit unclaimed money on a covered period" — the MED-1 fixture. The reader
-#     it was about (`projected_buffer`) is deleted; "unclaimed" is a dead word (spec §3). The
+#   * "does not call a deficit money nothing claims on a covered period" — the MED-1 fixture. The reader
+#     it was about (`projected_buffer`) is deleted; the word is dead (spec §3). The
 #     fixture is carried into "is honest when spending has drained the root", which asserts the
 #     same $100 the same way round.
 #   * "still states what is left over on a covered period in the black" — the other direction of the
-#     same branch, and the same "$600.00 unclaimed" figure. Carried as free money, once.
+#     same branch, and the same "$600.00 spare" figure. Carried as free money, once.
 #   * "explains the arithmetic when available itself is in the red" — `[data-available-in-the-red]`
 #     and its whole paragraph are gone with the word "available", which Home no longer says (§3).
 #     Its fixture (in $100, spent $500 unbudgeted, a $400 rule) is carried into the negative-free
@@ -109,7 +109,7 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
-    expect(page).to have_css("[data-free-subline]", text: "the rest is claimed")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 of checking is claimed by your rules")
     # THE WORDS THIS CARD NO LONGER SAYS, asserted rather than assumed. "Spoken for" and "set aside"
     # JOIN THE LIST IN TASK 3 and they are the whole vocabulary change: both named money that had been
     # MOVED — a distribution's remaining ask, and a holding — and nothing moves. A rule CLAIMS money
@@ -158,11 +158,17 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_no_css("[data-trouble]")
   end
 
-  # THE CAP AT THE POT, WHICH IS RULED (spec §3): money you would have to move out of another
-  # account before you could spend it is not free in the moment. THE SAME FIXTURE with $700 walked
-  # over to Ally — the purpose ledger has not moved at all, so a card that had dropped the `min`
-  # would still read $600 and this is the example that catches it.
-  it "caps free at the pot and says where the rest is", :aggregate_failures do
+  # ** MONEY IN ANOTHER ACCOUNT IS SHOWN, NEVER SUBTRACTED (two-shapes spec §2, Henry's ruling of
+  # 2026-09-05). ** THE SAME FIXTURE with $700 walked over to Ally: the claims are untouched, so
+  # `free = 300 − 400` = **−$100.00** and the card says both facts in one sentence — what the rules
+  # claim, and what sits elsewhere.
+  #
+  # ** IT READ $300.00, THE WHOLE POT, AND THE CLAIMS WERE INVISIBLE. ** `free` was
+  # `min(pot, total_money − Σ claims)`: the $700 in Ally went into the subtraction and the answer was
+  # then capped at the pot, so for every user whose other accounts covered their rules the two hero
+  # figures were the same number. "Why is free to spend and the number in checking the same when some
+  # is claimed?" is the question this example is the answer to.
+  it "subtracts the claims from checking and says what sits elsewhere", :aggregate_failures do
     ally = create(:pool, :account, user: user, name: "Ally")
     envelope("Groceries", 400)
     deposit(1_000)
@@ -171,84 +177,46 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$300.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$300.00")
-    expect(page).to have_css("[data-free-subline]", text: "more is parked in other accounts")
-    # ** AND IT NAMES THE CLAIM, WHICH IS THE FIX WAVE'S HIGH. ** This example asserted "none of it is
-    # claimed" here for the length of Task 3, over a $400-a-period rule. The arm was gated on
-    # `!rest_in_checking?` alone — `pot ≤ unclaimed`, which is `Σ claims ≤ Σ other accounts` and says
-    # only WHERE the money is. Ming's Home printed it above five rules claiming $1,668.37 (spec §10.6
-    # item 6). The rest of the pot really is $0.00, so "the rest is claimed" is still wrong here; what
-    # was missing was the claim itself.
-    expect(find("[data-free-subline]")).to have_text("$400.00 is claimed")
-      .and have_no_text("none of it is claimed").and have_no_text("the rest is claimed")
+    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free-subline]", text: "Your rules claim $100.00 more than checking holds")
+    expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
   end
 
-  # ** THE EXACT TIE, `Σ claims == Σ other accounts` (fix wave — HIGH). ** The same fixture with
-  # exactly $400 walked over: pot $1,600, total money $2,000, `unclaimed` $1,600. The two are EQUAL,
-  # so neither `#rest_in_checking?` (strict `>`) nor `#free_cap_bound?` (strict `<`) fires and the last
-  # arm is reached with a live claim — the corner the old gate could not see at all. `#anything_claimed?`
-  # is what carries it, which is why the parked clause hangs on `#money_parked_elsewhere?` here rather
-  # than on the cap.
-  it "names the claim at the exact tie between the claims and the other accounts", :aggregate_failures do
+  # ** THE POSITIVE ARM WITH MONEY ELSEWHERE, which is where the second clause is a fact rather than
+  # an instruction. ** $2,000 in with $400 walked to Ally and a $400 rule: `free = 1,600 − 400` =
+  # $1,200, and the card says "$400.00 of checking is claimed by your rules, and $400.00 sits in 1
+  # other account". The COUNT is asserted because the clause names it and a card counting main would
+  # say two.
+  it "names what is claimed and what sits elsewhere when free is positive", :aggregate_failures do
     ally = create(:pool, :account, user: user, name: "Ally")
     envelope("Groceries", 400)
-    deposit(1_000)
+    deposit(2_000)
     create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: Date.current, kind: :transfer)
 
     visit root_path
 
-    expect(page).to have_css("[data-in-checking]", text: "$600.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
-    expect(page).to have_css("[data-free-subline]", text: "$400.00 is claimed and more is parked in other accounts")
-    expect(page).to have_no_css("[data-free-subline]", text: "none of it is claimed")
+    expect(page).to have_css("[data-in-checking]", text: "$1,600.00")
+    expect(page).to have_css("[data-free-to-spend]", text: "$1,200.00")
+    expect(find("[data-free-subline]")).to have_text("$400.00 of checking is claimed by your rules")
+      .and have_text("$400.00 sits in 1 other account")
   end
 
-  # The other direction on the subline, so the gate cannot be satisfied by a card that simply always
-  # prints it: with every dollar in checking there is no other account for anything to be parked in.
-  it "says nothing about other accounts when the money is all in checking" do
+  # The other direction on the clause, so the gate cannot be satisfied by a card that always prints
+  # it: with every dollar in checking there is no other account for anything to sit in.
+  it "says nothing about other accounts when the money is all in checking", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(1_000)
 
     visit root_path
 
-    expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 of checking is claimed by your rules")
+    expect(page).to have_no_css("[data-free-subline]", text: "sits in")
   end
 
-  # ** THE CAP CAN NO LONGER BIND WITH ONE ACCOUNT, AND THAT IS THIS EXAMPLE'S NEW SUBJECT. ** The
-  # answers-first review's M-1 fixture lived in the THIRD term of the old cap identity
-  # (`available − pot = moves out + swept − Σ holdings`): a category overdrawn by $200 made
-  # `available` exceed the pot with nowhere for anything to be parked, and the card said "more is
-  # parked in other accounts" over an empty accounts line. There are two terms now —
-  # `unclaimed − pot = Σ other accounts − Σ claims` — and a claim can never be negative, so with one
-  # account the cap cannot bind at all. The corner is structurally gone rather than gated.
-  #
-  # THE OVERSPEND IS KEPT because the absence still has to be measured on a screen where something is
-  # wrong. PLANTED: a $400-a-period rate rule with $500 spent. §3.1 — `claim = max(0, 400 − 500)` =
-  # **$0.00**, and the $100 excess reduces `free` directly rather than sitting anywhere. Pot and total
-  # money are both `1,000 − 500` = **$500.00**, so `unclaimed` is $500, `free` is $500, the cap does
-  # not bind, and the card says the one true thing.
-  it "does not claim money is parked elsewhere on a single-account overspend", :aggregate_failures do
-    groceries = envelope("Groceries", 400)
-    deposit(1_000)
-    create(:entry, item: create(:item, category: groceries), amount: 500, date: Date.current)
-
-    visit root_path
-
-    expect(page).to have_css("[data-in-checking]", text: "$500.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$500.00")
-    expect(page).to have_css("[data-free-subline]", text: "none of it is claimed")
-    expect(page).to have_no_css("[data-free-subline]", text: "more is parked in other accounts")
-  end
-
-  # ** A REST IS NOT SELF-EXPLAINING EITHER, and this is the fixture that says so. ** The suite's own
-  # overdrawn-Ally shape, carried whole: $1,000 of income and $200 walked out of an Ally that is $200
-  # in the red. Under claims the rest is `Σ claims − Σ other accounts` = `0 − (−200)` = **$200.00**,
-  # so a positive rest with nothing claimed IS an overdrawn second account — the cause changed with
-  # the readers, and the point did not: `pot − free` says a rest EXISTS and never what it is.
-  #
-  # BOTH SENTENCES ASSERTED, because the two differ by one word and a pin on the new one alone would
-  # pass against a card printing both.
-  it "does not call a rest set aside when it walked in from another account", :aggregate_failures do
+  # AN OVERDRAWN SECOND ACCOUNT IS NOT SOMEWHERE MONEY SITS, which is why the gate is the TOTAL's
+  # sign: $200 walked IN from an Ally that is now $200 overdrawn is a DEBT the strip names, not a
+  # place to transfer from. PLANTED: pot $1,200, nothing claimed, so `free` is $1,200.
+  it "does not call an overdrawn second account money that sits elsewhere", :aggregate_failures do
     ally = create(:pool, :account, user: user, name: "Ally")
     deposit(1_000)
     create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: Date.current, kind: :transfer)
@@ -256,33 +224,32 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,200.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$1,000.00")
-    expect(page).to have_css("[data-free-subline]", text: "the rest isn't claimed")
-    expect(page).to have_no_css("[data-free-subline]", text: "the rest is claimed")
+    expect(page).to have_css("[data-free-to-spend]", text: "$1,200.00")
+    expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
+    expect(page).to have_no_css("[data-free-subline]", text: "sits in")
   end
 
-  # ** THE FRESH SIGNUP'S IDENTITY CORNER. ** Money in, no rule anywhere, nothing claimed — so free IS
-  # the pot, to the cent, and the card used to tell that user "the rest is set aside or spoken for"
-  # about a rest of $0.00. Asserted both ways round, because the failure was a true-sounding sentence
-  # rather than a missing one.
-  it "does not describe a rest when free is the whole pot", :aggregate_failures do
+  # THE FRESH SIGNUP: money in, no rule anywhere, so `free` IS the pot to the cent and the claimed
+  # figure is an honest $0.00. The card used to tell that user "the rest is set aside or spoken for"
+  # about a rest of $0.00, then "none of it is claimed"; it states the figure now, which is true
+  # whatever it is.
+  it "states a claimed figure of nothing rather than describing a rest", :aggregate_failures do
     deposit(1_000)
 
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free-to-spend]", text: "$1,000.00")
-    expect(page).to have_css("[data-free-subline]", text: "none of it is claimed")
-    expect(page).to have_no_css("[data-free-subline]", text: "the rest is claimed")
+    expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
   end
 
   # ── THE NEGATIVE STATES, WHICH ARE THE SAME CARD (spec §2) ─────────────────────────────────────
 
   # THE FIXTURE THAT KILLED "You're covered", CARRIED AT ITS OWN FIGURES — $250 more claimed than
   # exists. PLANTED: a $400-a-period rate rule with nothing spent claims the whole **$400.00** (§3.1),
-  # against $150 of money, so `unclaimed = 150 − 400` = **−$250.00** and `free = min(150, −250)` is
-  # −$250.00. The old band called this "$250.00 short this period"; the card says the same thing in
-  # the user's words and never clamps the figure to zero.
+  # against $150 in checking, so `free = 150 − 400` = **−$250.00**. The old band called this "$250.00
+  # short this period"; the card says the same thing in the user's words and never clamps the figure
+  # to zero.
   it "is honest when the claims ask for more than there is", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(150)
@@ -291,20 +258,24 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$250.00")
     expect(page).to have_css("[data-free-to-spend].text-status-danger")
-    expect(page).to have_css("[data-free-subline]", text: "More is claimed than you have")
-    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
+    expect(page).to have_css("[data-free-subline]", text: "Your rules claim $250.00 more than checking holds")
+    expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
+    # ** AND IT DOES NOT ALSO SAY THE OVERSPEND'S SENTENCE. ** The pot is a healthy $150; what is
+    # wrong is the rules, and "You have spent past what you had" would be a second, false cause.
+    expect(page).to have_no_css("[data-free-subline]", text: "You have spent past what you had")
   end
 
-  # ** THE MEASURED FIXTURE, AND THE OTHER KIND OF NEGATIVE. ** $1,000 of income, $1,200 walked over
-  # to Ally, and NOT ONE RULE. Total money is still $1,000 and nothing is claimed, so `unclaimed` is
-  # $1,000 and the CAP is what took free to the pot's -$200. Every word the card used to say about
-  # that was false: "More is claimed than you have" ($0 is claimed) and "nothing is free until money
-  # comes in" (a transfer away from $1,000). Nothing about this user's budget is wrong; their money is
-  # in the wrong account.
+  # ** THE MONEY IS IN THE WRONG ACCOUNT, AND THE CARD SAYS SO AS AN INSTRUCTION. ** $1,000 of
+  # income, $1,200 walked over to Ally, and NOT ONE RULE: the pot is −$200 and nothing is claimed, so
+  # `free` is −$200 and the second sentence is "Move some in from your other accounts."
   #
-  # BOTH SENTENCES ARE ASSERTED ABSENT as well as the right one present, because the failure this
-  # example exists for was a card printing a TRUE-sounding sentence, not a missing one.
-  it "says the money is elsewhere rather than gone when the pot is what capped free", :aggregate_failures do
+  # ** THE OLD CARD NEEDED A THIRD ARM FOR THIS AND THE ARM WAS UNREACHABLE FROM ONE ACCOUNT
+  # (two-shapes §2). ** `free = min(pot, total_money − Σ claims)` went below zero here because the
+  # CAP bound on a negative pot, and its sentence ("The money nothing claims is sitting outside
+  # checking") was gated on an inequality rather than on a predicate about accounts. `free = pot − Σ
+  # claims` has one cause per sign, so the arm is `#anything_claimed?` and `#money_parked_elsewhere?`
+  # — the accounts line's own sum — and the two fixtures below are the two answers it can give.
+  it "tells a user with money elsewhere to move some in", :aggregate_failures do
     ally = create(:pool, :account, user: user, name: "Ally")
     deposit(1_000)
     create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_200, date: Date.current, kind: :transfer)
@@ -313,26 +284,20 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$200.00")
     expect(page).to have_css("[data-free-to-spend]", text: "-$200.00")
-    expect(page).to have_css("[data-free-subline]", text: "sitting outside checking")
-    expect(page).to have_no_css("[data-free-subline]", text: "More is claimed than you have")
+    expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
+    expect(page).to have_no_css("[data-free-subline]", text: "You have spent past what you had")
     # The overdraft line states the fact and stops: the clause that used to follow it ("nothing is
     # free until money comes in") is what this user's transfer disproves.
     expect(page).to have_css("[data-checking-overdrawn]", text: "Your checking account is already spent past zero.")
     expect(page).to have_no_css("[data-checking-overdrawn]", text: "until money comes in")
   end
 
-  # ** THE SINGLE-ACCOUNT HALF OF THE PAIR ABOVE, AND THE ARM IT USED TO READ IS NOW UNREACHABLE. **
-  # The old card printed "Nothing here is free until money comes in" here, gated on there being no
-  # other account. Under two terms that gate can never be reached: `free < 0` with `unclaimed ≥ 0`
-  # forces `pot < 0` and therefore `Σ other accounts ≥ Σ claims − pot > 0` — another account IS
-  # holding money whenever the cap binds on a negative pot. So the branch is deleted, and THIS user
-  # takes the claims-outrun arm instead, which is the honest reading: with one account, a negative pot
-  # IS the whole of their money.
+  # ** THE SINGLE-ACCOUNT HALF OF THE PAIR ABOVE. ** With nowhere to move money in FROM, the second
+  # sentence is the plain one — and "Move some in from your other accounts" must stay off a screen
+  # whose accounts line has nothing to send the user to.
   #
-  # PLANTED: $1,000 in, $1,100 spent on a funded category carrying NO rule. Nothing is claimed, total
-  # money is `1,000 − 1,100` = **−$100.00**, `unclaimed` is −$100 and `free = min(−100, −100)` is
-  # −$100.00. The sentence is the pure overspend's, and "sitting outside checking" must stay off a
-  # screen whose accounts line has nothing to send the user to.
+  # PLANTED: $1,000 in, $1,100 spent on a funded category carrying NO rule. Nothing is claimed and
+  # the pot is `1,000 − 1,100` = **−$100.00**, so `free` is −$100.00.
   it "does not send a single-account user looking for money outside checking", :aggregate_failures do
     groceries = create(:category, :expense, user: user, name: "Groceries", funded_since: Date.current - 1.year)
     deposit(1_000)
@@ -343,7 +308,7 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$100.00")
     expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
     expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
-    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
+    expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
     # THE OTHER HALF OF THE CONTRADICTION was the accounts line, which had nothing in it to send the
     # user to. One account, so the page says "other account" nowhere.
     expect(page).to have_no_content("other account")
@@ -355,7 +320,7 @@ RSpec.describe "Home Hero", type: :system do
   # renders the same three lines and the free figure is simply -$100.00.
   #
   # IT IS ALSO THE PURE OVERSPEND: nothing is claimed and the account has simply been spent past zero,
-  # so "More is claimed than you have" would name something that does not exist.
+  # so "Your rules claim $X more than checking holds" would name something that does not exist.
   it "is honest when spending has drained the root", :aggregate_failures do
     spend_unbudgeted(100)
 
@@ -363,9 +328,8 @@ RSpec.describe "Home Hero", type: :system do
 
     expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
     expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
-    expect(page).to have_no_css("[data-free-subline]", text: "More is claimed than you have")
+    expect(page).to have_no_css("[data-free-subline]", text: "Your rules claim")
     within("[data-hero]") do
-      expect(page).to have_no_content(/unclaimed/i)
       expect(page).to have_no_content("You're covered")
     end
   end
@@ -374,8 +338,8 @@ RSpec.describe "Home Hero", type: :system do
   # sentence. It takes SPENDING to reach — money a rule has claimed has not left the bank.
   #
   # THE OTHER DIRECTION OF THE PAIR: an overdrawn pot where the money really is gone. Nothing was
-  # moved anywhere, so there is no other account for the "sitting outside checking" sentence to be
-  # about, and the card must say the plain thing instead.
+  # moved anywhere, so there is no other account for the "move some in" sentence to be about, and the
+  # card must say the plain thing instead.
   #
   # PLANTED, AND THE SENTENCE CHANGED WITH THE READER: a $400 rate rule spent flat claims
   # `max(0, 400 − 400)` = **$0.00** (§3.1), so nothing is claimed and the honest arm is the pure
@@ -390,7 +354,7 @@ RSpec.describe "Home Hero", type: :system do
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$400.00")
     expect(page).to have_css("[data-checking-overdrawn]", text: "already spent past zero")
     expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
-    expect(page).to have_no_css("[data-free-subline]", text: "sitting outside checking")
+    expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
   end
 
   # ── MOVED TO THE TROUBLE STRIP (answers-first Task 2): "names a non-main account that has gone

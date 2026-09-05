@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_05_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_06_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -48,18 +48,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_05_010000) do
     t.money "amount", scale: 2, null: false
     t.date "anchor_date"
     t.integer "basis", default: 0, null: false
-    t.boolean "carries_over", default: false, null: false
     t.uuid "category_id", null: false
     t.datetime "created_at", null: false
     t.integer "interval_months"
     t.uuid "item_id"
     t.integer "rule_type", default: 1, null: false
-    t.money "target_amount", scale: 2
     t.datetime "updated_at", null: false
     t.index ["category_id"], name: "index_budgets_on_category_id"
     t.index ["item_id"], name: "index_budgets_on_item_id"
     t.index ["item_id"], name: "index_budgets_on_item_id_unique", unique: true, where: "(item_id IS NOT NULL)"
-    t.check_constraint "target_amount > 0::money", name: "budgets_positive_target_amount"
   end
 
   create_table "categories", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|

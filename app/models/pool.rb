@@ -8,12 +8,12 @@
 #   * `account_id` and `child_pools` are gone: nesting was how an envelope said which account it
 #     sat in, and a category holds its own money now (§2). With them go the destroy-time
 #     re-pointing machinery, `REFUSALS`, and `User#destroy_child_pools_first`.
-#   * `start_date`, `target_amount` and `priority` are gone. They were the envelope's three
+#   * `start_date`, `target-amount` and `priority` are gone. They were the envelope's three
 #     columns; what wants them now is split between two records — a `Category` carrying
-#     `funded_since` and `priority`, and the BUILDING RULE on it carrying `carries_over` and the
-#     `target_amount` it accrues toward (rules-own-the-budget §2.1; `categories.target_amount` was
+#     `funded_since` and `priority`, and the BUILDING RULE on it carrying `carries-over` and the
+#     `target-amount` it accrues toward (rules-own-the-budget §2.1; `categories.target-amount` was
 #     itself dropped by §6's migration, because a goal is a rule and not a kind of category).
-#     The POOL's `target_amount` was a "buffer marker" — a health line on a bank account, which is a
+#     The POOL's `target-amount` was a "buffer marker" — a health line on a bank account, which is a
 #     different question from a goal — and that was a parked question whose ruling is no.
 #   * `NOUNS` is gone with the three types it named. An account is a "buffer" wherever a screen
 #     needs the word, and `EntryImpactPresenter#noun` names the two shapes a CATEGORY has.

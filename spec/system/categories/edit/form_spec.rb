@@ -149,9 +149,9 @@ RSpec.describe "Categories Edit - Form", type: :system do
   # nothing is held and there is no distribution to be funded first in — see
   # `categories/_form.html.erb` for the whole of both renamings.
   #
-  # ** TWO COLUMNS NOW (rules-own-the-budget spec §5/§7): `target_amount` has left the form and the
-  # permit. ** How much a category builds up toward is a fact about a RULE, and the column this
-  # field wrote is one no claim formula has read since the shapes moved onto the rule.
+  # ** TWO COLUMNS NOW (rules-own-the-budget spec §5/§7): the category-side target has left the form
+  # and the permit. ** How much a category is saving toward is a fact about a RULE, and the column
+  # this field wrote is one no claim formula has read since the shapes moved onto the rule.
   describe "the claiming fields", :aggregate_failures do
     let(:holder_attributes) do
       { name: "Vacation", priority: 3, funded_since: Date.new(2026, 2, 6) }
@@ -165,22 +165,23 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_no_field("Target")
     end
 
-    # ** THE FIGURE A CATEGORY USED TO CARRY IS THE RULE'S NOW, AND AN EDIT HERE LEAVES IT ALONE
-    # (rules-own-the-budget spec §6/§7). ** This example planted `categories.target_amount = 2,400`
-    # and asserted a save did not blank it, because the migration that moves those figures had not
-    # run yet. It has: the column is gone and the goal lives on the category's building rule, so the
-    # question the example is really about — can this form damage a fund by saving something else? —
-    # is asked of the record that now holds the fund.
-    it "leaves the building rule's target alone" do
+    # ** THE FIGURE A CATEGORY USED TO CARRY IS THE RULE'S AMOUNT NOW, AND AN EDIT HERE LEAVES IT
+    # ALONE (two-shapes spec §2). ** This example planted the category's own target and asserted a
+    # save did not blank it; that column is gone, then the goal lived on a rule's separate target
+    # column, and that is gone too — a goal IS a dated rule whose amount is the figure. The question
+    # the example is really about — can this form damage a fund by saving something else? — is asked
+    # of the record that holds the fund.
+    it "leaves the goal's own figure alone", :aggregate_failures do
       vacation = create(:category, :expense, user: user, **holder_attributes)
-      goal = create(:budget, :capped, category: vacation, amount: 200, target_amount: 2_400)
+      goal = create(:budget, :by_date, category: vacation, amount: 2_400)
 
       visit edit_category_path(vacation)
       fill_in "Name", with: "Vacation Fund"
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(goal.reload.target_amount).to eq(2_400)
+      expect(goal.reload.slice(:amount, :anchor_date))
+        .to eq("amount" => 2_400, "anchor_date" => Date.new(2027, 6, 1))
       expect(vacation.reload.name).to eq("Vacation Fund")
     end
 

@@ -26,7 +26,7 @@ class BankAccountsController < HomeController
   # priority and a start date — and two of the three kinds are CATEGORIES now. What an account
   # still has is a NAME, and that is the whole form:
   #
-  #   * `target_amount` — an account's target was the "buffer marker", a health line the
+  #   * `target-amount` — an account's target was the "buffer marker", a health line the
   #     distribution screen printed as ` · you wanted $2,000.00`. Two-ledger §2 gives accounts no
   #     target semantics at all (the buffer is AVAILABLE, on the other ledger), the plan's T8 drops
   #     the column, and Task 7 deleted the last reader (`DistributionPresenter#buffer_target`).

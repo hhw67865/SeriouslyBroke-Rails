@@ -47,21 +47,17 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_rule_amount(rule(:one_time, category: build(:category, :expense, :funded), amount: 300))).to eq("$300.00 once")
     end
 
-    # ** THE MINTED GOAL RULE, WHICH HAS NO RATE TO STATE (fix wave — LOW-4). ** Zero is legal on
-    # exactly one shape — a dateless target rule (`Budget#set_aside_only?`, spec §10.1 ruling 3) —
-    # and Task 4's migration minted one for every goal in the database that lacked a rule. The
-    # sticker printed "$0.00 / period" for those, beside a real built-up figure on the same row,
-    # which reads as a rule somebody set wrong rather than a rule that was never about a rate.
-    #
-    # ** THE TARGET IS THE RULE'S (rules-own-the-budget spec §2.1 row 4). ** The fixture put it on
-    # the CATEGORY, because that was the only shape the model let the amount be zero on; Task 4
-    # dropped `categories.target_amount` and `#set_aside_only?` reads all three columns off the rule,
-    # so `:hand_fed` is that same shape said on the record that owns it. THE HELPER READS NEITHER —
-    # it branches on the amount alone — which is why the sticker is what this example asserts.
-    it "says a $0 goal rule is fed by hand" do
+    # ** THE $0 ARM IS A GUARD AND ITS ROW CANNOT BE SAVED ANY MORE (two-shapes spec §2/§7). ** Zero
+    # was legal on exactly one shape — the dateless target fed by hand — and the sticker printed
+    # "$0.00 / period" for it beside a real built-up figure, which reads as a rule somebody set wrong
+    # rather than a rule that was never about a rate. `Budget` validates `amount > 0` on every shape
+    # now, so the rule is built UNSAVED here: the helper branches on the amount alone and the sticker
+    # is still what this example asserts.
+    it "says a $0 rule is fed by hand" do
       goal = build(:category, :expense, :funded)
 
-      expect(helper.budget_rule_amount(rule(:hand_fed, category: goal))).to eq("fed by hand")
+      expect(helper.budget_rule_amount(build(:budget, :per_period_rate, category: goal, amount: 0)))
+        .to eq("fed by hand")
     end
 
     # THE OTHER DIRECTION, one penny apart: a rule that names ANY rate states it, so the gate cannot
@@ -88,70 +84,21 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_rule_basis_phrase(rule(:rate, amount: 260))).to eq("a month")
     end
 
-    # §2.1 row 2 — the fund that grows without limit. There is no figure to name, so it names none
-    # rather than printing an empty one.
-    it "says a per-period fund builds up" do
-      expect(helper.budget_rule_basis_phrase(rule(:building, amount: 300))).to eq("per period, builds up")
-    end
-
-    # §2.1 row 3 — the goal. "builds up" and "builds up toward $1,200.00" are different promises:
-    # the first grows for as long as the rule lives, the second stops.
-    it "names the figure a capped fund is building toward" do
-      expect(helper.budget_rule_basis_phrase(rule(:capped, amount: 200))).to eq("per period, builds up toward $1,200.00")
-    end
-
-    it "says the same of a monthly rule that builds up" do
-      budget = rule(basis: :monthly, interval_months: 1, carries_over: true, amount: 260)
-
-      expect(helper.budget_rule_basis_phrase(budget)).to eq("a month, builds up")
-    end
-
-    # SAVED, on one category: a per-period rate, a monthly rate, a capped fund and a dated bill —
-    # every shape `Budget#shape_must_be_valid` permits. The fund is the item-LESS rule because
-    # `Budget#category_may_hold_one_item_less_rule` allows exactly one and a building rule with an
-    # item is not the category's own lane; the other three take a lane apiece.
-    def every_saved_shape
-      category = create(:category, :expense, :funded)
-      lane = ->(name) { create(:item, category: category, name: name) }
-      [
-        create(:budget, :per_period_rate, category: category, amount: 400, item: lane["Bread"]),
-        create(:budget, :rate, category: category, amount: 260, item: lane["Milk"]),
-        create(:budget, :capped, category: category, amount: 200),
-        create(
-          :budget,
-          category: category,
-          amount: 600,
-          interval_months: 6,
-          anchor_date: Date.new(2026, 3, 1),
-          item: lane["Insurance"]
-        )
-      ]
-    end
-
-    # ** THE HELPER READS THE RAW COLUMNS AND THIS IS WHAT STOPS THE TWO SPELLINGS DRIFTING (fix
-    # wave — LOW-3). ** `Budget#claim_shape` is the app's one door onto §3's three formulas, and the
-    # helper deliberately does not use it: `budgets/_form.html.erb` calls the helper with
-    # `RuleForm#budget`, a `Budget.new` with no category on the new-rule path, and `#claim_shape`
-    # builds a calculator whose `today:` falls back to `Date.current` there — the ambient clock
-    # inside a form hint, on a record whose owner has not been chosen yet.
+    # ** THE BUILD-UP CLAUSE IS DELETED WITH THE COLUMNS IT READ (two-shapes spec §7), AND SO ARE ITS
+    # FOUR EXAMPLES. ** They pinned "per period, builds up", "per period, builds up toward $1,200.00",
+    # the monthly twin of the first, and the agreement between the clause and `Budget#claim_shape`
+    # over every saved shape. All of them are about `budgets.carries_over` and `budgets.target_amount`,
+    # which `TwoShapes` drops: there is ONE dateless shape now — the allowance that resets — and what
+    # a fund is building toward is its own AMOUNT with a DATE beside it, which `#budget_rule_amount`
+    # and the row's due date already print.
     #
-    # SO THE AGREEMENT IS PINNED INSTEAD, over every SAVED shape (`Budget#shape_must_be_valid`
-    # refuses the one pair — an anchor beside `carries_over` — that could make the two disagree, so
-    # these four are all there are). The clause the helper adds is exactly `:building`:
-    #
-    #   per-period rate → :rate     → no clause
-    #   monthly rate    → :rate     → no clause
-    #   capped fund     → :building → "builds up toward $1,200.00"
-    #   dated bill      → :dated    → no clause (the anchor wins, §3.2)
-    it "adds the build-up clause exactly where the rule's claim shape is :building", :aggregate_failures do
-      saved = every_saved_shape
+    # WHAT IS LEFT IS THE CADENCE WORDS, exactly as they read before the clause was added — so every
+    # figure a resetting rule printed is unchanged, and the two examples above are the whole of it.
 
-      saved.each do |budget|
-        clause = helper.budget_rule_basis_phrase(budget).include?("builds up")
-
-        expect(clause).to eq(budget.claim_shape == :building), "#{budget.claim_shape} said #{clause}"
-      end
-      expect(saved.map(&:claim_shape)).to eq([:rate, :rate, :building, :dated])
+    # THE DATED ARM, so "no clause" is asserted rather than assumed of the one shape that accrues.
+    it "says once for a one-off and every N months for a repeating bill", :aggregate_failures do
+      expect(helper.budget_rule_basis_phrase(rule(:by_date, amount: 5_000))).to eq("once")
+      expect(helper.budget_rule_basis_phrase(rule(:recurring, amount: 600))).to eq("every 6 months")
     end
   end
 
@@ -165,9 +112,12 @@ RSpec.describe BudgetPageHelper, type: :helper do
         .to eq("What this rule asks for per period.")
     end
 
-    it "carries the build-up into the hint" do
-      expect(helper.budget_amount_hint(rule(:capped, amount: 200)))
-        .to eq("What this rule asks for per period, builds up toward $1,200.00.")
+    # THE DATED ARM'S HINT, which is the second thing the sentence can say. The build-up clause it
+    # used to carry ("builds up toward $1,200.00") is deleted with the columns — see
+    # `#budget_rule_basis_phrase` above.
+    it "names the unit for a one-off too" do
+      expect(helper.budget_amount_hint(rule(:by_date, amount: 5_000)))
+        .to eq("What this rule asks for once.")
     end
   end
 

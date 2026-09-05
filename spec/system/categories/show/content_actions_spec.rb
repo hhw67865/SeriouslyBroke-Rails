@@ -73,15 +73,15 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     end
   end
 
-  # A FUND IS A CATEGORY WITH A BUILDING RULE (two-ledger spec §3, Task 7; rules-own-the-budget spec
-  # §5/§7). This described a category POINTING AT a savings pool — the shape the pool layer made
-  # possible — and the pool is gone. The claim worth keeping is the noun one, and the noun itself
-  # has moved: §7 retires "goal", which named a kind of CATEGORY, in favour of what the RULE does
-  # with money the period did not spend. So the fixture plants the rule, not a figure on the record.
-  describe "a category whose money builds up", :aggregate_failures do
+  # A FUND IS A CATEGORY WITH A RULE SAVING TOWARD A DAY (two-shapes spec §2). This described a
+  # category POINTING AT a savings pool — the shape the pool layer made possible — and the pool is
+  # gone. The claim worth keeping is the noun one, and the noun itself has moved twice: "goal" named
+  # a kind of CATEGORY, then a rule whose unspent money built up, and it is a rule with a DATE now.
+  # So the fixture plants the rule, not a figure on the record.
+  describe "a category saving toward a day", :aggregate_failures do
     let!(:category) do
       create(:category, :expense, :funded, user: user, name: "Emergency Fund").tap do |fund|
-        create(:budget, :capped, category: fund, amount: 200, target_amount: 2_000)
+        create(:budget, :by_date, category: fund, amount: 2_000)
       end
     end
 

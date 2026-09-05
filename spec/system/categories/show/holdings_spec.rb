@@ -283,24 +283,33 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
   # The fund arm
   # ------------------------------------------------------------------------------------------
 
-  describe "a category whose money builds up", :aggregate_failures do
-    # ** A FUND IS A BUILDING RULE (rules-own-the-budget spec §5/§7), AND THE CATEGORY NAMES NOTHING.
-    # ** `ClaimCalculator#shape` reads `:building` off the RULE's own `carries_over` — the branch
-    # that makes money CARRY rather than reset — and `budgets.target_amount` is where it stops. This
-    # card's heading and its bar read `Category#building_rule` now, so the fixture stops writing the
-    # category's copy of the figure: a fixture that still wrote it would let a reader that had
-    # quietly stayed behind go on passing, and Task 4 drops the column in any case.
+  describe "a category saving toward a day", :aggregate_failures do
+    # ** A FUND IS A ONE-OFF DATED RULE WHOSE AMOUNT IS ITS TARGET (two-shapes spec §2 row 5). ** The
+    # classifier has moved twice — a figure on the CATEGORY, then the rule whose unspent money carried
+    # — and it is `Budget.saving_toward_a_date` now: an item-less rule with an anchor and no interval.
+    #
+    # THE HORIZON IS DERIVED FROM THE SHARE THE CALLER ASKS FOR. This file's grid is biweekly anchored
+    # today, so `target ÷ rate_amount` fortnights out leaves exactly that many boundaries and §3.2's
+    # catch-up asks `rate_amount` in each — the same figure the retired shape declared as a rate, so
+    # every literal below is unchanged.
     def fund(name, target:, rate_amount:)
+      periods = target / rate_amount
       holder(name).tap do |category|
-        create(:budget, :capped, category: category, amount: rate_amount, target_amount: target)
+        create(
+          :budget,
+          category: category,
+          amount: target,
+          basis: :monthly,
+          interval_months: nil,
+          anchor_date: Date.current + ((14 * periods) - 1).days
+        )
       end
     end
 
-    # PLANTED: a $500-per-period rule on a $2,000 goal, funded a year back but written today, so the
-    # walk visits one period. §3.2's dateless branch plans `min(rate, gap)` = `min(500, 2,000)` =
-    # **$500.00**, nothing is spent, so `built_up` = $500.00 and the claim is that. The bar is
-    # `(500 ÷ 2,000 × 100).round` = **25** — the same 25% the moved-money version of this example
-    # asserted over a $500 allocation, which is the point of keeping the figure.
+    # PLANTED: a $2,000 goal four fortnights out, funded a year back but written today, so the walk
+    # visits one period. `planned = 2,000 ÷ 4` = **$500.00**, nothing is spent, so `built_up` = $500.00
+    # and the claim is that. The bar is `(500 ÷ 2,000 × 100).round` = **25** — the same 25% the
+    # moved-money version of this example asserted over a $500 allocation.
     it "calls it a fund and states its built-up against the rule's target" do
       visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
@@ -314,40 +323,61 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       end
     end
 
-    # ** AN UNCAPPED FUND IS STILL A FUND, AND IT DRAWS NO TRACK (rules-own-the-budget spec §2.1 row
-    # 2; §5). ** The old classifier was a question about a FIGURE, so an emergency fund that names
-    # none read as an envelope on this card — the wrong heading over money that carries. The heading
-    # is a question about the SHAPE now; what the missing figure takes away is the BAR, because there
-    # is nothing for one to be a fraction of. Both halves asserted, so a fix that printed a full or
-    # an empty track against $0.00 would fail here.
+    # ** A RULE THAT REPEATS IS A RECURRING BILL, NOT A FUND (two-shapes spec §2). ** It accrues by
+    # exactly the same walk as the goal above, and this card calls it an ENVELOPE: the water rates
+    # every six months are not something being saved toward. That is the one clause
+    # `Budget.saving_toward_a_date` can draw and the retired classifier could not, because a rule
+    # whose money merely carried over had no date to repeat on.
     #
-    # PLANTED: a $500-a-period uncapped building rule, funded a year back but written today, so the
-    # walk visits one period and plans its plain rate — `built_up` = **$500.00**, with no `gap` to
-    # bound it.
-    it "calls an uncapped fund a fund and draws no track at all" do
-      emergency = holder("Emergency")
-      create(:budget, :building, category: emergency, amount: 500)
+    # ** IT REPLACES "calls an uncapped fund a fund and draws no track at all" (§7), ** which planted
+    # the fund naming no ceiling — the heading stayed and the BAR went, because there was nothing for
+    # one to be a fraction of. A fund with a sibling rule is the surviving way to lose the track (see
+    # below), and this is the surviving way for an accruing category to lose the heading.
+    #
+    # PLANTED: $3,000 every six months, first due four fortnights out, so `planned = 3,000 ÷ 4` =
+    # **$750.00** in the one period walked.
+    # FOUR FORTNIGHTS OUT, the same horizon `#fund` derives — so the only difference between this
+    # card and the goal's is the interval, which is the clause under test.
+    def repeating_bill(name, amount)
+      holder(name).tap do |category|
+        create(
+          :budget,
+          category: category,
+          amount: amount,
+          basis: :monthly,
+          interval_months: 6,
+          anchor_date: Date.current + 55.days
+        )
+      end
+    end
 
-      visit category_path(emergency)
+    it "calls a repeating bill's category an envelope and draws no track", :aggregate_failures do
+      visit category_path(repeating_bill("Emergency", 3_000))
 
       within(card) do
-        expect(page).to have_content("Fund")
-        expect(page).to have_no_content("Envelope")
+        expect(page).to have_content("Envelope")
+        expect(page).to have_no_content("Fund")
       end
-      expect(find("[data-figure='claim']").text).to eq("$500.00")
+      expect(find("[data-figure='claim']").text).to eq("$750.00")
       expect(page).to have_no_css("[data-building-progress]")
     end
 
     # ** THE ROW READS THE GOAL AS A FUND, NEVER AS MONEY TO SPEND. ** The figure is
-    # `built up of target` and the schedule is the rate the goal is filling at; a dateless goal has
-    # no due date, so `claim_schedule` drops that half and prints the per-period share alone.
-    it "keeps a fund's built-up against its target, with the rate it fills at" do
+    # `built up of target` and the schedule is the share it is filling at.
+    #
+    # ** THE CLAUSE GAINED ITS DATE AND LOST ITS PLUS (two-shapes spec §2). ** It read
+    # `+$500.00 per period` with no date, because a fund had no date to have — the LEADING PLUS was
+    # what a reader told it from a dated rule by. A goal names a day now, so it takes the dated
+    # clause: `next due <date> · $500.00 per period`, the same figure with the deadline the share is
+    # derived from. The row label follows too — `HomeHelper#pool_rule_label` calls this shape
+    # "One-off" where a dateless rule was "Per period".
+    it "keeps a fund's built-up against its target, beside the day it is needed", :aggregate_failures do
       visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
-      within(rule_row("Per period")) do
+      within(rule_row("One-off")) do
         expect(page).to have_css("[data-rule-figure]", text: "$500.00 built up of $2,000.00")
-        expect(page).to have_css("[data-rule-schedule]", text: "+$500.00 per period")
-        expect(page).to have_no_content("due")
+        expect(page).to have_css("[data-rule-schedule]", text: "$500.00 per period")
+        expect(page).to have_css("[data-rule-schedule]", text: "next due")
       end
     end
 
@@ -356,14 +386,15 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # additionally required the category to carry NO rule; the entry form's impact card therefore
     # drew it as an envelope while Home called it saving. Every claim comes from a rule (§3.3), so
     # "a goal is a category with no rule" had become a description of a goal that does not work, and
-    # the successor reads the rule outright: `Category#building_rule` is what all three screens ask,
-    # so the two readings that could disagree are one reading.
+    # the successor reads the rule outright: `Budget.saving_toward_a_date` is what the category-level
+    # screens ask, so the two readings that could disagree are one reading.
     #
-    # PLANTED: `min(rate, gap)` = `min(150, 100,000)` = **$150.00** after one period, which is
-    # `(150 ÷ 100,000 × 100).round` = **0**% — a bar drawn at zero, which is exactly the row that
-    # would have been unassertable if the percentage rode on the fill rather than on the track.
-    it "is still a fund when a rate fills it" do
-      retirement = fund("Retirement", target: 100_000, rate_amount: 150)
+    # PLANTED: a $90,000 goal six hundred fortnights out, so `planned = 90,000 ÷ 600` = **$150.00**
+    # after one period, which is `(150 ÷ 90,000 × 100).round` = **0**% — a bar drawn at zero, which is
+    # exactly the row that would have been unassertable if the percentage rode on the fill rather
+    # than on the track.
+    it "is still a fund when it is barely started" do
+      retirement = fund("Retirement", target: 90_000, rate_amount: 150)
 
       visit category_path(retirement)
 
@@ -373,7 +404,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       end
       expect(find("[data-figure='claim']").text).to eq("$150.00")
       within("[data-building-progress]") { expect(page).to have_content("0% complete") }
-      expect(retirement.building_rule).to eq(retirement.budgets.sole)
+      expect(Budget.saving_toward_a_date).to eq([retirement.budgets.sole])
     end
 
     # ** A FUND WITH A SIBLING RULE KEEPS ITS HEADING AND LOSES ITS TRACK (spec §10.5; fix wave —
@@ -388,8 +419,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # PLANTED, RE-DERIVED. This user's period is biweekly anchored today, and both rules are written
     # now, so each walks exactly ONE period:
     #
-    #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600, nothing
-    #             spent → built up **$600.00**
+    #   the FUND  item-less, $2,400 four fortnights out → planned `2,400 ÷ 4` = 600, nothing spent →
+    #             built up **$600.00**
     #   the BILL  on the item "Insurance", $600 due three days out — inside this period, so
     #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
     #
@@ -423,8 +454,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD PREDICATE GOT WRONG. ** A rule whose money
     # RESETS is an envelope: nothing about it builds up, and it got the "Goal" heading and a
     # progress bar under `#saving_toward_a_target?` because its CATEGORY named a figure. The example
-    # planted exactly that pair; `categories.target_amount` is dropped (§6/§7), so the shape is the
-    # only thing left to answer with — and it answers the same.
+    # planted exactly that pair; the category-side target column is dropped, so the shape is the only
+    # thing left to answer with — and it answers the same.
     it "calls a category with a resetting rule an envelope" do
       groceries = holder("Groceries")
       create(:budget, :per_period_rate, category: groceries, amount: 400)

@@ -78,7 +78,7 @@ RSpec.describe "Budgets", type: :request do
 
       get edit_budget_path(bill, budget: { schedule: "per_period" })
 
-      expect(input_tag("budget_schedule_every_n")).to include('checked="checked"')
+      expect(input_tag("budget_schedule_by_date")).to include('checked="checked"')
       expect(input_tag("budget_schedule_per_period")).not_to include('checked="checked"')
     end
 
@@ -94,31 +94,33 @@ RSpec.describe "Budgets", type: :request do
   # ** WHAT A BROWSER WITH NO JAVASCRIPT IS SERVED. ** A request spec IS that browser: the reveals
   # are an enhancement, the `<noscript>` rule in the partial forces every hidden block visible, and
   # the server has to answer for whatever such a form submits.
+  #
+  # ** THE "UNSPENT MONEY" EXAMPLES ARE DELETED WITH THE CONTROL (two-shapes spec §5/§7). ** They
+  # pinned that the radios and the Target field were DISABLED on a dated schedule — not merely
+  # hidden, which without JavaScript means visible and live — and that they stayed live on a dateless
+  # rule. There is no such control: a fund IS a dated rule, so there is nothing about unspent money
+  # left to ask and nothing to disable.
+  #
+  # WHAT REPLACES THEM is the "repeats" checkbox, whose reveal has no disabled state at all: an
+  # interval submitted with the box off is REFUSED under "When is it needed?" rather than laundered,
+  # which is the same treatment a due date on a per-period rule gets and is pinned on the POST below.
   describe "GET /budgets/:id/edit — without JavaScript", :aggregate_failures do
-    # ** THE "UNSPENT MONEY" RADIOS ARE DISABLED ON A DATED SCHEDULE, AND SAY WHY (fix round 1 —
-    # L2). ** They were merely HIDDEN, which with no JavaScript means visible and live — so a user
-    # could choose "Builds up" on a dated bill and `RuleForm` dropped it in silence, because
-    # `Budget#build_up_must_be_valid` refuses `carries_over` beside an anchor and the form forces
-    # `resets` there rather than arguing. A disabled control submits nothing and states its reason,
-    # which is the honest version of the same refusal.
-    it "disables the unspent radios on a dated bill and states the reason" do
+    # BOTH DATED CONTROLS RENDER ON A DATED RULE, and the checkbox comes back TICKED for one that
+    # repeats — which is what `RuleForm.from` derives from the interval it carries.
+    it "renders the date and a ticked repeats box for a repeating bill" do
       bill = create(:budget, :recurring, category: groceries, amount: 800, item: create(:item, category: groceries))
 
       get edit_budget_path(bill)
 
-      expect(response.body).to include("A dated bill never carries money over.")
-      expect(input_tag("budget_unspent_builds")).to include('disabled="disabled"')
-      expect(input_tag("budget_unspent_resets")).to include('disabled="disabled"')
-      expect(input_tag("budget_target_amount")).to include('disabled="disabled"')
+      expect(input_tag("budget_repeats")).to include('checked="checked"')
+      expect(response.body).to include('name="budget[anchor_date]"')
     end
 
-    # THE OTHER DIRECTION, or "it disables them" would pass against a form that disabled them always.
-    it "leaves them live on a dateless rule" do
+    # THE OTHER DIRECTION, or the example above would pass against a form that ticked it always.
+    it "leaves the repeats box unticked on a dateless rule" do
       get edit_budget_path(rule)
 
-      expect(response.body).not_to include("A dated bill never carries money over.")
-      expect(input_tag("budget_unspent_builds")).not_to include('disabled="disabled"')
-      expect(input_tag("budget_target_amount")).not_to include('disabled="disabled"')
+      expect(input_tag("budget_repeats")).not_to include('checked="checked"')
     end
   end
 
@@ -160,15 +162,18 @@ RSpec.describe "Budgets", type: :request do
     end
   end
 
-  # ** THE WIRE CARRIES THE USER'S WORDS SINCE RULES-OWN-THE-BUDGET §4. ** `basis` is no longer a
-  # permitted parameter; `schedule` (`per_period` / `monthly` / `every_n` / `once`) and `unspent`
-  # (`resets` / `builds`) are, and `RuleForm` turns them into the columns. Every payload below is
-  # therefore spelled as a person would answer the form, and the ASSERTIONS are on the columns —
-  # which is the only way a request spec can tell the mapping from a mapping that agrees with itself.
+  # ** THE WIRE CARRIES THE USER'S WORDS (two-shapes spec §5). ** `basis` is not a permitted
+  # parameter; `schedule` (`per_period` / `by_date`) and `repeats` are, and `RuleForm` turns them
+  # into the columns. Every payload below is therefore spelled as a person would answer the form, and
+  # the ASSERTIONS are on the columns — which is the only way a request spec can tell the mapping
+  # from a mapping that agrees with itself.
+  #
+  # `unspent` AND `target_amount` LEFT THE LIST WITH THE COLUMNS (§7); the keys are dropped rather
+  # than ignored, which is the only spelling of "not writable" a hand-made POST also obeys.
   #
   # The words a bare form submits, so each example states only the fields it is about.
   def rule_words(**overrides)
-    { amount: "40.00", rule_type: "usage", schedule: "per_period", unspent: "resets" }.merge(overrides)
+    { amount: "40.00", rule_type: "usage", schedule: "per_period" }.merge(overrides)
   end
 
   # ONE RENDERED `<input>`, BY ID. Rails writes an input's attributes in its own order and moves them
@@ -189,56 +194,37 @@ RSpec.describe "Budgets", type: :request do
     it "writes a rule on the user's own category", :aggregate_failures do
       own = create(:category, :expense, :funded, user: user, name: "Dining Out")
 
-      expect { post budgets_path, params: { budget: rule_words(category_id: own.id, schedule: "monthly") } }
+      expect { post budgets_path, params: { budget: rule_words(category_id: own.id) } }
         .to change(Budget, :count).by(1)
       expect(response).to redirect_to(budget_page_path)
       expect(own.budgets.reload.sole.amount).to eq(40)
     end
 
-    # ** ONE EXAMPLE PER ROW OF §2.1, THROUGH THE FULL STACK. ** The unit pins are in
+    # ** ONE EXAMPLE PER ROW OF §2 THE FORM CAN WRITE, THROUGH THE FULL STACK. ** The unit pins are in
     # `spec/services/rule_form_spec.rb`; these are here because a permitted-parameter list is the
     # other half of the mapping, and a field dropped from `BUDGET_FIELDS` is a control that silently
     # writes nothing.
+    #
+    # THE FUND ROWS ARE GONE AND THE GOAL IS A DATED ROW (two-shapes §2): "an uncapped fund", "a goal
+    # with a target" and "a goal fed by hand" all wrote `carries_over` and `target_amount`, which
+    # `TwoShapes` drops. A goal is "$5,000 by Jun 1, 2027", which is the one-off row with a longer
+    # horizon and is written as such.
     {
       "a per-period rate" => [
-        { schedule: "per_period", unspent: "resets", amount: "400.00" },
-        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: false, target_amount: nil }
-      ],
-      "an uncapped fund" => [
-        { schedule: "per_period", unspent: "builds", target_amount: "", amount: "300.00" },
-        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: nil }
-      ],
-      "a goal with a target" => [
-        { schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "200.00" },
-        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000 }
-      ],
-      "a goal fed by hand" => [
-        { schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "0" },
-        { basis: "per_period", interval_months: nil, anchor_date: nil, carries_over: true, target_amount: 5_000 }
-      ],
-      "a monthly rate" => [
-        { schedule: "monthly", unspent: "resets", amount: "260.00" },
-        { basis: "monthly", interval_months: 1, anchor_date: nil, carries_over: false, target_amount: nil }
+        { schedule: "per_period", amount: "400.00" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil }
       ],
       "a bill every 6 months" => [
-        { schedule: "every_n", interval_months: "6", anchor_date: "2026-12-01", amount: "600.00" },
-        {
-          basis: "monthly",
-          interval_months: 6,
-          anchor_date: Date.new(2026, 12, 1),
-          carries_over: false,
-          target_amount: nil
-        }
+        { schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "2026-12-01", amount: "600.00" },
+        { basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1) }
       ],
       "a one-time bill" => [
-        { schedule: "once", anchor_date: "2026-12-01", amount: "600.00" },
-        {
-          basis: "monthly",
-          interval_months: nil,
-          anchor_date: Date.new(2026, 12, 1),
-          carries_over: false,
-          target_amount: nil
-        }
+        { schedule: "by_date", anchor_date: "2026-12-01", amount: "600.00" },
+        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1) }
+      ],
+      "a goal" => [
+        { schedule: "by_date", anchor_date: "2027-06-01", amount: "5000.00" },
+        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1) }
       ]
     }.each do |name, (submitted, columns)|
       it "writes #{name}", :aggregate_failures do
@@ -249,6 +235,18 @@ RSpec.describe "Budgets", type: :request do
         expect(response).to redirect_to(budget_page_path)
         expect(own.budgets.reload.sole.slice(*columns.keys)).to eq(columns.stringify_keys)
       end
+    end
+
+    # ** `unspent` AND `target_amount` ARE UNPERMITTED, AND THE SILENCE IS THE ASSERTION. ** A client
+    # written against the old wire — or a hand-made POST — cannot reach the dropped columns, and the
+    # rule it writes is the one `schedule` describes.
+    it "ignores the retired build-up words on the wire", :aggregate_failures do
+      own = create(:category, :expense, :funded, user: user, name: "Dining Out")
+
+      post budgets_path, params: { budget: rule_words(category_id: own.id, unspent: "builds", target_amount: "5000") }
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(own.budgets.reload.sole.basis).to eq("per_period")
     end
 
     # EVERY RULE HAS A TYPE (§3), and the give-way order is built on it — so the radio is required
@@ -280,7 +278,7 @@ RSpec.describe "Budgets", type: :request do
       expect { post budgets_path, params: { budget: rule_words(category_id: own.id, anchor_date: "2026-12-01") } }
         .not_to change(Budget, :count)
       expect(response).to have_http_status(:unprocessable_content)
-      expect(response.body).to include("How often does not take a due date")
+      expect(response.body).to include("When it is needed does not take a due date")
     end
 
     # `basis` IS NOT A PERMITTED PARAMETER ANY MORE. Silent, as an unpermitted key always is: the
@@ -436,32 +434,39 @@ RSpec.describe "Budgets", type: :request do
       expect(income.budgets.reload).to be_empty
     end
 
-    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§4), AND THE CLAIM SIMPLY RE-RUNS. ** The
-    # "the schedule itself is already set on this rule" form is gone: a rate rule becoming a
-    # building one is a decision the user is now allowed to make, and because the claim is COMPUTED
-    # the walk re-runs from the rule's accrual start under the new shape with nothing migrated.
-    # `Budget#claim_shape` is the one door onto that reading, and it is what is asserted — the three
-    # columns beside it are what the form actually wrote.
-    it "turns a rate rule into a building one and the claim reads the new shape", :aggregate_failures do
+    # ** A SHAPE CHANGE ON AN EXISTING RULE IS LEGAL (§5), AND THE CLAIM SIMPLY RE-RUNS. ** The
+    # "the schedule itself is already set on this rule" form is gone: an allowance becoming a goal is
+    # a decision the user is now allowed to make, and because the claim is COMPUTED the walk re-runs
+    # from the rule's accrual start under the new shape with nothing migrated. `Budget#claim_shape` is
+    # the one door onto that reading, and it is what is asserted — the three columns beside it are
+    # what the form actually wrote.
+    it "turns an allowance into a goal and the claim reads the new shape", :aggregate_failures do
       patch budget_path(rule),
-            params: { budget: rule_words(schedule: "per_period", unspent: "builds", target_amount: "5000", amount: "200") }
+            params: { budget: rule_words(schedule: "by_date", anchor_date: "2027-06-01", amount: "5000") }
 
       expect(response).to redirect_to(budget_page_path)
-      expect(rule.reload.carries_over).to be true
-      expect(rule.target_amount).to eq(5_000)
-      expect(rule.claim_shape).to eq(:building)
+      expect(rule.reload.slice(:basis, :interval_months, :anchor_date))
+        .to eq("basis" => "monthly", "interval_months" => nil, "anchor_date" => Date.new(2027, 6, 1))
+      expect(rule.claim_shape).to eq(:dated)
     end
 
-    # THE OTHER DIRECTION, because a target left behind on a rule whose money now resets is a figure
-    # no formula reads sitting on a row that looks like progress.
-    it "turns a building rule back into a rate rule and drops the target", :aggregate_failures do
-      fund = create(:budget, :capped, category: create(:category, :expense, :funded, user: user), amount: 200)
+    # THE OTHER DIRECTION, because a date left behind on a rule that is now an allowance would go on
+    # making it a fund on every screen.
+    #
+    # ** THE BLANK DATE IS SUBMITTED, AND THAT IS THE FORM'S OWN BEHAVIOUR RATHER THAN A CONVENIENCE
+    # HERE. ** `#update` merges the request over `RuleForm.from(@budget)` — the rule's own words
+    # first — so a PATCH that named only the schedule would carry the ROW's date and be REFUSED under
+    # "When is it needed?", which is exactly right: a due date is not something this class launders
+    # away. §5's form submits every control on every save and the Stimulus controller CLEARS a field
+    # as it hides it, so a real change of shape arrives with the date blank.
+    it "turns a goal back into an allowance and drops the date", :aggregate_failures do
+      fund = create(:budget, :by_date, category: create(:category, :expense, :funded, user: user), amount: 5_000)
 
-      patch budget_path(fund), params: { budget: rule_words(unspent: "resets", amount: "200") }
+      patch budget_path(fund), params: { budget: rule_words(schedule: "per_period", anchor_date: "", amount: "200") }
 
       expect(response).to redirect_to(budget_page_path)
-      expect(fund.reload.carries_over).to be false
-      expect(fund.target_amount).to be_nil
+      expect(fund.reload.slice(:basis, :interval_months, :anchor_date))
+        .to eq("basis" => "per_period", "interval_months" => nil, "anchor_date" => nil)
       expect(fund.claim_shape).to eq(:rate)
     end
 
@@ -486,7 +491,7 @@ RSpec.describe "Budgets", type: :request do
       patch budget_path(rule), params: { budget: rule_words(schedule: "per_period", anchor_date: "2026-12-01") }
 
       expect(response).to have_http_status(:unprocessable_content)
-      expect(response.body).to include("How often does not take a due date")
+      expect(response.body).to include("When it is needed does not take a due date")
       expect(rule.reload.anchor_date).to be_nil
     end
   end

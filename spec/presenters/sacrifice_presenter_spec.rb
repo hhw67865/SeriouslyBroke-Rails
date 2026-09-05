@@ -124,24 +124,23 @@ RSpec.describe SacrificePresenter do
       expect(ids(presenter.fixed_rows)).to contain_exactly(rent.id, dentist.id)
     end
 
-    # A BUILDING RULE IS A REAL CLAIM the user declared — it is inside `Budget.steady_need` — so
-    # leaving it out of the cut list would put money in the gap that nothing on this page could
-    # reach. This is the shape that survives the deleted "includes a rule on a pool with no account":
-    # a goal a rate refills (§3's "typically no refill rule" — the demo's Retirement Supplement is
-    # exactly the exception), which the pool era could only express as an account-less pool and
-    # `Pool#account_matches_pool_type` then refused.
+    # ** A GOAL MOVED FROM THE CUT LIST TO THE FIXED ONE, AND IT IS A CONSEQUENCE OF §2 RATHER THAN A
+    # CHOICE THIS PAGE MADE (two-shapes spec §2). ** The example used to read "includes a building
+    # rule saving toward a target": a goal was a `carries over` rule with a figure and NO anchor, and
+    # `#reason_for` marks a rule uncuttable by its anchor alone — so it landed among the cuttable rows.
+    # A goal is a dated one-off now, so the same declaration answers `:dated` and the page offers it
+    # as fixed instead.
     #
-    # ** THE GOAL IS THE RULE'S NOW, NOT THE CATEGORY'S (rules-own-the-budget spec §2.1 row 3). **
-    # It was `create(:category, :expense, :savings, target_amount: 5_000)` carrying a plain rate
-    # rule, which named a goal on a column no formula reads any more. `:capped` is the same
-    # declaration on the record that owns it — `carries_over` with a figure — and it reaches this
-    # page by the same road, because `#reason_for` marks a rule uncuttable by its ANCHOR and a
-    # building rule has none.
-    it "includes a building rule saving toward a target" do
+    # ASSERTED RATHER THAN DELETED, because it is a real change in what the sacrifice view offers and
+    # a later reader has to be able to find where it came from. `#reason_for` itself is untouched: its
+    # sentence — a date is what a rule is FOR, so it cannot be trimmed — is unchanged, and it is the
+    # population under it that moved.
+    it "marks a goal fixed, because a goal is a dated rule", :aggregate_failures do
       goal = create(:category, :expense, :funded, user: user, name: "Retirement Supplement")
-      goal_rule = create(:budget, :capped, category: goal, amount: 150, target_amount: 5_000)
+      goal_rule = create(:budget, :by_date, category: goal, amount: 5_000)
 
-      expect(ids(presenter.cuttable_rows)).to include(goal_rule.id)
+      expect(ids(presenter.cuttable_rows)).not_to include(goal_rule.id)
+      expect(presenter.fixed_rows.to_h { |row| [row.budget.id, row.reason] }.fetch(goal_rule.id)).to eq(:dated)
     end
 
     # PER-PERIOD CLAIMS, NOT AMOUNTS — the one assertion that catches the mixed-unit slip head on.

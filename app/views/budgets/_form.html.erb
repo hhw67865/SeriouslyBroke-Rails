@@ -3,26 +3,27 @@
     WHAT THIS FORM HAS BEEN, AND WHY THE LAST VERSION HAD TO GO. It was a mode-aware form serving a
     category CAP and a pool rule at once; then a pool-only rule form with an ENVELOPE half for the
     accept flow; then a rule on the category that holds the money — and in all three it could reach
-    exactly TWO of §2.1's seven shapes. A hand-made rule was always a per-period rate (`basis` rode
+    exactly TWO of the shapes the model allowed. A hand-made rule was always a per-period rate (`basis` rode
     hidden saying so), and a dated bill could only arrive MEASURED, from the suggestion panel, with
     its interval and anchor prefilled. "Rules form needs to be able to set the complex rules too,
     not just the per period catchall" (Henry, 2026-09-04) is the ruling this rewrite encodes.
 
-    THE SIX CONTROLS, IN §4'S ORDER: Category · Pays · Type · Amount · How often · Unspent money.
-    Every one of them renders on BOTH paths except the category, which is read-only on an edit —
+    THE FIVE CONTROLS: Category · Pays · Type · Amount · When is it needed (with its date and its
+    repeats checkbox). Every one of them renders on BOTH paths except the category, which is
+    read-only on an edit —
     the page that lists rules groups them BY category, so moving one between categories is a
     re-parenting that list should own rather than a control buried in one rule's form.
 
     THE SCHEDULE IS EDITABLE ON AN EDIT NOW, and the hint that used to say otherwise ("the schedule
     itself is already set on this rule") is deleted with the branch that showed it. §4 rules a shape
-    change legal outright: the claim is COMPUTED, so a rate rule made into a building one simply has
+    change legal outright: the claim is COMPUTED, so an allowance made into a dated rule simply has
     the walk re-run from its accrual start under the new shape. Nothing is migrated and nothing is
     stale.
 
-    THE FORM SUBMITS WORDS, NOT COLUMNS. `schedule` and `unspent` are the two radios; `RuleForm`
-    turns them into `basis`, `interval_months`, `anchor_date`, `carries_over` and `target_amount`,
-    and turns them back for this form to render. Nothing here knows that "every month" is
-    `monthly + interval 1 + no anchor`.
+    THE FORM SUBMITS WORDS, NOT COLUMNS. `schedule` is the radio and `repeats` the checkbox;
+    `RuleForm` turns them into `basis`, `interval_months` and `anchor_date`, and turns them back for
+    this form to render. Nothing here knows that a repeating dated rule is
+    `monthly + interval N + anchor`.
 
     THE REVEALS ARE AN ENHANCEMENT AND NOT A GATE. Each conditional block renders with `hidden` set
     to the state the CURRENT choice implies, and `rule_form_controller.js` toggles it as the radios
@@ -225,23 +226,33 @@
           <% end %>
         </div>
 
-        <%# ── 5. HOW OFTEN ─────────────────────────────────────────────────────────────────────
-            THE FOUR SHAPES OF §2.1, AS FOUR WORDS. `per period` and `every month` are the dateless
-            pair and differ only in what a period is; `every N months` and `once` are the dated pair
-            and differ only in whether the date repeats. `RuleForm` maps each onto its three
-            columns, and the errors from `Budget`'s own shape validations land back here — under the
-            control that chose them — rather than under a `basis` field this form does not have.
+        <%# ── 5. WHEN IS IT NEEDED? ────────────────────────────────────────────────────────────
+            THE TWO SHAPES OF §2, AS TWO WORDS (two-shapes spec §5, Henry's ruling of 2026-09-05).
+            "Every period" is a spending allowance that resets with the paycheck; "By a date" is
+            money saved up toward a day — a bill or a goal, which are ONE shape — and it reveals the
+            date and a "repeats every N months" checkbox. `RuleForm` maps the pair onto the three
+            columns, and the errors from `Budget`'s own shape validations land back here (under the
+            control that chose them) rather than under a `basis` field this form does not have.
 
-            THERE IS NO ONE-TIME CONCEPT BEYOND THIS RADIO (§1): a rule with a date and no interval
-            already IS one, its fulfilment is an entry, and the default is recurring so `once` is
-            the deliberate choice. %>
+            ** "Every month" LEFT THE RADIOS AND NOT THE MODEL (§5's ruling). ** `monthly` with no
+            due date is a legal row and `SuggestionEngine` still writes one; it is not a shape people
+            write by hand, so the form does not offer it and `RuleForm.from` reads such a row back as
+            "Every period" with its amount shown per month. Saving it unchanged converts it, which is
+            the ruling taken rather than a defect hidden.
+
+            ** THE UNSPENT-MONEY STEP AND ITS TARGET FIELD ARE DELETED (§7). ** They asked what
+            becomes of money the period did not spend and revealed a Target under "Builds up". A fund
+            IS a dated rule whose amount is its target, so "builds up toward $5,000" is written as
+            "$5,000" in step 4 and "by Jun 1, 2027" here — and `budgets.carries-over` and
+            `budgets.target-amount` are dropped.
+
+            TASK 4 REBUILDS THIS PAGE on §5's mocks (a two-column layout with a sticky preview and
+            suggestion chips). What is here is the same controls in the new words, working. %>
         <div>
-          <span class="form-label">How often</span>
+          <span class="form-label">When is it needed?</span>
           <% schedules = [
-               ["per_period", "Per period", "every pay period, on your own cadence"],
-               ["monthly", "Every month", "a standing monthly figure, with no due date"],
-               ["every_n", "Every N months", "a bill that comes round on a date"],
-               ["once", "Once", "a single dated bill"]
+               ["per_period", "Every period", "a spending allowance that resets with your paycheck"],
+               ["by_date", "By a date", "money saved up toward a day — a bill or a goal"]
              ] %>
           <div class="mt-2 space-y-2">
             <% schedules.each do |value, label, help| %>
@@ -256,23 +267,10 @@
             <% end %>
           </div>
           <% if rule_form.errors[:schedule].any? %>
-            <p class="form-error">How often <%= rule_form.errors[:schedule].to_sentence %></p>
+            <p class="form-error">When it is needed <%= rule_form.errors[:schedule].to_sentence %></p>
           <% end %>
 
           <div class="mt-4 space-y-4 pl-3 border-l-2 border-gray-100">
-            <%# THE INTERVAL, revealed by `every N months` alone. §2.1's row 3 is
-                `monthly + interval + anchor` and a form offering one without the other could submit
-                row 2 with an N > 1, which `shape_must_be_valid` refuses. %>
-            <div data-rule-reveal
-                 data-app--budget--rule-form-target="intervalField"
-                 <%= "hidden" unless rule_form.schedule == "every_n" %>>
-              <%= f.input :interval_months,
-                  as: :integer,
-                  label: "Comes round every (months)",
-                  input_html: { min: 1, step: 1 },
-                  hint: "6 for a half-yearly bill, 3 for a quarterly one." %>
-            </div>
-
             <%# THE DATE. It rode HIDDEN beside the basis until Henry's real-use testing of
                 2026-08-20: `SuggestionEngine#next_due_on` walks the LAST PAYMENT forward by the
                 interval, so a bill paid late once proposed a rule whose every future due date was
@@ -280,92 +278,41 @@
                 decides when the money is needed was not. %>
             <div data-rule-reveal
                  data-app--budget--rule-form-target="anchorField"
-                 <%= "hidden" unless ["every_n", "once"].include?(rule_form.schedule) %>>
+                 <%= "hidden" unless rule_form.schedule == "by_date" %>>
               <%= f.input :anchor_date,
                   as: :date,
                   html5: true,
-                  label: "First due",
-                  hint: "When this bill next comes round. Change it if the last payment was early or late." %>
+                  label: "Due",
+                  hint: "The day the money has to be there. Change it if the last payment was early or late." %>
+            </div>
+
+            <%# REPEATS — a checkbox rather than a third schedule, because "every 6 months" is a
+                detail OF "by a date" and not a different answer to when the money is needed. Its own
+                reveal is the interval below; two nested reveals would each stash and clear the
+                other's inputs on the way past, so every reveal on this form is a leaf. %>
+            <div data-rule-reveal
+                 data-app--budget--rule-form-target="repeatsField"
+                 <%= "hidden" unless rule_form.schedule == "by_date" %>>
+              <%= f.input :repeats,
+                  as: :boolean,
+                  label: "Repeats every N months",
+                  input_html: { data: { action: "change->app--budget--rule-form#refresh" } },
+                  hint: "leave this off for a one-off bill or a savings goal" %>
+            </div>
+
+            <%# THE INTERVAL, revealed by the checkbox alone. §2's row 4 is
+                `monthly + interval + anchor`; a form offering the N without the date could submit
+                row 2 with an N > 1, which `shape_must_be_valid` refuses. %>
+            <div data-rule-reveal
+                 data-app--budget--rule-form-target="intervalField"
+                 <%= "hidden" unless rule_form.schedule == "by_date" && rule_form.repeats? %>>
+              <%= f.input :interval_months,
+                  as: :integer,
+                  label: "Comes round every (months)",
+                  input_html: { min: 1, step: 1 },
+                  hint: "6 for a half-yearly bill, 3 for a quarterly one." %>
             </div>
           </div>
-        </div>
-
-        <%# ── 6. UNSPENT MONEY ─────────────────────────────────────────────────────────────────
-            "Rules should have a option to not give a final number but rather a number saved per
-            period. This would be something that you could allow to infinitely grow" (Henry,
-            2026-09-04). A rate rule's money resets at the boundary (groceries); a BUILDING rule's
-            survives it (an emergency fund), and a building rule may name a target that caps it —
-            which is what a goal is, now that a goal is not a kind of category.
-
-            ** ON A DATED SCHEDULE IT IS DISABLED, NOT MERELY HIDDEN (fix round 1 - L2). ** A dated
-            rule's build-up is already defined by its date: §3.2's catch-up walk accrues toward the
-            amount, holds it until the bill is paid and empties when it is, and
-            `Budget#build_up_must_be_valid` refuses `carries_over` beside an anchor outright. With
-            JavaScript the block is simply away. WITHOUT it the `<noscript>` rule above forces every
-            reveal visible - so the radios were live, a user could choose "Builds up" on a `once`
-            rule, and `RuleForm` dropped it in silence. Disabled controls submit nothing and say why
-            they cannot be used, which is the honest version of the same refusal; the Stimulus
-            controller toggles the identical state as the schedule moves. %>
-        <div data-rule-reveal
-             data-app--budget--rule-form-target="unspentField"
-             <%= "hidden" unless RuleForm::DATELESS_SCHEDULES.include?(rule_form.schedule) %>>
-          <span class="form-label">Unspent money</span>
-          <% dated_schedule = RuleForm::DATELESS_SCHEDULES.exclude?(rule_form.schedule) %>
-          <% if dated_schedule %>
-            <p class="form-hint">A dated bill never carries money over.</p>
-          <% end %>
-          <% unspent_choices = [
-               ["resets", "Resets each period", "whatever is left goes back to free money"],
-               ["builds", "Builds up", "what is left stays in this category and grows"]
-             ] %>
-          <div class="mt-2 space-y-2">
-            <% unspent_choices.each do |value, label, help| %>
-              <label class="flex items-start gap-3 rounded border border-gray-200 p-3 <%= dated_schedule ? "opacity-60" : "cursor-pointer hover:border-gray-300" %>">
-                <% radio_data = { action: "change->app--budget--rule-form#refresh" } %>
-                <%= f.radio_button :unspent, value, class: "form-radio mt-1", disabled: dated_schedule, data: radio_data %>
-                <span class="flex-1">
-                  <span class="block text-sm font-medium text-gray-900"><%= label %></span>
-                  <span class="block text-xs text-gray-500"><%= help %></span>
-                </span>
-              </label>
-            <% end %>
-          </div>
-          <% if rule_form.errors[:unspent].any? %>
-            <p class="form-error">Unspent money <%= rule_form.errors[:unspent].to_sentence %></p>
-          <% end %>
-        </div>
-
-        <%# THE TARGET — a cap on what builds up, and optional: blank is the fund that grows without
-            limit, which is §2.1's row 2 and the whole of Henry's "allow it to infinitely grow".
-
-            A SIBLING OF THE BLOCK THAT REVEALS IT, not a child of it. Two nested reveals would each
-            stash and clear the other's inputs on the way past — hiding "Unspent money" would stash
-            the target, and hiding the target a moment later would stash the emptied field over the
-            top of it, losing the figure for good. Every reveal on this form is a leaf.
-
-            DISABLED ON A DATED SCHEDULE, with the radios above it and for their reason (fix round 1
-            — L2): a dated rule cannot build up at all, so a figure typed here without JavaScript
-            could only ever be dropped. It is NOT disabled under "Resets each period", and that is
-            the difference: a JavaScript-less user has to be able to reach it by moving the radio
-            one line up, which nothing but JavaScript would otherwise re-enable.
-
-            ITS ERRORS ARE ITS OWN (fix round 1 — L4). `target_amount` is a control on this form, so
-            "must be greater than 0" belongs under the input the figure was typed into; only
-            `carries_over` — which has no input of its own — is worded under the radios. %>
-        <div class="pl-3 border-l-2 border-gray-100"
-             data-rule-reveal
-             data-app--budget--rule-form-target="targetField"
-             <%= "hidden" unless RuleForm::DATELESS_SCHEDULES.include?(rule_form.schedule) && rule_form.unspent == "builds" %>>
-          <%= f.input :target_amount,
-              as: :decimal,
-              label: "Target",
-              input_html: {
-                placeholder: "0.00",
-                step: 0.01,
-                min: 0,
-                disabled: dated_schedule
-              },
-              hint: "leave blank to keep building" %>
         </div>
       </div>
     </div>

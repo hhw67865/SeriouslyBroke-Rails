@@ -25,16 +25,25 @@ RSpec.describe AdjustmentForm, type: :model do
     create(:category, :expense, user: user, name: "Vacation", funded_since: Date.new(2026, 1, 1))
   end
 
-  # A $150-a-period rule BORN AUG 1 BUILDING TOWARD $1,200: the walk visits August (planning
-  # `min($150, $1,200)` = $150) and September (planning `min($150, $1,050)` = $150), so this period
-  # accrues $150 and a skip is worth −$150.
+  # A $1,200 GOAL DUE MAR 31 2027, BORN AUG 1: eight monthly boundaries from August (Aug 1 … Mar 1),
+  # so §3.2's catch-up share is `1,200 ÷ 8` = $150 in August and `1,050 ÷ 7` = $150 in September. This
+  # period accrues $150 and a skip is worth −$150.
   #
-  # ** IT HAS TO BE A RULE THAT WALKS, AND THE FIGURE IS ON THE RULE (rules-own-the-budget §2.1). **
-  # A rate rule's `#periods` is the CURRENT period and nothing else, so its span can never be empty
-  # and the refusal below has no shape to fire on; `carries_over` is what opens the walk now, where a
-  # `target_amount` on the CATEGORY used to.
+  # ** IT HAS TO BE A RULE THAT WALKS, AND SINCE THE TWO SHAPES THAT MEANS A DATE (§2). ** A rate
+  # rule's `#periods` is the CURRENT period and nothing else, so its span can never be empty and the
+  # refusal below has no shape to fire on. The anchor is what opens the walk; it was `carries_over`
+  # for one task and a `target_amount` on the CATEGORY before that, and every literal here is the
+  # figure that shape produced.
   let(:rule) do
-    create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 8, 1, 9, 0))
+    create(
+      :budget,
+      category: goal,
+      amount: 1_200,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.new(2027, 3, 31),
+      created_at: Time.utc(2026, 8, 1, 9, 0)
+    )
   end
 
   def form(params, today:) = described_class.new(rule: rule, params: params, name: "Vacation", today: today)
@@ -51,7 +60,15 @@ RSpec.describe AdjustmentForm, type: :model do
   # full the day the period opens"). October is the first period whose OPEN is after this `today`.
   describe "a rule that has not started counting" do
     let(:rule) do
-      create(:budget, :capped, category: goal, amount: 150, target_amount: 1_200, created_at: Time.utc(2026, 10, 1, 9, 0))
+      create(
+        :budget,
+        category: goal,
+        amount: 1_200,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: Date.new(2027, 3, 31),
+        created_at: Time.utc(2026, 10, 1, 9, 0)
+      )
     end
 
     it "refuses, naming the rule rather than a span it could be met inside", :aggregate_failures do

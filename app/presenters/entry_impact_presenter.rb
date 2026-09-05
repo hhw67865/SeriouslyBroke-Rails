@@ -136,31 +136,24 @@ class EntryImpactPresenter
   # population — so a user who meets the sentence here and the offer there is reading one app.
   def unbudgeted? = holding.nil? || !holding.budgeted?
 
-  # ** A CATEGORY WHOSE MONEY BUILDS UP IS A FUND, so the card takes the fund shape (`$X → $Y of
-  # $Z`) rather than the envelope's (`$X → $Y left`). **
+  # ** A CATEGORY SAVING TOWARD A DAY IS A FUND, so the card takes the fund shape (`$X → $Y of $Z`)
+  # rather than the envelope's (`$X → $Y left`). **
   #
-  # ** IT IS THE RULE THAT SAYS SO NOW (rules-own-the-budget spec §5/§7). ** This asked
-  # `Category#saving_toward_a_target?` — `holder? && categories.target_amount.present?` — and that
-  # column is one no claim formula has read since the shapes moved onto the rule:
-  # `ClaimCalculator#shape` answers `:building` off `carries_over` and caps at the RULE's
-  # `target_amount`. Reading the category's figure here would draw a bar against a number nothing
-  # computes, and — because `#denominator` is that figure — it would have gone on doing so after
-  # Task 4 drops the column.
+  # ** IT IS THE RULE'S SHAPE THAT SAYS SO (two-shapes spec §2). ** This asked
+  # `Category#saving_toward_a_target?` — a figure on the category — and then the retired fund
+  # shape's own predicate, both of which read columns no claim formula consults any more. A fund is a
+  # dated rule; `ClaimCalculator#dated?` is the question, asked of the calculators this card already
+  # builds for the category it is drawing.
   #
-  # `Category#building_rule` IS THE ONE READER, asked of the CATEGORY this card is drawing: it is
-  # the item-less rule, the category's own lane, so a fund carved out for one item does not make the
-  # whole category a fund. The categories index card and the categories page's holdings card ask the
-  # same rule, so a fund is a fund on all three.
+  # ONE QUESTION WHERE THERE WERE TWO. The old pair decided the NOUN and, separately, the trailing
+  # phrase and the bar's denominator, and they could not be one because a fund was allowed to name no
+  # figure at all. Every dated rule names one, so the noun and the denominator answer
+  # together — what is left of the second reader is the SOLE-RULE guard, which is a different
+  # question and is kept below.
   #
-  # ** IT IS TWO QUESTIONS WHERE `#goal?` WAS ONE, because a building rule may name NO figure (§2.1
-  # row 2). ** `#building?` decides the NOUN and the card's shape; `#building_target` decides the
-  # trailing phrase and the bar's denominator, and it is nil for an uncapped fund — which falls back
-  # to `#steady_claim`, the ordinary envelope denominator, because what an uncapped fund adds per
-  # period is the only thing there is to measure a period's spending against.
-  #
-  # Spending from a fund is still spending against a fund, which is why this arm exists at all: the
-  # figures are the same two figures, and only the trailing phrase differs.
-  def building? = holding.present? && holding.building_rule.present?
+  # ANY dated rule, not only an item-less one: a bill's fund and a savings goal are one shape (§2),
+  # and spending from either is spending against money that was being saved.
+  def fund? = holding.present? && claim_calculators.any?(&:dated?)
 
   # ** THE TARGET IS PRINTED ONLY WHERE IT IS A CEILING ON THE FIGURE BESIDE IT (fix round 1 —
   # MED-4). ** `#balance` is the WHOLE CATEGORY's claim — Σ over every rule on it — and that is not
@@ -170,43 +163,41 @@ class EntryImpactPresenter
   # CATEGORY'S FIGURE or it is not true at all.
   #
   # ** MEASURED ON THE MIXED SHAPE, WHICH IS ORDINARY RATHER THAN EXOTIC. ** A "Car" category with a
-  # $600-a-period fund building toward $2,400 and a $600 insurance bill on one of its items claims
-  # `600 + 600` = $1,200 after one period. Printed against the fund's ceiling that reads
-  # `$1,200.00 of $2,400.00` — half full — when the FUND is a quarter full and the other $600 is a
-  # bill's accrual that has nothing to do with the target. The bar said the same thing twice as
-  # loudly.
+  # $2,400 goal and a $600 insurance bill on one of its items claims `600 + 600` = $1,200 after one
+  # period. Printed against the goal's ceiling that reads `$1,200.00 of $2,400.00` — half full — when
+  # the FUND is a quarter full and the other $600 is a bill's accrual that has nothing to do with the
+  # target. The bar said the same thing twice as loudly.
   #
-  # SO THE TARGET ARM REQUIRES THE BUILDING RULE TO BE THE CATEGORY'S ONLY RULE, which is exactly
-  # when `Σ claims` IS the fund's built-up and the target IS its ceiling. Everywhere else the card
-  # falls to the sentence it already had for a fund with no ceiling — `built up`, with the ordinary
-  # `Σ standing_ask` denominator — and that sentence stays TRUE on the mixed shape: both rules'
-  # contributions are money the category has accrued. What is dropped is only the false "of".
+  # ** SO THE TARGET ARM REQUIRES THE DATED RULE TO BE THE CATEGORY'S ONLY RULE, which is exactly
+  # when `Σ claims` IS that rule's built-up and its amount IS the ceiling. ** Everywhere else the
+  # card falls to the sentence it already had — `built up`, with the ordinary `Σ standing_ask`
+  # denominator — and that sentence stays TRUE on the mixed shape: both rules' contributions are
+  # money the category has accrued. What is dropped is only the false "of".
   #
-  # THE NOUN IS UNAFFECTED. `#building?` is a question about the SHAPE — money here builds up — and a
-  # sibling bill does not make that less so.
-  #
-  # ** THE TEST IS `Category#fund_is_the_whole_category?` AND IT IS NO LONGER THIS CARD'S ALONE (fix
-  # wave — MED-1). ** It was `budgets.load.one?` written out here, and the categories index card, the
-  # holdings card and the dashboard's savings strip went on dividing Σ every rule's claim by ONE
-  # rule's target. The model owns the clause now; it still costs no statement, because the
-  # association is already loaded on every path that reaches here (`Category#budgeted?` loads it, and
-  # `#claim_calculators` reads it).
-  def building_target
-    return nil unless holding&.fund_is_the_whole_category?
+  # ** THE SOLE-RULE GUARD SURVIVES THE SHAPE THAT NEEDED IT (two-shapes spec §2). ** It was
+  # `Category.fund-is-the-whole-category`, which is deleted with the retired fund shape; the CLAUSE
+  # is not, because what made it necessary is `#balance` being the whole category's claim. Asked of
+  # the calculators this card has already built, so it costs no statement (the association is loaded
+  # on every path that reaches here: `Category#budgeted?` loads it and `#claim_calculators` reads it).
+  def fund_target
+    return nil if holding.nil?
 
-    holding.building_rule.target_amount&.to_d
+    calculator = claim_calculators.sole if claim_calculators.one?
+    return nil unless calculator&.dated?
+
+    calculator.target
   end
 
   # "envelope" or "fund" — the noun the header uses.
   #
   # ** "GOAL" IS RETIRED (§7). ** A goal was a kind of CATEGORY; what this names is what the rule
-  # does with money the period did not spend. "Fund" is true of the capped shape and the uncapped
-  # one alike, where "goal" was true of neither without a figure to be a goal toward.
+  # does with the money: it is being saved toward a day. "Fund" is true of a bill's fund and a
+  # savings goal alike, which is what makes them one shape (two-shapes §2).
   #
   # `Pool#noun` IS GONE with the type it read: a pool had three types and a word for each, and a
   # category has one type and a question. "envelope" is the right word for a category that holds its
   # own spending money, and it is also the fallback the honest card's own headline is written in.
-  def noun = building? ? "fund" : "envelope"
+  def noun = fund? ? "fund" : "envelope"
 
   # WHAT THE CATEGORY CLAIMS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #
@@ -294,7 +285,7 @@ class EntryImpactPresenter
   # RAISE the pool it filled. Contributions are gone and there is no savings category to sign: every
   # card this class renders describes an expense (income is silent — see `#render?`), and an expense
   # is what §3 subtracts from a claim. The FUND arm is unaffected and still renders — spending from
-  # a fund is spending against a fund, which is `#building?`'s own note.
+  # a fund is spending against a fund, which is `#fund?`'s own note.
   #
   # UNCLAMPED, AND THAT IS THE POINT OF THE RIGHT-HAND FIGURE. §3 clamps a claim at zero and this
   # subtraction does not, because "what this spending leaves" and "what the rules will claim
@@ -332,19 +323,19 @@ class EntryImpactPresenter
   #     Under the steady_ask denominator its bar is drawn FULL while the line directly above it
   #     reads "of $100,000.00" — two answers to one question, an inch apart, on the same card.
   #   * The other four funds (Emergency Fund, House Down Payment, New Car, Vacation to Europe)
-  #     carry only hand-fed rules, so Σ steady_ask is zero and their bars could never move — empty
-  #     on a fund the user is watching fill. Such a fund claims nothing at the start either, so the
-  #     bar is empty for a second and better reason; the target denominator is what lets it start
-  #     moving the moment money is set aside.
+  #     carried only hand-fed rules under the retired building shape, so Σ steady_ask was zero and
+  #     their bars could never move — empty on a fund the user is watching fill. Every fund names a
+  #     date now, so Σ steady_ask is its target over the periods it has to reach it in and is never
+  #     zero; the target denominator is still what the line above the bar prints, which is why it
+  #     stays the first arm.
   #
-  # ** AN UNCAPPED FUND FALLS BACK TO Σ steady_ask (rules-own-the-budget spec §2.1 row 2). **
-  # `#building_target` is nil for it — there is no ceiling — and the honest denominator for a card
-  # asking "can I afford this" is then the same one an envelope gets: what the category's rules ask
-  # of a period. It is not the target arm wearing a different figure; it is the absence of a target,
-  # and the fallback is what the `||` has always meant.
+  # ** A FUND WITH A SIBLING RULE FALLS BACK TO Σ steady_ask. ** `#fund_target` withholds the figure
+  # there (a ceiling on the fund's money beside a total that is the category's), and the honest
+  # denominator for a card asking "can I afford this" is then the same one an envelope gets: what the
+  # category's rules ask of a period. The fallback is what the `||` has always meant.
   #
   # The rate case is untouched: a budgeted category's bar is Σ steady_ask, exactly as ruled.
-  def denominator = @denominator ||= building_target || steady_claim
+  def denominator = @denominator ||= fund_target || steady_claim
 
   # WHETHER THERE IS A BAR AT ALL. An envelope with no rules on it has no per-period claim, so
   # there is nothing for a bar to be a fraction OF — and an empty track drawn beside real figures
@@ -484,23 +475,15 @@ class EntryImpactPresenter
     claim_calculators.sum(0.to_d) { |calculator| ceiling_for(calculator) }
   end
 
-  # ** AN UNCAPPED BUILDING RULE HAS NO TARGET TO BE THE CEILING (rules-own-the-budget spec §2.1 row
-  # 2; fix round 1 — MED). ** `ClaimCalculator#target` is NIL for a fund that names no figure, and a
-  # `BigDecimal + nil` raised on the entry form the moment a category held one.
-  #
-  # THE CEILING FOR THAT SHAPE IS `built_up + this period's rate`, and the reasoning is the one this
-  # method is built on: the ceiling exists to stop a give-back printing money that is provably not
-  # there, so it has to be the most the rule COULD hold on the day the card is drawn. An uncapped
-  # rule's built-up is whatever the walk has reached; the only thing that can be added to it before
-  # the next boundary is this period's own share, and there is no deadline and no cap that could
-  # take it higher. It is also the LOOSEST honest bound rather than the tightest, which is the
-  # direction this method's own header argues for — the three gates on `#own_contribution` do the
-  # work, and the ceiling is the second line of defence behind them.
+  # ** THE UNCAPPED ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** `ClaimCalculator#target`
+  # was NIL for a fund that named no figure, and a `BigDecimal + nil` raised on the entry form the
+  # moment a category held one; the arm's ceiling was `built_up + this period's share`, the most such
+  # a rule COULD hold on the day the card was drawn. Every accruing rule is dated now and its target
+  # is its own amount, which is a real ceiling and the one this method wanted all along.
   def ceiling_for(calculator)
     return [calculator.accrued_this_period, 0.to_d].max if calculator.rate?
-    return calculator.target if calculator.capped?
 
-    calculator.built_up + calculator.planned_this_period
+    calculator.target
   end
 
   # WHAT THIS ENTRY HAS ALREADY TAKEN OUT OF THE CLAIM, in the claim's own sign. Zero for a new

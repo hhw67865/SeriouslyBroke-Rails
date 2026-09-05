@@ -89,48 +89,40 @@ class Budget < ApplicationRecord
   # column, and inventing one would give the invariant two places to be wrong.
   scope :for_user, ->(user) { where(category_id: user.categories.select(:id)) }
 
-  # ** WHAT MAKES A RULE THE ONE THAT BUILDS ITS CATEGORY'S MONEY UP (rules-own-the-budget spec §5)
-  # — THE CONDITIONS, ONCE (fix round 1 — LOW-7). ** The question was spelled THREE times: this pair
-  # of columns as a `detect` block on `Category`, again as a `detect` block on
-  # `CategoryBudgetPresenter`, and again as a literal `where(item_id: nil, carries_over: true)` in
-  # `Dashboard::OverviewPresenter#savings_categories`. Three copies of a two-clause test is how a
-  # strip comes to list a set the category pages disagree with.
+  # ** THE CATEGORIES SAVING TOWARD A DAY (two-shapes spec §2/§7) — THE ONE SPELLING, IN SQL. ** It
+  # replaces `BUILDS-UP-THE-CATEGORY` (`item_id: nil, carries-over: true`) and its two derived
+  # readers, which asked "does this rule's unspent money survive the boundary" — a question no column
+  # answers any more. What the dashboard's Savings band is about is a target with a DAY on it: a
+  # one-off dated rule, which is `anchor_date IS NOT NULL AND interval_months IS NULL` and is exactly
+  # §2's row 5 (a goal). A rule that REPEATS is a recurring bill, not something being saved toward.
   #
-  # ONE HASH, TWO DERIVED READERS, AND THEY CANNOT DIVERGE BY CONSTRUCTION: `.builds_up_the_category`
-  # is the SQL side (the dashboard's `IN (SELECT category_id …)` subquery) and
-  # `#builds_up_the_category?` is the in-memory side (`Category#building_rule` and the presenter's,
-  # both over rows something else has already loaded). `budget_spec` pins them equal on planted rules
-  # anyway, because a derivation nobody checks is a derivation waiting to grow an argument.
+  # ONE SCOPE AND NO IN-MEMORY TWIN, deliberately. The old pair existed because `Category#building-rule`
+  # and `CategoryBudgetPresenter` each had to pick the fund out of rows already loaded; both of those
+  # readers are deleted with the shape, and the only surviving caller is the dashboard's own
+  # `IN (SELECT category_id …)` subquery. A predicate nobody asks is a second spelling waiting for a
+  # caller to disagree with.
   #
-  # TWO CLAUSES AND NO THIRD. `carries_over` is what makes unspent money survive the boundary — the
-  # target is a CAP on that and may be absent (§2.1 row 2), so asking about it here would be the old
-  # `Category#saving_toward_a_target?` in a new place, blind to an emergency fund. `item_id IS NULL`
-  # is §3.1's lane partition: an item-backed rule speaks for one item's spending, so a fund carved
-  # out for the phone handset is not the CATEGORY building up.
-  BUILDS_UP_THE_CATEGORY = { item_id: nil, carries_over: true }.freeze
-
-  scope :builds_up_the_category, -> { where(BUILDS_UP_THE_CATEGORY) }
+  # ** `item_id IS NULL` SURVIVES THE CHANGE OF SHAPE UNCHANGED, and it is §3.1's lane partition. **
+  # An item-backed rule speaks for ONE item's spending, so a goal carved out for the flights line is
+  # not what the CATEGORY is saving toward — the same sentence the retired pair carried, asked of the
+  # new columns. It is also what makes the scope SINGLE-VALUED per category
+  # (`#category_may_hold_one_item_less_rule` allows exactly one item-less rule), which is what lets
+  # the dashboard's row name "the fund" rather than pick one of a set.
+  scope :saving_toward_a_date, -> { where(item_id: nil).where.not(anchor_date: nil).where(interval_months: nil) }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
-  # flowing the wrong way through the allocation waterfall — which `clamp` refuses outright.
+  # flowing the wrong way.
   #
-  # ** ZERO IS LEGAL FOR EXACTLY ONE SHAPE (computed-claims spec §3.2, Henry's ruling of
-  # 2026-09-03). ** "A dateless target … accrues by its rate if it has one, and OTHERWISE ONLY BY
-  # POSITIVE ADJUSTMENTS" — a goal somebody feeds by hand and never on a schedule. Under the computed
-  # model every claim comes from a rule (§3.3), so that goal has to BE a rule, and the only honest
-  # way to say "no standing rate" is an amount of zero. See #set_aside_only? for the exact shape;
-  # everywhere else "demands nothing" still means "delete it".
+  # ** ZERO IS LEGAL FOR NO SHAPE AT ALL SINCE THE TWO SHAPES (§2, Henry's ruling of 2026-09-05). **
+  # The one exemption was `#set-aside-only` — a dateless target fed only by hand, which spelled "no
+  # standing rate" as an amount of zero because there was no deadline for a rate to be derived from.
+  # A goal names a DAY now, so its per-period share is `remaining ÷ periods until the date` and its
+  # amount is the target itself: there is nothing left for a zero to mean. `TwoShapes` converts every
+  # such rule to `amount = target-amount`, so no row in any database this app can meet still holds
+  # one.
   validates :amount, presence: true
-  validates :amount, numericality: { greater_than: 0 }, unless: :set_aside_only?
-  validates :amount, numericality: { greater_than_or_equal_to: 0 }, if: :set_aside_only?
+  validates :amount, numericality: { greater_than: 0 }
   validates :interval_months, numericality: { greater_than: 0 }, allow_nil: true
-
-  # A GOAL OF ZERO IS ALREADY MET AND A NEGATIVE ONE IS MONEY THE BUDGET OWES ITS OWNER —
-  # `Category#target_is_a_real_figure`'s rule, re-stated on the column's new owner (spec §2.1). The
-  # database carries `budgets_positive_target_amount` for the same sentence; this is the half a form
-  # can render. `allow_nil` because a building rule with no target is the shape that grows without
-  # limit, which is a declaration rather than an omission.
-  validates :target_amount, numericality: { greater_than: 0 }, allow_nil: true
 
   # EVERY RULE HAS A TYPE (§3). The column is NOT NULL with a default, so this fires only on a rule
   # somebody explicitly blanked — which is exactly the state a form with an unanswered radio would
@@ -145,7 +137,6 @@ class Budget < ApplicationRecord
   # and `#item_must_not_be_claimed` is about one item having one rule, so neither has ever needed
   # to know who owns the rule.
   validate :shape_must_be_valid
-  validate :build_up_must_be_valid
   validate :item_must_not_be_claimed
 
   # `#category_column?` FIRST, AND IT IS NOT DEFENSIVE. `budgets.category_id` is younger than
@@ -191,10 +182,10 @@ class Budget < ApplicationRecord
     ClaimCalculator.new(self, today: today, spending: spending, adjustments: adjustments)
   end
 
-  # ** WHICH OF §3'S THREE FORMULAS THIS RULE TAKES — `ClaimCalculator#shape`, AND THE ONLY DOOR ONTO
-  # IT FROM OUTSIDE A CALCULATOR (fix wave — MED-2). ** The shape is read off `anchor_date` and
-  # `carries_over` — both the rule's own columns since this task; it was the CATEGORY's
-  # `target_amount` before — and `SuggestionEngine#rate_shape?` held a second reading of it that
+  # ** WHICH OF §3'S TWO FORMULAS THIS RULE TAKES — `ClaimCalculator#shape`, AND THE ONLY DOOR ONTO
+  # IT FROM OUTSIDE A CALCULATOR (fix wave — MED-2). ** The shape is read off `anchor_date` alone
+  # since the two shapes (§2); it was that column plus `carries-over` before, and the CATEGORY's
+  # `target-amount` before that — and `SuggestionEngine#rate_shape?` held a second reading of it that
   # asked neither: `anchor_date.blank? && item_id.blank? && cadence.in?([:per_period, :monthly])`. It
   # is missing the target column, so every goal category's rule was a "rate rule" to the drift
   # detector — including the eight $0 rules Task 4's migration minted, which fired "your rule says
@@ -204,19 +195,6 @@ class Budget < ApplicationRecord
   # IT COSTS NO QUERY WHERE THE OWNER IS LOADED: `#shape` reads two columns and the constructor's
   # `today:` default walks `category.user`, which every caller of this method already preloads.
   def claim_shape = claim_calculator.shape
-
-  # ** THE IN-MEMORY SIDE OF `BUILDS_UP_THE_CATEGORY`, and it reads that hash rather than restating
-  # it. ** It is asked of rows something else has already loaded — `Category#building_rule` over the
-  # `:budgets` association, and `CategoryBudgetPresenter#building_rule` over the set the page's ONE
-  # `ClaimLedger` fetched — so it must not be the scope: `budgets.merge(…).first` issues a statement
-  # on a LOADED association, which is a `SELECT budgets` per card on the categories index and one
-  # more per render of the entry form's impact card. Measured: routing the presenter through a
-  # relational reader took the categories show page's cost pin from `[1, 1]` to `[1, 2]`.
-  #
-  # `self[column]` and not the attribute readers, so the columns are named in exactly one place.
-  def builds_up_the_category?
-    BUILDS_UP_THE_CATEGORY.all? { |column, value| self[column] == value }
-  end
 
   # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`
   # are three columns whose COMBINATION is the shape (§3.1), and reading the shape off them takes
@@ -442,29 +420,14 @@ class Budget < ApplicationRecord
     errors.add(:category, "must be an expense category") if category&.income?
   end
 
-  # ** WHAT BECOMES OF UNSPENT MONEY, AND WHAT IT IS BUILDING TOWARD
-  # (docs/superpowers/specs/2026-09-04-rules-own-the-budget-design.md §2.1). ** Beside
-  # `#shape_must_be_valid` rather than inside it: that method is the CADENCE cascade — three columns
-  # whose combination says how often a rule comes round — and these two columns say something else
-  # about the same record. One method for each question keeps either readable on its own.
-  #
-  # A DATED RULE'S BUILD-UP IS ALREADY DEFINED, BY ITS DATE. §3.2's catch-up walk accrues toward the
-  # amount, holds it until the bill is paid and empties when it is; `carries_over` on top of that
-  # would be a second answer to "does this money survive the boundary", and `ClaimCalculator#shape`
-  # would have to pick one. It picks the anchor, so the pair is refused here rather than resolved
-  # silently there.
-  #
-  # A CAP ON MONEY THAT RESETS IS A NUMBER NO FORMULA READS. A rate rule carries nothing past the
-  # boundary (§3.1), so "building toward $5,000" describes a fund that cannot exist — and the figure
-  # would sit on the row looking like a goal the user is making progress on.
-  #
-  # THE ERRORS LAND ON THE CONTROL THAT CHOSE. §4's form asks "unspent money: resets / builds up"
-  # and reveals Target under the second, so `:carries_over` and `:target_amount` are the fields the
-  # user can actually act on — `:base` would put a sentence about a radio in the form's own banner.
-  def build_up_must_be_valid
-    errors.add(:carries_over, "cannot be set on a rule with a due date") if carries_over? && anchor_date.present?
-    errors.add(:target_amount, "needs a rule whose unspent money builds up") if target_amount.present? && !carries_over?
-  end
+  # ** `#build_up_must_be_valid` IS DELETED WITH THE COLUMNS IT REFEREED (two-shapes spec §7). ** It
+  # said two things: `carries-over` may not sit beside an `anchor_date` (a dated rule's build-up is
+  # already defined by its date, and `ClaimCalculator#shape` would have had two answers), and a
+  # `target-amount` needs a rule whose money builds up (a cap on money that resets is a number no
+  # formula reads). Both were about the pair of columns `TwoShapes` drops; with one shape column left
+  # there is no pair to referee. `#shape_must_be_valid` below is untouched — it is the CADENCE
+  # cascade, about the three columns that say how often a rule comes round, which is a different
+  # question and always was.
 
   # See docs/superpowers/specs/2026-08-14-envelope-budgeting-design.md §3.1
   def shape_must_be_valid
@@ -525,32 +488,11 @@ class Budget < ApplicationRecord
     errors.add(:base, CATCH_ALL_TAKEN)
   end
 
-  # THE ONE SHAPE THAT MAY DEMAND NOTHING (computed-claims spec §3.2): a goal fed only by hand. The
-  # RULE names a figure to reach and says its unspent money builds up, and it names no deadline to
-  # reach it by — so it has no schedule for a rate to be the rate OF, and every penny it ever holds
-  # arrives as a positive adjustment (§3.3's "set aside"). `ClaimCalculator` reads exactly this shape
-  # as a capped building rule whose per-period accrual is its amount, so a zero amount accrues zero
-  # and the adjustments are the whole of it.
-  #
-  # ** IT ASKED THE CATEGORY UNTIL THIS TASK, AND THE COLUMN THAT MOVED TOOK THE DEFECT WITH IT
-  # (rules-own-the-budget spec §2.1 row 4). ** `category&.target_amount.present?` made the exemption
-  # a fact about a NEIGHBOURING record: a user who retired a goal by clearing the category's figure
-  # left a $0 rule behind that re-validates nothing, and `SuggestionEngine` then read it as a rate
-  # rule that had drifted from a rate it never had. All three columns are the rule's own now, so the
-  # shape a save was granted for is the shape the row still has.
-  #
-  # NO `#category_mode?` GATE, and it is not an omission. That gate exists because
-  # `budgets.category_id` is younger than two migration specs that rewind past it; these three
-  # columns are younger still and no rewind reaches them (`spec/support/schema_rewind.rb` names five
-  # migrations and this is not one of them), so there is no schema in this project where reading
-  # them raises.
-  #
-  # `anchor_date.blank?` IS NOT REDUNDANT BESIDE `carries_over`: `#shape_must_be_valid` refuses that
-  # pair outright, so it can only be reached on a record mid-validation — which is exactly when this
-  # predicate is asked, since it gates the `amount` numericality rules running in the same pass.
-  def set_aside_only?
-    carries_over? && target_amount.present? && anchor_date.blank?
-  end
+  # ** `#set-aside-only` IS DELETED (two-shapes spec §7). ** It named the one shape that could
+  # demand nothing — a dateless target fed only by positive adjustments, whose amount of zero was how
+  # "no standing rate" was spelled — and it gated the two `amount` numericality rules against each
+  # other. A goal names a day now, so `amount > 0` is unconditional above and there is nothing left
+  # for the exemption to exempt.
 
   # `where.not(id: nil)` renders as `id IS NOT NULL`, so an unsaved budget still
   # compares against every persisted rule. An unsaved *item* has no id though,

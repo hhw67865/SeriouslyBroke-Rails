@@ -36,14 +36,14 @@
         `Category#counts_spending_on?`, the app's one Ruby mirror of the ledger's own rule.
 
         IT USED TO BE TWO SHAPES said as one sentence — no pool at all, and a pool that IS an
-        account — because an account was where the unclaimed money sat and nothing reserved money
+        account — because an account was where the money nothing claimed sat, and nothing reserved money
         sitting in one. The pool has gone and the date has arrived: a category can carry rules and
         still leave THIS receipt to free money.
 
         ** THE COPY IS REWRITTEN AND THE TWO SENTENCES IT REPLACES WERE BOTH FALSE NOW. ** "Not
         holding money yet" described a balance that had been moved in, and no category holds money
         under §3 — the funded ones included. "It comes out of what's available" named a recorded
-        pot of unclaimed money, and `available` is gone with the partition (§§5-6): what is left
+        pot of money nothing claimed, and `available` is gone with the partition (§§5-6): what is left
         over is FREE, and it is computed rather than held. The words are Home's — claimed, free —
         so a user reading this card and the hero on the same afternoon is reading one app.
 
@@ -97,14 +97,17 @@
         <%# A FUND SAYS WHAT IT IS FILLING; AN ENVELOPE SAYS WHAT IS LEFT IN IT. Both are the same
             two figures with the same arrow — only the trailing phrase differs.
 
-            ** THREE ARMS, BECAUSE A FUND MAY NAME NO FIGURE (rules-own-the-budget spec §2.1 row 2;
-            §5). ** An uncapped building rule has no target, so "of $0.00" would be a ceiling it
-            never set and "left" would call a fund an envelope. What is true of it is that the
-            figure IS the built-up, which is the same sentence Home's row says for the same shape
-            (`$450.00 built up`, no "of"). %>
-        <% if impact.building_target.present? %>
-          <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.building_target) %></span>
-        <% elsif impact.building? %>
+            ** THREE ARMS, BECAUSE A FUND'S TARGET IS WITHHELD BESIDE A SIBLING RULE (spec §10.5;
+            fix wave — MED-1). ** The figure on the left is the whole CATEGORY's claim, so "of
+            $2,400.00" against a fund sharing its category with a bill measures one against the
+            other. What is still true there is that the figure IS money built up, which is the same
+            sentence Home's row says (`$450.00 built up`, no "of").
+
+            (The other way this arm used to be reached was an UNCAPPED fund, which named no figure at
+            all; that shape is retired — two-shapes §7.) %>
+        <% if impact.fund_target.present? %>
+          <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.fund_target) %></span>
+        <% elsif impact.fund? %>
           <span class="text-sm text-gray-600" data-figure="target">built up</span>
         <% else %>
           <span class="text-sm text-gray-600">left</span>

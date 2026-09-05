@@ -29,7 +29,8 @@ RSpec.describe CategoriesHoldTheMoney do
                   described_class,
                   DropThePoolLayer,
                   DropTheDistribution,
-                  RulesOwnTheBudget
+                  RulesOwnTheBudget,
+                  TwoShapes
 
   let(:migration) { described_class.new }
   let(:user) { create(:user, email: "ming@example.com") }

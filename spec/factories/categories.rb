@@ -30,13 +30,13 @@ FactoryBot.define do
       funded_since { 1.year.ago.to_date }
     end
 
-    # ** `:savings` IS GONE WITH `categories.target_amount` (rules-own-the-budget spec §7). ** It was
-    # `funded` plus a figure, on the era's reading that a goal is a KIND OF CATEGORY. A goal is a
-    # building rule that names a target now (§2.1 rows 3-4), so the trait's second half has no column
-    # to write and its first half is `:funded` verbatim — a trait that is a synonym for another one
-    # is a second name for one shape, which is how two fixtures come to mean different things by the
-    # same word. Its call sites read `:funded` and reach for `create(:budget, :capped, …)` where the
-    # goal itself is the subject.
+    # ** `:savings` IS GONE WITH THE CATEGORY-SIDE TARGET COLUMN (rules-own-the-budget spec §7). **
+    # It was `funded` plus a figure, on the era's reading that a goal is a KIND OF CATEGORY. A goal
+    # is a rule saving toward a day now (two-shapes §2 row 5), so the trait's second half has no
+    # column to write and its first half is `:funded` verbatim — a trait that is a synonym for
+    # another one is a second name for one shape, which is how two fixtures come to mean different
+    # things by the same word. Its call sites read `:funded` and reach for
+    # `create(:budget, :by_date, …)` where the goal itself is the subject.
 
     trait :with_items_and_entries do
       transient do

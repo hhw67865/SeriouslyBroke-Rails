@@ -33,11 +33,21 @@ RSpec.describe ClaimLedger, type: :model do
     )
   end
   let(:groceries_rule) { create(:budget, :per_period_rate, category: groceries, amount: 400) }
-  # ** A CAPPED BUILDING RULE, WITH THE FIGURE ON THE RULE (rules-own-the-budget spec §2.1 row 3). **
-  # The category names nothing at all now; `carries_over` is what makes this a fund rather than a
-  # use-it-or-lose-it rate, and `target_amount` is where it stops.
+  # ** A GOAL — $1,200 BY AUG 31, WHICH IS A DATED RULE AND NOTHING ELSE (two-shapes spec §2 row 5). **
+  # Eight monthly periods from the funding day, so §3.2's catch-up share is `1,200 ÷ 8` = $150 every
+  # period and the goal is whole by August. It was a $150-a-period rule that carried its money over
+  # and stopped at $1,200; the walk's figures are identical, which is what let the shape be retired
+  # rather than replaced.
   let(:vacation_rule) do
-    create(:budget, :capped, category: vacation, amount: 150, target_amount: 1_200, created_at: born)
+    create(
+      :budget,
+      category: vacation,
+      amount: 1_200,
+      basis: :monthly,
+      interval_months: nil,
+      anchor_date: Date.new(2026, 8, 31),
+      created_at: born
+    )
   end
   let(:ledger) { described_class.new(user, today: today) }
 
@@ -45,7 +55,7 @@ RSpec.describe ClaimLedger, type: :model do
   #   pot          = 3000 − 250 − 1000 = 1750
   #   total_money  = 1750 + 1000       = 2750
   #   Groceries    = 400 − 250         =  150
-  #   Vacation     = 9 periods × 150, capped at the rule's 1,200
+  #   Vacation     = 8 periods × 150, whole at the rule's own 1,200
   #   Σ claims     = 1350
   before do
     create(:pool, :account, user: user, name: "Checking")
@@ -134,18 +144,32 @@ RSpec.describe ClaimLedger, type: :model do
     end
   end
 
+  # ===========================================================================================
+  # ** `free = pot − Σ claims` (two-shapes spec §2), AND THE TERM THAT LEFT IS THE POINT. **
+  #
+  # It was `min(pot, total_money − Σ claims)`: money in OTHER accounts was folded into the
+  # subtraction and the answer was then capped at the pot, so for every user whose savings covered
+  # their rules the two hero figures were the same number and the claims were invisible in the one
+  # figure that is about them (Henry, 2026-09-05). Money elsewhere is now shown and never subtracted
+  # from or added to anything, and `free` answers one question: of the money in CHECKING, how much is
+  # not claimed.
+  #
+  # BOTH DIRECTIONS, and the second is the one the cap used to hide.
+  # ===========================================================================================
   describe "#free" do
-    # 2,750 − 1,350 = 1,400, which is less than the 1,750 the pot holds — so the claims bind.
-    it "is the total money less every claim", :aggregate_failures do
+    # 1,750 in checking, 1,350 claimed. `#total_money` is asserted beside it because it still exists
+    # and is a DIFFERENT question — what the user physically has everywhere — and this is the one
+    # place the two are shown apart.
+    it "is the pot less every claim", :aggregate_failures do
       expect(ledger.total_money).to eq(2_750)
-      expect(ledger.free).to eq(1_400)
-      expect(ledger).not_to be_free_cap_bound
+      expect(ledger.free).to eq(400) # 1,750 − 1,350
     end
 
-    # ** THE CAP (§2/§3 of the answers-first spec): money in a savings account is not free to spend
-    # out of checking. ** Another $1,000 moved to Ally leaves the same $1,400 unclaimed and only $750
-    # in the pot, and `free` follows the pot.
-    it "never promises more than the pot holds", :aggregate_failures do
+    # ** MONEY IN ANOTHER ACCOUNT MOVES IT BY THE AMOUNT THAT LEFT CHECKING, AND BY NOTHING ELSE. **
+    # Another $1,000 walked over to Ally takes the pot to $750 and leaves every claim exactly where it
+    # was, so `free` is −$600. Under the cap it read $750 — the whole pot, with $1,350 of rules
+    # claiming against it, reported as free to spend.
+    it "falls by what leaves checking, whatever the other accounts hold" do
       create(
         :account_movement,
         from_pool: user.default_account,
@@ -154,19 +178,36 @@ RSpec.describe ClaimLedger, type: :model do
         date: Time.utc(2026, 1, 7, 12)
       )
 
-      expect(ledger.free).to eq(750)
-      expect(ledger).to be_free_cap_bound
+      expect(ledger.free).to eq(-600) # 750 − 1,350
+    end
+
+    # ** THE ARM THE CAP ERASED, AT THE SIZE IT SHOWS UP AT. ** $10,000 arriving in Ally covers every
+    # claim the user has several times over, so the old `total_money − Σ claims` was far above the pot
+    # and the cap answered the POT ITSELF — $1,750, "free to spend", with $1,350 of rules claiming
+    # against it and nothing on the screen saying so. What is true of CHECKING is unchanged by any of
+    # it, which is the sentence the figure now makes.
+    # $10,000 EARNED AND WALKED STRAIGHT OUT, so the pot ends exactly where it started and Ally holds
+    # the lot: the one movement that changes what the user HAS everywhere without changing what is in
+    # checking.
+    it "is unmoved by $10,000 arriving in another account", :aggregate_failures do
+      expect(ledger.free).to eq(400)
+      earn(10_000, on: Date.new(2026, 1, 7))
+      create(:account_movement, from_pool: user.default_account, to_pool: ally, amount: 10_000, date: Time.utc(2026, 1, 8, 12))
+      after = described_class.new(user, today: today)
+
+      expect(after.total_money).to eq(12_750)
+      expect(after.free).to eq(400)
     end
 
     # ** BELOW ZERO IS A SIGNAL, NEVER A REFUSAL (§4). ** A $5,000 bill due Oct 1 on a category funded
     # this month claims half of itself now — two periods to fill it, this one and the Oct one — and
-    # the user is $1,100 short.
+    # the user is $2,100 short of what their rules claim out of checking.
     it "goes negative rather than clamping when the claims outrun the money", :aggregate_failures do
       car = create(:category, :expense, user: user, name: "Car", funded_since: Date.new(2026, 9, 1))
       create(:budget, category: car, amount: 5_000, interval_months: nil, anchor_date: Date.new(2026, 10, 1), created_at: Time.utc(2026, 9, 1, 9, 0))
 
       expect(ledger.total_claims).to eq(3_850)
-      expect(ledger.free).to eq(-1_100)
+      expect(ledger.free).to eq(-2_100) # 1,750 − 3,850
     end
   end
 
@@ -223,26 +264,27 @@ RSpec.describe ClaimLedger, type: :model do
       expect(ledger.total_money).to eq(2_450) # 2,750 − 300
     end
 
-    # ** THE DISCRIMINATING HALF. ** Here the CLAIMS bind rather than the pot, so `free` is
-    # `total − Σ claims`: both fell by $300, so it does not move. Under the double-counted lane Σ
-    # claims fell by $450 against $300 of money and this read $1,100 — $150 MORE free for having paid
-    # a bill.
+    # ** THE DISCRIMINATING HALF, AND `free = pot − Σ claims` SHARPENS IT (two-shapes §2). ** The
+    # payment takes $300 out of checking and $300 off the bill's fund, so both terms fall together and
+    # `free` does not move at all. Under the double-counted lane Σ claims fell by $450 against $300 of
+    # money and free ROSE $150 for having paid a bill — which the cap could mask and this cannot.
     it "leaves free where it was, because the money and the claims fell together", :aggregate_failures do
-      expect(ledger.free).to eq(950) # min(1,750 pot, 2,750 − 1,800)
+      expect(ledger.free).to eq(-50) # 1,750 pot − 1,800 claimed
       pay_the_vet_bill
 
-      expect(described_class.new(user, today: today).free).to eq(950) # min(1,450 pot, 2,450 − 1,500)
+      expect(described_class.new(user, today: today).free).to eq(-50) # 1,450 − 1,500
     end
 
-    # ** THE POT-BOUND ARM, which is the ordinary shape: with another $1,000 parked in Ally the pot is
-    # the binding term, and paying $300 of a bill leaves exactly $300 less to spend out of checking. **
-    it "falls by exactly the payment when the pot is the binding term", :aggregate_failures do
+    # ** AND MONEY WALKED OUT TO ANOTHER ACCOUNT MOVES IT BY EXACTLY WHAT LEFT. ** $1,000 to Ally
+    # takes free down $1,000 and touches no claim; the payment on top of it still moves nothing,
+    # because both terms fall together whatever the pot happens to be.
+    it "falls by what leaves checking and not by what a bill costs", :aggregate_failures do
       create(:account_movement, from_pool: user.default_account, to_pool: ally, amount: 1_000, date: Time.utc(2026, 1, 7, 12))
 
-      expect(ledger.free).to eq(750) # min(750 pot, 2,750 − 1,800)
+      expect(ledger.free).to eq(-1_050) # 750 − 1,800
       pay_the_vet_bill
 
-      expect(described_class.new(user, today: today).free).to eq(450) # min(450 pot, 2,450 − 1,500)
+      expect(described_class.new(user, today: today).free).to eq(-1_050) # 450 − 1,500
     end
   end
 

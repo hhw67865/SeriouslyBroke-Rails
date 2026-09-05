@@ -4,31 +4,21 @@
     a figure, a list and a pace — inlined, the `case` that dispatches the four kinds would be
     unreadable and a fifth kind would be added below the wrong `end`.
 
-    ** THE STRIP MIRRORS THE HERO'S ARM TABLE, AND THAT IS THE FIX (fix round 1 — HIGH-1). ** This
-    said "Your rules claim more than you have" on `#short?` alone — `free < 0` — which is a SIGN, and
-    a sign never carries a cause. An inch above it the hero card was already splitting that same
-    negative three ways on predicates that ESTABLISH one, so the two panels could contradict each
-    other on the same afternoon and did, in three fixtures the answers-first review had already
-    written: money walked to a savings account with no rule in existence (card: it is outside
-    checking; strip: your rules claim too much), a plain overspend with nothing claimed (same), and
-    claims a savings account covers in full (the give-way list naming categories whose money is
-    sitting one panel further down). The arms below are `_hero.html.erb`'s, said as instructions:
+    ** THE STRIP MIRRORS THE HERO (two-shapes spec §2). ** It said "Your rules claim more than you
+    have" on `#short?` alone while the hero was splitting that same negative three ways, so the two
+    panels could contradict each other on the same afternoon and did. `free = pot − Σ claims` has
+    ONE cause per sign now, so both panels say the same thing for the same reason:
 
-      the claims outrun the money, → "Your rules claim more than you have", the give-way walk, the
-      and something IS claimed        remainder if the shortfall outlasts it, the pace
-      the claims outrun the money, → "You have spent past what you had". Σ claims is zero, so the
-      and nothing is claimed          walk has nothing to list and does not run
-      free < 0, the claims do NOT  → "Checking is short", and the money is in another account —
-      outrun (the cap bound on a     which is a TRANSFER, not a rule change. Nothing is uncovered:
-      negative pot)                  `unclaimed ≥ 0` IS "the user's money covers every claim"
+      free < 0  → "Your rules claim $X more than checking holds", the give-way walk, the remainder
+                  if the shortfall outlasts it, the pace, and — where another account holds money —
+                  "Move some in from your other accounts."
 
     THE WALK IS THE PRESENTER'S (`#uncovered_claims`), not this file's, and it is gated there on the
-    same `#claims_outrun_the_money?` the first two arms branch on. It takes each claim in turn until
-    the shortfall is absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is
-    short $120" is a different sentence from "Car repair is uncovered", and only the walk can tell
-    them apart.
+    same `#short?` this strip renders under. It takes each claim in turn until the shortfall is
+    absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is short $120" is a
+    different sentence from "Car repair is uncovered", and only the walk can tell them apart.
 
-    THE PACE IS SAID ON EVERY ARM, deliberately: spending less for the rest of the period lands the
+    THE PACE IS SAID ON BOTH ARMS, deliberately: spending less for the rest of the period lands the
     figure at zero whichever way it got there, which is the one remedy §4 names that does not depend
     on which cause it was.
 
@@ -38,13 +28,14 @@
     app no longer has. %>
 <div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
   <div class="flex justify-between items-baseline gap-4">
-    <%# THE HEADLINE IS THE CAUSE, AND EVERY BRANCH IS A PRESENTER PREDICATE. A view re-deriving which
-        side of the `min` won could name the wrong one of the two negatives. %>
+    <%# THE HEADLINE IS THE CAUSE, AND THE BRANCH IS A PRESENTER PREDICATE. With nothing claimed at
+        all the shortfall is a plain overspend and "your rules claim more" would be false — Σ claims
+        is zero — so the second arm says what actually happened. %>
     <span class="font-medium text-gray-900" data-shortfall-headline>
-      <% if presenter.claims_outrun_the_money? %>
-        <%= presenter.anything_claimed? ? "Your rules claim more than you have" : "You have spent past what you had" %>
+      <% if presenter.anything_claimed? %>
+        Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds
       <% else %>
-        Checking is short
+        You have spent past what you had
       <% end %>
     </span>
     <span class="text-sm font-medium text-status-danger tabular-nums" data-shortfall-amount>
@@ -52,20 +43,19 @@
     </span>
   </div>
 
-  <%# ** THE CAP-BOUND ARM'S OWN INSTRUCTION, AND ITS CAUSE IS ESTABLISHED BY REACHING IT. ** The
-      cap's identity has two terms — `unclaimed − pot = Σ other accounts − Σ claims` — so this arm
-      requires `free < 0` with `unclaimed ≥ 0`, which forces `pot < 0` and therefore
-      `Σ other accounts ≥ Σ claims − pot > 0`. Another account IS holding money whenever this renders,
-      which is why there is no else branch here and none on the hero's matching arm: an unreachable
-      branch on a money screen is a sentence waiting to be believed.
+  <%# ** THE HERO'S SECOND CLAUSE, SAID AS AN INSTRUCTION (§2). ** Money in another account is not
+      subtracted from `free` and never was money in checking, so it is not an explanation of the
+      shortfall — it is the thing that can close it without spending less. GATED, because it is
+      false for a user whose other accounts are empty or who has none: that user reads the headline's
+      own second arm ("You have spent past what you had") and this line does not render.
 
       THE FIGURE IS `#other_accounts_total`, THE SAME SUM THE ACCOUNTS LINE PRINTS (answers-first §6),
       so the strip cannot claim money the line below it shows as absent. It names no account, because
       the total spans all of them and "it is in savings" is a guess this panel cannot make. %>
-  <% unless presenter.claims_outrun_the_money? %>
+  <% if presenter.money_parked_elsewhere? %>
     <p class="mt-1 text-sm text-gray-700" data-shortfall-elsewhere>
       <%= number_to_currency(presenter.other_accounts_total) %> of your money is sitting outside
-      checking — move some into checking to spend it.
+      checking — move some in from your other accounts.
     </p>
   <% end %>
 

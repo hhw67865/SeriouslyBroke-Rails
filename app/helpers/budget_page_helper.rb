@@ -46,13 +46,14 @@ module BudgetPageHelper
   # A figure with no basis is unreadable on this page: $600 a period and $600 every six months
   # are the same digits and a twelvefold difference in what the user owes.
   #
-  # ** A $0 RULE HAS NO RATE TO STATE, SO IT SAYS SO IN WORDS (fix wave — LOW-4). ** Zero is legal on
-  # exactly one shape (`Budget#set_aside_only?`, spec §10.1 ruling 3): a goal the user feeds by hand
-  # and never on a schedule, which is what Task 4's migration minted for every goal in the database
-  # that lacked a rule. This printed "$0.00 / period" for one, beside a real built-up figure on the
-  # same row — a rate of nothing read as a rule that had been set wrong rather than a rule that was
-  # never about a rate. `positive?` and not `zero?`: the column cannot go negative on any shape, and
-  # a row that somehow did should say this rather than print a minus sign as a rate.
+  # ** THE "fed by hand" ARM IS KEPT AS A GUARD AND IS NO LONGER REACHABLE FROM THE DATA (two-shapes
+  # spec §7). ** Zero used to be legal on exactly one shape — a goal the user fed by hand and never
+  # on a schedule (`Budget#set-aside-only`) — and this printed "$0.00 / period" for one, beside a
+  # real built-up figure on the same row: a rate of nothing read as a rule set wrong rather than a
+  # rule that was never about a rate. `Budget` validates `amount > 0` on every shape now and
+  # `TwoShapes` converted every such row, so no rule this can meet takes this arm. It stays because
+  # the column cannot go negative on any shape and a row that somehow did should say this rather
+  # than print a minus sign as a rate.
   def budget_rule_amount(budget)
     return "fed by hand" unless budget.amount.to_d.positive?
 
@@ -84,35 +85,15 @@ module BudgetPageHelper
   # already read as words — so this delegates rather than restating the classification, and a fifth
   # cadence cannot be added to one of the two and forgotten in the other.
   #
-  # ** IT SAYS WHAT BECOMES OF THE MONEY TOO (rules-own-the-budget spec §2.1). ** The cadence alone
-  # was the whole story while every dateless rule reset at the boundary; a rule may now BUILD UP,
-  # and "$300.00 per period" says exactly the same words about a fund that keeps every unspent penny
-  # as about a grocery budget that keeps none. The clause is only ever added — the four cadence
-  # words are untouched — so every figure a resetting rule prints is the figure it printed before.
-  #
-  # THE TARGET IS NAMED WHERE THERE IS ONE, because "builds up" and "builds up toward $5,000" are
-  # different promises: the first grows for as long as the rule lives, the second stops.
-  #
-  # ** THE RAW COLUMNS AND NOT `Budget#claim_shape`, AND THE CONSTRAINT IS THE CALLER (fix wave —
-  # LOW-3). ** `#claim_shape` is the app's one door onto §3's three formulas and would be the reader
-  # to want here — except that `budgets/_form.html.erb` calls this with `RuleForm#budget`, which on
-  # the NEW path is a `Budget.new` carrying assigned attributes and no category at all. `#claim_shape`
-  # is `claim_calculator.shape` and the calculator's `today:` defaults to `Budget#today` —
-  # `category&.today || Date.current` — so asking it here would put the AMBIENT clock inside a form
-  # hint, on a record whose owner the user has not chosen yet. A sentence about the amount field must
-  # not depend on the wall clock or on a category being picked first.
-  #
-  # ** WHAT IT COSTS AND WHY IT IS SAFE. ** `#shape` is `:dated` on an anchor, `:building` on
-  # `carries_over`, `:rate` otherwise, and `Budget#shape_must_be_valid` refuses the one pair that
-  # would make the two disagree (an anchor beside `carries_over`). So these two clauses ARE the
-  # shape for every rule that can be saved — pinned example for example against `#claim_shape` in
-  # `budget_page_helper_spec`, which is what stops the two spellings drifting.
+  # ** THE "builds up" CLAUSE IS DELETED WITH THE COLUMNS (two-shapes spec §7). ** It read
+  # `budget.carries-over` and named `budget.target-amount` where there was one, because a dateless
+  # rule could either reset at the boundary or keep every unspent penny and the cadence alone could
+  # not say which. There is one dateless shape now — the allowance that resets — and what a fund is
+  # building toward is its own AMOUNT with a DATE beside it, which `#budget_rule_amount` and the
+  # row's due date already print. So this is the cadence words and nothing else, exactly as it was
+  # before the build-up clause was added, and every figure a resetting rule printed is unchanged.
   def budget_rule_basis_phrase(budget)
-    phrase = budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
-    return phrase unless budget.carries_over?
-    return "#{phrase}, builds up" if budget.target_amount.blank?
-
-    "#{phrase}, builds up toward #{number_to_currency(budget.target_amount)}"
+    budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
   end
 
   # THE LIST `PATCH /budget/reorder` TAKES, with one category moved one place. `offset` is -1 for ▲

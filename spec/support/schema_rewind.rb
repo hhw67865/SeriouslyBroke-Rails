@@ -6,6 +6,7 @@ require Rails.root.join("db/migrate/20260821000000_categories_hold_the_money")
 require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
+require Rails.root.join("db/migrate/20260906000000_two_shapes")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -91,6 +92,23 @@ require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 #   include_context "with the schema its subject was written for",
 #                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney,
 #                   DropThePoolLayer, DropTheDistribution, RulesOwnTheBudget
+#
+# ** A SEVENTH JOINED WITH THE TWO SHAPES, AND IT IS NEWER THAN ALL SIX (two-shapes §6). **
+# `TwoShapes` (2026-09-06) DROPS `budgets.carries_over` and `budgets.target_amount`, and BOTH are
+# read or written by `RulesOwnTheBudget` — its `up` moves a category's figure onto the rule and sets
+# the flag, and its `down` copies that figure back the other way. So this file's `down` (which
+# re-adds the two columns and the CHECK) has to run FIRST on the way down, before `RulesOwnTheBudget`
+# can write columns that are not there, and LAST on the way back up. Every one of the five older
+# migration specs therefore names it at the END of its own forward list:
+#
+#   include_context "with the schema its subject was written for",
+#                   TightenPoolShape, DropCapEraBudgetColumns, CategoriesHoldTheMoney,
+#                   DropThePoolLayer, DropTheDistribution, RulesOwnTheBudget, TwoShapes
+#
+# ITS `down` RESTORES THE SHAPE AND NOT THE DATA — a rule this file converted stays a dated one-off,
+# because the building shape has no code left to compute it. What the rewound specs need is the
+# COLUMN, and the column is what they get; the rules they plant are their own, written after the
+# rewind.
 #
 # ITS `down` DOES NOT TOUCH `budgets.carries_over`, `budgets.target_amount` OR `budgets.rule_type`,
 # which is why `RulesOwnTheBudgetColumns` is NOT on this list: those columns belong to that file, no
