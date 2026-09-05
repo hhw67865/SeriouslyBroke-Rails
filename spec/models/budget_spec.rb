@@ -159,35 +159,68 @@ RSpec.describe Budget, type: :model do
   # `IN (SELECT category_id …)` subquery and a predicate for rows already loaded — which this group
   # pinned equal over all four combinations of the two clauses. Both columns are dropped, and the
   # question is a different one: what the Savings band is about is a target with a DAY on it, which
-  # is an anchor with NO interval (§2's row 5). A rule that REPEATS is a recurring bill.
+  # is an anchor with NO interval (§2's row 5) that the user did not call a `bill`. A rule that
+  # REPEATS is a recurring bill, and so is a one-off the user typed as one.
   #
   # ONE SCOPE AND NO IN-MEMORY TWIN, so there is no equality left to pin — the two readers that
   # needed the predicate are deleted with the shape. What this group pins instead is the population,
-  # over one of each way to fail the two clauses.
+  # over one of each way to fail the FOUR clauses.
   describe "the categories saving toward a day" do
     let(:groceries) { create(:category, :expense, :funded, name: "Groceries") }
 
     def lane(name) = create(:item, category: groceries, name: name)
 
+    def holder(name) = create(:category, :expense, :funded, name: name)
+
+    # ONE ITEM-LESS RULE PER CATEGORY (`#category_may_hold_one_item_less_rule`), so the three
+    # item-less fixtures take a category each.
     def planted
       {
-        one_off: create(:budget, :by_date, category: groceries, amount: 5_000),
+        one_off: create(:budget, :by_date, :choice, category: groceries, amount: 5_000),
+        bill_one_off: create(:budget, :by_date, :bill, category: holder("Tax Estimate"), amount: 3_000),
         item_backed_one_off: create(:budget, :by_date, category: groceries, amount: 900, item: lane("Flights")),
-        repeating: create(:budget, :recurring, category: create(:category, :expense, :funded, name: "Insurance"), amount: 600),
-        resetting: create(:budget, :per_period_rate, category: create(:category, :expense, :funded, name: "Fun"), amount: 400)
+        repeating: create(:budget, :recurring, category: holder("Insurance"), amount: 600),
+        resetting: create(:budget, :per_period_rate, category: holder("Fun"), amount: 400)
       }
     end
 
-    # ONE OF EACH WAY TO FAIL THE THREE CLAUSES: a rule that repeats is a recurring bill, a rate rule
-    # saves toward nothing, and an item-backed one speaks for one item's spending rather than for the
-    # category (§3.1's partition — the clause the retired pair carried, asked of the new columns).
-    it "selects the item-less one-off dated rules and nothing else", :aggregate_failures do
+    # ONE OF EACH WAY TO FAIL THE FOUR CLAUSES: a rule that repeats is a recurring bill, a rate rule
+    # saves toward nothing, an item-backed one speaks for one item's spending rather than for the
+    # category (§3.1's partition — the clause the retired pair carried, asked of the new columns),
+    # and a rule the user typed `bill` is a thing that must be PAID rather than a thing being saved
+    # for (fix round 1 — LOW-7).
+    it "selects the item-less, non-bill, one-off dated rules and nothing else", :aggregate_failures do
       rules = planted
 
       expect(described_class.saving_toward_a_date.to_a).to eq([rules.fetch(:one_off)])
+      expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:bill_one_off))
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:item_backed_one_off))
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:repeating))
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:resetting))
+    end
+
+    # ** THE `bill` CLAUSE ON ITS OWN, BOTH DIRECTIONS, ON ONE PAIR OF ROWS THAT DIFFER BY THAT WORD
+    # AND NOTHING ELSE (fix round 2 — LOW-7). ** The example above would still pass with the clause
+    # deleted, because every other fixture in it fails a different clause: a one-off on the whole
+    # category is the shape of a GOAL and of an un-itemised BILL alike — the quarterly tax estimate,
+    # the annual registration — and the walk cannot tell them apart, because it is the same walk.
+    # The word the user chose is the only thing that can, so it is pinned by itself.
+    it "tells a goal from a one-off bill by the type alone", :aggregate_failures do
+      goal = create(:budget, :by_date, :choice, category: groceries, amount: 3_000)
+      tax = create(:budget, :by_date, :bill, category: holder("Tax Estimate"), amount: 3_000)
+
+      expect(goal.slice(:amount, :basis, :interval_months, :anchor_date))
+        .to eq(tax.slice(:amount, :basis, :interval_months, :anchor_date))
+      expect(described_class.saving_toward_a_date.to_a).to eq([goal])
+    end
+
+    # AND `usage` IS SAVING TOO, which is what keeps the clause from being read as "only `choice`":
+    # a house deposit is a need the household is putting money aside for, and the only word that
+    # takes a category off this band is the one that says somebody else sets the day.
+    it "keeps a usage one-off, because only a bill is not savings" do
+      deposit = create(:budget, :by_date, :usage, category: groceries, amount: 10_000)
+
+      expect(described_class.saving_toward_a_date.to_a).to eq([deposit])
     end
 
     # THE FORM THE DASHBOARD COMPOSES IT IN, because a scope that cannot be a subquery is a scope

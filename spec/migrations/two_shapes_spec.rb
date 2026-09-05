@@ -431,6 +431,32 @@ RSpec.describe TwoShapes do
       .to eq([5_000.to_d, "monthly", nil, Date.new(2027, 1, 20)])
   end
 
+  # ** AND ITS RECEIPT SAYS WHY, IN THE ONE SENTENCE THE OTHER CAUSE CANNOT BORROW (fix round 2 —
+  # MED-3). ** A hand-fed fund is the conversion's LOUDEST case: it asked nothing of a period before
+  # and asks its target over a stated year after, so its claim moves by the whole of what it now
+  # accrues. `#why_it_moved` has two branches and the wrong one would be worse than none — "the
+  # target does not divide by the rate" said of a rule with no rate at all — so this pins the branch
+  # by its exact words rather than by the fact that SOME note was printed.
+  #
+  # THE WHOLE LINE, `eq`, NOT `a_string_including`: an inclusion matcher passes on a line that also
+  # says a dozen other things, and every other receipt pin in this file leans on it. The sole line
+  # is what the migration writes for this rule, in full — `say`'s `"   -> "` indent included, because
+  # these lines are nested under their owner's heading and that is how they reach the operator.
+  #
+  # $357.14 IS RE-DERIVED: the rule is born Jan 1 and the horizon is Jan 20 2027, so §3.2's walk
+  # divides $5,000 by the 28 periods to it — $178.57 — and today is in P2, so two periods of it have
+  # accrued. It held nothing at all the day before.
+  it "names the hand-fed cause in the fund's own receipt line" do
+    plant_the_fund_era
+
+    lines = receipts
+
+    expect(lines.grep(/Emergency Fund/).sole).to eq(
+      "   -> Emergency Fund · was $0.00 a period · now $5000.00 by 2027-01-20 · " \
+      "claim moved $357.14: a fund with no rate set nothing aside, and the stated horizon now asks for it"
+    )
+  end
+
   # ---------------------------------------------------------------------------------------------
   # The rules it does not touch
   # ---------------------------------------------------------------------------------------------

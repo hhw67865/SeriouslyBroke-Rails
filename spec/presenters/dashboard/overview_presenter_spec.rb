@@ -85,8 +85,9 @@ RSpec.describe Dashboard::OverviewPresenter do
 
   # ** WHICH CATEGORIES THE STRIP IS ABOUT (two-shapes §2). ** The classifier has moved twice: from a
   # figure on the CATEGORY, to the item-less rule whose unspent money carried, to
-  # `Budget.saving_toward_a_date` — an item-less rule with an anchor and NO interval. "Which money is
-  # being saved" is answered by the SHAPE, and the shape that means it is a target with a DAY.
+  # `Budget.saving_toward_a_date` — an item-less, non-`bill` rule with an anchor and NO interval.
+  # "Which money is being saved" is answered by the SHAPE, and the shape that means it is a target
+  # with a DAY that the user did not call a bill.
   describe "#savings_summary — which categories are on it" do
     def category(name)
       create(:category, :expense, user: user, name: name, funded_since: 1.year.ago.to_date)
@@ -120,6 +121,35 @@ RSpec.describe Dashboard::OverviewPresenter do
       create(:budget, :recurring, category: category("Water"), amount: 600, anchor_date: Date.current + 9.weeks)
 
       expect(presenter.savings_summary).to be_empty
+    end
+
+    # THE SAME FOUR COLUMNS EVERY TIME, so the only thing that varies between the pair below is the
+    # word the user chose.
+    def one_off(name, type, amount)
+      create(
+        :budget,
+        :by_date,
+        type,
+        category: category(name),
+        amount: amount,
+        anchor_date: Date.current + 9.weeks
+      )
+    end
+
+    # ** A ONE-OFF THE USER TYPED `bill` IS NOT SAVINGS EITHER (fix round 1 — LOW-7). ** A quarterly
+    # tax estimate on the whole category has the SAME four columns as a goal — an anchor, no
+    # interval, no item, a positive amount — and accrues by the same walk, so nothing in the shape
+    # can tell them apart. The word the user chose can, and a band headed "Savings" that listed the
+    # household's tax estimate would be naming money as saved that has to be handed over.
+    #
+    # THE PAIR IS PLANTED, so the absence is a fact about the TYPE rather than about the fixture: the
+    # goal beside it renders, on the same screen, from the same shape.
+    it "leaves out a one-off bill while listing the goal beside it", :aggregate_failures do
+      one_off("Tax Estimate", :bill, 3_000)
+      goal = one_off("Vacation", :choice, 5_000)
+
+      expect(presenter.savings_summary.pluck(:name)).to eq(["Vacation"])
+      expect(presenter.savings_summary.sole[:target]).to eq(goal.amount)
     end
 
     # AN ITEM-BACKED RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money saved for one item

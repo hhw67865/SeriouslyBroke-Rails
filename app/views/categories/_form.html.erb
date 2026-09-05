@@ -20,7 +20,10 @@
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Basic Information</h2>
         
-        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation Fund" %>
+        <%# "Vacation Fund" WAS THE RETIRED NOUN IN A PLACEHOLDER (fix round 2 — MED-6). A fund is a
+            RULE with an amount and a day, not a kind of category, and a form that suggests naming a
+            category after one is teaching the shape this task deleted. %>
+        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation" %>
 
         <div class="space-y-2 mt-5">
           <%# TWO TYPES, TWO TILES (plan 3, task 5). `Category.category_types` drives the loop, so

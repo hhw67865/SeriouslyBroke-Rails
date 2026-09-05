@@ -423,17 +423,44 @@ RSpec.describe "db/seeds.rb" do
     # ** FREE BELOW ZERO IS A SIGNAL (§4), AND THE STRIP SAYS WHO GIVES WAY. ** The walk runs
     # `HomePresenter#give_way_order` — TYPE first (choice, then usage, then bill), and inside a type
     # the highest priority number first, which is `#budgeted_categories` read backwards — taking each
-    # rule's claim until the $2,740.34 is absorbed:
+    # rule's claim until the $4,904.84 is absorbed. ** THE TABLE IS THE ELEVEN ROWS THE WALK ACTUALLY
+    # VISITS (fix round 2), and it was four for a shape that no longer exists — the two goals that
+    # asked nothing of a period are gone from the seeds and the three that remain accrue, so the walk
+    # now reaches past the discretionary rules into the household's usage and stops inside a bill. **
+    # Each row: the type that orders it, the priority inside that type, and where the figure comes
+    # from — a RATE rule claims what is left of this period's rate, a DATED one claims what it has
+    # built up toward its day.
     #
-    #   Retirement Supplement  1,050.00   choice, priority 19, the demo's last, so it yields first
-    #   New Car                  525.00   choice, 18
-    #   Vacation to Europe       520.00   choice, 16
-    #   Holiday Gifts            645.34   choice, 11 — PARTIAL, and the whole reason this is a walk
-    #                                     rather than a filter: "$645.34 of it is uncovered" is a
-    #                                     different sentence from "Holiday Gifts is uncovered", and
-    #                                     only the walk can tell them apart
-    #   ────────────────────   2,740.34   which is the headline exactly, so `#uncovered_remainder`
+    #   choice, reverse priority, then the unranked
+    #   Vacation to Europe       725.47   16 — goal, `14 × (5,000 ÷ 78)` less the $180 flight deposit,
+    #                                     re-planned; derived in full at "accrues each goal" above
+    #   Holiday Gifts            933.34   11 — $1,200 every 12 months due `today + 2mo`, built up
+    #   Streaming                 25.00   UNRANKED (no holding date), so it sorts after the ranked
+    #                                     choice rules rather than among them — the same asymmetry
+    #                                     the "not in the give-way order" band names two examples up
+    #   usage, reverse priority
+    #   House Down Payment     1,800.96   17 — goal, `14 × (10,000 ÷ 182)` plus $1,050 set aside
+    #   Medical Copays            60.00   13 — rate, nothing spent this period
+    #   Commuter Pass             60.00    9 — rate, nothing spent
+    #   Pet Care                  50.00    8 — rate, nothing spent (the $180 vet bill is `bill` and
+    #                                     is never reached)
+    #   Household Supplies        75.00    7 — rate $120.00 less today's $45.00 detergent run, which
+    #                                     is why this row is not the $120.00 the rule says
+    #   Groceries                400.00    6 — rate, the period opened this morning
+    #   Utilities                120.00    2 — the Electric Bill: DATED and typed `usage`, the row
+    #                                     that keeps the type from being a synonym for the schedule
+    #   bill, reverse priority
+    #   Emergency Fund           655.07   15 — goal, PARTIAL: it has $1,583.07 built up and the walk
+    #                                     needs $655.07 of it, which is the whole reason this is a
+    #                                     walk rather than a filter — "$655.07 of it is uncovered" is
+    #                                     a different sentence from "the Emergency Fund is uncovered"
+    #   ────────────────────   4,904.84   which is the headline exactly, so `#uncovered_remainder`
     #                                     is zero and no part of the shortfall goes unnamed
+    #
+    # DINING OUT IS ABSENT and is not an omission: its $100 rate is spent ($110, the `:over` trouble),
+    # so it has nothing left to give way. The rent, the dentist, the car insurance, the vet, the
+    # renters premium, the quarterly taxes and the prescriptions are all `bill`s below the emergency
+    # fund's priority, and the walk stops before them.
     #
     # ** THE LIST CHANGED WITH THE TYPES AND AGAIN WITH THE SHAPES. ** It read Retirement, New Car,
     # House Down Payment and part of Vacation on priority alone; the types put the household's
@@ -496,7 +523,7 @@ RSpec.describe "db/seeds.rb" do
     end
 
     # ** THE TYPE OVERVIEW (§3), WHICH IS THE OTHER THING THE TYPES BOUGHT. ** `BudgetPagePresenter
-    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,858.18
+    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,236.57
     # `Budget.steady_need` reports two examples down — the same sum, partitioned three ways. Planted,
     # and the sum asserted beside them so a partition that lost a rule could not pass.
     #
