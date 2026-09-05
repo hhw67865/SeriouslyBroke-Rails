@@ -1,6 +1,6 @@
 # Two Shapes and the Runway: the model gets simpler and the screens get pictures
 
-**Status:** DRAFT — awaiting Henry's review
+**Status:** APPROVED (Henry, 2026-09-05) — plan in `docs/superpowers/plans/2026-09-05-two-shapes-and-the-runway.md`
 **Date:** 2026-09-05
 **Builds on:** `2026-09-04-rules-own-the-budget-design.md` (DELIVERED — rule types, the form, targets on
 rules) and `2026-09-03-computed-claims-design.md` (DELIVERED — the claim formulas). This spec removes
