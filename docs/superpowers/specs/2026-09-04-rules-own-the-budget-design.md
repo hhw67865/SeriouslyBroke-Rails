@@ -267,9 +267,13 @@ spelled (the negated index into `#budgeted_categories`), so the drag reorder sur
   in-memory predicate `Category#building_rule` and `CategoryBudgetPresenter` read over already-loaded
   rows). The question was spelled three times and three copies of a two-clause test is how a strip
   comes to list a set the category pages disagree with.
-- **The entry impact card prints a target only where the building rule is the category's ONLY rule.**
-  On a category carrying a fund beside other rules the card's denominator is Σ `standing_ask`, and a
-  bar drawn against the fund's target there would be a fraction of the wrong number.
+- **A fund's target and bar are drawn only where the building rule is the category's ONLY rule —
+  on every screen** (`Category.fund_is_the_whole_category?`, one spelling; the final fix wave
+  `353ec68` widened it from the entry impact card to the categories index card, the show page and
+  the dashboard savings strip). On a category carrying a fund beside other rules the impact card's
+  denominator is Σ `standing_ask`, the category pages print the category's Σ claims with no bar, and
+  the strip prints the fund's own built-up — a bar drawn against the fund's target there would be a
+  fraction of the wrong number.
 
 ### 10.6 The migration's receipts, and what it refuses
 
