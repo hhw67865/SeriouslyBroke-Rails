@@ -148,14 +148,14 @@ RSpec.describe "db/seeds.rb" do
     # than forbidding the string is the only spelling that can tell the builder from a rule written
     # around it.
     #
-    # EIGHTEEN CALL SITES FOR TWENTY-ONE RULES: the four hand-fed goals are written by one call
-    # inside a loop, because their shape is identical and four copies of a zero-amount rule is four
-    # places for one ruling to be edited.
+    # SEVENTEEN CALL SITES FOR NINETEEN RULES: the three goals are written by one call inside a loop,
+    # because their shape is identical and three copies of a dated rule is three places for one
+    # ruling to be edited.
     it "writes every rule through the builder that backdates it", :aggregate_failures do
       written = code.scan(/rule\.call\((?:[^()]|\([^()]*\))*\)/m)
 
       expect(code.scan("Budget.create!").length).to eq(1)
-      expect(written.length).to eq(18)
+      expect(written.length).to eq(17)
       expect(written.reject { |call| call.include?("category:") }).to eq([])
     end
 
@@ -194,10 +194,13 @@ RSpec.describe "db/seeds.rb" do
     it "holds exactly the rows the demo is made of" do
       expect(row_counts).to eq(
         users: 1,
-        # 29 SINCE `Streaming` (computed-claims Task 3's band). A category with no holding date
-        # carrying a rule is the one shape `BudgetPagePresenter#unfilled_rules` renders, and the
-        # demo had none while every rule's category was a holder.
-        categories: 29,
+        # ** 27 SINCE THE TWO SHAPES (§2/§7). ** It was 29: `New Car` and `Retirement Supplement`
+        # are gone with the shape that let a goal ask nothing of a period — see the seeds' own note
+        # at the goals, and the measurement there ($677.57 a period between them, on a household
+        # declaring $2,050). It had been 29 since `Streaming` (computed-claims Task 3's band): a
+        # category with no holding date carrying a rule is the one shape
+        # `BudgetPagePresenter#unfilled_rules` renders.
+        categories: 27,
         pools: 4,
         # 25 SINCE THE VET ITEM (the rulings of 2026-09-03). Pet Care is the demo's MIXED case — a
         # rate rule beside a dated bill — and both of those rulings land on it: a category may carry
@@ -205,13 +208,14 @@ RSpec.describe "db/seeds.rb" do
         # lane PARTITION then keeps the bill's payments out of the rate rule's figure.
         items: 25,
         entries: 75,
-        # 21 = the 16 the two-ledger demo carried, plus the four target-only rules the hand-fed goals
-        # need under §3.3 ("every adjustment targets a rule"), plus Streaming's.
-        budgets: 21,
+        # 19 = the 16 the two-ledger demo carried, plus the three goals' own dated rules. It was 21
+        # while five goals carried one each.
+        budgets: 19,
         movements: 8,
-        # 28 = four goals × seven periods, and nothing else. The other 33 rows the demo used to
-        # write were the distribution funding rules the app now computes (see the seeds' header).
-        adjustments: 28
+        # 14 = two goals × seven periods, and nothing else. It was 28 over four goals; the two that
+        # went are the ones the two shapes retired. The other 33 rows the demo used to write were the
+        # distribution funding rules the app now computes (see the seeds' header).
+        adjustments: 14
       )
     end
 
@@ -253,23 +257,28 @@ RSpec.describe "db/seeds.rb" do
       expect(physical).to eq(7_461.00)
     end
 
-    # ** §2'S DEFINITION, ON THE DEMO: `free = min(pot, total_money − Σ claims)`. **
+    # ** §2'S DEFINITION, ON THE DEMO: `free = pot − Σ claims` (two-shapes §2). **
     #
-    #   total_money   $7,461.00   the physical invariant above, unchanged
-    #   − Σ claims   $10,201.34   over all 21 rules — the sum of the figures the examples below pin
-    #   = unclaimed  -$2,740.34   which is BELOW the pot, so the `min` does not bind
+    #   pot            $5,561.00   main's balance, and the whole of what `free` is about
+    #   − Σ claims    $19,118.56   over all 19 rules — the sum of the figures the examples below pin
+    #   = free       -$13,557.56
     #
-    # FREE IS NEGATIVE, AND THAT IS THIS DEMO'S INHERITANCE RATHER THAN A NEW PESSIMISM. The deleted
-    # waterfall example asserted `short?` for the same household on the same data: its rules ask for
-    # more than it has. §4 says that is a SIGNAL and never a refusal, so the trouble strip states the
-    # figure, walks the uncovered claims in reverse priority and names the per-day pace — which is
-    # the branch this demo exists to put on a screen, exactly as the cutoff line was before it.
+    # `total_money` IS ASSERTED BESIDE IT AND IS NO LONGER A TERM IN IT. The $1,900 in the three
+    # other accounts is SHOWN by the hero and never subtracted from or added to anything: "why is
+    # free to spend and the number in checking the same when some is claimed?" (Henry, 2026-09-05) is
+    # the question the cap could not answer, and the answer is that free is about checking.
+    #
+    # ** IT WAS -$2,740.34, AND THE TWO CHANGES COMPOUND. ** The cap is gone (worth $1,900 on this
+    # household), and the three GOALS are dated rules that accrue every period rather than funds that
+    # held only what was set aside — worth $12,762.22 between them six months in, against the $2,795
+    # the five old funds held. The demo's rules genuinely ask more than its money, which is the state
+    # it has always existed to put on a screen; it asks a great deal more now, and the seeds' header
+    # says why in one paragraph.
     it "reports what the claims leave free", :aggregate_failures do
       expect(ledger.total_money).to eq(7_461.00)
       expect(ledger.pot).to eq(5_561.00)
-      expect(ledger.total_claims).to eq(10_201.34)
-      expect(ledger.free).to eq(-2_740.34)
-      expect(ledger.free_cap_bound?).to be(false)
+      expect(ledger.total_claims).to eq(19_118.56)
+      expect(ledger.free).to eq(-13_557.56)
     end
 
     # ** §3.1, ALL THREE WAYS A RATE ROW CAN READ, ON THE MORNING THE PERIOD OPENS. **
@@ -357,42 +366,41 @@ RSpec.describe "db/seeds.rb" do
       expect(claim_of("Utilities", "Electric Bill").overdue?).to be(false)
     end
 
-    # ** §3.2'S TWO DATELESS SHAPES, ONE OF EACH. **
+    # ** §2'S GOAL: A DATED RULE THAT ACCRUES ON ITS OWN, WITH SET-ASIDES ON TOP. **
     #
-    #   FED BY HAND     Emergency Fund's rule has an amount of ZERO — "no rate", the only honest way
-    #                   to say a goal has no standing contribution (`Budget#set_aside_only?`) — so
-    #                   its planned accrual is $0.00 every period and the seven $100 set-asides are
-    #                   the WHOLE of what it holds: 7 × 100 = $700.00. This is the shape
-    #                   `DropTheDistribution#mint_rule` mints, column for column.
-    #   FED BY A RULE   Vacation to Europe accrues $50 a period toward $5,000 with no deadline to
-    #                   spread it over, and the $180 flight deposit was a FULFILMENT that came
-    #                   straight off the built-up. Fourteen periods from `demo_start` × $50 = $700,
-    #                   less the $180 = $520.00.
+    #   EMERGENCY FUND  $10,000 by Sep 1 2027. The walk runs from `demo_start` — thirteen periods
+    #                   back — and each period asks `(10,000 − built up) ÷ periods left`, which
+    #                   starts near $256 and eases as the seven $100 set-asides raise the built-up
+    #                   ahead of it. Fourteen periods later it holds **$4,217.95** and this period
+    #                   plans **$235.28**. It held $700.00 — the set-asides and nothing else — while
+    #                   it was a fund with no deadline and no rate.
+    #   VACATION        $5,000 by Jun 1 2027, nothing set aside, and the $180 flight deposit was a
+    #                   FULFILMENT that came straight off the built-up. **$1,965.77**, where the
+    #                   $50-a-period fund it replaces held $520.00.
     #
     # THE SET-ASIDES ARE DATED ACROSS SEVEN PERIODS AND EVERY ONE COUNTS, which is the accrual-span
     # ruling doing its work: the rules are born on `demo_start`, so `#countable_span` opens six
     # months back and each row lands in the period containing its date (§3.3). Born at seed time
-    # instead, this figure would be $100.00 — one period's worth — and the example would still read
-    # like a savings goal.
-    it "feeds four goals by hand and one by its rule", :aggregate_failures do
+    # instead, the walk would visit one period and every figure here would be a fraction of itself.
+    it "accrues each goal toward its date, and counts the set-asides on top", :aggregate_failures do
       emergency = claim_of("Emergency Fund")
       vacation = claim_of("Vacation to Europe")
 
-      expect(emergency.planned_this_period).to eq(0)
-      expect([emergency.built_up, emergency.target]).to eq([700, 10_000])
+      expect(emergency.planned_this_period).to eq(235.28)
+      expect([emergency.built_up, emergency.target]).to eq([4_217.95, 10_000])
+      expect(emergency.next_due_on).to eq(Date.new(2027, 9, 1))
       expect(emergency.countable_span.first).to eq(today - (13 * 14))
-      expect([vacation.built_up, vacation.target]).to eq([520, 5_000])
+      expect([vacation.built_up, vacation.target]).to eq([1_965.77, 5_000])
     end
 
-    # THE SAME FOUR GOALS FROM THE OTHER SIDE — the rows themselves, grouped by the category they
-    # feed, so a set-aside that landed on the wrong rule cannot hide inside a built-up figure that
-    # happens to come out right.
-    it "writes every hand-fed goal's set-asides against its own rule" do
+    # THE TWO FED GOALS FROM THE OTHER SIDE — the rows themselves, grouped by the category they feed,
+    # so a set-aside that landed on the wrong rule cannot hide inside a built-up figure that happens
+    # to come out right. TWO WHERE THERE WERE FOUR: `New Car` and `Retirement Supplement` are gone
+    # with the shape that let a goal ask nothing of a period (see the seeds at the goals).
+    it "writes every fed goal's set-asides against its own rule" do
       expect(Adjustment.joins(rule: :category).group("categories.name").sum(:amount)).to eq(
         "Emergency Fund" => 700,
-        "House Down Payment" => 1_050,
-        "New Car" => 525,
-        "Retirement Supplement" => 1_050
+        "House Down Payment" => 1_050
       )
     end
 
@@ -422,62 +430,78 @@ RSpec.describe "db/seeds.rb" do
     #   ────────────────────   2,740.34   which is the headline exactly, so `#uncovered_remainder`
     #                                     is zero and no part of the shortfall goes unnamed
     #
-    # ** THE LIST CHANGED WITH THE TYPES AND THE HEADLINE DID NOT (rules-own-the-budget §3). ** It
-    # used to read Retirement, New Car, House Down Payment and $115.34 of Vacation, on priority
-    # alone. `db/seeds.rb` types House Down Payment `usage` and Emergency Fund `bill`, so both now
-    # rank behind every discretionary rule the household has and the walk reaches Holiday Gifts
-    # instead — four `choice` rules absorbing the same $2,740.34 at the same $210.80 a day.
+    # ** THE LIST CHANGED WITH THE TYPES AND AGAIN WITH THE SHAPES. ** It read Retirement, New Car,
+    # House Down Payment and part of Vacation on priority alone; the types put the household's
+    # discretionary saving first. The two shapes then made every GOAL a dated rule that accrues on
+    # its own, so the claims the walk has to absorb are an order of magnitude larger and it reaches
+    # every rule the household has bar the rent.
     #
-    # NO BILL IS TOUCHED, which is what a give-way order is for: this household's discretionary
-    # saving is what gives, and the rent — and now the emergency fund — is never in the list.
+    # NO BILL IS TOUCHED UNTIL THE VERY END, which is what a give-way order is for: the emergency
+    # fund is the last thing reached and the rent is never reached at all.
     it "leaves the household short, and says so on every reader the strip renders", :aggregate_failures do
       home = HomePresenter.new(user: user, today: today)
 
       expect(home.short?).to be(true)
-      expect(home.claims_outrun_the_money?).to be(true)
-      expect(home.shortfall).to eq(2_740.34)
-      expect(home.per_day_pace).to eq(210.80)
+      expect(home.shortfall).to eq(13_557.56)
+      expect(home.per_day_pace).to eq(1_042.89)
       expect(home.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :overdue, :structural])
     end
 
     # ** AND WHO GIVES WAY, WHICH IS THE HALF THE FIGURE ABOVE CANNOT SAY. ** Type decides before
-    # priority does (§3), so the walk is the household's four `choice` rules in reverse priority and
-    # they absorb the whole $2,740.34 — the last of them PART-COVERED at $645.34, which is why
-    # `#uncovered_remainder` is zero and no part of the shortfall goes unnamed.
+    # priority does (§3), so the walk is every `choice` rule in reverse priority, then every `usage`
+    # one, then the `bill`s — and it stops inside the Emergency Fund, PART-COVERED at $3,289.95,
+    # which is why `#uncovered_remainder` is zero and no part of the shortfall goes unnamed.
     #
-    it "names the four discretionary rules that give way, the last part-covered", :aggregate_failures do
+    # THE RENT IS NEVER REACHED, which is the sentence the whole order exists to make true.
+    def expected_give_way_walk
+      [
+        ["Vacation to Europe", 1_965.77],
+        ["Holiday Gifts", 933.34],
+        ["Streaming", 25],
+        ["House Down Payment", 6_578.50],
+        ["Medical Copays", 60],
+        ["Commuter Pass", 60],
+        ["Pet Care", 50],
+        ["Household Supplies", 75],
+        ["Groceries", 400],
+        ["Utilities", 120],
+        ["Emergency Fund", 3_289.95]
+      ]
+    end
+
+    it "names who gives way, in type order, the last part-covered", :aggregate_failures do
       home = HomePresenter.new(user: user, today: today)
 
-      expect(home.uncovered_claims.map { |claim| [claim.category.name, claim.amount] }).to eq(
-        [
-          ["Retirement Supplement", 1_050],
-          ["New Car", 525],
-          ["Vacation to Europe", 520],
-          ["Holiday Gifts", 645.34]
-        ]
-      )
+      expect(home.uncovered_claims.map { |claim| [claim.category.name, claim.amount] })
+        .to eq(expected_give_way_walk)
       expect(home.uncovered_remainder).to eq(0)
     end
 
-    # THE TWO TYPED FUNDS ARE ASSERTED ABSENT, because that is what the type bought: House Down
-    # Payment is `usage` and Emergency Fund is `bill`, and both carry claims ($1,050.00 and $700.00)
-    # large enough to have been in the list above under priority alone — House Down Payment was.
-    it "leaves the funds typed usage and bill out of the give-way list" do
+    # THE ORDER ITSELF, ASSERTED AS THE THING THE TYPE BOUGHT: every `choice` rule comes before every
+    # `usage` one and every `usage` one before every `bill`. On a shortfall this large the list
+    # reaches all three, which the old one never did — so this is the first fixture in the file that
+    # can say the partition holds across the whole walk rather than at its head.
+    it "walks choice, then usage, then bill" do
       home = HomePresenter.new(user: user, today: today)
 
-      expect(home.uncovered_claims.map { |claim| claim.category.name })
-        .not_to include("House Down Payment", "Emergency Fund")
+      expect(home.uncovered_claims.map { |claim| claim.line.rule.rule_type })
+        .to eq((["choice"] * 3) + (["usage"] * 7) + ["bill"])
     end
 
     # ** THE TYPE OVERVIEW (§3), WHICH IS THE OTHER THING THE TYPES BOUGHT. ** `BudgetPagePresenter
-    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,103.42
+    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,858.18
     # `Budget.steady_need` reports two examples down — the same sum, partitioned three ways. Planted,
     # and the sum asserted beside them so a partition that lost a rule could not pass.
+    #
+    # ** EVERY FIGURE ROSE WITH THE TWO SHAPES (§2). ** It read `$1,136.89 · $745.38 · $221.15`, and
+    # the difference is the three goals: a fund with no deadline had a standing ask of its RATE,
+    # which for these three was zero, while a goal that names a day asks its target over the periods
+    # it has to reach it in. $256.41 of that lands in Bills, $396.83 in Usage and $151.52 in Choice.
     it "partitions the standing ask across the three types", :aggregate_failures do
       overview = BudgetPagePresenter.new(user: user, today: today).type_overview
 
-      expect(overview).to eq([[:bill, 1_136.89], [:usage, 745.38], [:choice, 221.15]])
-      expect(overview.sum { |_type, amount| amount }).to eq(2_103.42)
+      expect(overview).to eq([[:bill, 1_393.30], [:usage, 1_142.21], [:choice, 322.67]])
+      expect(overview.sum { |_type, amount| amount }).to eq(2_858.18)
     end
 
     # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
@@ -493,10 +517,15 @@ RSpec.describe "db/seeds.rb" do
     # with every payment — and reads `ClaimCalculator#standing_ask` now, the amount over the periods
     # from the rule's birth to its due date. On this household the two nearly agree: both one-time
     # bills are as old as the seed and neither has been paid into, so only the Dentist's rounding
-    # separates them ($21.43 a period against $21.42 — one division rounded once, against a division
-    # rounded in each of fourteen periods). $2,103.41 → $2,103.42; the declaration does not move.
+    # separates them ($21.43 a period against $21.42). $2,103.41 → $2,103.42.
+    #
+    # ** AND $754.76 WHEN THE GOALS GAINED THEIR DATES (two-shapes §2). ** $2,103.42 → **$2,858.18**,
+    # which is the three goals' standing asks — $256.41, $396.83 and $151.52 — arriving in a sum that
+    # had counted them at zero. The declaration does NOT follow it down this time: $2,050 is what the
+    # user says they bring in, and moving it to keep the gap small would be the seed hiding the
+    # ruling's own consequence rather than showing it.
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_103.42)
+      expect(Budget.steady_need(user, today: today)).to eq(2_858.18)
       expect(user.typical_income).to eq(2_050.00)
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
