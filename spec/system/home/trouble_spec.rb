@@ -466,8 +466,14 @@ RSpec.describe "Home Trouble", type: :system do
 
     expect(problem_row("Utilities").find("[data-problem-state]"))
       .to have_content("overdue · was #{due.strftime("%b %-d")}")
+    # ** "the fund is short" IS "$500.00 short" NOW (fix round 1 — MED-6). ** "fund" named the retired
+    # shape — a rule whose unspent money carried over — and this row is about a DATED rule, which may
+    # be a bill somebody must pay or a target they chose to save toward. The sentence is about the
+    # MONEY either way, so it names the shortfall and the instruction and lets the row's own label
+    # say what the rule is.
     expect(problem_row("Utilities").find("[data-problem-detail]"))
-      .to have_content("$700.00 built up of $1,200.00 — the fund is short $500.00 — this needs paying")
+      .to have_content("$700.00 built up of $1,200.00 — $500.00 short — this needs paying")
+    expect(problem_row("Utilities")).to have_no_content("the fund is short")
   end
 
   # ** THE HALF THAT USED TO BE SILENT, AND IT IS THE ORDINARY CASE. ** The same bill with nothing
@@ -490,8 +496,9 @@ RSpec.describe "Home Trouble", type: :system do
     expect(problem_row("Utilities").find("[data-problem-state]"))
       .to have_content("overdue · was #{due.strftime("%b %-d")}")
     expect(problem_row("Utilities").find("[data-problem-detail]"))
-      .to have_content("$1,200.00 built up of $1,200.00 — it's all there — pay it and the fund starts again")
-    expect(problem_row("Utilities")).to have_no_content("the fund is short")
+      .to have_content("$1,200.00 built up of $1,200.00 — it's all there — pay it and it starts again")
+    expect(problem_row("Utilities")).to have_no_content("short")
+    expect(problem_row("Utilities")).to have_no_content("fund")
   end
 
   # THE OTHER DIRECTION, WHICH IS NOW THE DATE'S: a bill still ahead of its date is a fund SAVING,

@@ -119,6 +119,39 @@ RSpec.describe BudgetPageHelper, type: :helper do
       expect(helper.budget_amount_hint(rule(:by_date, amount: 5_000)))
         .to eq("What this rule asks for once.")
     end
+
+    # ** THE ONE ROW WHOSE UNIT IS THE RECORD'S AND NOT THE SCHEDULE'S (fix round 1 — MED-5). **
+    # `RuleForm.from` reads a `monthly`-no-anchor rule back as "Every period" (§5's ruling) and
+    # `#apply_to_budget` has already written `per_period` onto the record, so the phrase this helper
+    # would derive calls a MONTH's figure a period's. `RuleForm#amount_unit` overrides it.
+    it "takes the unit it is given over the record's own" do
+      expect(helper.budget_amount_hint(rule(:per_period_rate, amount: 260), unit: "a month"))
+        .to eq("What this rule asks for a month.")
+    end
+  end
+
+  # ** THE NOTE BESIDE THAT ROW'S AMOUNT (fix round 1 — MED-5). ** §5 rules the `monthly`-no-anchor
+  # shape converts on save; a form that made that change in silence would be re-shaping a rule the
+  # user opened to fix a typo in. Both figures are named because "this will change" without the
+  # numbers is a warning nobody can act on.
+  describe "#budget_monthly_conversion_note" do
+    def form_for(budget) = RuleForm.new(build(:user, :biweekly), RuleForm.from(budget), budget: budget)
+
+    it "names both figures and what to do about them" do
+      note = helper.budget_monthly_conversion_note(form_for(build(:budget, :rate, amount: 260)))
+
+      expect(note).to eq(
+        "This rule is $260.00 a month; saving it as every period would make it $260.00 a period — " \
+        "change the amount if you mean that."
+      )
+    end
+
+    # THE OTHER DIRECTION, so the note is never a fixture of the page: every other shape says
+    # nothing at all.
+    it "says nothing on a rule whose words describe its own columns", :aggregate_failures do
+      expect(helper.budget_monthly_conversion_note(form_for(build(:budget, :per_period_rate, amount: 400)))).to be_nil
+      expect(helper.budget_monthly_conversion_note(form_for(build(:budget, :by_date, amount: 5_000)))).to be_nil
+    end
   end
 
   # ** `#pool_balance_clause` AND ITS TWO EXAMPLES ARE DELETED (computed-claims spec §6). ** They

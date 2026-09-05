@@ -165,8 +165,29 @@ module BudgetPageHelper
   # rows down. What is left is the clause that was always the point — the amount's UNIT — and it now
   # carries the build-up too, because "$300 per period" means one thing for a fund and another for a
   # grocery budget.
-  def budget_amount_hint(budget)
-    "What this rule asks for #{budget_rule_basis_phrase(budget)}."
+  # `unit:` IS THE ONE OVERRIDE, and it exists for exactly one row (fix round 1 — MED-5): a
+  # `monthly`-no-anchor rule is read back as "Every period" by `RuleForm.from` (§5's ruling), so by
+  # the time this renders the RECORD says per-period while the FIGURE in the box is still a month's.
+  # `RuleForm#amount_unit` is what the form passes; every other caller passes nothing and gets the
+  # record's own phrase.
+  def budget_amount_hint(budget, unit: nil)
+    "What this rule asks for #{unit || budget_rule_basis_phrase(budget)}."
+  end
+
+  # ** THE SENTENCE BESIDE A ROW WHOSE WORDS DO NOT DESCRIBE ITS OWN COLUMNS (fix round 1 — MED-5).
+  # ** §5 rules that a `monthly`-no-anchor rule reads back as "Every period" and CONVERTS on save.
+  # That is a real change to what the rule costs — `Budget#steady_ask` prices $260 a month at $120 a
+  # fortnight, so saving it unchanged multiplies the claim by 2.17× — and a form that made it in
+  # silence would be re-shaping a rule the user opened to correct a typo in.
+  #
+  # IT NAMES BOTH FIGURES AND WHAT TO DO, because "this will change" without the numbers is a warning
+  # a reader cannot act on. Nil on every other rule, so the note is never a fixture of the page.
+  def budget_monthly_conversion_note(rule_form)
+    return nil unless rule_form.converted_from_monthly?
+
+    amount = number_to_currency(rule_form.amount)
+    "This rule is #{amount} a month; saving it as every period would make it #{amount} a period — " \
+      "change the amount if you mean that."
   end
 
   # -----------------------------------------------------------------------------------------

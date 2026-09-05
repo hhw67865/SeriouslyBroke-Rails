@@ -260,8 +260,8 @@ RSpec.describe "db/seeds.rb" do
     # ** §2'S DEFINITION, ON THE DEMO: `free = pot − Σ claims` (two-shapes §2). **
     #
     #   pot            $5,561.00   main's balance, and the whole of what `free` is about
-    #   − Σ claims    $19,118.56   over all 19 rules — the sum of the figures the examples below pin
-    #   = free       -$13,557.56
+    #   − Σ claims    $10,465.84   over all 19 rules — the sum of the figures the examples below pin
+    #   = free        -$4,904.84
     #
     # `total_money` IS ASSERTED BESIDE IT AND IS NO LONGER A TERM IN IT. The $1,900 in the three
     # other accounts is SHOWN by the hero and never subtracted from or added to anything: "why is
@@ -270,15 +270,15 @@ RSpec.describe "db/seeds.rb" do
     #
     # ** IT WAS -$2,740.34, AND THE TWO CHANGES COMPOUND. ** The cap is gone (worth $1,900 on this
     # household), and the three GOALS are dated rules that accrue every period rather than funds that
-    # held only what was set aside — worth $12,762.22 between them six months in, against the $2,795
+    # held only what was set aside — worth $4,109.50 between them six months in, against the $2,795
     # the five old funds held. The demo's rules genuinely ask more than its money, which is the state
-    # it has always existed to put on a screen; it asks a great deal more now, and the seeds' header
-    # says why in one paragraph.
+    # it has always existed to put on a screen; the seeds' header carries how the goals' horizons
+    # were chosen so the figure stays one a person can read.
     it "reports what the claims leave free", :aggregate_failures do
       expect(ledger.total_money).to eq(7_461.00)
       expect(ledger.pot).to eq(5_561.00)
-      expect(ledger.total_claims).to eq(19_118.56)
-      expect(ledger.free).to eq(-13_557.56)
+      expect(ledger.total_claims).to eq(10_465.84)
+      expect(ledger.free).to eq(-4_904.84)
     end
 
     # ** §3.1, ALL THREE WAYS A RATE ROW CAN READ, ON THE MORNING THE PERIOD OPENS. **
@@ -368,15 +368,18 @@ RSpec.describe "db/seeds.rb" do
 
     # ** §2'S GOAL: A DATED RULE THAT ACCRUES ON ITS OWN, WITH SET-ASIDES ON TOP. **
     #
-    #   EMERGENCY FUND  $10,000 by Sep 1 2027. The walk runs from `demo_start` — thirteen periods
-    #                   back — and each period asks `(10,000 − built up) ÷ periods left`, which
-    #                   starts near $256 and eases as the seven $100 set-asides raise the built-up
-    #                   ahead of it. Fourteen periods later it holds **$4,217.95** and this period
-    #                   plans **$235.28**. It held $700.00 — the set-asides and nothing else — while
-    #                   it was a fund with no deadline and no rate.
-    #   VACATION        $5,000 by Jun 1 2027, nothing set aside, and the $180 flight deposit was a
-    #                   FULFILMENT that came straight off the built-up. **$1,965.77**, where the
-    #                   $50-a-period fund it replaces held $520.00.
+    #   EMERGENCY FUND  $10,000 over 156 periods from `demo_start` (six years — see the seeds for how
+    #                   the horizons were chosen). §3.2's catch-up share is `10,000 ÷ 156` = $64.10
+    #                   and stays there; the walk runs the fourteen periods from `demo_start` through
+    #                   today, so the base is `14 × 64.10` = $897.40, the seven $100 set-asides add
+    #                   $700 on top, and each of those raises the built-up so the periods after it
+    #                   plan a little less — **$1,583.07**, with this period planning **$59.98**. It
+    #                   held $700.00 — the set-asides and nothing else — while it was a fund with no
+    #                   deadline and no rate.
+    #   VACATION        $5,000 over 78 periods (three years), nothing set aside, and the $180 flight
+    #                   deposit was a FULFILMENT that came straight off the built-up: `14 × 64.10` =
+    #                   $897.40 less the $180, with the catch-up re-planning the periods after it →
+    #                   **$725.47**, where the $50-a-period fund it replaces held $520.00.
     #
     # THE SET-ASIDES ARE DATED ACROSS SEVEN PERIODS AND EVERY ONE COUNTS, which is the accrual-span
     # ruling doing its work: the rules are born on `demo_start`, so `#countable_span` opens six
@@ -386,11 +389,13 @@ RSpec.describe "db/seeds.rb" do
       emergency = claim_of("Emergency Fund")
       vacation = claim_of("Vacation to Europe")
 
-      expect(emergency.planned_this_period).to eq(235.28)
-      expect([emergency.built_up, emergency.target]).to eq([4_217.95, 10_000])
-      expect(emergency.next_due_on).to eq(Date.new(2027, 9, 1))
+      expect(emergency.planned_this_period).to eq(59.98)
+      expect([emergency.built_up, emergency.target]).to eq([1_583.07, 10_000])
+      # THE DATE IS DERIVED, NOT NAMED (fix round 1 — HIGH-2): `demo_start + 14 × 156 − 1`, so it
+      # moves with `today` exactly as the grid under it does.
+      expect(emergency.next_due_on).to eq(today - (13 * 14) + (14 * 156) - 1)
       expect(emergency.countable_span.first).to eq(today - (13 * 14))
-      expect([vacation.built_up, vacation.target]).to eq([1_965.77, 5_000])
+      expect([vacation.built_up, vacation.target]).to eq([725.47, 5_000])
     end
 
     # THE TWO FED GOALS FROM THE OTHER SIDE — the rows themselves, grouped by the category they feed,
@@ -442,30 +447,32 @@ RSpec.describe "db/seeds.rb" do
       home = HomePresenter.new(user: user, today: today)
 
       expect(home.short?).to be(true)
-      expect(home.shortfall).to eq(13_557.56)
-      expect(home.per_day_pace).to eq(1_042.89)
+      expect(home.shortfall).to eq(4_904.84)
+      # `4,904.84 ÷ 13` days left = **$377.30** — the period is anchored on today, so today is its
+      # only elapsed day of fourteen.
+      expect(home.per_day_pace).to eq(377.30)
       expect(home.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :overdue, :structural])
     end
 
     # ** AND WHO GIVES WAY, WHICH IS THE HALF THE FIGURE ABOVE CANNOT SAY. ** Type decides before
     # priority does (§3), so the walk is every `choice` rule in reverse priority, then every `usage`
-    # one, then the `bill`s — and it stops inside the Emergency Fund, PART-COVERED at $3,289.95,
-    # which is why `#uncovered_remainder` is zero and no part of the shortfall goes unnamed.
+    # one, then the `bill`s — and it stops inside the Emergency Fund, PART-COVERED at $655.07, which
+    # is why `#uncovered_remainder` is zero and no part of the shortfall goes unnamed.
     #
     # THE RENT IS NEVER REACHED, which is the sentence the whole order exists to make true.
     def expected_give_way_walk
       [
-        ["Vacation to Europe", 1_965.77],
+        ["Vacation to Europe", 725.47],
         ["Holiday Gifts", 933.34],
         ["Streaming", 25],
-        ["House Down Payment", 6_578.50],
+        ["House Down Payment", 1_800.96],
         ["Medical Copays", 60],
         ["Commuter Pass", 60],
         ["Pet Care", 50],
         ["Household Supplies", 75],
         ["Groceries", 400],
         ["Utilities", 120],
-        ["Emergency Fund", 3_289.95]
+        ["Emergency Fund", 655.07]
       ]
     end
 
@@ -496,12 +503,14 @@ RSpec.describe "db/seeds.rb" do
     # ** EVERY FIGURE ROSE WITH THE TWO SHAPES (§2). ** It read `$1,136.89 · $745.38 · $221.15`, and
     # the difference is the three goals: a fund with no deadline had a standing ask of its RATE,
     # which for these three was zero, while a goal that names a day asks its target over the periods
-    # it has to reach it in. $256.41 of that lands in Bills, $396.83 in Usage and $151.52 in Choice.
+    # it has to reach it in. `10,000 ÷ 156` = $64.10 of that lands in Bills (the emergency fund),
+    # `10,000 ÷ 182` = $54.95 in Usage (the house deposit) and `5,000 ÷ 78` = $64.10 in Choice (the
+    # vacation) — $183.15 between them, which is the room the seeds' header measures.
     it "partitions the standing ask across the three types", :aggregate_failures do
       overview = BudgetPagePresenter.new(user: user, today: today).type_overview
 
-      expect(overview).to eq([[:bill, 1_393.30], [:usage, 1_142.21], [:choice, 322.67]])
-      expect(overview.sum { |_type, amount| amount }).to eq(2_858.18)
+      expect(overview).to eq([[:bill, 1_200.99], [:usage, 800.33], [:choice, 235.25]])
+      expect(overview.sum { |_type, amount| amount }).to eq(2_236.57)
     end
 
     # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
@@ -519,14 +528,17 @@ RSpec.describe "db/seeds.rb" do
     # bills are as old as the seed and neither has been paid into, so only the Dentist's rounding
     # separates them ($21.43 a period against $21.42). $2,103.41 → $2,103.42.
     #
-    # ** AND $754.76 WHEN THE GOALS GAINED THEIR DATES (two-shapes §2). ** $2,103.42 → **$2,858.18**,
-    # which is the three goals' standing asks — $256.41, $396.83 and $151.52 — arriving in a sum that
-    # had counted them at zero. The declaration does NOT follow it down this time: $2,050 is what the
-    # user says they bring in, and moving it to keep the gap small would be the seed hiding the
-    # ruling's own consequence rather than showing it.
+    # ** AND $133.15 WHEN THE GOALS GAINED THEIR DATES (two-shapes §2). ** $2,103.42 → **$2,236.57**,
+    # which is the three goals' standing asks — $64.10, $64.10 and $54.95 — arriving in a sum that
+    # had counted them at zero, less the $50-a-period rate the vacation fund used to carry. The
+    # declaration does NOT follow: $2,050 is what the user says they bring in, and moving it would be
+    # the seed hiding the ruling's consequence. What WAS tuned is the goals' horizons (fix round 1 —
+    # HIGH-2), so the gap stays **$186.57** — a near miss the sacrifice view can offer a way out of
+    # rather than a wall.
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_858.18)
+      expect(Budget.steady_need(user, today: today)).to eq(2_236.57)
       expect(user.typical_income).to eq(2_050.00)
+      expect(Budget.steady_need(user, today: today) - user.typical_income).to be < 200
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
     end
 

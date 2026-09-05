@@ -5,18 +5,15 @@ module SacrificesHelper
   # WHY THIS RULE IS NOT IN THE CUT LIST, and never merely that it is not — a row that fell silent
   # here would read as a checkbox that failed to render.
   #
-  # Two markings because there are two reasons, which is §9's own distinction ("can't cut — dated"
-  # against "fixed"): a one-off falls on a day and the money has to be there by then, while
-  # everything else anchored is a recurring bill whose amount somebody else sets. Neither is a rate
-  # the user can dial, and the difference matters to what they would do about it — a dated bill can
-  # sometimes be moved, a landlord's rent cannot.
+  # ** ONE MARKING WHERE THERE WERE TWO (fix round 1 — MED-4). ** §9 split them: "can't cut — dated"
+  # for a one-off and "fixed" for everything else anchored. A ONE-OFF IS CUTTABLE now — a goal is a
+  # one-off (two-shapes §2), and a page whose whole subject is closing a structural gap cannot refuse
+  # to name the one claim that could close it — so `:dated` is never returned and the only rows that
+  # reach here are the repeating bills whose amount somebody else sets.
   #
   # The symbol is `SacrificePresenter::Row#reason`, decided there off `Budget#cadence`; only the
-  # words are this module's. (`BudgetPageHelper#budget_rule_reason` used to split the same way for
-  # the Budget page's orphan rows; it is deleted with them — the split itself is the pattern.)
-  def sacrifice_fixed_reason(row)
-    row.reason == :dated ? "can't cut — dated" : "fixed — the bill is what it is"
-  end
+  # words are this module's.
+  def sacrifice_fixed_reason(_row) = "fixed — the bill is what it is"
 
   # THE RULE'S OWN UNIT BESIDE ITS PER-PERIOD CLAIM — "$1,500.00 a month" against the "$692.31 a
   # period" this page adds up — and only where the two are actually different things.

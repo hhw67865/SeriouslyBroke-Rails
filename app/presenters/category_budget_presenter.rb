@@ -198,9 +198,11 @@ class CategoryBudgetPresenter
   def fund? = fund_line.present?
 
   # ** FOUND AMONG THE ROWS THIS CARD ALREADY HOLDS, and the test is `Budget.saving_toward_a_date`'s
-  # in Ruby: an item-less rule with an anchor and no interval. ** A rule that REPEATS is a recurring
-  # bill rather than something being saved toward, a rate rule saves toward nothing at all, and an
-  # item-backed one speaks for one item's spending rather than for the category (§3.1's partition).
+  # in Ruby: an item-less, non-`bill` rule with an anchor and no interval. ** A rule that REPEATS is a
+  # recurring bill rather than something being saved toward, a rate rule saves toward nothing at all,
+  # an item-backed one speaks for one item's spending rather than for the category (§3.1's
+  # partition), and a rule the user typed `bill` is a thing that must be PAID rather than a thing
+  # being saved for (fix round 1 — LOW-7).
   #
   # THE POPULATION IS THE PAGE'S LEDGER rather than the category's association, because the
   # categories INDEX renders one of these per card and `category.budgets` is not preloaded there —
@@ -219,7 +221,8 @@ class CategoryBudgetPresenter
     return @fund_line if defined?(@fund_line)
 
     @fund_line = lines.detect do |line|
-      line.rule.item_id.nil? && line.rule.anchor_date.present? && line.rule.interval_months.nil?
+      rule = line.rule
+      rule.item_id.nil? && rule.anchor_date.present? && rule.interval_months.nil? && !rule.bill?
     end
   end
 

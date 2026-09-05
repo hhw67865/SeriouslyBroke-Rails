@@ -134,9 +134,11 @@ module Dashboard
       }
     end
 
-    # `Budget.saving_toward_a_date`'s three clauses in Ruby, asked of a row already loaded.
+    # `Budget.saving_toward_a_date`'s four clauses in Ruby, asked of a row already loaded — the
+    # `bill` one included (fix round 1 — LOW-7): a one-off on the whole category is the shape of a
+    # goal and of an un-itemised bill alike, and the word the user chose is what tells them apart.
     def saving_toward_a_date?(budget)
-      budget.item_id.nil? && budget.anchor_date.present? && budget.interval_months.nil?
+      budget.item_id.nil? && budget.anchor_date.present? && budget.interval_months.nil? && !budget.bill?
     end
 
     def total_savings_balance = savings_summary.sum { |row| row[:balance] }

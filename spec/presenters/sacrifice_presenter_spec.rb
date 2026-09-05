@@ -110,37 +110,54 @@ RSpec.describe SacrificePresenter do
   end
 
   describe "#cuttable_rows" do
-    # THE CUT LIST IS THE ANCHORLESS RULES. All the kinds this app can hold are on the fixture at
-    # once so the boundary is drawn rather than merely reported: two rates in, a recurring bill and
-    # a one-off out. (A category cap used to be a third arm — off the page entirely — and is
-    # deleted with the shape.)
-    it "holds the anchorless rules and nothing else", :aggregate_failures do
+    # ** THE CUT LIST IS EVERYTHING BUT A REPEATING DATED RULE (fix round 1 — MED-4). ** It was "the
+    # anchorless rules", which put every ONE-OFF out — and a goal is a one-off (two-shapes §2), so
+    # every savings goal left the list silently. All the kinds this app can hold are on the fixture
+    # at once so the boundary is drawn rather than reported: two rates and a one-off in, the
+    # recurring bill alone out.
+    it "holds everything but a repeating dated rule", :aggregate_failures do
       groceries = rate(holder("Groceries"), 400)
       dining = rate(holder("Dining Out", priority: 2), 150)
       rent = rolling(holder("Rent", priority: 3), amount: 1_500)
       dentist = one_off(holder("Dentist", priority: 4), amount: 300, anchor: Date.new(2026, 3, 4))
 
-      expect(ids(presenter.cuttable_rows)).to contain_exactly(groceries.id, dining.id)
-      expect(ids(presenter.fixed_rows)).to contain_exactly(rent.id, dentist.id)
+      expect(ids(presenter.cuttable_rows)).to contain_exactly(groceries.id, dining.id, dentist.id)
+      expect(ids(presenter.fixed_rows)).to contain_exactly(rent.id)
     end
 
-    # ** A GOAL MOVED FROM THE CUT LIST TO THE FIXED ONE, AND IT IS A CONSEQUENCE OF §2 RATHER THAN A
-    # CHOICE THIS PAGE MADE (two-shapes spec §2). ** The example used to read "includes a building
-    # rule saving toward a target": a goal was a `carries over` rule with a figure and NO anchor, and
-    # `#reason_for` marks a rule uncuttable by its anchor alone — so it landed among the cuttable rows.
-    # A goal is a dated one-off now, so the same declaration answers `:dated` and the page offers it
-    # as fixed instead.
+    # ** A GOAL IS CUTTABLE, AND FOR ONE ROUND IT WAS NOT (fix round 1 — MED-4). ** The example read
+    # "includes a building rule saving toward a target" while a goal was a `carries over` rule with
+    # no anchor. A goal is a dated ONE-OFF now (two-shapes §2), and `#reason_for` marked every
+    # anchored rule uncuttable — so every savings goal silently left the cut list, on the one page
+    # whose subject is closing a structural gap.
     #
-    # ASSERTED RATHER THAN DELETED, because it is a real change in what the sacrifice view offers and
-    # a later reader has to be able to find where it came from. `#reason_for` itself is untouched: its
-    # sentence — a date is what a rule is FOR, so it cannot be trimmed — is unchanged, and it is the
-    # population under it that moved.
-    it "marks a goal fixed, because a goal is a dated rule", :aggregate_failures do
-      goal = create(:category, :expense, :funded, user: user, name: "Retirement Supplement")
-      goal_rule = create(:budget, :by_date, category: goal, amount: 5_000)
+    # THE FAILING SCENARIO, PLANTED AND RE-DERIVED: a household declaring $2,050 with $1,900 a period
+    # of REPEATING bills — a monthly rule of `1,900 × 26 ÷ 12` = $4,116.67, which `Budget#steady_ask`
+    # prices back at exactly $1,900 a fortnight — and one goal of $5,000 due at the close of the
+    # 33rd period from today (`today + 14 × 33 − 1`). `ClaimCalculator#standing_ask` divides the
+    # target by the periods from the rule's birth to its due date, and the rule is born today, so the
+    # divisor is **33** and the ask is `5,000 ÷ 33` = **$151.52**.
+    #
+    # THE RULE IS BORN ON `today`, which is what makes that divisor 33 rather than the eighteen a
+    # factory-fresh `created_at` would give: `#standing_ask` counts from the ACCRUAL START — the
+    # later of the category's funding date and the rule's own birthday — and this file's clock is
+    # Feb 2026 while the factory writes at the real one.
+    #
+    # THE GAP IS `2,051.52 − 2,050` = **$1.52**, and the goal is the only claim that can close it.
+    # Under the old marking the page offered NOTHING and the figures are what say so: the cut list
+    # was empty while `#underwater?` was true.
+    it "offers the goal that closes the gap, rather than marking it fixed", :aggregate_failures do
+      user.update!(typical_income: 2_050)
+      create(:budget, :rate, category: holder("Rent"), amount: 1_900 * 26 / 12.0)
+      goal = create(:category, :expense, :funded, user: user, name: "Vacation", priority: 2)
+      goal_rule = create(
+        :budget, :by_date, category: goal, amount: 5_000, due: today + (14 * 33) - 1, created_at: today
+      )
 
-      expect(ids(presenter.cuttable_rows)).not_to include(goal_rule.id)
-      expect(presenter.fixed_rows.to_h { |row| [row.budget.id, row.reason] }.fetch(goal_rule.id)).to eq(:dated)
+      expect(presenter.underwater?).to be(true)
+      expect(presenter.cuttable_rows.detect { |row| row.budget.id == goal_rule.id })
+        .to have_attributes(claim: BigDecimal("151.52"), reason: nil)
+      expect(ids(presenter.fixed_rows)).not_to include(goal_rule.id)
     end
 
     # PER-PERIOD CLAIMS, NOT AMOUNTS — the one assertion that catches the mixed-unit slip head on.
@@ -168,16 +185,17 @@ RSpec.describe SacrificePresenter do
   end
 
   describe "#fixed_rows" do
-    # TWO MARKINGS FOR TWO REASONS (spec §9's "can't cut — dated" against "fixed"). A one-off falls
-    # on a day; everything else anchored is a recurring bill somebody else sets.
-    it "tells a dated one-off from a recurring bill", :aggregate_failures do
+    # ** ONE MARKING WHERE §9 HAD TWO (fix round 1 — MED-4). ** It read "can't cut — dated" for a
+    # one-off and "fixed" for everything else anchored; a one-off is CUTTABLE now, so only a
+    # REPEATING dated rule is fixed and the dentist visit is offered like any rate rule. Both
+    # directions on one fixture, because a presenter that had simply stopped marking anything would
+    # pass either half alone.
+    it "fixes a recurring bill and offers a dated one-off", :aggregate_failures do
       rent = rolling(holder("Rent"), amount: 1_500)
       dentist = one_off(holder("Dentist", priority: 2), amount: 300, anchor: Date.new(2026, 3, 4))
 
-      reasons = presenter.fixed_rows.to_h { |row| [row.budget.id, row.reason] }
-
-      expect(reasons.fetch(rent.id)).to eq(:fixed)
-      expect(reasons.fetch(dentist.id)).to eq(:dated)
+      expect(presenter.fixed_rows.to_h { |row| [row.budget.id, row.reason] }).to eq(rent.id => :fixed)
+      expect(ids(presenter.cuttable_rows)).to include(dentist.id)
     end
 
     it "marks every cuttable row with no reason at all" do
@@ -332,7 +350,9 @@ RSpec.describe SacrificePresenter do
 
       expect(count_statements { read_the_page_fresh }).to eq(one)
       expect(one).to eq(6)
-      expect(presenter.cuttable_rows).to be_empty
+      # A ONE-OFF IS CUTTABLE SINCE MED-4, so the five of them are the whole cut list rather than an
+      # empty one — the absence this used to assert has moved to `#fixed_rows`.
+      expect(presenter.fixed_rows).to be_empty
     end
   end
 end

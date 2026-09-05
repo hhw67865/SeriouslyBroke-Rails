@@ -173,6 +173,36 @@ RSpec.describe RuleForm do
       expect(rule.amount).to eq(260)
     end
 
+    # ** AND IT CARRIES A FLAG SAYING SO, BECAUSE THE CONVERSION IS NOT FREE (fix round 1 — MED-5). **
+    # `#apply_to_budget` writes `basis: per_period` onto the record in the CONSTRUCTOR, so by the
+    # time a view renders it the row says per-period while the figure in the box is still a month's —
+    # and `Budget#steady_ask` prices $260 a month at `260 × 12 ÷ 26` = **$120.00** a fortnight, so
+    # saving it unchanged multiplies what the rule really costs by 2.17×. The flag is what lets the
+    # form say the amount in the ROW's unit and warn about the save.
+    #
+    # BOTH DIRECTIONS, because a flag that was always true would read the same on this example.
+    it "flags the monthly read-back, and only that one", :aggregate_failures do
+      monthly = create(:budget, :rate, category: groceries, amount: 260)
+      per_period = create(:budget, :per_period_rate, category: create(:category, :expense, :funded, user: user), amount: 400)
+
+      expect(described_class.from(monthly)).to include(converted_from_monthly: true)
+      # ABSENT RATHER THAN `false`, on `interval_months`' own convention: `SuggestionEngine` puts
+      # these words on an accept URL through `.compact`, and a `false` would ride in every query
+      # string the panel builds to say nothing.
+      expect(described_class.from(per_period)[:converted_from_monthly]).to be_nil
+      expect(described_class.new(user, described_class.from(monthly), budget: monthly).amount_unit).to eq("a month")
+      expect(described_class.new(user, described_class.from(per_period), budget: per_period).amount_unit).to be_nil
+    end
+
+    # ** THE WIRE CANNOT SET IT. ** It is a fact about the ROW, not an answer the user gave, so it is
+    # absent from `BudgetsController::BUDGET_FIELDS` and a hand-made POST that names it is dropped
+    # before this class ever sees it — which is what keeps a form from claiming a conversion that is
+    # not happening.
+    it "is not one of the fields the form submits", :aggregate_failures do
+      expect(described_class::FIELDS).not_to include(:converted_from_monthly)
+      expect(BudgetsController::BUDGET_FIELDS).not_to include(:converted_from_monthly)
+    end
+
     # NO INTERVAL IS HANDED BACK WHERE THE CHECKBOX IS OFF, because the control is not on screen and
     # a value in it is a value the user never typed — which `#check_interval` then refuses.
     it "hands back no interval for a one-off", :aggregate_failures do
@@ -181,8 +211,11 @@ RSpec.describe RuleForm do
       expect(described_class.from(rule)).to include(schedule: "by_date", repeats: false, interval_months: nil)
     end
 
+    # THE DATE IS NAMED BY THE EXAMPLE rather than taken from the trait's own default, which is
+    # relative to `Date.current` since fix round 1 (LOW-9) — a fixed literal here would be asserting
+    # the factory's clock rather than the mapping.
     it "reads a goal's amount, its date and its type", :aggregate_failures do
-      rule = build(:budget, :by_date, rule_type: :choice, amount: 5_000)
+      rule = build(:budget, :by_date, rule_type: :choice, amount: 5_000, due: Date.new(2027, 6, 1))
 
       expect(described_class.from(rule)).to include(
         schedule: "by_date", anchor_date: Date.new(2027, 6, 1), rule_type: "choice", amount: 5_000

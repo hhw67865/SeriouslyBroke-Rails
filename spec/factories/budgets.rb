@@ -60,10 +60,21 @@ FactoryBot.define do
     # target beside it, and the hand-fed one wrote an amount of zero — a shape `Budget` refuses
     # outright now. A trait for a shape the model rejects is a fixture that cannot be constructed,
     # which is what `claim_calculator_spec` asserts rather than leaves implied.
+    # ** THE DATE IS RELATIVE, AND THE REASON IS CLAUDE.md's THIRD FLAKE CAUSE (fix round 1 —
+    # LOW-9). ** It was `Date.new(2027, 6, 1)`, a fixed day: every fortnight the suite is not run,
+    # that day is one period closer, and `ClaimCalculator#standing_ask` — `target ÷ periods to fund`
+    # — moves with it. A trait every accruing example in the suite reaches for must not carry a
+    # figure that drifts on the wall clock.
+    #
+    # NINE MONTHS, WHICH IS FAR ENOUGH TO READ AS A GOAL and near enough that the walk over it is
+    # cheap. `due:` is a transient so an example that needs a particular horizon says so rather than
+    # overriding the column and losing the reason.
+    transient { due { Date.current + 9.months } }
+
     trait :by_date do
       basis { :monthly }
       interval_months { nil }
-      anchor_date { Date.new(2027, 6, 1) }
+      anchor_date { due }
     end
 
     # THE THREE TYPES (§3). `usage` is the column's own default and has a trait all the same, so an

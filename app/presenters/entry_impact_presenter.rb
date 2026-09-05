@@ -188,16 +188,31 @@ class EntryImpactPresenter
     calculator.target
   end
 
-  # "envelope" or "fund" — the noun the header uses.
+  # ** THREE NOUNS, AND THE THIRD IS THE RULE'S OWN TYPE (fix round 1 — MED-6). ** It was
+  # "fund"/"envelope", and "fund" named the RETIRED shape — a rule whose unspent money carried over.
+  # An accruing rule is a dated one now, and the two things a person accrues toward are not the same
+  # thing to them: a BILL is a thing that must be paid, a target is a thing they chose to save for.
+  # `Budget#rule_type` is the word the user picked and is the only reader that can tell them apart.
   #
-  # ** "GOAL" IS RETIRED (§7). ** A goal was a kind of CATEGORY; what this names is what the rule
-  # does with the money: it is being saved toward a day. "Fund" is true of a bill's fund and a
-  # savings goal alike, which is what makes them one shape (two-shapes §2).
+  # ** "GOAL" IS RETIRED (§7) and "target" takes its place, ** because a goal was a kind of CATEGORY
+  # while this names what the RULE is accruing toward — which is the same word `ClaimCalculator
+  # #target` and every bar on the app already use.
   #
   # `Pool#noun` IS GONE with the type it read: a pool had three types and a word for each, and a
   # category has one type and a question. "envelope" is the right word for a category that holds its
   # own spending money, and it is also the fallback the honest card's own headline is written in.
-  def noun = fund? ? "fund" : "envelope"
+  def noun
+    return "envelope" unless fund?
+
+    dated_rules.any?(&:bill?) ? "bill" : "target"
+  end
+
+  # THE DATED RULES THEMSELVES, so `#noun` can ask what the user called them. A category mixing a
+  # bill with a target reads "bill": the sharper word wins, because a receipt landing on a bill's
+  # lane is money that has to be there on a day somebody else set.
+  def dated_rules
+    holding.budgets.select { |budget| budget.anchor_date.present? }
+  end
 
   # WHAT THE CATEGORY CLAIMS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #

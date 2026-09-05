@@ -309,18 +309,25 @@ RSpec.describe "Sacrifice view", type: :system do
     # checked that it appeared in neither list and in neither figure, and a rule owned by a category
     # is not something this app can hold. Nothing is left out of this page's arithmetic now.
 
-    # A one-off is dated rather than fixed, and the two markings say different things about what
-    # the user could do next: a dentist appointment can sometimes be moved, a landlord's rent
-    # cannot. Both on one screen, so a helper that returned one string for both would fail here.
-    it "tells a dated one-off from a recurring bill", :aggregate_failures do
+    # ** A ONE-OFF IS OFFERED, AND ONLY THE RECURRING BILL IS FIXED (fix round 1 — MED-4). ** The
+    # page marked both — "can't cut — dated" against "fixed — the bill is what it is" — and the first
+    # of those took every SAVINGS GOAL off the cut list the moment a goal became a one-off
+    # (two-shapes §2), on the one screen whose subject is closing a structural gap. A dentist
+    # appointment on a day the user chose IS a decision; a landlord's rent is not.
+    #
+    # BOTH ON ONE SCREEN, so a page that had simply stopped marking anything would fail the second
+    # half.
+    it "offers a dated one-off and fixes only the recurring bill", :aggregate_failures do
       rate("Groceries", 3_000)
       dentist = one_off("Dentist", 300, priority: 2)
       rent = rolling("Rent", 1_500, priority: 3)
 
       visit sacrifice_path
 
-      expect(fixed_row(dentist)).to have_content("can't cut — dated")
+      expect(page).to have_no_css("[data-fixed-row='#{dentist.id}']")
+      expect(row(dentist)).to have_content("Dentist")
       expect(fixed_row(rent)).to have_content("fixed — the bill is what it is")
+      expect(page).to have_no_content("can't cut — dated")
     end
   end
 

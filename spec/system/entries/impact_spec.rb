@@ -447,9 +447,12 @@ RSpec.describe "Entry impact card", type: :system do
   # whose unspent money carried over. It asks `ClaimCalculator#dated?` now, of the calculators the
   # card already builds, so the noun and the bar come from the same objects the figures do.
   #
-  # "GOAL" IS RETIRED WITH THE NOUN. A goal was a kind of category; "fund" is what an accruing rule
-  # does with money — it saves it toward a day — and a bill's fund and a savings goal are ONE shape.
-  describe "a fund" do
+  # ** THE NOUN IS THE RULE'S OWN TYPE (fix round 1 — MED-6). ** It was "fund", which named the
+  # RETIRED shape; what a person accrues toward is either a BILL somebody else sets the day for or a
+  # TARGET they chose, and `Budget#rule_type` is the only reader that tells them apart. "Goal" is
+  # retired too — it named a kind of CATEGORY — and "target" is the word every bar in the app already
+  # uses for the figure this one is measured against.
+  describe "a target" do
     before do
       vacation = create(:category, :expense, user: user, name: "Vacation", funded_since: funded_since)
       # $600 OF A $2,400 TARGET, planted as §3.2 builds it: a $2,400 goal FOUR fortnights out on this
@@ -470,11 +473,11 @@ RSpec.describe "Entry impact card", type: :system do
     end
 
     it "takes the fund shape and subtracts what is spent", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='fund']")
+      expect(page).to have_css("[data-impact-card='target']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("Vacation fund")
+        expect(figure("envelope")).to have_text("Vacation target")
         expect(figure("balance")).to have_text("$600.00")
         expect(figure("balance-after")).to have_text("$450.00")
         expect(figure("target")).to have_text("of $2,400.00")
@@ -547,19 +550,23 @@ RSpec.describe "Entry impact card", type: :system do
         item: create(:item, category: car, name: "Insurance"),
         amount: 600,
         interval_months: 1,
-        anchor_date: Date.current + 3.days
+        anchor_date: Date.current + 3.days,
+        rule_type: :bill
       )
 
       visit new_entry_path
       select_category("Car")
     end
 
+    # THE SHARPER WORD WINS ON A MIXED CATEGORY (MED-6): a receipt landing on the insurance lane is
+    # money that has to be there on a day somebody else set, so the card says "bill" over a category
+    # that also carries a target.
     it "keeps the fund shape and drops the ceiling", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='fund']")
+      expect(page).to have_css("[data-impact-card='bill']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("Car fund")
+        expect(figure("envelope")).to have_text("Car bill")
         expect(figure("balance")).to have_text("$1,200.00")
         expect(figure("balance-after")).to have_text("$1,050.00")
         expect(figure("target")).to have_text("built up")
@@ -592,11 +599,11 @@ RSpec.describe "Entry impact card", type: :system do
     end
 
     it "takes the fund shape and measures against the bill", :aggregate_failures do
-      expect(page).to have_css("[data-impact-card='fund']")
+      expect(page).to have_css("[data-impact-card='target']")
       fill_in "Amount", with: "150"
 
       within(card) do
-        expect(figure("envelope")).to have_text("House Deposit fund")
+        expect(figure("envelope")).to have_text("House Deposit target")
         expect(figure("balance-after")).to have_text("$450.00")
         expect(figure("target")).to have_text("of $600.00")
         expect(page).to have_no_content("left")

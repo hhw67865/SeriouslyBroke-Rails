@@ -173,7 +173,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
     # of the record that holds the fund.
     it "leaves the goal's own figure alone", :aggregate_failures do
       vacation = create(:category, :expense, user: user, **holder_attributes)
-      goal = create(:budget, :by_date, category: vacation, amount: 2_400)
+      goal = create(:budget, :by_date, category: vacation, amount: 2_400, due: Date.new(2027, 6, 1))
 
       visit edit_category_path(vacation)
       fill_in "Name", with: "Vacation Fund"

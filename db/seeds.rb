@@ -81,42 +81,45 @@
 #   waterfall to draw a cutoff on.
 #
 #     In Checking            $5,561.00   the pot — `AccountLedger#pot`, main's balance
-#     Free to spend        -$13,557.56   `pot − Σ claims` (two-shapes §2), unclamped
-#     Claimed              $19,118.56    Σ over all 19 rules
+#     Free to spend         -$4,904.84   `pot − Σ claims` (two-shapes §2), unclamped
+#     Claimed               $10,465.84   Σ over all 19 rules
 #     total money            $7,461.00   pot + the three other accounts ($1,900.00), SHOWN and never
 #                                        subtracted — the hero says it in its own clause
 #
-#   ** THE FREE FIGURE MOVED FROM -$2,740.34 TO -$13,557.56 AND THE TWO SHAPES ARE WHY (§2). ** Two
+#   ** THE FREE FIGURE MOVED FROM -$2,740.34 TO -$4,904.84 AND THE TWO SHAPES ARE WHY (§2). ** Two
 #   changes compound. The cap is gone, so money in the three other accounts no longer offsets a
 #   claim — worth $1,900. And the three GOALS are dated rules now: a fund with no deadline asked
-#   nothing of a period and held only what the household set aside, while "$50,000 by Jan 1 2031"
+#   nothing of a period and held only what the household set aside, while a goal with a day on it
 #   asks `remaining ÷ periods left` every period from the day it was written. Six months in, the
-#   three of them have accrued $12,762.22 between them where the five old funds held $2,795.
+#   three of them hold $4,109.50 between them where the five old funds held $2,795 — see the goals
+#   themselves for how the horizons were chosen.
 #
 #   THE TROUBLE STRIP (§4), and this demo lights four of its five arms:
 #     :overdraft   Side Gig Checking is overdrawn $300.00
-#     :shortfall   $13,557.56 short, at $1,042.89 a day for the thirteen days left, and the give-way
+#     :shortfall   $4,904.84 short, at $377.30 a day for the thirteen days left, and the give-way
 #                  walk BY TYPE AND THEN BY REVERSE PRIORITY (rules-own-the-budget §3):
-#                    choice  Vacation to Europe $1,965.77 · Holiday Gifts $933.34 · Streaming $25.00
-#                    usage   House Down Payment $6,578.50 · Medical Copays $60.00 ·
+#                    choice  Vacation to Europe $725.47 · Holiday Gifts $933.34 · Streaming $25.00
+#                    usage   House Down Payment $1,800.96 · Medical Copays $60.00 ·
 #                            Commuter Pass $60.00 · Pet Care $50.00 · Household Supplies $75.00 ·
 #                            Groceries $400.00 · Utilities $120.00 — the Electric Bill is typed
 #                            `usage` though it is dated, which is the row that keeps the type from
 #                            being a synonym for the schedule
-#                    bill    Emergency Fund $3,289.95 — PARTIAL, which is the shape a walk can say
-#                            and a filter cannot; the rent is never reached at all
+#                    bill    Emergency Fund $655.07 — PARTIAL, which is the shape a walk can say and
+#                            a filter cannot; the rent is never reached at all
 #                  ** THE TYPE IS STILL WHAT ORDERS IT, and it is more visible than it was: every
 #                  `choice` rule goes before any `usage` one and every `usage` one before any
-#                  `bill`, so the household's $50,000 house deposit gives way ahead of its $400
-#                  groceries and the emergency fund is the last thing reached. Under priority alone
+#                  `bill`, so the household's house deposit gives way ahead of its $400 groceries
+#                  and the emergency fund is the last thing reached. Under priority alone
 #                  the goals would have led the list in a different order entirely.
 #     :over        Dining Out — over by $10.00
 #     :overdue     Renters Insurance — was due 6 days ago, $180.00 built up of $180.00, all there
-#     :structural  rules need $2,858.18 a period against a declared $2,050.00 — the standing ask of
+#     :structural  rules need $2,236.57 a period against a declared $2,050.00 — the standing ask of
 #                  every rule (`Budget.steady_need`), which for a one-off is the amount spread from
 #                  the day the rule was born to the day it falls due and moves with nothing else
 #                  (fix wave 2 — MED-A). It read $2,103.42 while the three goals asked NOTHING of a
-#                  period; a goal that names a day states its cost, which is the ruling's point.
+#                  period; a goal that names a day states its cost, which is the ruling's point, and
+#                  the horizons below are chosen so the verdict stays a **$186.57** near miss rather
+#                  than a wall.
 #
 #   "THIS PERIOD" (§3.4), one row per category and one line per rule. The period ANCHORS ON TODAY,
 #   so today is the only day of it that has happened — a rate row reads $0.00 unless its money went
@@ -132,11 +135,12 @@
 #     ACCRUING         Quarterly Taxes      $1,400.00 built up of $1,800.00 · next due <today+2mo>
 #                                             · $100.00 per period
 #     OVERDUE          Renters Insurance    $180.00 built up of $180.00 · was due <today-6>
-#     GOAL             Vacation to Europe   $1,965.77 built up of $5,000.00 · next due Jun 1, 2027
-#                                              · $159.70 per period
-#     GOAL             Emergency Fund       $4,217.95 built up of $10,000.00 · next due Sep 1, 2027
-#                                              · $235.28 per period — its catch-up plus seven $100
-#                                              set-asides, which is the change of shape in one row
+#     GOAL             Vacation to Europe   $725.47 built up of $5,000.00 · next due <demo_start
+#                                              + 78 periods> · $66.79 per period
+#     GOAL             Emergency Fund       $1,583.07 built up of $10,000.00 · next due <demo_start
+#                                              + 156 periods> · $59.98 per period — its catch-up
+#                                              plus seven $100 set-asides, which is the change of
+#                                              shape in one row
 #     UNRULED          Transportation       spent $48.00            no rule, no bar, no pressure
 #
 #   THE BUDGET PAGE — the same two sentences, per rule, beside what the rule SAYS:
@@ -147,19 +151,20 @@
 #     category has no holding date, so its $25.00 claims every period while nothing spent there
 #     ever comes off it.
 #
-#   THE DASHBOARD'S SAVINGS STRIP composes `Budget.saving_toward_a_date` — an item-less rule with an
-#   anchor and no interval (two-shapes §2) — so the three goals below appear on it and no bill does:
-#   House Down Payment $6,578.50 of $50,000.00, Emergency Fund $4,217.95 of $10,000.00 and Vacation
-#   to Europe $1,965.77 of $5,000.00, $12,762.22 claimed between them. All three are claims and none
-#   is money moved. The classifier has been a figure on the CATEGORY and then the rule whose unspent
-#   money carried; it is the DATE now, which is also what keeps the six-monthly car insurance off a
-#   strip about saving.
+#   THE DASHBOARD'S SAVINGS STRIP composes `Budget.saving_toward_a_date` — an item-less, non-`bill`
+#   rule with an anchor and no interval (two-shapes §2; fix round 1 — LOW-7) — so the two goals the
+#   household could stop saving into appear on it and neither a repeating bill nor the emergency
+#   fund does: House Down Payment $1,800.96 of $10,000.00 and Vacation to Europe $725.47 of
+#   $5,000.00, $2,526.43 claimed between them. Both are claims and neither is money moved. The
+#   classifier has been a figure on the CATEGORY and then the rule whose unspent money carried; it is
+#   the DATE and the TYPE now, which is what keeps the six-monthly car insurance and the emergency
+#   fund's own dated rule off a strip about saving.
 #
 #   THE BUDGET PAGE'S TYPE OVERVIEW (§3), summed from `Budget#steady_ask` over all 19 rules:
-#     `Bills $1,393.30 · Usage $1,142.21 · Choice $322.67 a period` — which adds to the $2,858.18
+#     `Bills $1,200.99 · Usage $800.33 · Choice $235.25 a period` — which adds to the $2,236.57
 #     `Budget.steady_need` reports, because it is the same sum partitioned three ways. Every one of
-#     the three goals is inside it now: the emergency fund's $256.41 lands in Bills, the house
-#     deposit's $396.83 in Usage and the vacation's $151.52 in Choice, where the old funds asked
+#     the three goals is inside it now: the emergency fund's $64.10 lands in Bills, the house
+#     deposit's $54.95 in Usage and the vacation's $64.10 in Choice, where the old funds asked
 #     nothing of a period at all.
 #
 #   WHICH TYPE EACH RULE CARRIES, and the table is here because nothing else in the file can say it
@@ -277,7 +282,7 @@ today = Time.find_zone!(user.timezone).today
 #
 # `typical_income` is what the user SAYS they bring in, and it is UNDER the $2,600 paycheck below on
 # purpose: it is a declaration, not a measurement, and §9's structural check compares it against
-# `Budget.steady_need` — $2,858.18 here — so the demo is structurally underwater and the sacrifice
+# `Budget.steady_need` — $2,236.57 here — so the demo is structurally underwater and the sacrifice
 # view has a screen. That screen existing is the load-bearing property; the exact gap is not.
 #
 # ** IT WAS $2,400 AGAINST A NEED OF $2,459.99 (fix wave — MED-3). ** `Budget#steady_ask`'s one-off
@@ -295,13 +300,13 @@ today = Time.find_zone!(user.timezone).today
 # and rounds ONCE while catch-up rounds every period it walks. $2,103.41 → $2,103.42, and the demo
 # stayed $53.42 a period underwater against the same declared $2,050.
 #
-# ** THE TWO SHAPES TOOK IT FROM $53.42 TO $808.18 (two-shapes §2), AND THE DECLARATION DOES NOT
-# FOLLOW IT THIS TIME. ** The three goals are dated rules now, so each states what it costs a period
-# — $256.41, $396.83 and $151.52 — where the funds they replace asked NOTHING of one. That is the
-# ruling's whole point ("build up is just a higher target on a timeline longer than a period"), and
-# the honest demo is a household whose goals it cannot actually afford at those dates. The
-# declaration stays at $2,050 because it is what the user SAYS they bring in, and moving it to hide
-# the gap would be the seed lying about the state it exists to show.
+# ** THE TWO SHAPES TOOK IT FROM $53.42 TO $186.57 (two-shapes §2), AND THE DECLARATION DOES NOT
+# MOVE. ** The three goals are dated rules now, so each states what it costs a period — $64.10,
+# $64.10 and $54.95 — where the funds they replace asked NOTHING of one. That is the ruling's whole
+# point ("build up is just a higher target on a timeline longer than a period"). The declaration
+# stays at $2,050 because it is what the user SAYS they bring in; what was tuned instead is the
+# goals' HORIZONS, so the verdict stays a near miss a person could act on — see the goals for the
+# arithmetic and for why the house deposit is $10,000.
 user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_050)
 
 # ---------------------------------------------------------------------------------------------
@@ -646,25 +651,56 @@ vacation_costs = vacation.items.create!(name: "Flights & Hotels")
 # retirement goal and a $50,000 house deposit at once; keeping them would have made every screen in
 # the demo a wall of red about a budget nobody could run, which teaches nothing about the app.
 #
-# WHAT IS LEFT IS THE THREE THE PLAN NAMES, with the dates it names them by: Vacation to Europe
-# $5,000 by Jun 1 2027, Emergency Fund $10,000 by Sep 1 2027, House Down Payment $50,000 by Jan 1
-# 2031. The demo is still structurally underwater — it always was, by $53 a period — and it is now
-# underwater by an amount a person can see the cause of.
+# ---------------------------------------------------------------------------------------------
+# ** EVERY GOAL'S DATE IS RELATIVE, AND THE HORIZON IS CHOSEN SO THE DEMO STAYS INSTRUCTIVE
+# (fix round 1 — HIGH-2). **
+# ---------------------------------------------------------------------------------------------
+#
+# ** ABSOLUTE DATES ROT (CLAUDE.md's third flake cause, at a fortnightly cadence). ** Everything else
+# in this file is relative to `today` — the grid is anchored on it and `demo_start` is thirteen
+# periods back — so a goal anchored `Jan 1 2031` moves one period closer every fortnight the suite
+# is not run, and `seeds_spec`'s figures rot with it: the house deposit's standing ask read $396.83
+# on the day it was written and $400.00 within fourteen days. A date this file states has to be
+# derived from `today` like every other date in it.
+#
+# ** THE HORIZON IS COUNTED FROM `demo_start`, NOT FROM TODAY, and that is what makes the figures
+# whole cents. ** `ClaimCalculator#standing_ask` divides the target by the periods from the RULE'S
+# BIRTH to its due date, and every rule here is born on `demo_start`; so `demo_start + 14N − 1` — the
+# last day of the Nth period after the rule was written — makes that divisor exactly N, the standing
+# ask exactly `target ÷ N`, and §3.2's catch-up share the same figure in every period it walks.
+#
+#   Vacation to Europe   $5,000  over N =  78 periods (three years)  → $64.10 a period
+#   Emergency Fund      $10,000  over N = 156 periods (six years)    → $64.10 a period
+#   House Down Payment  $10,000  over N = 182 periods (seven years)  → $54.95 a period
+#
+# ** THE TARGETS AND THE HORIZONS ARE TUNED TOGETHER, and the constraint is arithmetic rather than
+# taste. ** This household's NON-GOAL rules already ask $2,053.42 a period against a declared $2,050
+# — it was $3.42 underwater before a single goal was counted — so the three goals together have
+# about $196 of room if §9's verdict is to stay a near miss a person can act on rather than a wall.
+# They ask **$183.15**, which leaves the demo **$186.57** a period underwater: the sacrifice view
+# still has a screen, and the screen is about a gap somebody could close.
+#
+# THE HOUSE DEPOSIT IS $10,000 AND NOT $50,000 for the same reason. At a horizon a person would
+# actually name, $50,000 asks $400 a period on its own — twice the room the whole budget has — and a
+# horizon long enough to fit it (thirty years) is not a house deposit, it is a pension. $10,000 over
+# seven years is a first tranche, and it is a figure this household could really be saving.
 #
 # ** THE TYPES ARE UNCHANGED, and they are what order these three in the give-way walk: `bill` on the
 # emergency fund, `usage` on the house deposit, `choice` on the vacation — the one the household
 # could stop saving into.
+goal_due = ->(periods) { demo_start + (14 * periods) - 1 }
+
 {
-  vacation => { target: 5_000, due: Date.new(2027, 6, 1), type: :choice },
-  emergency_fund => { target: 10_000, due: Date.new(2027, 9, 1), type: :bill },
-  house_fund => { target: 50_000, due: Date.new(2031, 1, 1), type: :usage }
+  vacation => { target: 5_000, periods: 78, type: :choice },
+  emergency_fund => { target: 10_000, periods: 156, type: :bill },
+  house_fund => { target: 10_000, periods: 182, type: :usage }
 }.each do |goal, shape|
   rule.call(
     category: goal,
     amount: shape[:target],
     basis: :monthly,
     interval_months: nil,
-    anchor_date: shape[:due],
+    anchor_date: goal_due[shape[:periods]],
     rule_type: shape[:type]
   )
 end

@@ -102,8 +102,8 @@ type,
         ** TWO COLUMNS NOW, WHERE THERE WERE THREE (rules-own-the-budget spec §5/§7). ** Nothing is
         held any more (§5), so this section is not about money put somewhere: it is about WHEN a
         category's rules start claiming, and WHO gives way when the claims outrun the money. The
-        third — `target-amount` — is gone, because how much a category is building up toward is a
-        fact about a RULE and is set on the rules form; the tombstone below carries the whole
+        third — the category's own target — is gone, because how much a category is saving toward is
+        a fact about a RULE and is set on the rules form; the tombstone below carries the whole
         argument.
 
         BOTH ARE USER-EDITABLE, which §4 requires of `funded_since` and which `priority` has always
@@ -122,20 +122,18 @@ type,
           nothing claims its spending, and that spending comes straight out of what's free to spend.
         </p>
 
-        <%# ** THE TARGET FIELD IS DELETED (rules-own-the-budget spec §5/§7). ** It wrote
-            `categories.target-amount`, and the hint below it promised that a figure here switched
+        <%# ** THE TARGET FIELD IS DELETED (rules-own-the-budget spec §5/§7). ** It wrote the
+            CATEGORY's own target column, and the hint below it promised that a figure here switched
             the category's undated rules from use-it-or-lose-it to an accrual that carries. That
-            promise stopped being true the moment the shapes moved onto the rule:
-            `ClaimCalculator#shape` reads the RULE's `carries-over`, and the ceiling it accrues
-            toward is the RULE's `target-amount` (§2.1). A category target changed no claim, no bar
-            and no figure — a control that wrote a column nothing read, with a sentence beside it
-            saying otherwise.
+            promise stopped being true the moment the shapes moved onto the rule, and the column is
+            dropped: a category target changed no claim, no bar and no figure — a control that wrote
+            a column nothing read, with a sentence beside it saying otherwise.
 
-            WHERE IT WENT: the rules form's "Unspent money" radio ("builds up") and the Target it
-            reveals, which is the same question asked of the record that answers it. A goal is a
-            building rule with a target; it is not a kind of category, and this form is name, colour,
-            type and give-way order. `categories.target-amount` itself is DROPPED (§6's data
-            migration, `RulesOwnTheBudget`), which moved every figure onto the rule first. %>
+            WHERE IT WENT: the rules form's "When is it needed?" radio and the Due date it reveals
+            (two-shapes §5), which is the same question asked of the record that answers it. A goal
+            is a rule with an amount and a day; it is not a kind of category, and this form is name,
+            colour, type and give-way order. The rule-side pair that briefly held the figure — a
+            carry-over flag and a separate target — is dropped too, by `TwoShapes` (§6). %>
 
         <%# ** PRIORITY IS THE GIVE-WAY ORDER NOW (§4). ** It used to name a position in the
             distribution waterfall — "lower is funded first" — and there is no distribution to be

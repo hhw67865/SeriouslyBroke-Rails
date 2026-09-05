@@ -200,8 +200,13 @@
 
         <%# ── 4. AMOUNT ────────────────────────────────────────────────────────────────────────
             ITS UNIT IS NAMED BY THE SCHEDULE BELOW, and `#budget_amount_hint` says so in the rule's
-            own words — "per period", "a month", "every 6 months", and now "per period, builds up
-            toward $5,000" for a fund. %>
+            own words — "per period", "a month", "every 6 months", "once".
+
+            ** ONE ROW'S UNIT IS THE RECORD'S AND NOT THE SCHEDULE'S (fix round 1 — MED-5). ** A
+            `monthly`-no-anchor rule is read back as "Every period" (§5's ruling), so the record this
+            hint would otherwise read has already been re-shaped and would call a month's figure a
+            period's. `RuleForm#amount_unit` is the row's own unit, and the note under the field says
+            what saving will do to it. %>
         <div>
           <%= f.input :amount,
               as: :decimal,
@@ -211,7 +216,11 @@
                 step: 0.01,
                 min: 0
               },
-              hint: budget_amount_hint(budget) %>
+              hint: budget_amount_hint(budget, unit: rule_form.amount_unit) %>
+
+          <% if note = budget_monthly_conversion_note(rule_form) %>
+            <p class="mt-1 text-sm text-status-warning" data-monthly-conversion><%= note %></p>
+          <% end %>
 
           <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
               The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts

@@ -163,18 +163,25 @@ class SacrificePresenter
   # this key sorts is the row that helper labels.
   def owner_name(budget) = budget.category&.name.to_s
 
-  # `:dated` and `:fixed` are the spec's own two markings, and they are told apart by SHAPE rather
-  # than by a second reading of the three schedule columns: `Budget#cadence` is the one place that
-  # cascade lives (`basis_per_period?` first, then the interval), and a private copy here would
-  # reopen exactly the seam Task 7 closed when it collapsed two helpers into it.
+  # ** ONLY A REPEATING DATED RULE IS FIXED (fix round 1 — MED-4). ** `:fixed` is the spec's own
+  # marking for a claim this page may not offer to cut: the rent comes round every month whatever
+  # anybody decides, and a screen offering to trim it would be offering something the user cannot do.
   #
-  # A one-off is dated in the sense a user can act on: it happens once, on a day, and the money has
-  # to be there by then. Everything else anchored recurs — rent, insurance — and is fixed in the
-  # sense that the bill is the bill.
+  # ** A ONE-OFF IS CUTTABLE, AND THE TWO SHAPES ARE WHY IT HAD TO BE SAID AGAIN. ** It answered
+  # `:dated` — uncuttable-but-for-a-different-reason — and that was harmless while a one-off was a
+  # single bill on a day. A GOAL is a one-off now (two-shapes §2), so the marking silently took every
+  # savings goal off the cut list: measured, a household declaring $2,050 with $1,900 of repeating
+  # bills and one "$5,000 by Jun 1 2027" goal asking $151.52 a period was $1.52 underwater with
+  # NOTHING the page would let it cut — a sacrifice view whose whole subject is closing that gap,
+  # unable to name the one claim that could close it.
+  #
+  # A one-off IS a decision: it happens once, on a day the user chose, and moving the day or the
+  # figure is exactly what this page exists to offer. `Budget#cadence` is the one place the schedule
+  # cascade lives, so the test is asked of it rather than re-read off the three columns.
   def reason_for(budget)
-    return nil if budget.anchor_date.blank?
+    return nil if budget.anchor_date.blank? || budget.cadence == :one_off
 
-    budget.cadence == :one_off ? :dated : :fixed
+    :fixed
   end
 
   # EVERY RULE THE USER OWNS, scoped exactly as `Budget.steady_need` scopes its own sum — the same

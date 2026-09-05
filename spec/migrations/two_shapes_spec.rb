@@ -279,6 +279,142 @@ RSpec.describe TwoShapes do
   end
 
   # ---------------------------------------------------------------------------------------------
+  # ** THE RATE IS WHAT THE APP CHARGED, NOT THE FIGURE ON THE ROW (fix round 1 — HIGH-1) **
+  # ---------------------------------------------------------------------------------------------
+  #
+  # `$260 a month` is a shape a fund could carry — §2.1 row 5, `basis: monthly, interval 1,
+  # carries over`, model-valid at this file's own moment in the sequence and reachable from the form
+  # the rules-own-the-budget task shipped. `Budget#steady_ask` prices it at `260 × 12 ÷ 26` =
+  # **$120.00** a fortnight, and that is the figure `#planned_for`'s retired building arm asked for
+  # every period, so it is the figure the walk and the derivation have to use.
+  #
+  # BY HAND, at $120.00 a period on the two periods this world walks:
+  #   P1 (Jan 1–14)  gap 5,000 → plans min(120, 5,000) = 120 → built up 120
+  #   P2 (Jan 15–28) gap 4,880 → plans 120                   → built up **240**
+  # `ceil((5,000 − 240) ÷ 120)` = `ceil(39.67)` = **40** periods forward from P2 — P2 opens Jan 15
+  # 2026, and 40 × 14 = 560 days later that period opens on Jul 29 2027 — so the anchor is its LAST
+  # DAY, **Aug 11 2027**.
+  #
+  # READ OFF `budgets.amount` INSTEAD it converts at $260 a period: two periods hold **$520** rather
+  # than $240, `ceil((5,000 − 520) ÷ 260)` = 18 periods, and the anchor lands inside 2026 — nearly a
+  # year early, with the morning-after claim more than double what the screens had said. The date is
+  # asserted rather than the rate alone, because a conversion that used the wrong unit would still
+  # produce a plausible-looking date.
+  describe "a fund whose rate is stated per month" do
+    let(:monthly_fund) do
+      create(
+        :budget,
+        :rate,
+        category: holder("Repairs"),
+        amount: 260,
+        carries_over: true,
+        target_amount: 5_000,
+        created_at: born
+      )
+    end
+
+    it "walks the rate the grid charges and dates the fund off that", :aggregate_failures do
+      plant_the_fund_era
+      monthly_fund
+
+      migrate!
+
+      expect(columns_of(monthly_fund.reload))
+        .to eq([5_000.to_d, "monthly", nil, Date.new(2027, 8, 11)])
+    end
+
+    # THE RECEIPT NAMES THE CHARGED RATE FIRST — it is the number the date came from — with the
+    # figure the owner typed beside it, so a person reading the line can tie it back to their form.
+    it "prints the charged rate with the stated one beside it" do
+      plant_the_fund_era
+      monthly_fund
+
+      expect(receipts)
+        .to include(a_string_including("Repairs · was $120.00 a period ($260.00 a month) · now $5000.00 by 2027-08-11"))
+    end
+
+    # AND THE PER-PERIOD FUNDS DO NOT GROW THE CLAUSE, because the two figures are the same number
+    # there and `was $150.00 a period ($150.00 a month)` would be noise on every ordinary row.
+    it "says nothing about a month where the rate is already per period" do
+      plant_the_fund_era
+
+      expect(receipts).to include(a_string_including("Vacation to Europe · was $150.00 a period · now $1200.00"))
+    end
+  end
+
+  # ---------------------------------------------------------------------------------------------
+  # ** "THE CLAIM DOES NOT MOVE" IS EXACT ONLY WHERE THE TARGET DIVIDES (fix round 1 — MED-3) **
+  # ---------------------------------------------------------------------------------------------
+  #
+  # `ceil` places the date at or beyond the true crossing, so the catch-up share afterwards is
+  # `target ÷ ceil(target ÷ rate)` — the rate exactly when the division is whole, and a little under
+  # it when it is not. THE SHORTFALL IS NOT A ROUNDING: measured here, and re-derived.
+  #
+  #   $5,000 at $300 a period, TEN periods walked (the rule and its category are born nine periods
+  #   before the current one opens, Sep 11 2025) → built up **$3,000.00**.
+  #   `ceil(2,000 ÷ 300)` = `ceil(6.67)` = **7** periods forward from P2 (opens Jan 15 2026), so the
+  #   anchor is **May 6 2026**.
+  #   The live walk then counts the boundaries from Sep 11 2025 through May 6 2026 — seventeen of
+  #   them — so its share is `5,000 ÷ 17` = **$294.12** and ten periods hold **$2,941.20**.
+  #   `3,000.00 − 2,941.20` = **$58.80**, which the receipt names on that rule's own line.
+  #
+  # IT IS NOT A REFUSAL. The alternative is refusing every fund whose target does not divide by its
+  # rate, which is most of them; the conversion is still the best available date and the owner is
+  # told the figure beside the two numbers it came from.
+  describe "a target that does not divide by the rate" do
+    let(:ten_periods_back) { Date.new(2025, 9, 11) }
+
+    let(:awkward_fund) do
+      category = holder("New Roof", funded_since: ten_periods_back)
+      create(
+        :budget,
+        :per_period_rate,
+        category: category,
+        amount: 300,
+        carries_over: true,
+        target_amount: 5_000,
+        created_at: ten_periods_back.beginning_of_day
+      )
+    end
+
+    it "dates the fund at the ceiling of the crossing", :aggregate_failures do
+      plant_the_fund_era
+      awkward_fund
+
+      migrate!
+
+      expect(columns_of(awkward_fund.reload)).to eq([5_000.to_d, "monthly", nil, Date.new(2026, 5, 6)])
+      expect(awkward_fund.claim_calculator(today: today).claim).to eq(2_941.20)
+    end
+
+    it "names how far the claim moved, on that rule's own line" do
+      plant_the_fund_era
+      awkward_fund
+
+      expect(receipts).to include(
+        a_string_including(
+          "New Roof · was $300.00 a period · now $5000.00 by 2026-05-06 · " \
+          "claim moved $58.80: the target does not divide by the rate"
+        )
+      )
+    end
+
+    # THE OTHER DIRECTION, one figure apart: $1,200 at $150 divides exactly, so the date lands on the
+    # true crossing, the share IS the rate and the claim is the same $300 the day after as the day
+    # before — which is the sentence the header makes and this is what keeps it honest.
+    # ONE `#receipts` CALL AND A LOCAL, because that helper RUNS the migration: asking it twice in
+    # one example runs `up` against a schema the first call already dropped the columns from.
+    it "says nothing about a claim that did not move", :aggregate_failures do
+      plant_the_fund_era
+
+      lines = receipts
+
+      expect(lines).to include(a_string_including("Vacation to Europe"))
+      expect(lines.grep(/Vacation to Europe/).sole).not_to include("claim moved")
+    end
+  end
+
+  # ---------------------------------------------------------------------------------------------
   # The hand-fed fund
   # ---------------------------------------------------------------------------------------------
 

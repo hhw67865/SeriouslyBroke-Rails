@@ -108,7 +108,16 @@ class Budget < ApplicationRecord
   # new columns. It is also what makes the scope SINGLE-VALUED per category
   # (`#category_may_hold_one_item_less_rule` allows exactly one item-less rule), which is what lets
   # the dashboard's row name "the fund" rather than pick one of a set.
-  scope :saving_toward_a_date, -> { where(item_id: nil).where.not(anchor_date: nil).where(interval_months: nil) }
+  #
+  # ** AND A `bill` IS NOT SAVING, WHICH IS THE CLAUSE THE DATE ALONE CANNOT DRAW (fix round 1 —
+  # LOW-7). ** A one-off dated rule on the whole category is the shape of a goal AND the shape of a
+  # single bill nobody has itemised — the quarterly tax estimate, the annual registration — and the
+  # walk cannot tell them apart, because it is the same walk. What tells them apart is the word the
+  # user chose: `bill` is "must be paid", which is not money being saved toward a thing. `usage` and
+  # `choice` both are, so the band lists them and leaves the household's tax estimate off a strip
+  # headed "Savings".
+  scope :saving_toward_a_date,
+        -> { where(item_id: nil, interval_months: nil).where.not(anchor_date: nil).where.not(rule_type: :bill) }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way.

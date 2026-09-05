@@ -74,10 +74,15 @@
           <% if trouble.kind == :over %>
             <%= number_to_currency(trouble.subject.spent) %> spent of <%= number_to_currency(trouble.subject.accrued) %>
             — the excess comes straight out of what is free.
+          <%# ** "THE FUND" IS GONE FROM BOTH ARMS (fix round 1 — MED-6). ** "fund" named the retired
+              shape — a rule whose unspent money carried over — and this row is about a DATED rule,
+              which may be a bill the user must pay or a target they are saving toward. The sentence
+              is about the MONEY either way, so it names the shortfall and the instruction and lets
+              the row's own label say what the rule is. %>
           <% elsif trouble.subject.fund_short? %>
             <%= number_to_currency(trouble.subject.built_up) %> built up of
-            <%= number_to_currency(trouble.subject.target) %> — the fund is short
-            <%= number_to_currency(trouble.subject.fund_gap) %> — this needs paying.
+            <%= number_to_currency(trouble.subject.target) %> —
+            <%= number_to_currency(trouble.subject.fund_gap) %> short — this needs paying.
           <%# ** THE WHOLE-FUND ARM (two-shapes spec §2). ** Reaching here means `#fund_short?` was
               false, so the money is all there and the instruction is to PAY it rather than to save
               more.
@@ -91,8 +96,8 @@
               reachable is pinned in `spec/system/home/trouble_spec.rb`. %>
           <% else %>
             <%= number_to_currency(trouble.subject.built_up) %> built up of
-            <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and the
-            fund starts again.
+            <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and it
+            starts again.
           <% end %>
         </p>
       </div>

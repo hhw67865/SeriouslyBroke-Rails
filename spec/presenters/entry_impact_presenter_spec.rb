@@ -693,10 +693,22 @@ RSpec.describe EntryImpactPresenter do
       impact = present(vacation, amount: "150")
 
       expect(impact.fund?).to be(true)
-      expect(impact.noun).to eq("fund")
+      expect(impact.noun).to eq("target")
       expect(impact.balance).to eq(BigDecimal("600"))
       expect(impact.balance_after).to eq(BigDecimal("450"))
       expect(impact.fund_target).to eq(BigDecimal("2400"))
+    end
+
+    # ** THE NOUN IS THE RULE'S OWN TYPE (fix round 1 — MED-6). ** It was "fund" for every accruing
+    # category, and "fund" named the RETIRED shape. What a person accrues toward is either a BILL
+    # somebody else sets the day for or a TARGET they chose, and `Budget#rule_type` is the only
+    # reader that can tell them apart. The goal above is `usage` by the factory's default, so it
+    # reads "target"; the same category with the rule typed `bill` reads "bill".
+    it "calls a dated rule the user typed bill a bill", :aggregate_failures do
+      vacation.budgets.sole.update!(rule_type: :bill)
+
+      expect(present(vacation.reload).noun).to eq("bill")
+      expect(present(vacation.reload).fund?).to be(true)
     end
 
     it "measures its bar against the target, which no rule could ever be", :aggregate_failures do
@@ -759,6 +771,10 @@ RSpec.describe EntryImpactPresenter do
 
     # THE BILL IS ITEM-BACKED BECAUSE IT HAS TO BE: `Budget#category_may_hold_one_item_less_rule`
     # allows exactly one rule whose lane is the whole category, and the fund is it.
+    # TYPED `bill`, which it is — and it is also what makes this fixture the SHARPER-WORD-WINS case
+    # for `#noun` (fix round 1 — MED-6): a category carrying a target beside a bill reads "bill",
+    # because a receipt landing on the bill's lane is money that has to be there on a day somebody
+    # else set.
     def insurance_bill_on(car)
       create(
         :budget,
@@ -767,6 +783,7 @@ RSpec.describe EntryImpactPresenter do
         amount: 600,
         interval_months: nil,
         anchor_date: today + 3.days,
+        rule_type: :bill,
         created_at: born
       )
     end
@@ -778,7 +795,7 @@ RSpec.describe EntryImpactPresenter do
       impact = present(car.reload, amount: "150")
 
       expect(impact.fund?).to be(true)
-      expect(impact.noun).to eq("fund")
+      expect(impact.noun).to eq("bill")
       expect(impact.balance).to eq(BigDecimal("1200"))
       expect(impact.balance_after).to eq(BigDecimal("1050"))
       expect(impact.fund_target).to be_nil
@@ -836,7 +853,7 @@ RSpec.describe EntryImpactPresenter do
       create(:budget, :by_date, category: groceries, item: item, amount: 900, created_at: born)
 
       expect(present(groceries.reload).fund?).to be(true)
-      expect(present(groceries.reload).noun).to eq("fund")
+      expect(present(groceries.reload).noun).to eq("target")
     end
 
     # A DATED RULE ON A CATEGORY THAT HOLDS NOTHING IS NOT A FUND ON THIS CARD either, because

@@ -100,7 +100,17 @@ class RuleForm
     category: :category_id
   }.freeze
 
-  attr_reader :user, :budget, :anchor_date
+  # ** WHETHER THE ROW THIS FORM IS EDITING IS THE `monthly`-NO-ANCHOR SHAPE (fix round 1 — MED-5).
+  # ** `.from` reads such a row back as `per_period` (see `.schedule_for`), which is the ruling — but
+  # the columns are applied to `#budget` in the constructor, so by the time the view renders, the
+  # record says `per_period` and every hint on the page reads the amount in the WRONG UNIT. A $260-a-
+  # month rule showed "What this rule asks for per period", and saving it unchanged multiplies its
+  # real cost by 2.17× on a fortnightly grid (`Budget#steady_ask`: `260 × 12 ÷ 26` = $120).
+  #
+  # SO THE FLAG TRAVELS WITH THE WORDS. `.from` sets it, the form reads it for the hint's unit and
+  # for the note beside the field, and it is NOT one of `BUDGET_FIELDS` — a POST cannot set it,
+  # because it is a fact about the row rather than an answer the user gave.
+  attr_reader :user, :budget, :anchor_date, :converted_from_monthly
   attr_accessor :category_id,
                 :item_id,
                 :rule_type,
@@ -116,9 +126,16 @@ class RuleForm
   def initialize(user, params = {}, budget: nil)
     @user = user
     @budget = budget || Budget.new
+    @converted_from_monthly = params.to_h.symbolize_keys[:converted_from_monthly].present?
     assign(params)
     apply_to_budget
   end
+
+  def converted_from_monthly? = converted_from_monthly.present?
+
+  # THE UNIT THE RULE'S OWN AMOUNT IS IN, for the hint beside the amount field. It is the SCHEDULE's
+  # unit on every ordinary path, and the ROW's on the one path where the two disagree.
+  def amount_unit = converted_from_monthly? ? "a month" : nil
 
   # ** THE COLUMNS → THE WORDS. ** The reverse of `#apply_to_budget`, and it must round-trip every
   # row of §2 or the edit form silently re-shapes a rule the moment it is opened.
@@ -139,6 +156,11 @@ class RuleForm
       amount: budget.amount,
       schedule: schedule,
       repeats: repeats,
+      # SEE `#converted_from_monthly`: the one row whose words do not describe its own columns.
+      # TRUE OR ABSENT, never `false`, on `interval_months`' own convention two lines down —
+      # `SuggestionEngine` puts these words on an accept URL through `.compact`, and a `false` there
+      # would ride in every query string the panel builds to say nothing at all.
+      converted_from_monthly: (true if schedule == "per_period" && budget.basis_monthly?),
       # NOT the column unless the checkbox is on: an interval handed back for a control that is not
       # revealed is a value the user never typed, and #check_interval refuses exactly that on the way
       # in.

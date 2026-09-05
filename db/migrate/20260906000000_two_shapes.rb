@@ -19,6 +19,18 @@
 #     interval_months  := NULL          (a one-off; it does not roll)
 #     anchor_date      := THE DAY IT WOULD HAVE REACHED THAT TARGET AT ITS CURRENT RATE
 #
+# ** THE RATE IS WHAT THE APP CHARGED A PERIOD, NOT `budgets.amount` (fix round 1 — HIGH-1). ** The
+# retired building arm was `#planned_for`'s `rate_per_period`, which is `Budget#steady_ask` — and
+# that method DIVIDES a monthly-basis rule over the owner's grid: `$260 a month` is `260 × 12 ÷ 26`
+# = **$120.00** a fortnight, always. A fund could carry that basis (§2.1 row 5: `monthly, interval 1,
+# carries over`, model-valid at this file's own moment and reachable from the old form), and reading
+# `amount` there would convert it at $260 a period — measured on the $260/$5,000 fixture in the spec:
+# built-up **$2,600 instead of $1,200**, the anchor **nine months early**, and the morning after the
+# run a claim of ~$2,500 where the screens had said $1,200. So the frozen walk reads the rate through
+# `Budget#steady_ask` — LIVE code, deliberately, because it is the app's one spelling of "what this
+# rule costs a period on this grid" and nothing about it changed in this task. What is frozen is the
+# WALK; the unit is not this file's to re-invent.
+#
 # ** THE DATE IS DERIVED SO THAT THE CLAIM DOES NOT MOVE, and that is the whole care of this file. **
 # Walk `ceil((target − built up) ÷ rate)` periods forward from the period containing the OWNER's
 # today, on the OWNER's grid, and take the LAST DAY of the period you land in. The catch-up formula
@@ -27,13 +39,17 @@
 # the rate, period after period. The fund the user was looking at yesterday is the fund they see
 # today; only the sentence under it changes.
 #
-# WHERE ROUNDING MOVES A CENT it is named in the receipt rather than hidden: `ceil` can only place
-# the date at or beyond the true crossing, and `(gap ÷ periods left).round(2)` on a horizon that is
-# not a whole multiple of the rate asks a few cents less per period than the rate did. The receipt
-# prints the old rate beside the new date for every rule, so an owner can correct either on the
-# Budget page.
+# ** "IDENTICAL" IS EXACT ONLY WHERE `target ÷ rate` IS WHOLE, AND WHERE IT IS NOT THE RECEIPT SAYS
+# BY HOW MUCH (fix round 1 — MED-3). ** `ceil` places the date at or beyond the true crossing, so the
+# catch-up share is `target ÷ ceil(target ÷ rate)` rather than the rate — and that is NOT "a few
+# cents". Measured: a $5,000 target at $300 a period crosses in 16.67 periods, `ceil` gives 17, the
+# share becomes $294.12 and ten walked periods hold **$2,941.20 against $3,000.00 — $58.80 short**.
+# So `#verify!` RECOMPUTES every converted rule's claim through the live `ClaimCalculator` after the
+# write, compares it to the frozen walk's figure, and names any divergence over a cent in that rule's
+# own receipt line. The receipt also prints the old rate AS CHARGED beside the new date on every
+# line, so an owner can correct either on the Budget page.
 #
-# ** A HAND-FED FUND GETS ONE YEAR. ** `amount = 0` was how "this goal has no standing rate — I feed
+# ** A HAND-FED FUND GETS ONE YEAR. ** A charged rate of zero was how "this goal has no standing rate — I feed
 # it by hand" was spelled, and zero has no crossing date to derive: the fund would reach its target
 # never. One year from the owner's today is a horizon, stated rather than inferred, and it is on the
 # receipt for the owner to move. It is also the only choice that keeps such a rule VALID: `Budget`
@@ -96,6 +112,11 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # fund funded in 2010 is walked here exactly as far as the app walked it yesterday.
   PERIOD_WALK_LIMIT = 520
 
+  # THE MOST A CONVERTED CLAIM MAY MOVE BEFORE THE RECEIPT SAYS SO (MED-3). One cent: `#planned_for`
+  # rounds its share to the cent every period it walks, so a long walk can accumulate one without
+  # anything having changed.
+  CLAIM_TOLERANCE = BigDecimal("0.01")
+
   # A HORIZON FOR A FUND WITH NO RATE TO CROSS ONE — see the header. A year from the owner's today,
   # to the DAY rather than to a period boundary: it is a horizon this file states rather than one it
   # derived, and rounding it onto the grid would dress a stated figure as a computed one.
@@ -111,8 +132,9 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   def up
     before = ledgers
     preflight!
-    receipts = convert_the_funds
-    verify!(before, receipts)
+    converted = convert_the_funds
+    check_the_claims(converted)
+    verify!(before, converted)
     drop_the_columns
   end
 
@@ -167,21 +189,51 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # The conversion
   # -----------------------------------------------------------------------------------------------
 
+  # ONE ROW PER CONVERTED FUND, carried from the write through the claim check to the receipt. The
+  # `built_up` member is the FROZEN walk's answer and is what `#check_the_claims` compares the live
+  # calculator against (MED-3); `charged` is the rate as `Budget#steady_ask` states it, which is what
+  # the derivation used and therefore what the receipt has to print (HIGH-1).
+  Converted = Struct.new(:id, :email, :name, :amount, :charged, :target, :anchor, :built_up, :note)
+
   # ONE RULE AT A TIME, because the derived date is a walk over the OWNER's period grid and there is
   # no SQL that knows what a fortnight is for this user. The write is one UPDATE per rule; the whole
   # of `up` is one transaction, so a raise anywhere takes every one of them back.
-  #
-  # Returns the receipt lines, grouped by owner email: name · old rate · new date.
   def convert_the_funds
     Budget.reset_column_information
 
-    funds.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |rule, receipts|
+    funds.map do |rule|
       owner = rule.category.user
-      anchor = anchor_for(rule, owner)
-      receipts[owner.email] << line_for(rule, anchor)
+      charged = charged_rate(rule, owner)
+      built_up = built_up(rule, owner, owner.today, charged)
+      anchor = anchor_for(rule, owner, charged, built_up)
       write_the_shape(rule, anchor)
+      row_for(rule, owner, charged, built_up, anchor)
     end
   end
+
+  def row_for(rule, owner, charged, built_up, anchor)
+    Converted.new(
+      id: rule.id,
+      email: owner.email,
+      name: rule.item&.name || rule.category.name,
+      amount: rule.amount.to_d,
+      charged: charged,
+      target: rule.target_amount.to_d,
+      anchor: anchor,
+      built_up: built_up,
+      note: nil
+    )
+  end
+
+  # ** WHAT THIS RULE COSTS A PERIOD ON THIS OWNER'S GRID — `Budget#steady_ask`, LIVE (HIGH-1). ** It
+  # is the same method `#planned_for`'s retired building arm called (`rate_per_period`), and it is
+  # deliberately not frozen: nothing in this task touched it, it is the app's ONE normalisation of a
+  # monthly figure onto a fortnightly grid, and a copy here would be a second answer to "what is
+  # $260 a month a period" free to disagree with the screens this migration is preserving.
+  #
+  # A FUND NEVER REACHES ITS `:one_off` BRANCH (that branch builds a `ClaimCalculator`, and a fund
+  # has no anchor), so this costs no query.
+  def charged_rate(rule, owner) = rule.steady_ask(owner, today: owner.today).to_d
 
   # THE FUNDS, WITH EVERY RECORD THE WALK READS ALREADY LOADED: the owner (the grid and the
   # timezone), the category (`funded_since`, and the spending lane), the item (which lane), and the
@@ -214,14 +266,13 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # sentence about a fund that has reached its figure: the money is there, and there is nothing left
   # to save.
   #
-  # A RATE OF ZERO CROSSES NOTHING — see `HAND_FED_HORIZON`.
-  def anchor_for(rule, owner)
+  # A CHARGED RATE OF ZERO CROSSES NOTHING — see `HAND_FED_HORIZON`.
+  def anchor_for(rule, owner, charged, built_up)
     today = owner.today
-    rate = rule.amount.to_d
-    return today + HAND_FED_HORIZON unless rate.positive?
+    return today + HAND_FED_HORIZON unless charged.positive?
 
-    gap = rule.target_amount.to_d - built_up(rule, owner, today)
-    periods_out = gap.positive? ? (gap / rate).ceil : 0
+    gap = rule.target_amount.to_d - built_up
+    periods_out = gap.positive? ? (gap / charged).ceil : 0
     period_after(owner, owner.period_containing(today), periods_out).last
   end
 
@@ -233,7 +284,7 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # ---------------------------------------------------------------------------------------------
   # ** THE RETIRED BUILDING WALK, FROZEN (see the header for why it cannot be `ClaimCalculator`'s). **
   #
-  #   planned(P) = min(rate, target − built up)          — its own rate, capped by what is missing
+  #   planned(P) = min(rate, target − built up)          — its CHARGED rate, capped by what is missing
   #   built up   = max( min(built up + planned + Σ adj(P), target) − spent(P), 0 )
   #
   # Period by period, from the period containing the accrual start through the period containing the
@@ -241,11 +292,10 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # lands, the adjustments dated in it apply, the total is capped at the target, and only then does
   # the period's spending come out.
   # ---------------------------------------------------------------------------------------------
-  def built_up(rule, owner, today)
+  def built_up(rule, owner, today, rate)
     spending = spending_rows(rule)
     adjustments = rule.adjustments.map { |adjustment| [adjustment.local_day, adjustment.amount.to_d] }
     target = rule.target_amount.to_d
-    rate = rule.amount.to_d
 
     walk_periods(owner, accrual_start(rule, owner, today), today).reduce(0.to_d) do |built, period|
       gap = target - built
@@ -296,11 +346,54 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # The verification, and the receipt
   # -----------------------------------------------------------------------------------------------
 
-  def verify!(before, receipts)
+  def verify!(before, converted)
     failures = drift(before) + funds_left_behind + malformed_rules
     raise VerificationFailed, failures.join("; ") if failures.any?
 
-    report(before, receipts)
+    report(before, converted)
+  end
+
+  # ** WHAT THE APP WILL ACTUALLY SAY TOMORROW, ASKED OF THE APP (fix round 1 — MED-3). ** The header
+  # claims the claim does not move; that is exact only where `target ÷ charged rate` is a whole
+  # number, because `ceil` then places the date on the true crossing and `target ÷ periods` IS the
+  # rate. Where it is not, the catch-up share is a little smaller than the rate was and the fund
+  # reads LOW — $58.80 on the spec's $5,000-at-$300 fixture, which is not a rounding.
+  #
+  # SO IT IS MEASURED RATHER THAN ARGUED: the row is written, the LIVE `ClaimCalculator` is asked for
+  # the converted rule's claim on the owner's today, and the difference from the frozen walk's figure
+  # goes on that rule's own receipt line. NOT a refusal — the conversion is still the best available
+  # date and the alternative is refusing every fund whose target does not divide by its rate — but a
+  # figure the owner is told, beside the two numbers it came from.
+  #
+  # A CENT IS THE FLOOR, because `#planned_for` rounds its share to the cent every period and a walk
+  # of many periods can accumulate one; anything at or under that is the arithmetic and not a change.
+  #
+  # THE RULES ARE RE-FOUND rather than reused: `#write_the_shape` is raw SQL, so the in-memory rows
+  # still carry the pre-conversion columns.
+  def check_the_claims(converted)
+    Budget.reset_column_information
+    rules = Budget.where(id: converted.map(&:id)).includes(:item, :adjustments, category: :user).index_by(&:id)
+
+    converted.each do |row|
+      rule = rules.fetch(row.id)
+      claim = ClaimCalculator.new(rule, today: rule.category.user.today).claim
+      moved = (claim - row.built_up).abs
+      next if moved <= CLAIM_TOLERANCE
+
+      row.note = "claim moved #{money(moved)}: #{why_it_moved(row)}"
+    end
+  end
+
+  # ** TWO CAUSES, AND NAMING THE WRONG ONE WOULD BE WORSE THAN NAMING NONE. ** The divergence this
+  # check exists for is `ceil`'s: the date lands past the true crossing, so the catch-up share is a
+  # little under the rate. A HAND-FED fund diverges for a different reason entirely — it had no rate,
+  # so it accrued nothing at all, and the stated one-year horizon now asks for its whole target over
+  # the periods to it. Both are real and both belong on the receipt; "the target does not divide by
+  # the rate" is false about the second.
+  def why_it_moved(row)
+    return "a fund with no rate set nothing aside, and the stated horizon now asks for it" unless row.charged.positive?
+
+    "the target does not divide by the rate"
   end
 
   # EVERY USER, ON BOTH SIDES, AND THE COMPARISON IS AGAINST THE PRE-MIGRATION FIGURE rather than
@@ -374,22 +467,31 @@ class TwoShapes < ActiveRecord::Migration[8.1]
   # ** ONE LINE PER FUND, UNDER ONE LINE PER OWNER, plus the totals and the invariant. ** The OLD
   # RATE is on every line and it is the point of the receipt: the date this file derived is a
   # consequence of that rate, so an owner who disagrees with the date has the number it came from in
-  # front of them — and where rounding moved a cent (see the header) the two figures are what says
-  # so.
-  def report(before, receipts)
-    receipts.keys.sort.each do |email|
-      say "#{email}: #{count(receipts[email].size, 'fund')} became #{became(receipts[email].size)}"
-      receipts[email].each { |line| say line, true }
+  # front of them.
+  def report(before, converted)
+    converted.group_by(&:email).sort.each do |email, rows|
+      say "#{email}: #{count(rows.size, 'fund')} became #{became(rows.size)}"
+      rows.each { |row| say line_for(row), true }
     end
-    say "#{count(receipts.values.sum(&:size), 'fund')} converted in total across " \
-        "#{count(receipts.size, 'owner')}"
+    say "#{count(converted.size, 'fund')} converted in total across " \
+        "#{count(converted.map(&:email).uniq.size, 'owner')}"
     before.each_value { |was| say "#{was[:email]}: physical #{was[:physical].to_f} == bank #{was[:bank].to_f}, unchanged" }
   end
 
-  def line_for(rule, anchor)
-    name = rule.item&.name || rule.category.name
-    "#{name} · was #{money(rule.amount)} a period · now #{money(rule.target_amount)} by #{anchor}"
+  # ** THE RATE AS CHARGED, WITH THE STATED AMOUNT BESIDE IT WHERE THEY DIFFER (HIGH-1). ** A
+  # `$260 a month` fund on a fortnightly grid was charged $120.00 a period, and $120.00 is the number
+  # the date came from — so it leads. The `($260.00 a month)` clause is the figure the owner will
+  # recognise from the form, and it is printed only where the two are not the same number, because
+  # `($400.00 a month)` after `was $400.00 a period` would be noise on every per-period fund.
+  def line_for(row)
+    [
+      "#{row.name} · was #{money(row.charged)} a period#{stated_clause(row)}",
+      "now #{money(row.target)} by #{row.anchor}",
+      row.note
+    ].compact.join(" · ")
   end
+
+  def stated_clause(row) = row.charged == row.amount ? "" : " (#{money(row.amount)} a month)"
 
   def money(amount) = format("$%.2f", amount.to_d)
 

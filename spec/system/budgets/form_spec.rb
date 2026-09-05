@@ -442,6 +442,40 @@ RSpec.describe "Budgets Forms", type: :system do
     end
   end
 
+  # ** THE `monthly`-NO-ANCHOR ROW, WHICH THE FORM DOES NOT OFFER AND HAS TO OPEN ANYWAY
+  # (fix round 1 — MED-5; two-shapes §5's ruling). ** `SuggestionEngine` still writes "$260 every
+  # month", and `RuleForm.from` reads it back as "Every period" — so the record the page renders has
+  # ALREADY been re-shaped, and every hint derived from it would call a month's figure a period's.
+  # Saving it unchanged really does convert the rule, and `Budget#steady_ask` prices the two
+  # differently: $260 a month is $120.00 a fortnight.
+  #
+  # THE FORM SAYS BOTH THINGS: the hint names the unit the FIGURE is in, and the note under it names
+  # what saving would do. Asserted on the rendered page, because the whole point is what a person
+  # reading the form is told before they press the button.
+  describe "editing a monthly rule the form does not offer", :aggregate_failures do
+    let!(:monthly) { create(:budget, :rate, category: groceries, amount: 260, rule_type: :usage) }
+
+    before { visit edit_budget_path(monthly) }
+
+    it "opens as Every period, in the rule's own unit, and warns what saving would do" do
+      expect(page).to have_checked_field("Every period")
+      expect(page).to have_field("Amount", with: "260.0")
+      expect(page).to have_content("What this rule asks for a month.")
+      expect(find("[data-monthly-conversion]")).to have_content(
+        "This rule is $260.00 a month; saving it as every period would make it $260.00 a period"
+      )
+    end
+
+    # THE OTHER DIRECTION, so the note is not a fixture of every edit form: an ordinary per-period
+    # rule says nothing about months at all.
+    it "says nothing of the sort on a rule whose words match its columns" do
+      visit edit_budget_path(create(:budget, :per_period_rate, category: groceries, amount: 400, item: create(:item, category: groceries)))
+
+      expect(page).to have_content("What this rule asks for per period.")
+      expect(page).to have_no_css("[data-monthly-conversion]")
+    end
+  end
+
   # ---------------------------------------------------------------------------------------------
   # The picker, and the two dead eras' controls
   # ---------------------------------------------------------------------------------------------
