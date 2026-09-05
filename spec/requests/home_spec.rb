@@ -157,12 +157,18 @@ RSpec.describe "Home", type: :request do
       let(:zone) { "America/Los_Angeles" }
       let(:now) { Time.utc(2026, 9, 3, 2, 0, 0) }
 
+      # ** THE ROW'S COPY CHANGED WITH THE BLOCKS AND THE ASSERTION FOLLOWS IT (two-shapes §3). **
+      # This read `next due Sep 2` — `HomeHelper#claim_schedule`, which Home no longer renders. A
+      # block row says the date and the STATE (`#when_words`), so the same fact about the same bill
+      # is now `Sep 2 · ready`: the day has not passed on this owner's calendar and the money is
+      # there. It is a sharper pin than the old one, which could not tell a funded bill from an
+      # empty one.
       it "leaves a bill due today out of the strip" do
         plant_overdue_bill
 
         get root_path
 
-        expect(response.body).to include("next due Sep 2")
+        expect(response.body).to include("Sep 2 · ready")
         expect(response.body).not_to include("overdue")
       end
     end

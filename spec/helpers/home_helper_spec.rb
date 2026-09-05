@@ -237,4 +237,231 @@ RSpec.describe HomeHelper, type: :helper do
       end
     end
   end
+
+  # ── ** THE BLOCK ROW'S VOCABULARY (two-shapes spec §3). ** ─────────────────────────────────────
+  #
+  # Home's category blocks say a rule in three phrases — what SHAPE it is, what it HAS, and WHEN —
+  # and these are the one spelling of each, which Task 3's Budget rows and Task 4's preview will
+  # call. Doubles for the reason the group above uses them: a real `ClaimLine` drags a category, a
+  # rule and a period walk in to answer four questions.
+  #
+  # ** `#claim_figure` AND `#claim_schedule` ARE NOT DELETED, WHICH THE BRIEF ASKED FOR. ** Both are
+  # still rendered by `budget_page/_rule_row.html.erb` and `categories/…/_holdings_card.html.erb`,
+  # and both of those screens are out of this task's scope — the Budget page is Task 3's and the
+  # categories page is out of scope for the whole plan (spec §8). Their examples above therefore
+  # stay, and the sentences genuinely differ: `#figure_words` says `$450.00 of $1,200.00` where
+  # `#claim_figure` says `$450.00 built up of $1,200.00`, which is pinned in both directions below.
+  describe "the block row's vocabulary" do
+    # `rule:` IS A DOUBLE OF THE RECORD'S OWN CLASSIFIER (`Budget#cadence`) rather than a set of
+    # columns, because that is what the helper reads: the classification is the model's and only the
+    # WORDS are this screen's. A cascade over `basis`/`interval_months`/`anchor_date` here would be
+    # a fifth reading of one shape.
+    def rule_double(cadence:, bill: false, interval_months: nil, item: nil)
+      instance_double(Budget, cadence: cadence, bill?: bill, interval_months: interval_months, item: item)
+    end
+
+    def block_line(**overrides)
+      defaults = {
+        rule: rule_double(cadence: :per_period),
+        stripe_type: :usage,
+        rate?: true,
+        filled: 310.to_d,
+        denominator: 400.to_d,
+        target: 0.to_d,
+        per_period: 0.to_d,
+        next_due_on: nil,
+        resets_on: nil,
+        overdue?: false,
+        short?: false,
+        fund_short?: false,
+        fund_gap: 0.to_d,
+        bar_state: :normal
+      }
+
+      instance_double(HomePresenter::ClaimLine, **defaults, **overrides)
+    end
+
+    describe "#shape_words" do
+      it "says a rate rule is a period's allowance" do
+        expect(helper.shape_words(block_line)).to eq("usage · a period")
+      end
+
+      # THE MONTHLY-BASIS RULE WITH NO DATE — "$260 every month", reachable only from a suggestion
+      # (spec §5) and therefore never offered by the form. It is a RATE shape (no anchor) with a
+      # monthly cadence, so a reader that branched on `#rate?` before asking the cadence would call
+      # it "a period" and quietly restate its schedule as something the user never wrote.
+      it "keeps a monthly rule monthly even though it accrues like a rate" do
+        line = block_line(rule: rule_double(cadence: :monthly, bill: true, interval_months: 1), stripe_type: :bill)
+
+        expect(helper.shape_words(line)).to eq("bill · every month")
+      end
+
+      it "names a repeating rule by its interval" do
+        line = block_line(rule: rule_double(cadence: :every_n, bill: true, interval_months: 12), stripe_type: :bill)
+
+        expect(helper.shape_words(line)).to eq("bill · every 12 months")
+      end
+
+      # ** THE ONE-OFF SPLITS ON ITS TYPE, AND BOTH DIRECTIONS ARE PINNED. ** A bill is a thing to
+      # PAY on a day; anything else with a day is a figure being SAVED toward, and the figure is what
+      # the row is about — so it is in the phrase, with its year, because a goal's horizon is
+      # routinely years out and "Jun 1" alone would read as this June.
+      it "says a goal as a figure and a day" do
+        line = block_line(
+          rule: rule_double(cadence: :one_off),
+          stripe_type: :choice,
+          rate?: false,
+          target: 5_000.to_d,
+          next_due_on: Date.new(2027, 6, 1)
+        )
+
+        expect(helper.shape_words(line)).to eq("choice · $5,000.00 by Jun 1, 2027")
+      end
+
+      it "says a one-time bill as a day it happens once" do
+        line = block_line(
+          rule: rule_double(cadence: :one_off, bill: true),
+          stripe_type: :bill,
+          rate?: false,
+          target: 600.to_d,
+          next_due_on: Date.new(2026, 12, 1)
+        )
+
+        expect(helper.shape_words(line)).to eq("bill · once, Dec 1")
+      end
+    end
+
+    describe "#figure_words" do
+      # ONE SENTENCE FOR BOTH SHAPES, off `#filled` and `#denominator` — the pair that makes them
+      # one. The caller does not choose the noun, because a row printing "spent" over a target's
+      # running total would be the money screen's oldest lie.
+      it "says what a rate rule has spent of its rate" do
+        expect(helper.figure_words(block_line)).to eq("$310.00 of $400.00")
+      end
+
+      it "says what a dated rule has of what it needs", :aggregate_failures do
+        line = block_line(rate?: false, filled: 80.to_d, denominator: 120.to_d)
+
+        expect(helper.figure_words(line)).to eq("$80.00 of $120.00")
+        # ** AND IT DOES NOT SAY "built up". ** That is `#claim_figure`'s wording, which two other
+        # screens still render; this section's rows are a column of figures and the four extra words
+        # on every dated row were the widest thing in it.
+        expect(helper.figure_words(line)).not_to include("built up")
+      end
+    end
+
+    describe "#when_words" do
+      # USE-IT-OR-LOSE-IT IS RESET AT THE BOUNDARY (§3.1), so what a rate row has to say about time
+      # is the day it starts again — `ClaimLine#resets_on`, which is the period's own close plus one.
+      it "says the day a rate rule starts again" do
+        expect(helper.when_words(block_line(resets_on: Date.new(2026, 10, 1)))).to eq("resets Oct 1")
+      end
+
+      # NO PERIOD, NO RESET DAY: the row says one clause fewer rather than naming a boundary nobody
+      # declared, which is `HomePresenter#period_range`'s refusal arriving on the row.
+      it "says nothing about a rate rule with no period declared" do
+        expect(helper.when_words(block_line)).to be_nil
+      end
+
+      # THE MONEY IS THERE FOR THE DAY.
+      it "calls a dated rule with its money ready" do
+        line = block_line(rate?: false, next_due_on: Date.new(2026, 9, 17))
+
+        expect(helper.when_words(line)).to eq("Sep 17 · ready")
+      end
+
+      # THE MONEY IS NOT THERE AND THE DAY IS INSIDE THIS PERIOD — `ClaimLine#short?`, the pair the
+      # runway's red tick fires on, said in words so a colour is not the only thing carrying it.
+      it "names the gap on a rule that is short" do
+        line = block_line(
+          rate?: false,
+          next_due_on: Date.new(2026, 9, 20),
+          short?: true,
+          fund_short?: true,
+          fund_gap: 40.to_d
+        )
+
+        expect(helper.when_words(line)).to eq("Sep 20 · $40.00 short")
+      end
+
+      # STILL ACCRUING: a day further out than this period, and what this period is putting toward
+      # it. The PLUS is what tells a contribution from a total.
+      it "says what a rule still saving is putting in" do
+        line = block_line(
+          rate?: false, next_due_on: Date.new(2027, 4, 2), fund_short?: true, per_period: 41.67.to_d
+        )
+
+        expect(helper.when_words(line)).to eq("Apr 2 · +$41.67")
+      end
+
+      # ** A SETTLED ONE-OFF ASKS FOR NOTHING MORE, so the share drops rather than printing
+      # `+$0.00`. ** `ClaimCalculator#planned_for` returns zero for a one-time bill whose money has
+      # been spent, and a rule advertising a contribution it is not making is worse than a bare date.
+      it "drops the share where the rule is asking for nothing" do
+        line = block_line(rate?: false, next_due_on: Date.new(2026, 12, 1), fund_short?: true)
+
+        expect(helper.when_words(line)).to eq("Dec 1")
+      end
+
+      # A DATE GONE BY WITH THE MONEY MISSING, in `#claim_trouble_label`'s exact wording — the strip
+      # above and the row below print one string about one rule, which is why it is not respelled.
+      it "puts a date already gone in the past tense" do
+        line = block_line(rate?: false, next_due_on: Date.new(2026, 8, 15), overdue?: true)
+
+        expect(helper.when_words(line)).to eq("overdue · was Aug 15")
+      end
+    end
+
+    # ── THE PACE, SAID ONCE FOR THE RUNWAY AND THE SHORTFALL STRIP ───────────────────────────────
+    describe "#pace_words" do
+      it "says what a day may cost while free is above zero" do
+        pace = HomePresenter::Pace.new(amount: 32.81.to_d, fine: true)
+
+        expect(helper.pace_words(pace)).to eq("$32.81 a day is fine for the rest of the period.")
+      end
+
+      # THE SHORTFALL STRIP'S OWN SENTENCE, character for character: it is the only arm that strip
+      # ever renders, and it read it out of its own view until this task.
+      it "says what a day must come down by while free is under" do
+        pace = HomePresenter::Pace.new(amount: 210.80.to_d, fine: false)
+
+        expect(helper.pace_words(pace))
+          .to eq("Spending $210.80 a day less for the rest of this period lands it at zero.")
+      end
+
+      it "is nil before a period is declared" do
+        expect(helper.pace_words(nil)).to be_nil
+      end
+    end
+
+    # ── THE COLOURS, WHICH ARE TABLES AND NOT CASCADES ──────────────────────────────────────────
+    #
+    # `fetch` FOR `Budget::TYPE_RANK`'S OWN REASON: a fourth rule type added to the enum without a
+    # colour would render a row with no stripe at all, which is invisible until somebody notices a
+    # blank column. Every arm is pinned so the tables cannot rot silently.
+    describe "the type and bar palettes" do
+      it "gives each rule type its own stripe and text colour", :aggregate_failures do
+        stripes = [:bill, :usage, :choice].index_with { |type| helper.stripe_fill(block_line(stripe_type: type)) }
+        words = [:bill, :usage, :choice].index_with { |type| helper.type_text_class(block_line(stripe_type: type)) }
+
+        expect(stripes).to eq(bill: "bg-brand-darker", usage: "bg-dusty-teal", choice: "bg-terracotta")
+        expect(words).to eq(
+          bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
+        )
+      end
+
+      # GREEN WHEN IT HAS ARRIVED, RED WHEN IT IS OVER OR SHORT, OLIVE WHILE IT IS STILL FILLING
+      # (§3). The state is the ROW's (`ClaimLine#bar_state`) and this is only its palette.
+      it "paints a bar by the state the row is in" do
+        fills = [:full, :over, :short, :normal].index_with { |state| helper.bar_fill(block_line(bar_state: state)) }
+
+        expect(fills).to eq(
+          full: "bg-status-success",
+          over: "bg-status-danger",
+          short: "bg-status-danger",
+          normal: "bg-brand-dark"
+        )
+      end
+    end
+  end
 end

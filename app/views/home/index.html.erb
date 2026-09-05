@@ -2,21 +2,45 @@
 
 <%= page_header(title: "Home", subtitle: "Where your money stands") %>
 
-<%# ANSWERS FIRST (answers-first spec §1). Home asks four questions in order and this is the order:
-    the hero answers "how much is in checking, how much of it is free, where are we in the period";
-    the trouble strip interrupts — and ONLY when something real needs a human (§5), which is why it
-    is gated rather than rendered with an empty state; "This period" answers "what have I spent on
-    each category" (§4); and everything else demotes to one line (§6).
+<%# ANSWERS FIRST (answers-first spec §1), NOW IN TWO COLUMNS (two-shapes spec §3). Home asks four
+    questions and this is the order: the MONEY COLUMN answers "how much is in checking and how much of
+    it is free"; the RUNWAY answers "what is coming before the period closes", which is the question
+    the old period bar could only half ask; the trouble strip interrupts — and ONLY when something
+    real needs a human (§5), which is why it is gated rather than rendered with an empty state; "This
+    period" answers "what does each category's every rule have" (§3); and everything else demotes to
+    one line (§6).
+
+    THE TWO COLUMNS ARE ONE ROW AT 1024px AND STACK BELOW IT. The money column is the narrower of the
+    two because it is three figures; the runway is a ruler and wants the width.
 
     THE ONBOARDING CARDS STAY TOP-LEVEL AND STAY LAST. They are the setup that has not finished, not
     an answer to any of the four questions, so they sit below the answers — but outside the accounts
     line, because a door behind a chevron is a door a first-time user does not find. %>
 <div class="space-y-6">
-  <%= render "hero", presenter: @presenter %>
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-start">
+    <div class="lg:col-span-1"><%= render "money", presenter: @presenter %></div>
+    <div class="lg:col-span-2"><%= render "runway", presenter: @presenter %></div>
+  </div>
+
   <% if @presenter.trouble? %>
     <%= render "trouble", presenter: @presenter %>
   <% end %>
+
   <%= render "this_period", presenter: @presenter %>
+
+  <%# ** THE GIVE-WAY SENTENCE (§3's "below"), AND IT IS THE SECTION'S ORDER SAID IN WORDS. ** The
+      blocks above are in `#give_way_order` and nothing on the screen says so — an order nobody
+      explains reads as arbitrary, and this one is the answer to "who goes without when the money
+      runs out". The three words are the app's own (`Budget::TYPE_RANK`, and the same three the
+      Budget page's list, its ▲▼ buttons and the category form all say), and the door is the Budget
+      page, which is where the order is changed. %>
+  <p class="text-sm text-gray-600" data-give-way>
+    When the money runs short, choices give way first, then usage, and bills last — which is the
+    order above.
+    <%= link_to "Change what a category asks for on the Budget page", budget_page_path,
+                class: "text-status-info hover:underline" %>
+  </p>
+
   <%= render "accounts_line", presenter: @presenter %>
   <% @presenter.onboarding_accounts.each do |account| %>
     <%= render "account", presenter: @presenter, account: account %>

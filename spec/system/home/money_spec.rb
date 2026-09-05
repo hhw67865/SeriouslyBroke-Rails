@@ -2,35 +2,29 @@
 
 require "rails_helper"
 
-# THE HERO CARD — Home's first two answers and its third (answers-first spec §§2-3): how much is in
-# checking, how much of that is FREE, and where we are in the period. It replaces the standing band,
-# and this file is `spec/system/home/standing_spec.rb`'s successor.
+# THE MONEY COLUMN — Home's first two answers as three stat tiles (two-shapes spec §3): how much is
+# in checking, how much of that is FREE, and what sits outside it. This file is
+# `spec/system/home/hero_spec.rb`'s successor, and the rename is the card's: `_hero.html.erb` is
+# deleted and `_money.html.erb` is what renders here.
 #
-# ── CARRIED FROM standing_spec.rb, because they are still true of the card that replaced it:
+# ── CARRIED WHOLE, because they are still true of the tiles that replaced the card. Every figure
+# example in `hero_spec` is below at its own figures, with two hooks renamed by the partial:
+# `[data-hero]` → `[data-money]` and `[data-free-to-spend]` → `[data-free]`. Not one number moved —
+# `free = pot − Σ claims` is Task 1's and this task did not touch it.
 #
-#   * "names the period beside the standing sentence"      → "draws the period as a bar"
-#   * "shows no period range before a period is declared"   → unchanged in substance
-#   * "names an overdrawn account beside the figures that exclude it" → split in two: the POT's own
-#     overdraft is the red "In Checking" figure (§2) and stays here; the NON-MAIN half moved on to
-#     the trouble strip in Task 2, with its copy verbatim (see the marker below).
-#   * all six sacrifice-link examples were carried here by Task 1 and MOVED ON in Task 2, to the
-#     strip that did not exist when Task 1 ran. See the marker at the foot of this file.
+# ── MOVED TO `runway_spec.rb` (three examples): the period bar. See the marker at its own site for
+# why the period left this card.
 #
-# Nine carried titles in all; Task 2 took seven of them onward to `trouble_spec.rb`, leaving the two
-# period-bar ones and the card's own figures.
+# ── NEW WITH §3: the two-segment claimed bar (`[data-claimed-bar]`, three examples — the fraction,
+# the clamp, and the refusal on an overdrawn pot) and the third tile (`[data-other-accounts]`,
+# `[data-account-chip]`, both directions).
 #
-# EVERY COPY ASSERTION IN THIS FILE BUT ONE IS SCOPED TO THE CARD — through a data hook
-# (`[data-in-checking]`, `[data-free-to-spend]`, `[data-free-subline]`, `[data-checking-overdrawn]`,
-# `[data-period-range]`, `[data-period-progress]`, `[data-period-days-left]`,
-# `[data-overdrawn-account]`) or inside `within("[data-hero]")` for the ones that assert a word is
-# ABSENT, which no hook can carry. The exception is the page-wide dead-words example (FINAL review —
-# L-6), which is page-wide on purpose: a word is dead when NOTHING on the screen says it, and every
-# other spelling of that rule in this suite is scoped to one region. The hooks exist to be asserted
-# through, and a file that names
-# half of them and matches the other half on page text leaves the unasserted ones looking
-# load-bearing when nothing holds them. `[data-period-days-left]` was added in Task 4 for the
-# sharper reason: `_this_period`'s heading prints the SAME "7 days left" sentence, so the page-wide
-# spelling of that assertion passed whether or not the card rendered a bar at all.
+# EVERY COPY ASSERTION IN THIS FILE BUT ONE IS SCOPED TO THE COLUMN — through a data hook
+# (`[data-in-checking]`, `[data-free]`, `[data-free-subline]`, `[data-checking-overdrawn]`,
+# `[data-claimed-bar]`, `[data-other-accounts]`) or inside `within("[data-money]")` for the ones
+# that assert a word is ABSENT, which no hook can carry. The exception is the page-wide dead-words
+# example (FINAL review — L-6), which is page-wide on purpose: a word is dead when NOTHING on the
+# screen says it, and every other spelling of that rule in this suite is scoped to one region.
 #
 # ── DELETED WITH THE STANDING BAND (answers-first spec §2: "this REPLACES the old 'You're covered /
 # Nothing is set aside yet' branch question entirely"). Every one of these asserted a branch that no
@@ -41,17 +35,17 @@ require "rails_helper"
 #   * "states the gap when you're short" — "$250.00 short this period" over "You need … You have …"
 #     is the system talking about itself. The same fixture is now "-$250.00 free" with the honest
 #     sentence, in "is honest when the plan asks for more than there is".
-#   * "does not call a deficit money nothing claims on a covered period" — the MED-1 fixture. The reader
-#     it was about (`projected_buffer`) is deleted; the word is dead (spec §3). The
-#     fixture is carried into "is honest when spending has drained the root", which asserts the
-#     same $100 the same way round.
+#   * "does not call a deficit money nothing claims on a covered period" — the MED-1 fixture. The
+#     reader it was about (`projected_buffer`) is deleted; the word is dead (spec §3). The fixture is
+#     carried into "is honest when spending has drained the root", which asserts the same $100 the
+#     same way round.
 #   * "still states what is left over on a covered period in the black" — the other direction of the
 #     same branch, and the same "$600.00 spare" figure. Carried as free money, once.
 #   * "explains the arithmetic when available itself is in the red" — `[data-available-in-the-red]`
 #     and its whole paragraph are gone with the word "available", which Home no longer says (§3).
 #     Its fixture (in $100, spent $500 unbudgeted, a $400 rule) is carried into the negative-free
 #     example so the state is still measured; only the machinery sentence dies.
-RSpec.describe "Home Hero", type: :system do
+RSpec.describe "Home Money Column", type: :system do
   include ActiveSupport::Testing::TimeHelpers
 
   let(:user) do
@@ -88,6 +82,22 @@ RSpec.describe "Home Hero", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
+  # MONEY WALKED OUT OF CHECKING INTO A SECOND ACCOUNT — the fixture behind every "sits elsewhere"
+  # sentence and the third tile. It lowers the pot and raises nothing the rules can claim, which is
+  # exactly the state §2 says is SHOWN and never subtracted.
+  def walk_over(name, amount)
+    account = create(:pool, :account, user: user, name: name)
+    create(
+      :account_movement,
+      from_pool: checking,
+      to_pool: account,
+      amount: amount,
+      date: Date.current,
+      kind: :transfer
+    )
+    account
+  end
+
   # SPENDING THAT DRAINS AVAILABLE: an expense category that has never been funded holds nothing, so
   # its receipts come out of the root (§4's start-date rule). It lowers the pot either way.
   def spend_unbudgeted(amount)
@@ -108,13 +118,13 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
+    expect(page).to have_css("[data-free]", text: "$600.00")
     expect(page).to have_css("[data-free-subline]", text: "$400.00 of checking is claimed by your rules")
     # THE WORDS THIS CARD NO LONGER SAYS, asserted rather than assumed. "Spoken for" and "set aside"
     # JOIN THE LIST IN TASK 3 and they are the whole vocabulary change: both named money that had been
     # MOVED — a distribution's remaining ask, and a holding — and nothing moves. A rule CLAIMS money
     # where it sits.
-    within("[data-hero]") do
+    within("[data-money]") do
       # CASE-INSENSITIVE: `have_no_content("available")` is a substring match, so it passes over a
       # card printing "Available" — the app's own spelling of the word — and therefore over exactly
       # the spelling that could slip in.
@@ -141,7 +151,7 @@ RSpec.describe "Home Hero", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "$1,600.00")
+    expect(page).to have_css("[data-free]", text: "$1,600.00")
     [/available/i, /unclaimed/i, /buffer/i].each { |word| expect(page).to have_no_content(word) }
     # "ALLOCATION" JOINED THE PAGE-WIDE LIST IN TASK 3, and it could not have before: the trouble
     # strip's fix buttons linked to `/allocations/new` and named AVAILABLE as their source. There are
@@ -152,7 +162,7 @@ RSpec.describe "Home Hero", type: :system do
     # convenient: the sidebar still carries a Distribute nav item until Task 4 deletes that screen.
     # What Task 3 owns is that none of Home's own three panels says it — the `:undistributed` trouble
     # arm and its button are gone.
-    ["[data-hero]", "[data-this-period]"].each do |region|
+    ["[data-money]", "[data-this-period]"].each do |region|
       within(region) { expect(page).to have_no_content(/distribut/i) }
     end
     expect(page).to have_no_css("[data-trouble]")
@@ -177,7 +187,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$300.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free]", text: "-$100.00")
     expect(page).to have_css("[data-free-subline]", text: "Your rules claim $100.00 more than checking holds")
     expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
   end
@@ -196,7 +206,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,600.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$1,200.00")
+    expect(page).to have_css("[data-free]", text: "$1,200.00")
     expect(find("[data-free-subline]")).to have_text("$400.00 of checking is claimed by your rules")
       .and have_text("$400.00 sits in 1 other account")
   end
@@ -224,7 +234,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,200.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$1,200.00")
+    expect(page).to have_css("[data-free]", text: "$1,200.00")
     expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
     expect(page).to have_no_css("[data-free-subline]", text: "sits in")
   end
@@ -239,7 +249,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "$1,000.00")
+    expect(page).to have_css("[data-free]", text: "$1,000.00")
     expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
   end
 
@@ -256,8 +266,8 @@ RSpec.describe "Home Hero", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "-$250.00")
-    expect(page).to have_css("[data-free-to-spend].text-status-danger")
+    expect(page).to have_css("[data-free]", text: "-$250.00")
+    expect(page).to have_css("[data-free].text-status-danger")
     expect(page).to have_css("[data-free-subline]", text: "Your rules claim $250.00 more than checking holds")
     expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
     # ** AND IT DOES NOT ALSO SAY THE OVERSPEND'S SENTENCE. ** The pot is a healthy $150; what is
@@ -283,7 +293,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$200.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "-$200.00")
+    expect(page).to have_css("[data-free]", text: "-$200.00")
     expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
     expect(page).to have_no_css("[data-free-subline]", text: "You have spent past what you had")
     # The overdraft line states the fact and stops: the clause that used to follow it ("nothing is
@@ -306,7 +316,7 @@ RSpec.describe "Home Hero", type: :system do
     visit root_path
 
     expect(page).to have_css("[data-in-checking].text-status-danger", text: "-$100.00")
-    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free]", text: "-$100.00")
     expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
     expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
     # THE OTHER HALF OF THE CONTRADICTION was the accounts line, which had nothing in it to send the
@@ -326,10 +336,10 @@ RSpec.describe "Home Hero", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free]", text: "-$100.00")
     expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
     expect(page).to have_no_css("[data-free-subline]", text: "Your rules claim")
-    within("[data-hero]") do
+    within("[data-money]") do
       expect(page).to have_no_content("You're covered")
     end
   end
@@ -362,51 +372,89 @@ RSpec.describe "Home Hero", type: :system do
   # the strip did not exist yet. Its copy is verbatim in `trouble_spec.rb`, which also pins the other
   # direction — main's own overdraft staying on THIS card and not being repeated there.
 
-  # ── THE PERIOD AS A BAR (spec §2) ──────────────────────────────────────────────────────────────
+  # ── ** THE PERIOD BAR AND ITS THREE EXAMPLES MOVED TO `runway_spec.rb` (two-shapes §3). ** The
+  # period is the runway's subject now — its ruler, its ticks and its pace line are all drawn on it —
+  # and two panels drawing the same fortnight was how "7 days left" came to be printed twice on one
+  # screen by two readers that could disagree. All three went with their hooks:
+  # "draws the period as a bar with the days that are left" (`[data-period-range]`,
+  # `[data-period-progress]`, `[data-period-days-left]`), "says one day rather than 1 days on the
+  # closing eve", and "shows no period bar before a period is declared" — which is now the runway's
+  # own absence, asserted there against `[data-runway]`.
 
-  # CARRIED FROM "names the period beside the standing sentence". `travel_to` wraps only the visit —
-  # HomeController reads `Date.current` at request time — and every date is a planted literal, never
-  # a lazy `Date.current` resolved inside the travelled block (CLAUDE.md's third flake cause).
-  #
-  # Aug 14 – Aug 27 is fourteen days; Aug 20 is day 7 of it, so seven remain.
-  it "draws the period as a bar with the days that are left", :aggregate_failures do
-    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
-    envelope("Groceries", 400)
-    deposit(1_000)
+  # ── THE CLAIMED BAR (§3): THE SUBLINE AS A PICTURE ─────────────────────────────────────────────
 
-    travel_to(Date.new(2026, 8, 20)) { visit root_path }
-
-    expect(page).to have_css("[data-period-range]", text: "Aug 14")
-    expect(page).to have_css("[data-period-range]", text: "Aug 27")
-    expect(page).to have_css("[data-period-days-left]", text: "7 days left")
-    expect(page).to have_css("[data-period-progress='50']")
-  end
-
-  # The singular, because "1 days left" is the kind of thing a reader stops trusting a screen over.
-  it "says one day rather than 1 days on the closing eve" do
-    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
-    deposit(1_000)
-
-    travel_to(Date.new(2026, 8, 26)) { visit root_path }
-
-    expect(page).to have_css("[data-period-days-left]", text: "1 day left")
-  end
-
-  # CARRIED UNCHANGED: no declared period, no invented bar. `User#period_containing` falls back to
-  # the calendar month, which is right for a normaliser and a lie on a card that would print a
-  # boundary nobody set.
-  it "shows no period bar before a period is declared", :aggregate_failures do
-    user.update!(period_cadence: nil, period_anchor_date: nil)
+  # ** TWO SEGMENTS OF THE POT, AND THE FIGURE IS THE CLAIMED ONE. ** $1,000 in with a $400 rate
+  # rule claiming its whole rate is `round(400 ÷ 1,000 × 100)` = **40%** claimed, which is the same
+  # subtraction the two figures above it print — a bar that disagreed with them would be a third
+  # arithmetic on one card.
+  it "draws what is claimed as a fraction of what is in checking", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(1_000)
 
     visit root_path
 
-    expect(page).to have_no_css("[data-period-range]")
-    expect(page).to have_no_css("[data-period-progress]")
-    # The rest of the card is unconditional, and this is where that matters most: a user who has
-    # declared nothing still gets both answers.
-    expect(page).to have_css("[data-free-to-spend]")
+    expect(page).to have_css("[data-claimed-bar='40']")
+    expect(page).to have_css("[data-claimed-bar] [data-claimed-fill]")
+  end
+
+  # ** CLAMPED, NOT RUN OFF THE CARD. ** $150 in against a $400 rule claims more than the whole pot,
+  # so the bar is full and RED — the state the figure above it prints as −$250.00. A bar 267% wide
+  # would simply leave the tile.
+  it "fills the bar red when the rules claim more than checking holds", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(150)
+
+    visit root_path
+
+    expect(page).to have_css("[data-claimed-bar='100']")
+    expect(page).to have_css("[data-claimed-fill].bg-status-danger")
+  end
+
+  # ** NO POT, NO FRACTION. ** An overdrawn account is not a quantity anything can be a fraction of,
+  # and a bar there would have to invent a denominator — the same refusal every other bar on this
+  # screen makes. The figures are still both printed, which is the half that must not go with it.
+  it "draws no bar at all on an overdrawn account", :aggregate_failures do
+    groceries = create(:category, :expense, user: user, name: "Groceries", funded_since: Date.current - 1.year)
+    deposit(1_000)
+    create(:entry, item: create(:item, category: groceries), amount: 1_100, date: Date.current)
+
+    visit root_path
+
+    expect(page).to have_no_css("[data-claimed-bar]")
+    expect(page).to have_css("[data-in-checking]", text: "-$100.00")
+    expect(page).to have_css("[data-free]", text: "-$100.00")
+  end
+
+  # ── THE THIRD TILE: MONEY THAT IS NOT IN CHECKING (§3) ─────────────────────────────────────────
+
+  # THE FIGURE AND THE NAMES. The subline already says how much sits elsewhere; the tile says WHICH
+  # accounts, which the line at the foot of the page could only answer once it was opened.
+  it "names the accounts the rest of the money sits in", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(2_000)
+    walk_over("Ally", 300)
+    walk_over("Vanguard", 100)
+
+    visit root_path
+
+    # CASE-INSENSITIVE, because the tile's label is `uppercase` in CSS and Capybara reads the
+    # RENDERED text: the string in the template is "In 2 other accounts" and the string on the
+    # screen is "IN 2 OTHER ACCOUNTS". The count is what this line is pinning either way.
+    expect(page).to have_css("[data-other-accounts]", text: /in 2 other accounts/i)
+    expect(page).to have_css("[data-other-accounts-total]", text: "$400.00")
+    expect(page).to have_css("[data-account-chip='Ally']")
+    expect(page).to have_css("[data-account-chip='Vanguard']")
+  end
+
+  # THE OTHER DIRECTION: one account is no tile at all. "$0.00 in 0 other accounts" would be the app
+  # inventing an absence, and the money column would carry a third of its height saying nothing.
+  it "leaves the tile off a screen with only one account" do
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_no_css("[data-other-accounts]")
   end
 
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
@@ -448,6 +496,27 @@ RSpec.describe "Home Hero", type: :system do
       )
     end
 
+    # ** THE TILES STACK (§3), which at this width is what "column" means: three tiles one above the
+    # other, each as wide as the card. The measurement is the tile's own rect against the one below
+    # it — two tiles side by side at 375px would share a top edge, which is exactly the layout a
+    # `grid-cols-2` that forgot its breakpoint produces.
+    it "stacks the money tiles inside a 375px viewport", :aggregate_failures do
+      envelope("Groceries", 400)
+      deposit(1_000)
+      walk_over("Vanguard", 100)
+
+      visit root_path
+
+      expect(page).to have_css("[data-in-checking]", text: "$900.00")
+      expect(page).to have_css("[data-free]", text: "$500.00")
+
+      checking_tile = page.find("[data-in-checking]").native.rect
+      others_tile = page.find("[data-other-accounts]").native.rect
+
+      expect(others_tile.y).to be > checking_tile.y
+      expect(others_tile.x + others_tile.width).to be <= 375
+    end
+
     it "fits the card and its figures inside a 375px viewport", :aggregate_failures do
       envelope("Groceries", 400)
       deposit(1_000)
@@ -455,11 +524,10 @@ RSpec.describe "Home Hero", type: :system do
       visit root_path
 
       expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
-      expect(page).to have_css("[data-free-to-spend]", text: "$600.00")
-      expect(page).to have_css("[data-period-progress]")
+      expect(page).to have_css("[data-free]", text: "$600.00")
 
-      hero = page.find("[data-hero]").native.rect
-      figure = page.find("[data-free-to-spend]").native.rect
+      hero = page.find("[data-money]").native.rect
+      figure = page.find("[data-free]").native.rect
 
       expect(hero.x + hero.width).to be <= 375
       expect(figure.x + figure.width).to be <= hero.x + hero.width

@@ -146,7 +146,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-hero]")
+    expect(page).to have_css("[data-money]")
     expect(page).to have_no_css("[data-trouble]")
     expect(page).to have_no_content("Nothing needs you")
     expect(page).to have_no_content("needs you")
@@ -184,7 +184,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "-$260.00")
+    expect(page).to have_css("[data-free]", text: "-$260.00")
     expect(find("[data-shortfall-amount]")).to have_content("short $260.00")
     expect(find("[data-shortfall-pace]")).to have_content("Spending $20.00 a day less")
     expect(uncovered("Fun")).to have_content("nothing covers its $200.00")
@@ -261,7 +261,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "$200.00")
+    expect(page).to have_css("[data-free]", text: "$200.00")
     expect(page).to have_no_css("[data-shortfall]")
     expect(page).to have_no_css("[data-trouble]")
   end
@@ -321,7 +321,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "-$100.00")
+    expect(page).to have_css("[data-free]", text: "-$100.00")
     expect(find("[data-shortfall-headline]")).to have_content("You have spent past what you had")
     expect(find("[data-shortfall-amount]")).to have_content("short $100.00")
     expect(strip).to have_no_content("Your rules claim")
@@ -444,7 +444,11 @@ RSpec.describe "Home Trouble", type: :system do
     visit root_path
 
     expect(problem_row("Dining Out").find("[data-problem-state]")).to have_content("over by $30.00")
-    expect(find("[data-period-row='Dining Out'] [data-period-clause]")).to have_content("over by $30.00")
+    # ** THE SECTION SAYS THE SAME $30 IN THE FIGURE RATHER THAN IN A CLAUSE (two-shapes §3). ** The
+    # block row's clause is the DAY — a rate rule's is `resets <boundary>` — and the excess is the
+    # strip's own sentence, printed once. What the row must still say is the pair the excess is the
+    # difference of, in red, which is the half of this example that is about the two panels agreeing.
+    expect(find("[data-category-block='Dining Out'] [data-rule-figure]")).to have_content("$180.00 of $150.00")
   end
 
   # ── TRIGGER: A DUE DATE PASSED WITH THE FUND SHORT (§3.2) ──────────────────────────────────────
@@ -511,8 +515,8 @@ RSpec.describe "Home Trouble", type: :system do
 
     expect(page).to have_no_css("[data-problem-category='Utilities']")
     expect(page).to have_no_css("[data-trouble]")
-    expect(find("[data-period-row='Utilities'] [data-period-figure]"))
-      .to have_content("$1,200.00 built up of $1,200.00")
+    expect(find("[data-category-block='Utilities'] [data-rule-figure]"))
+      .to have_content("$1,200.00 of $1,200.00")
   end
 
   # ── TRIGGER: A PHYSICAL OVERDRAFT (answers-first §5) ───────────────────────────────────────────
@@ -592,7 +596,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "$2,000.00")
+    expect(page).to have_css("[data-free]", text: "$2,000.00")
     expect(strip).to have_link("Your budget doesn't fit your income", href: sacrifice_path)
   end
 
@@ -640,7 +644,7 @@ RSpec.describe "Home Trouble", type: :system do
 
     visit root_path
 
-    expect(page).to have_css("[data-free-to-spend]", text: "-$300.00")
+    expect(page).to have_css("[data-free]", text: "-$300.00")
     expect(page).to have_css("[data-shortfall-amount]", text: "short $300.00")
     expect(page).to have_no_css("[data-uncovered-claim='Vacation']")
   end

@@ -285,7 +285,7 @@ RSpec.describe "Budget page rules", type: :system do
 
   # ** A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE — Chrome refuses a headless
   # window narrower than 500px, so every `resize_to(375, …)` in this suite is really a 500px test.
-  # The mechanism is `spec/system/home/hero_spec.rb`'s, copied deliberately rather than re-derived,
+  # The mechanism is `spec/system/home/money_spec.rb`'s (`hero_spec.rb` before the money column renamed it), copied deliberately rather than re-derived,
   # and there is NO `evaluate_script` in the example: a trailing JS call leaves the session in a
   # state Capybara's teardown navigation does not survive. **
   #

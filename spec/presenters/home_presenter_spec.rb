@@ -27,6 +27,25 @@ require "rails_helper"
 #
 # ── NEW, BECAUSE THE MODEL IS (§4): `#shortfall`, `#uncovered_claims` (the give-way walk) and
 # `#per_day_pace`.
+#
+# ── ** `#period_rows` AND `PeriodRow` ARE DELETED WITH THE BLOCKS (two-shapes spec §3), AND EVERY
+# ONE OF THEIR EXAMPLES IS ACCOUNTED FOR BELOW. ** A row per CATEGORY could not say what §3 asks
+# for — a category's own rules ranked by TYPE, since almost every category has several — so the
+# section is a block per category with a row per rule, ordered by the one walk this screen already
+# had (`#give_way_order`, grouped back):
+#
+#   * the six figure examples ("counts the spending inside this period and no other", the dated
+#     rule, the goal's target, the goal's bar, the two-rule category, the unbudgeted partition) are
+#     CARRIED at their own figures, reading `#category_blocks.sole.rows` where they read
+#     `#period_rows.sole.lines`. Not one number moved: a `ClaimLine` is the same object.
+#   * "sorts trouble first and keeps priority order behind it" is DELETED at its own site, with the
+#     second ordering it asserted. The reason is written there.
+#   * "keeps a rule-less holder only while it has spending" MOVED to `#unbudgeted_rows`, which is
+#     the reader that answers for that row now.
+#
+# ── NEW WITH §3: `#runway` (the ticks, their days and their two states), `#pace_line` (both signs
+# of `free`), `#category_blocks` (the order, the header figures and the tint) and the row vocabulary
+# `ClaimLine` carries for `HomeHelper` — `#name`, `#stripe_type`, `#short?`, `#bar_state`.
 RSpec.describe HomePresenter do
   include ActiveSupport::Testing::TimeHelpers
 
@@ -211,7 +230,12 @@ RSpec.describe HomePresenter do
 
       expect(presenter.categories.map(&:name)).to eq(["Groceries"])
       expect(presenter.budgeted_categories.map(&:name)).to eq(["Groceries", "Coffee"])
-      expect(presenter.period_rows.map { |row| row.category.name }).to eq(["Groceries", "Coffee"])
+      # ** THE BLOCK IS THERE, AND IN GIVE-WAY ORDER RATHER THAN FILL ORDER (two-shapes §3). ** This
+      # read `["Groceries", "Coffee"]` off `#period_rows`, which was fill order; the section is the
+      # give-way walk grouped back now, so the category that would be funded LAST is the one that
+      # goes without FIRST and leads the section. Both types are `usage` here, so the ranking is the
+      # category half of the key alone: Coffee's priority 2 gives way before Groceries' priority 1.
+      expect(presenter.category_blocks.map(&:name)).to eq(["Coffee", "Groceries"])
     end
   end
 
@@ -470,7 +494,7 @@ RSpec.describe HomePresenter do
     # rest ALWAYS `Σ claims`, so "is there a rest" and "is anything claimed" are one question and
     # `#anything_claimed?` is the one that survives. Its four examples went with it.
 
-    # ** THE ARM TABLE, RE-DERIVED ROW BY ROW. ** `home/_hero.html.erb` branches on these predicates
+    # ** THE ARM TABLE, RE-DERIVED ROW BY ROW. ** `home/_money.html.erb` branches on these predicates
     # in this order and says a different sentence on each row; the presenter's own header states the
     # table, and this block asserts the COMBINATION rather than the predicates one at a time — which
     # is exactly how the old table's last row shipped ungated.
@@ -627,6 +651,179 @@ RSpec.describe HomePresenter do
     end
   end
 
+  # ── THE RUNWAY (two-shapes spec §3) ────────────────────────────────────────────────────────────
+  #
+  # ONE TICK PER DATED RULE FALLING DUE INSIDE THIS PERIOD, at its own day of it. Every position
+  # below is re-derived in its example's comment from the grid the example declares — the arithmetic
+  # is `(due − period opens) + 1` over `Progress#days`, and a literal nobody can re-derive is a pin
+  # that cannot be maintained.
+  describe "#runway" do
+    # THE CATEGORY EVERY EXAMPLE IN THIS GROUP PLANTS ITS BILLS ON, funded TODAY so §3.2's walk visits
+    # exactly ONE period: every figure below is then `target ÷ periods_left` with nothing behind it,
+    # which is what makes the tick states derivable in a comment rather than by running the walk.
+    let(:utilities) { holder("Utilities", priority: 1, funded_since: today) }
+
+    # A ONE-TIME BILL BORN TODAY ON THAT CATEGORY. `created_at:` is planted for the ruling of
+    # 2026-09-03 — a rule accrues from the LATER of its category's funding date and its own birthday,
+    # and this file's clock is Feb 2026 while the factory writes at real-now.
+    def due_on(category, amount:, due:, item_name: nil)
+      bill(
+        category,
+        amount: amount,
+        due: due,
+        item: item_name && lane(category, item_name),
+        created_at: Time.zone.local(2026, 2, 6)
+      )
+    end
+
+    # A BILL DUE INSIDE THE PERIOD, ON THE FILE'S OWN BIWEEKLY GRID. Feb 6–19 is fourteen days and
+    # today is the opening day; Feb 14 is `14 − 6 + 1` = **day 9**, so `round(9 ÷ 14 × 100)` = **64%**
+    # along the ruler.
+    #
+    # THE MONEY IS THERE, so the tick is ready: the category is funded today and the rule is born
+    # today, so §3.2's walk visits ONE period, `periods_left` is 1 against a date inside it, and the
+    # catch-up share is the whole $120.
+    it "puts a tick on the day its rule falls due", :aggregate_failures do
+      income(2_000)
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 14))
+
+      runway = presenter.runway
+      tick = runway.ticks.sole
+
+      expect([runway.day, runway.days]).to eq([1, 14])
+      expect(tick.day_index).to eq(9)
+      expect(tick.percent).to eq(64)
+      expect(tick.amount).to eq(120)
+      expect(tick.label).to eq("Utilities")
+      expect(tick).to be_ready
+    end
+
+    # ** THE SAME RULE ON A MONTHLY GRID, AND ONLY THE GRID MOVES. ** Anchored on the 1st, the period
+    # containing Feb 6 is Feb 1–28 — twenty-eight days, today day **6** — and a bill due Feb 21 is
+    # `21 − 1 + 1` = **day 21**, so `round(21 ÷ 28 × 100)` = **75%**. The same $120 on the same
+    # afternoon sits at 64% of one grid and 75% of the other, which is the whole reason the position
+    # is read off `User#period_containing` and never off a month.
+    it "places a rule by the grid its owner declared, not by the month", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      income(2_000)
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 21))
+
+      runway = presenter.runway
+      tick = runway.ticks.sole
+
+      expect([runway.day, runway.days]).to eq([6, 28])
+      expect([runway.first, runway.last]).to eq([Date.new(2026, 2, 1), Date.new(2026, 2, 28)])
+      expect(tick.day_index).to eq(21)
+      expect(tick.percent).to eq(75)
+    end
+
+    # ** READY AND SHORT, SIDE BY SIDE, WITH THE TOTAL AND THE NAMED LIST. ** Two bills due inside
+    # the period: Electric's $120 is knocked to $80 by a −$40 adjustment dated inside the period, and
+    # Water's $30 is whole. `due_total` is the two TARGETS ($150) — what has to be there before the
+    # period closes, not what is missing — and `short` names only the one that is.
+    it "tells ready from short, totals the day's asks and names the gap", :aggregate_failures do
+      income(2_000)
+      set_aside(due_on(utilities, amount: 120, due: Date.new(2026, 2, 14), item_name: "Electric"), -40)
+      due_on(utilities, amount: 30, due: Date.new(2026, 2, 18), item_name: "Water")
+
+      runway = presenter.runway
+
+      # THE PAIR, TOGETHER: a label matched to the wrong state would pass two separate assertions.
+      expect(runway.ticks.map { |tick| [tick.label, tick.state] }).to eq([["Electric", :short], ["Water", :ready]])
+      expect(runway.due_total).to eq(150)
+      expect(runway.short.map(&:label)).to eq(["Electric"])
+      expect(runway.short.sole.gap).to eq(40)
+    end
+
+    # A PERIOD WITH NOTHING DUE IS THE ORDINARY ONE, and it still has a runway: the rail, today's
+    # mark and the pace line are the answer, and a rate rule is not a day.
+    it "draws a period with nothing due and no ticks", :aggregate_failures do
+      income(2_000)
+      rate(holder("Groceries", priority: 1), 400)
+
+      runway = presenter.runway
+
+      expect(runway.ticks).to be_empty
+      expect(runway).not_to be_any_due
+      expect(runway.due_total).to eq(0)
+    end
+
+    # ** THE WINDOW, BOTH DIRECTIONS. ** A date in the NEXT period is not on this ruler (Feb 26 is
+    # past Feb 19), and neither is one already gone: an overdue bill's day is in a period that has
+    # ended, so there is no point on this line for it to sit on — the trouble strip is where a date
+    # already missed belongs, and it is asserted here so the absence is not read as an omission.
+    it "leaves out a date in the next period and one already gone", :aggregate_failures do
+      income(2_000)
+      later = holder("Insurance", priority: 1, funded_since: today)
+      bill(later, amount: 200, due: Date.new(2026, 2, 26), created_at: Time.zone.local(2026, 2, 6))
+      missed = holder("Rent", priority: 2, funded_since: Date.new(2026, 1, 2))
+      bill(missed, amount: 900, due: Date.new(2026, 2, 2), created_at: Time.zone.local(2026, 1, 2))
+
+      expect(presenter.runway.ticks).to be_empty
+      expect(presenter.troubles.map(&:kind)).to include(:overdue)
+    end
+
+    # NO PERIOD, NO PICTURE — `#period_progress`'s own refusal, for the same reason: a runway is a
+    # picture OF a period, and a calendar month nobody declared would be thirty invented days.
+    it "is nil before a period is declared" do
+      user.update!(period_cadence: nil, period_anchor_date: nil)
+
+      expect(presenter.runway).to be_nil
+    end
+  end
+
+  # ── THE PACE LINE (§3), WHICH IS TWO ARMS OF ONE QUESTION ─────────────────────────────────────
+  describe "#pace_line" do
+    # FREE ABOVE ZERO: what a day may cost for the rest of the period. PLANTED — $2,000 in with a
+    # $400 rate rule claiming its whole rate leaves `free` **$1,600**, and today is day 1 of 14, so
+    # thirteen days remain: `1,600 ÷ 13` = **$123.08**.
+    it "spreads what is free over the days that are left", :aggregate_failures do
+      income(2_000)
+      rate(holder("Groceries", priority: 1), 400)
+
+      pace = presenter.pace_line
+
+      expect(pace).to be_fine
+      expect(pace.amount).to eq(123.08)
+    end
+
+    # ** THE LAST DAY IS THE FLOOR, AND IT IS THE CLOSING DAY RATHER THAN A GUARD. ** `days_left` is
+    # zero on Feb 19 — the user still has today, and today is the whole of what is left — so the
+    # divisor floors at one and the sentence reads the whole $1,600 for the day. Dividing by zero
+    # would raise on the one afternoon the sentence matters most.
+    it "puts the whole of what is free on today when the period closes today", :aggregate_failures do
+      income(2_000)
+      rate(holder("Groceries", priority: 1), 400)
+
+      pace = described_class.new(user: user, today: Date.new(2026, 2, 19)).pace_line
+
+      expect(pace).to be_fine
+      expect(pace.amount).to eq(1_600)
+    end
+
+    # FREE BELOW ZERO: the SAME figure the shortfall strip has always printed, and the two panels
+    # render one sentence off this object now (`HomeHelper#pace_words`). PLANTED — $150 in against a
+    # $400 rate rule is `free` −$250 over thirteen days: `250 ÷ 13` = **$19.23**.
+    it "hands the shortfall's own pace back when free is under", :aggregate_failures do
+      income(150)
+      rate(holder("Groceries", priority: 1), 400)
+
+      pace = presenter.pace_line
+
+      expect(pace).not_to be_fine
+      expect(pace.amount).to eq(19.23)
+      expect(pace.amount).to eq(presenter.per_day_pace)
+    end
+
+    # NIL BEFORE A PERIOD IS DECLARED — there is no "rest of the period" to spread anything over,
+    # which is `#per_day_pace`'s own refusal asked of both arms.
+    it "is nil before a period is declared" do
+      user.update!(period_cadence: nil, period_anchor_date: nil)
+
+      expect(presenter.pace_line).to be_nil
+    end
+  end
+
   # ** ONE `ClaimLedger` PER RENDER (computed-claims §3.3), PINNED BY STRICT EQUALITY. ** The house
   # idiom (distribution_clock_spec, ledger_sharing_spec) — schema and transaction chatter excluded.
   describe "the screen's query cost" do
@@ -639,19 +836,28 @@ RSpec.describe HomePresenter do
       statements
     end
 
-    # EVERYTHING A RENDERED HOME ASKS FOR, in the order the page asks it — the hero's own readers,
-    # then the three panels below it. Split in two because one method asking twelve questions of one
-    # object is past rubocop's ABC limit, not because the halves mean anything separately.
+    # EVERYTHING A RENDERED HOME ASKS FOR, in the order the page asks it — the money column's own
+    # readers, then the three panels below it. Split in two because one method asking a dozen
+    # questions of one object is past rubocop's ABC limit, not because the halves mean anything
+    # separately.
     def read_the_screen
-      read_the_hero
+      read_the_money_column
       read_screen_for(presenter)
     end
 
-    def read_the_hero
+    # ** `#claimed_percent` AND `#other_accounts` JOINED THE LIST WITH THE TILES (two-shapes §3). **
+    # The bar's fraction and the chips that name the accounts are two new readers on the one panel a
+    # cost pin has always covered, and a reader the pin never calls is a reader free to open a ledger
+    # of its own without any figure moving. Neither costs a statement: the fraction is `total_claims`
+    # over `#in_checking` (both already read), and the chips are `#accounts`, which the overdraft
+    # walk fetched.
+    def read_the_money_column
       presenter.in_checking
       presenter.free_to_spend
+      presenter.claimed_percent
       presenter.money_parked_elsewhere?
       presenter.anything_claimed?
+      presenter.other_accounts
       presenter.period_progress
     end
 
@@ -707,7 +913,9 @@ RSpec.describe HomePresenter do
       other.shortfall
       other.other_accounts_total
       other.per_day_pace
-      other.period_rows
+      other.pace_line
+      other.runway
+      other.category_blocks
       other.unbudgeted_rows
       other.troubles
       other.uncovered_claims
@@ -728,39 +936,47 @@ RSpec.describe HomePresenter do
       expect(count_statements { read_the_screen }).to eq(0)
     end
 
-    # FIFTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
+    # FOURTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
     #
     #    1-2. `AccountLedger#entry_side`'s income and expense SUMs — the pot's own term, memoised in
-    #         that class as of this task (it ran three times over before, once for the hero's figure,
-    #         once inside `#total_money` and once for the overdraft walk).
+    #         that class (it ran three times over before, once for the hero's figure, once inside
+    #         `#total_money` and once for the overdraft walk).
     #    3-4. its two grouped movement sums, in and out.
     #      5. `ClaimLedger#rules` — every rule the user owns …
     #    6-7. … and its `:item, category: :user` preload, one statement each.
     #      8. the claim ledger's CATCH-ALL spending lane. (The ITEM lane is absent here: no rule on
     #         this fixture names one, and the ledger does not query for an empty id list.)
     #      9. its adjustment lane.
-    #     10. `#accounts` — the user's accounts by name, for the accounts line and the overdraft walk.
+    #     10. `#accounts` — the user's accounts by name, for the money column's chips, the accounts
+    #         line and the overdraft walk.
     #     11. `#categories` — the holders in fill order …
-    #     12. … and its `:budgets` preload.
-    #     13. `#holder_spending_this_period` — ONE grouped sum for every row on the screen.
-    #     14. `#unbudgeted_spending_this_period` — the same expression read for its NULL answer.
-    #     15. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
+    #     12. … and its `:budgets` preload, which is also what `Category#budgeted?` reads when
+    #         `#unruled_holders` partitions them.
+    #     13. `#unbudgeted_spending_this_period` — the entry sum read for its NULL answer.
+    #     14. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
     #
-    # ** IT WAS NINETEEN, THEN SIXTEEN, AND IT IS FIFTEEN SINCE THE TWO SHAPES (§2). ** The three that
-    # left first were `Budget.steady_need`'s own — its `for_user(user).includes(:item, category: :user)`
-    # re-fetched rules, categories and users this screen already held — and it takes the page's
-    # `ledger:` now, so lines 5-7 answer for it. The SIXTEENTH was `ClaimLedger#total_money`'s fetch of
-    # the user's accounts: `free` was `min(pot, total_money − Σ claims)` and read it; `free = pot − Σ
-    # claims` does not. `#other_accounts_total` sums `#balance_of` over `#accounts`, which line 10
-    # already fetched, so the figure the hero prints beside `free` costs nothing.
-    it "costs fifteen statements for a whole render" do
+    # ** NOTHING ON THIS LIST IS THE RUNWAY OR THE BLOCKS. ** Both are readings of `#claim_lines`,
+    # which is lines 5-9 already paid for: a tick is a dated line placed on `#period_progress` (the
+    # user's own cadence columns, no query) and a block is `#give_way_order` grouped back. A reader
+    # that had opened a ledger of its own would move this number, which is what the pin is for.
+    #
+    # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, AND IT IS FOURTEEN SINCE THE BLOCKS (§3). **
+    # The three that left first were `Budget.steady_need`'s own — its
+    # `for_user(user).includes(:item, category: :user)` re-fetched rules, categories and users this
+    # screen already held — and it takes the page's `ledger:` now, so lines 5-7 answer for it. The
+    # SIXTEENTH was `ClaimLedger#total_money`'s fetch of the user's accounts: `free` was
+    # `min(pot, total_money − Σ claims)` and read it; `free = pot − Σ claims` does not. The FIFTEENTH
+    # is `#holder_spending_this_period`, and it left because its last reader did: a per-CATEGORY
+    # spending sum was what `#period_rows` printed, and a per-RULE row reads its own lane off the
+    # ledger. It still runs for the one shape that needs it — see the example below.
+    it "costs fourteen statements for a whole render" do
       income(2_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 400)
       spend(groceries, 310)
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
 
-      expect(count_statements { read_the_screen }).to eq(15)
+      expect(count_statements { read_the_screen }).to eq(14)
     end
 
     # THE UNBUDGETED FETCH IS CONDITIONAL, and this is what says so: the same screen with nothing
@@ -772,7 +988,22 @@ RSpec.describe HomePresenter do
       rate(groceries, 400)
       spend(groceries, 310)
 
-      expect(count_statements { read_the_screen }).to eq(14)
+      expect(count_statements { read_the_screen }).to eq(13)
+    end
+
+    # ** AND THE HOLDER SUM IS CONDITIONAL TOO — THE OTHER DIRECTION OF THE STATEMENT THAT LEFT. **
+    # The same screen plus a funded category with no rule and a receipt on it: that row's figure is
+    # the one thing on Home no claim can answer, so `#holder_spending_this_period` runs, and it runs
+    # ONCE for however many such categories there are.
+    it "costs one more when a rule-less holder has spending" do
+      income(2_000)
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      spend(groceries, 310)
+      spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
+      spend(holder("Car Repairs", priority: 2), 45)
+
+      expect(count_statements { read_the_screen }).to eq(15)
     end
   end
 
@@ -781,7 +1012,7 @@ RSpec.describe HomePresenter do
   # The bars themselves are pinned in `spec/system/home/this_period_spec.rb`, on the screen. What is
   # here is what a browser cannot reach cheaply: the WINDOW both directions, the partition between a
   # budgeted row and an unbudgeted one, the per-rule lines, and the sort key.
-  describe "#period_rows" do
+  describe "#category_blocks" do
     # THE WINDOW, BOTH DIRECTIONS, ON ONE CATEGORY. The period containing Feb 6 on a biweekly cadence
     # anchored Feb 6 is Feb 6–19, so the Feb 10 receipt is inside it and the Feb 2 one is not — and a
     # rate claim counts THIS period alone (§3.1), which is why the line reads $310 and not $360.
@@ -791,7 +1022,7 @@ RSpec.describe HomePresenter do
       spend(groceries, 310, on: Date.new(2026, 2, 10))
       spend(groceries, 50, on: Date.new(2026, 2, 2))
 
-      line = presenter.period_rows.sole.lines.sole
+      line = presenter.category_blocks.sole.rows.sole
 
       expect(line.spent).to eq(310)
       expect(line.accrued).to eq(400)
@@ -805,7 +1036,7 @@ RSpec.describe HomePresenter do
     it "measures a dated rule against the bill and not against a period's share", :aggregate_failures do
       rent = holder("Rent", priority: 1)
       rolling(rent, amount: 600, anchor: Date.new(2026, 3, 1))
-      line = presenter.period_rows.sole.lines.sole
+      line = presenter.category_blocks.sole.rows.sole
 
       expect(line).not_to be_rate
       expect(line.target).to eq(600)
@@ -822,7 +1053,7 @@ RSpec.describe HomePresenter do
     it "measures a goal against its target and fills the bar with what it has built up", :aggregate_failures do
       goal = savings_goal("Vacation", priority: 1)
       set_aside(goal_rule(goal, target: 2_400), -1_976)
-      line = presenter.period_rows.sole.lines.sole
+      line = presenter.category_blocks.sole.rows.sole
 
       expect(line).not_to be_rate
       expect(line.target).to eq(2_400)
@@ -842,7 +1073,7 @@ RSpec.describe HomePresenter do
     it "still draws a bar for a goal", :aggregate_failures do
       goal = savings_goal("Vacation", priority: 1)
       goal_rule(goal, target: 2_400)
-      line = presenter.period_rows.sole.lines.sole
+      line = presenter.category_blocks.sole.rows.sole
 
       expect(line).to be_dated
       expect(line).to be_bar
@@ -869,7 +1100,7 @@ RSpec.describe HomePresenter do
       bill(pet_care, amount: 600, due: Date.new(2026, 2, 14), item: lane(pet_care, "Vet"))
       spend(pet_care, 150)
 
-      lines = presenter.period_rows.sole.lines
+      lines = presenter.category_blocks.sole.rows
 
       expect(lines.map(&:shape)).to eq([:dated, :rate])
       expect(lines.first.built_up).to eq(600)
@@ -878,34 +1109,178 @@ RSpec.describe HomePresenter do
       expect(presenter.total_claims).to eq(850)
     end
 
-    # TROUBLE FIRST, THEN PRIORITY. Three categories in priority order 1-2-3 with the LAST in trouble:
-    # both halves are asserted at once, because either alone passes against a list that was simply
-    # reversed. PLANTED: $80 spent against a $50 rate is over by $30 (§3.1).
-    it "sorts trouble first and keeps priority order behind it" do
-      rate(holder("Rent", priority: 1), 400)
-      rate(holder("Groceries", priority: 2), 400)
-      dining = holder("Dining Out", priority: 3)
-      rate(dining, 50)
-      spend(dining, 80)
+    # ** "SORTS TROUBLE FIRST AND KEEPS PRIORITY ORDER BEHIND IT" IS DELETED WITH `#period_rows`
+    # (two-shapes §3). ** It asserted the section's own second ordering — a category in trouble
+    # jumped the queue — and there is no second ordering: the blocks ARE `#give_way_order` grouped
+    # back, which is the walk the trouble strip above them uses, so a category cannot rank one way in
+    # the strip and another in the section. Trouble is said by the header TINT now
+    # (`CategoryBlock#trouble?`, pinned below and on the screen in `this_period_spec`) rather than by
+    # moving the block, which is the honest signal: a reader scanning for red does not have to
+    # re-learn where a category went.
 
-      expect(presenter.period_rows.map { |row| row.category.name }).to eq(["Dining Out", "Rent", "Groceries"])
+    # ** THE ORDER, AND IT IS THE ONE SORT (§3). ** Three categories, and every term of
+    # `#give_way_key` decides something here:
+    #
+    #   Fun money   priority 3, one CHOICE rule   → type_rank 0, so it leads whatever its priority
+    #   Groceries   priority 2, one USAGE rule    → type_rank 1, and priority 2 gives way before 1
+    #   Rent        priority 1, one BILL rule     → type_rank 2, the last thing reached
+    #
+    # A BLOCK SITS WHERE ITS FIRST-GIVING-WAY RULE SITS, which is what the two-rule category proves:
+    # Groceries carries a choice rule as well, so its FIRST line in the walk is that choice — ranked
+    # between Fun money's (priority 3 gives way first) and its own usage rule — and the block
+    # therefore lands second, ahead of every usage rule in the app. Its own rows keep the walk's
+    # order too, choice above usage.
+    it "orders the blocks by the rule of each that gives way first", :aggregate_failures do
+      rate(holder("Rent", priority: 1), 400, type: :bill)
+      groceries = holder("Groceries", priority: 2)
+      rate(groceries, 400)
+      rate(groceries, 60, type: :choice, item: lane(groceries, "Treats"))
+      rate(holder("Fun money", priority: 3), 100, type: :choice)
+
+      blocks = presenter.category_blocks
+
+      expect(blocks.map(&:name)).to eq(["Fun money", "Groceries", "Rent"])
+      expect(blocks.second.rows.map(&:stripe_type)).to eq([:choice, :usage])
+      expect(blocks.second.rule_count).to eq(2)
     end
 
-    # A HOLDER WITH NO RULE STATES ITS SPENDING AND NOTHING ELSE, and one with neither is absent —
-    # `spent $0.00` under a name is a row that reports nothing.
-    it "keeps a rule-less holder only while it has spending", :aggregate_failures do
-      spend(holder("Car Repairs", priority: 1), 45)
-      holder("Someday Fund", priority: 2)
+    # WHAT THE HEADER SAYS: how many rules, and what they claim BETWEEN them. PLANTED — a $400 rate
+    # with $150 spent claims $250 (§3.1), and a $60 rate untouched claims $60, so the header reads
+    # $310 over two rules while neither row's own figure is that number.
+    it "adds a block's claims up across its rules", :aggregate_failures do
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      rate(groceries, 60, item: lane(groceries, "Treats"))
+      spend(groceries, 150)
 
-      rows = presenter.period_rows
+      block = presenter.category_blocks.sole
 
-      expect(rows.map { |row| row.category.name }).to eq(["Car Repairs"])
-      expect(rows.sole.lines).to be_empty
-      expect(rows.sole.spent).to eq(45)
+      expect(block.rule_count).to eq(2)
+      expect(block.claimed).to eq(310)
+      expect(block.claimed).to eq(presenter.total_claims)
+    end
+
+    # ── THE HEADER TINT (§3: "a category in trouble — any rule over, short or overdue") ───────────
+
+    # ** IT IS WIDER THAN THE TROUBLE STRIP'S OWN TRIGGERS, AND THIS IS THE ROW THAT SHOWS IT. ** A
+    # $120 bill due Feb 14 — inside the Feb 6–19 period — with $80 built up is short $40: nothing has
+    # gone wrong (the date has not passed, nothing was overspent), so §5's strip is silent, and the
+    # block tints because the money is not there for a day that is.
+    #
+    # PLANTED: the rule is born Feb 6 with the category funded the same day, so the walk visits ONE
+    # period; a −$40 adjustment inside it takes the catch-up's $120 down to $80.
+    it "tints a block whose rule is short with the day inside this period", :aggregate_failures do
+      income(2_000)
+      utilities = holder("Utilities", priority: 1, funded_since: Date.new(2026, 2, 6))
+      rule = bill(utilities, amount: 120, due: Date.new(2026, 2, 14), created_at: Time.zone.local(2026, 2, 6))
+      set_aside(rule, -40)
+
+      block = presenter.category_blocks.sole
+
+      expect(block.rows.sole.built_up).to eq(80)
+      expect(block.rows.sole).to be_short
+      expect(block).to be_trouble
+      expect(presenter.troubles).to be_empty
+    end
+
+    # THE OTHER DIRECTION, so the tint cannot be satisfied by a block that always claims trouble: the
+    # same bill with its money whole is ready, and nothing about it is red.
+    it "leaves a block alone when its rule has the money for the day", :aggregate_failures do
+      utilities = holder("Utilities", priority: 1, funded_since: Date.new(2026, 2, 6))
+      bill(utilities, amount: 120, due: Date.new(2026, 2, 14), created_at: Time.zone.local(2026, 2, 6))
+
+      block = presenter.category_blocks.sole
+
+      expect(block.rows.sole.built_up).to eq(120)
+      expect(block.rows.sole).not_to be_short
+      expect(block).not_to be_trouble
+    end
+
+    # A GOAL WITH YEARS TO RUN IS NOT SHORT, WHICH IS THE HALF OF `#short?` THE DATE CARRIES. Its
+    # money is missing by definition — that is what saving is — and a block tinted red for it would
+    # be red for as long as the goal exists.
+    #
+    # PLANTED, AND THE HORIZON IS DERIVED RATHER THAN WRITTEN: the category is funded today and the
+    # rule is born today, so §3.2's walk visits exactly ONE period; the due date is the close of the
+    # 26th biweekly period from today (`today + 14 × 26 − 1`), which is 26 boundaries away, so the
+    # catch-up share is `5,000 ÷ 26` = **$192.31** and that is the whole of what has accrued.
+    it "does not call a goal with years to run short", :aggregate_failures do
+      vacation = holder("Vacation", priority: 1, funded_since: today)
+      goal_rule(vacation, target: 5_000, due: today + (14 * 26) - 1, created_at: Time.zone.local(2026, 2, 6))
+
+      block = presenter.category_blocks.sole
+
+      expect(block.rows.sole.built_up).to eq(192.31)
+      expect(block.rows.sole).not_to be_short
+      expect(block).not_to be_trouble
+      expect(block.rows.sole.bar_state).to eq(:normal)
+    end
+
+    # ── THE ROW'S OWN VOCABULARY (§3), which `HomeHelper` renders and this pins as data ───────────
+
+    # THE NAME IS THE LANE: the item a rule names, or the catch-all it is. `#stripe_type` is the
+    # RULE's type and not its category's, which is the whole reason a block can carry two colours.
+    it "names a row by its lane and stripes it by its rule's type", :aggregate_failures do
+      groceries = holder("Groceries", priority: 1)
+      rate(groceries, 400)
+      rate(groceries, 60, type: :choice, item: lane(groceries, "Treats"))
+
+      rows = presenter.category_blocks.sole.rows
+
+      expect(rows.map(&:name)).to eq(["Treats", "Whole category"])
+      expect(rows.map(&:stripe_type)).to eq([:choice, :usage])
+    end
+
+    # THE FOUR BAR STATES, THREE OF THEM HERE AND `:short` ABOVE. A rate rule spent past its rate is
+    # over ($80 of $50), spent to the penny is full ($50 of $50), and under it is normal.
+    it "reads a bar state off the same figures the bar is drawn from", :aggregate_failures do
+      over = holder("Dining Out", priority: 1)
+      rate(over, 50)
+      spend(over, 80)
+      exact = holder("Coffee", priority: 2)
+      rate(exact, 50)
+      spend(exact, 50)
+      under = holder("Groceries", priority: 3)
+      rate(under, 50)
+
+      states = presenter.category_blocks.to_h { |block| [block.name, block.rows.sole.bar_state] }
+
+      expect(states).to eq("Dining Out" => :over, "Coffee" => :full, "Groceries" => :normal)
     end
   end
 
   describe "#unbudgeted_rows" do
+    # ** CARRIED FROM `#period_rows` AS "keeps a rule-less holder only while it has spending"
+    # (two-shapes §3). ** A holder that was funded and never given a rule used to be a BUDGETED row
+    # with an empty line list, printing `spent $45.00`; an unbudgeted category printed the same
+    # string from the other list. They are one fact — no rule claims these receipts — and this reader
+    # answers for both now, which is why the example moved rather than being deleted. Its figures are
+    # unchanged, and the second half (a holder with neither rule nor spending is absent) is the same
+    # `#silent?` rule the old row carried, stated as a filter on the spending instead.
+    it "keeps a rule-less holder only while it has spending", :aggregate_failures do
+      spend(holder("Car Repairs", priority: 1), 45)
+      holder("Someday Fund", priority: 2)
+
+      rows = presenter.unbudgeted_rows
+
+      expect(rows.map { |row| row.category.name }).to eq(["Car Repairs"])
+      expect(rows.sole.spent).to eq(45)
+      expect(presenter.category_blocks).to be_empty
+    end
+
+    # THE TWO POPULATIONS ON ONE SCREEN, IN ONE NAME ORDER — a funded holder with no rule and a
+    # category nobody ever funded. They reach this list down different queries (`ENTRY_CATEGORY_ID`
+    # answers for one and its NULL arm for the other), and a reader that sorted each half separately
+    # would print two alphabets one after the other.
+    it "sorts the funded and the never-funded into one alphabet", :aggregate_failures do
+      spend(holder("Car Repairs", priority: 1), 45)
+      never = create(:category, :expense, user: user, name: "Books")
+      create(:entry, item: create(:item, category: never), amount: 12, date: today)
+
+      expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Books", "Car Repairs"])
+      expect(presenter.unbudgeted_rows.map(&:spent)).to eq([12, 45])
+    end
+
     # ZERO-SPEND ROWS ARE ABSENT BY CONSTRUCTION — they never appear in the grouped sum — which is the
     # rule stated as a query rather than as a filter somebody could forget.
     it "lists only the unbudgeted categories with spending in this period", :aggregate_failures do
@@ -930,7 +1305,7 @@ RSpec.describe HomePresenter do
       spend(groceries, 30, on: Date.new(2026, 2, 9))
 
       expect(presenter.unbudgeted_rows).to be_empty
-      expect(presenter.period_rows.sole.lines.sole.spent).to eq(30)
+      expect(presenter.category_blocks.sole.rows.sole.spent).to eq(30)
     end
   end
 

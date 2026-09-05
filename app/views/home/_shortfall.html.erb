@@ -60,11 +60,15 @@
   <% end %>
 
   <%# THE PACE. Nil for a user who has declared no period — there is no "rest of the period" to
-      spread a shortfall over — and the strip simply says one sentence fewer there. %>
-  <% if pace = presenter.per_day_pace %>
-    <p class="mt-1 text-sm text-gray-700" data-shortfall-pace>
-      Spending <%= number_to_currency(pace) %> a day less for the rest of this period lands it at zero.
-    </p>
+      spread a shortfall over — and the strip simply says one sentence fewer there.
+
+      ** IT IS `HomeHelper#pace_words` NOW, AND THE RUNWAY SAYS THE SAME SENTENCE (two-shapes §3). **
+      The runway's pace line and this remedy are one sentence about one figure; written out in two
+      views they were two chances to round it differently or to reword one of them. `#pace_line`
+      answers WHICH arm — and this strip only ever renders while `free` is below zero, so it is
+      always the second one, at the same `#per_day_pace` figure it printed before. %>
+  <% if pace = presenter.pace_line %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-pace><%= pace_words(pace) %></p>
   <% end %>
 
   <%# WHO GIVES WAY, AND IN THE ORDER THE WALK ACTUALLY USES (rules-own-the-budget spec §3;

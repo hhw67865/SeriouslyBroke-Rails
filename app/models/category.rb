@@ -397,8 +397,10 @@ class Category < ApplicationRecord
   # category with none claims nothing however much has been spent against it, and §3.4's own
   # sentence for that shape is `spent $X` with no bar and no envelope.
   #
-  # IT WAS TWO PREDICATES AND THEY DISAGREED ON A REACHABLE SHAPE. `HomePresenter::PeriodRow
-  # #budgeted?` asked `lines.any?` — one line per rule — while `EntryImpactPresenter#unbudgeted?`
+  # IT WAS TWO PREDICATES AND THEY DISAGREED ON A REACHABLE SHAPE. Home's own row (then
+  # `HomePresenter::PeriodRow#budgeted?`, deleted with the category blocks — two-shapes §3, and
+  # `HomePresenter#unruled_holders` is what asks this today) asked `lines.any?` — one line per rule —
+  # while `EntryImpactPresenter#unbudgeted?`
   # asked `holding.nil?`, and `#holding` is the category whenever `#counts_spending_on?`. Under the
   # pool layer those agreed, because a funded category was one money had been moved INTO; under
   # computed claims a FUNDED category with no rules is an ordinary shape (the Budget page's rate

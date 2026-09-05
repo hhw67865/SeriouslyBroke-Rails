@@ -475,13 +475,13 @@ RSpec.describe "Budget page adjustments", type: :system do
   # A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE — Chrome refuses to make a
   # headless window narrower than 500px, so every window-based spelling of this is a 500px test
   # wearing a 375 label. `Emulation.setDeviceMetricsOverride` sets the LAYOUT viewport, which is
-  # what CSS media queries read. (See `home/hero_spec.rb`, where this idiom and the reason for it
+  # what CSS media queries read. (See `home/money_spec.rb`, where this idiom and the reason for it
   # were measured.)
   #
   # THE PANEL IS THE WIDEST NEW THING ON THIS PAGE: two fields, two buttons and a skip whose label
   # carries a money figure. `flex-wrap` is what keeps it inside the card, and the assertion is
   # Selenium's own geometry rather than a JS `scrollWidth` — a trailing `evaluate_script` is what
-  # `home/hero_spec.rb` measured as the cause of its own InvalidSessionIdError.
+  # `home/money_spec.rb` measured as the cause of its own InvalidSessionIdError.
   describe "on a narrow screen" do
     before do
       page.driver.browser.execute_cdp(

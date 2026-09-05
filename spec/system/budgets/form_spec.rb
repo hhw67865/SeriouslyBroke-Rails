@@ -545,7 +545,7 @@ RSpec.describe "Budgets Forms", type: :system do
   # `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500`, measured — so every
   # window-based spelling of this test is really a 500px test wearing a 375 label.
   # `Emulation.setDeviceMetricsOverride` sets the LAYOUT viewport, which is what CSS media queries
-  # read. The idiom, and the measurements behind it, are in `spec/system/home/hero_spec.rb`.
+  # read. The idiom, and the measurements behind it, are in `spec/system/home/money_spec.rb` (`hero_spec.rb` before the money column renamed it).
   #
   # SELENIUM'S OWN GEOMETRY AND NO TRAILING `evaluate_script`: an example whose last statement runs
   # JS leaves the session in a state Capybara's teardown does not survive here.

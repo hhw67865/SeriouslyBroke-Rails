@@ -75,6 +75,25 @@ RSpec.describe "Home Accounts", type: :system do
     expect(line).to have_no_content("$77,455.13")
   end
 
+  # ** THE NAMES, AS CHIPS ON THE LINE (two-shapes §3's "below"). ** The line answered how MUCH is
+  # elsewhere and never WHERE, so a user with two accounts had to open the tray to learn which. The
+  # money column's third tile names them too — same accounts, own hook, because one hook on both
+  # would make every unscoped find ambiguous — and this pins that the two lists agree.
+  it "names the accounts on the line as well as totalling them", :aggregate_failures do
+    deposit(300_000)
+    other_account("Ally", 222_000)
+    other_account("Vanguard", 544.87)
+
+    visit root_path
+
+    expect(line).to have_css("[data-line-chip='Ally']")
+    expect(line).to have_css("[data-line-chip='Vanguard']")
+    expect(page).to have_css("[data-other-accounts] [data-account-chip='Ally']")
+    # MAIN IS NOT A CHIP, for the reason it is not in the figure: its balance is the money column's
+    # own "In checking", and naming it here would answer one question twice.
+    expect(line).to have_no_css("[data-line-chip='Checking']")
+  end
+
   # The singular, because "1 other accounts" is the kind of thing a reader stops trusting a screen
   # over.
   it "says one account rather than 1 accounts" do
@@ -222,7 +241,8 @@ RSpec.describe "Home Accounts", type: :system do
 
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
   #
-  # A TRUE 375px LAYOUT VIEWPORT via CDP — `hero_spec.rb`'s mechanism, copied deliberately: Chrome
+  # A TRUE 375px LAYOUT VIEWPORT via CDP — `money_spec.rb`'s mechanism (`hero_spec.rb` until this
+  # task renamed it), copied deliberately: Chrome
   # refuses a headless window narrower than 500px, so `resize_to(375, …)` is really a 500px test.
   describe "on a narrow screen" do
     before do

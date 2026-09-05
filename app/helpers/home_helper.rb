@@ -110,6 +110,128 @@ module HomeHelper
     "overdue · was #{line.next_due_on.strftime("%b %-d")}"
   end
 
+  # ── ** THE BLOCK ROW'S THREE PHRASES (two-shapes spec §3), ONE SPELLING EACH. ** ───────────────
+  #
+  # Home's category blocks say a rule in four parts: a stripe (its type), a name (its lane), WHAT
+  # SHAPE it is, WHAT IT HAS, and WHEN. The last three are these, and they are here rather than in
+  # `home/_this_period.html.erb` because Task 3's Budget rows and Task 4's rule-form preview say the
+  # same three about the same rules — a second spelling is how one screen comes to describe a rule
+  # differently from the screen a click away, which is the defect `#claim_trouble_label`'s own header
+  # records having already happened once.
+  #
+  # ** WHAT THEY DID NOT REPLACE, AND WHY THE BRIEF'S "NAME DELETIONS" ARE A PUSHBACK. ** The brief
+  # has `#claim_figure` and `#claim_schedule` folding into these two and their names deleted. They
+  # cannot be deleted here: both are read by `budget_page/_rule_row.html.erb` and by
+  # `categories/_partials/show/_holdings_card.html.erb`, and BOTH of those screens are out of this
+  # task's scope — the Budget page is Task 3's and the categories page is out of scope for the whole
+  # plan (spec §8: "they keep their current shape"). Deleting the names would have meant either
+  # breaking two screens or changing their copy without a ruling, since the sentences genuinely
+  # differ: this section says `$450.00 of $1,200.00` where those rows say `$450.00 built up of
+  # $1,200.00`. So the two old methods stay, unchanged, with two callers each, and the fold happens
+  # in Task 3 when the rows that read them are rebuilt.
+
+  # ** THE THREE RULE-TYPE COLOURS, ONE TABLE (two-shapes spec §3). ** A stripe fill and a text
+  # colour per type, `fetch`ed for `Budget::TYPE_RANK`'s own reason: a fourth type added to the enum
+  # without a colour is a row rendering with no stripe at all, which is invisible until someone
+  # notices a blank column. The two accents are DARKER as text than as fills and the measurements are
+  # in `custom.css` beside the tokens — the fills are decorative and clear 3:1, the words are text
+  # and have to clear 4.5:1.
+  STRIPE_FILLS = { bill: "bg-brand-darker", usage: "bg-dusty-teal", choice: "bg-terracotta" }.freeze
+
+  TYPE_TEXT = {
+    bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
+  }.freeze
+
+  def stripe_fill(line) = STRIPE_FILLS.fetch(line.stripe_type)
+
+  def type_text_class(line) = TYPE_TEXT.fetch(line.stripe_type)
+
+  # WHAT THE BAR SAYS IN COLOUR (§3: "green full, red over/short"). The state is
+  # `ClaimLine#bar_state` — one classification, on the row — and this is only its palette, so a
+  # screen cannot decide a row is over while another decides it is full.
+  BAR_FILLS = {
+    full: "bg-status-success", over: "bg-status-danger", short: "bg-status-danger", normal: "bg-brand-dark"
+  }.freeze
+
+  def bar_fill(line) = BAR_FILLS.fetch(line.bar_state)
+
+  # `usage · a period` / `bill · every 12 months` / `choice · $5,000 by Jun 1, 2027` /
+  # `bill · once, Dec 1`.
+  #
+  # THE CLASSIFICATION IS `Budget#cadence`'s, THE WORDS ARE THIS SCREEN'S — the split every rule-shape
+  # reader in this app keeps (`#pool_rule_label` names a rule, `BudgetPageHelper#budget_rule_basis`
+  # says what an amount is per). A fifth cascade over `basis`/`interval_months`/`anchor_date` here
+  # would be a fifth chance to classify one rule two ways.
+  def shape_words(line) = "#{line.stripe_type} · #{shape_schedule_words(line)}"
+
+  # ** A ONE-OFF SPLITS ON ITS TYPE, AND THAT IS NOT `Budget.saving_toward_a_date` (LOW-7's clause
+  # asked of a different question). ** That scope answers "which ONE rule is this category's savings
+  # row" and needs `item_id IS NULL` to stay single-valued per category; this asks "what does this
+  # rule say about itself", where the lane it names changes nothing. What is left of the scope once
+  # the `:one_off` branch has already established the anchor and the absent interval is the type
+  # alone: a bill is a thing to PAY on a day ("once, Dec 1"), and anything else with a day is a
+  # figure being SAVED toward ("$5,000 by Jun 1, 2027").
+  #
+  # THE GOAL'S DATE CARRIES ITS YEAR AND THE BILL'S DOES NOT, deliberately: a goal's horizon is
+  # routinely years out and `Jun 1` alone would read as this June, while a one-time bill inside the
+  # next few months is the shape "Dec 1" is unambiguous for.
+  def shape_schedule_words(line)
+    case line.rule.cadence
+    when :per_period then "a period"
+    when :monthly then "every month"
+    when :every_n then "every #{line.rule.interval_months} months"
+    else
+      if line.rule.bill?
+        "once, #{line.next_due_on.strftime("%b %-d")}"
+      else
+        "#{number_to_currency(line.target)} by #{line.next_due_on.strftime("%b %-d, %Y")}"
+      end
+    end
+  end
+
+  # `$310.00 of $400.00` — spending against this period's rate for a rate rule, the running total
+  # against the target for a dated one. ONE sentence for both shapes, because `ClaimLine#filled` and
+  # `#denominator` are the pair that makes them one: the caller must not choose the noun, and a row
+  # that printed "spent" over a target's running total would be the money screen's oldest lie.
+  def figure_words(line) = "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
+
+  # `resets Oct 1` / `Sep 17 · ready` / `Apr 2 · +$41.67` / `Sep 20 · $40.00 short` /
+  # `overdue · was Aug 15`.
+  #
+  # THE ORDER OF THE ARMS IS THE ORDER OF THE NEWS. A date already gone with the money missing comes
+  # first whatever else is true of the row (and keeps `#claim_trouble_label`'s exact wording, so the
+  # strip above and the row below say one string about one rule); then the money missing on a day
+  # that is HERE (`ClaimLine#short?`); then a rule that has arrived; then one still accruing.
+  #
+  # THE LAST ARM DROPS TO THE BARE DATE WHERE THE SHARE IS ZERO. A one-time bill whose money has
+  # already been spent asks for nothing more (`ClaimCalculator#planned_for`'s settled gate), so
+  # `+$0.00` would be a rule advertising a contribution it is not making.
+  def when_words(line)
+    return "overdue · was #{line.next_due_on.strftime("%b %-d")}" if line.overdue?
+    return line.resets_on && "resets #{line.resets_on.strftime("%b %-d")}" if line.rate?
+
+    [line.next_due_on.strftime("%b %-d"), dated_when_clause(line)].compact.join(" · ")
+  end
+
+  def dated_when_clause(line)
+    return "#{number_to_currency(line.fund_gap)} short" if line.short?
+    return "ready" unless line.fund_short?
+
+    line.per_period.positive? ? "+#{number_to_currency(line.per_period)}" : nil
+  end
+
+  # ** THE PACE, SAID ONCE FOR BOTH PANELS (§3 and §4). ** The runway's pace line and the shortfall
+  # strip's remedy are the same sentence about the same figure — the strip only ever renders the
+  # second arm, because it only renders while `free` is below zero — and they were written twice in
+  # two views for one wave, which is how two panels on one screen come to name different amounts.
+  # `HomePresenter::Pace` decides which arm; this says it.
+  def pace_words(pace)
+    return nil if pace.nil?
+    return "#{number_to_currency(pace.amount)} a day is fine for the rest of the period." if pace.fine?
+
+    "Spending #{number_to_currency(pace.amount)} a day less for the rest of this period lands it at zero."
+  end
+
   # What an expanded row calls one of a pool's rules.
   #
   # An item names itself. An item-less rule used to render the literal word "Rule", which on

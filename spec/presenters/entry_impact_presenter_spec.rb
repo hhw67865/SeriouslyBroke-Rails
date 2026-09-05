@@ -661,11 +661,12 @@ RSpec.describe EntryImpactPresenter do
       expect(impact.bar?).to be(false)
     end
 
-    # ** ONE SPELLING, SHARED WITH HOME. ** `Category#budgeted?` is what
-    # `HomePresenter::PeriodRow#budgeted?` asks too, so the two screens cannot answer differently
-    # about one category. Both directions on ONE category, so the example is about the rule and
-    # nothing else.
-    it "asks the same predicate Home's period rows ask", :aggregate_failures do
+    # ** ONE SPELLING, SHARED WITH HOME. ** `Category#budgeted?` is what `HomePresenter` asks too —
+    # `#unruled_holders`, which is the half of Home's section that gets a `spent $X` line instead of
+    # a block of rule rows (two-shapes §3; it was `PeriodRow#budgeted?` until the blocks replaced the
+    # per-category row). So the two screens cannot answer differently about one category. Both
+    # directions on ONE category, so the example is about the rule and nothing else.
+    it "asks the same predicate Home's rule-less rows ask", :aggregate_failures do
       expect(groceries.budgeted?).to be(false)
       expect(present(groceries, amount: "55").unbudgeted?).to be(true)
 

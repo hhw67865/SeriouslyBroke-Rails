@@ -1,0 +1,128 @@
+<%# THE MONEY COLUMN — Home's first two answers as three stat tiles (two-shapes spec §3).
+    Local: `presenter` (HomePresenter). It replaces `home/_hero.html.erb`.
+
+    ** WHAT MOVED AND WHAT DID NOT. ** The card's THREE FIGURES and both of its SENTENCES are §2's,
+    unchanged and pinned by the examples `hero_spec.rb` carried into `money_spec.rb`: in checking,
+    free = pot − Σ claims, the claimed/parked subline, and the overdraft line. What changed is the
+    shape — three tiles rather than a definition list — and what LEFT is the period bar: a period is
+    the runway's subject now (`_runway.html.erb`), and drawing it twice on one screen was how the
+    "7 days left" sentence came to be printed by two panels that could disagree.
+
+    ** THE BAR IS THE ONE NEW THING, AND IT IS THE SUBLINE AS A PICTURE. ** Two segments of the pot,
+    free and claimed, off ONE figure (`#claimed_percent`) so they cannot add up to something that is
+    not the whole. It is drawn on the free tile because free is the number it explains.
+
+    THE WORDS ARE THE USER'S (answers-first §3): in checking, free, claimed, other accounts. "Set
+    aside", "spoken for", "available", "goal" and "fund" are not on this screen — nothing is moved
+    anywhere and nothing holds money; a rule CLAIMS money where it sits. %>
+<div class="bg-white border border-gray-200 rounded p-4 sm:p-6 space-y-4" data-money>
+  <%# TILE 1 — THE NUMBER THE BANK APP SHOWS. `#in_checking` is `AccountLedger#pot`: main's balance,
+      not the user's money everywhere, because that is the figure they can check against their phone.
+      RED BELOW ZERO — a physical overdraft is money that has already gone, which no purpose-side
+      figure on this screen can say. %>
+  <div class="rounded border border-gray-200 px-4 py-3">
+    <p class="text-xs font-medium uppercase tracking-wide text-gray-500">In checking</p>
+    <p class="mt-1 text-2xl font-semibold tabular-nums <%= presenter.in_checking.negative? ? "text-status-danger" : "text-gray-900" %>"
+       data-in-checking>
+      <%= number_to_currency(presenter.in_checking) %>
+    </p>
+    <%# THE FACT ALONE, AND NO CONSEQUENCE (fix round 1 — MED-1). This ended "— nothing is free until
+        money comes in", which is a lie for the user whose money is simply in the wrong account.
+        Which of the two negative-pot states it is belongs to the subline, which is the one place on
+        this card that knows. %>
+    <% if presenter.in_checking.negative? %>
+      <p class="mt-1 text-sm text-status-danger" data-checking-overdrawn>
+        Your checking account is already spent past zero.
+      </p>
+    <% end %>
+  </div>
+
+  <%# TILE 2 — THE ONE DERIVED NUMBER: `pot − Σ claims` (§2). The sage tile, because it is the answer
+      the user came for and the only figure on this screen their bank cannot tell them. Never
+      clamped: a negative free renders negative, in red (§4 — it is a signal, not a refusal). %>
+  <div class="rounded border border-brand bg-brand-light px-4 py-3">
+    <p class="text-xs font-medium uppercase tracking-wide text-brand-dark">Free to spend</p>
+    <p class="mt-1 text-3xl font-semibold tabular-nums <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+       data-free>
+      <%= number_to_currency(presenter.free_to_spend) %>
+    </p>
+
+    <%# THE TWO SEGMENTS, of checking: what is free and what the rules claim. Drawn only where the
+        pot is a quantity to be a fraction of — an empty or overdrawn account is not, and a bar there
+        would have to invent a denominator (`#claimed_percent` is nil, and this renders nothing).
+
+        THE CLAIMED SEGMENT IS THE ONE THAT CARRIES THE HOOK AND THE WIDTH, deliberately: at 0% a fill
+        has no width and Capybara does not consider it visible, so the percent rides on the track —
+        `_this_period`'s own rule, and the app's other bars draw the same way. %>
+    <% if claimed = presenter.claimed_percent %>
+      <div class="mt-3 h-2 bg-white rounded-full overflow-hidden"
+           role="progressbar"
+           aria-valuenow="<%= claimed %>"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-label="<%= number_to_currency(presenter.total_claims) %> of checking claimed by your rules"
+           data-claimed-bar="<%= claimed %>">
+        <div class="h-2 <%= presenter.short? ? "bg-status-danger" : "bg-brand-darker" %>"
+             style="width: <%= claimed %>%;"
+             data-claimed-fill></div>
+      </div>
+    <% end %>
+
+    <%# ** THE SUBLINE'S TWO ARMS (§2), VERBATIM FROM TASK 1. ** Each half is gated on the predicate
+        that ESTABLISHES it rather than inferred from the signs of two figures:
+
+          claimed, money elsewhere   → "Your rules claim $X more…" + "Move some in…"
+          claimed, one account       → "Your rules claim $X more…"
+          nothing claimed, elsewhere → "Move some in…"   (the pot is under; the money exists)
+          nothing claimed, one acct  → "You have spent past what you had."
+
+        "You have spent past what you had" is therefore unreachable while anything is claimed, which
+        is the same split `_shortfall.html.erb`'s headline makes. %>
+    <p class="mt-2 text-sm <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
+       data-free-subline>
+      <% if presenter.free_to_spend.negative? %>
+        <% if presenter.anything_claimed? %>
+          Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds.
+        <% end %>
+        <% if presenter.money_parked_elsewhere? %>
+          Move some in from your other accounts.
+        <% elsif !presenter.anything_claimed? %>
+          You have spent past what you had.
+        <% end %>
+      <% elsif presenter.money_parked_elsewhere? %>
+        <%# ONE SENTENCE, NOT TWO: joined with ", and" so the second fact reads as part of the first
+            rather than as an afterthought. %>
+        <%= number_to_currency(presenter.total_claims) %> of checking is claimed by your rules, and
+        <%= number_to_currency(presenter.other_accounts_total) %> sits in
+        <%= pluralize(presenter.other_accounts.count, "other account") %>.
+      <% else %>
+        <%= number_to_currency(presenter.total_claims) %> of checking is claimed by your rules.
+      <% end %>
+    </p>
+  </div>
+
+  <%# TILE 3 — MONEY THAT IS NOT IN CHECKING (§2): shown, never subtracted from or added to anything.
+      A SMALLER FIGURE THAN THE TWO ABOVE, because it is not an answer to "what can I spend" — it is
+      the fact that closes the shortfall arm's instruction, and the chips say which accounts hold it.
+
+      ABSENT WHERE THERE IS NOTHING TO SAY. `#other_accounts` empty is a user with one account, and a
+      tile reading "$0.00 in 0 other accounts" would be the app inventing an absence — the same
+      refusal `_accounts_line` makes about its own summary. %>
+  <% if presenter.other_accounts.any? %>
+    <div class="rounded border border-gray-200 px-4 py-3" data-other-accounts>
+      <p class="text-xs font-medium uppercase tracking-wide text-gray-500">
+        In <%= pluralize(presenter.other_accounts.count, "other account") %>
+      </p>
+      <p class="mt-1 text-lg font-semibold tabular-nums text-gray-900" data-other-accounts-total>
+        <%= number_to_currency(presenter.other_accounts_total) %>
+      </p>
+      <ul class="mt-2 flex flex-wrap gap-1.5">
+        <% presenter.other_accounts.each do |account| %>
+          <li class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700" data-account-chip="<%= account.name %>">
+            <%= account.name %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+</div>
