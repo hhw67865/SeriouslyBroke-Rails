@@ -1,0 +1,105 @@
+<%# ** ONE CATEGORY IN THE LIST (two-shapes spec §4). ** Locals: `row` (CategoryRow), `reorderable`
+    (the draggable rows, whole, because every ▲▼ carries the entire order) and `presenter`.
+
+      ▲▼  Food & Grocery   2 rules  ●●   $1,409.00 claimed   [2 suggestions]  ⌄
+
+    ** THE HANDLE IS ON THE ROWS THE ENDPOINT ACCEPTS AND ONLY THOSE. ** `Category.apply_fill_order`
+    refuses any list but `in_fill_order.with_a_rule`, so a rule-less category — or one that is not
+    holding money yet — draws no arrows: offering them would be a control whose every use is
+    refused, with a message about the order this page had just rendered. `CategoryRow#reorderable?`
+    is the one reader.
+
+    ** `priority N` STAYS, AND IT IS NOT DECORATION. ** This is the screen where priority is SET;
+    the number is what the arrows write, what the give-way sentence on Home is about and what the
+    category form's own field says. Hidden below `sm`, where the row keeps handle · name · dots ·
+    claimed and nothing else (§4). %>
+<section class="bg-white border border-gray-200 rounded"
+         data-category-row="<%= row.name %>"
+         data-category-id="<%= row.category.id %>"
+         data-app--budget-page--category-list-target="row"
+         <% if row.reorderable? %>
+           data-app--budget-page--reorder-target="row"
+           draggable="true"
+           data-action="dragstart->app--budget-page--reorder#start
+                        dragend->app--budget-page--reorder#finish"
+         <% end %>>
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 px-4 py-3">
+    <div class="flex items-center gap-3 min-w-0">
+      <% if row.reorderable? %>
+        <%= render "reorder_controls", group: row, groups: reorderable %>
+      <% end %>
+
+      <h3 class="text-sm font-semibold text-gray-900 truncate"><%= row.name %></h3>
+
+      <% if row.ruled? %>
+        <span class="text-xs text-gray-500 shrink-0"><%= pluralize(row.rule_count, "rule") %></span>
+
+        <%# ONE DOT PER RULE, IN ITS TYPE'S COLOUR — `HomeHelper::STRIPE_FILLS`, the same table
+            Home's stripes and the tiles' bands read, so a bill is the same colour on every screen.
+            `aria-hidden`, because the row already says how many rules there are and the open panel
+            says what kind each one is; a screen reader meeting three unlabelled dots learns
+            nothing. %>
+        <span class="flex items-center gap-1 shrink-0" aria-hidden="true" data-type-dots="<%= row.type_dots.join(" ") %>">
+          <% row.type_dots.each do |type| %>
+            <span class="h-1.5 w-1.5 rounded-full <%= type_fill(type) %>" data-type-dot="<%= type %>"></span>
+          <% end %>
+        </span>
+      <% end %>
+
+      <% if row.reorderable? %>
+        <span class="hidden sm:inline text-xs text-gray-500 shrink-0">priority <%= row.priority %></span>
+      <% end %>
+    </div>
+
+    <div class="flex items-center gap-3 shrink-0">
+      <%# WHAT THE CATEGORY CLAIMS, or — where no rule claims anything — what has been spent here
+          over the suggestion engine's own window. The two are different facts and they are
+          deliberately in different registers: a claim is money spoken for, and a rule-less
+          category's spending is money already gone with nothing speaking for it. %>
+      <% if row.ruled? %>
+        <span class="text-sm tabular-nums <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>"
+              data-category-claim>
+          <%= number_to_currency(row.claimed) %> claimed
+        </span>
+      <% else %>
+        <span class="text-sm text-gray-400" data-category-spent>
+          <%= spent_recently_words(row.spent_recently) %>
+        </span>
+      <% end %>
+
+      <%# THE BADGE, AMBER, ONLY WHEN THE ENGINE HAS SOMETHING FOR THIS CATEGORY. Not a count of
+          everything the panel found — `SuggestionEngine#by_category` partitions the list, so this
+          number and the rows inside the panel are one grouping. %>
+      <% if row.suggestions? %>
+        <span class="shrink-0 rounded bg-status-warning-light px-1.5 py-0.5 text-xs text-status-warning"
+              data-suggestion-badge="<%= row.suggestion_count %>">
+          <%= pluralize(row.suggestion_count, "suggestion") %>
+        </span>
+      <% end %>
+
+      <%# THE CHEVRON IS A LINK, and that is the whole no-JavaScript mechanism: it carries
+          `?open=<id>` on a closed row and bare `/budget` on the open one (see
+          `BudgetPageHelper#category_toggle_path`). `category_list_controller` intercepts it and
+          flips the panels in place. `draggable="false"` so a click on it is a click and not the
+          start of a drag on the card around it. %>
+      <%= link_to category_toggle_path(row),
+                  class: "shrink-0 inline-flex h-8 w-8 items-center justify-center rounded text-gray-500 " \
+                         "hover:bg-gray-100 hover:text-gray-900",
+                  draggable: "false",
+                  aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
+                  data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>
+        <span class="text-xs" aria-hidden="true"><%= row.open? ? "&#9652;".html_safe : "&#9662;".html_safe %></span>
+      <% end %>
+    </div>
+  </div>
+
+  <%# ** EVERY PANEL IS RENDERED AND THE CLOSED ONES ARE `hidden`. ** §4 asks for expand/collapse
+      with no round trip, which means the content has to be in the DOM already — and the cost of
+      that is Ruby and markup, never a query: every figure inside it comes off the page's ONE
+      `ClaimLedger` and its ONE `SuggestionEngine`, both of which have already answered for the row
+      above. `hidden` rather than a class, so Capybara and a screen reader agree with the eye about
+      what is on the page. %>
+  <div class="border-t border-gray-200" data-app--budget-page--category-list-target="panel" <%= "hidden" unless row.open? %>>
+    <%= render "category_open", row: row, presenter: presenter %>
+  </div>
+</section>

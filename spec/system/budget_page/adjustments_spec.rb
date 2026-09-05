@@ -50,6 +50,14 @@ RSpec.describe "Budget page adjustments", type: :system do
 
   def rule_row(name) = find("[data-rule='#{name}']")
 
+  # ** ONE CATEGORY IS OPEN AT A TIME (two-shapes spec §4), SO A RULE'S PANEL HAS TO BE REACHED
+  # THROUGH ITS CATEGORY. ** Every closed panel is rendered and `hidden`, which is exactly what
+  # Capybara refuses to see — so a spec about a rule opens its category first, by the same `?open=`
+  # parameter the chevron writes and the adjustment redirects carry back.
+  def open_category(name)
+    visit budget_page_path(open: user.categories.find_by!(name: name).id)
+  end
+
   # OPEN THE PANEL FIRST. `<details>` keeps its contents out of the accessibility tree while it is
   # closed, so Capybara cannot see a field inside one — which is the affordance working.
   def open_adjust(name)
@@ -78,12 +86,12 @@ RSpec.describe "Budget page adjustments", type: :system do
   describe "a fund that accrues toward a target" do
     before do
       fund(holder("Vacation"), 150, target: 1_200)
-      visit budget_page_path
+      open_category("Vacation")
     end
 
     it "says what it has built up and what is going in this period", :aggregate_failures do
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$150.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$150.00 of $1,200.00")
       end
       open_adjust("Vacation")
       expect(find("[data-adjust='Vacation'] [data-adjust-planned]")).to have_content("$150.00 going in this period")
@@ -99,7 +107,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       expect(page).to have_content("Skipped this period for Vacation")
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$0.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $1,200.00")
         expect(page).to have_css("[data-change-amount]", text: "-$150.00")
         expect(page).to have_content(Date.current.strftime("%b %-d"))
       end
@@ -129,13 +137,13 @@ RSpec.describe "Budget page adjustments", type: :system do
     # $400.00 built up before, $0.00 after, and one −$400.00 delta to explain it.
     it "skips a period that has already been topped up by taking back the whole accrual", :aggregate_failures do
       change_by("Vacation", 250, "Set aside")
-      expect(page).to have_css("[data-rule-figure]", text: "$400.00 built up of $1,200.00")
+      expect(page).to have_css("[data-rule-figure]", text: "$400.00 of $1,200.00")
 
       open_adjust("Vacation")
       find("[data-adjust='Vacation'] [data-adjust-skip]").click
 
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$0.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $1,200.00")
         expect(page).to have_css("[data-change-amount]", text: "-$400.00")
       end
     end
@@ -147,7 +155,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       expect(page).to have_content("Set aside $250.00 for Vacation")
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$400.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$400.00 of $1,200.00")
       end
     end
 
@@ -159,7 +167,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
       expect(page).to have_content("Took back $50.00 from Vacation")
       within(rule_row("Vacation")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$100.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$100.00 of $1,200.00")
       end
     end
   end
@@ -169,7 +177,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   describe "a rate rule's envelope" do
     before do
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      open_category("Groceries")
     end
 
     # A RATE RULE SAYS SPENT-OF-RATE, NEVER BUILT UP (§3.4) — use-it-or-lose-it means nothing is ever
@@ -237,24 +245,31 @@ RSpec.describe "Budget page adjustments", type: :system do
     before do
       fund(holder("Vacation", priority: 1), 150, target: 1_200, born: 1.month.ago)
       rate(holder("Groceries", priority: 2), 400)
-      visit budget_page_path
     end
 
     def date_field(name) = find("[data-adjust='#{name}'] input[name='date']")
 
+    # THE THREE READINGS OF ONE SPAN, per shape: the hint's words, and the field's own bounds. Pulled
+    # out of the example so it stays inside the length its neighbours keep.
+    def expect_span(name, hint:, min:)
+      expect(find("[data-adjust='#{name}'] [data-adjust-hint]")).to have_content(hint)
+      expect(date_field(name)[:min]).to eq(min.to_s)
+      expect(date_field(name)[:max]).to eq(Date.current.to_s)
+    end
+
     it "words the hint per shape and bounds the date field by the same span", :aggregate_failures do
       opened_on = 1.month.ago.to_date.beginning_of_month
 
+      # ONE CATEGORY AT A TIME, so the two halves of this example are two visits — which is the
+      # affordance working rather than a cost: the page shows one category's rules and the spec has
+      # to ask for each.
+      open_category("Vacation")
       open_adjust("Vacation")
-      expect(find("[data-adjust='Vacation'] [data-adjust-hint]"))
-        .to have_content("Counts from #{opened_on.strftime("%b %-d")} to today")
-      expect(date_field("Vacation")[:min]).to eq(opened_on.to_s)
-      expect(date_field("Vacation")[:max]).to eq(Date.current.to_s)
+      expect_span("Vacation", hint: "Counts from #{opened_on.strftime("%b %-d")} to today", min: opened_on)
 
+      open_category("Groceries")
       open_adjust("Groceries")
-      expect(find("[data-adjust='Groceries'] [data-adjust-hint]")).to have_content("This period only, up to today")
-      expect(date_field("Groceries")[:min]).to eq(Date.current.beginning_of_month.to_s)
-      expect(date_field("Groceries")[:max]).to eq(Date.current.to_s)
+      expect_span("Groceries", hint: "This period only, up to today", min: Date.current.beginning_of_month)
     end
   end
 
@@ -266,7 +281,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   describe "changing how long a period is" do
     before do
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
       select "Biweekly", from: "How long is a period?"
       click_button "Save period and income"
     end
@@ -309,7 +324,14 @@ RSpec.describe "Budget page adjustments", type: :system do
       expect(page).to have_content("your per-period amounts were scaled to it")
       expect(user.reload.period_cadence).to eq("biweekly")
       expect(user.all_budgets.sole.amount).to eq(BigDecimal("184.62"))
-      within(rule_row("Groceries")) { expect(page).to have_content("$184.62 / period") }
+      # ** THE ROW READS THE CLAIM AND NOT THE STICKER (two-shapes spec §4). ** It asserted
+      # `$184.62 / period` — `BudgetPageHelper#budget_rule_amount`, which is deleted with the group
+      # card: on a dated rule it printed the target a second time inside the row that was already
+      # showing it. What the row prints is `HomeHelper#figure_words`, and on an untouched
+      # per-period rule the denominator IS the scaled amount, which is the same claim about the
+      # same write. The redirect carries no `open`, so the panel is asked for again.
+      open_category("Groceries")
+      within(rule_row("Groceries")) { expect(page).to have_content("$0.00 of $184.62") }
     end
 
     it "keeps the amounts when that is the answer", :aggregate_failures do
@@ -318,7 +340,8 @@ RSpec.describe "Budget page adjustments", type: :system do
       expect(page).to have_content("Your period and income are saved")
       expect(user.reload.period_cadence).to eq("biweekly")
       expect(user.all_budgets.sole.amount).to eq(400)
-      within(rule_row("Groceries")) { expect(page).to have_content("$400.00 / period") }
+      open_category("Groceries")
+      within(rule_row("Groceries")) { expect(page).to have_content("$0.00 of $400.00") }
     end
   end
 
@@ -331,7 +354,7 @@ RSpec.describe "Budget page adjustments", type: :system do
     it "offers only the rule whose amount is denominated in periods", :aggregate_failures do
       rate(holder("Groceries", priority: 1), 400)
       create(:budget, :rate, category: holder("Phone", priority: 2), amount: 260)
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
 
       select "Biweekly", from: "How long is a period?"
       click_button "Save period and income"
@@ -366,7 +389,7 @@ RSpec.describe "Budget page adjustments", type: :system do
         interval_months: 6,
         anchor_date: Date.current + 3.months
       )
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
 
       select "Biweekly", from: "How long is a period?"
       click_button "Save period and income"
@@ -395,7 +418,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   describe "saving the declaration without touching the period" do
     it "asks nothing and saves the income", :aggregate_failures do
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
 
       fill_in "You typically bring in", with: "5000"
       click_button "Save period and income"
@@ -415,7 +438,7 @@ RSpec.describe "Budget page adjustments", type: :system do
     it "saves it without asking, and touches no amount", :aggregate_failures do
       user.update!(period_cadence: nil, period_anchor_date: nil)
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
 
       select "Biweekly", from: "How long is a period?"
       fill_in "A day a period starts", with: Date.current.strftime("%Y-%m-%d")
@@ -434,7 +457,7 @@ RSpec.describe "Budget page adjustments", type: :system do
   describe "a cadence change the declaration itself refuses" do
     it "shows the refusal rather than the offer", :aggregate_failures do
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
 
       select "Biweekly", from: "How long is a period?"
       fill_in "A day a period starts", with: ""
@@ -459,7 +482,7 @@ RSpec.describe "Budget page adjustments", type: :system do
         interval_months: 6,
         anchor_date: Date.current + 3.months
       )
-      visit budget_page_path
+      visit budget_page_path(declare: 1)
     end
 
     it "saves straight away with no question", :aggregate_failures do
@@ -491,7 +514,7 @@ RSpec.describe "Budget page adjustments", type: :system do
 
     it "keeps the open panel and its buttons inside a 375px viewport", :aggregate_failures do
       fund(holder("Vacation"), 150, target: 1_200)
-      visit budget_page_path
+      open_category("Vacation")
       open_adjust("Vacation")
 
       panel = find("[data-adjust='Vacation']").native.rect

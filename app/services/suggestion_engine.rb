@@ -136,7 +136,63 @@ class SuggestionEngine
     end
   end
 
+  # ** THE PANEL MOVED INSIDE THE CATEGORY (two-shapes spec §4), SO THE LIST IS PARTITIONED ONCE. **
+  # `{ category_id => [Suggestion…] }` over exactly `#suggestions` — every suggestion in one bucket,
+  # nothing dropped, nothing duplicated, and the engine's own order preserved inside each bucket
+  # (`group_by` keeps first-appearance order and `#ordered` has already sorted).
+  #
+  # A CATEGORY WITH NOTHING IS ABSENT rather than mapped to `[]`, which is what lets the row's badge
+  # be `by_category[id].to_a.size` and never a hash full of empty lists to filter.
+  #
+  # ** IT IS `#suggestions` AND NOT `#detected`, so a hidden row is out of here exactly as it is out
+  # of the panel. ** The hidden ones have their own partition below, because the "where did it go"
+  # answer moved into the category with the panel: a foot section on a page-wide panel could list
+  # every hidden row at once, and there is no page-wide panel any more.
+  def by_category = @by_category ||= suggestions.group_by { |suggestion| category_id_for(suggestion) }
+
+  # THE SAME PARTITION FOR THE HIDDEN ONES, so each category's panel can carry its own "N hidden
+  # here" foot. `Hidden#suggestion` is the row the pairing is about.
+  def hidden_by_category
+    @hidden_by_category ||= hidden.group_by { |row| category_id_for(row.suggestion) }
+  end
+
+  # ** WHAT A CATEGORY HAS SPENT OVER THE PANEL'S OWN WINDOW — `{ category_id => Spending }`. **
+  # The Budget page's list prints `$X spent in N periods` under a category NO RULE claims (spec §4),
+  # and this is where that figure comes from: the same `#periods` the detectors measure in and the
+  # same `#entry_rows` they read, rolled up once. NO NEW DATE ARITHMETIC — that was the brief's
+  # constraint and it is the reason this lives here rather than on the presenter, which would have
+  # had to cut its own window out of `User#period_boundaries` and could then have cut a different one
+  # from the sentence the suggestions beside it are computed against.
+  #
+  # NO EXCLUSIONS, unlike `#rates`' roll-up: that detector subtracts the payments it is separately
+  # proposing as bills, because a bill is not a rate. This is a plain "what left the account here",
+  # which is the sentence the row prints.
+  #
+  # EMPTY FOR A USER WITH NO CADENCE, because `#periods` is — the same silence every detector keeps,
+  # and the row says "nothing spent yet" rather than a figure over a window nobody defined.
+  Spending = Data.define(:total, :periods)
+
+  def recent_spending
+    @recent_spending ||= begin
+      totals, = category_history(periods, exclude: Set.new)
+      # `to_h` AND NOT `transform_values`: `#category_history` hands back a Hash with a default PROC,
+      # and a reader that looked up a category with no spending would otherwise write an empty bucket
+      # into the memo. A plain Hash answers nil, which is what the row's "nothing spent yet" reads.
+      totals.transform_values { |by_index| Spending.new(total: by_index.values.sum(0.to_d), periods: periods.size) }
+    end
+  end
+
   private
+
+  # WHICH CATEGORY A SUGGESTION IS ABOUT, per kind — a bill's is its ITEM's, a rate's is the category
+  # it IS, and drift's and a dead rule's is their RULE's. Stated once here rather than in the view,
+  # because the four subjects are three different classes and a `case` in a partial would be the
+  # engine's own taxonomy re-derived by a screen.
+  def category_id_for(suggestion)
+    # A RATE'S SUBJECT IS THE CATEGORY ITSELF; every other kind's subject — an Item for a bill, a
+    # Budget for drift and for a dead rule — CARRIES one.
+    suggestion.kind == :rate ? suggestion.subject.id : suggestion.subject.category_id
+  end
 
   # EVERY SUGGESTION THE FOUR DETECTORS FOUND, before anything is set aside — the list #suggestions
   # and #hidden are the two halves of. Memoised here rather than in each, so the detectors run once

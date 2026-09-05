@@ -58,52 +58,20 @@
 #
 # See docs/superpowers/specs/2026-09-03-computed-claims-design.md §2-§5.
 class CategoryBudgetPresenter
-  # ** ONE RULE'S LINE ON THE CARD — §3.4'S ROW, IN THE SHAPE THE SHARED HELPERS READ. **
+  # ** `Line` IS DELETED AND THE ROW IS `ClaimLine` (this task's carry (b)). ** It was the THIRD
+  # Data type holding §3.4's row — the other two were `HomePresenter::ClaimLine` and
+  # `BudgetPagePresenter::Rule` — and its own header promised that "an object that answered any of
+  # them differently would be this card quietly saying a different sentence about a rule than the
+  # Budget page says about the same rule on the same afternoon". It did: this card printed `$450.00
+  # built up of $1,200.00` and `next due Mar 1 · $200.00 per period` where Home printed `$450.00 of
+  # $1,200.00` and `Mar 1 · +$200.00`, off two helpers that were one sentence with a different noun
+  # in it. `ClaimRows` builds the one row type off this card's own ledger, and the card's words are
+  # `HomeHelper#shape_words` / `#figure_words` / `#when_words` — the same three Home says.
   #
-  # The member names are `BudgetPagePresenter::Rule`'s, and the three aliases below it are the same
-  # three: `HomeHelper#claim_figure` asks `#rate?`, `#spent`, `#accrued`, `#built_up` and `#target`;
-  # `#claim_schedule` asks `#rate?`, `#next_due_on`, `#overdue?` and `#per_period`;
-  # `#claim_trouble_label` asks `#over?`, `#spent`, `#accrued` and `#next_due_on`. An object that
-  # answered any of them differently would be this card quietly saying a different sentence about a
-  # rule than the Budget page says about the same rule on the same afternoon.
-  #
-  # A `Data` HOLDING FIGURES RATHER THAN THE CALCULATOR ITSELF, on `BudgetPagePresenter::Rule`'s
-  # reasoning: `#overdue?` compares against the presenter's `today` — the OWNER's day — and an object
-  # free to ask a calculator for more would be free to ask it with a clock of its own.
-  Line = Data.define(
-    :rule,
-    :shape,
-    :claim,
-    :spent,
-    :accrued_this_period,
-    :built_up,
-    :target,
-    :next_due_on,
-    :planned_this_period,
-    :over,
-    :over_by,
-    :overdue
-  ) do
-    def rate? = shape == :rate
-
-    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2). The same reader the other two §3.4 rows
-    # carry: `HomeHelper#claim_schedule` renders all three and asks `#rate?` to tell this shape's
-    # `next due Mar 1 · $200.00 per period` from an allowance that says nothing at all.
-    def dated? = shape == :dated
-
-    def accrued = accrued_this_period
-
-    def per_period = planned_this_period
-
-    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, the figure BEFORE the clamp at zero,
-    # which is the only reader that can tell "spent it exactly" from "spent more than there was".
-    def over? = over
-
-    # A DATE THAT PASSED WITH THE MONEY STILL UNSPENT (§3.2).
-    def overdue? = overdue
-
-    def trouble? = over? || overdue?
-  end
+  # WHAT THE CARD GAINED BY THE FOLD, and it is not cosmetic: a rate rule's row can say when it
+  # RESETS, a dated one can say it is READY or how much it is SHORT, and a paid one-off says "paid
+  # Aug 14" where it used to say "was due Aug 15" for ever (this task's carry (a)). All three come
+  # off the period window `ClaimRows` reads, which this card had no way to ask for.
 
   attr_reader :category, :today
 
@@ -113,10 +81,15 @@ class CategoryBudgetPresenter
   # (§2) — and rendering last March's figures beside a live "Rules on the Budget page" button would
   # be the page disagreeing with the screen it links to. The spending figures above this card are
   # the ones the toggle is for.
-  def initialize(category:, today: category.today, claims: nil)
+  # `rows:` IS A SEAM ON `claims:`' OWN REASONING: the categories INDEX draws a card per category
+  # off one ledger, and `ClaimRows` builds a line for every rule the ledger holds — so a card left to
+  # build its own would build the whole user's rows once per card. One object for the page, handed
+  # in; nothing is passed on the show page and this class builds its own.
+  def initialize(category:, today: category.today, claims: nil, rows: nil)
     @category = category
     @today = today
     @claims = claims
+    @claim_rows = rows
   end
 
   # ---- Which state the card is in ---------------------------------------------------------------
@@ -171,9 +144,10 @@ class CategoryBudgetPresenter
   # screen contradicts. The key is total: a rule with no date sorts last (a rate rule is never due),
   # ties break on the larger amount and then on the id, because `budgets` carries no ORDER BY and a
   # plain UPDATE relocates a row in the heap.
-  def lines
-    @lines ||= claims.rules_of(category).map { |rule| build_line(rule) }.sort_by { |line| line_order(line) }
-  end
+  # ** `ClaimRows#lines_for`, WHICH IS ALREADY IN `Category.rule_order` (the app's one key). ** The
+  # sort left with the row type: this card, the Budget page's list and Home's blocks list the same
+  # category's rules, and until one reader owned the key they listed them three ways.
+  def lines = claim_rows.lines_for(category)
 
   # ** DOES ANYTHING HERE NEED A HUMAN — the two facts §4 says are worth one, asked of these rows. **
   # Home's trouble strip and the Budget page's group header fire on exactly this test
@@ -331,38 +305,21 @@ class CategoryBudgetPresenter
 
   def suggested? = suggestions.any?
 
-  # WHICH RUN ON /budget TO LAND IN. The engine's order is kind rank first (dated bills before
-  # rates), so the first suggestion's kind is the most urgent thing waiting there, and
-  # `suggestion_kind_anchor` is the same reader the panel's own index and headings use — one
-  # spelling of the fragment, so this link cannot silently stop working.
-  def first_suggestion_kind = suggestions.first&.kind
+  # ** `#first_suggestion_kind` IS DELETED (two-shapes spec §4). ** It named which RUN of a
+  # page-wide suggestions panel to scroll to, and there is no page-wide panel: the pointer links to
+  # `/budget?open=<this category>`, which opens the category whose proposals it is about.
 
   private
 
-  def build_line(rule)
-    calculator = claims.calculator_for(rule)
-
-    Line.new(
-      rule: rule,
-      shape: calculator.shape,
-      claim: calculator.claim,
-      spent: calculator.spent_this_period,
-      accrued_this_period: calculator.accrued_this_period,
-      built_up: calculator.built_up,
-      target: calculator.target,
-      next_due_on: calculator.next_due_on,
-      planned_this_period: calculator.planned_this_period,
-      over: calculator.over?,
-      over_by: calculator.over_by,
-      overdue: calculator.overdue?
-    )
-  end
-
-  # `Category.rule_order`, THE APP'S ONE KEY (fix wave — LOW-3): this card, the Budget page's group
-  # and Home's period row list the same category's rules, and until the model owned the key Home
-  # listed them differently.
-  def line_order(line)
-    Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id)
+  # ** THE ROWS, OFF THE CARD'S OWN LEDGER — `ClaimRows`, SHARED WITH HOME AND THE BUDGET PAGE. **
+  # It queries nothing (the calculators are the ledger's, the period grid is
+  # `User#period_containing`), so a card that hands its page's ledger in still costs the page one
+  # ledger however many cards it draws — the `claims:` seam's whole point.
+  #
+  # NO `categories:` IS PASSED, and none is loaded: that argument is `#give_way_order`'s alone, and
+  # this card never asks for an order across categories.
+  def claim_rows
+    @claim_rows ||= ClaimRows.new(ledger: claims, today: today)
   end
 
   # WHETHER A PROPOSAL COULD BE ABOUT THIS CATEGORY AT ALL — ONE CONDITION, and it stays one.

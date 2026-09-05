@@ -34,14 +34,20 @@ RSpec.describe "Suggestion dismissals", type: :request do
 
   def panel_holds_phone? = response.body.include?(%(data-suggestion="dated_bill:#{phone.id}"))
 
+  # ** THE REDIRECT NAMES THE CATEGORY THE ROW WAS IN (two-shapes spec §4). ** Suggestions live
+  # inside the category they are about now, so hiding one — or showing it again — comes back to that
+  # category open, or the row the user just acted on is off screen under a flash about it. The
+  # category is the SUBJECT's own, in `SuggestionEngine#category_id_for`'s three shapes.
+  def back_to(subject) = budget_page_path(open: subject.is_a?(Category) ? subject.id : subject.category_id)
+
   describe "POST /suggestion_dismissals", :aggregate_failures do
     # THE REACH DIRECTION FIRST: without it every refusal below would pass just as well against a
     # route that hid nothing at all.
     it "writes the dismissal, sends the user back to the page, and takes the row off it" do
       expect { hide(own_suggestion) }.to change(SuggestionDismissal, :count).by(1)
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(phone))
 
-      get budget_page_path
+      get back_to(phone)
       expect(panel_holds_phone?).to be false
     end
 
@@ -68,7 +74,7 @@ RSpec.describe "Suggestion dismissals", type: :request do
 
     it "refuses a kind no detector produces" do
       expect { hide(own_suggestion.merge(kind: "everything")) }.not_to change(SuggestionDismissal, :count)
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(phone))
     end
 
     # A DOUBLE SUBMIT IS NOT A CRASH. The unique index is the real guard, and the validation in
@@ -77,7 +83,7 @@ RSpec.describe "Suggestion dismissals", type: :request do
       hide(own_suggestion)
 
       expect { hide(own_suggestion) }.not_to change(SuggestionDismissal, :count)
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(phone))
     end
   end
 
@@ -87,9 +93,9 @@ RSpec.describe "Suggestion dismissals", type: :request do
       dismissal = user.suggestion_dismissals.sole
 
       expect { delete suggestion_dismissal_path(dismissal) }.to change(SuggestionDismissal, :count).by(-1)
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(phone))
 
-      get budget_page_path
+      get back_to(phone)
       expect(panel_holds_phone?).to be true
     end
 

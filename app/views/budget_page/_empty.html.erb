@@ -1,20 +1,19 @@
-<%# THE FIRST SCREEN EVERY REAL USER MEETS: no rules at all.
+<%# THE ONE USER THIS PAGE HAS NOTHING TO DRAW: no expense category at all.
 
-    ONE sentence, and it names only what exists today. §8's bottom half now exists — the
-    suggestions panel below this frame proposes rules from entry history — so the third route is
-    named here alongside the button in this page's own header. When the engine has nothing to
-    propose, the panel says so in its own words rather than leaving this sentence pointing at an
-    empty section.
-
-    THE POOL AND CATEGORY LINKS ARE GONE (two-ledger spec §5). They pointed at the two screens a
-    rule could be made from when a rule was owned by an envelope; a rule is written here, from the
-    New rule button above, or accepted from the panel below.
+    ** THE GATE MOVED FROM "no rules" TO "no categories" (two-shapes spec §4). ** The list is every
+    expense category now, so a user with three categories and no rules is not empty — they have
+    three rows, each with a "+ New rule for <category>" button inside it, which is exactly the
+    screen this frame used to stand in for. What is left is the user with nowhere to put a rule, and
+    the honest thing to offer them is a category.
 
     A frame rather than a blank page: an empty screen reads as something that failed to load. %>
-<section class="bg-white border border-gray-200 rounded px-6 py-8 text-center">
-  <h3 class="text-sm font-semibold text-gray-900">No funding rules yet</h3>
+<section class="bg-white border border-gray-200 rounded px-6 py-8 text-center" data-budget-empty>
+  <h3 class="text-sm font-semibold text-gray-900">No spending categories yet</h3>
   <p class="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
-    A rule claims part of every period's income for one category — accept one of the suggestions
-    below, or add one with New rule above — and it appears here, in the order they give way.
+    A rule claims part of every period's income for one category, so a category comes first — make
+    one and it appears here, in the order they give way.
+  </p>
+  <p class="mt-4">
+    <%= link_to "Add a category", new_category_path, class: "btn btn-primary" %>
   </p>
 </section>

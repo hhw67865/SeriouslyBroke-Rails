@@ -6,133 +6,71 @@
 # See docs/superpowers/specs/2026-08-15-budgeting-ui-design.md §8 and
 # docs/superpowers/specs/2026-08-21-two-ledger-design.md §3
 class BudgetPagePresenter
-  # ONE RULE ON THE PAGE. `next_due_on` is nil for an anchorless rule and that nil is information,
-  # not a gap — a rate rule is never "due" — so the row prints a date only where one exists. It is
-  # `ClaimCalculator#next_due_on` rather than `BudgetCalculator#due_date`, which answers `period_end`
-  # for an anchorless rule (a real number for the maths and a lie on screen) and diverges from the
-  # computed reading on an item-less one (see #rule_order).
+  # ** `Rule` AND `Group` ARE DELETED, AND THEIR ROW IS `ClaimLine` (this task). ** The two Data
+  # types said in this file's words exactly what `HomePresenter::ClaimLine` and its block said in
+  # Home's, and both files carried a comment promising the other would be kept in step by hand. They
+  # were not (Home printed `$450.00 of $1,200.00` where this row printed `$450.00 built up of
+  # $1,200.00`). There is one row type, in `app/presenters/claim_line.rb`, built by `ClaimRows` off
+  # this page's ONE `ClaimLedger`; `#countable_span` and `#adjustments` — the two members only the
+  # adjust panel reads — ride on it, filled here and empty everywhere else.
   #
-  # `reason` IS GONE WITH THE ORPHANS (two-ledger spec §5, Task 5). It said WHY a rule was outside
-  # the fill order, and the one reason left — a pool no account holds — is a fact about a layer that
-  # no longer owns rules. A category-owned rule is always in the fill order; there is nothing left
-  # for a row to have to excuse.
+  # ** ONE CATEGORY, AS THE LIST DRAWS IT (two-shapes spec §4). ** Every EXPENSE category the user
+  # owns gets one of these, ruled or not:
   #
-  # ** THE CLAIM FIGURES RIDE ON THE ROW, FROM ONE LEDGER (computed-claims spec §3.3; Task 2). **
-  # Every one of the figures comes off `ClaimLedger#calculator_for`, which the page builds ONCE over
-  # the user's whole rule set — the row does not hold a calculator and the partial does not build
-  # one. That is the same objection `Group#status` makes about the category header, said one level
-  # down: a partial free to ask for a claim of its own is a screen that costs a walk per row and
-  # can disagree with the figure the header above it printed.
+  #   `lines`            its rules as `ClaimLine`s, in give-way order — EMPTY for a rule-less one
+  #   `type_dots`        one entry per rule, its type, for the dots beside the name
+  #   `claimed`          Σ the lines' claims — the same figure `free` subtracted on Home
+  #   `spent_recently`   `SuggestionEngine::Spending` for a rule-less category, nil for a ruled one
+  #   `suggestion_count` how many of the engine's suggestions are about this category
+  #   `open`             whether this is the one category expanded on this render
   #
-  # `shape` rather than two booleans, because §3.3 offers DIFFERENT WORDS per shape — a rate rule's
-  # envelope is topped up or reduced for this period, an accruing rule's fund is set aside into,
-  # taken back out of, or skipped — and `ClaimCalculator#shape` is the one place that classification
-  # lives.
-  #
-  # `adjustments` is THIS PERIOD's rows in date order, which is what the row lists and what the
-  # remove button deletes. The claim already counts them; they are listed so the figure above them
-  # is explicable rather than merely asserted.
-  #
-  # `countable_span` IS WHERE THE RULE COUNTS (fix round 2, NEW-5) — `ClaimCalculator#countable_span`
-  # verbatim, and the panel reads it twice: the hint says it in words and the date field's
-  # `min`/`max` enforce it before the user can submit. `AdjustmentForm` refuses a date outside the
-  # same range at 422 and that stays the law; this is the field agreeing with it rather than a
-  # second derivation free to offer a bound the writer rejects.
-  # ** §3.4'S ROW, AND IT IS THE SAME OBJECT SHAPE HOME'S IS (Task 3). ** `HomeHelper#claim_figure`
-  # and `#claim_schedule` render this Data and `HomePresenter::ClaimLine` alike — they ask #rate?,
-  # #spent, #accrued, #built_up, #target, #next_due_on and #per_period and nothing else — so the two
-  # screens print ONE sentence about one rule rather than two that have to be kept in step. Task 2
-  # left `$X claimed` / `$X built up` here as a minimum and named the replacement; this is it, and it
-  # REPLACES those hooks rather than standing beside them, or the row would say the same money twice.
-  Rule = Data.define(
-    :budget,
-    :shape,
-    :claim,
-    :spent,
-    :accrued_this_period,
-    :built_up,
-    :target,
-    :next_due_on,
-    :planned_this_period,
-    :over,
-    :over_by,
-    :overdue,
-    :countable_span,
-    :adjustments
+  # `spent_recently` IS ONLY ASKED OF A RULE-LESS CATEGORY, and the asymmetry is the point: a ruled
+  # category's spending is already in its rows (each rule's own lane, and the lanes partition —
+  # §3.1), so a category-level figure beside them would be the same money said twice. A category with
+  # no rule has no lane at all, and what it has instead is a fact about the entries.
+  CategoryRow = Data.define(
+    :category, :lines, :type_dots, :claimed, :spent_recently, :suggestion_count, :open
   ) do
-    def anchored? = next_due_on.present?
+    delegate :name, :priority, to: :category
 
-    def rate? = shape == :rate
+    def open? = open
 
-    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2) — a bill and a goal, which are one shape. The
-    # same reader `HomePresenter::ClaimLine` carries and for the same caller: `HomeHelper
-    # #claim_schedule` prints `next due Mar 1 · $200.00 per period` for it and renders this row and
-    # Home's alike.
-    def dated? = shape == :dated
+    def rule_count = lines.size
 
-    # WHICH KIND OF RULE THIS IS — bill, usage or choice (spec §3). Off the record rather than a
-    # member, because it is a column the row already holds: the label beside the row and the
-    # overview above the groups are two readings of one answer.
-    delegate :rule_type, to: :budget
+    def ruled? = lines.any?
 
-    # ** `#capped` LEFT WITH `ClaimCalculator#capped` (two-shapes spec §7). ** It was carried onto
-    # the row because an UNCAPPED building rule's `#target` was NIL and `HomeHelper#claim_figure` —
-    # which renders this Data as well as Home's — had to ask before it printed "of". Every accruing
-    # rule has a figure now.
+    # DOES ANYTHING UNDER THIS NAME NEED A HUMAN — the same two facts Home's strip fires on, asked
+    # of the same rows, so the two screens agree about one category on one afternoon.
+    def needs_attention? = lines.any?(&:trouble?)
 
-    # THE THREE ALIASES THE SHARED §3.4 HELPERS ASK FOR. `accrued_this_period` and
-    # `planned_this_period` are the writer's names — `AdjustmentForm` skips one and the panel prints
-    # the other — and `accrued`/`per_period` are the reader's. Two names, one member, rather than two
-    # members that could hold different figures.
-    def accrued = accrued_this_period
+    def suggestions? = suggestion_count.positive?
 
-    def per_period = planned_this_period
-
-    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, the pre-clamp figure, which is the only
-    # reader that can tell "spent it exactly" from "spent more than there was".
-    def over? = over
-
-    # A DATE THAT PASSED WITH THE MONEY STILL MISSING (§3.2). A member rather than a derivation,
-    # because the comparison is against the presenter's `today` — the OWNER's day (`User#today`, fix
-    # round 2 — LOW-1) — and a Data object computing it would reach for a clock of its own, in
-    # whatever zone happened to be ambient.
-    def overdue? = overdue
-
-    def trouble? = over? || overdue?
-
-    # ** WHETHER A SKIP IS OFFERABLE, AND IT IS THE ACCRUAL THAT DECIDES (fix round MED-2). ** A
-    # skip means "accrue nothing this period", so the button has a job only while the period is
-    # still accruing SOMETHING — and `accrued_this_period` is the post-adjustment figure
-    # (`planned + Σ this period's deltas`) while `planned_this_period` is not. Read off the plan,
-    # this offered a second skip on a period already skipped, whose −planned would have been a raid
-    # on the fund's prior savings under a flash saying the period was skipped. `AdjustmentForm` is
-    # the backstop for a submission that arrives anyway.
-    def skippable? = !rate? && accrued_this_period.positive?
+    # ** IS THIS ROW DRAGGABLE — AND IT IS `Category.apply_fill_order`'S OWN POPULATION. ** That
+    # endpoint refuses any list but `in_fill_order.with_a_rule`, so a row that drew a handle for
+    # anything else would offer a control whose every use is refused — and the refusal would say
+    # "that order didn't match your categories" about the order this page had just rendered. A
+    # holder with a rule, asked of the record and of the rows this object already carries.
+    def reorderable? = category.holder? && ruled?
   end
 
-  # ONE CATEGORY AND THE RULES THAT FILL IT.
+  # ** THE THREE TILES ACROSS THE TOP (two-shapes spec §4). ** One object rather than three, because
+  # the three are one arithmetic: what the rules need, what comes in, and the subtraction between
+  # them. A list of tiles would have made the partial branch on which tile it was rendering anyway,
+  # and would have let the third be built from figures the first two did not print.
   #
-  # ** THE HEADER STOPPED READING A HOLDING (computed-claims Task 3). ** It was a `HoldingStatus`
-  # rendered through `shared/_holding_status` — `$400.00 left · last period — you changed a rule here
-  # after distributing`, every clause of which is about money that was MOVED into the category and
-  # about the distribution that moved it. Nothing moves (§5), so there is no balance to read, no
-  # swept period for `· last period` to name and no distribution for the second suffix to compare
-  # against. What a category has is `Σ its rules' claims` (`Category#claim`, §3), which is what the
-  # header prints and what `free` subtracted.
-  #
-  # THE STATUS VOCABULARY IS NOT DELETED — the categories, distribute and reallocation screens still
-  # speak it, and Task 4 retires it with them. This page simply stopped.
-  Group = Data.define(:category, :rules) do
-    delegate :priority, to: :category
+  # `segments` IS THE TYPE BAR AND THE THREE TOTALS UNDER IT — one entry per kind of rule that
+  # exists, in reading order, each carrying what it asks of a period and how wide its band is. The
+  # PERCENT is here rather than in the view for `HomePresenter#claimed_percent`'s reason: a bar and
+  # the figure beside it must be two readings of one number.
+  Segment = Data.define(:type, :amount, :percent)
 
-    # WHAT THIS CATEGORY CLAIMS — `Category#claim`'s definition (Σ over its rules), summed off the
-    # rows this group already built rather than re-asked of the model, so the header and the rules
-    # under it cannot come from two readings.
-    def claim = rules.sum(0.to_d, &:claim)
+  Tiles = Data.define(:need, :segments, :income, :cadence, :leftover, :declared, :fits) do
+    def declared? = declared
 
-    # DOES ANYTHING UNDER THIS HEADER NEED A HUMAN — the same two facts Home's strip fires on (§4),
-    # asked of the same rows, so the two screens agree about one category on one afternoon.
-    def needs_attention? = rules.any?(&:trouble?)
+    # ** GREEN WHEN IT FITS, RED WHEN IT DOES NOT (§4). ** Both halves are required: an undeclared
+    # user's tile is neither — it says "declare your income" — so a view branching on the sign of a
+    # nil would have to know that too.
+    def fits? = fits
   end
 
   attr_reader :user, :today
@@ -149,68 +87,70 @@ class BudgetPagePresenter
   # See BudgetPageController#update.
   attr_reader :declaration
 
-  def initialize(user:, today: user.today, declaration: nil)
+  # `open_category_id:` IS WHICH CATEGORY IS EXPANDED ON THIS RENDER — the `open` query parameter,
+  # threaded through rather than read off `params` here. Nil is a real answer (nothing expanded), and
+  # it is the ordinary one: without JavaScript the chevron is a link that sets it, and with
+  # JavaScript `category_list_controller` restores the viewer's last one out of localStorage.
+  #
+  # `declaring:` IS WHETHER THE DECLARATION FORM IS SHOWING (`?declare=1`). §4 hides it behind
+  # "change" on the income tile, so it is a fact about this render rather than about the user.
+  def initialize(user:, today: user.today, declaration: nil, open_category_id: nil, declaring: false)
     @user = user
     @today = today
     @declaration = declaration || user
+    @open_category_id = open_category_id.presence&.to_s
+    @declaring = declaring
   end
 
-  # The top half of §8: categories in fill order, each carrying its rules in due order.
-  #
-  # `[priority, name]` is the in-memory twin of `Category.in_fill_order` and the same tie-break
-  # HomePresenter#by_priority uses. Priority alone is not a total order, and a tie falling through
-  # to database order is the defect Plan 1 shipped in its waterfall — heap order deciding who gets
-  # funded first, so the same page reported a different order on consecutive loads with no data
-  # change.
-  #
-  # HOLDER CATEGORIES THAT OWN A RULE — `Category.in_fill_order.with_a_rule`, and the population is
-  # THE SAME SET `.apply_fill_order` REFUSES ANY OTHER LIST THAN. That agreement is the whole point
-  # of stating it twice: the reorder endpoint compares the submitted ids against
-  # `in_fill_order.with_a_rule`, so a page that drew a draggable card for anything else would offer
-  # the user a control whose every use is refused — and the refusal it produced would say "that
-  # order didn't match your categories" about the order the page itself had just rendered.
-  #
-  # THE `holder?` HALF IS THIS FIX ROUND'S CORRECTION (MED-1). It was `with_a_rule` alone, which is
-  # wider by exactly the rules on categories that hold nothing: an expense category whose
-  # `funded_since` is still NULL is not in `Category.in_fill_order`, so no distribution can ever
-  # reach it and no reorder can ever include it — a group with a priority badge and two arrows,
-  # unorderable forever. Those rules are not hidden; they go to #unfilled_rules, which says why.
-  #
-  # THE BANDS ARE GONE. `Band`/`#account_bands` split this list by the account that funded each
-  # envelope, because priority was only ever compared inside an account; the waterfall now ranks
-  # every holder against every other, so there is one list and one reorder scope.
-  def category_groups
-    @category_groups ||= grouped_categories.sort_by { |category| [category.priority, category.name] }
-      .map { |category| build_group(category) }
+  # ** THE THREE TILES (§4). ** Everything the top of the page says, from the readers below it, so
+  # the tile that says "left over" is arithmetically the two above it.
+  def tiles
+    @tiles ||= Tiles.new(
+      need: rules_need,
+      segments: segments,
+      income: typical_income,
+      cadence: user.period_cadence,
+      leftover: leftover,
+      declared: declared?,
+      fits: fits?
+    )
   end
 
-  # THE RULES NO GROUP CAN SHOW, each of which is a claim on income that no distribution will
-  # reach. ONE SHAPE, and it is permanent rather than transitional: a rule on a category that is not
-  # holding money yet (`funded_since` NULL). The second shape — a rule written before the cutover,
-  # naming only a pool — is GONE with `budgets.pool_id` (Task 8): `budgets.category_id` is NOT NULL
-  # and `Budget.for_user` is `where(category_id: user.categories.select(:id))`, one lane.
+  # ** EVERY EXPENSE CATEGORY THE USER OWNS, RULED ONES IN GIVE-WAY ORDER THEN RULE-LESS ONES BY
+  # NAME (§4). ** Two populations and one list, because §4's list is the user's whole expense budget
+  # and not only the part of it that has been written down yet: a category nobody has given a rule is
+  # exactly where the next rule goes, and a page that omitted it would send that user hunting.
   #
-  # THE SURVIVING SHAPE IS REACHED FROM THE CATEGORY FORM, which Task 7 made able to clear
-  # `funded_since`, and it is narrower than it was: the final fix wave refuses that clear while the
-  # category still holds money (`Category#money_may_not_be_stranded`), so a rule can land here only
-  # on a category that has been emptied first — which is exactly the "I set this up by mistake"
-  # flow, and exactly the user this band has something to tell.
+  # ** THE RULED HALF IS `ClaimRows#blocks` AND IS NOT RE-SORTED HERE. ** That is the give-way order
+  # grouped back by category — Home's own section, off the same shared reader (this task) — so the
+  # Budget list and Home's blocks cannot rank one category two ways. What this adds around each block
+  # is the three things Home's does not carry: the dots, the suggestion count and whether it is open.
   #
-  # THIS IS THE ORPHAN BAND'S JOB, AND NOT ITS RETURN. The old one listed rules on account-less
-  # pools — a setup problem inside a layer being deleted. This lists rules whose OWNER cannot hold
-  # money yet, which is a fact about the purpose ledger and is exactly what `Budget.steady_need`
-  # counts and the fill order cannot: a user whose structural check says $500 and whose fill order
-  # shows nothing has to be told where the $500 went.
-  #
-  # Ordered by owner name then by the groups' own `#rule_order`, because `all_budgets` carries no
-  # ORDER BY and a plain UPDATE relocates a row in the heap. BUILT BEFORE IT IS SORTED, because the
-  # key now reads the CLAIM's due date (see #rule_order) and that is a fact about the row rather than
-  # about the record — one ordering for both lists, off the date both of them print.
-  def unfilled_rules
-    @unfilled_rules ||= (rules - grouped_rules)
-      .map { |budget| build_rule(budget) }
-      .sort_by { |rule| [owner_name(rule.budget), *rule_order(rule)] }
+  # ** THE RULE-LESS HALF IS BY NAME, and that is a refusal rather than an omission. ** These
+  # categories have no rule, so they have no type to rank and no claim to rank by; sorting them by
+  # what has been SPENT there would imply an order the app is not asking the user to act on.
+  def category_rows
+    @category_rows ||= ruled_rows + unruled_rows
   end
+
+  # THE ROWS THE DRAG AND THE ▲▼ WRITE, in the order they are drawn — `Category.apply_fill_order`'s
+  # own population (see `CategoryRow#reorderable?`). `_reorder_controls` takes this list, because
+  # every button carries the WHOLE order as hidden fields and a list including a row the endpoint
+  # refuses would make every one of those buttons a refusal.
+  def reorderable_rows = @reorderable_rows ||= category_rows.select(&:reorderable?)
+
+  # WHICH CATEGORY'S PANEL IS OPEN, or nil. Compared as a string, because it arrives off the wire.
+  def open?(category) = @open_category_id.present? && @open_category_id == category.id.to_s
+
+  # IS THE DECLARATION FORM SHOWING — `?declare=1`, or a submission that was refused (the form holds
+  # what was typed and the errors, and hiding it would throw both away).
+  def declaring? = @declaring || declaration.errors.any?
+
+  # THE SUGGESTIONS FOR ONE CATEGORY, and the hidden ones with them — both off the page's ONE engine,
+  # partitioned there (`SuggestionEngine#by_category`) rather than filtered here.
+  def suggestions_for(category) = by_category.fetch(category.id, [])
+
+  def hidden_suggestions_for(category) = hidden_by_category.fetch(category.id, [])
 
   # ** WHAT EACH KIND OF RULE COSTS A PERIOD (rules-own-the-budget spec §3) — the overview above the
   # groups. ** `[[:bill, 1_400], [:usage, 600], [:choice, 300]]`, which the partial renders as
@@ -253,14 +193,11 @@ class BudgetPagePresenter
     end
   end
 
-  # The empty top half — a brand-new user's first sight of this page. Asked of every rule the user
-  # has rather than of #category_groups, and the gap between the two is what #unfilled_rules is
-  # about: a rule on a category that holds nothing is a rule the user HAS and no group can show, so
-  # a screen that answered "no rules" off #category_groups would tell that user they have none while
-  # the band below them lists one. The pool lane that used to be the second half of this gap is gone
-  # (Task 8, `budgets.category_id` NOT NULL); the holder gap is not, and it is why this is asked of
-  # `#rules`.
-  def no_rules? = rules.empty?
+  # THE EMPTY STATE'S GATE (`_empty.html.erb`): a user with no EXPENSE CATEGORY AT ALL. It was
+  # `#rules.empty?` — "no rules" — and the list is every expense category now, so a user with three
+  # categories and no rules has three rows to write a rule from and is not empty at all. The one user
+  # this page has nothing to draw for is the one with nowhere to put a rule.
+  def no_categories? = category_rows.empty?
 
   # §8's structural check, three lines: what the rules claim from a period, what the user says
   # they bring in, and the difference.
@@ -316,45 +253,15 @@ class BudgetPagePresenter
   # not said how long a period is states a figure with no unit.
   def declared? = user.typical_income.present? && user.period_cadence.present?
 
-  # §8'S BOTTOM HALF, straight from the engine and in the engine's order. Not re-sorted, not
-  # filtered and not truncated here: `SuggestionEngine#ordered` sorts by [kind, per-period cost,
-  # id] for reasons its own comments give (a $1,600 annual bill costs $61.54 a period and must not
-  # outrank a $1,500 monthly one), and a second ordering on this side would be a screen deciding
-  # to disagree with the reader it renders.
-  #
-  # THERE IS NO CAP ON THE LIST AND NOTHING IS TRUNCATED. There IS a dismiss now (Henry's ruling of
-  # 2026-08-20, which reverses §8 on that one point) — but it is the USER's act, one row at a time,
-  # and every hidden row is still listed at the panel's foot. Nothing this screen decides removes a
-  # suggestion from the list.
-  def suggestions = @suggestions ||= engine.suggestions
-
-  # THE SUGGESTIONS THIS USER HAS PUT DOWN, each paired with the row that hides it — the panel's
-  # foot section, and the answer to "where did it go" that keeps hiding from being deletion.
-  #
-  # Through the SAME engine instance as #suggestions, which is why that reader stopped building one
-  # inline: the two lists are the two halves of one run of the detectors, and a second instance
-  # would run them twice and could disagree with the first about what was found.
-  def hidden_suggestions = @hidden_suggestions ||= engine.hidden
-
-  # THE PANEL'S INDEX AND ITS HEADINGS, from one grouping so the counts cannot disagree with the
-  # runs they point at.
-  #
-  # `group_by` and NOT a sort: `SuggestionEngine#ordered` already sorts by `[kind, per-period cost,
-  # id]`, so the kinds arrive in the engine's rank order and each run is contiguous by
-  # construction. Re-sorting here would be this page deciding to disagree with the reader it
-  # renders — the same objection #suggestions' own comment makes — and grouping a list that is
-  # already grouped is free.
-  #
-  # It hides nothing, which is the whole constraint (§8 forbids truncation and dismissal alike).
-  # Every suggestion the engine returned is in exactly one group and every group is rendered in
-  # full; the index above them is navigation, not a filter.
-  def suggestions_by_kind = @suggestions_by_kind ||= suggestions.group_by(&:kind)
-
-  # `#joined_pool` IS DELETED (two-ledger spec §5). It answered which envelope an acceptance would
-  # JOIN rather than mint — two queries for the whole panel, and a whole paragraph about the two
-  # ways to reuse one — and there is no envelope to join or mint. What accepting does now is stamp
-  # `funded_since`, which the engine states on the suggestion itself (`detail[:starts_holding]`), so
-  # the row needs nothing from this class to say it.
+  # ** `#suggestions`, `#hidden_suggestions` AND `#suggestions_by_kind` ARE DELETED WITH THE
+  # STANDALONE PANEL (two-shapes spec §4/§7). ** They fed one page-wide list with an index strip
+  # across the top of it, and §4 moves every suggestion inside the category it is about: the index
+  # was navigation for a 5,000px panel that no longer exists, and a page-wide list would now be the
+  # same rows a second time. `#suggestions_for` and `#hidden_suggestions_for` above are what
+  # replaced them, off `SuggestionEngine#by_category` — ONE partition of the engine's own list, so
+  # nothing is dropped and nothing is listed twice. The dismiss control and its "where did it go"
+  # answer survive per category (Henry's ruling of 2026-08-20 is about the CONTROL, not about where
+  # the panel sits).
 
   private
 
@@ -362,65 +269,82 @@ class BudgetPagePresenter
   # run of the four detectors, and it holds the dismissal lookup they are split by.
   def engine = @engine ||= SuggestionEngine.new(user: user, today: today)
 
-  # EVERY RULE THE USER OWNS. `user.all_budgets` is `Budget.for_user`, the app's one answer to
-  # which rules are a user's.
-  #
-  # `category: :user` is the whole preload. `:user` because `Budget#user` walks the owner and every
-  # claim on the page asks it for the period grid and for the owner's calendar day; measured on the
-  # demo seeds in the pool era, eleven `SELECT users WHERE id = ?` for one user.
-  #
-  # `:budgets` LEFT THE PRELOAD WITH THE HOLDING (Task 3). It was there because `HoldingStatus` read
-  # `category.budgets` for every anchored rule it ranked and `DistributionClock` read it again; the
-  # header reads neither now, and a preload nothing asks for is a query that reports nothing.
-  def rules
-    @rules ||= user.all_budgets.includes(:item, category: :user).to_a
+  # `#rules` IS `ClaimLedger#rules` NOW, AND THE PAGE'S KNOWN DUPLICATE IS GONE WITH IT (the four
+  # statements the old cost pin named as lines 5-8). This class loaded `user.all_budgets` and the
+  # ledger loaded `Budget.for_user` — two spellings of one population, each with its own
+  # `includes(:item, category: :user)`, so the page paid for the same rows and the same three
+  # preloads twice. There is one rule set on this page: the ledger's, which is what every figure on
+  # it was computed from anyway.
+  def rules = claim_ledger.rules
+
+  # ** THE RULED ROWS, OFF `ClaimRows#blocks` — the give-way order grouped back (§4). ** Not
+  # re-sorted and not re-grouped: this is Home's own section with three more facts hung on it.
+  def ruled_rows
+    claim_rows.blocks.map { |block| row_for(block.category, lines: block.rows, claimed: block.claimed) }
   end
 
-  # `Category#holder?` IN MEMORY — the Ruby twin of `Category.in_fill_order`'s `expenses.where.not
-  # (funded_since: nil)`, asked of the categories the preload already loaded rather than through a
-  # second query that could disagree with the one `.apply_fill_order` runs.
-  def rules_by_category
-    @rules_by_category ||= rules.select { |budget| budget.category&.holder? }.group_by(&:category_id)
+  # ** EVERY EXPENSE CATEGORY WITH NO RULE, BY NAME. ** One statement for the whole list, with the
+  # ruled half subtracted in memory, so a user's whole budget costs one query however it splits.
+  def unruled_rows
+    ruled = claim_rows.blocks.to_set { |block| block.category.id }
+
+    expense_categories.reject { |category| ruled.include?(category.id) }
+      .map { |category| row_for(category, lines: [], claimed: 0.to_d) }
   end
 
-  def grouped_rules = @grouped_rules ||= rules_by_category.values.flatten
-
-  def categories_by_id = @categories_by_id ||= rules.filter_map(&:category).index_by(&:id)
-
-  def grouped_categories = rules_by_category.keys.map { |id| categories_by_id.fetch(id) }
-
-  # THE OWNER'S NAME, category first and the pool behind it — `Budget#user`'s own order, and
-  # `BudgetPageHelper#budget_rule_name`'s. `to_s` because a rule with neither owner is
-  # `#must_have_an_owner`'s refusal rather than something to crash a sort over.
-  def owner_name(budget) = budget.category&.name.to_s
-
-  def build_group(category)
-    Group.new(
+  def row_for(category, lines:, claimed:)
+    CategoryRow.new(
       category: category,
-      rules: rules_by_category.fetch(category.id).map { |budget| build_rule(budget) }.sort_by { |rule| rule_order(rule) }
+      lines: lines,
+      type_dots: lines.map(&:stripe_type),
+      claimed: claimed,
+      # THE WINDOW FIGURE IS ONLY ASKED OF A RULE-LESS CATEGORY (see `CategoryRow`), and it is the
+      # ENGINE's own window — no second piece of date arithmetic on this page.
+      spent_recently: lines.empty? ? engine.recent_spending[category.id] : nil,
+      suggestion_count: suggestions_for(category).size,
+      open: open?(category)
     )
   end
 
-  def build_rule(budget)
-    calculator = claim_ledger.calculator_for(budget)
+  # EVERY EXPENSE CATEGORY THE USER OWNS, in name order — the rule-less half of the list, and the
+  # set the ruled half is subtracted from. `Category.in_fill_order` is deliberately NOT the reader:
+  # that scope is holders only, and §4's list is every expense category including the ones that have
+  # never held anything.
+  def expense_categories
+    @expense_categories ||= user.categories.expenses.order(:name).to_a
+  end
 
-    Rule.new(
-      budget: budget,
-      shape: calculator.shape,
-      claim: calculator.claim,
-      spent: calculator.spent_this_period,
-      accrued_this_period: calculator.accrued_this_period,
-      built_up: calculator.built_up,
-      target: calculator.target,
-      next_due_on: calculator.next_due_on,
-      planned_this_period: calculator.planned_this_period,
-      over: calculator.over?,
-      over_by: calculator.over_by,
-      overdue: calculator.overdue?,
-      countable_span: calculator.countable_span,
-      adjustments: adjustments_this_period.fetch(budget.id, [])
+  # ** THE ROWS, THE ORDER AND THE GROUPING — `ClaimRows`, SHARED WITH HOME (this task). ** It
+  # queries nothing: the calculators are this page's ONE ledger's, and `categories:` is the
+  # already-loaded expense list narrowed to the holders — `Category.in_fill_order`'s population in
+  # memory rather than a second query for it.
+  def claim_rows
+    @claim_rows ||= ClaimRows.new(
+      ledger: claim_ledger,
+      today: today,
+      categories: expense_categories.select(&:holder?),
+      adjustments: adjustments_this_period
     )
   end
+
+  # ** THE TYPE BAR AND ITS THREE TOTALS (§4), off `#type_overview`'s own figures. ** The percent is
+  # each kind's share of what the rules need — the same total the tile prints above the bar, so the
+  # bands add to the figure and not to something near it. No segments for a user with no rules, which
+  # is the tile reading $0.00 and drawing no bar.
+  def segments
+    total = type_overview.sum { |(_type, amount)| amount }
+    return [] unless total.positive?
+
+    type_overview.map do |(type, amount)|
+      Segment.new(type: type, amount: amount, percent: ((amount / total) * 100).round.clamp(0, 100))
+    end
+  end
+
+  # DOES THE BUDGET FIT — the green/red gate on the third tile. `#underwater?` inverted, with the
+  # declaration required on both sides: an unanswered income is not "it fits", it is unanswered.
+  def fits? = declared? && !underwater?
+
+  delegate :by_category, :hidden_by_category, to: :engine
 
   # ONE CLAIM LEDGER FOR THE WHOLE PAGE (computed-claims spec §3.3) — three statements for the
   # user's entire rule set, where a calculator per row would be two per rule. It is built over
@@ -458,15 +382,7 @@ class BudgetPagePresenter
     end
   end
 
-  # ** THE ORDER RULES ARE LISTED IN, OFF THE DATE THE PAGE ACTUALLY PRINTS (Task 3) — AND IT IS
-  # `Category.rule_order` NOW (fix wave — LOW-3). ** It was `BudgetCalculator#due_order` over
-  # `#due_date`, and both are gone: that class DIVERGED from `ClaimCalculator#next_due_on` on an
-  # item-less rule — no fulfilment signal without an item, so it assumed every bill was paid on time
-  # and rolled the date on the calendar, while the computed model reads the category's own lane and
-  # leaves an unpaid occurrence where it was anchored. The key that replaced it was then written out
-  # a third time on Home, in a DIFFERENT order; the model owns the one spelling and carries the
-  # argument for it.
-  def rule_order(rule)
-    Category.rule_order(next_due_on: rule.next_due_on, amount: rule.budget.amount, id: rule.budget.id)
-  end
+  # ** `#rule_order` LEFT WITH THE ROW (`ClaimRows`). ** Ordering a category's rules is the shared
+  # reader's job now — `Category.rule_order` over the date the row actually prints — and a copy here
+  # would be this page free to list one category's rules in a different order from Home's.
 end

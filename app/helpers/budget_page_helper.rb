@@ -18,11 +18,13 @@ module BudgetPageHelper
   # `Budget::TYPE_RANK` is spelled with the same discipline and for the same reason.
   TYPE_HEADINGS = { "bill" => "Bills", "usage" => "Usage", "choice" => "Choice" }.freeze
 
-  TYPE_LABELS = { "bill" => "Bill", "usage" => "Usage", "choice" => "Choice" }.freeze
-
   def rule_type_heading(type) = TYPE_HEADINGS.fetch(type.to_s)
 
-  def rule_type_label(type) = TYPE_LABELS.fetch(type.to_s)
+  # ** `TYPE_LABELS` AND `#rule_type_label` ARE DELETED (two-shapes spec §4). ** They printed a grey
+  # "Bill" chip beside a rule's name on `_rule_row`, which died with the group card. The type is
+  # still said twice on the new page and in two better places: as a coloured DOT per rule on the
+  # category's row, and as the first word of `HomeHelper#shape_words` inside the open panel
+  # ("bill · every 12 months"), which is the reading Home already gives it.
 
   # WHAT A RULE IS CALLED. The item it pays is the truest name — "Rent Bill" says what the money
   # does — and where there is none the rule is named by whatever owns it, because a rule with no
@@ -42,23 +44,14 @@ module BudgetPageHelper
     budget.item&.name || budget.category&.name
   end
 
-  # "$400.00 / period", "$600.00 every 6 months" — the amount and what it is an amount PER.
-  # A figure with no basis is unreadable on this page: $600 a period and $600 every six months
-  # are the same digits and a twelvefold difference in what the user owes.
-  #
-  # ** THE "fed by hand" ARM IS KEPT AS A GUARD AND IS NO LONGER REACHABLE FROM THE DATA (two-shapes
-  # spec §7). ** Zero used to be legal on exactly one shape — a goal the user fed by hand and never
-  # on a schedule (`Budget#set-aside-only`) — and this printed "$0.00 / period" for one, beside a
-  # real built-up figure on the same row: a rate of nothing read as a rule set wrong rather than a
-  # rule that was never about a rate. `Budget` validates `amount > 0` on every shape now and
-  # `TwoShapes` converted every such row, so no rule this can meet takes this arm. It stays because
-  # the column cannot go negative on any shape and a row that somehow did should say this rather
-  # than print a minus sign as a rate.
-  def budget_rule_amount(budget)
-    return "fed by hand" unless budget.amount.to_d.positive?
-
-    "#{number_to_currency(budget.amount)} #{budget_rule_basis(budget)}"
-  end
+  # ** `#budget_rule_amount` IS DELETED (two-shapes spec §4). ** It printed the STICKER — what the
+  # rule declares, `$1,200.00 every 6 months` — beside the claim's own figure on `_rule_row`, and
+  # that row's header argued the repetition was deliberate ("the declaration confirmed by the
+  # reading"). On a dated rule it was the target said twice inside one sentence, and the new table
+  # has a column for the schedule alone: `HomeHelper#shape_words` says `bill · every 6 months`
+  # without saying the money again, and Edit is one click away for the declaration itself.
+  # `#budget_rule_basis` — the words the sticker was built from — survives, read by the dead-rule
+  # suggestion and by the rule form's own hint.
 
   # A LOOKUP ON `Budget#cadence`, not a predicate cascade of its own. This module and
   # `HomeHelper#pool_rule_label` used to hold the same four-branch classification, in the same
@@ -103,13 +96,26 @@ module BudgetPageHelper
   #
   # A move off either end returns the list unchanged, so the button at an edge is a no-op even if
   # the `disabled` attribute on it is ever bypassed. #reorder_edge? is what hides it.
+  #
+  # ** THE WIRE CARRIES THE FILL ORDER AND THE PAGE DRAWS THE GIVE-WAY ORDER, WHICH IS ITS REVERSE
+  # (two-shapes spec §4). ** `Category.apply_fill_order` reads position 0 as `priority: 0` — funded
+  # first, gives way LAST — and it is unchanged, deliberately: it is the model's own contract and
+  # three other things read that column. What changed is the LIST: it used to be drawn in fill order
+  # and is now drawn in the order the shortfall reaches, so the top card is the one that goes
+  # without first and its priority is the HIGHEST. Submitting the drawn order verbatim would write
+  # every priority backwards — measured: moving the top card down swapped the two rows on screen and
+  # left the give-way walk naming them in the order it had before.
+  #
+  # ONE REVERSAL, HERE, and `reorder_controller.js#submit` mirrors it with a comment pointing at
+  # this method — the drag reads the same DOM this list is drawn from, so it has the same job to do
+  # and there is nowhere else it could be done once for both.
   def reordered_category_ids(groups, group, offset)
     ids = groups.map { |candidate| candidate.category.id }
     index = ids.index(group.category.id)
     target = index + offset
-    return ids unless target.between?(0, ids.size - 1)
+    return ids.reverse unless target.between?(0, ids.size - 1)
 
-    ids.insert(target, ids.delete_at(index))
+    ids.insert(target, ids.delete_at(index)).reverse
   end
 
   # Whether this category is already as far as `offset` would take it — the top row cannot move up
@@ -120,41 +126,13 @@ module BudgetPageHelper
     offset.negative? ? index.zero? : index == groups.size - 1
   end
 
-  # WHY THIS RULE IS NOT IN THE FILL ORDER, and never merely that it is not — a row that fell silent
-  # here would read as a rule that failed to render.
-  #
-  # IT REPLACES `#budget_rule_reason`, WHICH SAID SOMETHING ELSE. That one worded one reason ("no
-  # account — nothing can fund it") about a rule on an account-less pool, a setup problem inside the
-  # layer being deleted. Both reasons here are about the PURPOSE ledger and both are transitional,
-  # with a deleter each:
-  #
-  #   * a category that is not holding money yet — `Category#holder?` false, so it is outside
-  #     `Category.in_fill_order` and no distribution reaches it. Task 7 makes `funded_since`
-  #     editable, which is what makes this reachable at all.
-  #   * a rule that names only a pool, written before the cutover. Task 8 drops the column, and
-  #     this arm goes with it.
-  #
-  # A CLAUSE RATHER THAN A SENTENCE, which is the correction its predecessor made at the browser: a
-  # full sentence under each row rendered the identical text down the whole band and read as a
-  # rendering fault. Each row says why beside its own name, in the length the rest of this app's
-  # rows use.
-  #
-  # THE CATEGORY IS NAMED ONLY WHERE THE ROW HAS NOT ALREADY NAMED IT (design review, nits).
-  # `#budget_rule_name` prefers the ITEM a rule pays and falls back to its CATEGORY, so this clause
-  # named the category twice on every item-less rule — the band rendered "Subscriptions ·
-  # Subscriptions isn't holding money yet", which reads as a rendering fault rather than as
-  # emphasis. An item-backed rule still needs the name, and for the original reason: "Phone · isn't
-  # holding money yet" would never say WHAT is not holding it.
-  #
-  # `budget.item` is the same question `#budget_rule_name` asks to make its own choice — the two
-  # branch on one fact, so the clause cannot repeat a name the row did not print.
-  def budget_rule_unfilled_reason(budget)
-    category = budget.category
-    return "written before the cutover — no category to hold it" if category.blank?
-
-    subject = budget.item.present? ? "#{category.name} has" : "has"
-    "#{subject} no claiming date — spending here isn't counted against it"
-  end
+  # ** `#budget_rule_unfilled_reason` IS DELETED WITH `_not_filling` (two-shapes spec §4/§7). ** It
+  # worded why a rule was outside the give-way order — "Utilities has no claiming date — spending
+  # here isn't counted against it" — for a band that listed the rules no group could show. The list
+  # is EVERY expense category now, so a category that is not holding money yet has a row of its own
+  # with its rules under it; there is nothing left outside the list to have to excuse. What the band
+  # was really about — that such a category's spending counts against nothing — is the category
+  # page's own sentence, and the row here prints its claim like any other.
 
   # WHAT THE AMOUNT FIELD IS AN AMOUNT OF.
   #
@@ -190,6 +168,29 @@ module BudgetPageHelper
       "change the amount if you mean that."
   end
 
+  # ** WHERE THE CHEVRON GOES WITH SCRIPTING OFF (two-shapes spec §4). ** One category is open at a
+  # time, so the link on a CLOSED row opens it and the link on the OPEN one closes the list — the
+  # same control saying both halves of one state, which is why it is one reader rather than an `if`
+  # in the partial. `category_list_controller` intercepts the click and flips the panels in place;
+  # without it these two hrefs are the whole mechanism.
+  def category_toggle_path(row) = row.open? ? budget_page_path : budget_page_path(open: row.category.id)
+
+  def category_toggle_label(row) = "#{row.open? ? "Hide" : "Show"} #{row.category.name}"
+
+  # ** WHAT A RULE-LESS CATEGORY'S ROW SAYS INSTEAD OF `$X claimed` (§4). ** Nothing claims this
+  # money, so there is no claim to print; what there is is a fact about the entries, over the same
+  # window the suggestions beside it are measured in (`SuggestionEngine#recent_spending`).
+  #
+  # "nothing spent yet" AT ZERO AND FOR A USER WITH NO WINDOW, because `$0.00 spent in 6 periods` is
+  # a figure pretending to be a measurement — and a user who has declared no cadence has no periods
+  # to have spent anything in. One sentence for both silences, because the row's reader cannot act
+  # on the difference.
+  def spent_recently_words(spending)
+    return "nothing spent yet" if spending.nil? || !spending.total.positive?
+
+    "#{number_to_currency(spending.total)} spent in #{pluralize(spending.periods, "period")}"
+  end
+
   # -----------------------------------------------------------------------------------------
   # §8's bottom half — the suggestions panel
   # -----------------------------------------------------------------------------------------
@@ -214,13 +215,17 @@ module BudgetPageHelper
   # and account, plus the category to be re-pointed at it — because none of that was a `Budget`
   # column. The owner IS a `Budget` column now, so the proposing kinds carry `budget[category_id]`
   # like any other field and there is nothing left to rename or to nest.
-  def suggestion_accept_path(suggestion)
+  # ** THE PANEL'S OWN CATEGORY RIDES ON THE PROPOSING LINK (two-shapes spec §4). ** The payload
+  # already carries `budget[category_id]`, and `category_id` beside it is what the form's breadcrumb
+  # and its empty-payload path read (`BudgetsController#new`) — the same parameter the panel's own
+  # "+ New rule for <category>" button carries, so the two doors into that form are one door.
+  def suggestion_accept_path(suggestion, category: nil)
     prefill = suggestion.prefill
 
     case suggestion.kind
     when :drift then edit_budget_path(prefill[:id], budget: prefill[:budget])
     when :dead_rule then edit_budget_path(prefill[:id])
-    else new_budget_path(budget: prefill[:budget])
+    else new_budget_path(category_id: category&.id, budget: prefill[:budget])
     end
   end
 
@@ -240,45 +245,27 @@ module BudgetPageHelper
   # WHAT THE BUTTON SAYS IT WILL DO, per kind. "Accept" on all four would be one word covering
   # four different acts — two of them write a new rule and an envelope, one changes a figure on an
   # existing rule, and one opens a rule for a decision this page refuses to make for the user.
+  # ** "Write it →" IS THE MOCK'S OWN WORDING (two-shapes spec §4), AND THE ARROW IS THE POINT. **
+  # It was "Write this rule", which reads as a button that WRITES one — and it does not: every one
+  # of the four opens a form the user then saves. Inside the category's own panel the noun is
+  # already said by everything around it, so what is left for the label is where the click goes.
   def suggestion_accept_label(suggestion)
     case suggestion.kind
     when :drift then "Update the rule"
     when :dead_rule then "Review the rule"
-    else "Write this rule"
+    else "Write it →"
     end
   end
 
-  # THE INDEX STRIP'S WORDING — "10 bills · 5 rates · 4 drifting · 2 dead", §8's own shorthand for
-  # a panel that on the demo runs to about 5,000px. Short by design: this is a jump list, and the
-  # heading it lands on says the kind in full.
-  #
-  # `pluralize` prints the count with the noun, and the two kinds that are ADJECTIVES rather than
-  # nouns ("drifting", "dead") take the count directly — "4 drifts" would name a thing this app has
-  # no word for, and "4 dead rules" is the heading's job, not the index's.
-  def suggestion_kind_count(kind, count)
-    case kind
-    when :dated_bill then pluralize(count, "bill")
-    when :rate then pluralize(count, "rate")
-    when :drift then "#{count} drifting"
-    else "#{count} dead"
-    end
-  end
+  # ** `#suggestion_kind_count` AND `#suggestion_kind_heading` ARE DELETED WITH THE INDEX STRIP
+  # (two-shapes spec §4). ** "10 bills · 5 rates · 4 drifting · 2 dead" was navigation for a
+  # page-wide panel about 5,000px tall; inside the category it is about, a panel is two or three
+  # rows under one heading and has nothing to navigate.
 
-  # WHAT A RUN OF ROWS IS, said in full at the top of the run — the index's shorthand expanded, so
-  # a reader who jumped knows what they jumped to. Deliberately not the same strings: an index item
-  # is read in a line of four, a heading is read alone.
-  def suggestion_kind_heading(kind)
-    case kind
-    when :dated_bill then "Dated bills"
-    when :rate then "Rates"
-    when :drift then "Rules that have drifted"
-    else "Rules that look dead"
-    end
-  end
-
-  # The fragment the index links to and the heading carries. One reader, because an anchor whose
-  # two ends are spelled separately is a link that silently stops working.
-  def suggestion_kind_anchor(kind) = "suggestions-#{kind}"
+  # ** `#suggestion_kind_anchor` IS DELETED WITH THE RUNS IT NAMED (two-shapes spec §4). ** The
+  # fragment `#suggestions-dated_bill` was the id on a run's heading inside the page-wide panel; the
+  # panel is per category, so the categories page's pointer carries `?open=<category>` instead — a
+  # parameter the page acts on rather than a scroll position it has to happen to have.
 
   # "every month" / "every 6 months", said of a PROPOSED interval rather than of a saved rule.
   # `budget_rule_basis` reads a Budget and there is no Budget yet, so this reads the integer.

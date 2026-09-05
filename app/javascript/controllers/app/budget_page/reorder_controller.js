@@ -66,10 +66,15 @@ export default class extends Controller {
     this.orderBefore.forEach((id) => this.element.insertBefore(this.rowFor(id), this.formTarget))
   }
 
+  // THE WIRE CARRIES THE FILL ORDER AND THE LIST DRAWS THE GIVE-WAY ORDER, WHICH IS ITS REVERSE
+  // (two-shapes spec §4). `Category.apply_fill_order` reads position 0 as `priority: 0` — funded
+  // first, gives way last — while the top card on screen is the one that goes without first. The
+  // ▲▼ buttons do the same reversal in `BudgetPageHelper#reordered_category_ids`, which carries the
+  // whole argument; both paths submit one shape to one endpoint, which is the point of them.
   submit() {
     const form = this.formTarget
     form.querySelectorAll("input[name='category_ids[]']").forEach((input) => input.remove())
-    this.categoryIds.forEach((id) => {
+    this.categoryIds.reverse().forEach((id) => {
       const input = document.createElement("input")
       input.type = "hidden"
       input.name = "category_ids[]"

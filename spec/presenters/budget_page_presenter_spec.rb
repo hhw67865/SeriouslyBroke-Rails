@@ -76,18 +76,33 @@ RSpec.describe BudgetPagePresenter do
     create(:budget, :per_period_rate, amount: 90, category: create(:category, :expense, user: user, name: "Coffee"))
   end
 
-  def names(rules) = rules.map { |rule| rule.budget.id }
+  def names(lines) = lines.map { |line| line.rule.id }
 
-  describe "#category_groups" do
-    it "puts each rule under the category it fills", :aggregate_failures do
+  # THE LIST, BY NAME — `#category_rows` is every EXPENSE category now (two-shapes spec §4), so a
+  # reader that took `.map(&:name)` off it is asserting the whole page's order in one line.
+  def row_names = presenter.category_rows.map(&:name)
+
+  def row(name) = presenter.category_rows.find { |candidate| candidate.name == name }
+
+  # ** THE LIST IS EVERY EXPENSE CATEGORY, RULED ONES IN GIVE-WAY ORDER (two-shapes spec §4). **
+  # It was `#category_groups` — holders with a rule, in `[priority, name]` — and both halves moved:
+  # the population widened to the whole expense budget, and the order is `ClaimRows#give_way_order`
+  # grouped back, which is Home's own section read off the same object.
+  describe "#category_rows" do
+    # ** THE ORDER IS GIVE-WAY AND NOT FILL, WHICH IS THE REVERSE (two-shapes spec §4). ** This
+    # example asserted `[Groceries(1), Rent(2)]` under `#category_groups`, whose key was
+    # `[priority, name]` — the order money would have been handed out in. Nothing is handed out: the
+    # HIGHER priority number is the one that goes without first, so the list reads the other way and
+    # the row at the TOP is the one the shortfall reaches first. Same list Home's blocks print.
+    it "puts each rule under the category it claims for, highest priority first", :aggregate_failures do
       groceries = holder("Groceries")
       rent = holder("Rent", priority: 2)
       groceries_rule = rate(groceries, 400)
       rent_rule = rate(rent, 1_500)
 
-      expect(presenter.category_groups.map(&:category)).to eq([groceries, rent])
-      expect(names(presenter.category_groups.first.rules)).to eq([groceries_rule.id])
-      expect(names(presenter.category_groups.last.rules)).to eq([rent_rule.id])
+      expect(presenter.category_rows.map(&:category)).to eq([rent, groceries])
+      expect(names(row("Groceries").lines)).to eq([groceries_rule.id])
+      expect(names(row("Rent").lines)).to eq([rent_rule.id])
     end
 
     # PRIORITY FIRST, NAME AS THE TIE-BREAK, on a fixture where all three candidate orders
@@ -96,11 +111,157 @@ RSpec.describe BudgetPagePresenter do
     # the order is whatever Postgres hands back, and a plain UPDATE relocates a row in the heap:
     # renaming a category would reshuffle the fill order with no change to what actually fills
     # first.
-    it "orders categories by priority and then by name" do
+    # PRIORITY FIRST, NAME AS THE TIE-BREAK, on a fixture where all three candidate orders disagree
+    # — and both terms REVERSED, because this is the give-way walk: the category that would have
+    # been funded LAST goes without first, and a tie on priority breaks on the later NAME.
+    # Insertion order is Zebra, Alpha, Middle and fill order is Middle, Alpha, Zebra, so a sort that
+    # fell through to either would fail.
+    it "orders categories by priority and then by name, both reversed" do
       ["Zebra", "Alpha"].each { |name| rate(holder(name, priority: 2), 100) }
       rate(holder("Middle", priority: 1), 100)
 
-      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Middle", "Alpha", "Zebra"])
+      expect(row_names).to eq(["Zebra", "Alpha", "Middle"])
+    end
+
+    # ** THE ORDER IS `HomePresenter#give_way_order`'S, GROUPED BACK — the same list, off the same
+    # object (`ClaimRows`). ** The type decides BEFORE priority does (rules-own-the-budget §3), so a
+    # choice rule on a priority-1 category gives way before a bill on a priority-9 one — and
+    # `[priority, name]` alone would rank these the other way round. Pinned against Home's own
+    # reader rather than against a literal, because the two lists agreeing IS the property: a second
+    # sort here is exactly how the strip came to name a category the section below it ranked
+    # elsewhere.
+    it "reads the same order Home's blocks do", :aggregate_failures do
+      create(:budget, :per_period_rate, category: holder("Rent", priority: 9), amount: 900, rule_type: :bill)
+      create(:budget, :per_period_rate, category: holder("Fun", priority: 1), amount: 100, rule_type: :choice)
+
+      expect(row_names).to eq(["Fun", "Rent"])
+      expect(row_names).to eq(HomePresenter.new(user: user, today: today).category_blocks.map(&:name))
+    end
+
+    # ** EVERY EXPENSE CATEGORY, RULE-LESS ONES AFTER THE RULED ONES, BY NAME (§4). ** The old list
+    # was holders-with-a-rule; a category nobody has written a rule for is exactly where the next
+    # rule goes, and a page that omitted it sent that user hunting. Both halves in one example,
+    # because a list that put them in one pile would pass an assertion about membership alone.
+    it "lists rule-less expense categories after the ruled ones, by name", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+      create(:category, :expense, user: user, name: "Zoo")
+      create(:category, :expense, user: user, name: "Aquarium")
+
+      expect(row_names).to eq(["Groceries", "Aquarium", "Zoo"])
+      expect(row("Aquarium").lines).to be_empty
+      expect(row("Aquarium")).not_to be_ruled
+    end
+
+    # AN INCOME CATEGORY IS NOT ON THIS PAGE AT ALL — a rule cannot claim one
+    # (`Budget#category_must_be_an_expense`), so a row for it would be a row with no rule it could
+    # ever hold.
+    it "leaves out income categories and another user's" do
+      rate(holder("Groceries"), 400)
+      create(:category, :income, user: user, name: "Salary")
+      rate(create(:category, :expense, :funded, user: create(:user), name: "Their Rent"), 900)
+
+      expect(row_names).to eq(["Groceries"])
+    end
+
+    # ** A RULE ON A CATEGORY THAT HOLDS NOTHING HAS A ROW NOW, which is what deleted the
+    # "not filling" band (§4/§7). ** That band listed exactly these rules under a heading saying no
+    # group could show them; every expense category is in the list, so the rule sits under its own
+    # category like any other — and the row draws NO drag handle, because
+    # `Category.apply_fill_order` would refuse a list containing it.
+    it "gives a rule on a category that holds nothing a row, and no handle", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+      waiting = create(:budget, :per_period_rate, amount: 90, category: create(:category, :expense, user: user, name: "Coffee"))
+
+      expect(row_names).to include("Coffee")
+      expect(names(row("Coffee").lines)).to eq([waiting.id])
+      expect(row("Coffee")).not_to be_reorderable
+      expect(row("Groceries")).to be_reorderable
+    end
+
+    # ** THE DRAGGABLE ROWS ARE EXACTLY `Category.apply_fill_order`'S OWN POPULATION. ** Asserted as
+    # the identity it is rather than inferred: the page can never render an order its own button is
+    # refused for, and the refusal it produced would name the order the page had just drawn. The
+    # rule-less holder is in neither list, which is the one shape that could drift.
+    it "offers a handle on exactly the set the reorder endpoint accepts" do
+      rate(holder("Groceries"), 400)
+      create(:budget, :per_period_rate, amount: 35, category: create(:category, :expense, user: user, name: "Coffee"))
+      create(:category, :expense, :funded, user: user, name: "Vacation")
+
+      expect(presenter.reorderable_rows.map { |candidate| candidate.category.id })
+        .to match_array(user.categories.in_fill_order.with_a_rule.ids)
+    end
+
+    # ** ONE DOT PER RULE, IN ITS OWN TYPE — never the category's (rules-own-the-budget §3). ** A
+    # category may carry a bill beside a choice and they give way at opposite ends of the walk, so a
+    # row that painted one dot per CATEGORY would be colouring the wrong thing. In the rules' own
+    # give-way order, because that is the order the panel underneath lists them in.
+    it "carries one dot per rule in the rule's own type", :aggregate_failures do
+      groceries = holder("Groceries")
+      create(:budget, :per_period_rate, category: groceries, amount: 400, rule_type: :usage)
+      create(:budget, :per_period_rate, category: groceries, item: lane(groceries, "Wine"), amount: 50, rule_type: :choice)
+
+      expect(row("Groceries").type_dots).to eq([:choice, :usage])
+      expect(row("Groceries").rule_count).to eq(2)
+    end
+
+    # THE BADGE COUNTS ONE CATEGORY'S SUGGESTIONS, off `SuggestionEngine#by_category` — the same
+    # partition the open panel renders, so the number on the row and the rows inside it are one
+    # grouping. Zero where the engine has nothing, which is what hides the badge.
+    # THE QUIET CATEGORY'S RULE IS ITEM-BACKED so nothing fires on it: drift measures item-LESS rate
+    # rules only, and the dead-rule detector needs its item to have had entries. A plain rate rule
+    # on a holder with no spending IS a drift suggestion ("averaged $0.00 for 4 periods"), which is
+    # correct and would make this example assert nothing about the partition.
+    it "counts only this category's suggestions", :aggregate_failures do
+      quiet = holder("Groceries")
+      create(:budget, :per_period_rate, category: quiet, item: lane(quiet, "Bread"), amount: 400)
+      noisy = create(:category, :expense, user: user, name: "Coffee")
+      beans = create(:item, category: noisy, name: "Beans")
+      [42, 28, 14].each { |back| create(:entry, item: beans, amount: 150, date: today - back.days) }
+
+      expect(row("Coffee").suggestion_count).to eq(1)
+      expect(row("Coffee")).to be_suggestions
+      expect(row("Groceries").suggestion_count).to eq(0)
+    end
+
+    # ** `spent_recently` IS ONLY ASKED OF A RULE-LESS CATEGORY, and it is the ENGINE's window. ** A
+    # ruled category's spending is already in its rows (each rule's own lane, and the lanes
+    # partition), so a category-level figure beside them would be the same money said twice.
+    it "reads the window figure for a rule-less category and nothing for a ruled one", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+      coffee = create(:category, :expense, user: user, name: "Coffee")
+      beans = create(:item, category: coffee, name: "Beans")
+      [42, 28, 14].each { |back| create(:entry, item: beans, amount: 150, date: today - back.days) }
+
+      expect(row("Coffee").spent_recently.total).to eq(450)
+      expect(row("Coffee").spent_recently.periods).to be_positive
+      expect(row("Groceries").spent_recently).to be_nil
+    end
+
+    # NOTHING SPENT AND NOTHING TO SAY — nil rather than a zero, which the row reads as
+    # "nothing spent yet" (`BudgetPageHelper#spent_recently_words`).
+    it "reads no window figure for a category nothing was spent in" do
+      create(:category, :expense, user: user, name: "Coffee")
+
+      expect(row("Coffee").spent_recently).to be_nil
+    end
+
+    # ** WHICH CATEGORY IS EXPANDED — the `open` parameter, compared as a STRING because that is how
+    # it arrives. ** One at a time, and an id that is not this user's simply matches no row rather
+    # than raising: the page never looks the parameter up, it compares it against the ids it
+    # rendered.
+    it "opens exactly the category the parameter names", :aggregate_failures do
+      groceries = holder("Groceries")
+      rate(groceries, 400)
+      rate(holder("Rent", priority: 2), 900)
+
+      opened = described_class.new(user: user, today: today, open_category_id: groceries.id)
+
+      expect(opened.category_rows.select(&:open?).map(&:name)).to eq(["Groceries"])
+      expect(presenter.category_rows.select(&:open?)).to be_empty
+      expect(
+        described_class.new(user: user, today: today, open_category_id: SecureRandom.uuid)
+                .category_rows.select(&:open?)
+      ).to be_empty
     end
 
     # BudgetCalculator#due_order breaks a shared due date toward the LARGER obligation, because
@@ -111,7 +272,7 @@ RSpec.describe BudgetPagePresenter do
       small = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1), item: lane(category, "Small"))
       large = rolling(category, amount: 500, anchor: Date.new(2026, 3, 1), item: lane(category, "Large"))
 
-      expect(names(presenter.category_groups.first.rules)).to eq([large.id, small.id])
+      expect(names(row("Pet Care").lines)).to eq([large.id, small.id])
       expect(small.created_at).to be < large.created_at
     end
 
@@ -120,17 +281,7 @@ RSpec.describe BudgetPagePresenter do
       later = rolling(category, amount: 900, anchor: Date.new(2026, 4, 1), item: lane(category, "Later"))
       sooner = rolling(category, amount: 100, anchor: Date.new(2026, 3, 1), item: lane(category, "Sooner"))
 
-      expect(names(presenter.category_groups.first.rules)).to eq([sooner.id, later.id])
-    end
-
-    it "leaves out a category with no rule at all, and another user's rules", :aggregate_failures do
-      holder("Empty")
-      rate(holder("Groceries"), 400)
-      stranger = create(:user)
-      rate(create(:category, :expense, :funded, user: stranger, name: "Their Rent"), 900)
-
-      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Groceries"])
-      expect(presenter.category_groups.first.rules.size).to eq(1)
+      expect(names(row("Pet Care").lines)).to eq([sooner.id, later.id])
     end
   end
 
@@ -140,7 +291,7 @@ RSpec.describe BudgetPagePresenter do
   # (spec §5). The figure a category has is `Σ its rules' claims` (§3), which is what `free`
   # subtracted on Home and what the header prints. The `:left_to_spend` state that the first example
   # asserted is the same $150 said the other way round, and is now the row's own `$250.00 of $400.00`.
-  describe "a group's own reading" do
+  describe "a row's own reading" do
     # PLANTED: a $400-a-period rate rule with $250 spent inside the period. §3.1 —
     # `claim = max(0, rate + Σ adjustments − spent)` = max(0, 400 + 0 − 250) = **$150.00**, and
     # `Group#claim` is Σ over the category's rules, which is that one rule.
@@ -148,10 +299,8 @@ RSpec.describe BudgetPagePresenter do
       category = holder("Groceries")
       rate(category, 400)
       create(:entry, item: create(:item, category: category), amount: 250, date: today)
-      group = presenter.category_groups.first
-
-      expect(group.claim).to eq(150)
-      expect(group.claim).to be_a(BigDecimal)
+      expect(row("Groceries").claimed).to eq(150)
+      expect(row("Groceries").claimed).to be_a(BigDecimal)
     end
 
     # A category no money has moved through must not turn a money figure into an Integer: the empty
@@ -160,8 +309,8 @@ RSpec.describe BudgetPagePresenter do
     it "reports a decimal claim for an untouched category", :aggregate_failures do
       rate(holder("Groceries"), 400)
 
-      expect(presenter.category_groups.first.claim).to eq(400)
-      expect(presenter.category_groups.first.claim).to be_a(BigDecimal)
+      expect(row("Groceries").claimed).to eq(400)
+      expect(row("Groceries").claimed).to be_a(BigDecimal)
     end
 
     # TWO RULES, TWO DENOMINATIONS, ONE HEADER. §3.4 gives a rate rule and a dated one different
@@ -173,7 +322,7 @@ RSpec.describe BudgetPagePresenter do
       rate(category, 400)
       rolling(category, amount: 1_200, anchor: Date.new(2025, 9, 1), every: 6, item: lane(category, "Vet"))
 
-      expect(presenter.category_groups.first.claim).to eq(400)
+      expect(row("Pet Care").claimed).to eq(400)
     end
 
     # RED WHERE A RULE UNDER IT NEEDS A HUMAN, and quiet where none does — the same two facts Home's
@@ -185,14 +334,14 @@ RSpec.describe BudgetPagePresenter do
       rate(loud, 180)
       create(:entry, item: create(:item, category: loud), amount: 220, date: today)
 
-      expect(presenter.category_groups.first).not_to be_needs_attention
-      expect(presenter.category_groups.last).to be_needs_attention
+      expect(row("Groceries")).not_to be_needs_attention
+      expect(row("Dining")).to be_needs_attention
     end
 
     it "states the category's priority position" do
       rate(holder("Groceries", priority: 4), 400)
 
-      expect(presenter.category_groups.first.priority).to eq(4)
+      expect(row("Groceries").priority).to eq(4)
     end
   end
 
@@ -216,7 +365,7 @@ RSpec.describe BudgetPagePresenter do
     # the unfulfilled occurrence; the fund state splits the strip's SENTENCE, not the verdict.
     it "is overdue on a date that has passed, with the fund whole", :aggregate_failures do
       car_insurance
-      rule = presenter.category_groups.first.rules.first
+      rule = row("Car Insurance").lines.first
 
       expect(rule.next_due_on).to eq(Date.new(2025, 9, 1))
       expect(rule.built_up).to eq(1_200)
@@ -230,7 +379,7 @@ RSpec.describe BudgetPagePresenter do
     # `cycles_paid_by` stays at 0 and the occurrence does NOT roll.
     it "is overdue where the date has passed and the fund is short", :aggregate_failures do
       pay(car_insurance, 500)
-      rule = presenter.category_groups.first.rules.first
+      rule = row("Car Insurance").lines.first
 
       expect(rule.next_due_on).to eq(Date.new(2025, 9, 1))
       expect(rule.built_up).to eq(700)
@@ -242,7 +391,7 @@ RSpec.describe BudgetPagePresenter do
     # six-monthly rule re-aims at Mar 1 2026.
     it "rolls to the next occurrence once the bill has been paid", :aggregate_failures do
       pay(car_insurance, 1_200)
-      rule = presenter.category_groups.first.rules.first
+      rule = row("Car Insurance").lines.first
 
       expect(rule.next_due_on).to eq(Date.new(2026, 3, 1))
       expect(rule).not_to be_overdue
@@ -253,91 +402,48 @@ RSpec.describe BudgetPagePresenter do
     # answers nil, which is the fact.
     it "is nil for an anchorless rate rule", :aggregate_failures do
       rate(holder("Groceries"), 400)
-      rule = presenter.category_groups.first.rules.first
+      rule = row("Groceries").lines.first
 
       expect(rule.next_due_on).to be_nil
       expect(rule).not_to be_anchored
     end
   end
 
-  describe "#no_rules?" do
-    it "is true for a user with no rules anywhere" do
+  # ** THE EMPTY GATE MOVED FROM "no rules" TO "no expense categories" (two-shapes spec §4). ** The
+  # list is every expense category now, so a user with categories and no rules is not empty at all —
+  # they have a row apiece, each carrying its own "+ New rule for <category>" button, which is the
+  # screen the empty frame used to stand in for.
+  describe "#no_categories?" do
+    it "is true for a user with no expense category at all", :aggregate_failures do
+      create(:category, :income, user: user, name: "Salary")
+
+      expect(presenter).to be_no_categories
+      expect(presenter.category_rows).to be_empty
+    end
+
+    # ** THE CASE THAT USED TO READ AS EMPTY AND MUST NOT. ** A holder with no rule drew no group
+    # under the old reader, so this user met "No funding rules yet" over a category they had already
+    # made; now it is a row with a button in it.
+    it "is false for a category with no rule" do
       holder("Groceries")
 
-      expect(presenter).to be_no_rules
+      expect(presenter).not_to be_no_categories
     end
 
-    it "is false for a rule in the fill order" do
+    it "is false once a rule exists" do
       rate(holder("Groceries"), 400)
 
-      expect(presenter).not_to be_no_rules
-    end
-
-    # THE GAP BETWEEN "has rules" AND "has groups", pinned rather than left to be discovered. A rule
-    # on a category that holds nothing draws no group here — `Category.in_fill_order` is holders —
-    # and telling that user they have no rules would be this screen contradicting the rules they can
-    # see elsewhere. `#no_rules?` asks about every rule the user has; `budget_page/show` prints its
-    # own sentence for the difference.
-    it "is false for a rule no group can show", :aggregate_failures do
-      unshowable_rule
-
-      expect(presenter).not_to be_no_rules
-      expect(presenter.category_groups).to be_empty
+      expect(presenter).not_to be_no_categories
     end
   end
 
-  # THE POPULATION IS `Category.in_fill_order.with_a_rule` — the SAME set `.apply_fill_order`
-  # refuses any other list than (fix round 1, MED-1). It was `with_a_rule` alone, which is wider by
-  # exactly the rules on categories that hold nothing, and every one of those rendered a group with
-  # a priority badge and two reorder arrows the endpoint would refuse: the page offering a control
-  # whose every use is rejected, and rejected with a message about the order the page itself had
-  # just drawn.
-  describe "#unfilled_rules" do
-    def unfunded_rule(name, amount)
-      create(
-        :budget,
-        :per_period_rate,
-        amount: amount,
-        category: create(:category, :expense, user: user, name: name)
-      )
-    end
-
-    # BOTH DIRECTIONS ON ONE FIXTURE, and `funded_since` is the only variable that moves: two rules
-    # of the same shape, one on a category that holds money and one on a category that does not.
-    it "takes the rule on a category that holds nothing, and leaves the holder's alone", :aggregate_failures do
-      filling = rate(holder("Groceries"), 400)
-      waiting = unfunded_rule("Coffee", 35)
-
-      expect(names(presenter.unfilled_rules)).to eq([waiting.id])
-      expect(presenter.category_groups.map { |group| group.category.name }).to eq(["Groceries"])
-      expect(names(presenter.category_groups.sole.rules)).to eq([filling.id])
-    end
-
-    # THE ALIGNMENT ITSELF, asserted as the identity it is rather than inferred from the two lists
-    # above: what the page draws a card for and what the endpoint will accept are one set, so the
-    # page can never render an order its own button is refused for. The savings category is in the
-    # fill order and carries no rule, which is the one shape that is in neither list.
-    it "leaves the groups exactly the set apply_fill_order accepts" do
-      rate(holder("Groceries"), 400)
-      unfunded_rule("Coffee", 35)
-      create(:category, :expense, :funded, user: user, name: "Vacation")
-
-      expect(presenter.category_groups.map { |group| group.category.id })
-        .to match_array(user.categories.in_fill_order.with_a_rule.ids)
-    end
-
-    it "takes a rule no group can show too" do
-      unshowable = unshowable_rule
-
-      expect(names(presenter.unfilled_rules)).to eq([unshowable.id])
-    end
-
-    it "is empty when every rule fills a holder" do
-      rate(holder("Groceries"), 400)
-
-      expect(presenter.unfilled_rules).to be_empty
-    end
-  end
+  # ** `#unfilled_rules` IS DELETED WITH THE BAND IT FED (two-shapes spec §4/§7). ** It was the
+  # rules no group could show — a rule on a category that is not holding money yet — listed under a
+  # heading saying their spending was not counted against them. The list is EVERY expense category,
+  # so every one of those rules has a row under its own category; what the band uniquely said (no
+  # handle on such a row, because `Category.apply_fill_order` refuses it) is pinned in
+  # `#category_rows` above, in both directions, and the alignment example that lived here moved
+  # there with it.
 
   # §8's three lines and §9's gate. Every figure is pinned against a planted literal rather than
   # against a sum recomputed from the same records — `rules_need == Σ steady_ask` over the fixture
@@ -507,7 +613,7 @@ RSpec.describe BudgetPagePresenter do
       )
     end
 
-    def row_for(name) = presenter.category_groups.find { |group| group.category.name == name }.rules.sole
+    def row_for(name) = row(name).lines.sole
 
     it "carries the built-up, the planned share and the shape for an accruing rule", :aggregate_failures do
       goal_rule
@@ -515,7 +621,7 @@ RSpec.describe BudgetPagePresenter do
       expect(row_for("Vacation")).to have_attributes(
         shape: :dated,
         built_up: BigDecimal("600"),
-        planned_this_period: BigDecimal("150"),
+        per_period: BigDecimal("150"),
         claim: BigDecimal("600"),
         target: BigDecimal("1200")
       )
@@ -533,7 +639,7 @@ RSpec.describe BudgetPagePresenter do
 
       create(:adjustment, rule: rule, amount: -150, date: today)
 
-      after = described_class.new(user: user, today: today).category_groups.sole.rules.sole
+      after = described_class.new(user: user, today: today).category_rows.sole.lines.sole
       expect(after).not_to be_skippable
     end
 
@@ -596,38 +702,30 @@ RSpec.describe BudgetPagePresenter do
 
       # ** EVERY READER THE RENDERED PAGE ASKS FOR, IN THE ORDER `show.html.erb` ASKS IT. ** A cost
       # pin is only as honest as the reader list it walks: a reader this method never calls is a
-      # reader free to open a `ClaimLedger` of its own without either figure below moving. The three
-      # panels the partials read are the type overview, the give-way order's groups, the "not
-      # filling" band and the structural check.
+      # reader free to open a `ClaimLedger` of its own without either figure below moving. The page
+      # is the tiles, then a row per expense category, then — for every one of them, because the
+      # closed panels are rendered and hidden (§4) — that category's rules, its adjust panel's span,
+      # its deltas and its suggestions.
       #
-      # ** THE TYPE OVERVIEW IS READ THROUGH THIS PIN (rules-own-the-budget spec §3). ** It sums
-      # `ClaimCalculator#standing_ask` over every rule the user owns, off the page's ONE ledger — a
-      # reader that reached for `Budget#steady_ask` instead would build a second calculator per
-      # DATED bill, which is why the fixture below carries one.
-      #
-      # ** `#suggestions` IS DELIBERATELY ABSENT. ** It is `SuggestionEngine`'s cost, not this
-      # class's — eight statements of detectors this presenter only forwards — and folding it in
-      # would put the engine's query plan inside a pin about the page's own ledger. Its own spec
-      # owns it.
+      # ** `#suggestions_for` IS READ AND `SuggestionEngine`'s OWN COST IS NOT THIS PIN'S. ** The
+      # engine is eight or nine statements of detectors this presenter only forwards, and its own
+      # spec owns that figure; what this pin has to see is that the page runs ONE engine — a second
+      # would double them, which is exactly the kind of constant the delta pin below cannot catch.
       def read_the_page(page)
-        page.no_rules?
-        page.type_overview
-        page.category_groups.each do |group|
-          group.rules.each { |rule| [rule.claim, rule.built_up, rule.planned_this_period, rule.adjustments.size] }
-        end
-        page.unfilled_rules
-        read_the_structural_check(page)
+        page.no_categories?
+        page.tiles
+        page.reorderable_rows
+        page.category_rows.each { |row| read_the_row(page, row) }
       end
 
-      # THE ADJUST PANEL'S OWN FOUR (`_structural_check.html.erb`). `#rules_need` is the one that
-      # matters: `Budget.steady_need` takes the page's `ledger:` and a version that built its own
-      # would cost the whole set of grouped aggregates twice — invisible to every other example here.
-      def read_the_structural_check(page)
-        page.declared?
-        page.rules_need
-        page.typical_income
-        page.underwater?
-        page.leftover
+      # ONE ROW, AS THE PARTIALS READ IT: the row's own facts, then — because every closed panel is
+      # rendered and hidden (§4) — its rules, its adjust panel's span, its deltas and its
+      # suggestions.
+      def read_the_row(page, row)
+        row.lines.each { |line| [line.claim, line.built_up, line.per_period, line.countable_span, line.adjustments.size] }
+        [row.type_dots, row.claimed, row.spent_recently, row.suggestion_count, row.open?]
+        page.suggestions_for(row.category)
+        page.hidden_suggestions_for(row.category)
       end
 
       # A FRESH PRESENTER EACH TIME. Every reader on this class is memoised, so a second read
@@ -697,44 +795,57 @@ RSpec.describe BudgetPagePresenter do
         expect(count_statements { read_the_page(page) }).to eq(0)
       end
 
-      # ** FIFTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain (MED-2). **
+      # ** NINETEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain (MED-2). **
       #
-      #    1. `#rules` — `User#all_budgets`, every rule the user owns …
-      #  2-4. … and its `includes(:item, category: :user)` preload: the one item a rule names, the
-      #       three categories, the one user. One statement each, whatever the row count.
-      #    5. `ClaimLedger#rules` — the SAME set again, loaded by the ledger for its own probes …
-      #  6-8. … and its own copy of that preload. ** THE FOUR ARE A KNOWN DUPLICATE AND THIS PIN IS
-      #       WHERE IT IS VISIBLE: ** the presenter's set is `User#all_budgets` and the ledger's is
-      #       `Budget.for_user`, two spellings of one population, and closing the gap is a change to
-      #       what `#rules` MEANS rather than a cost fix — so it is named here rather than silently
-      #       carried.
-      #    9. the ledger's ITEM spending lane (the Bread rule names an item).
-      #   10. its adjustment lane — one grouped statement for every delta the claims read.
-      #   11. its CATCH-ALL spending lane (the Rent bill and the Coffee rule name no item).
-      #   12. `#adjustments_this_period` — ONE listing of this period's deltas for every row …
-      #  13-15. … and its `includes(rule: { category: :user })` preload, which is what keeps
+      #    1. `#expense_categories` — EVERY expense category, which IS the list (§4). NEW in this
+      #       task, and the rule-less half of the page is made of it.
+      #    2. `ClaimLedger#rules` — every rule the user owns, `Budget.for_user` …
+      #  3-5. … and its `includes(:item, category: :user)` preload: the items rules name, the
+      #       categories, the one user. One statement each, whatever the row count.
+      #    6. `#adjustments_this_period` — ONE listing of this period's deltas for every row …
+      #  7-9. … and its `includes(rule: { category: :user })` preload, which is what keeps
       #       `Adjustment#local_day` from walking `rule → category → user` per delta.
+      #   10. the ledger's ITEM spending lane (the Bread rule names an item).
+      #   11. its adjustment lane — one grouped statement for every delta the claims read.
+      #   12. its CATCH-ALL spending lane (the Rent bill and the Coffee rule name no item).
+      #  13-19. `SuggestionEngine`, ONCE for the whole page however many rows ask it: its expense
+      #       categories, its expense items, its rules and that set's three preloads, and the entry
+      #       history. Its own spec owns those figures; what THIS pin owns is the "once" — the panel
+      #       is inside every row now, and a screen that built an engine per row would run them per
+      #       category with nothing else in this file to see it.
       #
-      # NOTHING BELOW IS A STATEMENT AND THAT IS THE POINT: `#type_overview` and `#rules_need` read
-      # `ClaimCalculator#standing_ask`, which touches two columns and the period grid; `#unfilled_rules`
-      # is `rules - grouped_rules` in memory; `#category_groups` sorts the preloaded categories rather
-      # than re-asking `Category.in_fill_order`.
+      # ** THE PAGE'S OWN COST WENT DOWN BY THREE AND THE PIN WENT UP BY FOUR. ** The old figure was
+      # fifteen and deliberately EXCLUDED the engine, whose panel was a separate section; lines 1-12
+      # here are the same measurement and are TWELVE, because the old pin's lines 5-8 were a KNOWN
+      # DUPLICATE — this class loaded `user.all_budgets` while the ledger loaded `Budget.for_user`,
+      # two spellings of one population with a preload each — and `#rules` is the ledger's set now.
+      # What replaced them is one category list. The engine is inside the count because it is inside
+      # the rows.
+      #
+      # ** THE ENGINE RE-READS ROWS THE PAGE ALREADY HOLDS (13-18), and that is stated rather than
+      # hidden. ** It takes a user and a day and owns its own reads; handing it the page's ledger is
+      # a change to what that class IS, not a cost fix, so it is named here as the next thing to
+      # close rather than silently carried.
+      #
+      # NOTHING ELSE IS A STATEMENT AND THAT IS THE POINT: `#tiles` reads
+      # `ClaimCalculator#standing_ask`, which touches two columns and the period grid;
+      # `#category_rows` groups `ClaimRows#blocks` in memory and subtracts them from line 1;
+      # `#recent_spending` rolls up the entry rows line 19 already fetched.
       #
       # ** WHY THIS PIN AND THE DELTA PIN ARE BOTH HERE, AND WHAT EACH ONE ALONE CANNOT SEE (LOW-1).
       # ** The delta pin is a DIFFERENCE — five rules on a category cost exactly what one costs — so
       # it catches anything that grows with the ROW COUNT: a calculator built inside a partial, a
-      # preload dropped. It is BLIND to a constant: a second `ClaimLedger` opened once per render adds
-      # the same statements to both sides of the equality and cancels, and the pin stays green. This
-      # one is the ABSOLUTE figure and sees exactly that. Measured on this fixture: dropping
-      # `ledger:` from `#rules_need` — `Budget.steady_need` building its own ledger — takes it from
-      # **15 to 19** (that ledger's rules and its three preloads; its lanes stay lazy because
-      # `#standing_ask` reads no rows), and a `#type_overview` that built a ledger per rule instead of
-      # reading the page's takes it to **36**. Both readings leave the delta pin passing. Neither pin
-      # is redundant and neither subsumes the other.
-      it "costs fifteen statements for a whole render" do
+      # preload dropped. It is BLIND to a constant: a second `ClaimLedger` opened once per render
+      # adds the same statements to both sides of the equality and cancels, and the pin stays green.
+      # This one is the ABSOLUTE figure and sees exactly that. Measured on this fixture: dropping
+      # `ledger:` from `#rules_need` — `Budget.steady_need` building its own ledger — takes it to
+      # **23** (that ledger's rules and its three preloads; its lanes stay lazy because
+      # `#standing_ask` reads no rows). Both readings leave the delta pin passing. Neither pin is
+      # redundant and neither subsumes the other.
+      it "costs nineteen statements for a whole render" do
         a_whole_page
 
-        expect(count_statements { read_every_row }).to eq(15)
+        expect(count_statements { read_every_row }).to eq(19)
       end
     end
   end
@@ -790,7 +901,8 @@ RSpec.describe BudgetPagePresenter do
       typed(holder("Groceries"), 600, :usage)
       typed(create(:category, :expense, user: user, name: "Someday"), 300, :choice)
 
-      expect(presenter.unfilled_rules.map { |rule| rule.budget.category.name }).to eq(["Someday"])
+      expect(row("Someday").lines.size).to eq(1)
+      expect(row("Someday")).not_to be_reorderable
       expect(presenter.type_overview).to eq([[:usage, 600], [:choice, 300]])
     end
 
@@ -832,11 +944,11 @@ RSpec.describe BudgetPagePresenter do
   # ** EACH ROW SAYS WHICH KIND IT IS (spec §3). ** The label beside a rule and the overview above
   # the groups are two readings of one column, so the row carries `rule_type` off the record rather
   # than as a member a build step could fill in differently.
-  describe "Rule#rule_type" do
+  describe "ClaimLine#rule_type" do
     it "carries the rule's own type onto the row" do
       create(:budget, :per_period_rate, category: holder("Fun"), amount: 300, rule_type: :choice)
 
-      expect(presenter.category_groups.sole.rules.sole.rule_type).to eq("choice")
+      expect(presenter.category_rows.sole.lines.sole.rule_type).to eq("choice")
     end
   end
 end

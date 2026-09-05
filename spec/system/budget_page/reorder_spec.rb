@@ -47,19 +47,30 @@ RSpec.describe "Budget page reorder", type: :system do
   end
 
   describe "moving a category up the fill order", :aggregate_failures do
+    # ** THE LIST IS IN GIVE-WAY ORDER, SO THE HIGHEST PRIORITY NUMBER IS AT THE TOP (§4). **
+    # Groceries is priority 1 and Fun Money 2, so the page opens `["Fun Money", "Groceries"]` — the
+    # order the shortfall reaches them in — and moving Fun Money UP the fill order (to priority 0)
+    # moves it DOWN this list. That is not a contradiction: the arrows write `priority`, which is
+    # what "up" means, and the list draws who gives way first.
     it "changes the order of the cards" do
-      click_button "Move Fun Money up"
+      expect(cards).to eq(["Fun Money", "Groceries"])
+
+      click_button "Move Groceries up"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      expect(cards).to eq(["Fun Money", "Groceries"])
+      expect(cards).to eq(["Groceries", "Fun Money"])
     end
 
+    # ** THE NUMBER IS STILL ON THE ROW, AND IT IS NOT DECORATION. ** This is the screen where
+    # priority is SET: the number is what these arrows write, what the category form's own field
+    # says, and what "the highest number gives way first" is about. It sits beside the handle and is
+    # hidden below `sm`, where the row keeps handle · name · dots · claimed (§4).
     it "restates each category's new position on the page it comes back to" do
-      click_button "Move Fun Money up"
+      click_button "Move Groceries up"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      within(group("Fun Money")) { expect(page).to have_content("priority 0") }
       within(group("Groceries")) { expect(page).to have_content("priority 1") }
+      within(group("Fun Money")) { expect(page).to have_content("priority 0") }
     end
 
     # THE DATABASE, NOT THE LIST ON SCREEN. $500 of income cannot cover $700 of rules, so exactly
@@ -67,10 +78,16 @@ RSpec.describe "Budget page reorder", type: :system do
     # Read back off the model's own give-way scope rather than off the page that ordered it: the
     # page is what is being ordered, and asking it what the order means would be one screen
     # agreeing with itself.
+    # ** THE DATABASE, NOT THE LIST ON SCREEN — and the two run in OPPOSITE directions, which is
+    # exactly what this example is for. ** `in_fill_order` is `[priority, name]` ascending, the
+    # order money would have been handed out in; the page draws the reverse, the order the shortfall
+    # reaches. Moving Groceries UP the drawn list therefore moves it DOWN this one, and a page that
+    # submitted the order it drew verbatim would leave this reading unchanged while the cards
+    # visibly swapped (measured — see `BudgetPageHelper#reordered_category_ids`).
     it "writes the new give-way order rather than only redrawing the cards" do
       expect(give_way_order).to eq(["Groceries", "Fun Money"])
 
-      click_button "Move Fun Money up"
+      click_button "Move Groceries up"
       expect(page).to have_content("Your money fills them in that order now.")
 
       expect(give_way_order).to eq(["Fun Money", "Groceries"])
@@ -81,10 +98,10 @@ RSpec.describe "Budget page reorder", type: :system do
   # that got the sign wrong would move the wrong row while still producing a valid order.
   describe "moving a category down the fill order", :aggregate_failures do
     it "arrives at the same order as moving the other one up" do
-      click_button "Move Groceries down"
+      click_button "Move Fun Money down"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      expect(cards).to eq(["Fun Money", "Groceries"])
+      expect(cards).to eq(["Groceries", "Fun Money"])
     end
   end
 
@@ -97,12 +114,29 @@ RSpec.describe "Budget page reorder", type: :system do
 
     # Both directions on both rows, on one screen: an unconditionally disabled pair would pass
     # half of this and an unconditionally enabled one the other half.
+    # THE ENDS ARE THE ENDS OF THE LIST AS DRAWN, and the list is give-way order — so Fun Money is
+    # the top row and cannot move up, and Groceries is the bottom one and cannot move down.
     it "offers no move off either end" do
-      within("[data-fill-order]") do
-        expect(page).to have_button("Move Groceries up", disabled: true)
-        expect(page).to have_button("Move Groceries down", disabled: false)
-        expect(page).to have_button("Move Fun Money up", disabled: false)
-        expect(page).to have_button("Move Fun Money down", disabled: true)
+      within("[data-category-list]") do
+        expect(page).to have_button("Move Fun Money up", disabled: true)
+        expect(page).to have_button("Move Fun Money down", disabled: false)
+        expect(page).to have_button("Move Groceries up", disabled: false)
+        expect(page).to have_button("Move Groceries down", disabled: true)
+      end
+    end
+
+    # ** A CATEGORY THE ENDPOINT WOULD REFUSE DRAWS NO HANDLE AT ALL (§4). ** The list is every
+    # expense category now, and `Category.apply_fill_order` accepts only
+    # `in_fill_order.with_a_rule`; a rule-less category with arrows would be a control whose every
+    # use is refused, with a message about the order the page had just drawn.
+    it "draws no arrows on a category the reorder cannot include", :aggregate_failures do
+      create(:category, :expense, :funded, user: user, name: "Vacation", priority: 3)
+      visit budget_page_path
+
+      expect(cards).to include("Vacation")
+      within(group("Vacation")) do
+        expect(page).to have_no_button("Move Vacation up")
+        expect(page).to have_no_button("Move Vacation down")
       end
     end
   end
@@ -127,7 +161,9 @@ RSpec.describe "Budget page reorder", type: :system do
     user.reload.categories.in_fill_order.with_a_rule.pluck(:name)
   end
 
-  def group(name) = find("[data-category-group='#{name}']")
+  # THE HOOK IS `data-category-row` SINCE THE PAGE BECAME ONE LIST OF EVERY CATEGORY (two-shapes
+  # spec §4) — `data-category-group` was the group CARD's, and the card is a row now.
+  def group(name) = find("[data-category-row='#{name}']")
 
-  def cards = page.all("[data-category-group]").pluck("data-category-group")
+  def cards = page.all("[data-category-row]").pluck("data-category-row")
 end

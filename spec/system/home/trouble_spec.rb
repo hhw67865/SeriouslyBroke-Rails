@@ -123,6 +123,44 @@ RSpec.describe "Home Trouble", type: :system do
     end
   end
 
+  # A ONE-TIME BILL ON AN ITEM — the shape whose occurrence never rolls. `created_at` IS PLANTED,
+  # for the ruling of 2026-09-03: a rule accrues from the LATER of its category's funding date and
+  # its OWN birth, so a rule the factory writes at real-now walks only today's period and a receipt
+  # dated ten days ago would move nothing at all. Returns the ITEM, because the caller settles the
+  # rule by spending on its lane.
+  def one_off_bill(name, amount:, due:)
+    create(:item, category: holder(name), name: "Water").tap do |item|
+      create(
+        :budget,
+        :one_time,
+        category: item.category,
+        item: item,
+        amount: amount,
+        anchor_date: due,
+        created_at: 2.months.ago
+      )
+    end
+  end
+
+  # A ONE-TIME BILL ON AN ITEM — the shape whose occurrence never rolls. `created_at` IS PLANTED, for
+  # the ruling of 2026-09-03: a rule accrues from the LATER of its category's funding date and its
+  # OWN birth, so a rule the factory writes at real-now walks only today's period and a receipt dated
+  # ten days ago would move nothing at all. Returns the ITEM, because the caller settles the rule by
+  # spending on its lane.
+  def one_off_bill(name, amount:, due:)
+    create(:item, category: holder(name), name: "Water").tap do |item|
+      create(
+        :budget,
+        :one_time,
+        category: item.category,
+        item: item,
+        amount: amount,
+        anchor_date: due,
+        created_at: 2.months.ago
+      )
+    end
+  end
+
   # A MOVE ON THE PHYSICAL LEDGER. `move_out` puts CHECKING in the red; `move_in` is its mirror and is
   # the only way to put a NON-main account below zero while every claim stays healthy.
   def move_out(amount)
@@ -503,6 +541,30 @@ RSpec.describe "Home Trouble", type: :system do
       .to have_content("$1,200.00 built up of $1,200.00 — it's all there — pay it and it starts again")
     expect(problem_row("Utilities")).to have_no_content("short")
     expect(problem_row("Utilities")).to have_no_content("fund")
+  end
+
+  # ** A PAID ONE-OFF IS SILENT, AND IT USED TO BE THE LOUDEST ROW ON THE SCREEN (two-shapes Task
+  # 3's carry (a)). ** A ONE-TIME rule's occurrence never rolls — there is no interval to roll onto,
+  # which is exactly what makes the two examples above safe on a REPEATING bill — so a one-off paid
+  # on the 18th and due on the 24th read `overdue · was <date>` from the 25th onward, for ever, with
+  # "this needs paying" beside it. `ClaimCalculator#settled?` is the fulfilment and the strip fires
+  # on the date AND it.
+  #
+  # BOTH DIRECTIONS ON ONE FIXTURE, because a strip that had simply stopped firing would pass the
+  # second half alone: the same rule is named before the payment and absent after it.
+  it "drops a one-off from the strip once it has been paid", :aggregate_failures do
+    deposit(2_000)
+    due = Date.current - 10.days
+    water = one_off_bill("Utilities", amount: 600, due: due)
+
+    visit root_path
+    expect(problem_row("Utilities").find("[data-problem-state]")).to have_content("overdue · was")
+
+    create(:entry, item: water, amount: 600, date: due)
+    visit root_path
+
+    expect(page).to have_no_css("[data-problem-category='Utilities']")
+    expect(page).to have_no_content("this needs paying")
   end
 
   # THE OTHER DIRECTION, WHICH IS NOW THE DATE'S: a bill still ahead of its date is a fund SAVING,

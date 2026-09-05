@@ -181,14 +181,23 @@ class BudgetsController < ApplicationController
   #
   # A PLAIN SYMBOL-KEYED HASH, because `#edit` MERGES it over `RuleForm.from` — the rule's own words
   # first, the suggestion's correction on top — and `Hash#merge` cannot take `Parameters`.
+  # ** A BARE `?category_id=` IS THE CATEGORY PANEL'S OWN DOOR (two-shapes spec §4). ** "+ New rule
+  # for Groceries" carries the category and nothing else — there is no measurement behind it, so
+  # there is no `budget[…]` payload to nest it in — and without this the form opened with the owner
+  # picker on it, offering to send the rule somewhere the button's own words did not promise.
+  #
+  # THE SAME SCOPING AS EVERY OTHER OWNER ON THIS CONTROLLER: it goes through
+  # `current_user.categories`, so a stranger's id is a 404 rather than a rendered name. It is folded
+  # UNDER the payload's own key, not over it — a suggestion's `budget[category_id]` is the measured
+  # answer and a query parameter must not be able to redirect it.
   def prefill_attributes
-    @prefill_attributes ||=
-      if params[:budget].blank?
-        {}
-      else
-        scoped_owners(params.expect(budget: BUDGET_FIELDS)).to_h.symbolize_keys
-      end
+    @prefill_attributes ||= begin
+      from_query = { category_id: params[:category_id].presence }.compact
+      scoped_owners(from_query.merge(payload)).to_h.symbolize_keys
+    end
   end
+
+  def payload = params[:budget].blank? ? {} : params.expect(budget: BUDGET_FIELDS).to_h.symbolize_keys
 
   # `item_id` IS §7a'S CLASS AGAIN, AND IT IS THE SHARPEST OF THEM. A rule names the item it pays;
   # `Budget` validates that the item sits in the rule's category, never WHOSE item it is. Unscoped,

@@ -7,7 +7,7 @@ class CategoriesController < ApplicationController
   before_action :set_category, only: [:show, :edit, :update, :destroy, :toggle_tracked]
   before_action :set_categories, only: [:index]
 
-  helper_method :claim_ledger
+  helper_method :claim_ledger, :claim_rows
 
   # GET /categories
   def index
@@ -35,7 +35,7 @@ class CategoriesController < ApplicationController
   # snapshots of one user's money, and the comment promising one was false the whole time. It costs
   # nothing either way here (one category, one card) and it is the shape the index already has.
   def show
-    @holdings_card = CategoryBudgetPresenter.new(category: @category, claims: claim_ledger) if @category.expense?
+    @holdings_card = CategoryBudgetPresenter.new(category: @category, claims: claim_ledger, rows: claim_rows) if @category.expense?
   end
 
   # GET /categories/new
@@ -203,6 +203,14 @@ class CategoriesController < ApplicationController
   # reach the same reader without a second construction path, and so an index of income categories —
   # none of which carries a rule — pays for nothing: `ClaimLedger` memoises each grouped query at
   # its FIRST read, and a page that asks no claim runs no query.
+  # ** THE PAGE'S ONE SET OF `ClaimLine`s, on `#claim_ledger`'s own reasoning one level up. ** The
+  # index draws a card per category and every card asks for its own rules' rows; `ClaimRows` builds
+  # a line for every rule the ledger holds, so a card left to build its own would build the whole
+  # user's rows once per card. It runs no query of its own.
+  def claim_rows
+    @claim_rows ||= ClaimRows.new(ledger: claim_ledger, today: current_user.today)
+  end
+
   def claim_ledger
     @claim_ledger ||= ClaimLedger.new(current_user, today: current_user.today)
   end

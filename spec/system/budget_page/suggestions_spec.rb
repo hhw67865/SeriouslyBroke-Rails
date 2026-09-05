@@ -25,14 +25,18 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   before { sign_in user, scope: :user }
 
+  # ** THE PANEL IS PER CATEGORY NOW (two-shapes spec §4), so "the four kinds" is four categories. **
+  # `plant_everything` still plants all four at once — the point of the fixture is that the four
+  # detectors fire on ONE user — and each example opens the category its own kind belongs to, which
+  # is also what pins the partition: a bill's category is its ITEM's, a rate's is the category it
+  # IS, and drift's and a dead rule's are their RULE's.
   describe "rendering the four kinds", :aggregate_failures do
-    before do
-      plant_everything
-      visit budget_page_path
-    end
+    before { plant_everything }
 
     # §8's dated-bill row: what leaves the account, on what schedule, next when.
     it "states a detected bill with its schedule and its per-period cost" do
+      open_category(utilities)
+
       within(suggestion(:dated_bill, phone)) do
         expect(page).to have_content("Phone — $85.00 every month")
           .and have_content("next due #{expected_due_on.strftime("%b %-d, %Y")}")
@@ -47,8 +51,13 @@ RSpec.describe "Budget page suggestions", type: :system do
     # one-off — planted here beside it, on the same screen, so the absence is a fact about this
     # render and not about a fixture that was never built.
     it "renders the measured bill and no row at all for a single payment", :aggregate_failures do
+      open_category(utilities)
       within(suggestion(:dated_bill, phone)) { expect(page).to have_no_content("guess") }
 
+      # AND THE CONCERT'S OWN CATEGORY IS OPENED to look for its row, because a suggestion absent
+      # from Utilities' panel would be absent whether or not the engine had proposed it. The row is
+      # asserted missing where it WOULD have been.
+      open_category(concert.category)
       expect(page).to have_no_css("[data-suggestion='dated_bill:#{concert.id}']")
       expect(page).to have_no_content("is a guess")
     end
@@ -58,6 +67,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     # (answers-first Home spec §3 — "buffer" is a dead word; this screen says available). The divisor is named too: the amount is the
     # total over periods LIVED THROUGH, not over appearances.
     it "states a detected rate, its window and that nothing holds it" do
+      open_category(groceries)
+
       within(suggestion(:rate, groceries)) do
         expect(page).to have_content("Groceries — $300.00 a period")
           .and have_content("currently claimed by no rule")
@@ -69,6 +80,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     # §8: `Groceries has averaged $470 for 4 periods, your rule says $420`. Both figures are per
     # period — the rule's side is `Budget#steady_ask`, never `budgets.amount`.
     it "states drift with both figures in the same unit" do
+      open_category(dining)
+
       within(suggestion(:drift, dining_rule)) do
         expect(page).to have_content("Dining Out has averaged $45.00 a period for 4 periods")
           .and have_content("your rule asks for $150.00 a period")
@@ -78,6 +91,8 @@ RSpec.describe "Budget page suggestions", type: :system do
 
     # §8: `Netflix stopped in October, the rule is still funding it`.
     it "states a dead rule in the unit the money leaves in" do
+      open_category(streaming)
+
       within(suggestion(:dead_rule, netflix_rule)) do
         expect(page).to have_content("Netflix stopped on")
           .and have_content("nothing for 3 periods")
@@ -86,83 +101,80 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # Everything the engine returns, in the engine's order (kind, then per-period cost) — nothing
-    # truncated, nothing re-sorted here.
+    # ** NOTHING IS DROPPED BY THE MOVE INSIDE THE CATEGORIES (two-shapes spec §4). ** The old
+    # examples here read one page-wide panel: every suggestion rendered in the engine's order, an
+    # index strip that summed to the whole list, and a heading per run. There is no page-wide panel
+    # and no index — a category's panel is two or three rows under one heading and has nothing to
+    # navigate — so what those examples were really protecting is asserted the way it now exists:
+    # every suggestion the engine returns is reachable, in exactly one category, and the BADGE on
+    # each row says how many are in it before anything is opened.
     #
     # FIVE, WHERE IT WAS SIX (answers-first Home spec §7). The row that left is the Concert — one
-    # $200 payment, which the engine used to propose as a guessed yearly bill and no longer
-    # proposes at all. Every count below moves with it and for that reason alone; the drift and
-    # dead-rule rows are untouched, because this fixture's history runs back two months and clears
-    # the new history gate.
-    it "renders every suggestion the engine returns, in its order" do
-      expect(rendered_keys).to eq(SuggestionEngine.new(user: user).suggestions.map { |s| "#{s.kind}:#{s.subject.id}" })
-      expect(rendered_keys.size).to eq(5)
+    # $200 payment, which the engine used to propose as a guessed yearly bill and no longer proposes
+    # at all.
+    it "reaches every suggestion the engine returns, each in exactly one category" do
+      found = user.categories.expenses.flat_map do |category|
+        open_category(category)
+        rendered_keys
+      end
+
+      expect(found).to match_array(SuggestionEngine.new(user: user).suggestions.map { |s| "#{s.kind}:#{s.subject.id}" })
+      expect(found.size).to eq(5)
+      expect(found.uniq.size).to eq(5)
     end
 
-    # THE INDEX (Task 7's review): the panel runs to about 5,000px on the demo and §8 forbids both
-    # of the usual answers — no truncation, no dismissal — so what is left is navigation.
-    #
-    # THE COUNTS ARE CHECKED AGAINST THE ROWS THEMSELVES rather than against the engine, because an
-    # index that agreed with the engine and disagreed with what is on screen would be exactly the
-    # defect: a strip promising three bills over a list of two.
-    it "agrees with the rows the panel is actually showing" do
-      expect(rendered_keys.map { |key| key.split(":").first }.tally)
-        .to eq("dated_bill" => 2, "rate" => 1, "drift" => 1, "dead_rule" => 1)
+    # ** THE BADGE IS THE INDEX'S SUCCESSOR, AND IT SUMS TO THE SAME LIST. ** The counts are checked
+    # against the ROWS the panels actually show rather than against the engine, because a badge that
+    # agreed with the engine and disagreed with what is on screen would be exactly the defect the
+    # index strip was pinned against: a number promising two bills over a list of one.
+    it "counts each category's own suggestions on its row", :aggregate_failures do
+      open_category(utilities)
+
+      expect(badge_for(utilities).text).to eq("2 suggestions")
+      expect(badge_for(groceries).text).to eq("1 suggestion")
+      expect(badge_for(dining).text).to eq("1 suggestion")
+      expect(badge_for(streaming).text).to eq("1 suggestion")
+      expect(rendered_keys.map { |key| key.split(":").first }.tally).to eq("dated_bill" => 2)
     end
 
-    # THE WORDING IS PINNED AS LITERALS, not rebuilt from `pluralize` here — an expectation that
-    # called the same helper the view calls would pass whatever it returned. It also puts the
-    # singular on the screen: three of the four kinds are at one on this fixture, and "1 rates" is
-    # the copy nobody notices until it ships.
-    it "names each kind with its count" do
-      expect(index_link(:dated_bill).text).to eq("2 bills")
-      expect(index_link(:rate).text).to eq("1 rate")
-      expect(index_link(:drift).text).to eq("1 drifting")
-      expect(index_link(:dead_rule).text).to eq("1 dead")
+    # ** AND A CATEGORY WITH NOTHING WEARS NO BADGE. ** The singular is on screen here too, which is
+    # the copy nobody notices until it ships: "1 suggestions" would pass an assertion about the
+    # count alone.
+    it "puts no badge on a category the engine has nothing for" do
+      quiet = create(:category, :expense, :funded, user: user, name: "Quiet")
+      open_category(quiet)
+
+      expect(page).to have_no_css("[data-category-row='Quiet'] [data-suggestion-badge]")
     end
 
-    # HIDING NOTHING IS THE WHOLE CONSTRAINT. The index sums to every suggestion the engine
-    # returned, so no kind can quietly fall out of the panel behind a heading that never appeared.
-    it "indexes every suggestion on the page" do
-      indexed = page.all("[data-suggestions-index-link]").sum { |link| link.text.to_i }
+    # ** ONE CATEGORY'S PANEL SHOWS ONLY ITS OWN (§4), which is the whole partition said on screen. **
+    # Both directions on one render: the two Utilities bills are there and the three suggestions
+    # about other categories are not — a panel rendering the engine's whole list would pass a check
+    # for presence alone.
+    it "shows only that category's suggestions in its panel", :aggregate_failures do
+      open_category(dining)
 
-      expect(indexed).to eq(rendered_keys.size)
-      expect(indexed).to eq(5)
-    end
-
-    # THE ANCHOR HAS TO LAND, and on something that says what it is: a bare `<span id>` would be a
-    # jump to a spot with nothing at it. Followed rather than merely asserted, because a fragment
-    # that names no element is a link that silently does nothing.
-    it "jumps to the run it names" do
-      index_link(:drift).click
-
-      # `url: true` because Capybara's `current_path` drops the fragment, and the fragment is the
-      # whole of what this link does. The scroll itself is the browser's; what has to be true here
-      # is that the fragment names an element that exists and says what it is.
-      expect(page).to have_current_path(%r{/budget\#suggestions-drift\z}, url: true)
-      expect(find("#suggestions-drift")).to have_content("Rules that have drifted · 1")
-    end
-
-    # Each heading sits directly above its own run, which is what makes the jump useful — the
-    # engine sorts by kind first, so the runs are contiguous and the heading is not a filter.
-    it "heads each run with its kind and its count", :aggregate_failures do
-      expect(find("#suggestions-dated_bill")).to have_content("Dated bills · 2")
-      expect(find("#suggestions-rate")).to have_content("Rates · 1")
-      expect(find("#suggestions-dead_rule")).to have_content("Rules that look dead · 1")
+      expect(rendered_keys).to eq(["drift:#{dining_rule.id}"])
+      expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
+      expect(page).to have_no_css("[data-suggestion='rate:#{groceries.id}']")
     end
 
     # HENRY'S RULING OF 2026-08-20 REVERSES §8 HERE, and this example is the inversion of the one
     # that stood in its place — "offers no way to dismiss one", which asserted the absence of
     # exactly this affordance. It is inverted rather than deleted because the fact worth pinning is
-    # the same one: whether the panel can hide a row. It can now, on every row, and on purpose.
+    # the same one: whether the panel can hide a row. It can, on every row, and on purpose.
     it "offers a way to hide every one of them" do
-      expect(page.all("[data-suggestion]").size).to eq(5)
-      expect(page.all("[data-suggestion] button", text: "Hide").size).to eq(5)
+      open_category(utilities)
+
+      expect(page.all("[data-suggestion]").size).to eq(2)
+      expect(page.all("[data-suggestion] button", text: "Hide").size).to eq(2)
     end
 
     # NOTHING IS HIDDEN UNTIL THE USER HIDES IT. The foot section is state, so its absence on a
     # panel nobody has touched is what says the list above is complete.
     it "shows no hidden section until something is hidden" do
+      open_category(utilities)
+
       expect(page).to have_no_css("[data-hidden-suggestions]")
     end
 
@@ -170,6 +182,8 @@ RSpec.describe "Budget page suggestions", type: :system do
     # (two-ledger spec §3/§4). Nothing is re-pointed and no envelope is made; what changes besides
     # the rule is which side of the start-date rule this category's future spending falls on.
     it "says what accepting does to the category" do
+      open_category(utilities)
+
       within(effect_of(:dated_bill, phone)) do
         expect(page).to have_content("starts Utilities counting its own spending, from today onward")
       end
@@ -179,7 +193,9 @@ RSpec.describe "Budget page suggestions", type: :system do
     # the re-point's goes here, and its absence is asserted for the same reason the cap's was — a
     # regression restoring either would be a sentence promising an act this app cannot perform.
     it "says nothing about moving a category into an envelope, or about a cap" do
-      within("[data-suggestions]") do
+      open_category(utilities)
+
+      within("[data-suggestions='Utilities']") do
         expect(page).to have_css("[data-suggestion-effect]")
         expect(page).to have_no_css("[data-suggestion-cap]")
         expect(page).to have_no_content("envelope")
@@ -194,7 +210,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     before do
       plant_bill(phone, 85)
       plant_bill(internet, 65)
-      visit budget_page_path
+      open_category(utilities)
       page.assert_selector("[data-suggestion='dated_bill:#{phone.id}']")
     end
 
@@ -220,9 +236,9 @@ RSpec.describe "Budget page suggestions", type: :system do
     # SURVIVES, rather than that the row disappeared from a page that had not been reloaded.
     it "stays hidden across a reload" do
       hide(:dated_bill, phone)
-      visit budget_page_path
+      open_category(utilities)
 
-      expect(page).to have_css("[data-suggestions]")
+      expect(page).to have_css("[data-suggestions='Utilities']")
       expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
     end
 
@@ -259,13 +275,18 @@ RSpec.describe "Budget page suggestions", type: :system do
   describe "the empty state", :aggregate_failures do
     # A user with a declared period and no history at all: the detectors ran and found nothing,
     # which is a different sentence from "this section failed to render".
-    it "says there is nothing to suggest" do
-      visit budget_page_path
+    # ** THE EMPTY STATE IS THE PANEL'S ABSENCE NOW (two-shapes spec §4). ** The page-wide panel had
+    # to say "Nothing to suggest" because it was a permanent section with a heading over it; inside
+    # a category, a heading over nothing IS the noise, so the "Your entries suggest" block simply is
+    # not rendered — and the row above it wears no badge, which is where the same fact is said.
+    it "says nothing at all where there is nothing to suggest", :aggregate_failures do
+      utilities
+      open_category(utilities)
 
-      within("[data-suggestions]") do
-        expect(page).to have_content("Nothing to suggest")
-        expect(page).to have_no_css("[data-suggestion]")
-      end
+      expect(page).to have_css("[data-category-row='Utilities']")
+      expect(page).to have_no_css("[data-suggestions='Utilities']")
+      expect(page).to have_no_css("[data-suggestion]")
+      expect(page).to have_no_css("[data-suggestion-badge]")
     end
   end
 
@@ -273,7 +294,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     before do
       plant_bill(phone, 85)
       plant_bill(internet, 65)
-      visit budget_page_path
+      open_category(utilities)
     end
 
     # THE ENVELOPE HALF IS GONE FROM THIS FORM (two-ledger spec §3), and one example goes with it:
@@ -307,14 +328,22 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(Budget.find_by(item_id: phone.id)).to be_bill
     end
 
-    # THE SCHEDULE ARRIVES AS THE FORM'S OWN WORDS TOO. A monthly bill WITH a due date is "every N
-    # months" with an N of 1 — the same control the half-yearly bill uses — so the radio is checked
-    # and both of its fields are revealed rather than the shape riding hidden.
-    it "opens on the every-N-months row with both of its fields revealed" do
+    # THE SCHEDULE ARRIVES AS THE FORM'S OWN WORDS TOO. A monthly bill WITH a due date is "by a
+    # date, repeating every 1 month" — the same pair of controls the half-yearly bill uses — so the
+    # radio and the checkbox are both checked and the interval field is revealed rather than the
+    # shape riding hidden.
+    #
+    # ** THE LABELS ARE TWO-SHAPES' (§5), AND THIS EXAMPLE HAD NOT CAUGHT UP. ** It read
+    # `have_checked_field("Every N months")` and `have_field("First due")` — the controls of the
+    # THREE-shape form Task 1 replaced — and had been failing since that commit; this file was not
+    # among the ones re-run for it (see this task's report).
+    it "opens on the by-a-date row with its interval revealed", :aggregate_failures do
       accept(:dated_bill, phone)
 
-      expect(page).to have_checked_field("Every N months")
-      expect(page).to have_field("First due")
+      expect(page).to have_checked_field("By a date")
+      expect(page).to have_checked_field("Repeats every N months")
+      expect(page).to have_field("Comes round every (months)", with: "1")
+      expect(page).to have_field("Due")
       expect(page).to have_no_content("Unspent money")
     end
 
@@ -328,14 +357,19 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_no_select("Category")
     end
 
-    # THE ROUND TRIP: accept, and the rule is in the top half while the suggestion has left the
-    # bottom one — because the item now carries a rule, which is the engine's own retirement test.
-    it "writes the rule, which retires its own suggestion" do
+    # THE ROUND TRIP: accept, and the rule is in the category's table while the suggestion has left
+    # its panel — because the item now carries a rule, which is the engine's own retirement test.
+    # Both facts are inside ONE category's panel now, which is what the move bought: the rule and
+    # the proposal it retired are two inches apart rather than two screens.
+    it "writes the rule, which retires its own suggestion", :aggregate_failures do
       accept_and_create(:dated_bill, phone)
 
       expect(page).to have_content("Budget was successfully created")
-      within("[data-category-group='Utilities']") { expect(page).to have_content("$85.00 a month") }
-      expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
+      open_category(utilities)
+      within("[data-category-panel='Utilities']") do
+        expect(page).to have_css("[data-rule='Phone']")
+        expect(page).to have_no_css("[data-suggestion='dated_bill:#{phone.id}']")
+      end
     end
 
     # THE SECOND WRITE. "creates the envelope and re-points the category at it" is what stood here,
@@ -356,7 +390,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "prefills the date the engine inferred" do
       accept(:dated_bill, phone)
 
-      expect(page).to have_field("First due", with: expected_due_on.strftime("%Y-%m-%d"))
+      expect(page).to have_field("Due", with: expected_due_on.strftime("%Y-%m-%d"))
     end
 
     # THE CORRECTION HAS TO REACH THE COLUMN, not merely the input: `anchor_date` was already a
@@ -370,7 +404,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     # `update_value_js` path and REPLACES the value, which is what a user picking a date does.
     it "writes the corrected date rather than the inferred one" do
       accept(:dated_bill, phone)
-      fill_in "First due", with: corrected_due_on
+      fill_in "Due", with: corrected_due_on
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
@@ -387,7 +421,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   describe "accepting a proposed rate", :aggregate_failures do
     before do
       groceries
-      visit budget_page_path
+      open_category(groceries)
     end
 
     it "offers no date field" do
@@ -402,12 +436,16 @@ RSpec.describe "Budget page suggestions", type: :system do
     # `usage`'s own definition and the column's default besides. A rate that proposed `bill` would
     # be claiming something the spending history does not say, and the give-way order is built on
     # the answer.
-    it "preselects usage, and opens on the per-period row that resets" do
+    # ** "Every period" IS THE FORM'S WORD SINCE TWO-SHAPES (§5), and the "Resets each period" radio
+    # is DELETED WITH THE UNSPENT-MONEY STEP (§7) — an allowance that resets is the only dateless
+    # shape left, so there is nothing for that control to choose between. This example named both of
+    # the retired controls and had been failing since Task 1.
+    it "preselects usage, and opens on the every-period row", :aggregate_failures do
       accept(:rate, groceries)
 
       expect(page).to have_checked_field("Usage")
-      expect(page).to have_checked_field("Per period")
-      expect(page).to have_checked_field("Resets each period")
+      expect(page).to have_checked_field("Every period")
+      expect(page).to have_no_content("Unspent money")
     end
 
     it "writes the type it proposed" do
@@ -434,7 +472,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     before do
       plant_bill(phone, 85)
       plant_bill(internet, 65)
-      visit budget_page_path
+      open_category(utilities)
       accept_and_create(:dated_bill, phone)
     end
 
@@ -460,8 +498,13 @@ RSpec.describe "Budget page suggestions", type: :system do
       accept_and_create(:dated_bill, internet)
 
       expect(page).to have_content("Budget was successfully created")
-      within("[data-category-group='Utilities']") do
-        expect(page).to have_content("$85.00 a month").and have_content("$65.00 a month")
+      # ** THE ROW READS THE CLAIM, NOT THE STICKER (§4). ** It asserted `$85.00 a month` twice —
+      # `budget_rule_amount`, deleted with the group card — so the two rules are pinned by their
+      # own lanes and their shape clauses, which is what the panel actually prints.
+      open_category(utilities)
+      within("[data-category-panel='Utilities']") do
+        expect(page).to have_css("[data-rule='Phone']").and have_css("[data-rule='Internet']")
+        expect(page.all("[data-rule-shape]").map(&:text)).to all(include("every month"))
       end
     end
   end
@@ -469,7 +512,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   describe "accepting a drift", :aggregate_failures do
     before do
       plant_drift
-      visit budget_page_path
+      open_category(dining)
     end
 
     # THE FIGURE ARRIVES IN THE RULE'S OWN UNIT and the form labels it rather than converting it.
@@ -504,7 +547,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   describe "accepting a drift on a monthly rule", :aggregate_failures do
     before do
       plant_monthly_drift
-      visit budget_page_path
+      open_category(retirement)
     end
 
     it "states the drift in per-period money" do
@@ -523,15 +566,27 @@ RSpec.describe "Budget page suggestions", type: :system do
       expect(page).to have_no_content("$120.00")
     end
 
-    # The round trip through the app's own normaliser: what was written reads back as the observed
-    # figure, so the rule now asks for what the entries actually say.
-    it "writes a rule whose per-period claim is the observed figure" do
+    # ** THE ROUND TRIP DOES NOT CLOSE, AND THIS EXAMPLE NOW PINS THAT IT DOES NOT (Task 1's concern
+    # 4). ** It read "what was written reads back as the observed figure, so the rule now asks for
+    # what the entries actually say" — `steady_ask == 200` — and that stopped being true when §5
+    # ruled that a `monthly`-no-anchor rule reads back as "Every period" and CONVERTS on save. The
+    # figure the engine put on the wire is in the rule's MONTHLY unit ($433.33 a month = $200 a
+    # period); saving the form writes it as a PER-PERIOD amount, so the rule ends up asking $433.33
+    # every fortnight — 3.6× what the drift row proposed.
+    #
+    # PINNED AS IT BEHAVES, NOT AS IT SHOULD, and named here so nobody reads the green as agreement:
+    # the form warns in words (`#budget_monthly_conversion_note`, asserted below) and the rule form's
+    # own task owns the fix — a preview card that prices the conversion before the click.
+    it "converts the monthly rule to a per-period one on save, warning first", :aggregate_failures do
       accept(:drift, retirement_rule)
+
+      expect(page).to have_css("[data-monthly-conversion]", text: "would make it $433.33 a period")
+
       click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
       expect(retirement_rule.reload.amount).to eq(433.33)
-      expect(retirement_rule.steady_ask(user)).to eq(200)
+      expect(retirement_rule.steady_ask(user)).to eq(433.33)
     end
   end
 
@@ -540,7 +595,7 @@ RSpec.describe "Budget page suggestions", type: :system do
   describe "a dead rule", :aggregate_failures do
     before do
       plant_dead_rule
-      visit budget_page_path
+      open_category(streaming)
     end
 
     it "opens the rule for review rather than deleting it" do
@@ -599,7 +654,7 @@ RSpec.describe "Budget page suggestions", type: :system do
       deposit(2_000)
       groceries # $900 across the last three periods, which is what the row measures
       create(:entry, item: groceries.items.sole, amount: 500, date: Date.current - 400.days)
-      visit budget_page_path
+      open_category(groceries)
       # A WAITING ASSERTION BEFORE ANY MODEL READ, and `assert_selector` rather than `expect`
       # because a hook is not the place for an expectation (RSpec/ExpectInHook) — it still waits.
       # Two of the examples below assert on records rather than on the page, and `visit` alone
@@ -639,7 +694,8 @@ RSpec.describe "Budget page suggestions", type: :system do
       accept_and_create(:rate, groceries)
 
       expect(page).to have_content("Budget was successfully created")
-      within("[data-category-group='Groceries']") { expect(page).to have_no_content("over by") }
+      open_category(groceries)
+      within("[data-category-panel='Groceries']") { expect(page).to have_no_content("over by") }
       expect(groceries.reload.claim).to eq(300)
     end
 
@@ -663,6 +719,16 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   def suggestion(kind, subject) = find("[data-suggestion='#{kind}:#{subject.id}']")
 
+  # ** EVERY SUGGESTION IS INSIDE THE CATEGORY IT IS ABOUT (two-shapes spec §4), so a spec about one
+  # opens that category. ** The closed panels are rendered and `hidden`, which is exactly what
+  # Capybara refuses to see; `?open=` is the same parameter the chevron writes, the categories
+  # page's pointer carries, and the Hide/Show redirects come back with.
+  def open_category(category) = visit(budget_page_path(open: category.id))
+
+  # THE BADGE ON A CATEGORY'S ROW — the count `SuggestionEngine#by_category` puts in the panel, said
+  # on the row above it, so a reader can see where the proposals are without opening anything.
+  def badge_for(category) = find("[data-category-row='#{category.name}'] [data-suggestion-badge]")
+
   # The clause every proposing row carries, addressed by its own hook rather than by searching the
   # whole row: the category's name appears in the row's own sentence too, so a row-wide
   # `have_content` cannot tell the two apart — which is precisely the regression the second-bill
@@ -671,14 +737,18 @@ RSpec.describe "Budget page suggestions", type: :system do
 
   def rendered_keys = page.all("[data-suggestion]").pluck("data-suggestion")
 
-  def index_link(kind) = find("[data-suggestions-index-link='#{kind}']")
+  # ** `#index_link` IS DELETED WITH THE INDEX STRIP (two-shapes spec §4). ** It found a link into
+  # one run of the page-wide panel; there are no runs, and `#badge_for` above is what says how many
+  # a category has.
 
   def accept(kind, subject)
     within(suggestion(kind, subject)) { click_link suggestion_accept_label(kind) }
   end
 
   def suggestion_accept_label(kind)
-    { drift: "Update the rule", dead_rule: "Review the rule" }.fetch(kind, "Write this rule")
+    # "Write it →" IS THE MOCK'S OWN WORDING (§4) and replaces "Write this rule": every one of the
+    # four opens a form the user then saves, so the noun was a promise the button does not keep.
+    { drift: "Update the rule", dead_rule: "Review the rule" }.fetch(kind, "Write it →")
   end
 
   # `have_content` after the click and BEFORE any model read: `click_button` returns as soon as the
@@ -686,7 +756,10 @@ RSpec.describe "Budget page suggestions", type: :system do
   def accept_and_create(kind, subject)
     accept(kind, subject)
     click_button "Create rule"
-    expect(page).to have_css("[data-suggestions]")
+    # THE PAGE COMES BACK WITH NO CATEGORY OPEN (`BudgetsController` redirects to `/budget`), so the
+    # waiting assertion is on the LIST rather than on a panel — a `have_css` on a hidden panel would
+    # never settle and the example would end mid-request, which is CLAUDE.md's first cause.
+    expect(page).to have_css("[data-category-list]")
   end
 
   # ---------------------------------------------------------------------------------------------

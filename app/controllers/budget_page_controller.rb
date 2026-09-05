@@ -56,7 +56,7 @@ class BudgetPageController < ApplicationController
       # exists to keep away from the figures. One `owner` local, so the two cannot be handed different
       # rows.
       owner = User.find(current_user.id)
-      @presenter = BudgetPagePresenter.new(user: owner, today: owner.today, declaration: current_user)
+      @presenter = build_presenter(user: owner, declaration: current_user)
       render :show, status: :unprocessable_content
     end
   end
@@ -142,7 +142,30 @@ class BudgetPageController < ApplicationController
     render :show, status: :unprocessable_content
   end
 
-  def build_presenter = BudgetPagePresenter.new(user: current_user, today: current_user.today)
+  # ** THE TWO THINGS THE URL SAYS ABOUT THIS RENDER (two-shapes spec §4). **
+  #
+  # `open` IS WHICH CATEGORY IS EXPANDED, and it is a query parameter rather than session state for
+  # two reasons: one category open at a time is a fact about the PAGE, not about the user, and a
+  # link that carries it is what makes expanding work with scripting off. `category_list_controller`
+  # is the enhancement — it flips the panels in place and remembers the last one per viewer — and
+  # the server-rendered one wins on load.
+  #
+  # `declare` IS THE DECLARATION FORM, hidden behind the income tile's "change" (§4). It used to be
+  # permanently open under a block of prose, which put a three-field settings form in the middle of
+  # the one screen that is about rules.
+  #
+  # NEITHER IS TRUSTED WITH ANYTHING: `open` is compared as a string against the ids the page
+  # itself rendered (`BudgetPagePresenter#open?`), so an id that is not this user's simply matches
+  # no row, and `declare` is a boolean read of presence.
+  def build_presenter(user: current_user, declaration: nil)
+    BudgetPagePresenter.new(
+      user: user,
+      today: user.today,
+      declaration: declaration,
+      open_category_id: params[:open],
+      declaring: params[:declare].present?
+    )
+  end
 
   # EXACTLY THREE PARAMS, and the list is the whole security boundary here. `current_user.update`
   # writes the signed-in user's own row, so ownership is never in question — but `User` carries

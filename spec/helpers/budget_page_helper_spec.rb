@@ -26,53 +26,18 @@ RSpec.describe BudgetPageHelper, type: :helper do
     # owner lane now and the category arm above is it.
   end
 
-  # THE FIGURE AND WHAT IT IS A FIGURE PER. $600 a period and $600 every six months are the same
-  # digits and a twelvefold difference in what the user owes.
-  describe "#budget_rule_amount" do
-    it "says a rate rule's period" do
-      expect(helper.budget_rule_amount(rule(:per_period_rate, category: build(:category, :expense, :funded), amount: 400))).to eq("$400.00 / period")
-    end
+  # ** `#budget_rule_amount` AND ITS SIX EXAMPLES ARE DELETED (two-shapes spec §4). ** It printed the
+  # STICKER — what the rule declares, `$1,200.00 every 6 months` — beside the claim's own figure on
+  # `budget_page/_rule_row`, and the row's header argued that the repetition was deliberate. On a
+  # dated rule it was the target said twice inside one sentence, and the rules table that replaced
+  # the row has a column for the schedule alone: `HomeHelper#shape_words` says `bill · every 6
+  # months` without saying the money again, and Edit is one click away for the declaration itself.
+  #
+  # WHAT THE SIX EXAMPLES PINNED AND WHERE IT LIVES NOW: the four "amount and what it is per" cases
+  # are `#budget_rule_basis`' own words, still asserted through `#budget_rule_basis_phrase` below
+  # and rendered by the dead-rule suggestion and the rule form's hint; the $0 pair pinned an arm no
+  # `Budget` can reach since `amount > 0` was validated on every shape, and nothing renders it.
 
-    it "says a recurring rule's interval" do
-      budget = rule(category: build(:category, :expense, :funded), amount: 600, interval_months: 6, anchor_date: Date.new(2026, 3, 1))
-
-      expect(helper.budget_rule_amount(budget)).to eq("$600.00 every 6 months")
-    end
-
-    it "says a monthly rule is monthly" do
-      expect(helper.budget_rule_amount(rule(:rate, category: build(:category, :expense, :funded), amount: 120))).to eq("$120.00 a month")
-    end
-
-    it "says a one-off rule happens once" do
-      expect(helper.budget_rule_amount(rule(:one_time, category: build(:category, :expense, :funded), amount: 300))).to eq("$300.00 once")
-    end
-
-    # ** THE $0 ARM IS A GUARD AND ITS ROW CANNOT BE SAVED ANY MORE (two-shapes spec §2/§7). ** Zero
-    # was legal on exactly one shape — the dateless target fed by hand — and the sticker printed
-    # "$0.00 / period" for it beside a real built-up figure, which reads as a rule somebody set wrong
-    # rather than a rule that was never about a rate. `Budget` validates `amount > 0` on every shape
-    # now, so the rule is built UNSAVED here: the helper branches on the amount alone and the sticker
-    # is still what this example asserts.
-    it "says a $0 rule is fed by hand" do
-      goal = build(:category, :expense, :funded)
-
-      expect(helper.budget_rule_amount(build(:budget, :per_period_rate, category: goal, amount: 0)))
-        .to eq("fed by hand")
-    end
-
-    # THE OTHER DIRECTION, one penny apart: a rule that names ANY rate states it, so the gate cannot
-    # be satisfied by a helper that stopped printing figures.
-    it "still states a rate of a single cent" do
-      goal = build(:category, :expense, :funded)
-
-      expect(helper.budget_rule_amount(rule(:per_period_rate, category: goal, amount: 0.01))).to eq("$0.01 / period")
-    end
-  end
-
-  # ** THE SAME FACT IN A SENTENCE, AND IT NOW SAYS WHAT BECOMES OF THE MONEY (rules-own-the-budget
-  # spec §2.1). ** The cadence alone was the whole story while every dateless rule reset at the
-  # boundary; a rule may now BUILD UP, and "$300.00 per period" says exactly the same words about a
-  # fund that keeps every unspent penny as about a grocery budget that keeps none.
   describe "#budget_rule_basis_phrase" do
     # THE RESETTING ARMS ARE UNTOUCHED, which is the direction that keeps every figure already
     # pinned on the drift accept form ("Currently $150.00 per period", "Currently $260.00 a month").

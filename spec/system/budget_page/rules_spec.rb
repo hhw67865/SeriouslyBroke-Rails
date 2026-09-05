@@ -2,10 +2,24 @@
 
 require "rails_helper"
 
-# The Budget page's top half (spec §8): every active rule, under the category it fills, in the
-# order money arrives. `Capybara.exact` is unset in this suite, so every row assertion is scoped
-# with `within` — an unscoped `have_content("Groceries")` matches the group heading, the rule name
-# and the nav all at once.
+# ** WHAT ONE RULE SAYS ABOUT ITSELF, INSIDE THE CATEGORY THAT IS OPEN (two-shapes spec §4). **
+# `Capybara.exact` is unset in this suite, so every row assertion is scoped with `within` — an
+# unscoped `have_content("Groceries")` matches the row's name, the rule's name and the nav at once.
+#
+# ** THIS FILE SPLIT IN THREE WHEN THE PAGE DID (this task), and the successors are named here so a
+# reader looking for a deleted example finds it:
+#
+#   `list_spec.rb`  — the LIST: every expense category, give-way order, the rule count, the type
+#                     dots, `$X claimed`, the suggestion badge, the rule-less rows, the empty state
+#                     and the 375px pin. The old "the fill order" and "the type overview" groups.
+#   `open_spec.rb`  — OPENING one: one at a time, the `?open=` parameter without JavaScript, the
+#                     panel's memory, only that category's suggestions, and the "+ New rule for
+#                     <category>" button.
+#   `tiles_spec.rb` — the three tiles (successor of `structural_check_spec.rb`), which is where the
+#                     type overview's three figures went.
+#
+# WHAT STAYS HERE is the RULES TABLE itself — the sentence a rule says — plus the nav and the edit
+# round trip, because both are about a rule rather than about the list.
 RSpec.describe "Budget page rules", type: :system do
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
@@ -16,8 +30,6 @@ RSpec.describe "Budget page rules", type: :system do
   def group(name) = find("[data-category-group='#{name}']")
 
   def rule_row(name) = find("[data-rule='#{name}']")
-
-  def category_groups = page.all("[data-category-group]").pluck("data-category-group")
 
   # A CATEGORY THAT HOLDS MONEY (two-ledger spec §3) — what `envelope(...)` built here in the pool
   # era, one record shorter.
@@ -35,66 +47,131 @@ RSpec.describe "Budget page rules", type: :system do
     create(:budget, category: category, amount: amount, interval_months: every, anchor_date: anchor)
   end
 
-  describe "the fill order", :aggregate_failures do
+  # A ONE-TIME BILL ON AN ITEM. `created_at` IS PLANTED TWO MONTHS BACK, because a rule accrues from
+  # the LATER of its category's funding date and its OWN birth: a rule created at the wall clock
+  # walks only today's period, and a receipt dated before it moves nothing at all
+  # (`ClaimCalculator#accrual_start`).
+  # AN ITEM-BACKED ONE-OFF ALREADY PAST ITS DATE — the whole fixture the paid example needs, and the
+  # state it starts in.
+  def overdue_one_off(name)
+    create(:item, category: holder("Utilities"), name: name)
+      .tap { |item| one_off(item, amount: 600, due: Date.current - 10.days) }
+  end
+
+  def one_off(item, amount:, due:)
+    create(
+      :budget,
+      :one_time,
+      category: item.category,
+      item: item,
+      amount: amount,
+      anchor_date: due,
+      created_at: 2.months.ago
+    )
+  end
+
+  # A ONE-TIME BILL ON AN ITEM. `created_at` IS PLANTED TWO MONTHS BACK, because a rule accrues from
+  # the LATER of its category's funding date and its OWN birth: a rule created at the wall clock
+  # walks only today's period and a receipt dated before it moves nothing at all
+  # (`ClaimCalculator#accrual_start`).
+  # AN ITEM-BACKED ONE-OFF ALREADY PAST ITS DATE — the whole fixture the paid example needs, and the
+  # state it starts in.
+  def overdue_one_off(name)
+    create(:item, category: holder("Utilities"), name: name)
+      .tap { |item| one_off(item, amount: 600, due: Date.current - 10.days) }
+  end
+
+  def one_off(item, amount:, due:)
+    create(
+      :budget,
+      :one_time,
+      category: item.category,
+      item: item,
+      amount: amount,
+      anchor_date: due,
+      created_at: 2.months.ago
+    )
+  end
+
+  # ** ONE CATEGORY IS OPEN AT A TIME (§4), so a rule's row is reached through its category. ** The
+  # closed panels are rendered and `hidden`, which is exactly what Capybara refuses to see; `?open=`
+  # is the same parameter the chevron writes.
+  def open_category(name) = visit(budget_page_path(open: user.categories.find_by!(name: name).id))
+
+  describe "the rules table", :aggregate_failures do
     before do
       rate(holder("Groceries", priority: 2), 400)
       rolling(holder("Car Insurance", priority: 1), amount: 1_200, anchor: Date.current + 3.months, every: 6)
-      visit budget_page_path
     end
 
-    it "renders each rule under its category, with its amount and basis" do
-      within(group("Groceries")) { expect(page).to have_content("$400.00 / period") }
-      within(group("Car Insurance")) { expect(page).to have_content("$1,200.00 every 6 months") }
-    end
-
-    it "puts the categories in priority order" do
-      expect(category_groups).to eq(["Car Insurance", "Groceries"])
-      expect(page).to have_no_content("Nothing is in the fill order yet")
-    end
-
-    it "states each category's priority position" do
-      within(group("Car Insurance")) { expect(page).to have_content("priority 1") }
-      within(group("Groceries")) { expect(page).to have_content("priority 2") }
-    end
-
-    # ** §3.4'S ROW (computed-claims Task 3), REPLACING TASK 2'S `$X claimed` / `$X built up`. **
-    # The date and the per-period share are the ACCRUING row's second half and belong to the dated
-    # rule alone: an anchorless rate rule is never due and accrues toward nothing, so its row carries
-    # neither. Both directions on one screen.
-    #
-    # PLANTED: a $1,200 six-monthly bill anchored three months out on a biweekly grid anchored today.
-    # §3.2's `periods_left` counts the boundaries from today through the due date — three months is
-    # 89 to 92 days and `floor(days ÷ 14) + 1` is **7** for every one of them — so
-    # `planned = 1,200 ÷ 7` = **$171.43**, and one walked period leaves that much built up.
-    it "gives the accruing rule a schedule and the rate rule none" do
-      within(rule_row("Car Insurance")) do
-        expect(page).to have_css(
-          "[data-rule-schedule]",
-          text: "next due #{(Date.current + 3.months).strftime("%b %-d")} · $171.43 per period"
-        )
+    # ** THE SHAPE CLAUSE REPLACED THE STICKER (§4). ** The row printed `$400.00 / period` and
+    # `$1,200.00 every 6 months` — `BudgetPageHelper#budget_rule_amount`, deleted with the group
+    # card, which on a dated rule said the target a second time inside a row already showing it.
+    # `HomeHelper#shape_words` says the type and the schedule and no money at all, which is the one
+    # thing the row was missing and is the SAME clause Home prints about the same rule.
+    it "says each rule's type and schedule, and no second copy of its amount" do
+      open_category("Groceries")
+      within(rule_row("Groceries")) do
+        expect(page).to have_css("[data-rule-shape]", text: "usage · a period")
+        expect(page).to have_no_content("/ period")
       end
-      within(rule_row("Groceries")) { expect(page).to have_no_css("[data-rule-schedule]") }
+
+      open_category("Car Insurance")
+      within(rule_row("Car Insurance")) do
+        # `usage` IS THE COLUMN'S DEFAULT and the fixture leaves it there — the point of the clause
+        # is the SCHEDULE beside the type, and a bill would say the same sentence with one word
+        # changed. The three types' own colours are `list_spec`'s dots.
+        expect(page).to have_css("[data-rule-shape]", text: "usage · every 6 months")
+      end
     end
 
-    # THE FIGURE, PER SHAPE (§3.4): a rate rule says what it SPENT of its rate, an accruing one what
-    # it has BUILT UP of its target. Never both, and never the other one's noun.
-    it "reads spent-of-rate on the rate rule and built-up-of-target on the bill" do
+    # ** THE `when` CLAUSE, PER SHAPE (§3/§4) — `HomeHelper#when_words`, ONE spelling for three
+    # screens. ** It was `#claim_schedule`'s `next due Nov 30 · $171.43 per period`; the collapsed
+    # helper says the date and the contribution with a leading plus, which is what tells a share
+    # from a total. A rate rule says when it RESETS, which the old helper had no answer for at all.
+    #
+    # PLANTED: a $1,200 six-monthly bill anchored three months out on a biweekly grid anchored
+    # today. §3.2's `periods_left` counts the boundaries from today through the due date — three
+    # months is 89 to 92 days and `floor(days ÷ 14) + 1` is **7** for every one of them — so
+    # `planned = 1,200 ÷ 7` = **$171.43**, and one walked period leaves that much built up.
+    it "dates the accruing rule and resets the rate rule" do
+      open_category("Car Insurance")
+      within(rule_row("Car Insurance")) do
+        expect(page).to have_css("[data-rule-when]", text: "#{(Date.current + 3.months).strftime("%b %-d")} · +$171.43")
+      end
+
+      open_category("Groceries")
+      within(rule_row("Groceries")) do
+        expect(page).to have_css("[data-rule-when]", text: "resets")
+      end
+    end
+
+    # ** THE FIGURE, PER SHAPE, AND IN ONE VOCABULARY (this task's carry (b)). ** It read
+    # `$171.43 built up of $1,200.00` here and `$171.43 of $1,200.00` on Home — two helpers, one
+    # fact. `#figure_words` is what all three screens say now, and the noun is not the caller's to
+    # choose: a row printing "spent" over a target's running total would be the money screen's
+    # oldest lie.
+    it "reads what each rule has of what it needs" do
+      open_category("Groceries")
       within(rule_row("Groceries")) do
         expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
+        expect(page).to have_no_content("built up")
       end
+
+      open_category("Car Insurance")
       within(rule_row("Car Insurance")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$171.43 of $1,200.00")
       end
     end
 
-    # ** THE HEADER IS `Σ its rules' claims` (§3), WHERE A `HoldingStatus` USED TO BE. ** It read
-    # `$0.00 left · holds $0.00` — a balance and a state about money that had been MOVED into the
-    # category, and nothing moves. Groceries claims its whole unspent rate; Car Insurance claims what
-    # it has built up.
-    it "heads each category with what its rules claim" do
-      within(group("Groceries")) { expect(page).to have_css("[data-category-claim]", text: "$400.00 claimed") }
-      within(group("Car Insurance")) { expect(page).to have_css("[data-category-claim]", text: "$171.43 claimed") }
-      expect(page).to have_no_content("holds $")
+    # ** THE STRIPE IS THE RULE'S TYPE AND THE BAR IS ITS STATE (§4), where a grey "Bill" chip used
+    # to be. ** The chip said the type in words on a row whose shape clause now leads with it; the
+    # stripe says it in the colour the list's dots and Home's rows use, so the same rule is the same
+    # colour on every screen.
+    it "carries a bar in the state the row is in" do
+      open_category("Car Insurance")
+
+      expect(find("[data-rule='Car Insurance'] [data-rule-bar]")["data-rule-bar-state"]).to eq("normal")
     end
   end
 
@@ -112,13 +189,35 @@ RSpec.describe "Budget page rules", type: :system do
     due = Date.current - 10.days
     rolling(holder("Utilities"), amount: 1_200, anchor: due, every: 1)
 
-    visit budget_page_path
+    open_category("Utilities")
 
     within(rule_row("Utilities")) do
-      expect(page).to have_css("[data-rule-schedule]", text: "was due #{due.strftime("%b %-d")}")
+      expect(page).to have_css("[data-rule-when]", text: "overdue · was #{due.strftime("%b %-d")}")
       expect(page).to have_no_content("next due")
-      expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 built up of $1,200.00")
-      expect(page).to have_css("[data-rule-trouble]", text: "overdue · was #{due.strftime("%b %-d")}")
+      expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 of $1,200.00")
+    end
+  end
+
+  # ** AND A ONE-OFF THAT HAS BEEN PAID SAYS SO, WHERE IT USED TO SAY THE OPPOSITE (this task's
+  # carry (a)). ** A one-time bill's occurrence never rolls, so on the day after the money went out
+  # this row read `overdue · was <date>` for ever — the worst sentence the vocabulary has, about a
+  # bill that had been paid. Both directions on one fixture: the same rule before and after the
+  # payment, which is what says the arm fires on the FULFILMENT and not on the date.
+  it "calls a paid one-off paid, with the day it was paid on", :aggregate_failures do
+    paid_on = Date.current - 2.days
+    water = overdue_one_off("Water")
+
+    open_category("Utilities")
+    within(rule_row("Water")) { expect(page).to have_css("[data-rule-when]", text: "overdue · was") }
+
+    create(:entry, item: water, amount: 600, date: paid_on)
+    open_category("Utilities")
+    # THE DATE HAS NOT MOVED — a one-time rule's occurrence never rolls, which is what makes this
+    # sentence the FULFILMENT's rather than the calendar's, and what left the old reading with
+    # nothing to stop it saying "overdue" for ever (`claim_calculator_spec` pins the anchor itself).
+    within(rule_row("Water")) do
+      expect(page).to have_css("[data-rule-when]", text: "paid #{paid_on.strftime("%b %-d")}")
+        .and have_no_content("overdue")
     end
   end
 
@@ -134,187 +233,15 @@ RSpec.describe "Budget page rules", type: :system do
   # is pinned on the presenter rather than here, where it would need a fixture nothing in the app
   # can write any more.
 
-  # A RULE WHOSE CATEGORY IS NOT HOLDING MONEY YET (fix round 1, MED-1) — the orphan band's job,
-  # re-anchored on the purpose ledger. `Category.in_fill_order` is HOLDERS, so no distribution can
-  # reach such a rule and `Category.apply_fill_order` refuses any list naming its category; drawing
-  # it as a group would put a priority badge and two arrows on a card whose every use is rejected.
+  # ** FOUR GROUPS MOVED TO `list_spec.rb` WITH THE LIST THEY WERE ABOUT (this task). ** "the fill
+  # order"'s ordering and header examples, "a rule whose category holds nothing yet", "a brand-new
+  # user" and "the type overview" are all statements about which ROWS the page draws and in what
+  # order — which is the list's subject, not a rule's. Two of them changed meaning on the way and
+  # the successor says how: a category that holds nothing has a ROW now (the "not filling" band it
+  # was kept out of is deleted), and a brand-new user with a category is no longer empty at all.
   #
-  # THE MIXED PAGE IS THE POINT. A page with only unfillable rules would pass a presenter that
-  # simply rendered nothing; this one has two holders that ARE orderable beside one that is not, so
-  # the panel and the fill order have to be right about the same screen at the same time.
-  #
-  # NONE OF THIS EXISTS ON REAL DATA — every writer stamps `funded_since` through `BudgetProposal`
-  # — and it is two clicks away once Task 7 ships `funded_since` editing. The rule is planted
-  # directly for that reason.
-  describe "a rule whose category holds nothing yet", :aggregate_failures do
-    before do
-      rate(holder("Groceries", priority: 1), 400)
-      rate(holder("Fun Money", priority: 2), 300)
-      create(
-        :budget,
-        :per_period_rate,
-        amount: 35,
-        category: create(:category, :expense, user: user, name: "Coffee")
-      )
-      visit budget_page_path
-    end
-
-    # THE NAME IS PRINTED ONCE (design review, nits). `budget_rule_name` falls back to the
-    # CATEGORY for an item-less rule like this one, so the row's own heading already says
-    # "Coffee" — and the reason clause used to say it again, rendering "Coffee · Coffee has no
-    # holding date". The clause names the category only where the heading named an ITEM instead;
-    # the row as a whole still says both, which is what this example checks.
-    #
-    # ** THE REASON ITSELF CHANGED WITH THE MODEL (computed-claims spec §6), AND THE OLD ONE WAS
-    # THE FALSE HALF. ** It read "isn't holding money yet — nothing fills it", which was true of a
-    # distribution: no waterfall reached a category with no funding date. Every rule claims now
-    # (`ClaimLedger` counts all of them into `#free`), so the claim is not what is missing — the
-    # SPENDING is: `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its category only
-    # from `funded_since` on, so this rule claims its full $35 every period while nothing the user
-    # spends on Coffee ever comes off it.
-    it "keeps it out of the give-way order and names its category in the panel" do
-      expect(category_groups).to eq(["Groceries", "Fun Money"])
-      expect(page).to have_no_css("[data-category-group='Coffee']")
-      within("[data-not-filling-rule='Coffee']") do
-        expect(page).to have_content("Coffee")
-        expect(page).to have_content("has no claiming date — spending here isn't counted against it")
-        expect(page).to have_no_content("Coffee has no claiming date")
-        expect(page).to have_content("$35.00 / period")
-      end
-    end
-
-    # THE REFUSAL THE ALIGNMENT KILLED. The endpoint compares the submitted ids against
-    # `in_fill_order.with_a_rule`; before the fix the page drew a Coffee card, so its own ▲▼ carried
-    # a list containing Coffee and came back "That order didn't match your categories" — a page
-    # refusing the order it had just rendered. The message is asserted absent BY ITS OWN WORDS, not
-    # merely by the success flash, because a redirect could be right while the flash was wrong.
-    it "cannot be refused for the order it rendered itself" do
-      click_button "Move Fun Money up"
-
-      expect(page).to have_content("Your money fills them in that order now.")
-      expect(page).to have_no_content("nothing was changed")
-      expect(category_groups).to eq(["Fun Money", "Groceries"])
-    end
-  end
-
-  describe "a brand-new user", :aggregate_failures do
-    before { visit budget_page_path }
-
-    # The first screen every real user meets. The sentence points at the two ways a rule is
-    # actually made and promises nothing this page does not yet do.
-    #
-    # THE TYPE OVERVIEW IS ABSENT TOO (rules-own-the-budget spec §3): a split of nothing is a heading
-    # about nothing, and the caller gates it on the same `no_rules?` branch this state renders.
-    it "sees the frame, one sentence and no groups at all" do
-      expect(page).to have_content("No funding rules yet")
-      expect(page).to have_content("A rule claims part of every period's income for one category")
-      expect(page).to have_no_content("Nothing is in the fill order yet")
-      expect(page).to have_no_css("[data-category-group]")
-      expect(page).to have_no_css("[data-rule]")
-      expect(page).to have_no_css("[data-type-overview]")
-    end
-  end
-
-  # ── ** THE TYPE OVERVIEW AND THE ROW LABELS (rules-own-the-budget spec §3) ** ───────────────────
-  #
-  # `Bills $1,400.00 · Usage $600.00 · Choice $300.00 a period`, above the groups, with each row
-  # carrying the type it is counted in. EVERY RULE HERE IS PER-PERIOD, so `standing_ask` IS its own
-  # amount and no example has to divide a monthly figure by a cadence: `Budget#steady_ask`'s
-  # normalisation is `budget_steady_ask_spec`'s subject.
-  describe "the type overview", :aggregate_failures do
-    def three_types
-      rate(holder("Rent", priority: 1), 1_000, type: :bill)
-      rate(holder("Insurance", priority: 2), 400, type: :bill)
-      rate(holder("Groceries", priority: 3), 600, type: :usage)
-      rate(holder("Fun", priority: 4), 300, type: :choice)
-    end
-
-    # THE SPEC'S OWN LINE, to the character: two bills summing to $1,400.00, and the three read in
-    # order of how unavoidable they are.
-    it "states what each kind of rule asks of a period" do
-      three_types
-      visit budget_page_path
-
-      within("[data-type-overview]") do
-        expect(page).to have_content("Bills $1,400.00")
-        expect(page).to have_content("Usage $600.00")
-        expect(page).to have_content("Choice $300.00")
-        expect(page).to have_content("a period")
-      end
-      expect(find("[data-type-overview]").text).to match(/Bills.*Usage.*Choice/m)
-    end
-
-    # A TYPE WITH NO RULES IS ABSENT, NOT $0.00 — a figure that is true and reports nothing, on a
-    # line whose whole job is the split. The example above is the other direction.
-    it "omits a kind no rule carries", :aggregate_failures do
-      rate(holder("Groceries"), 600, type: :usage)
-      visit budget_page_path
-
-      within("[data-type-overview]") do
-        expect(page).to have_content("Usage $600.00")
-        expect(page).to have_no_content("Bills")
-        expect(page).to have_no_content("Choice")
-      end
-    end
-
-    # ** EACH ROW SAYS WHICH SUM IT IS IN. ** Without the label the overview is three figures a user
-    # cannot trace to any rule, and the give-way order — which reads this word FIRST — would be
-    # invisible on the page that sets it.
-    it "labels every rule row with its own type" do
-      three_types
-      visit budget_page_path
-
-      within(rule_row("Rent")) { expect(page).to have_css("[data-rule-type='bill']", text: "Bill") }
-      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-type='usage']", text: "Usage") }
-      within(rule_row("Fun")) { expect(page).to have_css("[data-rule-type='choice']", text: "Choice") }
-    end
-
-    # ** THE REORDER COPY SAYS WHAT THE ARROWS ACTUALLY DO, IN THE CATEGORY FORM'S OWN WORDS (fix
-    # round 1 — LOW-11). ** The type is read before this list is, so dragging a card sets the order
-    # among rules of the SAME kind — and the DIRECTION is said with the number rather than with a
-    # position ("lower" meant a lower number on one screen and a lower card on the other). The
-    # form's hint is pinned to the same sentence in `spec/system/categories/new/form_spec.rb`, so
-    # the two cannot drift back apart.
-    it "says the arrows order rules within each type, in the number's own words" do
-      three_types
-      visit budget_page_path
-
-      expect(find("[data-fill-order]")).to have_content("within each type, the highest number gives way first")
-    end
-  end
-
-  # ** A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE — Chrome refuses a headless
-  # window narrower than 500px, so every `resize_to(375, …)` in this suite is really a 500px test.
-  # The mechanism is `spec/system/home/money_spec.rb`'s (`hero_spec.rb` before the money column renamed it), copied deliberately rather than re-derived,
-  # and there is NO `evaluate_script` in the example: a trailing JS call leaves the session in a
-  # state Capybara's teardown navigation does not survive. **
-  #
-  # THE OVERVIEW IS THE WIDEST SINGLE LINE THIS PAGE PRINTS — three labels, three currency figures
-  # and a trailing "a period" — and the type label is a NEW element on a row that already stacked at
-  # `sm`. Both are measured with Selenium's own geometry.
-  describe "on a narrow screen" do
-    before do
-      page.driver.browser.execute_cdp(
-        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
-      )
-    end
-
-    it "fits the overview and a labelled row inside a 375px viewport", :aggregate_failures do
-      rate(holder("Rent", priority: 1), 1_000, type: :bill)
-      rate(holder("Groceries", priority: 2), 600, type: :usage)
-      rate(holder("Fun", priority: 3), 300, type: :choice)
-
-      visit budget_page_path
-
-      expect(find("[data-type-overview]")).to have_content("Bills $1,000.00")
-
-      overview = find("[data-type-overview]").native.rect
-      label = find("[data-rule='Groceries'] [data-rule-type]").native.rect
-
-      expect(overview.x + overview.width).to be <= 375
-      expect(label.x + label.width).to be <= 375
-    end
-  end
+  # THE TYPE OVERVIEW'S THREE FIGURES ARE IN `tiles_spec.rb`, on the tile that replaced the line,
+  # and the 375px pin is in `list_spec.rb`, which is where the widest line on this page now is.
 
   # ** TWO GROUPS OF EXAMPLES ARE DELETED HERE (computed-claims Task 3), and both measured a fact
   # about money that had been MOVED into a category (spec §5):
@@ -372,7 +299,7 @@ RSpec.describe "Budget page rules", type: :system do
   describe "editing a rule", :aggregate_failures do
     before do
       rate(holder("Groceries"), 400)
-      visit budget_page_path
+      open_category("Groceries")
       within(rule_row("Groceries")) { click_link "Edit" }
     end
 
@@ -387,7 +314,12 @@ RSpec.describe "Budget page rules", type: :system do
       click_button "Update rule"
 
       expect(page).to have_current_path(budget_page_path)
-      within(rule_row("Groceries")) { expect(page).to have_content("$425.00 / period") }
+      # THE ROW READS THE CLAIM, where it used to read the sticker (`budget_rule_amount`, deleted
+      # with the group card): on an untouched per-period rule the denominator IS the amount just
+      # written, which is the same claim about the same write off the figure the page prints. The
+      # redirect carries no `open`, so the panel is asked for again.
+      open_category("Groceries")
+      within(rule_row("Groceries")) { expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $425.00") }
     end
   end
 end

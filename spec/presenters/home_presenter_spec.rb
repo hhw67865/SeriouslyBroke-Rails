@@ -735,6 +735,49 @@ RSpec.describe HomePresenter do
       expect(runway.short.sole.gap).to eq(40)
     end
 
+    # ** A PAID ONE-OFF DRAWS NO TICK, AND CONTRIBUTES NOTHING TO THE DUE TOTAL (this task's carry
+    # (a)). ** A one-time bill's occurrence NEVER rolls — there is no interval to roll onto — so its
+    # date stays inside this period for ever after the money has gone out, and the tick it drew was
+    # RED: paying the bill empties the fund, and `#fund_short?` read the emptiness as a shortfall.
+    # The pace line then told the user money was still due on a bill they had already paid.
+    #
+    # BOTH DIRECTIONS ON ONE FIXTURE, because a reader that dropped every tick would pass the second
+    # half alone: the same rule draws a ready tick worth $120 before the payment and nothing after.
+    it "draws no tick for a one-off that has been paid", :aggregate_failures do
+      income(2_000)
+      bill_item = lane(utilities, "Water")
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 14), item_name: nil)
+      before_payment = presenter.runway
+
+      expect(before_payment.ticks.sole).to be_ready
+      expect(before_payment.due_total).to eq(120)
+
+      create(:entry, item: bill_item, amount: 120, date: Date.new(2026, 2, 10))
+      after = described_class.new(user: user, today: today).runway
+
+      expect(after.ticks).to be_empty
+      expect(after.due_total).to eq(0)
+    end
+
+    # ** AND IT IS NEITHER SHORT NOR TROUBLE, so the strip stays silent about it. ** `#short?` is
+    # what colours a tick red and what the pace line's "$X short" clause reads; `#trouble?` is what
+    # puts a rule in the strip at all. A one-off whose money has gone out is neither — it is DONE —
+    # and `ClaimLine#paid?` is the one reading of that.
+    it "calls a paid one-off neither short nor trouble", :aggregate_failures do
+      income(2_000)
+      bill_item = lane(utilities, "Water")
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 14), item_name: nil)
+      create(:entry, item: bill_item, amount: 120, date: Date.new(2026, 2, 10))
+
+      line = presenter.give_way_order.sole
+
+      expect(line).to be_paid
+      expect(line.paid_on).to eq(Date.new(2026, 2, 10))
+      expect(line).not_to be_short
+      expect(line).not_to be_trouble
+      expect(presenter.troubles).to be_empty
+    end
+
     # A PERIOD WITH NOTHING DUE IS THE ORDINARY ONE, and it still has a runway: the rail, today's
     # mark and the pace line are the answer, and a rate rule is not a day.
     it "draws a period with nothing due and no ticks", :aggregate_failures do

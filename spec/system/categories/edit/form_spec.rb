@@ -198,14 +198,17 @@ RSpec.describe "Categories Edit - Form", type: :system do
   # ** EDITING `funded_since` MOVES A CATEGORY IN AND OUT OF THE GROUPED HALF OF THE BUDGET PAGE
   # (Task 7's ruling, re-anchored on claims). **
   #
-  # `BudgetPagePresenter#category_groups` is holders that own a rule, so clearing the date on a
-  # category that CARRIES A RULE drops it out of the ordered list — and what it drops INTO is a band
-  # whose sentence changed with the model. The rule does not stop claiming: `ClaimCalculator
-  # #accrual_start` falls back to the rule's own birthday, so it claims its full $400 every period.
-  # What stops is the SPENDING — `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its
-  # category only from `funded_since` on — so the rule claims in full while nothing the user spends
-  # there ever comes off it. That is what the band says now, and it is the pair the form's hint
-  # promises, asserted on the screen that shows the consequence rather than on the record alone.
+  # ** WHAT CLEARING THE DATE COSTS ON THE BUDGET PAGE IS THE DRAG HANDLE, NOT THE ROW (two-shapes
+  # spec §4). ** It used to drop the category out of the grouped list and into a "not filling" band
+  # that said why; the list is EVERY expense category now, so the row stays where it is and what it
+  # loses is the reorder — `Category.apply_fill_order` accepts only `in_fill_order.with_a_rule`, and
+  # a row with arrows the endpoint refuses would be a control whose every use fails.
+  #
+  # THE RULE DOES NOT STOP CLAIMING: `ClaimCalculator#accrual_start` falls back to the rule's own
+  # birthday, so it claims its full $400 every period. What stops is the SPENDING —
+  # `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its category only from
+  # `funded_since` on — which is the pair the form's hint promises, asserted on the screen that shows
+  # the consequence rather than on the record alone.
   describe "clearing and setting the claiming start on a ruled category", :aggregate_failures do
     let!(:groceries) do
       create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
@@ -213,7 +216,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
     before { create(:budget, :per_period_rate, category: groceries, amount: 400) }
 
-    it "drops the category out of the grouped half and into the band that says why" do
+    it "takes the drag handle off the category's row" do
       visit edit_category_path(groceries)
       fill_in "Claiming since", with: ""
       click_button "Update Category"
@@ -222,14 +225,11 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(groceries.reload.funded_since).to be_nil
 
       visit budget_page_path
-      expect(page).to have_no_css("[data-category-group='Groceries']")
-      # The heading names the category (this rule pays no item), so the reason clause beside it
-      # does not repeat it — see budget_page/rules_spec.rb for the whole of that rule.
-      expect(find("[data-not-filling-rule='Groceries']").text)
-        .to include("Groceries", "has no claiming date")
+      expect(page).to have_css("[data-category-row='Groceries']")
+      within("[data-category-row='Groceries']") { expect(page).to have_no_button("Move Groceries up") }
     end
 
-    it "puts it back in the grouped half when the date is set again" do
+    it "gives the handle back when the date is set again" do
       groceries.update!(funded_since: nil)
 
       visit edit_category_path(groceries)
@@ -240,8 +240,7 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(groceries.reload.funded_since).to eq(Date.new(2026, 2, 6))
 
       visit budget_page_path
-      expect(page).to have_css("[data-category-group='Groceries']")
-      expect(page).to have_no_css("[data-not-filling-rule='Groceries']")
+      within("[data-category-row='Groceries']") { expect(page).to have_button("Move Groceries up", disabled: true) }
     end
   end
 

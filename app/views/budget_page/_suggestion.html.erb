@@ -7,6 +7,12 @@
     bill and a rate cannot come to describe the same act in two different ways. (A second clause
     named the cap the acceptance would destroy; it is deleted with the cap.)
 
+    `category` IS THE PANEL THIS ROW IS IN (two-shapes spec §4), and it is a local rather than a
+    derivation because the four kinds carry their category three different ways —
+    `SuggestionEngine#category_id_for` is the one taxonomy and it is the engine's. It rides on the
+    accept link (so the form opens knowing what the rule is for) and on the Hide button's return
+    path is the controller's own.
+
     `presenter` LEFT THE LOCALS with `#joined_pool` (two-ledger spec §5): the effect clause asked
     the page which envelope an acceptance would join, and the engine states what accepting does on
     the suggestion itself now, so this partial takes exactly what it renders.
@@ -51,7 +57,7 @@
 
     <div class="shrink-0 flex flex-wrap items-center gap-2">
       <%= link_to suggestion_accept_label(suggestion),
-                  suggestion_accept_path(suggestion),
+                  suggestion_accept_path(suggestion, category: category),
                   class: "btn btn-primary whitespace-nowrap",
                   data: { suggestion_accept: true } %>
 
@@ -73,7 +79,7 @@
                       subject_id: suggestion.subject.id
                     },
                     class: "btn btn-secondary whitespace-nowrap",
-                    form: { data: { suggestion_hide: suggestion_key(suggestion) } } %>
+                    form: { draggable: "false", data: { suggestion_hide: suggestion_key(suggestion) } } %>
 
       <% if suggestion.kind == :dead_rule %>
         <%# THE PAGE DOES NOT DELETE — the user does. Both doors are open on the row because the
@@ -85,7 +91,8 @@
                       budget_path(suggestion.subject),
                       method: :delete,
                       class: "btn btn-secondary whitespace-nowrap",
-                      form: { data: { turbo_confirm: "Delete this rule? Nothing else about #{suggestion.detail[:item_name]} changes." } } %>
+                      form: { draggable: "false",
+                              data: { turbo_confirm: "Delete this rule? Nothing else about #{suggestion.detail[:item_name]} changes." } } %>
       <% end %>
     </div>
   </div>

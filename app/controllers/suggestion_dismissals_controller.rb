@@ -46,9 +46,9 @@ class SuggestionDismissalsController < ApplicationController
     return head :unprocessable_content if subject.nil?
 
     dismissal = current_user.suggestion_dismissals.new(subject: subject, kind: params[:kind])
-    redirect_to budget_page_path, **outcome_of(dismissal)
+    redirect_to back_to(subject), **outcome_of(dismissal)
   rescue ActiveRecord::RecordNotUnique
-    redirect_to budget_page_path, notice: ALREADY_HIDDEN
+    redirect_to back_to(subject), notice: ALREADY_HIDDEN
   end
 
   # DELETE /suggestion_dismissals/:id
@@ -57,11 +57,24 @@ class SuggestionDismissalsController < ApplicationController
   # is deleted: the suggestion comes back because the engine derives it again on the next load,
   # not because anything was restored.
   def destroy
-    current_user.suggestion_dismissals.find(params[:id]).destroy
-    redirect_to budget_page_path, notice: "Showing that suggestion again."
+    dismissal = current_user.suggestion_dismissals.find(params[:id])
+    subject = dismissal.subject
+    dismissal.destroy
+
+    redirect_to back_to(subject), notice: "Showing that suggestion again."
   end
 
   private
+
+  # ** BACK TO THE PANEL THE BUTTON WAS IN (two-shapes spec §4). ** Suggestions live inside the
+  # category they are about now, so hiding one — or showing it again — has to come back to that
+  # category open, or the row the user just acted on is off screen with a flash about it at the top.
+  #
+  # THE CATEGORY IS THE SUBJECT'S OWN, in `SuggestionEngine#category_id_for`'s three shapes: a rate's
+  # subject IS the category, and an item's and a rule's both carry one.
+  def back_to(subject)
+    budget_page_path(open: subject.is_a?(Category) ? subject.id : subject.category_id)
+  end
 
   # THE RECORD THIS DISMISSAL IS ABOUT, looked up through `current_user`, or nil where the wire
   # named a class no suggestion carries.

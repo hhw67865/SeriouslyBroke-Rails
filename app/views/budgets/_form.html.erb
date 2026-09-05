@@ -230,7 +230,14 @@
               field IS the current amount and repeating it would be one number printed twice. %>
           <% if @current_amount.present? && rule_form.amount.present? && rule_form.amount.to_d != @current_amount.to_d %>
             <p class="mt-2 text-sm text-gray-500" data-current-amount>
-              Currently <%= number_to_currency(@current_amount) %> <%= budget_rule_basis_phrase(budget) %>.
+              <%# ** THE UNIT IS `RuleForm#amount_unit`, THE SAME ONE THE LABEL ABOVE READS. ** It was
+                  `budget_rule_basis_phrase(budget)`, and `budget` is the record AFTER the words have
+                  been applied — so on the one row §5's read-back re-shapes (a `monthly`-no-anchor
+                  rule, which reads back as "Every period"), the hint said "asks for a month" and
+                  this line said "per period" about the same figure, an inch apart. Two clauses about
+                  one unit must not be able to disagree. %>
+              Currently <%= number_to_currency(@current_amount) %>
+              <%= rule_form.amount_unit || budget_rule_basis_phrase(budget) %>.
             </p>
           <% end %>
         </div>

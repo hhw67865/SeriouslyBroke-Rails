@@ -88,6 +88,31 @@ RSpec.describe "Home Runway", type: :system do
     create(:adjustment, rule: rule, amount: amount, date: on)
   end
 
+  # ** A PAID ONE-OFF IS OFF THE RAIL, AND OUT OF THE DUE TOTAL (two-shapes Task 3's carry (a)). **
+  # A one-time bill's occurrence NEVER rolls — there is no interval to roll onto — so its date stays
+  # inside this period for ever after the money has gone out, and the tick it drew was RED: paying
+  # the bill empties the fund, and `ClaimLine#fund_short?` read the emptiness as a shortfall. The
+  # pace line then said `$120.00 due before Aug 27` about a bill already paid, and named it short.
+  #
+  # BOTH DIRECTIONS ON ONE FIXTURE, because a page that drew no ticks at all would pass the second
+  # half alone: the same rule has a mark and a due total before the payment and neither after.
+  it "takes a paid one-off off the rail and out of the total", :aggregate_failures do
+    deposit(1_000)
+    water = create(:item, category: holder("Utilities"), name: "Water")
+    rule = bill(water.category, amount: 120, due: Date.new(2026, 8, 24), item: water)
+
+    travel_to(today) { visit root_path }
+
+    expect(page).to have_css("[data-tick-mark='#{rule.id}']")
+      .and have_css("[data-due-total]", text: "$120.00 due")
+
+    create(:entry, item: water, amount: 120, date: Date.new(2026, 8, 18))
+    travel_to(today) { visit root_path }
+
+    expect(page).to have_no_css("[data-tick-mark='#{rule.id}']").and have_no_css("[data-due-total]")
+    expect(page).to have_no_css("[data-short-list]")
+  end
+
   # ── THE RULER (carried from the hero's bar) ────────────────────────────────────────────────────
 
   # Aug 14 – Aug 27 is fourteen days; Aug 20 is day 7 of it, so `round(7 ÷ 14 × 100)` = 50% and seven

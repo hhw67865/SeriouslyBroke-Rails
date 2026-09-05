@@ -530,6 +530,97 @@ RSpec.describe ClaimCalculator, type: :model do
         expect(july.next_due_on).to eq(Date.new(2026, 6, 1))
         expect(july.built_up).to eq(0)
       end
+
+      # ── ** THE PAID ONE-OFF (two-shapes Task 3's carry (a)) ** ─────────────────────────────────
+      #
+      # `#settled?` HAS ALWAYS BEEN THE GATE THE WALK ASKS (`#planned_for` returns zero for a paid
+      # one-time bill, or it would re-accrue its whole amount for ever against a date that never
+      # moves). It is PUBLIC now because three screens have to stop calling a paid bill late: the
+      # row's `when` clause, the runway's tick and the trouble strip all read a rule whose date has
+      # not rolled and whose fund is empty, and every one of them read the emptiness as a shortfall.
+      #
+      # BOTH DIRECTIONS ON ONE FIXTURE: the same rule before and after the payment.
+      it "is settled once the bill is paid and not before", :aggregate_failures do
+        expect(calc(Date.new(2026, 7, 15))).not_to be_settled
+
+        spend(600, on: Date.new(2026, 6, 5), item: premium)
+
+        expect(calc(Date.new(2026, 7, 15))).to be_settled
+      end
+
+      # ** AND IT IS NO LONGER OVERDUE, WHICH IS THE WHOLE POINT OF THE PREDICATE BEING PUBLIC. **
+      # July 15 is six weeks past a June 1 date that can never roll, so before the payment this is
+      # the ordinary overdue bill and after it there is nothing left to do.
+      it "stops being overdue the moment it is paid", :aggregate_failures do
+        expect(calc(Date.new(2026, 7, 15))).to be_overdue
+
+        spend(600, on: Date.new(2026, 6, 5), item: premium)
+
+        expect(calc(Date.new(2026, 7, 15))).not_to be_overdue
+      end
+
+      # ** THE SETTLING DAY IS THE DAY THE RUNNING TOTAL REACHED THE TARGET — the date the row
+      # prints as `paid Jun 20`. ** Two part payments, so the answer is the SECOND one: a reader
+      # that named the first receipt would date the settlement before the money was there, and one
+      # that named the last would be right only by accident on a single-payment bill.
+      it "names the day the spending reached the target", :aggregate_failures do
+        spend(200, on: Date.new(2026, 6, 5), item: premium)
+        spend(400, on: Date.new(2026, 6, 20), item: premium)
+        july = calc(Date.new(2026, 7, 15))
+
+        expect(july).to be_settled
+        expect(july.settled_on).to eq(Date.new(2026, 6, 20))
+      end
+
+      # NIL WHILE THE BILL IS UNPAID, because there is no settlement to date — an answer rather than
+      # the first receipt's day, which would be this reader guessing.
+      it "names no day while the bill is only part paid", :aggregate_failures do
+        spend(200, on: Date.new(2026, 6, 5), item: premium)
+        july = calc(Date.new(2026, 7, 15))
+
+        expect(july).not_to be_settled
+        expect(july.settled_on).to be_nil
+      end
+    end
+
+    # ** A REPEATING RULE IS NEVER SETTLED, whatever has been paid into it (§3.2). ** There is
+    # always a next occurrence to fund, and this is the property that keeps the paid arm above from
+    # silencing an ordinary six-monthly bill: it rolls its date instead, which is the correct
+    # sentence for that shape and was never the misreading.
+    describe "a repeating bill that has been paid" do
+      let(:rule) do
+        create(
+          :budget,
+          category: groceries,
+          item: premium,
+          amount: 600,
+          interval_months: 6,
+          anchor_date: Date.new(2026, 6, 1),
+          created_at: born
+        )
+      end
+
+      it "is not settled and rolls its date instead", :aggregate_failures do
+        spend(600, on: Date.new(2026, 6, 5), item: premium)
+        july = calc(Date.new(2026, 7, 15))
+
+        expect(july).not_to be_settled
+        expect(july.settled_on).to be_nil
+        expect(july.next_due_on).to eq(Date.new(2026, 12, 1))
+      end
+    end
+
+    # A RATE RULE ANSWERS FALSE WITHOUT WALKING ANYTHING — `#one_time?` is asked first, so a
+    # use-it-or-lose-it rule never reaches a question about a bill.
+    describe "a rate rule asked whether it is settled" do
+      let(:rule) { create(:budget, :per_period_rate, category: groceries, amount: 400, created_at: born) }
+
+      it "is never settled and names no day", :aggregate_failures do
+        march = calc(Date.new(2026, 3, 10))
+
+        expect(march).not_to be_settled
+        expect(march.settled_on).to be_nil
+      end
     end
   end
 

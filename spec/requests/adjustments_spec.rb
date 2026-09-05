@@ -33,11 +33,18 @@ RSpec.describe "Adjustments", type: :request do
 
   def adjust(params) = post(adjustments_path, params: params)
 
+  # ** THE REDIRECT NAMES THE CATEGORY THE BUTTON WAS IN (two-shapes spec §4). ** The Budget page
+  # shows one category's rules at a time, so a write made inside one has to come back to it open —
+  # otherwise pressing "Set aside" closes the panel it was pressed in and the figure it just changed
+  # is off screen under a flash about it. It is the RULE's own category, so the redirect states a
+  # fact rather than echoing a parameter back off the wire.
+  def back_to(rule) = budget_page_path(open: rule.category_id)
+
   describe "a top-up", :aggregate_failures do
     it "writes one positive row on the rule and comes back to the budget page" do
       adjust(rule_id: rule.id, amount: "100")
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(rule))
       expect(rule.adjustments.count).to eq(1)
       expect(rule.adjustments.first.amount).to eq(100)
     end
@@ -48,7 +55,7 @@ RSpec.describe "Adjustments", type: :request do
     it "writes one negative row for a take-back" do
       adjust(rule_id: rule.id, amount: "-158")
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(rule))
       expect(rule.adjustments.first.amount).to eq(-158)
     end
 
@@ -168,7 +175,7 @@ RSpec.describe "Adjustments", type: :request do
     it "accepts the first day of the current period on a rate rule", :aggregate_failures do
       adjust(rule_id: rule.id, amount: "100", date: "2026-09-01")
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(rule))
       expect(rule.adjustments.sole.local_day).to eq(Date.new(2026, 9, 1))
     end
 
@@ -246,7 +253,7 @@ RSpec.describe "Adjustments", type: :request do
     it "writes exactly minus this period's planned share, dated the owner's today" do
       adjust(rule_id: target_rule.id, skip: "1")
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(target_rule))
       expect(target_rule.adjustments.first.amount).to eq(-150)
       expect(target_rule.adjustments.first.local_day).to eq(Date.new(2026, 9, 4))
     end
@@ -260,7 +267,7 @@ RSpec.describe "Adjustments", type: :request do
     it "ignores a date on the wire and lands on the owner's today", :aggregate_failures do
       adjust(rule_id: target_rule.id, skip: "1", date: "2026-08-15")
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(target_rule))
       expect(target_rule.adjustments.sole.local_day).to eq(Date.new(2026, 9, 4))
       expect(target_rule.adjustments.sole.amount).to eq(-150)
     end
@@ -322,7 +329,7 @@ RSpec.describe "Adjustments", type: :request do
 
       delete(adjustment_path(adjustment))
 
-      expect(response).to redirect_to(budget_page_path)
+      expect(response).to redirect_to(back_to(rule))
       expect(Adjustment.where(id: adjustment.id)).to be_empty
     end
 

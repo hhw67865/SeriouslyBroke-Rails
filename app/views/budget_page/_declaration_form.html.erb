@@ -9,8 +9,13 @@
 
     `url:` is given explicitly because `simple_form_for @user` would otherwise post to
     `/users/:id` — Devise's registration route, which asks for a current password. %>
+<%# `declare: 1` ON THE ACTION, so a refusal — or the cadence question — comes back with the form
+    still showing (two-shapes spec §4). It is hidden behind the income tile's "change" now, and
+    `BudgetPageController#build_presenter` reads the parameter off whatever request it is rendering:
+    without it, a 422 would re-render the page with the errors' own form gone and what the user
+    typed with it. %>
 <%= simple_form_for presenter.declaration,
-                    url: budget_page_user_path,
+                    url: budget_page_user_path(declare: 1),
                     method: :patch,
                     html: { class: "border-t border-gray-100 pt-5 space-y-4" } do |f| %>
   <%# Both `:base` and the field errors: the anchor validation's message lands on

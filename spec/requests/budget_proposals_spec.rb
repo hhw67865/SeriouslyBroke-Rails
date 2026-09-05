@@ -151,16 +151,22 @@ RSpec.describe "Budget proposals", type: :request do
   # the same control the half-yearly bill uses — and `RuleForm` maps the pair onto the columns. The
   # `rule_type` is `bill`, which is what a dated-bill suggestion proposes (§3), and `unspent` is
   # `resets`, because a dated rule's build-up is defined by its date.
+  # ** THE PAYLOAD IS `RuleForm`'S WORDS, AND IT HAD NOT CAUGHT UP (two-shapes spec §5). ** It sent
+  # `schedule: "every_n"` and `unspent: "resets"` — the THREE-shape form's vocabulary, which Task 1
+  # replaced with `by_date` + `repeats` and deleted outright. `RuleForm` refused every one of these
+  # posts, so the three examples in this file that assert a WRITE had been failing since that commit
+  # (this file was not among the ones re-run for it — see this task's report), and the refusals below
+  # were passing for the wrong reason: nothing was written because nothing could be.
   def accept(**overrides)
     post budgets_path,
          params: {
            budget: {
              amount: "85.00",
              rule_type: "bill",
-             schedule: "every_n",
+             schedule: "by_date",
+             repeats: true,
              interval_months: 1,
              anchor_date: Date.current + 1.month,
-             unspent: "resets",
              item_id: phone.id,
              category_id: utilities.id
            }.merge(overrides)

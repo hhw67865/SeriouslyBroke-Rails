@@ -116,8 +116,11 @@ class RuleForm
                 :rule_type,
                 :amount,
                 :schedule,
-                :repeats,
                 :interval_months
+
+  # `repeats` HAS A WRITER AND A READER OF ITS OWN (below), because the reader CASTS: the accessor's
+  # would hand the view the raw string the wire carried.
+  attr_writer :repeats
 
   # `budget:` IS THE EDIT PATH AND NOTHING ELSE. A new rule is a `Budget.new` this class builds; an
   # existing one is handed in so the words are applied to the row the user is editing — including a
@@ -222,7 +225,24 @@ class RuleForm
   # `ActiveModel::Type::Boolean` is the same cast a `boolean` column applies, so the string an
   # unchecked box submits (`"0"`) is false here exactly as it would be in the database — a truthiness
   # test would read it as checked and write an interval onto a one-off.
-  def repeats? = ActiveModel::Type::Boolean.new.cast(repeats).present?
+  def repeats? = ActiveModel::Type::Boolean.new.cast(@repeats).present?
+
+  # ** THE CHECKBOX READS THIS, SO IT HAS TO BE A BOOLEAN AND NOT THE STRING THE WIRE CARRIED. **
+  # `RuleForm.from` sets `repeats: true`, which a suggestion's accept link URL-encodes as the STRING
+  # "true"; `check_box` decides `checked` by `value.to_s == checked_value` — `"true" == "1"` — so a
+  # measured every-N-months bill opened its form with the box UNCHECKED and the interval field
+  # hidden and blank beside it. That is not only a display fault: the browser submits the state of
+  # the control, so pressing Create on that form wrote the bill as a ONE-OFF with the interval
+  # dropped, silently turning a recurring bill into a single payment.
+  #
+  # ONE CAST, HERE, and `#repeats?` reads the same ivar — the two cannot part company. It is the
+  # same treatment `#anchor_date=` gives the one other field whose raw wire value is not renderable.
+  #
+  # ** PRE-EXISTING, AND FOUND BY RE-RUNNING `system/budget_page/suggestions_spec` (see this task's
+  # report). ** It is fixed here rather than left for the rule form's own task because the flow it
+  # breaks — accept a dated bill, land on the form — is the one this task re-homed inside the
+  # category panel.
+  def repeats = ActiveModel::Type::Boolean.new.cast(@repeats)
 
   # A DATE, NOT THE STRING THE WIRE CARRIED. `date_field` formats its value with `strftime`, so a
   # String reaches it as a NoMethodError rather than as a rendered form — and this is the one field

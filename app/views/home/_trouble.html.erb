@@ -49,7 +49,7 @@
       <%= render "shortfall", presenter: presenter %>
 
     <% when :over, :overdue %>
-      <%# ONE RULE THAT NEEDS A HUMAN. The line is `HomePresenter::ClaimLine` — the SAME object the
+      <%# ONE RULE THAT NEEDS A HUMAN. The line is a `ClaimLine` — the SAME object the
           "This period" row below prints — so the two cannot describe one rule differently, which is
           exactly what happened when the strip read a `HoldingStatus` and the section read a bar.
 

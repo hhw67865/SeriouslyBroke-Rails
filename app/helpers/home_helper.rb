@@ -37,56 +37,18 @@ module HomeHelper
   # THE STATUS VOCABULARY ITSELF IS NOT DELETED — the distribute, reallocation and category screens
   # still speak it, and Task 4 is what retires it with them. Home simply stopped.
 
-  # THE FIGURE ON A "THIS PERIOD" ROW (§3.4): `spent of rate` for an envelope, `built up of target`
-  # for a fund. ONE method for both because the two are the same shape said about different money,
-  # and the caller must not choose the noun — a row that printed "spent" over a fund's running total
-  # would be the money screen's oldest lie, that savings are money to spend.
-  # ** THE UNCAPPED ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** A building rule that named
-  # no target had `ClaimCalculator#target` NIL — no ceiling — and an un-gated sentence printed
-  # `$450.00 built up of ` with an empty figure after a dangling preposition. Every accruing rule has
-  # a day and a figure now, so both halves of the "of" are always there.
-  def claim_figure(line)
-    return "#{number_to_currency(line.spent)} of #{number_to_currency(line.accrued)}" if line.rate?
-
-    "#{number_to_currency(line.built_up)} built up of #{number_to_currency(line.target)}"
-  end
-
-  # THE SCHEDULE CLAUSE UNDER AN ACCRUING ROW (§3.4): `next due Mar 1 · $200.00 per period`.
+  # ** `#claim_figure`, `#claim_schedule` AND `#dated_schedule` ARE DELETED (this task's carry (b)).
+  # ** They were the SECOND spelling of a row's figure and a row's date: `#claim_figure` said
+  # `$450.00 built up of $1,200.00` where `#figure_words` says `$450.00 of $1,200.00`, and
+  # `#claim_schedule` said `next due Mar 1 · $200.00 per period` where `#when_words` says
+  # `Mar 1 · +$200.00`. Two helpers, one fact, and the split was not a design: Task 2 kept them alive
+  # by ruling because their two readers — `budget_page/_rule_row` and the categories holdings card —
+  # were outside that task's scope, and named this task as the fold. Both readers are converted in
+  # this commit and both now print the same sentence Home prints about the same rule.
   #
-  # ** THE TENSE IS THE DATE'S OWN (fix round 1 — MED-1). ** A $600 bill due Aug 15, saved in full and
-  # never paid, keeps its occurrence anchored where it was (§3.2) — so on Sep 3 this row printed
-  # `next due Aug 15`, a date already gone under a word that promises a future one. `was due` is what
-  # a past occurrence gets, and the side of `today` it falls on is read off `#overdue?` rather than
-  # compared here: that predicate IS `next_due_on < today` (`ClaimCalculator#overdue?`), stated once,
-  # so this clause and the trouble label above it cannot disagree about one date on one afternoon.
-  #
-  # ** WHAT DROPS AND WHAT SURVIVES (fix round 1 — MED-2, a comment that misstated its own code). **
-  # It said "nil for a fund already full". It is not, and never was: a full fund's per-period SHARE is
-  # zero, so that half of the clause drops and the DATE is printed alone (`was due Aug 15`) — which is
-  # exactly the row a user with an unpaid bill needs. nil is returned for a RATE rule only, which has
-  # neither half: use-it-or-lose-it accrues toward nothing and is due on no day. The view renders no
-  # element at all where this is nil.
-  #
-  # ** THE BUILDING ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** A building rule had no
-  # date at all, so its clause was `+$300.00 per period` — money added every period for as long as
-  # the rule lived — and `#building_schedule` was where that sentence lived. A goal names a day now,
-  # so it takes the dated clause like every other accruing rule: `next due Jun 1 · $148.15 per
-  # period`, which says the same thing with the deadline the share is derived from.
-  def claim_schedule(line)
-    return nil if line.rate?
-
-    dated_schedule(line)
-  end
-
-  # THE DATED ROW'S: the occurrence, in the tense the date's own side of `today` gives it, and the
-  # catch-up share where there is still one to ask for. Either half may drop; both dropping is the
-  # settled one-off, which renders no element at all.
-  def dated_schedule(line)
-    [
-      line.next_due_on && "#{line.overdue? ? "was due" : "next due"} #{line.next_due_on.strftime("%b %-d")}",
-      line.per_period.positive? && "#{number_to_currency(line.per_period)} per period"
-    ].select { |clause| clause.is_a?(String) }.join(" · ").presence
-  end
+  # WHAT SURVIVES IS `#claim_trouble_label` below, which is a different question (what is WRONG with
+  # a claim, in the two shapes §4 says are worth a human) and is rendered by the trouble strip, the
+  # categories card and nothing else.
 
   # WHAT IS WRONG WITH A CLAIM, IN THE TWO SHAPES §4 SAYS ARE WORTH A HUMAN. The strip and the "This
   # period" row print the SAME string about the same rule inches apart, which is why it is one method:
@@ -142,7 +104,13 @@ module HomeHelper
     bill: "text-brand-dark", usage: "text-dusty-teal-dark", choice: "text-terracotta-dark"
   }.freeze
 
-  def stripe_fill(line) = STRIPE_FILLS.fetch(line.stripe_type)
+  def stripe_fill(line) = type_fill(line.stripe_type)
+
+  # THE SAME TABLE ASKED OF A BARE TYPE, for the two places on the Budget page that colour a type
+  # with no row in hand: the list's dots (one per rule) and the tiles' segmented bar (one band per
+  # kind). `fetch` for `#stripe_fill`'s own reason — a fourth type without a colour is a dot nobody
+  # can see rather than a failure anybody notices.
+  def type_fill(type) = STRIPE_FILLS.fetch(type.to_sym)
 
   def type_text_class(line) = TYPE_TEXT.fetch(line.stripe_type)
 
@@ -175,18 +143,27 @@ module HomeHelper
   # THE GOAL'S DATE CARRIES ITS YEAR AND THE BILL'S DOES NOT, deliberately: a goal's horizon is
   # routinely years out and `Jun 1` alone would read as this June, while a one-time bill inside the
   # next few months is the shape "Dec 1" is unambiguous for.
+  #
+  # ** NIL-SAFE ON THE DATE (this task's carry (a)). ** Every arm below that names a day drops the
+  # day rather than raising where there is none: `once` and `$5,000.00` are true sentences about a
+  # rule, `undefined method 'strftime' for nil` is a 500 on a money screen. The shape cannot be
+  # `:one_off` without an anchor today — `Budget#cadence` reads the column — so this is a guard and
+  # not a branch the data reaches; it is here because these words are now rendered by THREE screens
+  # over rows built by three presenters, and the one that raised would be whichever built a row for
+  # a rule mid-edit.
   def shape_schedule_words(line)
     case line.rule.cadence
     when :per_period then "a period"
     when :monthly then "every month"
     when :every_n then "every #{line.rule.interval_months} months"
-    else
-      if line.rule.bill?
-        "once, #{line.next_due_on.strftime("%b %-d")}"
-      else
-        "#{number_to_currency(line.target)} by #{line.next_due_on.strftime("%b %-d, %Y")}"
-      end
+    else one_off_words(line)
     end
+  end
+
+  def one_off_words(line)
+    return ["once", line.next_due_on&.strftime("%b %-d")].compact.join(", ") if line.rule.bill?
+
+    [number_to_currency(line.target).to_s, line.next_due_on&.strftime("by %b %-d, %Y")].compact.join(" ")
   end
 
   # `$310.00 of $400.00` — spending against this period's rate for a rate rule, the running total
@@ -195,22 +172,31 @@ module HomeHelper
   # that printed "spent" over a target's running total would be the money screen's oldest lie.
   def figure_words(line) = "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
 
-  # `resets Oct 1` / `Sep 17 · ready` / `Apr 2 · +$41.67` / `Sep 20 · $40.00 short` /
+  # `paid Aug 14` / `resets Oct 1` / `Sep 17 · ready` / `Apr 2 · +$41.67` / `Sep 20 · $40.00 short` /
   # `overdue · was Aug 15`.
   #
-  # THE ORDER OF THE ARMS IS THE ORDER OF THE NEWS. A date already gone with the money missing comes
-  # first whatever else is true of the row (and keeps `#claim_trouble_label`'s exact wording, so the
-  # strip above and the row below say one string about one rule); then the money missing on a day
-  # that is HERE (`ClaimLine#short?`); then a rule that has arrived; then one still accruing.
+  # THE ORDER OF THE ARMS IS THE ORDER OF THE NEWS. A one-off that is DONE comes first, because
+  # nothing else the row could say about it is true any more; then a date already gone with the money
+  # missing (which keeps `#claim_trouble_label`'s exact wording, so the strip above and the row below
+  # say one string about one rule); then the money missing on a day that is HERE (`ClaimLine#short?`);
+  # then a rule that has arrived; then one still accruing.
   #
-  # THE LAST ARM DROPS TO THE BARE DATE WHERE THE SHARE IS ZERO. A one-time bill whose money has
-  # already been spent asks for nothing more (`ClaimCalculator#planned_for`'s settled gate), so
-  # `+$0.00` would be a rule advertising a contribution it is not making.
+  # ** THE PAID ARM IS THIS TASK'S CARRY (a). ** A one-time bill's occurrence never rolls, so before
+  # its date a paid rule read `Sep 20 · $600.00 short` and after it `overdue · was Sep 20` — the two
+  # worst sentences the vocabulary has, about a bill that had been paid. `ClaimLine#paid?` is the
+  # fulfilment and `#paid_on` is the day the spending reached the target, which
+  # `ClaimCalculator#settled_on` reads off rows the walk had already summed — so the row names the
+  # day rather than saying a bare "paid", at no cost. The arm degrades to "paid" alone where the
+  # settling day cannot be named.
+  #
+  # THE ACCRUING ARM DROPS TO THE BARE DATE WHERE THE SHARE IS ZERO. A rule asking for nothing more
+  # would otherwise advertise a `+$0.00` contribution it is not making.
   def when_words(line)
+    return ["paid", line.paid_on&.strftime("%b %-d")].compact.join(" ") if line.paid?
     return "overdue · was #{line.next_due_on.strftime("%b %-d")}" if line.overdue?
     return line.resets_on && "resets #{line.resets_on.strftime("%b %-d")}" if line.rate?
 
-    [line.next_due_on.strftime("%b %-d"), dated_when_clause(line)].compact.join(" · ")
+    [line.next_due_on&.strftime("%b %-d"), dated_when_clause(line)].compact.join(" · ").presence
   end
 
   def dated_when_clause(line)

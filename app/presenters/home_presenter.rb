@@ -35,177 +35,12 @@
 # docs/superpowers/specs/2026-09-02-answers-first-home-design.md §§2-6, whose four questions and
 # whose copy this screen still answers — only the readers underneath changed.
 class HomePresenter
-  # WHAT AN ITEM-LESS RULE IS CALLED ON A BLOCK ROW (two-shapes spec §3, and the rule form's own
-  # words — §5: "the whole category" means "anything in <category> no other rule pays"). It is NOT
-  # `HomeHelper#pool_rule_label`, which names such a rule by its SHAPE ("Per period", "One-off"): a
-  # block row already prints the shape in its own clause, so the shape said twice would displace the
-  # one thing the row is missing — which lane of the category this rule is about.
-  #
-  # HERE RATHER THAN INSIDE `ClaimLine`, where it belongs and where rubocop will not have it
-  # (Lint/ConstantDefinitionInBlock). The Data block's lexical scope is this class, so `#name` reads
-  # it unqualified.
-  WHOLE_CATEGORY = "Whole category"
-
-  # ONE RULE'S CLAIM, AS THE SCREEN SAYS IT (spec §3.4). Every member comes off ONE
-  # `ClaimCalculator`, from the page's ONE `ClaimLedger`, so a row cannot pair one rule's figure with
-  # another's state and cannot cost a walk of its own.
-  #
-  # `shape` RATHER THAN A BOOLEAN, because §3.4 gives the two shapes two different sentences: a rate
-  # rule says `spent of rate`, a dated one says `built up of target · next due · $X per period`, and
-  # the classification lives in exactly one place (`ClaimCalculator#shape`).
-  #
-  # ** `capped` LEFT THE MEMBER LIST WITH `ClaimCalculator#capped` (two-shapes spec §7). ** It was
-  # carried onto the row because an UNCAPPED building rule's `#target` was NIL and every reader of
-  # `target` had to ask a second question first. There is no such shape: a dated rule's target is its
-  # own amount and a rate rule's is zero, so `#target` is always a figure and `#dated?` is the only
-  # question a reader has left.
-  ClaimLine = Data.define(
-    :category,
-    :rule,
-    :shape,
-    :claim,
-    :spent,
-    :accrued,
-    :built_up,
-    :target,
-    :next_due_on,
-    :per_period,
-    :over,
-    :over_by,
-    :overdue,
-    :due_this_period,
-    :resets_on
-  ) do
-    def rate? = shape == :rate
-
-    # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2) — a bill or a goal, which are one shape.
-    def dated? = shape == :dated
-
-    # SPENT PAST WHAT THE RULE HAD — `ClaimCalculator#over?`, which reads the figure BEFORE the clamp
-    # at zero and is therefore the only reader that can tell "spent it exactly" from "spent more than
-    # there was". Both leave a claim of zero (§3.1/§3.2).
-    def over? = over
-
-    # A DATE THAT PASSED WITH THE MONEY STILL MISSING (§3.2). Not merely a date in the past: a bill
-    # whose fund is FULL is waiting to be PAID, which is a different sentence and not trouble — the
-    # cycle rolls on payment, so an unpaid occurrence stays anchored where it was and goes on asking.
-    #
-    # A MEMBER RATHER THAN A DERIVATION, because the comparison is against the presenter's `today` and
-    # a Data object computing it would have to reach for a clock of its own — which is the one thing
-    # every reader on this screen is built to avoid. That day is the OWNER's (`User#today`, fix round
-    # 2 — LOW-1), so a Data object reaching for `Date.current` would not merely be a second clock: it
-    # would be a second clock in the wrong zone.
-    def overdue? = overdue
-
-    def trouble? = over? || overdue?
-
-    # ** IS THE MONEY FOR THIS OCCURRENCE THERE, OR NOT (fix round 1 — MED-1)? ** It used to be half
-    # of `#overdue?` and it is the wrong half to gate a trigger on (see `ClaimCalculator#overdue?`) —
-    # a bill nobody paid needs a human whether or not the fund is whole. What it is exactly right for
-    # is which SENTENCE the strip says about it: "the fund is short $200.00 — this needs paying" is a
-    # different instruction from "the money is set aside — pay it and the fund starts again", and only
-    # this pair can tell them apart.
-    # BOTH READ `#target`, SO BOTH ASK `#dated?` FIRST. The strip only reaches them on an OVERDUE
-    # rule, which has a due date and is therefore always dated — so the rate arms below are
-    # unreachable from `_trouble.html.erb` today and are stated anyway, because "unreachable" is a
-    # fact about one caller and this is a fact about the row.
-    def fund_short? = dated? && built_up < target
-
-    def fund_gap = dated? ? target - built_up : 0.to_d
-
-    # WHAT THE BAR MEASURES: spending against the rate for an envelope, the running total against the
-    # target for a fund (§3.4). One pair of readers rather than a signed number, because the two
-    # halves are read by different parts of the row.
-    def filled = rate? ? spent : built_up
-
-    # THIS PERIOD'S ACCRUAL FOR A RATE RULE, THE TARGET FOR A DATED ONE. Never nil since the two
-    # shapes: the uncapped fund that had no figure to be a fraction of is retired (§7).
-    def denominator = rate? ? accrued : target
-
-    # A BAR NEEDS SOMETHING TO BE A FRACTION OF, and a rate rule skipped to nothing this period has
-    # no denominator — the row prints the fact and no track, `EntryImpactPresenter#bar?`'s rule for
-    # its reason.
-    def bar? = denominator.positive?
-
-    # WHOLE PERCENT, CLAMPED, matching `HomePresenter::Progress#percent` and
-    # `HoldingCalculator#progress_percentage` — the app's other bars — so all of them draw alike.
-    #
-    # ** THE BRIEF CALLS THIS `bar_fraction` AND IT IS THE SAME NUMBER, SO IT KEEPS ONE NAME. ** A
-    # fraction beside a percent is two spellings of one quantity and the view would have to know
-    # which one the CSS wants; every bar in this app is drawn `style="width: <percent>%"`.
-    def percent
-      return 0 unless bar?
-
-      ((filled / denominator) * 100).round.clamp(0, 100)
-    end
-
-    # ── WHAT A CATEGORY BLOCK'S ROW IS MADE OF (two-shapes spec §3) ────────────────────────────
-    #
-    # All four are derivations rather than members: each is a reading of members this object already
-    # carries, and a member would be a second place for the same fact to be set differently. The
-    # WORDS that go beside them are `HomeHelper#shape_words` / `#when_words` / `#figure_words` — one
-    # spelling each, shared with Task 3's Budget rows.
-
-    # WHICH COLOUR THE STRIPE IS: the RULE's type, never the category's (rules-own-the-budget §3).
-    # A category may carry a bill beside a choice, and the stripe is what says so at a glance.
-    def stripe_type = rule.rule_type.to_sym
-
-    # WHICH LANE OF THE CATEGORY THIS RULE PAYS FOR (§3.1's partition): the item it names, or
-    # everything no other rule claims.
-    def name = rule.item&.name || WHOLE_CATEGORY
-
-    # ** THE MONEY IS NOT ALL THERE AND THE DAY IS HERE OR GONE. ** Two facts, and both are needed:
-    # `#fund_short?` alone is true of every goal that has not finished saving — a $5,000 target due
-    # in 2027 is not "short", it is accruing — and the date alone is true of a bill whose money is
-    # sitting ready. This is the pair the runway's tick colours split on, said once so the tick and
-    # the row underneath it cannot disagree about one rule on one afternoon.
-    def short? = fund_short? && (due_this_period || overdue?)
-
-    # WHAT THE BAR IS SAYING (§3). `over` is spending past what the rule had; `short` is the state
-    # above; `full` is a bar that has arrived — a fund at its target, or a rate rule spent to the
-    # penny. `normal` is everything in progress.
-    #
-    # `over` FIRST, because an over-spent rate rule is also a full one and the news is the excess.
-    def bar_state
-      return :over if over?
-      return :short if short?
-      return :full if bar? && filled >= denominator
-
-      :normal
-    end
-  end
-
-  # ONE CATEGORY AS A ROW, AND ITS RULES AS LINES (spec §3.4 + answers-first §4).
-  #
-  # ** THE RULING: A ROW PER CATEGORY, A LINE PER RULE. ** §3.4 gives per-RULE sentences and
-  # `Category#claim` is a SUM, so a category carrying a $400-a-period rate rule beside a $1,200
-  # six-monthly bill cannot honestly print one "spent of rate" or one "built up of target" — the two
-  # figures are denominated in different things and summing them would state a number that is true
-  # of neither. The category is still the heading (answers-first §4's fourth question is about
-  # categories), and where it has exactly ONE rule — the ordinary shape, and the only one
-  # `Budget#category_may_hold_one_item_less_rule` lets a user build without naming items — the row
-  # renders as it always did: name, figure, bar.
-  #
-  # `spent` IS THE CATEGORY'S WHOLE SPENDING THIS PERIOD and is what an UNRULED holder prints. It is
-  # deliberately not summed into the lines: each line already carries its own lane's spending, and
-  # the lanes partition (§3.1's `Entry.on_unruled_items`), so adding them would be the same money
-  # said twice.
-  CategoryBlock = Data.define(:category, :rows, :claimed) do
-    delegate :name, to: :category
-
-    def rule_count = rows.size
-
-    # ** THE HEADER TINT (two-shapes spec §3): "a category in trouble — any rule over, short or
-    # overdue — tints its header". **
-    #
-    # IT IS A WIDER TEST THAN `ClaimLine#trouble?`, DELIBERATELY, AND THE DIFFERENCE IS `short?`.
-    # That predicate is the TROUBLE STRIP's population (`#trouble_lines`), and §5 gives the strip
-    # exactly two per-rule triggers — spending past the rate, and a date gone by unpaid. A bill due
-    # on the 20th with $80 of its $120 saved is neither: nothing has gone wrong yet, the runway
-    # names it in its pace line, and the block tints so the eye lands there. Widening the strip's
-    # own predicate would have added a fifth kind of trouble to a list §5 fixes at four.
-    def trouble? = rows.any? { |row| row.trouble? || row.short? }
-  end
+  # ** `ClaimLine`, `CategoryBlock`, `#claim_lines`, `#give_way_key` AND `#give_way_rank` ARE HOISTED
+  # TO `ClaimRows` (this task). ** The Budget page's list is the same give-way order under a
+  # different header (two-shapes spec §4) and the categories card is one category's slice of it, so
+  # leaving the row type and the sort here meant either a second sort — the very defect
+  # `ClaimRows#blocks` records — or two other screens reaching into this class's privates. Home
+  # reads them through `#claim_rows` and every figure below is unchanged.
 
   # ** A CATEGORY WITH NO RULE AT ALL AND SPENDING THIS PERIOD (answers-first §4). ** The fact, and
   # no bar: nothing claims this money, so a denominator would be inventing the pressure rather than
@@ -405,18 +240,13 @@ class HomePresenter
     @categories ||= user.categories.in_fill_order.includes(:budgets).to_a
   end
 
-  # EVERY CATEGORY WITH A ROW ON THIS SCREEN — the holders, PLUS any category carrying a rule that is
-  # not one (`funded_since` cleared after the fact, which `BudgetPagePresenter#unfilled_rules` is the
-  # Budget page's band about). The second half is load-bearing rather than defensive: `ClaimLedger`
-  # counts EVERY rule's claim into `free`, so a claim with no row would be money missing from the
-  # hero's figure with nothing on the screen to explain it.
-  #
-  # `[priority, name]`, `Category.in_fill_order`'s own key — priority alone is not a total order, and
-  # a tie falling through to database order means the same data ranks differently between loads.
-  def budgeted_categories
-    @budgeted_categories ||= (categories + claim_ledger.rules.filter_map(&:category))
-      .uniq.sort_by { |category| [category.priority, category.name] }
-  end
+  # EVERY CATEGORY WITH A ROW ON THIS SCREEN — the holders, PLUS any category carrying a rule that
+  # is not one (`funded_since` cleared after the fact). `ClaimRows#ranked_categories`, which is where
+  # the give-way rank reads it: one list, so the strip and the section cannot rank a category two
+  # ways. It takes THIS class's `#categories` (eager-loaded `:budgets`, which `#unruled_holders`
+  # reads) rather than loading a second copy.
+  delegate :ranked_categories, to: :claim_rows
+  alias budgeted_categories ranked_categories
 
   # ── THE HERO CARD (answers-first §§2-3, on computed-claims' terms) ─────────────────────────────
 
@@ -522,30 +352,12 @@ class HomePresenter
 
   # ── "THIS PERIOD" — ONE BLOCK PER CATEGORY, ONE ROW PER RULE (two-shapes spec §3) ──────────────
 
-  # ** THE BLOCKS ARE `#give_way_order` GROUPED BACK, AND THAT IS THE WHOLE OF THE SORT. ** §3: "two
-  # columns, give-way order (type rank of the category's lowest-ranked rule, then highest priority
-  # number first — the one sort, `HomePresenter#give_way_order`, grouped back by category)".
-  #
-  # `group_by` KEEPS FIRST-APPEARANCE ORDER, which is exactly the rule the spec states: a block's
-  # position is its FIRST line's position in the walk, so a category is placed by the rule of its
-  # that gives way soonest. No second sort exists to disagree with the strip's list — the shortfall
-  # walk and this section are one ordering read twice, which is what stops the strip naming a
-  # category the section below it ranks somewhere else.
-  #
-  # THE ROWS INSIDE A BLOCK COME OUT IN THE SAME ORDER, and that is a consequence rather than a
-  # separate decision: `#give_way_key`'s third term is `Category.rule_order`, the app's one
-  # within-category key, so two rules of one type keep the order every other screen prints them in
-  # and a choice sorts above a bill because that is the order they would give way in.
-  #
-  # ** IT REPLACES `#period_rows` AND `PeriodRow` (this task). ** That reader was a row per CATEGORY
-  # sorted trouble-first then priority — a second ordering over the same lines, and one that could
-  # not say what §3 asks for: a category's own rules ranked by type. Its `#silent?` gate and its
-  # rule-less `budgeted?` arm survive in `#unbudgeted_rows`, which now answers for both populations.
-  def category_blocks
-    @category_blocks ||= give_way_order.group_by { |line| line.category.id }.map do |_id, rows|
-      CategoryBlock.new(category: rows.first.category, rows: rows, claimed: rows.sum(0.to_d, &:claim))
-    end
-  end
+  # ** ONE BLOCK PER CATEGORY, IN GIVE-WAY ORDER (§3) — `ClaimRows#blocks`. ** The sort, the
+  # grouping and the row type all live there now (this task), because the Budget page renders the
+  # same list under a different header and a second grouping is how two screens come to rank one
+  # category two ways.
+  delegate :blocks, to: :claim_rows
+  alias category_blocks blocks
 
   # ** THE RUNWAY: THIS PERIOD AS A LINE, WITH A MARK ON EVERY DAY MONEY IS NEEDED (§3). **
   #
@@ -728,53 +540,16 @@ class HomePresenter
 
   # ── THE PERIOD, AND THE STRUCTURAL VERDICT ─────────────────────────────────────────────────────
 
-  # WHICH PERIOD THE SCREEN IS TALKING ABOUT, or nil for a user who has declared none.
-  #
-  # `User#period_containing`, the one method that owns this arithmetic. GATED ON THE DECLARATION
-  # rather than taken on trust: `period_containing` falls back to the calendar month for an undeclared
-  # user, which is the right fallback for a normaliser and a lie on this card, since "Aug 1 – Aug 31"
-  # would state a boundary the user never set.
-  # MEMOISED WITH `defined?` RATHER THAN `||=`, because the nil arm is a real answer and the common
-  # one for an undeclared user — `||=` would re-walk the boundaries for every row on the screen for
-  # exactly the users who have none. `#claim_line_for` asks this once per rule now (`#due_this_period?`).
-  def period_range
-    return @period_range if defined?(@period_range)
+  # WHICH PERIOD THE SCREEN IS TALKING ABOUT, or nil for a user who has declared none —
+  # `ClaimRows#period_range`, which is where the rows' own `resets_on` and `due_this_period` are read
+  # against it, so the heading and the rows cannot be talking about two fortnights.
+  delegate :period_range, to: :claim_rows
 
-    @period_range =
-      if user.period_cadence.blank? || user.period_anchor_date.blank?
-        nil
-      else
-        user.period_containing(today)
-      end
-  end
-
-  # ** THE ORDER CLAIMS GIVE WAY IN (rules-own-the-budget spec §3), AND IT IS ONE SORT OVER EVERY
-  # CLAIM LINE. ** It was `budgeted_categories.reverse.flat_map { … }` — a category-level walk that
-  # could only rank whole categories against each other — and the type is a fact about a RULE: one
-  # category may carry a bill beside a choice, and under the old walk both gave way together at
-  # whatever rank their category held. Every line is now ranked individually, on one key:
-  #
-  #   1. `Budget#type_rank` — `{ choice: 0, usage: 1, bill: 2 }`, spelled once on the model (§3).
-  #      Discretionary money goes first and a must-pay is the last thing reached, which is the whole
-  #      point of giving rules a type. It DECIDES BEFORE PRIORITY DOES, which closes §3's open
-  #      question about intra-category order: a restaurant rule on a high-priority category gives way
-  #      before the rent does.
-  #   2. THE CATEGORY, IN REVERSE FILL ORDER — `#budgeted_categories` read backwards, which is
-  #      `[priority, name]` reversed and is exactly what the old walk did. The category that would
-  #      have been funded LAST is the one that goes without first, so a HIGHER priority number gives
-  #      way sooner; a tie on priority breaks on the later NAME. Both are unchanged, and both are
-  #      taken as an INDEX into the list this screen already sorted rather than re-spelled here —
-  #      `Category.in_fill_order`'s key exists in one place and a second copy of it could rank the
-  #      trouble strip differently from the section below it.
-  #   3. `Category.rule_order` — the app's one within-category key (see #claim_lines), so two rules
-  #      of one type on one category give way in the order the rows are printed in.
-  #
-  # PUBLIC, because it is a produced interface of this plan and because `#uncovered_claims` is not
-  # the only honest reader of it: the order is a fact about the screen, and a spec that had to reach
-  # it through `send` would be pinning a private accident.
-  def give_way_order
-    @give_way_order ||= claim_lines.values.flatten.sort_by { |line| give_way_key(line) }
-  end
+  # ** THE ORDER CLAIMS GIVE WAY IN (rules-own-the-budget spec §3) — `ClaimRows#give_way_order`. **
+  # PUBLIC, because it is a produced interface of this plan and `#uncovered_claims` is not its only
+  # honest reader: the order is a fact about the screen, and a spec that had to reach it through
+  # `send` would be pinning a private accident.
+  delegate :give_way_order, to: :claim_rows
 
   # DOES THE BUDGET FIT THE INCOME — a question about the SHAPE of the rules, not about this
   # afternoon's cash, and the one kind of trouble no amount of care this period can fix.
@@ -823,9 +598,16 @@ class HomePresenter
   # THE LABEL IS THE ITEM'S NAME OR THE CATEGORY'S — never `ClaimLine#name`'s "Whole category", which
   # is a phrase about a LANE and reads as nonsense on a mark saying what is due ("$1,200 Whole
   # category"). §3: "labelled amount + rule name (item name or category)".
+  #
+  # ** A PAID ONE-OFF DRAWS NO TICK (this task's carry (a)). ** Its occurrence never rolls, so its
+  # `next_due_on` sits inside this period for ever after it has been paid — and the tick it drew was
+  # RED, because paying the bill empties the fund and `#fund_short?` read the emptiness as a
+  # shortfall. It also counted its whole amount into `#due_total`, so the pace line told the user
+  # money was still due on a bill they had already paid. `ClaimLine#paid?` is the one reading of the
+  # fulfilment; the row beside the rail says "paid <date>" in its place.
   def runway_ticks(progress)
-    claim_lines.values.flatten
-      .select { |line| line.dated? && line.due_this_period }
+    give_way_order
+      .select { |line| line.dated? && line.due_this_period && !line.paid? }
       .sort_by { |line| [line.next_due_on, line.name] }
       .map { |line| runway_tick(line, progress) }
   end
@@ -874,73 +656,8 @@ class HomePresenter
       .map { |category| UnbudgetedRow.new(category: category, spent: spending.fetch(category.id)) }
   end
 
-  # ONE CATEGORY'S LINES, out of the list below. `fetch` with a default rather than `[]`, because a
-  # category with no rule is a real caller (`#trouble_lines` walks every budgeted category).
-  def claim_lines_for(category) = claim_lines.fetch(category.id, [])
-
-  # ** EVERY RULE'S CLAIM, BY CATEGORY, OFF THE PAGE'S ONE LEDGER. ** Built once for the whole screen:
-  # the category blocks, the trouble strip's over/overdue triggers and the shortfall's give-way walk
-  # are three readings of ONE list, and three lists would be three chances for the strip to name a
-  # category the section below it describes differently.
-  #
-  # ** `Category.rule_order`, WHICH IS THE APP'S ONE KEY SINCE THE FIX WAVE (LOW-3). ** This sorted
-  # by `[item name, id]` — the catch-all first, then the items by name — on the argument that the
-  # item-less rule is the category's own envelope and the item-backed ones are exceptions carved out
-  # of it (§3.1's lane partition). The Budget page's group and the category card both sorted the SAME
-  # category's rules by the date the row prints, so one category read one way here and another way
-  # two clicks along. The date key won: it orders on a fact the reader can see, and it was already
-  # two screens' answer against this one's. See `Category.rule_order` for the whole argument.
-  #
-  # THE LINES ARE BUILT BEFORE THEY ARE SORTED, because the key reads `next_due_on` — which is the
-  # CLAIM's reading of the schedule and not a column. It costs nothing extra: the calculators are the
-  # ledger's own and the map ran either way.
-  def claim_lines
-    @claim_lines ||= claim_ledger.rules
-      .map { |rule| claim_line_for(rule) }
-      .sort_by { |line| Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id) }
-      .group_by { |line| line.category.id }
-  end
-
-  def claim_line_for(rule)
-    calculator = claim_ledger.calculator_for(rule)
-
-    ClaimLine.new(
-      category: rule.category,
-      rule: rule,
-      shape: calculator.shape,
-      claim: calculator.claim,
-      spent: calculator.spent_this_period,
-      accrued: calculator.accrued_this_period,
-      built_up: calculator.built_up,
-      target: calculator.target,
-      next_due_on: calculator.next_due_on,
-      per_period: calculator.planned_this_period,
-      over: calculator.over?,
-      over_by: calculator.over_by,
-      overdue: calculator.overdue?,
-      due_this_period: due_this_period?(calculator.next_due_on),
-      resets_on: calculator.rate? ? next_period_opens_on : nil
-    )
-  end
-
-  # ** THE DAY A RATE RULE STARTS AGAIN (§3: "resets Oct 1"). ** Use-it-or-lose-it is reset at every
-  # boundary (§3.1), so the day is the one after this period's close — `#period_range`'s own last
-  # day, never a second calendar. Nil for a dated rule (nothing resets; it has a due date instead)
-  # and for a user who has declared no period, where the row simply says one clause fewer.
-  #
-  # A MEMBER ON THE LINE RATHER THAN AN ARGUMENT TO `HomeHelper#when_words`: that helper is one
-  # spelling for Home's blocks and Task 3's Budget rows, and a signature carrying the period would
-  # make every caller supply a calendar the row object already knows.
-  def next_period_opens_on = period_range.nil? ? nil : period_range.last + 1
-
-  # ** IS THE DAY THIS RULE'S MONEY IS NEEDED ON INSIDE THE PERIOD ON THE SCREEN? ** A MEMBER RATHER
-  # THAN A DERIVATION, for `ClaimLine#overdue?`'s own reason: the comparison is against the
-  # presenter's window, and a Data object computing it would have to reach for a calendar of its own
-  # — which is the one thing every reader on this screen is built to avoid.
-  #
-  # `#period_range` IS THE WINDOW, so this is `User#period_containing` and nothing else; nil for a
-  # user who has declared no period, where the honest answer is false rather than a month nobody set.
-  def due_this_period?(due) = due.present? && period_range.present? && period_range.cover?(due)
+  # ONE CATEGORY'S LINES — `ClaimRows#lines_for`, the same list the blocks are grouped out of.
+  def claim_lines_for(category) = claim_rows.lines_for(category)
 
   # THE LINES THE STRIP IS ABOUT, in the order the section lists their categories, so a reader
   # scanning down the strip and then down the section meets the same categories in the same order.
@@ -948,23 +665,9 @@ class HomePresenter
     @trouble_lines ||= budgeted_categories.flat_map { |category| claim_lines_for(category) }.select(&:trouble?)
   end
 
-  # ONE LINE'S PLACE IN THE GIVE-WAY ORDER. See #give_way_order for what each term is and why.
-  def give_way_key(line)
-    [
-      line.rule.type_rank,
-      give_way_rank.fetch(line.category.id),
-      Category.rule_order(next_due_on: line.next_due_on, amount: line.rule.amount, id: line.rule.id)
-    ]
-  end
-
-  # ** THE CATEGORY HALF OF THE KEY: `#budgeted_categories` READ BACKWARDS, AS AN INDEX. ** The
-  # negated position in a list already sorted `[priority, name]`, so the reverse-fill order arrives
-  # as one comparable number and `Category.in_fill_order`'s key is not written out a second time.
-  # Every line's category is in that list by construction — it is `categories + the rules' own
-  # categories` — so `fetch` is a claim rather than a lookup with a default.
-  def give_way_rank
-    @give_way_rank ||= budgeted_categories.each_with_index.to_h { |category, index| [category.id, -index] }
-  end
+  # ** `#give_way_key` AND `#give_way_rank` LEFT WITH THE SORT (`ClaimRows`). ** The key is the
+  # order's definition and the order is now read by three screens; a copy here would be a second
+  # definition free to disagree with the list it ranks.
 
   def spent_this_period(category) = holder_spending_this_period.fetch(category.id, 0.to_d)
 
@@ -1049,6 +752,15 @@ class HomePresenter
   # costs against a one-rule one, because a reader that quietly grew a ledger of its own is invisible
   # to every other example in the file.
   def claim_ledger = @claim_ledger ||= ClaimLedger.new(user, today: today)
+
+  # ** THE ROWS, THE ORDER AND THE BLOCKS — ONE OBJECT, SHARED WITH THE BUDGET PAGE AND THE
+  # CATEGORIES CARD (this task). ** It queries nothing: the calculators are the ledger's, the period
+  # grid is `User#period_containing`, and `categories:` is the list this class already loaded (with
+  # its `:budgets` preload, which `#unruled_holders` reads). Handing that list in rather than letting
+  # `ClaimRows` load its own is what keeps the screen's statement count where the cost pin puts it.
+  def claim_rows
+    @claim_rows ||= ClaimRows.new(ledger: claim_ledger, today: today, categories: categories)
+  end
 
   # ONE PHYSICAL LEDGER FOR THE SCREEN, and it is the CLAIM LEDGER'S OWN — the accounts band, the
   # overdraft lines, the onboarding gates and `free`'s cap all read one snapshot. A second

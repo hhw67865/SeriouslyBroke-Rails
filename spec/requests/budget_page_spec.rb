@@ -16,6 +16,72 @@ RSpec.describe "Budget page declaration", type: :request do
 
   def declare(params) = patch(budget_page_user_path, params: { user: params })
 
+  # ** THE TWO THINGS THE URL SAYS ABOUT ONE RENDER (two-shapes spec §4). ** Neither is trusted with
+  # anything: `open` is compared as a string against the ids the page itself rendered, and `declare`
+  # is a presence read. A request spec because both are facts about the ROUTE — the page's own
+  # behaviour is `system/budget_page/open_spec.rb`'s.
+  describe "GET /budget", :aggregate_failures do
+    def holder(name, priority: 1)
+      create(:category, :expense, :funded, user: user, name: name, priority: priority).tap do |category|
+        create(:budget, :per_period_rate, category: category, amount: 400)
+      end
+    end
+
+    # ** `?open=` OPENS THAT CATEGORY'S PANEL AND ONLY THAT ONE. ** The closed panels are RENDERED
+    # and `hidden` (§4 asks for expand with no round trip), so the assertion is on the attribute
+    # rather than on the presence of the markup: a check for the panel's own hook would pass on
+    # every row on the page.
+    it "opens the category the parameter names, and only that one" do
+      groceries = holder("Groceries")
+      holder("Rent", priority: 2)
+
+      get budget_page_path(open: groceries.id)
+
+      expect(response.body).to include(%(data-category-id="#{groceries.id}"))
+      expect(response.body.scan(/data-app--budget-page--category-list-target="panel"[^>]*/).count { |tag| tag.include?("hidden") })
+        .to eq(1)
+    end
+
+    # NOTHING OPEN WITHOUT THE PARAMETER — the memory is the viewer's browser's, not the server's,
+    # so a bare load opens nothing and `category_list_controller` restores what it restores.
+    it "opens nothing at all without the parameter" do
+      holder("Groceries")
+      holder("Rent", priority: 2)
+
+      get budget_page_path
+
+      expect(response.body.scan(/data-app--budget-page--category-list-target="panel"[^>]*/).count { |tag| tag.include?("hidden") })
+        .to eq(2)
+    end
+
+    # AN ID THAT IS NOT THIS USER'S SIMPLY MATCHES NO ROW. The page never looks the parameter up —
+    # it compares it against the ids it rendered — so a stranger's category is not a 404 and not a
+    # leak, it is a page with nothing open.
+    it "opens nothing for an id that is not this user's" do
+      holder("Groceries")
+      stranger = create(:category, :expense, :funded, user: create(:user), name: "Theirs")
+
+      get budget_page_path(open: stranger.id)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).not_to include("Theirs")
+    end
+
+    # ** THE DECLARATION FORM IS BEHIND "change" (§4), where it used to be permanently open under a
+    # paragraph of prose. ** Both directions, because a form that never rendered would pass the
+    # first half alone.
+    it "reveals the declaration form only when asked for it" do
+      get budget_page_path
+
+      expect(response.body).not_to include("data-declaration")
+
+      get budget_page_path(declare: 1)
+
+      expect(response.body).to include("data-declaration")
+      expect(response.body).to include("Save period and income")
+    end
+  end
+
   describe "the three permitted params", :aggregate_failures do
     it "writes all three and comes back to the page" do
       declare(typical_income: "2400", period_cadence: "biweekly", period_anchor_date: "2026-02-06")

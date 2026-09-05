@@ -1,14 +1,22 @@
 <% content_for :title, "Budget" %>
 
-<%# THE ONE DOOR TO A HAND-MADE RULE (Henry's ruling of 2026-08-20). `/budgets/new` existed and
-    nothing linked to it: every other way into that form carries an owner already (the Edit links
-    below, the suggestion panel's accept links), so a user who wanted a rule for something their
-    entries have not shown yet had no door at all. It belongs HERE and only here, because this is
-    the screen that lists rules — the same reason the form's Cancel and both of its saves come back
-    to this path.
+<%# ** THE BUDGET PAGE IS EVERY CATEGORY, AND ONE OF THEM IS OPEN (two-shapes spec §4). **
 
-    `standard_action_button` rather than markup of its own, which is what puts it in the same
-    treatment as the New Category button on the categories index. %>
+    Henry, 2026-09-05: "Expanded should just show all rules and suggestions. The new rule thing
+    should be a form we go to." So the page is three tiles and one list: a row per EXPENSE category,
+    ruled ones in give-way order and rule-less ones after, and the open one shows its rules, the
+    suggestions the engine has for it, and one button to write another.
+
+    ** FIVE PANELS DIED HERE (§7). ** `_type_overview` (its three figures are the tiles' segmented
+    bar), `_structural_check` (its three lines ARE the three tiles), `_fill_order` and
+    `_category_group` (folded into the row), `_not_filling` (every expense category is in the list
+    now, so a rule on a category that holds nothing has a row of its own rather than a band saying
+    it has none) and `_suggestions` (every suggestion is inside the category it is about). Not one
+    figure was dropped: each of them is somewhere on this page, closer to the thing it is about.
+
+    THE DECLARATION FORM SURVIVES, behind the income tile's "change" — `?declare=1`. It was
+    permanently open under a paragraph of prose, which put a three-field settings form in the middle
+    of the one screen that is about rules. %>
 <%= page_header(title: "Budget",
                 subtitle: "The rules that claim your money",
                 actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
@@ -21,39 +29,52 @@
       submission that may never become one. See BudgetPageController#offer_scaling. %>
   <%= render "cadence_confirm", change: @cadence_change if @cadence_change %>
 
-  <% if @presenter.no_rules? %>
-    <%= render "empty" %>
-  <% else %>
-    <%# ** THE TYPE OVERVIEW, ABOVE THE GROUPS (rules-own-the-budget spec §3). ** What each kind of
-        rule asks of a period, before the list of which rules they are — the one thing on this page
-        that is about the SHAPE of the budget rather than about a rule. Inside the `no_rules?`
-        branch's else, because a split of nothing has nothing to say; the structural check below is
-        the block that deliberately renders for a user with no rules at all. %>
-    <%= render "type_overview", overview: @presenter.type_overview %>
+  <%= render "tiles", presenter: @presenter %>
 
-    <%# The give-way order itself: category by category, and the shortfall walks these cards from
-        the BOTTOM up (see `_fill_order`). One list — the account bands are gone with the
-        per-account waterfall. %>
-    <% groups = @presenter.category_groups %>
-    <%= render "fill_order", groups: groups if groups.any? %>
-
-    <%# The rules no group can show, each saying why — a category not holding money yet, or a rule
-        written before the cutover that names only a pool. Both are transitional and both are
-        counted by the structural check below, so the band is what keeps that figure explicable.
-        Silent when there are none. %>
-    <%= render "not_filling", rules: @presenter.unfilled_rules %>
+  <%# THE FORM, ONLY WHEN ASKED FOR — or when a submission was refused, in which case it is holding
+      what the user typed and the errors, and hiding it would throw both away. %>
+  <% if @presenter.declaring? %>
+    <section class="bg-white border border-gray-200 rounded px-6 py-5" data-declaration>
+      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period and income</h2>
+      <%= render "declaration_form", presenter: @presenter %>
+    </section>
   <% end %>
 
-  <%# OUTSIDE the no_rules? branch, deliberately. §8 puts the check under the rules, but a
-      brand-new user with no rules is exactly the person who has declared nothing — sending the
-      block away with the empty state would leave the only writer for `typical_income`,
-      `period_cadence` and `period_anchor_date` in the app unreachable until they had made a rule.
-      The check reads $0.00 for them, which is true. %>
-  <%= render "structural_check", presenter: @presenter %>
+  <% if @presenter.no_categories? %>
+    <%= render "empty" %>
+  <% else %>
+    <%# THE LIST, AND IT IS WHAT `PATCH /budget/reorder` REWRITES. The drag controller reads the
+        order back off the rows at drop; the ▲▼ on each draggable row carry the same list already
+        swapped, so the order is reachable with no JavaScript at all.
 
-  <%# §8'S BOTTOM HALF, and it renders for EVERY user — including the one with no rules at all,
-      whose top half is the empty state. That user is exactly who this panel is for: a brand-new
-      account sees an empty top half and a full bottom one, which is the spec's own reason there
-      is no separate onboarding flow to build or maintain. %>
-  <%= render "suggestions", presenter: @presenter %>
+        `category_list` IS THE SECOND CONTROLLER ON THE SAME ELEMENT: the expand/collapse and the
+        drag are two behaviours over one list of rows, and splitting them onto two elements would
+        mean one of them binding to a wrapper the other does not own. %>
+    <section class="space-y-2"
+             data-category-list
+             data-controller="app--budget-page--reorder app--budget-page--category-list"
+             data-action="dragover->app--budget-page--reorder#over
+                          drop->app--budget-page--reorder#drop">
+      <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your categories</h2>
+        <%# ONE PHRASING ON BOTH SCREENS, AND IT IS THE NUMBER'S (fix round 1 — LOW-11): "lower" is
+            ambiguous between a lower NUMBER and a position lower down the list, which are opposite
+            directions. The number is what both writers actually write. %>
+        <p class="text-xs text-gray-500">
+          Open one for its rules — drag a card, or use the arrows, to set which gives way first
+        </p>
+      </div>
+
+      <% rows = @presenter.category_rows %>
+      <% reorderable = @presenter.reorderable_rows %>
+      <% rows.each do |row| %>
+        <%= render "category_row", row: row, reorderable: reorderable, presenter: @presenter %>
+      <% end %>
+
+      <% form_data = { app__budget_page__reorder_target: "form" } %>
+      <%= form_with(url: budget_page_reorder_path, method: :patch, class: "hidden", data: form_data) do %>
+        <%# One hidden `category_ids[]` per draggable row, appended by reorder_controller at drop. %>
+      <% end %>
+    </section>
+  <% end %>
 </div>

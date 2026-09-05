@@ -409,15 +409,22 @@ RSpec.describe "db/seeds.rb" do
       )
     end
 
-    # ** THE BUDGET PAGE'S "NOT IN THE GIVE-WAY ORDER" BAND. ** `Category.in_fill_order` is holders
-    # only, so a rule on a category with no holding date cannot be ranked and cannot be dragged —
-    # while `ClaimLedger` counts it into `#free` like every other rule. $25.00 claimed every period
-    # against spending that is attributed to nobody: the asymmetry the band exists to name.
-    it "leaves one rule outside the give-way order", :aggregate_failures do
+    # ** THE ROW THE REORDER CANNOT TAKE. ** `Category.in_fill_order` is holders only, so a rule on a
+    # category with no holding date cannot be ranked and cannot be dragged — while `ClaimLedger`
+    # counts it into `#free` like every other rule. $25.00 claimed every period against spending that
+    # is attributed to nobody: the asymmetry that used to have a band of its own.
+    #
+    # ** THE BAND IS GONE AND THE ROW IS NOT (two-shapes spec §4/§7). ** `#unfilled_rules` fed a
+    # "Not in the give-way order" section under the group cards; the list is EVERY expense category
+    # now, so Streaming has a row like any other and what it lacks is the drag handle
+    # (`CategoryRow#reorderable?`). The same two facts, asserted through the reader that replaced it.
+    it "leaves one row outside the reorder", :aggregate_failures do
       page = BudgetPagePresenter.new(user: user, today: today)
+      streaming = page.category_rows.find { |row| row.name == "Streaming" }
 
-      expect(page.unfilled_rules.map { |rule| rule.budget.category.name }).to eq(["Streaming"])
-      expect(page.unfilled_rules.sole.claim).to eq(25)
+      expect(page.category_rows.reject(&:reorderable?).map(&:name)).to include("Streaming")
+      expect(page.reorderable_rows.map(&:name)).not_to include("Streaming")
+      expect(streaming.claimed).to eq(25)
     end
 
     # ** FREE BELOW ZERO IS A SIGNAL (§4), AND THE STRIP SAYS WHO GIVES WAY. ** The walk runs

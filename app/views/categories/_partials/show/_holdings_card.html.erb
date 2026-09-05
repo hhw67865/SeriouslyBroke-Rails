@@ -19,8 +19,8 @@
       "Move it back to available"                     there is nothing to move and nowhere to move
                                                         it to (§5).
 
-    ** THE ROWS ARE §3.4'S, AND THEY ARE THE BUDGET PAGE'S OWN SENTENCES. ** `claim_figure`,
-    `claim_schedule` and `claim_trouble_label` render `budget_page/_rule_row`, Home's "This period"
+    ** THE ROWS ARE §3.4'S, AND THEY ARE THE BUDGET PAGE'S OWN SENTENCES. ** `figure_words`,
+    `when_words` and `claim_trouble_label` render the Budget page's rules table, Home's "This period"
     line and this card alike — one sentence about one rule across the three screens that show it:
 
       RATE      $310.00 of $400.00                    spent of this period's rate, over in red
@@ -147,7 +147,7 @@
                     reader that can tell "spent it exactly" from "spent more than there was". %>
                 <span class="tabular-nums shrink-0 <%= line.over? ? "text-status-danger font-medium" : "text-gray-900 font-medium" %>"
                       data-rule-figure>
-                  <%= claim_figure(line) %>
+                  <%= figure_words(line) %>
                 </span>
               </div>
 
@@ -160,7 +160,7 @@
                 <p class="mt-1 text-status-danger font-medium" data-rule-trouble>
                   <%= claim_trouble_label(line) %>
                 </p>
-              <% elsif schedule = claim_schedule(line) %>
+              <% elsif schedule = when_words(line) %>
                 <p class="mt-1 text-gray-500" data-rule-schedule><%= schedule %></p>
               <% end %>
             </li>

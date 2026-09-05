@@ -84,7 +84,7 @@
               this block does not render — the honest `Claimed` line stays, which is what the entry
               form's impact card does with the same shape. %>
           <% if category.holder? %>
-            <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger) %>
+            <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger, rows: claim_rows) %>
             <div class="flex justify-between text-xs mt-2" data-holding-line>
               <span class="text-gray-500">Claimed</span>
               <span class="font-medium text-gray-900">

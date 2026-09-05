@@ -104,6 +104,46 @@ RSpec.describe "Home This Period", type: :system do
     )
   end
 
+  # A ONE-TIME BILL ON AN ITEM, ON THE FIXED GRID, DUE INSIDE THE PERIOD — the shape whose
+  # occurrence never rolls and which therefore needed the paid arm. Returns the ITEM, because the
+  # example settles the rule by spending on its lane.
+  def one_off_bill_on_the_fixed_grid
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+    deposit(2_000)
+    utilities = holder("Utilities", funded_since: Date.new(2026, 8, 14))
+    create(:item, category: utilities, name: "Water").tap do |water|
+      create(
+        :budget,
+        :one_time,
+        category: utilities,
+        item: water,
+        amount: 600,
+        anchor_date: Date.new(2026, 8, 24),
+        created_at: Time.zone.local(2026, 8, 14)
+      )
+    end
+  end
+
+  # A ONE-TIME BILL ON AN ITEM, ON THE FIXED GRID, DUE INSIDE THE PERIOD — the shape whose occurrence
+  # never rolls and which therefore needed the paid arm. Returns the ITEM, because the example
+  # settles the rule by spending on its lane.
+  def one_off_bill_on_the_fixed_grid
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+    deposit(2_000)
+    utilities = holder("Utilities", funded_since: Date.new(2026, 8, 14))
+    create(:item, category: utilities, name: "Water").tap do |water|
+      create(
+        :budget,
+        :one_time,
+        category: utilities,
+        item: water,
+        amount: 600,
+        anchor_date: Date.new(2026, 8, 24),
+        created_at: Time.zone.local(2026, 8, 14)
+      )
+    end
+  end
+
   # ** A GOAL IS A DATED RULE WHOSE AMOUNT IS ITS TARGET (§2 row 5). ** `periods:` is what the share
   # is derived from: on the biweekly grid this file declares, `periods` fortnights from today closes
   # on `today + 14 × periods − 1`, so §3.2's catch-up asks `target ÷ periods` in the first period and
@@ -314,6 +354,33 @@ RSpec.describe "Home This Period", type: :system do
 
     expect(figure("House Deposit")).to have_content("$60.00 of $300.00")
     expect(when_clause("House Deposit")).to have_content("Oct 9 · +$60.00")
+  end
+
+  # ** A PAID ONE-OFF SAYS `paid <date>`, WHERE IT WENT ON PROMISING A BILL THAT WAS DONE
+  # (two-shapes Task 3's carry (a)). ** A one-time bill's occurrence NEVER rolls, so after the money
+  # went out the row kept reading `Aug 24 · ready` until the date passed and `overdue · was Aug 24`
+  # for ever afterwards — two sentences about a bill nobody owed any more, and the second is the one
+  # the trouble strip fired on. The fulfilment is the fact (`ClaimCalculator#settled?`), and the day is the day the
+  # spending reached the target.
+  #
+  # BOTH DIRECTIONS ON ONE FIXTURE: the same rule before and after the payment, which is what says
+  # the arm fires on the payment rather than on the date.
+  it "calls a paid one-off paid, with the day the money went out", :aggregate_failures do
+    water = one_off_bill_on_the_fixed_grid
+
+    # BEFORE THE PAYMENT the fund has caught up — `periods_left` from Aug 14 to Aug 24 is one, so
+    # §3.2 asks the whole $600 in the walked period — and the row reads READY, which is the
+    # ordinary shape of a bill due inside this period with its money set aside. What matters is that
+    # the same row does NOT go on saying it after the money has gone out.
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
+    expect(when_clause("Utilities", lane: "Water")).to have_content("Aug 24 · ready")
+
+    create(:entry, item: water, amount: 600, date: Date.new(2026, 8, 18))
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
+
+    expect(when_clause("Utilities", lane: "Water")).to have_content("paid Aug 18")
+    expect(rule_row("Utilities", lane: "Water")).to have_no_content("ready")
+    expect(rule_row("Utilities", lane: "Water")).to have_no_content("overdue")
   end
 
   # ── THE CLAUSE, WHICH IS THE DAY (§3) ─────────────────────────────────────────────────────────

@@ -251,7 +251,53 @@ class ClaimCalculator
   # `today` of their own and this class already holds the only one that matters. It is also the one
   # place the test is stated, so Home's trouble strip and the Budget page's rule row cannot come to
   # different verdicts about one rule on one afternoon.
-  def overdue? = next_due_on.present? && next_due_on < today
+  #
+  # ** A PAID ONE-OFF IS NOT OVERDUE, AND THAT IS THE CARRY TASK 2 LEFT (its concern 1; ruling of
+  # this task). ** A one-time bill's occurrence NEVER rolls — `#due_on` returns the anchor whatever
+  # has been paid, because there is no interval to roll onto — so a $600 premium due Aug 15 and paid
+  # on the 14th went on printing `was due Aug 15` for ever, drew a red runway tick, counted into the
+  # runway's due total, and sat in the trouble strip saying "this needs paying" about a bill that was
+  # paid. The date is not the fact; the FULFILMENT is, and `#settled?` is the app's one reading of it.
+  # A repeating rule cannot reach this arm (`#settled?` is one-time only) and is unaffected: its date
+  # rolls on payment, which is what made this misreading invisible until the one-off shape absorbed
+  # the goals.
+  # THE DATE IS ASKED FIRST so a rate rule — which has none — never reaches the walk to answer a
+  # question about a bill.
+  def overdue? = next_due_on.present? && next_due_on < today && !settled?
+
+  # ** IS THIS ONE-OFF PAID — THE APP'S ONE READING (two-shapes §3.2; public as of this task). **
+  # A one-time rule is the only shape that can be finished: a recurring one always has a next
+  # occurrence to fund. `#planned_for` has gated on this since the walk was written (a settled
+  # one-off asks for nothing ever again, or it would re-accrue its whole amount for ever against a
+  # date that never moves) — what is new is only that a SCREEN may ask, because a row, a runway tick
+  # and a trouble strip all have to stop calling a paid bill late.
+  #
+  # `walk.paid` IS EVERY DOLLAR THE WALK COUNTED ON THIS RULE'S LANE, from the accrual start to
+  # today — the same total the settled gate reads mid-walk, read out at the end. It costs no query
+  # of its own: the walk is memoised and the rows are the ledger's.
+  # `#one_time?` FIRST, so a rate rule answers false without walking anything.
+  def settled? = one_time? && settled_by?(walk.paid)
+
+  # ** THE DAY IT WAS SETTLED — the date `HomeHelper#when_words` prints as `paid Aug 14`. ** The
+  # spending rows are already in memory (`#spending_rows`, batched by `ClaimLedger` or fetched once
+  # here), so the settling day is the day the running total first reached the target: one pass over
+  # rows the walk has already summed, and NO SECOND QUERY. That is why this reader exists at all
+  # rather than the row saying a bare "paid" — the brief allowed either, and the date is free.
+  #
+  # ONLY THE DAYS THE WALK COUNTS (`#counts_spending_on?`), because `walk.paid` only counts those:
+  # a receipt dated outside every visited period moved no figure and must not be allowed to name the
+  # day a fund was finished. Nil unless `#settled?`, and nil where the rows somehow do not reach the
+  # target — an answer, not a guess.
+  def settled_on
+    return nil unless settled?
+
+    running = 0.to_d
+    countable_spending.each do |day, amount|
+      running += amount
+      return day if running >= target
+    end
+    nil
+  end
 
   # HOW MANY PERIODS ARE LEFT TO FILL THE FUND, THIS ONE INCLUDED (§3.2: the accrual counts in full
   # the day the period opens). Nil where there is no due date. Floors at 1, so an overdue bill asks
@@ -419,7 +465,7 @@ class ClaimCalculator
   # never what a walk plans. A goal's per-period share is `remaining ÷ periods until the date`, which
   # is what "by a date" means and is why the shape could be retired rather than replaced.
   def planned_for(period, state, due)
-    return 0.to_d if settled?(state.paid)
+    return 0.to_d if settled_by?(state.paid)
 
     gap = target - state.built_up
     return 0.to_d unless gap.positive?
@@ -427,9 +473,21 @@ class ClaimCalculator
     [(gap / periods_left_from(period.first, due)).round(2), gap].min
   end
 
-  def settled?(paid) = one_time? && paid >= target
+  # THE GATE THE WALK ASKS MID-PASS, with the running total it has so far. `#settled?` above is this
+  # same test read at the end — one predicate, two moments, so a screen and the walk cannot come to
+  # different verdicts about one bill.
+  def settled_by?(paid) = one_time? && paid >= target
 
   def one_time? = anchor.present? && rule.interval_months.nil?
+
+  # THIS RULE'S SPENDING, IN DAY ORDER, restricted to the days the walk counted. `#spending_rows`
+  # carries a day of slack on its window (the bound is a UTC instant, the day is the owner's) and
+  # `ClaimLedger` hands over rows grouped by lane rather than by period, so neither source is
+  # ordered or bounded the way this reader needs — the filter and the sort are what make the running
+  # total below the same total `walk.paid` holds.
+  def countable_spending
+    spending_rows.select { |day, _amount| counts_spending_on?(day) }.sort_by(&:first)
+  end
 
   def anchor = rule.anchor_date
 

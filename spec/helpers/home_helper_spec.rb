@@ -93,7 +93,7 @@ RSpec.describe HomeHelper, type: :helper do
     # gets the matching label without a third keyword.
     def rate_line(spent:, accrued:, over: false)
       instance_double(
-        HomePresenter::ClaimLine,
+        ClaimLine,
         rate?: true,
         spent: spent,
         accrued: accrued,
@@ -122,7 +122,7 @@ RSpec.describe HomeHelper, type: :helper do
     # clause for a rule that is settled".
     def accruing_line(built_up:, target:, per_period:, next_due_on: nil, overdue: false)
       instance_double(
-        HomePresenter::ClaimLine,
+        ClaimLine,
         rate?: false,
         built_up: built_up,
         target: target,
@@ -136,84 +136,23 @@ RSpec.describe HomeHelper, type: :helper do
       )
     end
 
-    describe "#claim_figure" do
-      # §3.4: a rate rule says what it SPENT of its rate. The denominator is the ACCRUED figure —
-      # `rate + Σ this period's deltas` — because that is what `#over?` compares against, so the
-      # colour and the fraction cannot describe different arithmetic.
-      it "says spent of rate on a rate rule" do
-        expect(helper.claim_figure(rate_line(spent: 310, accrued: 400))).to eq("$310.00 of $400.00")
-      end
-
-      # ** THE NOUN IS NOT THE CALLER'S TO CHOOSE. ** A row printing "spent" over a fund's running
-      # total would be the money screen's oldest lie, that savings are money to spend.
-      it "says built up of target on an accruing rule" do
-        line = accruing_line(built_up: 450, target: 1_200, per_period: 200)
-
-        expect(helper.claim_figure(line)).to eq("$450.00 built up of $1,200.00")
-      end
-
-      # ** THE "built up alone" ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** It was the
-      # uncapped fund, whose `ClaimCalculator#target` was NIL — an un-gated sentence printed
-      # `$450.00 built up of `, a dangling preposition over an empty figure — and there is no such
-      # shape: every accruing rule has a day and a figure, so both halves of the "of" are always
-      # there.
-    end
-
-    describe "#claim_schedule" do
-      # §3.4's second half, on the shape that has one.
-      it "names the next due date and the per-period share" do
-        line = accruing_line(built_up: 450, target: 1_200, per_period: 200, next_due_on: Date.new(2026, 3, 1))
-
-        expect(helper.claim_schedule(line)).to eq("next due Mar 1 · $200.00 per period")
-      end
-
-      # ** `#building_schedule` AND ITS THREE EXAMPLES ARE DELETED (two-shapes spec §7). ** A building
-      # rule had no date at all, so its whole clause was `+$150.00 per period` — money added every
-      # period for as long as the rule lived — and the leading PLUS was what told it from a dated
-      # rule's `$200.00 per period`, a share of a bill that stops when the bill is whole. A goal names
-      # a day now and takes the dated clause like every other accruing rule, which says the same thing
-      # with the deadline the share is derived from.
-      #
-      # THE ARM THOSE EXAMPLES ALSO COVERED — a rule accruing nothing more — survives as the settled
-      # one-off below, which is the only way `#next_due_on` and `#per_period` are now both empty.
-      it "renders no clause for a rule that is settled" do
-        expect(helper.claim_schedule(accruing_line(built_up: 0, target: 600, per_period: 0))).to be_nil
-      end
-
-      # A FULL FUND ACCRUES NOTHING MORE, so "$0.00 per period" would be a line reporting nothing.
-      # THE DATE SURVIVES ALONE — the clause is not nil here, which is what the method's own comment
-      # used to claim (fix round 1 — MED-2).
-      it "drops the share on a fund that is already full" do
-        line = accruing_line(built_up: 1_200, target: 1_200, per_period: 0, next_due_on: Date.new(2026, 3, 1))
-
-        expect(helper.claim_schedule(line)).to eq("next due Mar 1")
-      end
-
-      # ** A DATE THAT HAS GONE BY IS NOT "NEXT" (fix round 1 — MED-1). ** A $600 bill due Aug 15,
-      # fully built up and never paid, kept its occurrence anchored where it was (§3.2) and the row
-      # printed `next due Aug 15` on Sep 3 — a past date under a word that promises a future one. The
-      # tense comes off `#overdue?`, which IS `next_due_on < today`, so the row and the trouble strip
-      # cannot disagree about which side of today a date is on.
-      it "puts a date that has passed in the past tense" do
-        line = accruing_line(built_up: 600, target: 600, per_period: 0, next_due_on: Date.new(2026, 8, 15), overdue: true)
-
-        expect(helper.claim_schedule(line)).to eq("was due Aug 15")
-      end
-
-      # BOTH TENSES CARRY THE SHARE, so the fund still saving toward a date it has already missed
-      # reads as one sentence rather than losing half of it to the tense.
-      it "keeps the per-period share beside a date that has passed" do
-        line = accruing_line(built_up: 400, target: 600, per_period: 200, next_due_on: Date.new(2026, 8, 15), overdue: true)
-
-        expect(helper.claim_schedule(line)).to eq("was due Aug 15 · $200.00 per period")
-      end
-
-      # A RATE RULE HAS NEITHER — use-it-or-lose-it accrues toward nothing and is due on no day — so
-      # the view renders no element at all.
-      it "is nil for a rate rule" do
-        expect(helper.claim_schedule(rate_line(spent: 310, accrued: 400))).to be_nil
-      end
-    end
+    # ** `#claim_figure` AND `#claim_schedule` ARE DELETED, AND SO ARE THEIR TEN EXAMPLES (this
+    # task's carry (b)). ** They were the SECOND spelling of a row's figure and a row's date:
+    # `$450.00 built up of $1,200.00` against `#figure_words`' `$450.00 of $1,200.00`, and `next due
+    # Mar 1 · $200.00 per period` against `#when_words`' `Mar 1 · +$200.00`. Task 2 kept them alive
+    # by ruling because their two readers — the Budget page's rule row and the categories holdings
+    # card — were outside its scope and named this task as the fold; both are converted in this
+    # commit and both now print what Home prints.
+    #
+    # WHAT EACH DELETED EXAMPLE ASSERTED, AND WHERE IT LIVES NOW — nothing is unpinned by the fold:
+    #
+    #   spent of rate / built up of target        → `#figure_words`, below, both shapes
+    #   the "built up alone" uncapped arm         → deleted with the shape (two-shapes §7), already
+    #   next due + the per-period share           → `#when_words`, `Mar 1 · +$200.00`
+    #   a settled rule renders no clause          → `#when_words` says `paid <date>` instead, below
+    #   a full fund drops the share               → `#when_words` says `Mar 1 · ready`
+    #   a past date reads `was due`               → `#when_words`' overdue arm, unchanged wording
+    #   a rate rule has no clause                 → `#when_words` answers the RESET day or nil
 
     describe "#claim_trouble_label" do
       # ** THE EXCESS, NOT THE CLAIM. ** §3.1 clamps an overspent claim to zero, so a figure taken
@@ -245,12 +184,11 @@ RSpec.describe HomeHelper, type: :helper do
   # call. Doubles for the reason the group above uses them: a real `ClaimLine` drags a category, a
   # rule and a period walk in to answer four questions.
   #
-  # ** `#claim_figure` AND `#claim_schedule` ARE NOT DELETED, WHICH THE BRIEF ASKED FOR. ** Both are
-  # still rendered by `budget_page/_rule_row.html.erb` and `categories/…/_holdings_card.html.erb`,
-  # and both of those screens are out of this task's scope — the Budget page is Task 3's and the
-  # categories page is out of scope for the whole plan (spec §8). Their examples above therefore
-  # stay, and the sentences genuinely differ: `#figure_words` says `$450.00 of $1,200.00` where
-  # `#claim_figure` says `$450.00 built up of $1,200.00`, which is pinned in both directions below.
+  # ** THESE THREE ARE NOW THE WHOLE VOCABULARY, ON EVERY SCREEN THAT SAYS A RULE. ** Home's blocks,
+  # the Budget page's open panel and the categories holdings card render exactly `#shape_words` /
+  # `#figure_words` / `#when_words` over exactly one row type (`ClaimLine`), so a sentence about a
+  # rule cannot differ between two screens a click apart — which it did, for one plan, and which is
+  # what the deletion above closes.
   describe "the block row's vocabulary" do
     # `rule:` IS A DOUBLE OF THE RECORD'S OWN CLASSIFIER (`Budget#cadence`) rather than a set of
     # columns, because that is what the helper reads: the classification is the model's and only the
@@ -275,10 +213,16 @@ RSpec.describe HomeHelper, type: :helper do
         short?: false,
         fund_short?: false,
         fund_gap: 0.to_d,
-        bar_state: :normal
+        bar_state: :normal,
+        # ** THE TWO MEMBERS THIS TASK'S CARRY (a) ADDED, DEFAULTED TO "not a paid one-off". ** They
+        # are on the double rather than derived because they are the LINE's answers:
+        # `ClaimCalculator#settled?` is the app's one reading of a bill being finished, and
+        # `#settled_on` is the day its spending reached the target.
+        paid?: false,
+        paid_on: nil
       }
 
-      instance_double(HomePresenter::ClaimLine, **defaults, **overrides)
+      instance_double(ClaimLine, **defaults, **overrides)
     end
 
     describe "#shape_words" do
@@ -316,6 +260,20 @@ RSpec.describe HomeHelper, type: :helper do
         )
 
         expect(helper.shape_words(line)).to eq("choice · $5,000.00 by Jun 1, 2027")
+      end
+
+      # ** NIL-SAFE ON THE DATE, ON BOTH ONE-OFF ARMS (this task's carry (a)). ** `once` and
+      # `$5,000.00` are true sentences about a rule with no anchor; `undefined method 'strftime' for
+      # nil` is a 500. Both arms, because a guard on one of two branches is a guard nobody can rely
+      # on.
+      it "drops the day rather than raising where a one-off has no date", :aggregate_failures do
+        bill = block_line(rule: rule_double(cadence: :one_off, bill: true), stripe_type: :bill, rate?: false)
+        goal = block_line(
+          rule: rule_double(cadence: :one_off), stripe_type: :choice, rate?: false, target: 5_000.to_d
+        )
+
+        expect(helper.shape_words(bill)).to eq("bill · once")
+        expect(helper.shape_words(goal)).to eq("choice · $5,000.00")
       end
 
       it "says a one-time bill as a day it happens once" do
@@ -409,6 +367,45 @@ RSpec.describe HomeHelper, type: :helper do
         line = block_line(rate?: false, next_due_on: Date.new(2026, 8, 15), overdue?: true)
 
         expect(helper.when_words(line)).to eq("overdue · was Aug 15")
+      end
+
+      # ── ** THE PAID ONE-OFF (this task's carry (a)) ** ────────────────────────────────────────
+      #
+      # A one-time bill's occurrence NEVER rolls — there is no interval to roll onto — so before its
+      # date a paid rule read `Sep 20 · $600.00 short` and after it `overdue · was Sep 20`: the two
+      # worst sentences this vocabulary has, about a bill that had been paid. The arm is FIRST,
+      # because nothing else the row could say about such a rule is true any more.
+      #
+      # BOTH DIRECTIONS ON ONE FIXTURE: the same members with `paid?` false read the old, wrong
+      # sentence, so an arm that never fired would fail the second half.
+      it "says a paid one-off is paid, with the day it was paid on", :aggregate_failures do
+        members = {
+          rate?: false, next_due_on: Date.new(2026, 9, 20), short?: true, fund_short?: true, fund_gap: 600.to_d
+        }
+
+        expect(helper.when_words(block_line(**members, paid?: true, paid_on: Date.new(2026, 9, 14))))
+          .to eq("paid Sep 14")
+        expect(helper.when_words(block_line(**members))).to eq("Sep 20 · $600.00 short")
+      end
+
+      # THE DAY IS THE SETTLING ENTRY'S AND IT IS FREE (`ClaimCalculator#settled_on` walks rows the
+      # claim has already summed) — but the arm degrades rather than raising if it is ever nil, and
+      # "paid" alone is still the true half of the sentence.
+      it "says a bare paid where the settling day cannot be named" do
+        line = block_line(rate?: false, next_due_on: Date.new(2026, 9, 20), paid?: true)
+
+        expect(helper.when_words(line)).to eq("paid")
+      end
+
+      # ** NIL-SAFE ON THE DATE (this task's carry (a)). ** No `Budget` reaches these words without
+      # an anchor, so this is a guard rather than a branch the data takes — and it is worth having
+      # because three screens now render these words over rows built by three presenters, and the
+      # one that raised would be a 500 on a money screen rather than a clause missing from a row.
+      # BOTH HALVES: the clause survives the missing date on its own, and where there is no clause
+      # either the row renders no element at all rather than an empty one.
+      it "drops the date rather than raising where a dated rule has none", :aggregate_failures do
+        expect(helper.when_words(block_line(rate?: false))).to eq("ready")
+        expect(helper.when_words(block_line(rate?: false, fund_short?: true))).to be_nil
       end
     end
 

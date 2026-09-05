@@ -10,8 +10,13 @@
 
     It renders ONLY when the engine currently proposes for this category
     (CategoryBudgetPresenter#suggestions), so it can never send a user to a panel with nothing in it
-    for them. The anchor is `suggestion_kind_anchor`, the same reader the panel's own index and
-    headings use — one spelling of the fragment, so this link cannot silently stop working. %>
+    for them.
+
+    ** THE LINK IS `?open=<category>` NOW, AND NOT A FRAGMENT (two-shapes spec §4). ** It used to be
+    `#suggestions-dated_bill` — the anchor of a run inside one page-wide panel — and there is no
+    page-wide panel: every suggestion sits inside the category it is about. The category is what
+    this card IS, so the pointer names it and the Budget page opens there with the proposals in
+    view. One parameter, the same one the chevron on that page writes. %>
 <div class="mt-4 pt-4 border-t border-gray-100" data-suggestion-pointer>
   <p class="text-sm text-gray-500 mb-3">
     Your spending here already looks like a rule — the Budget page is proposing
@@ -19,10 +24,8 @@
   </p>
   <%# "it" OR "them", AGREEING WITH THE SENTENCE ABOVE IT. That line already pluralises through
       `pluralize` — "proposing 2 rules for this category" — and the link under it said "See it",
-      which reads as a pointer at one of the two and leaves the other unaccounted for. The anchor
-      stays the FIRST kind's either way: it opens the panel at the first thing waiting, and
-      scrolling to a section is not a claim about how many are in it. %>
-  <%= link_to budget_page_path(anchor: suggestion_kind_anchor(presenter.first_suggestion_kind)),
+      which reads as a pointer at one of the two and leaves the other unaccounted for. %>
+  <%= link_to budget_page_path(open: presenter.category.id),
               class: "inline-flex items-center gap-2 text-sm font-medium text-brand hover:text-brand-dark" do %>
     <span>See <%= presenter.suggestions.size > 1 ? "them" : "it" %> on the Budget page</span>
     <%= heroicon "arrow-right", options: { class: "h-4 w-4" } %>

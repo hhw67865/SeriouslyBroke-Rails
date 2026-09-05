@@ -2,20 +2,29 @@
 
 require "rails_helper"
 
-# THE STRUCTURAL CHECK (spec §8's three lines, §9's gate) and the declaration form under it — the
-# first and only writer in the app for `typical_income`, `period_cadence` and `period_anchor_date`.
+# ** THE THREE TILES ACROSS THE TOP OF THE BUDGET PAGE (two-shapes spec §4) — what the rules need,
+# what comes in, and the subtraction between them — and the declaration form behind the income
+# tile's "change", which is still the first and only writer in the app for `typical_income`,
+# `period_cadence` and `period_anchor_date`.
 #
-# `Capybara.exact` is unset in this suite, so every figure assertion is scoped to its own
-# `data-figure` row: unscoped, "$2,400.00 a period" matches the income line from inside the rules
-# line's own container and a swapped pair of labels would pass.
-RSpec.describe "Budget page structural check", type: :system do
+# ** SUCCESSOR OF `structural_check_spec.rb`. ** The check was a definition list under a heading
+# asking "Does this fit your income?", with the form permanently open beneath it and the type
+# overview a separate line above the groups; §4 makes them three tiles, and every figure and every
+# gate below is the same one under a different hook (`data-tile` for `data-figure`, and the block's
+# own `data-structural-check` gone with the block). The type overview's three totals arrived with
+# them, off `rules_spec.rb`'s deleted group.
+#
+# `Capybara.exact` is unset in this suite, so every figure assertion is scoped to its own tile:
+# unscoped, "$2,400.00 a period" matches the income tile from inside the need tile and a swapped
+# pair of labels would pass.
+RSpec.describe "Budget page tiles", type: :system do
   let(:user) { create(:user) }
 
   before { sign_in user, scope: :user }
 
-  def check_block = find("[data-structural-check]")
+  def tiles = find("[data-tiles]")
 
-  def figure(name) = find("[data-figure='#{name}']")
+  def tile(name) = find("[data-tile='#{name}']")
 
   # A CATEGORY THAT HOLDS MONEY (two-ledger spec §3) — what `envelope(...)` built here in the pool
   # era. Every figure this block prints is `Budget.steady_need`, which reads the RULE and never its
@@ -25,6 +34,12 @@ RSpec.describe "Budget page structural check", type: :system do
   end
 
   def rate(category, amount) = create(:budget, :per_period_rate, category: category, amount: amount)
+
+  # ** THE FORM IS BEHIND "change" NOW (§4), so declaring starts by asking for it. ** It was
+  # permanently open under a paragraph of prose, which put a three-field settings form in the middle
+  # of the one screen that is about rules; `?declare=1` is what the tile's link carries and what a
+  # refused submission comes back with.
+  def open_declaration = visit(budget_page_path(declare: 1))
 
   def declare(income:, cadence:, anchor:)
     fill_in "You typically bring in", with: income
@@ -46,35 +61,97 @@ RSpec.describe "Budget page structural check", type: :system do
       visit budget_page_path
     end
 
+    # ** NOT YET SAID IS NOT ZERO. ** Zero is a claim about the user's income; this is the absence
+    # of one, and the tile invites rather than reporting — which is the same distinction
+    # `#typical_income`'s nil makes on the presenter.
     it "invites a declaration instead of printing figures" do
-      within(check_block) do
-        expect(page).to have_content("Tell us how long a period is and what you typically bring in")
-        expect(page).to have_no_css("[data-figure]")
-      end
+      within(tile("income")) { expect(page).to have_content("Not said yet") }
+      within(tile("leftover")) { expect(page).to have_content("Declare your income") }
+      expect(page).to have_no_content("Left over $")
     end
 
     it "shows no sacrifice button" do
       expect(page).to have_no_css("[data-sacrifice-link]")
     end
 
-    it "offers all three fields" do
+    # ** THE FORM IS BEHIND THE TILE'S OWN LINK (§4), and both directions are one example: hidden
+    # until asked for, and complete when it arrives. ** Permanently open, it was a settings form in
+    # the middle of the one screen that is about rules.
+    it "hides the three fields until the tile's link is followed" do
+      expect(page).to have_no_field("You typically bring in")
+
+      # TWO TILES OFFER THE SAME DOOR — the income tile and the leftover tile, deliberately, because
+      # a user reading either one is asking the same question — so the click is scoped to one.
+      within(tile("income")) { click_link "Declare your income" }
+
       expect(page).to have_field("You typically bring in")
       expect(page).to have_select("How long is a period?")
       expect(page).to have_field("A day a period starts")
     end
   end
 
-  # THE FORM IS OUTSIDE THE EMPTY STATE, deliberately. A user who has declared nothing is usually
-  # a user who has made nothing, and putting the block inside the `no_rules?` else-branch would
-  # leave the only writer in the app for these three columns unreachable until they had built a
-  # rule first.
-  describe "a brand-new user with no rules at all", :aggregate_failures do
-    before { visit budget_page_path }
+  # THE TILES ARE OUTSIDE THE EMPTY STATE, deliberately. A user who has declared nothing is usually
+  # a user who has made nothing, and putting them inside the empty branch would leave the only
+  # writer in the app for these three columns unreachable until they had built something first.
+  describe "a brand-new user with nothing at all", :aggregate_failures do
+    before { open_declaration }
 
-    it "still gets the declaration form under the empty state" do
-      expect(page).to have_content("No funding rules yet")
+    it "still gets the tiles and the form beside the empty state" do
+      expect(page).to have_content("No spending categories yet")
+      expect(page).to have_css("[data-tiles]")
       expect(page).to have_field("You typically bring in")
       expect(page).to have_button("Save period and income")
+    end
+  end
+
+  # ** THE TYPE OVERVIEW IS THE NEED TILE'S BAR AND ITS THREE TOTALS (§4). ** It was a line of its
+  # own above the groups (`rules_spec.rb`'s deleted "the type overview" group); the figures are the
+  # same `ClaimCalculator#standing_ask` sums, which is what makes them add up to the tile above
+  # them rather than to something near it.
+  describe "the type split on the need tile", :aggregate_failures do
+    before do
+      declared_user(2_400)
+      create(:budget, :per_period_rate, category: holder("Rent", priority: 1), amount: 1_000, rule_type: :bill)
+      create(:budget, :per_period_rate, category: holder("Insurance", priority: 2), amount: 400, rule_type: :bill)
+      create(:budget, :per_period_rate, category: holder("Groceries", priority: 3), amount: 600, rule_type: :usage)
+      create(:budget, :per_period_rate, category: holder("Fun", priority: 4), amount: 300, rule_type: :choice)
+      visit budget_page_path
+    end
+
+    # THE SPEC'S OWN LINE, to the character: two bills summing to $1,400.00, and the three read in
+    # order of how unavoidable they are.
+    it "states what each kind of rule asks of a period, heaviest first" do
+      within(tile("need")) do
+        expect(page).to have_content("Bills $1,400.00")
+        expect(page).to have_content("Usage $600.00")
+        expect(page).to have_content("Choice $300.00")
+        expect(page).to have_content("$2,300.00 a period")
+      end
+      expect(tile("need").text).to match(/Bills.*Usage.*Choice/m)
+    end
+
+    # ** THE BAR IS THE SAME SPLIT IN THE SAME COLOURS THE ROWS' DOTS USE. ** One band per kind, its
+    # width its share of the figure above it — so the bands add to the total and not to something
+    # near it, and a bill is the same colour here, on a row's dot and on Home's stripe.
+    it "draws one band per kind, in the type's own colour" do
+      within(tile("need")) do
+        expect(page.all("[data-type-band]").pluck("data-type-band")).to eq(["bill", "usage", "choice"])
+        expect(find("[data-type-band='bill']")[:class]).to include("bg-brand-darker")
+        expect(find("[data-type-band='bill']")[:style]).to include("61%")
+      end
+    end
+
+    # A TYPE WITH NO RULES IS ABSENT, NOT $0.00 — a figure that is true and reports nothing, on a
+    # line whose whole job is the split. The example above is the other direction.
+    it "omits a kind no rule carries" do
+      user.all_budgets.where(rule_type: :bill).destroy_all
+      visit budget_page_path
+
+      within(tile("need")) do
+        expect(page).to have_content("Usage $600.00")
+        expect(page).to have_no_content("Bills")
+        expect(page).to have_no_css("[data-type-band='bill']")
+      end
     end
   end
 
@@ -90,15 +167,32 @@ RSpec.describe "Budget page structural check", type: :system do
     # $400 a period passes straight through; $260 a month under a biweekly period is $120, NOT
     # $260 — the mixed-unit figure the rate normalisation exists to get right, asserted on the
     # rendered page rather than only in the model.
-    it "prints the three lines from the spec" do
-      within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
-      within(figure("typical-income")) { expect(page).to have_content("$2,400.00 a period") }
-      within(figure("leftover")) { expect(page).to have_content("$1,880.00 free") }
+    # $400 a period passes straight through; $260 a month under a biweekly period is $120, NOT
+    # $260 — the mixed-unit figure the rate normalisation exists to get right, asserted on the
+    # rendered page rather than only in the model.
+    #
+    # ** THE THIRD TILE SAYS THE DIRECTION IN WORDS AND IN COLOUR (§4). ** "$1,880.00 free" became
+    # the figure in green with "Your rules fit what you bring in" under it: the word "free" was
+    # doing the work of a state, and a state is what the tile is for.
+    it "prints the three figures from the spec" do
+      within(tile("need")) { expect(page).to have_content("$520.00 a period") }
+      within(tile("income")) { expect(page).to have_content("$2,400.00 a period") }
+      within(tile("leftover")) do
+        expect(page).to have_content("$1,880.00")
+        expect(page).to have_css("[data-tile-verdict]", text: "Your rules fit what you bring in")
+        expect(find("[data-tile-figure]")[:class]).to include("text-status-success")
+      end
+    end
+
+    # AND THE CADENCE IS ON THE INCOME TILE, because "$2,400.00 a period" at a user who has not said
+    # how long a period is has no unit — the same gate `#declared?` applies to the whole trio.
+    it "names the cadence beside the income" do
+      within(tile("income")) { expect(page).to have_css("[data-tile-cadence]", text: "Biweekly") }
     end
 
     it "shows no sacrifice button and does not call the budget underwater" do
       expect(page).to have_no_css("[data-sacrifice-link]")
-      within(check_block) { expect(page).to have_no_content("Underwater") }
+      within(tiles) { expect(page).to have_no_content("Underwater") }
     end
 
     # THE CAPS NOTE IS GONE FROM THE PAGE (plan 3, task 3), so this asserts its absence rather than
@@ -110,7 +204,15 @@ RSpec.describe "Budget page structural check", type: :system do
     # page still talks about caps.
     it "says nothing about category caps anywhere" do
       expect(page).to have_no_css("[data-caps-note]")
-      within(check_block) { expect(page).to have_no_content("spending limits") }
+      within(tiles) { expect(page).to have_no_content("spending limits") }
+    end
+
+    # ** THE BLOCK ITSELF IS GONE (§4/§7), and its heading with it. ** The three lines are three
+    # tiles; a surviving "Does this fit your income?" panel would be the same three figures said
+    # twice on one screen, in two places free to disagree.
+    it "renders no structural-check block at all" do
+      expect(page).to have_no_css("[data-structural-check]")
+      expect(page).to have_no_content("Does this fit your income?")
     end
   end
 
@@ -123,14 +225,14 @@ RSpec.describe "Budget page structural check", type: :system do
     end
 
     it "reads zero with no explanation to give" do
-      within(figure("rules-need")) { expect(page).to have_content("$0.00 a period") }
-      within(figure("leftover")) { expect(page).to have_content("$2,400.00 free") }
+      within(tile("need")) { expect(page).to have_content("$0.00 a period") }
+      within(tile("leftover")) { expect(page).to have_content("$2,400.00") }
       expect(page).to have_no_css("[data-caps-note]")
     end
 
     it "is covered rather than underwater, and offers no cut list" do
       expect(page).to have_no_css("[data-sacrifice-link]")
-      within(check_block) { expect(page).to have_no_content("Underwater") }
+      within(tiles) { expect(page).to have_no_content("Underwater") }
     end
   end
 
@@ -145,10 +247,17 @@ RSpec.describe "Budget page structural check", type: :system do
       visit budget_page_path
     end
 
-    it "states the gap the way the sacrifice view states it" do
-      within(figure("rules-need")) { expect(page).to have_content("$3,000.00 a period") }
-      within(figure("leftover")) { expect(page).to have_content("Underwater").and have_content("$600.00 a period") }
-      within(figure("leftover")) { expect(page).to have_no_content("buffer") }
+    # ** THE THIRD TILE GOES RED AND SAYS WHICH WAY IT WENT. ** It printed the word "Underwater"
+    # beside a positive figure; the tile prints the SIGNED leftover in red with the sentence under
+    # it, which is one number rather than a figure and a label that could contradict it.
+    it "states the gap in red, and says which way it went" do
+      within(tile("need")) { expect(page).to have_content("$3,000.00 a period") }
+      within(tile("leftover")) do
+        expect(page).to have_content("-$600.00")
+        expect(page).to have_css("[data-tile-verdict]", text: "Your rules ask for more than you bring in")
+        expect(find("[data-tile-figure]")[:class]).to include("text-status-danger")
+        expect(page).to have_no_content("buffer")
+      end
     end
 
     # The button points at Task 9's sacrifice view, which is not routed yet. The link's presence
@@ -180,7 +289,7 @@ RSpec.describe "Budget page structural check", type: :system do
     end
 
     it "reads the standing claim, not this period's ask" do
-      within(figure("rules-need")) do
+      within(tile("need")) do
         expect(page).to have_content("$200.00 a period")
         expect(page).to have_no_content("$5,200.00")
       end
@@ -230,15 +339,14 @@ RSpec.describe "Budget page structural check", type: :system do
     end
 
     it "prices the bill the row calls overdue" do
-      visit budget_page_path
+      visit budget_page_path(open: car_service.id)
 
-      within(figure("rules-need")) do
+      within(tile("need")) do
         expect(page).to have_content("$600.00 a period")
         expect(page).to have_no_content("$0.00")
       end
       within("[data-rule='Car Service']") do
-        expect(page).to have_css("[data-rule-trouble]", text: "overdue")
-        expect(page).to have_css("[data-rule-schedule]", text: "was due")
+        expect(page).to have_css("[data-rule-when]", text: "overdue · was")
       end
     end
 
@@ -251,12 +359,16 @@ RSpec.describe "Budget page structural check", type: :system do
     it "keeps the same standing figure once the bill has been paid" do
       create(:entry, item: create(:item, category: car_service), amount: 600, date: Date.current)
 
-      visit budget_page_path
+      visit budget_page_path(open: car_service.id)
 
+      # ** AND THE ROW NOW READS `paid <date>` RATHER THAN `overdue` (this task's carry (a)). ** A
+      # one-time bill's occurrence never rolls, so the old reading called this paid bill late for
+      # ever; the figure beside it is unchanged, because paying a fund is what empties it.
       within("[data-rule='Car Service']") do
-        expect(page).to have_css("[data-rule-figure]", text: "$0.00 built up of $600.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $600.00")
+        expect(page).to have_css("[data-rule-when]", text: "paid #{Date.current.strftime("%b %-d")}")
       end
-      within(figure("rules-need")) do
+      within(tile("need")) do
         expect(page).to have_content("$600.00 a period")
         expect(page).to have_no_content("$0.00")
       end
@@ -301,7 +413,7 @@ RSpec.describe "Budget page structural check", type: :system do
       expect(page).to have_no_content("Your budget doesn't fit your income")
 
       visit budget_page_path
-      expect(page).to have_no_css("[data-figure]")
+      within(tile("income")) { expect(page).to have_content("Not said yet") }
       expect(page).to have_no_css("[data-sacrifice-link]")
     end
 
@@ -321,15 +433,15 @@ RSpec.describe "Budget page structural check", type: :system do
     before do
       rate(holder("Groceries"), 400)
       create(:budget, :rate, category: holder("Utilities", priority: 2), amount: 260)
-      visit budget_page_path
+      open_declaration
     end
 
     it "persists it and re-derives the block from it" do
       declare(income: "2400", cadence: "Biweekly", anchor: Date.current.strftime("%Y-%m-%d"))
 
       expect(page).to have_current_path(budget_page_path)
-      within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
-      within(figure("typical-income")) { expect(page).to have_content("$2,400.00 a period") }
+      within(tile("need")) { expect(page).to have_content("$520.00 a period") }
+      within(tile("income")) { expect(page).to have_content("$2,400.00 a period") }
       expect(user.reload.period_cadence).to eq("biweekly")
     end
 
@@ -346,13 +458,17 @@ RSpec.describe "Budget page structural check", type: :system do
     # offer itself is pinned in `budget_page/adjustments_spec.rb`.
     it "re-derives every figure the moment the cadence changes" do
       declare(income: "2400", cadence: "Biweekly", anchor: Date.current.strftime("%Y-%m-%d"))
-      within(figure("rules-need")) { expect(page).to have_content("$520.00 a period") }
+      within(tile("need")) { expect(page).to have_content("$520.00 a period") }
 
+      # A SAVE REDIRECTS TO THE PAGE WITHOUT `declare`, so the form closes behind the user — which
+      # is the affordance working: it is a settings form, and it is done. Changing the period again
+      # is asking for it again, through the tile's own link.
+      open_declaration
       select "Monthly", from: "How long is a period?"
       click_button "Save period and income"
       click_button "Keep amounts"
 
-      within(figure("rules-need")) { expect(page).to have_content("$660.00 a period") }
+      within(tile("need")) { expect(page).to have_content("$660.00 a period") }
     end
 
     it "says so on the form" do
@@ -383,9 +499,8 @@ RSpec.describe "Budget page structural check", type: :system do
       select "Biweekly", from: "How long is a period?"
       click_button "Save period and income"
 
-      within(check_block) do
-        expect(page).to have_content("Tell us how long a period is")
-        expect(page).to have_no_css("[data-figure]")
+      within(tiles) do
+        expect(page).to have_content("Not said yet")
         expect(page).to have_no_content("$2,400.00 a period")
       end
       # "2400.00", not "2400": the box renders the figure to two decimals now (design review,

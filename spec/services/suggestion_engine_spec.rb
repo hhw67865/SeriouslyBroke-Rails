@@ -952,6 +952,101 @@ RSpec.describe SuggestionEngine do
     end
   end
 
+  # ── ** THE PANEL MOVED INSIDE THE CATEGORY (two-shapes spec §4) ** ────────────────────────────
+  #
+  # `#by_category` partitions `#suggestions` and does nothing else: the Budget page's row badge
+  # counts a bucket and its open panel renders one, so a suggestion in the wrong bucket is a row
+  # proposing a rule for a category it is not about, and one in NO bucket is a suggestion the user
+  # can never reach.
+  describe "#by_category" do
+    # ** THE PARTITION ITSELF, AS AN IDENTITY. ** Σ the buckets is the whole list and no suggestion
+    # is in two of them — asserted over `one_of_each`, which is the only fixture in this file where
+    # all four kinds fire at once and therefore the only one where all four `subject` classes (an
+    # Item, a Category and two Budgets) are exercised together.
+    it "partitions the suggestions exactly", :aggregate_failures do
+      one_of_each
+      buckets = engine.by_category
+
+      expect(buckets.values.sum(&:size)).to eq(engine.suggestions.size)
+      expect(buckets.values.flatten).to match_array(engine.suggestions)
+    end
+
+    # ** EACH KIND UNDER ITS OWN CATEGORY, and the three subject classes are three different
+    # readings. ** A bill's category is its ITEM's, a rate's is the category it IS, and drift's and
+    # a dead rule's are their RULE's — so a partition that asked one question of all four would put
+    # three quarters of the panel in the wrong place, and `subject.id` (which every kind has) would
+    # do it silently.
+    it "files every kind under the category it is about", :aggregate_failures do
+      one_of_each
+      named = engine.by_category.transform_keys { |id| Category.find(id).name }
+
+      expect(named["Bills"].map(&:kind)).to eq([:dated_bill])
+      expect(named["Coffee"].map(&:kind)).to eq([:rate])
+      expect(named["Groceries"].map(&:kind)).to eq([:drift])
+      expect(named["Netflix"].map(&:kind)).to eq([:dead_rule])
+    end
+
+    # A CATEGORY WITH NOTHING IS ABSENT rather than mapped to an empty list, which is what lets the
+    # row's badge be a `fetch` with a default and never a hash of empties to filter.
+    it "leaves out a category with nothing to suggest" do
+      one_of_each
+      quiet = funded_category("Quiet")
+
+      expect(engine.by_category).not_to have_key(quiet.id)
+    end
+
+    # ** A HIDDEN SUGGESTION IS OUT OF THE BUCKETS EXACTLY AS IT IS OUT OF THE PANEL, and it is in
+    # `#hidden_by_category` instead. ** Both directions on one fixture: the same suggestion moves
+    # from one partition to the other and the counts move with it, so a `#by_category` built off
+    # `#detected` would fail the first half and a `#hidden_by_category` that dropped it the second.
+    it "moves a hidden suggestion into the hidden partition", :aggregate_failures do
+      one_of_each
+      coffee = user.categories.find_by(name: "Coffee")
+      user.suggestion_dismissals.create!(subject: coffee, kind: :rate)
+
+      expect(engine.by_category).not_to have_key(coffee.id)
+      expect(engine.hidden_by_category.fetch(coffee.id).map { |row| row.suggestion.kind }).to eq([:rate])
+    end
+  end
+
+  # ** THE WINDOW FIGURE THE BUDGET PAGE'S RULE-LESS ROWS PRINT (two-shapes spec §4). ** `$X spent
+  # in N periods`, and the whole point of it living here is that it is the SAME window the
+  # suggestions beside it are measured in — a presenter cutting its own out of
+  # `User#period_boundaries` could cut a different one and put two windows on one row.
+  describe "#recent_spending" do
+    # THE SIX COMPLETE PERIODS OF THE FILE HEADER, and the total is every entry in them. No
+    # exclusions, unlike `#rates`' roll-up: this is "what left the account here", not "what left it
+    # that is not already a proposed bill".
+    it "totals a category's spending over the engine's own window", :aggregate_failures do
+      beans = item("Beans", in_category: category("Coffee"))
+      in_last_three_periods(beans, [150, 200, 250])
+      coffee = user.categories.sole
+
+      expect(engine.recent_spending.fetch(coffee.id).total).to eq(600)
+      expect(engine.recent_spending.fetch(coffee.id).periods).to eq(6)
+    end
+
+    # THE CURRENT PERIOD IS IN NO WINDOW (see the file header), so a category spent in only today's
+    # period is absent — which is the row saying "nothing spent yet", the honest sentence for a
+    # measurement with nothing complete to measure.
+    it "counts nothing from the period that has not closed" do
+      beans = item("Beans", in_category: category("Coffee"))
+      spend(beans, 150, on: today)
+
+      expect(engine.recent_spending).to be_empty
+    end
+
+    # A USER WITH NO CADENCE HAS NO PERIODS, so there is no window to measure in — the same silence
+    # every detector keeps, arriving on the row as the same sentence.
+    it "is empty for a user who has declared no period" do
+      stranger = create(:user, period_cadence: nil, period_anchor_date: nil)
+      beans = create(:item, category: create(:category, :expense, user: stranger, name: "Coffee"))
+      create(:entry, item: beans, amount: 150, date: today - 30)
+
+      expect(engine(for_user: stranger).recent_spending).to be_empty
+    end
+  end
+
   describe "query cost" do
     def three_items
       ["One", "Two", "Three"].each_with_index do |name, index|

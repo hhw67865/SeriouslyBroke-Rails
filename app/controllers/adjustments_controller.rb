@@ -28,7 +28,7 @@ class AdjustmentsController < BudgetPageController
     )
 
     if form.save
-      redirect_to budget_page_path, notice: confirmation(form)
+      redirect_to back_to(rule), notice: confirmation(form)
     else
       # The FORM's sentence — the record's own where a column is at fault, its own where the date
       # is out of the rule's reach — and the page comes back at 422 with nothing written, the shape
@@ -43,10 +43,16 @@ class AdjustmentsController < BudgetPageController
     rule = adjustment.rule
     adjustment.destroy
 
-    redirect_to budget_page_path, notice: removal(adjustment, rule)
+    redirect_to back_to(rule), notice: removal(adjustment, rule)
   end
 
   private
+
+  # ** BACK TO THE PANEL THE BUTTON WAS IN (two-shapes spec §4). ** The Budget page shows one
+  # category's rules at a time, so a write made inside one has to come back to it open — otherwise
+  # pressing "Set aside" closes the panel it was pressed in and the figure it changed is off screen.
+  # The category is the rule's own, so the redirect states a fact rather than echoing a parameter.
+  def back_to(rule) = budget_page_path(open: rule.category_id)
 
   # `Budget.for_user`, the app's ONE answer to which rules are a user's — so a crafted `rule_id` is
   # not found rather than found and refused.

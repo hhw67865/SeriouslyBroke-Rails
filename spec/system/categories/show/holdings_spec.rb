@@ -164,7 +164,12 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       expect(find("[data-figure='claim']").text).to eq("$90.00")
       within(rule_row("Per period")) do
         expect(page).to have_css("[data-rule-figure]", text: "$310.00 of $400.00")
-        expect(page).to have_no_css("[data-rule-schedule]")
+        # ** A RATE RULE SAYS WHEN IT RESETS NOW, WHERE IT SAID NOTHING (two-shapes Task 3's carry
+        # (b)). ** This card rendered `HomeHelper#claim_schedule`, which answered nil for a rate rule
+        # because it had no period window to read; the collapsed `#when_words` does — the same clause
+        # Home's blocks and the Budget page's table print — so the row gained a true sentence rather
+        # than losing one. The absence that still matters is the TROUBLE line.
+        expect(page).to have_css("[data-rule-schedule]", text: "resets")
         expect(page).to have_no_css("[data-rule-trouble]")
       end
     end
@@ -208,11 +213,13 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # neighbours keep. The figure and the schedule are §3.4's two halves and the absent trouble is
     # the third fact: a fund on course is not a thing that needs a human (§4).
     def expect_the_accruing_row(due_on)
-      expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
-      expect(page).to have_css(
-        "[data-rule-schedule]",
-        text: "next due #{due_on.strftime("%b %-d")} · $171.43 per period"
-      )
+      expect(page).to have_css("[data-rule-figure]", text: "$171.43 of $1,200.00")
+      # ** THE CLAUSE IS `HomeHelper#when_words` NOW (this task's carry (b)). ** It was
+      # `#claim_schedule`'s `next due Dec 5 · $171.43 per period`; the collapsed helper says
+      # `Dec 5 · +$171.43` — the same date and the same share, with the LEADING PLUS that tells a
+      # contribution from a total — and it is the one string Home's blocks and the Budget page's
+      # rules table print about the same rule.
+      expect(page).to have_css("[data-rule-schedule]", text: "#{due_on.strftime("%b %-d")} · +$171.43")
       expect(page).to have_no_css("[data-rule-trouble]")
     end
 
@@ -233,7 +240,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
 
       expect(find("[data-figure='claim']").text).to eq("$1,200.00")
       within(rule_row("Monthly")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$1,200.00 of $1,200.00")
         expect(page).to have_css("[data-rule-trouble]", text: "overdue · was #{due.strftime("%b %-d")}")
         expect(page).to have_no_content("next due")
       end
@@ -270,7 +277,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # cadence, which is the app's one answer to what a rule is called.
     it "says each rule's own sentence, in its own row" do
       within(rule_row("Insurance")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$171.43 built up of $1,200.00")
+        expect(page).to have_css("[data-rule-figure]", text: "$171.43 of $1,200.00")
       end
       within(rule_row("Per period")) do
         expect(page).to have_css("[data-rule-figure]", text: "$0.00 of $400.00")
@@ -365,19 +372,19 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # ** THE ROW READS THE GOAL AS A FUND, NEVER AS MONEY TO SPEND. ** The figure is
     # `built up of target` and the schedule is the share it is filling at.
     #
-    # ** THE CLAUSE GAINED ITS DATE AND LOST ITS PLUS (two-shapes spec §2). ** It read
-    # `+$500.00 per period` with no date, because a fund had no date to have — the LEADING PLUS was
-    # what a reader told it from a dated rule by. A goal names a day now, so it takes the dated
-    # clause: `next due <date> · $500.00 per period`, the same figure with the deadline the share is
-    # derived from. The row label follows too — `HomeHelper#pool_rule_label` calls this shape
-    # "One-off" where a dateless rule was "Per period".
+    # ** THE CLAUSE GAINED ITS DATE (two-shapes spec §2) AND KEPT ITS PLUS (this task's carry (b)).
+    # ** It read `+$500.00 per period` with no date, because a fund had no date to have. A goal names
+    # a day now, and the collapsed `HomeHelper#when_words` says `<date> · +$500.00` — the deadline
+    # the share is derived from, and the leading plus that tells a contribution from a total. The row
+    # label follows too — `#pool_rule_label` calls this shape "One-off" where a dateless rule was
+    # "Per period".
     it "keeps a fund's built-up against its target, beside the day it is needed", :aggregate_failures do
       visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
       within(rule_row("One-off")) do
-        expect(page).to have_css("[data-rule-figure]", text: "$500.00 built up of $2,000.00")
-        expect(page).to have_css("[data-rule-schedule]", text: "$500.00 per period")
-        expect(page).to have_css("[data-rule-schedule]", text: "next due")
+        expect(page).to have_css("[data-rule-figure]", text: "$500.00 of $2,000.00")
+        expect(page).to have_css("[data-rule-schedule]", text: "+$500.00")
+        expect(page).to have_no_content("next due")
       end
     end
 
@@ -534,7 +541,11 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
 
       within(card) do
         expect(page).to have_content("the Budget page is proposing")
-        expect(page).to have_link("See it on the Budget page", href: budget_page_path(anchor: "suggestions-dated_bill"))
+        # ** THE LINK CARRIES THE CATEGORY, NOT A FRAGMENT (two-shapes spec §4). ** It was
+        # `#suggestions-dated_bill`, the anchor of a run inside one page-wide panel; every
+        # suggestion sits inside the category it is about now, so the pointer opens THIS category
+        # and the proposal is in view rather than scrolled to.
+        expect(page).to have_link("See it on the Budget page", href: budget_page_path(open: streaming.id))
       end
     end
 
