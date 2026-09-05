@@ -236,6 +236,53 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
       within(card(vacation)) { expect(page).to have_content("$0.00") }
       expect(page).to have_no_content("negative")
     end
+
+    # ** A FUND WITH A SIBLING RULE SHOWS ITS OWN BUILT-UP AND NO CEILING (spec §10.5; fix wave —
+    # MED-1). ** The row was `ClaimLedger#claim_of_category` — Σ EVERY rule on the category — printed
+    # against ONE rule's `target_amount`, and the heading over the strip sums those rows under the
+    # word "Claimed". A car insurance bill accruing beside a car fund was counted as savings and
+    # measured against the fund's ceiling.
+    #
+    # PLANTED, RE-DERIVED. The period is biweekly anchored today and both rules are written now, so
+    # each walks exactly ONE period:
+    #
+    #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600 →
+    #             built up **$600.00**
+    #   the BILL  on the item "Insurance", $600 due three days out — inside this period, so
+    #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
+    #
+    # The card read `$1,200.00 of $2,400.00` — half full over a fund a QUARTER full — and the strip's
+    # heading read $2,200.00 against the $1,000 Vacation Fund beside it. It says **$600.00 built up**
+    # now, with `$1,600.00` over the strip. The "of $2,400.00" absence is asserted on the CARD rather
+    # than the page, because the Vacation Fund's own `of $5,000.00` is a legitimate neighbour.
+    # THE BILL IS ITEM-BACKED BECAUSE IT HAS TO BE: `Budget#category_may_hold_one_item_less_rule`
+    # allows exactly one rule whose lane is the whole category, and the fund is it.
+    def car_fund_beside_its_insurance_bill
+      car = create(:category, :expense, user: user, name: "Car Fund", funded_since: 1.year.ago.to_date)
+      create(:budget, :capped, category: car, amount: 600, target_amount: 2_400)
+      create(
+        :budget,
+        category: car,
+        item: create(:item, category: car, name: "Insurance"),
+        amount: 600,
+        interval_months: nil,
+        anchor_date: Date.current + 3.days
+      )
+      car
+    end
+
+    it "shows a fund's own built-up and no ceiling where it is not the whole category" do
+      car = car_fund_beside_its_insurance_bill
+
+      visit reports_path
+
+      within(card(car)) do
+        expect(page).to have_content("$600.00")
+        expect(page).to have_content("built up")
+        expect(page).to have_no_content("of $2,400.00")
+      end
+      expect(page).to have_content("$1,600.00")
+    end
   end
 
   # `progress_percentage` is `(claim ÷ target × 100).round.clamp(0, 100)` —

@@ -154,6 +154,44 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content("25% of #{currency(2_000)}")
     end
 
+    # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING (spec §10.5; fix wave — MED-1). ** `Claimed` is
+    # Σ EVERY rule's claim and the target is a ceiling on the FUND's built-up alone, so `25% of
+    # $2,000.00` measured one against the other: the card said a $2,000 fund was a quarter of the way
+    # there while counting a second rule's money into the numerator. The entry form's impact card had
+    # this guard since §10.5 and this card did not.
+    #
+    # PLANTED: the example above's fund — $500 a period toward $2,000, one walked period, **$500.00**
+    # built up — plus an item-backed **$100.00**-a-period rate rule with nothing spent against it
+    # (§3.1: `max(0, 100 + 0 − 0)`). `Claimed` is their sum, **$600.00**, and the fund's own figure is
+    # still $500 — which is exactly why no ceiling can be printed beside the $600.
+    #
+    # THE SIBLING IS A RATE RULE AND NOT THE §10.5 EXAMPLE'S DATED BILL: this file's user declares no
+    # period, so the walk falls back to the calendar month and a dated rule's catch-up would depend
+    # on which day of the month the suite ran (CLAUDE.md's third flake cause). What the gate reads is
+    # that a SECOND rule exists, and a rate rule is the cheapest honest way to say so.
+    def vacation_fund_beside_a_second_rule
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
+      create(:budget, :capped, category: vacation, amount: 500, target_amount: 2_000)
+      create(
+        :budget,
+        :per_period_rate,
+        category: vacation,
+        item: create(:item, category: vacation, name: "Flights"),
+        amount: 100
+      )
+    end
+
+    it "draws no bar for a fund that is not the whole category", :aggregate_failures do
+      vacation_fund_beside_a_second_rule
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Claimed")
+      expect(page).to have_content(currency(600))
+      expect(page).to have_no_css("[data-building-progress]")
+      expect(page).to have_no_content("of #{currency(2_000)}")
+    end
+
     # ** AN UNCAPPED FUND HAS NO TRACK (rules-own-the-budget spec §2.1 row 2). ** Same shape, same
     # walk, no ceiling: `planned` is the plain rate because there is no `gap` to bound it, so the
     # claim is **$500.00** and there is nothing for a bar to be a fraction of. Both halves, so a card

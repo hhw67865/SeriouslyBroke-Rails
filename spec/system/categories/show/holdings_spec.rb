@@ -376,6 +376,50 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       expect(retirement.building_rule).to eq(retirement.budgets.sole)
     end
 
+    # ** A FUND WITH A SIBLING RULE KEEPS ITS HEADING AND LOSES ITS TRACK (spec §10.5; fix wave —
+    # MED-1). ** `Claimed` is Σ EVERY rule's claim; the target is a ceiling on the FUND's built-up
+    # alone. The card measured one against the other and read `50% complete · Target: $2,400.00` over
+    # a fund that is a QUARTER full. The entry form's impact card has had this guard since §10.5;
+    # this card and the index card did not, which is the whole of MED-1.
+    #
+    # THE NOUN IS UNAFFECTED, and that is the half worth asserting beside the absence: a sibling bill
+    # does not make this category's money stop building up, so the heading still says "Fund".
+    #
+    # PLANTED, RE-DERIVED. This user's period is biweekly anchored today, and both rules are written
+    # now, so each walks exactly ONE period:
+    #
+    #   the FUND  item-less, $600 a period, capped at $2,400 → planned min(600, 2,400) = 600, nothing
+    #             spent → built up **$600.00**
+    #   the BILL  on the item "Insurance", $600 due three days out — inside this period, so
+    #             `periods_left` is 1 and the catch-up asks the whole $600 → built up **$600.00**
+    #
+    # `Claimed` is their sum, **$1,200.00**, against a fund holding $600 of its $2,400.
+    # ITEM-BACKED BECAUSE IT HAS TO BE: `Budget#category_may_hold_one_item_less_rule` allows exactly
+    # one rule whose lane is the whole category, and the fund is it.
+    def car_fund_beside_its_insurance_bill
+      fund("Car", target: 2_400, rate_amount: 600).tap do |car|
+        create(
+          :budget,
+          category: car,
+          item: create(:item, category: car, name: "Insurance"),
+          amount: 600,
+          interval_months: nil,
+          anchor_date: Date.current + 3.days
+        )
+      end
+    end
+
+    it "keeps the fund heading and draws no track where the fund is not the whole category" do
+      car = car_fund_beside_its_insurance_bill
+
+      visit category_path(car)
+
+      within(card) { expect(page).to have_content("Fund") }
+      expect(find("[data-figure='claim']").text).to eq("$1,200.00")
+      expect(page).to have_no_css("[data-building-progress]")
+      expect(page).to have_no_content("Target:")
+    end
+
     # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD PREDICATE GOT WRONG. ** A rule whose money
     # RESETS is an envelope: nothing about it builds up, and it got the "Goal" heading and a
     # progress bar under `#saving_toward_a_target?` because its CATEGORY named a figure. The example

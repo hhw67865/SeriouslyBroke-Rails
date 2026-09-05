@@ -51,6 +51,12 @@
 # heading, the index card's bar and the entry form's impact card all read the same rule, so a fund
 # is a fund on every one of them.
 #
+# ** AND THE TARGET IS THE FUND'S ALONE (spec §10.5; fix wave — MED-1). ** A ceiling is a ceiling on
+# the FUND's built-up, so it is printed only where the building rule is the category's ONLY rule —
+# `Category.fund_is_the_whole_category?`, the same test the impact card and the dashboard's savings
+# strip apply to their own populations. Beside a sibling bill, Σ claims is not the fund's money and a
+# bar drawn against the target would be a fraction of the wrong number.
+#
 # See docs/superpowers/specs/2026-09-03-computed-claims-design.md §2-§5.
 class CategoryBudgetPresenter
   # ** ONE RULE'S LINE ON THE CARD — §3.4'S ROW, IN THE SHAPE THE SHARED HELPERS READ. **
@@ -211,23 +217,51 @@ class CategoryBudgetPresenter
   # the user owns. `#lines` is already built from `ClaimLedger#rules_of`, one statement for the whole
   # page, so this costs nothing at all.
   #
+  # ** THE LINE AND NOT ONLY THE RULE, since the fix wave. ** The bar's numerator is the FUND's own
+  # built-up (`#fund_figure`), which is on the row this card already built — going back to a
+  # calculator for it would be the second reading this class was written to avoid.
+  #
   # `defined?` rather than `||=`: nil is the ordinary answer (an envelope), and a truthiness memo
-  # would re-scan the lines on every one of the four readers below that consult it.
-  def building_rule
-    return @building_rule if defined?(@building_rule)
+  # would re-scan the lines on every one of the five readers below that consult it.
+  def building_line
+    return @building_line if defined?(@building_line)
 
-    @building_rule = lines.map(&:rule).detect(&:builds_up_the_category?)
+    @building_line = lines.detect { |line| line.rule.builds_up_the_category? }
   end
 
-  # THE FIGURE THE FUND IS AIMING AT, or NIL where it names none. Nil rather than zero, exactly as
-  # `ClaimCalculator#target` answers it and for the same reason: zero is a ceiling that has already
-  # been reached, and every reader below asks presence before it divides.
-  def target = building_rule&.target_amount&.to_d
+  def building_rule = building_line&.rule
+
+  # ** IS THE FUND THE WHOLE CATEGORY — THE GATE ON EVERY TARGET THIS CARD PRINTS (fix wave —
+  # MED-1; spec §10.5). ** `Category.fund_is_the_whole_category?` asked of the rules the page's ONE
+  # ledger fetched, which is the same test the entry form's impact card asks of the association and
+  # the dashboard's strip asks of its preload — see the model for why the target is a sentence about
+  # the fund and not about the category whenever a sibling rule exists.
+  def fund_is_the_whole_category? = Category.fund_is_the_whole_category?(rules)
+
+  # ** WHAT THE FUND ITSELF HAS BUILT UP — the numerator of every bar this card draws. ** `#claim` is
+  # Σ EVERY rule's claim, and on a category carrying a fund beside a bill those are different money;
+  # this is the fund's own figure, off the row already built. The two are equal wherever a bar is
+  # drawn at all (`#bar?` requires the fund to be the whole category, and a building rule's claim IS
+  # its built-up — `ClaimCalculator#claim`), so no figure on any screen moves: what the spelling buys
+  # is that loosening the gate could never silently change what the percentage is a percentage OF.
+  def fund_figure = building_line&.built_up
+
+  # THE FIGURE THE FUND IS AIMING AT, or NIL where it names none — AND NIL AGAIN WHERE THE FUND IS
+  # NOT THE WHOLE CATEGORY (fix wave — MED-1), because a ceiling printed beside Σ claims is a
+  # ceiling on the wrong number. Nil rather than zero, exactly as `ClaimCalculator#target` answers it
+  # and for the same reason: zero is a ceiling that has already been reached, and every reader below
+  # asks presence before it divides.
+  def target
+    return nil unless fund_is_the_whole_category?
+
+    building_rule.target_amount&.to_d
+  end
 
   # HOW FULL, AS A WHOLE PERCENT, CLAMPED AT BOTH ENDS — `HoldingCalculator#progress_percentage`'s
-  # arithmetic verbatim, with `#claim` where `#balance` stood. Kept to the digit deliberately: the
-  # money the numerator names changed, the reading of it did not, and a figure that moved here would
-  # have moved for a reason nobody asked for.
+  # arithmetic verbatim, with `#fund_figure` where `#balance` stood. Kept to the digit deliberately:
+  # the money the numerator names changed, the reading of it did not, and a figure that moved here
+  # would have moved for a reason nobody asked for. (It read `#claim` until the fix wave; the two are
+  # the same figure on every fixture that reaches this line — see `#fund_figure`.)
   #
   # ZERO FOR AN UNCAPPED FUND, and the card draws no bar there at all (see `#bar?`): a fund with no
   # ceiling is not a fraction of anything, and a track whose fullness means nothing is worse than no
@@ -244,12 +278,13 @@ class CategoryBudgetPresenter
   def progress_percentage
     return 0 unless bar?
 
-    (claim / target * 100).round.clamp(0, 100)
+    (fund_figure / target * 100).round.clamp(0, 100)
   end
 
   # A BAR NEEDS SOMETHING TO BE A FRACTION OF — `HomePresenter::ClaimLine#bar?`'s rule, asked of the
   # category. Both render sites gate on this rather than on `#building?`, so an uncapped fund gets
-  # its heading and its figure and no track.
+  # its heading and its figure and no track — and so does a fund with a sibling rule, whose target
+  # `#target` withholds (fix wave — MED-1).
   def bar? = target&.positive? || false
 
   # ** `#remaining_amount` IS DELETED. ** `target − claim`, floored at zero — and it was callerless

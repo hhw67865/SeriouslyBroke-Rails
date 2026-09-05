@@ -193,10 +193,18 @@ class SacrificePresenter
   # since the fix wave — exactly. `Budget#user` walks the category, and `#steady_ask`'s one-off branch
   # builds a `ClaimCalculator` that asks `budget.user` for its period boundaries and its own day.
   #
-  # ** THIS CLASS DOES NOT BATCH, AND THE COST IS STATED RATHER THAN HIDDEN. ** The cut list is
-  # rendered once, on a page the user reaches from the structural check, and an unbatched one-off
-  # rule costs two statements. If that ever bites, the fix is to iterate a `ClaimLedger` here the way
-  # `.steady_need` does — never a second figure computed a second way.
+  # ** THIS CLASS DOES NOT BATCH, AND THE COST IS STATED, MEASURED AND PINNED RATHER THAN HIDDEN
+  # (fix wave — INFO). ** The whole page costs SIX statements: `.steady_need`'s ledger loads the
+  # rules with its `includes(:item, category: :user)` preload, and this reader loads the same set
+  # again with its own — the deliberate second pass argued for above.
+  #
+  # ** A ONE-OFF RULE COSTS NOTHING EXTRA, and the sentence here used to say it cost two. ** That
+  # was true while `#steady_ask`'s one-off arm read `#planned_this_period` — a spending query and an
+  # adjustment query per rule. Fix wave 2 (MED-A) moved the arm onto `ClaimCalculator#standing_ask`,
+  # which reads two columns and the period grid and nothing else, so the calculator that arm builds
+  # is an object rather than a query. Measured and pinned in `sacrifice_presenter_spec`: one one-off
+  # costs six statements and five cost six. If the duplicate load ever bites, the fix is to iterate a
+  # `ClaimLedger` here the way `.steady_need` does — never a second figure computed a second way.
   def rules
     @rules ||= Budget.for_user(user).includes(:item, category: :user).to_a
   end

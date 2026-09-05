@@ -77,10 +77,18 @@
     </p>
   <% end %>
 
-  <%# WHO GIVES WAY. Reverse priority, and the figure is what THIS claim is short by after everything
-      below it in the order has already given way — which is why the last row in the list is usually
-      partial and says so. Empty on the two arms above that have nothing uncovered, so this renders
-      nothing there rather than being gated a second way. %>
+  <%# WHO GIVES WAY, AND IN THE ORDER THE WALK ACTUALLY USES (rules-own-the-budget spec §3;
+      `HomePresenter#give_way_key`). It said "Reverse priority" and never mentioned the TYPE, which
+      is the term the walk sorts on FIRST: every `choice` rule in the app gives way before any
+      `usage` rule, and a `bill` is the last thing reached. Within a type it is the highest priority
+      NUMBER first — the reverse of fill order, the lowest number being the one that keeps its money
+      — and rules inside one category break on `Category.rule_order`. The same three words the
+      Budget page's give-way list, its ▲▼ buttons and the category form all say.
+
+      The figure is what THIS claim is short by after everything below it in the order has already
+      given way — which is why the last row in the list is usually partial and says so. Empty on the
+      two arms above that have nothing uncovered, so this renders nothing there rather than being
+      gated a second way. %>
   <% if presenter.uncovered_claims.any? %>
     <ul class="mt-2 space-y-1" data-uncovered>
       <% presenter.uncovered_claims.each do |uncovered| %>

@@ -105,7 +105,13 @@
         building rule names no figure, so there is nothing for a bar to be a fraction of — the same
         rule Home's row applies to the same shape. The heading above still says "Fund" and the
         Claimed figure still says what it has; what is absent is the track, because a track drawn
-        against nothing reports nothing. %>
+        against nothing reports nothing.
+
+        ** AND `#bar?` NOW ALSO REQUIRES THE FUND TO BE THE WHOLE CATEGORY (spec §10.5; fix wave —
+        MED-1). ** `Claimed` above is Σ EVERY rule's claim and the target is a ceiling on the FUND's
+        built-up: beside a sibling bill they are different money, and `50% complete · Target:
+        $2,400.00` measured one against the other. The heading and the Claimed figure are untouched
+        — a sibling bill does not make this category's money stop building up. %>
     <% if presenter.bar? %>
       <% progress = presenter.progress_percentage %>
       <div class="mb-4" data-building-progress>

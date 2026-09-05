@@ -75,7 +75,14 @@
               the presenter's `#bar?` — the same reader the show page's holdings card and the entry
               form's impact card ask, so a fund is a fund on every one of them. The BAR is the
               CAPPED fund's alone: a building rule with no target names no figure, and there is
-              nothing for a track to be a fraction of. %>
+              nothing for a track to be a fraction of.
+
+              ** AND THE FUND HAS TO BE THE WHOLE CATEGORY (spec §10.5; fix wave — MED-1). ** The
+              `Claimed` figure above is Σ EVERY rule's claim; the target is a ceiling on the FUND's
+              built-up alone. Beside a sibling bill the two are different money and `50% of
+              $2,400.00` was a fraction of the wrong number, so `#target` withholds the figure and
+              this block does not render — the honest `Claimed` line stays, which is what the entry
+              form's impact card does with the same shape. %>
           <% if category.holder? %>
             <% money = CategoryBudgetPresenter.new(category: category, claims: claim_ledger) %>
             <div class="flex justify-between text-xs mt-2" data-holding-line>

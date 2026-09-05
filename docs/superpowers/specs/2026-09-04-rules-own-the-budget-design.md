@@ -334,3 +334,18 @@ Holiday Gifts — the same total, absorbed by four `choice` rules.
    database of thirty rules arrives with thirty of them claiming to be "a real need whose amount
    moves with how you live", and the give-way order reads that. There is no bulk retype and no
    prompt; the user meets one rule at a time on the edit form.
+3. **An uncapped fund's bar on the entry form's impact card always reads full.** `EntryImpact
+   Presenter#building_target` is nil for a fund that names no ceiling (§2.1 row 2), so the card falls
+   back to `#steady_claim` — `Σ standing_ask`, what the rules ask of ONE period. The numerator is the
+   fund's built-up, which is a walk over EVERY period since it started, so the fraction is ≥ 1 from
+   the second period onward and the bar is pinned at 100% for the life of the fund. Nothing is
+   arithmetically wrong; the two figures are simply denominated in different spans, and there is no
+   honest one-period denominator for a multi-period accrual. The options are a bar that measures the
+   period's own movement instead, or no bar at all on that arm — a design call, not a defect fix.
+4. **The migration refuses a legacy anchorless `monthly` rule with `interval_months ≠ 1` after its
+   writes rather than at preflight.** The five preflight refusals fire before the first write (§10.6);
+   this shape is caught by the post-write restatement of `Budget#shape_must_be_valid` in SQL, which
+   names the offending row and aborts the transaction. It is already invalid under that validation, so
+   no rule the app can write today can reach it — only a row predating the validation could — and
+   moving it forward means a sixth preflight query for a shape that may not exist in any real
+   database. Whether the earlier, cheaper message is worth that query is Henry's call.

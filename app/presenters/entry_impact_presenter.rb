@@ -185,14 +185,16 @@ class EntryImpactPresenter
   # THE NOUN IS UNAFFECTED. `#building?` is a question about the SHAPE — money here builds up — and a
   # sibling bill does not make that less so.
   #
-  # `budgets.load.one?` and not a `count`: the association is already loaded on every path that
-  # reaches here (`Category#budgeted?` loads it, and `#claim_calculators` reads it), so this costs
-  # no statement.
+  # ** THE TEST IS `Category#fund_is_the_whole_category?` AND IT IS NO LONGER THIS CARD'S ALONE (fix
+  # wave — MED-1). ** It was `budgets.load.one?` written out here, and the categories index card, the
+  # holdings card and the dashboard's savings strip went on dividing Σ every rule's claim by ONE
+  # rule's target. The model owns the clause now; it still costs no statement, because the
+  # association is already loaded on every path that reaches here (`Category#budgeted?` loads it, and
+  # `#claim_calculators` reads it).
   def building_target
-    rule = holding&.building_rule
-    return nil unless rule && holding.budgets.load.one?
+    return nil unless holding&.fund_is_the_whole_category?
 
-    rule.target_amount&.to_d
+    holding.building_rule.target_amount&.to_d
   end
 
   # "envelope" or "fund" — the noun the header uses.

@@ -80,7 +80,11 @@
           </div>
           <%# NO TRACK WITHOUT A DENOMINATOR (rules-own-the-budget spec §5). An uncapped fund is not
               a fraction of anything, and an empty grey track under a real figure reads as "nothing
-              saved" over money that is there. %>
+              saved" over money that is there.
+
+              `target` IS ALSO NIL WHERE THE FUND IS NOT THE WHOLE CATEGORY (spec §10.5; fix wave —
+              MED-1), and such a card takes exactly this arm: the fund's built-up, the "building"
+              badge and no track. See `Dashboard::OverviewPresenter#savings_summary`. %>
           <% if target.present? %>
             <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
               <div class="h-3 rounded-full <%= bar_class %>" style="width: <%= progress.clamp(0, 100) %>%"></div>

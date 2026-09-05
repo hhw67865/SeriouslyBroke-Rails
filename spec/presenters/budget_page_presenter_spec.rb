@@ -588,20 +588,45 @@ RSpec.describe BudgetPagePresenter do
         statements
       end
 
-      # A FRESH PRESENTER EACH TIME. Every reader on this class is memoised, so a second read
-      # through the same instance would answer out of memory and hide the statements this pins.
-      # ** THE TYPE OVERVIEW IS READ THROUGH THIS PIN TOO (rules-own-the-budget spec §3). ** It sums
+      # ** EVERY READER THE RENDERED PAGE ASKS FOR, IN THE ORDER `show.html.erb` ASKS IT. ** A cost
+      # pin is only as honest as the reader list it walks: a reader this method never calls is a
+      # reader free to open a `ClaimLedger` of its own without either figure below moving. The three
+      # panels the partials read are the type overview, the give-way order's groups, the "not
+      # filling" band and the structural check.
+      #
+      # ** THE TYPE OVERVIEW IS READ THROUGH THIS PIN (rules-own-the-budget spec §3). ** It sums
       # `ClaimCalculator#standing_ask` over every rule the user owns, off the page's ONE ledger — a
       # reader that reached for `Budget#steady_ask` instead would build a second calculator per
-      # dated bill, and a reader that built a ledger of its own would cost the whole set of grouped
-      # aggregates twice. Neither is visible to any other example in this file.
-      def read_every_row
-        page = described_class.new(user: user, today: today)
+      # DATED bill, which is why the fixture below carries one.
+      #
+      # ** `#suggestions` IS DELIBERATELY ABSENT. ** It is `SuggestionEngine`'s cost, not this
+      # class's — eight statements of detectors this presenter only forwards — and folding it in
+      # would put the engine's query plan inside a pin about the page's own ledger. Its own spec
+      # owns it.
+      def read_the_page(page)
+        page.no_rules?
         page.type_overview
         page.category_groups.each do |group|
           group.rules.each { |rule| [rule.claim, rule.built_up, rule.planned_this_period, rule.adjustments.size] }
         end
+        page.unfilled_rules
+        read_the_structural_check(page)
       end
+
+      # THE ADJUST PANEL'S OWN FOUR (`_structural_check.html.erb`). `#rules_need` is the one that
+      # matters: `Budget.steady_need` takes the page's `ledger:` and a version that built its own
+      # would cost the whole set of grouped aggregates twice — invisible to every other example here.
+      def read_the_structural_check(page)
+        page.declared?
+        page.rules_need
+        page.typical_income
+        page.underwater?
+        page.leftover
+      end
+
+      # A FRESH PRESENTER EACH TIME. Every reader on this class is memoised, so a second read
+      # through the same instance would answer out of memory and hide the statements this pins.
+      def read_every_row = read_the_page(described_class.new(user: user, today: today))
 
       # EACH RULE CARRIES A DELTA OF ITS OWN, and that half of the fixture is what catches the
       # second per-row cost: `Adjustment#local_day` walks `rule → category → user` for the owner's
@@ -614,6 +639,34 @@ RSpec.describe BudgetPagePresenter do
         rule
       end
 
+      # ** A ONE-TIME DATED BILL, AND IT IS THE ONE SHAPE THE COMMENT ABOVE IS ABOUT (MED-2). **
+      # `Budget#cadence` calls an anchored rule with no interval `:one_off`, and that is the only arm
+      # of `#steady_ask` that BUILDS a `ClaimCalculator` — the second-door hazard both `#type_overview`
+      # and `#rules_need` are written to avoid. Every rule in this fixture used to be per-period, so
+      # the claim was untestable: the arm it warns about was never reached.
+      #
+      # `created_at:` PLANTED as the current period opens, so the rule walks exactly one period and
+      # nothing here depends on the wall clock.
+      def dated_bill(category, amount:, due:)
+        create(
+          :budget,
+          category: category,
+          amount: amount,
+          interval_months: nil,
+          anchor_date: due,
+          created_at: Time.zone.local(2026, 2, 6)
+        )
+      end
+
+      # THE WHOLE PAGE, AT ITS SMALLEST HONEST SIZE: a group with a rule and a delta on it, a DATED
+      # bill on a second category (the `:one_off` arm, and a second group for the give-way order), and
+      # a rule on a category that holds nothing — which is the only thing `#unfilled_rules` can list.
+      def a_whole_page
+        rule_with_a_delta(holder("Groceries"), "Bread", 100)
+        dated_bill(holder("Rent", priority: 2), amount: 1_500, due: today + 3.days)
+        unshowable_rule
+      end
+
       it "costs the same for five rules on a category as for one", :aggregate_failures do
         category = holder("Groceries")
         rule_with_a_delta(category, "Bread", 100)
@@ -624,6 +677,58 @@ RSpec.describe BudgetPagePresenter do
 
         expect(count_statements { read_every_row }).to eq(one_rule)
         expect(one_rule).to be_positive
+      end
+
+      # ** THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN (Home's own pin, MED-2). ** Every figure
+      # on this page is composed from readers the presenter already holds, so once anything has been
+      # read, reading all of it costs nothing. A reader added here that opened a ledger of its own
+      # would fail this and not the delta pin above.
+      it "reads the whole page a second time for nothing at all", :aggregate_failures do
+        a_whole_page
+        page = described_class.new(user: user, today: today)
+
+        expect(count_statements { read_the_page(page) }).to be_positive
+        expect(count_statements { read_the_page(page) }).to eq(0)
+      end
+
+      # ** FIFTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain (MED-2). **
+      #
+      #    1. `#rules` — `User#all_budgets`, every rule the user owns …
+      #  2-4. … and its `includes(:item, category: :user)` preload: the one item a rule names, the
+      #       three categories, the one user. One statement each, whatever the row count.
+      #    5. `ClaimLedger#rules` — the SAME set again, loaded by the ledger for its own probes …
+      #  6-8. … and its own copy of that preload. ** THE FOUR ARE A KNOWN DUPLICATE AND THIS PIN IS
+      #       WHERE IT IS VISIBLE: ** the presenter's set is `User#all_budgets` and the ledger's is
+      #       `Budget.for_user`, two spellings of one population, and closing the gap is a change to
+      #       what `#rules` MEANS rather than a cost fix — so it is named here rather than silently
+      #       carried.
+      #    9. the ledger's ITEM spending lane (the Bread rule names an item).
+      #   10. its adjustment lane — one grouped statement for every delta the claims read.
+      #   11. its CATCH-ALL spending lane (the Rent bill and the Coffee rule name no item).
+      #   12. `#adjustments_this_period` — ONE listing of this period's deltas for every row …
+      #  13-15. … and its `includes(rule: { category: :user })` preload, which is what keeps
+      #       `Adjustment#local_day` from walking `rule → category → user` per delta.
+      #
+      # NOTHING BELOW IS A STATEMENT AND THAT IS THE POINT: `#type_overview` and `#rules_need` read
+      # `ClaimCalculator#standing_ask`, which touches two columns and the period grid; `#unfilled_rules`
+      # is `rules - grouped_rules` in memory; `#category_groups` sorts the preloaded categories rather
+      # than re-asking `Category.in_fill_order`.
+      #
+      # ** WHY THIS PIN AND THE DELTA PIN ARE BOTH HERE, AND WHAT EACH ONE ALONE CANNOT SEE (LOW-1).
+      # ** The delta pin is a DIFFERENCE — five rules on a category cost exactly what one costs — so
+      # it catches anything that grows with the ROW COUNT: a calculator built inside a partial, a
+      # preload dropped. It is BLIND to a constant: a second `ClaimLedger` opened once per render adds
+      # the same statements to both sides of the equality and cancels, and the pin stays green. This
+      # one is the ABSOLUTE figure and sees exactly that. Measured on this fixture: dropping
+      # `ledger:` from `#rules_need` — `Budget.steady_need` building its own ledger — takes it from
+      # **15 to 19** (that ledger's rules and its three preloads; its lanes stay lazy because
+      # `#standing_ask` reads no rows), and a `#type_overview` that built a ledger per rule instead of
+      # reading the page's takes it to **36**. Both readings leave the delta pin passing. Neither pin
+      # is redundant and neither subsumes the other.
+      it "costs fifteen statements for a whole render" do
+        a_whole_page
+
+        expect(count_statements { read_every_row }).to eq(15)
       end
     end
   end

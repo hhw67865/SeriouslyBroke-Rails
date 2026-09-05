@@ -92,20 +92,36 @@ module Dashboard
     # THE TARGET IS THE RULE'S AND IT MAY BE NIL, which is the strip's one new arm: an uncapped fund
     # has no denominator, so its card gets its figure and no bar (see the partial).
     #
+    # ** AND IT IS NIL AGAIN WHERE THE FUND IS NOT THE WHOLE CATEGORY (spec §10.5; fix wave —
+    # MED-1). ** `Category.fund_is_the_whole_category?` — the same test the entry form's impact card
+    # and `CategoryBudgetPresenter` apply to their own populations. A target is a ceiling on the
+    # FUND's built-up, so printing it beside a figure that also contains a sibling bill's accrual is
+    # a fraction of the wrong number: a "Car" fund of $600 a period toward $2,400, beside a $600
+    # insurance bill on one of its items, read `$1,200.00 of $2,400.00` — half full, over a fund a
+    # quarter full.
+    #
+    # ** THE ROW'S FIGURE IS THE FUND'S OWN BUILT-UP, NOT Σ THE CATEGORY'S CLAIMS (fix wave —
+    # MED-1). ** This is a strip of FUNDS: each card names one, and `#total_savings_balance` sums
+    # them under the word "Claimed". `claim_of_category` counted that sibling bill's accrual as
+    # savings in both. `ClaimCalculator#claim` IS `#built_up` for a building rule, so the two are one
+    # figure wherever the fund is the whole category — every row this strip has ever drawn — and what
+    # changes is only the mixed shape, which is where the old figure was wrong.
+    #
     # `ClaimLedger` RATHER THAN `Category#claim`, because this is a strip of many categories and the
     # unbatched door costs a spending query and an adjustment query PER RULE. The two are pinned
     # against each other figure for figure in `claim_ledger_spec`, so the batching cannot make this
     # page disagree with a category's own.
     def savings_summary
       @savings_summary ||= savings_categories.map do |category|
-        claim = claim_ledger.claim_of_category(category)
-        target = category.building_rule&.target_amount
+        rule = category.building_rule
+        built_up = claim_ledger.calculator_for(rule).built_up
+        target = category.fund_is_the_whole_category? ? rule.target_amount : nil
         {
           id: category.id,
           name: category.name,
-          balance: claim,
+          balance: built_up,
           target_amount: target,
-          progress_percentage: progress_percentage(claim, target)
+          progress_percentage: progress_percentage(built_up, target)
         }
       end
     end

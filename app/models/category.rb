@@ -411,6 +411,38 @@ class Category < ApplicationRecord
   # `Budget.builds_up_the_category` the SQL side the dashboard's strip composes.
   def building_rule = budgets.detect(&:builds_up_the_category?)
 
+  # ** IS THIS CATEGORY'S FUND THE WHOLE CATEGORY — THE ONE TEST BEHIND EVERY BAR AND EVERY "of $X"
+  # (rules-own-the-budget spec §10.5; fix wave — MED-1). **
+  #
+  # A fund's TARGET is a ceiling on the FUND's built-up, and every screen that prints it prints it
+  # beside a figure. On a category carrying the fund ALONE those are one figure — `Σ claims` IS the
+  # building rule's built-up — and the sentence is true. Beside a sibling rule they are two: a "Car"
+  # category with a $600-a-period fund toward $2,400 and a $600 insurance bill on one of its items
+  # claims $1,200 after one period, and `$1,200 of $2,400` reads half full while the FUND is a
+  # quarter full and the other $600 is a bill's accrual with nothing to do with the target.
+  #
+  # ** IT WAS SPELLED ON THE ENTRY FORM'S IMPACT CARD ONLY, and the other three screens divided Σ
+  # every rule's claim by ONE rule's target. ** `EntryImpactPresenter#building_target` carried
+  # `budgets.load.one?` inline; the categories index card, the categories show page's holdings card
+  # and the dashboard's savings strip each gated on `target&.positive?` alone. Hoisted here so the
+  # four cannot answer differently about one category on one afternoon.
+  #
+  # ** TWO POPULATIONS, ONE TEST — `#building_rule`'s own arrangement, for `#building_rule`'s own
+  # measured reason. ** The class method takes the ROWS: callers holding the `:budgets` association
+  # (this card, the impact card, the strip's `includes(:budgets)`) pass it, and
+  # `CategoryBudgetPresenter` passes the rules its page's ONE `ClaimLedger` already fetched — a
+  # presenter reading `category.budgets` would be a `SELECT budgets` per card on the categories
+  # index, which is the cost `categories_spec`'s `eq([1, 1])` pin forbids.
+  #
+  # `rules.one?` AND NOT `#building_rule` PLUS A COUNT: one rule that builds up is the whole of it,
+  # and asking the question in one clause is what keeps a future caller from checking only half.
+  def self.fund_is_the_whole_category?(rules) = rules.one? && rules.first.builds_up_the_category?
+
+  # `budgets.load` and not a `count`: every caller here already has the association loaded, and a
+  # relational `one?` on an unloaded association is a statement per card on the screens that draw
+  # many.
+  def fund_is_the_whole_category? = Category.fund_is_the_whole_category?(budgets.load)
+
   # ** IS ANYTHING BUDGETED HERE — THE ONE SPELLING, SHARED BY HOME AND THE ENTRY FORM (fix round
   # 1 — M2). ** Every claim comes from a rule (§3.3), so "budgeted" is exactly "carries a rule": a
   # category with none claims nothing however much has been spent against it, and §3.4's own

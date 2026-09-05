@@ -274,4 +274,66 @@ RSpec.describe SacrificePresenter do
       expect(row.claim_param).not_to include(",")
     end
   end
+
+  # ** WHAT THE CUT LIST COSTS, AND THE PRESENTER SAYS SO IN AS MANY WORDS (fix wave — INFO). **
+  # `#rules` states "this class does not batch, and the cost is stated rather than hidden — an
+  # unbatched one-off rule costs two statements", and nothing asserted it. A stated cost nobody pins
+  # is a comment, not a property: the figure can drift in either direction with the sentence intact.
+  describe "what the cut list costs" do
+    def count_statements(&block)
+      statements = 0
+      counter = lambda do |_name, _start, _finish, _id, payload|
+        statements += 1 unless payload[:name].to_s.match?(/SCHEMA|TRANSACTION/)
+      end
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record", &block)
+      statements
+    end
+
+    # EVERY READER `sacrifices/show.html.erb` ASKS FOR, in the order it asks.
+    def read_the_page(page)
+      page.rules_need
+      page.typical_income
+      page.gap
+      page.gap_param
+      page.underwater?
+      page.unwinnable?
+      page.cuttable_rows
+      page.fixed_rows
+      page.unclosable
+    end
+
+    def read_the_page_fresh = read_the_page(described_class.new(user: user, today: today))
+
+    # ** SIX STATEMENTS, WHATEVER THE ROW COUNT — AND THE ONE-OFF COSTS NOTHING (fix wave — INFO). **
+    #
+    #   1. `Budget.steady_need`'s own `ClaimLedger#rules` — every rule the user owns …
+    # 2-3. … and its `includes(:item, category: :user)` preload: the categories and the one user.
+    #      (`:item` runs no statement here — no rule in this fixture names one. A fixture with an
+    #      item-backed rule would read SEVEN, which is the preload and not a per-row cost.)
+    #   4. `SacrificePresenter#rules` — the SAME set again, the deliberate second pass its own
+    #      comment argues for: the rows and the figure they must add up to come from one population
+    #      and the alternative is this page summing the rules itself …
+    # 5-6. … and its own copy of that preload.
+    #
+    # ** THE STATED COST WAS WRONG IN THE SAFE DIRECTION, AND THE PIN IS WHY IT IS NOW RIGHT. ** The
+    # `#rules` comment said "an unbatched one-off rule costs two statements", which was true while
+    # `#steady_ask`'s one-off arm read `#planned_this_period` — a spending query and an adjustment
+    # query per rule. Fix wave 2 (MED-A) moved that arm onto `ClaimCalculator#standing_ask`, which
+    # reads two columns and the period grid and nothing else, so the calculator it builds is an
+    # object and not a query. Measured here: ONE one-off costs six, FIVE cost six.
+    #
+    # STRICT EQUALITY AND THE FIGURE NAMED, not "no more than": a bound pins nothing, and the whole
+    # subject is a per-rule cost that a bound would hide.
+    it "costs six statements for five one-off rules, exactly what it costs for one", :aggregate_failures do
+      one_off(holder("Roof", priority: 1), amount: 3_000, anchor: Date.new(2026, 6, 1))
+
+      one = count_statements { read_the_page_fresh }
+
+      4.times { |n| one_off(holder("Thing #{n}", priority: n + 2), amount: 300, anchor: Date.new(2026, 6, 1)) }
+
+      expect(count_statements { read_the_page_fresh }).to eq(one)
+      expect(one).to eq(6)
+      expect(presenter.cuttable_rows).to be_empty
+    end
+  end
 end

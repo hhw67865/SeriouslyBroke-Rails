@@ -92,6 +92,21 @@ module BudgetPageHelper
   #
   # THE TARGET IS NAMED WHERE THERE IS ONE, because "builds up" and "builds up toward $5,000" are
   # different promises: the first grows for as long as the rule lives, the second stops.
+  #
+  # ** THE RAW COLUMNS AND NOT `Budget#claim_shape`, AND THE CONSTRAINT IS THE CALLER (fix wave —
+  # LOW-3). ** `#claim_shape` is the app's one door onto §3's three formulas and would be the reader
+  # to want here — except that `budgets/_form.html.erb` calls this with `RuleForm#budget`, which on
+  # the NEW path is a `Budget.new` carrying assigned attributes and no category at all. `#claim_shape`
+  # is `claim_calculator.shape` and the calculator's `today:` defaults to `Budget#today` —
+  # `category&.today || Date.current` — so asking it here would put the AMBIENT clock inside a form
+  # hint, on a record whose owner the user has not chosen yet. A sentence about the amount field must
+  # not depend on the wall clock or on a category being picked first.
+  #
+  # ** WHAT IT COSTS AND WHY IT IS SAFE. ** `#shape` is `:dated` on an anchor, `:building` on
+  # `carries_over`, `:rate` otherwise, and `Budget#shape_must_be_valid` refuses the one pair that
+  # would make the two disagree (an anchor beside `carries_over`). So these two clauses ARE the
+  # shape for every rule that can be saved — pinned example for example against `#claim_shape` in
+  # `budget_page_helper_spec`, which is what stops the two spellings drifting.
   def budget_rule_basis_phrase(budget)
     phrase = budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
     return phrase unless budget.carries_over?

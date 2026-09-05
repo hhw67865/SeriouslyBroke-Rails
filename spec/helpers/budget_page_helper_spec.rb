@@ -105,6 +105,54 @@ RSpec.describe BudgetPageHelper, type: :helper do
 
       expect(helper.budget_rule_basis_phrase(budget)).to eq("a month, builds up")
     end
+
+    # SAVED, on one category: a per-period rate, a monthly rate, a capped fund and a dated bill —
+    # every shape `Budget#shape_must_be_valid` permits. The fund is the item-LESS rule because
+    # `Budget#category_may_hold_one_item_less_rule` allows exactly one and a building rule with an
+    # item is not the category's own lane; the other three take a lane apiece.
+    def every_saved_shape
+      category = create(:category, :expense, :funded)
+      lane = ->(name) { create(:item, category: category, name: name) }
+      [
+        create(:budget, :per_period_rate, category: category, amount: 400, item: lane["Bread"]),
+        create(:budget, :rate, category: category, amount: 260, item: lane["Milk"]),
+        create(:budget, :capped, category: category, amount: 200),
+        create(
+          :budget,
+          category: category,
+          amount: 600,
+          interval_months: 6,
+          anchor_date: Date.new(2026, 3, 1),
+          item: lane["Insurance"]
+        )
+      ]
+    end
+
+    # ** THE HELPER READS THE RAW COLUMNS AND THIS IS WHAT STOPS THE TWO SPELLINGS DRIFTING (fix
+    # wave — LOW-3). ** `Budget#claim_shape` is the app's one door onto §3's three formulas, and the
+    # helper deliberately does not use it: `budgets/_form.html.erb` calls the helper with
+    # `RuleForm#budget`, a `Budget.new` with no category on the new-rule path, and `#claim_shape`
+    # builds a calculator whose `today:` falls back to `Date.current` there — the ambient clock
+    # inside a form hint, on a record whose owner has not been chosen yet.
+    #
+    # SO THE AGREEMENT IS PINNED INSTEAD, over every SAVED shape (`Budget#shape_must_be_valid`
+    # refuses the one pair — an anchor beside `carries_over` — that could make the two disagree, so
+    # these four are all there are). The clause the helper adds is exactly `:building`:
+    #
+    #   per-period rate → :rate     → no clause
+    #   monthly rate    → :rate     → no clause
+    #   capped fund     → :building → "builds up toward $1,200.00"
+    #   dated bill      → :dated    → no clause (the anchor wins, §3.2)
+    it "adds the build-up clause exactly where the rule's claim shape is :building", :aggregate_failures do
+      saved = every_saved_shape
+
+      saved.each do |budget|
+        clause = helper.budget_rule_basis_phrase(budget).include?("builds up")
+
+        expect(clause).to eq(budget.claim_shape == :building), "#{budget.claim_shape} said #{clause}"
+      end
+      expect(saved.map(&:claim_shape)).to eq([:rate, :rate, :building, :dated])
+    end
   end
 
   # ** THE HINT'S SECOND CLAUSE IS GONE WITH THE FORM IT DESCRIBED (spec §7). ** It read "— the
