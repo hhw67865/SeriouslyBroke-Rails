@@ -47,19 +47,39 @@
          data-period-progress="<%= runway.percent %>">
       <div class="absolute inset-y-0 left-0 rounded-full bg-gray-300" style="width: <%= runway.percent %>%;"></div>
 
+      <%# ** TWO MARKS CAN LAND ON ONE DAY, AND BOTH HAVE TO SURVIVE IT (fix round 1 — LOW-3). ** A
+          12px tick drawn at the same `left:` as the 2px today mark covers it completely, and a bill
+          due TODAY is the single most likely day for that to happen — the one afternoon the mark
+          matters most. Two nudges, and neither is a colour trick:
+
+            SAME-DAY TICKS STEP 6px EACH. `nudged_by` counts how many ticks have already been drawn
+              on this day and offsets the next by half its own width, so two bills due on the 24th
+              are two dots rather than one. It is a VIEW concern (pixels, not money), which is why it
+              is counted here rather than carried on `RunwayTick`.
+            TODAY IS DRAWN LAST, ABOVE, WITH A WHITE HALO. Later siblings paint over earlier ones in
+              one stacking context, so the mark moved BELOW the tick loop and takes `z-10` as well —
+              and `ring-1 ring-white` separates it from whatever colour it is standing on. %>
+      <% nudged_by = Hash.new(0) %>
+      <% runway.ticks.each do |tick| %>
+        <% nudge = nudged_by[tick.day_index] %>
+        <% nudged_by[tick.day_index] += 1 %>
+        <%# ** KEYED ON THE RULE, LABELLED SEPARATELY (fix round 1 — LOW-4). ** Two categories may
+            each own an item called "Electric", and a hook keyed on the label answers for both — an
+            ambiguous find in a spec and, worse, two marks a reader cannot tell apart. The id is the
+            identity; the label is what it says. %>
+        <span class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white <%= tick.short? ? "bg-status-danger" : "bg-status-success" %>"
+              style="left: calc(<%= tick.percent %>% + <%= nudge * 6 %>px);"
+              title="<%= number_to_currency(tick.amount) %> <%= tick.label %>"
+              data-tick-mark="<%= tick.line.rule.id %>"
+              data-tick-label="<%= tick.label %>"></span>
+      <% end %>
+
       <%# TODAY, as a mark on the ruler rather than as the end of a fill: what is left of the period
           is the thing the ticks are placed in, so the day itself has to be findable. %>
-      <span class="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-gray-900"
+      <span class="absolute top-1/2 z-10 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-gray-900 ring-1 ring-white"
             style="left: <%= runway.percent %>%;"
             title="Today"
             data-today-mark></span>
-
-      <% runway.ticks.each do |tick| %>
-        <span class="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white <%= tick.short? ? "bg-status-danger" : "bg-status-success" %>"
-              style="left: <%= tick.percent %>%;"
-              title="<%= number_to_currency(tick.amount) %> <%= tick.label %>"
-              data-tick-mark="<%= tick.label %>"></span>
-      <% end %>
     </div>
 
     <%# THE PERIOD'S OWN ENDS, labelled: the ruler is meaningless without them, and "Sep 1 — Sep 30"
@@ -79,7 +99,8 @@
       <ul class="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-4">
         <% runway.ticks.each do |tick| %>
           <li class="flex items-baseline gap-2 text-sm sm:flex-col sm:items-start sm:gap-0"
-              data-tick="<%= tick.label %>">
+              data-tick="<%= tick.line.rule.id %>"
+              data-tick-label="<%= tick.label %>">
             <span class="font-medium tabular-nums <%= tick.short? ? "text-status-danger" : "text-gray-900" %>">
               <%= number_to_currency(tick.amount) %>
             </span>

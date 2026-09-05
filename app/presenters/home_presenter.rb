@@ -874,12 +874,15 @@ class HomePresenter
       .map { |category| UnbudgetedRow.new(category: category, spent: spending.fetch(category.id)) }
   end
 
-  # EVERY RULE'S CLAIM, BY CATEGORY, OFF THE PAGE'S ONE LEDGER. Built once for the whole screen: the
-  # "This period" rows, the trouble strip's over/overdue triggers and the shortfall's give-way walk
-  # are three readings of ONE list, and three lists would be three chances for the strip to name a
-  # category the section below it describes differently.
+  # ONE CATEGORY'S LINES, out of the list below. `fetch` with a default rather than `[]`, because a
+  # category with no rule is a real caller (`#trouble_lines` walks every budgeted category).
   def claim_lines_for(category) = claim_lines.fetch(category.id, [])
 
+  # ** EVERY RULE'S CLAIM, BY CATEGORY, OFF THE PAGE'S ONE LEDGER. ** Built once for the whole screen:
+  # the category blocks, the trouble strip's over/overdue triggers and the shortfall's give-way walk
+  # are three readings of ONE list, and three lists would be three chances for the strip to name a
+  # category the section below it describes differently.
+  #
   # ** `Category.rule_order`, WHICH IS THE APP'S ONE KEY SINCE THE FIX WAVE (LOW-3). ** This sorted
   # by `[item name, id]` — the catch-all first, then the items by name — on the argument that the
   # item-less rule is the category's own envelope and the item-backed ones are exceptions carved out

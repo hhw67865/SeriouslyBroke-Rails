@@ -168,6 +168,75 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_no_css("[data-trouble]")
   end
 
+  # ** THE WHOLE DEAD LIST, OVER ALL FOUR REGIONS, IN ONE EXAMPLE (fix round 1 — LOW-5). ** The two
+  # pins above it and `this_period_spec`'s each covered part of the plan's Global Constraints and a
+  # different part: between them "goal", "fund", "spoken for" and "allocation" were unasserted on
+  # three of the four panels. This walks the list against every region Home owns, on a fixture that
+  # renders all four at once — a shortfall makes the strip appear, and the strip is the panel most
+  # likely to reach for the retired vocabulary because it is the one giving instructions.
+  #
+  # PLANTED: $150 in against a $400 rate rule and a $5,000 goal due next year, so `free` is under and
+  # the strip renders with its give-way walk; the goal is what would have said "goal" or "fund".
+  #
+  # ** SCOPED, AND THE SCOPE IS THE POINT FOR "fund". ** "Fund this account" is the ONBOARDING card's
+  # own button (main-account spec §5) and is a live, correct sentence about a bank account — a
+  # page-wide `/\bfund/i` would fail on it. The four regions are where the RULES are described, and
+  # that is where the word is dead. A word boundary as well, so "funded" and "refund" in a category
+  # name a user typed are not what this example is about.
+  # THE LIST ITSELF, as a method rather than a constant (rubocop's `RSpec/LeakyConstantDeclaration`:
+  # a constant declared in an example group leaks into the whole suite). Each entry is a word the
+  # plan's Global Constraints retired, in the case-insensitive form the rule needs — a substring
+  # match passes over "Available", which is exactly the spelling this app uses.
+  def dead_words
+    [
+      /available/i,
+      /unclaimed/i,
+      /buffer/i,
+      /distribut/i,
+      /allocat/i,
+      /spoken for/i,
+      /set aside/i,
+      /builds up/i,
+      /\bgoal/i,
+      /\bfund\b/i
+    ]
+  end
+
+  # A GOAL ON THE SCREEN, which is the rule that would have said "goal" or "fund": $5,000 by a day
+  # next year, on a category funded a year back.
+  def goal(name, target, priority: 2)
+    category = create(
+      :category,
+      :expense,
+      user: user,
+      name: name,
+      priority: priority,
+      funded_since: Date.current - 1.year
+    )
+    create(
+      :budget,
+      category: category,
+      amount: target,
+      basis: :monthly,
+      interval_months: nil,
+      rule_type: :choice,
+      anchor_date: Date.current + 300.days
+    )
+  end
+
+  it "says none of the retired vocabulary in any of Home's four panels", :aggregate_failures do
+    deposit(150)
+    envelope("Groceries", 400)
+    goal("Vacation", 5_000)
+
+    visit root_path
+
+    expect(page).to have_css("[data-trouble]")
+    ["[data-money]", "[data-runway]", "[data-this-period]", "[data-trouble]"].each do |region|
+      within(region) { dead_words.each { |word| expect(page).to have_no_content(word) } }
+    end
+  end
+
   # ** MONEY IN ANOTHER ACCOUNT IS SHOWN, NEVER SUBTRACTED (two-shapes spec §2, Henry's ruling of
   # 2026-09-05). ** THE SAME FIXTURE with $700 walked over to Ally: the claims are untouched, so
   # `free = 300 − 400` = **−$100.00** and the card says both facts in one sentence — what the rules

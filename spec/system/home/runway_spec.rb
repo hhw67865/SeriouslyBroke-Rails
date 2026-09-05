@@ -15,8 +15,10 @@ require "rails_helper"
 #   * "shows no period bar before a period is declared" → "draws nothing before a period is
 #     declared", asserted against `[data-runway]` — the whole panel is absent, not just its bar.
 #
-# EVERY ASSERTION GOES THROUGH A HOOK: `[data-runway]`, `[data-tick="<name>"]`,
-# `[data-tick-mark="<name>"]`, `[data-today-mark]`, `[data-period-range]`,
+# EVERY ASSERTION GOES THROUGH A HOOK: `[data-runway]`, `[data-tick="<rule id>"]`,
+# `[data-tick-mark="<rule id>"]` (with `[data-tick-label]` beside each — fix round 1, LOW-4: two
+# categories may each own an item called "Electric", and a hook keyed on the LABEL answers for both),
+# `[data-today-mark]`, `[data-period-range]`,
 # `[data-period-progress]`, `[data-period-days-left]`, `[data-pace]` and its three lines
 # (`[data-pace-line]`, `[data-due-total]`, `[data-short-list]`).
 #
@@ -70,6 +72,12 @@ RSpec.describe "Home Runway", type: :system do
   def bill_on_item(category, name, amount:, due:)
     bill(category, amount: amount, due: due, item: create(:item, category: category, name: name))
   end
+
+  # THE TWO HOOKS, FOUND BY THE RULE THAT OWNS THEM. Both take the `Budget` the fixture helpers
+  # return, so no example in this file can be satisfied by another rule's mark.
+  def tick(rule) = find("[data-tick='#{rule.id}']")
+
+  def tick_mark(rule) = find("[data-tick-mark='#{rule.id}']")
 
   def deposit(amount)
     category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
@@ -131,13 +139,13 @@ RSpec.describe "Home Runway", type: :system do
   # it.
   it "marks a day money is needed on and says it is ready", :aggregate_failures do
     deposit(1_000)
-    bill(holder("Utilities"), amount: 120, due: Date.new(2026, 8, 24))
+    rule = bill(holder("Utilities"), amount: 120, due: Date.new(2026, 8, 24))
 
     travel_to(today) { visit root_path }
 
-    expect(page).to have_css("[data-tick-mark='Utilities'][style*='79%']")
-    expect(page).to have_css("[data-tick='Utilities']", text: "$120.00")
-    expect(page).to have_css("[data-tick='Utilities']", text: "ready")
+    expect(tick_mark(rule)[:style]).to include("79%")
+    expect(tick_mark(rule)["data-tick-label"]).to eq("Utilities")
+    expect(tick(rule)).to have_content("$120.00").and have_content("ready")
     expect(page).to have_css("[data-due-total]", text: "$120.00 due before Aug 27")
     expect(page).to have_no_css("[data-short-list]")
   end
@@ -147,12 +155,13 @@ RSpec.describe "Home Runway", type: :system do
   # adjustment dated inside the period, so the gap is **$40.00**.
   it "names a rule whose money is not there for the day", :aggregate_failures do
     deposit(1_000)
-    set_aside(bill_on_item(holder("Utilities"), "Electric", amount: 120, due: Date.new(2026, 8, 24)), -40)
+    rule = bill_on_item(holder("Utilities"), "Electric", amount: 120, due: Date.new(2026, 8, 24))
+    set_aside(rule, -40)
 
     travel_to(today) { visit root_path }
 
-    expect(page).to have_css("[data-tick-mark='Electric'].bg-status-danger")
-    expect(page).to have_css("[data-tick='Electric']", text: "$40.00 short")
+    expect(tick_mark(rule)[:class]).to include("bg-status-danger")
+    expect(tick(rule)).to have_content("$40.00 short")
     expect(page).to have_css("[data-short-list]", text: "Electric is $40.00 short")
   end
 
@@ -170,6 +179,62 @@ RSpec.describe "Home Runway", type: :system do
     expect(page).to have_no_css("[data-tick-mark]")
     expect(page).to have_no_css("[data-due-total]")
     expect(page).to have_css("[data-pace-line]")
+  end
+
+  # ── ** TWO MARKS ON ONE DAY (fix round 1 — LOW-3/LOW-4) ** ────────────────────────────────────
+
+  # ** A BILL DUE TODAY PUTS A 12px TICK EXACTLY WHERE THE 2px TODAY MARK IS. ** Aug 20 is day 7 of
+  # 14, so both sit at `round(7 ÷ 14 × 100)` = 50% — the one afternoon the mark matters most, and the
+  # afternoon it was invisible before this round. The mark is drawn LAST (a later sibling paints over
+  # an earlier one) with `z-10` and a white ring, and the geometry says the two really do overlap:
+  # the mark's centre falls inside the tick's rect, which is the state a "fix" that simply moved the
+  # mark aside would fail.
+  it "keeps today's mark visible under a tick due today", :aggregate_failures do
+    deposit(1_000)
+    rule = bill(holder("Utilities"), amount: 120, due: today)
+
+    travel_to(today) { visit root_path }
+
+    mark = find("[data-today-mark]").native.rect
+    dot = tick_mark(rule).native.rect
+
+    expect(mark.x + (mark.width / 2)).to be_between(dot.x, dot.x + dot.width)
+    # DRAWN AFTER THE TICK, AND ABOVE IT: the sibling combinator is document order, which is what
+    # decides the paint order inside one stacking context, and `z-10` is what decides it anyway.
+    expect(page).to have_css("[data-tick-mark] ~ [data-today-mark].z-10")
+  end
+
+  # ** TWO BILLS DUE ON ONE DAY ARE TWO DOTS. ** Both fall on Aug 24, so both are placed at the same
+  # percent; the second is nudged 6px — half its own width — so neither is hidden by the other.
+  # PINNED ON x, because a `left:` that ignored the nudge would put them at the same place and still
+  # render two elements.
+  it "nudges a second tick that falls on the same day", :aggregate_failures do
+    deposit(1_000)
+    utilities = holder("Utilities")
+    electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
+    water = bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 24))
+
+    travel_to(today) { visit root_path }
+
+    expect(tick_mark(water).native.rect.x - tick_mark(electric).native.rect.x).to eq(6)
+  end
+
+  # ** TWO ITEMS WITH ONE NAME, IN TWO CATEGORIES (LOW-4). ** "Electric" is an ordinary item name and
+  # nothing stops two categories owning one each. Keyed on the label, one hook answered for both —
+  # ambiguous to a spec and indistinguishable to a reader. Keyed on the RULE, each mark is its own,
+  # and the label rides beside it as what it SAYS rather than as what it IS.
+  it "tells two same-named items apart by their rules", :aggregate_failures do
+    deposit(2_000)
+    first = bill_on_item(holder("Utilities"), "Electric", amount: 120, due: Date.new(2026, 8, 24))
+    second = bill_on_item(holder("Workshop", priority: 2), "Electric", amount: 40, due: Date.new(2026, 8, 26))
+
+    travel_to(today) { visit root_path }
+
+    # TWO MARKS AND TWO ROWS carry the label — it is on both halves of a tick — so the count is
+    # asserted on the MARKS, which is the half a shared hook made ambiguous.
+    expect(page).to have_css("[data-tick-mark][data-tick-label='Electric']", count: 2)
+    expect(tick(first)).to have_content("$120.00")
+    expect(tick(second)).to have_content("$40.00")
   end
 
   # ── THE PACE LINE, BOTH SIGNS OF FREE ─────────────────────────────────────────────────────────
@@ -220,15 +285,15 @@ RSpec.describe "Home Runway", type: :system do
     it "keeps every tick's words inside a 375px viewport, one to a line", :aggregate_failures do
       deposit(1_000)
       utilities = holder("Utilities")
-      bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
-      bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 26))
+      electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
+      water = bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 26))
 
       travel_to(today) { visit root_path }
 
-      expect(page).to have_css("[data-tick='Electric']", text: "$120.00")
+      expect(tick(electric)).to have_content("$120.00")
 
-      first = page.find("[data-tick='Electric']").native.rect
-      second = page.find("[data-tick='Water']").native.rect
+      first = tick(electric).native.rect
+      second = tick(water).native.rect
 
       # THE SECOND TICK IS BELOW THE FIRST (they stack) and its right edge is inside the viewport —
       # the two facts a row of labels along a rail fails at this width.

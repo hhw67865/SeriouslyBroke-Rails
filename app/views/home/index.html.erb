@@ -37,8 +37,9 @@
   <p class="text-sm text-gray-600" data-give-way>
     When the money runs short, choices give way first, then usage, and bills last — which is the
     order above.
-    <%= link_to "Change what a category asks for on the Budget page", budget_page_path,
-                class: "text-status-info hover:underline" %>
+    <%# ON ONE LINE DELIBERATELY: `rubocop-erb`'s autocorrect breaks a multi-line `link_to` in an ERB
+        tag onto a raw newline mid-argument-list, which it then re-breaks on every run. %>
+    <%= link_to "Change what a category asks for on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
   </p>
 
   <%= render "accounts_line", presenter: @presenter %>

@@ -651,7 +651,8 @@ RSpec.describe "Home Trouble", type: :system do
 
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
   #
-  # A TRUE 375px LAYOUT VIEWPORT via CDP — `hero_spec.rb`'s mechanism, copied deliberately: Chrome
+  # A TRUE 375px LAYOUT VIEWPORT via CDP — `money_spec.rb`'s mechanism (`hero_spec.rb` until the
+  # money column renamed it), copied deliberately: Chrome
   # refuses a headless window narrower than 500px, so `resize_to(375, …)` is really a 500px test.
   # No `evaluate_script` anywhere in the example, for that file's measured reason: Selenium's own
   # geometry says what this example is about without running a line of JS.

@@ -920,6 +920,18 @@ RSpec.describe HomePresenter do
       other.troubles
       other.uncovered_claims
       other.uncovered_remainder
+      read_the_foot_of_the_page(other)
+    end
+
+    # ** THE ACCOUNTS LINE AND THE ONBOARDING CARDS, WHICH THE PIN DID NOT WALK (fix round 1 —
+    # LOW-1). ** `index.html.erb` calls `#onboarding_accounts` on every render and
+    # `_accounts_line.html.erb` calls `#collapsed_accounts`; both go through `#onboarding?` to
+    # `#awaiting_opening_balance?`, which runs `Category.opening_balance.exists?` — a real statement
+    # that no example in this block was counting. A reader the pin never calls is a reader free to
+    # open a ledger of its own without either figure moving, which is the whole point of the block.
+    def read_the_foot_of_the_page(other)
+      other.collapsed_accounts
+      other.onboarding_accounts
     end
 
     # THE SECOND COUNT IS THE ONE THAT PINS THE DESIGN: every figure on this screen is composed from
@@ -936,7 +948,7 @@ RSpec.describe HomePresenter do
       expect(count_statements { read_the_screen }).to eq(0)
     end
 
-    # FOURTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
+    # FIFTEEN, AND EACH ONE IS NAMED — a bare number is a pin nobody can maintain:
     #
     #    1-2. `AccountLedger#entry_side`'s income and expense SUMs — the pot's own term, memoised in
     #         that class (it ran three times over before, once for the hero's figure, once inside
@@ -954,13 +966,22 @@ RSpec.describe HomePresenter do
     #         `#unruled_holders` partitions them.
     #     13. `#unbudgeted_spending_this_period` — the entry sum read for its NULL answer.
     #     14. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
+    #     15. `Category.opening_balance.exists?` — onboarding step 3's latch, reached through
+    #         `#collapsed_accounts` / `#onboarding_accounts` (the accounts line and the cards under
+    #         it). ONE statement however many accounts the user has: `#opening_balance_recorded?` is
+    #         memoised with `defined?`, and every account but main is answered `false` by the first
+    #         half of `#awaiting_opening_balance?` before the latch is ever asked.
     #
     # ** NOTHING ON THIS LIST IS THE RUNWAY OR THE BLOCKS. ** Both are readings of `#claim_lines`,
     # which is lines 5-9 already paid for: a tick is a dated line placed on `#period_progress` (the
     # user's own cadence columns, no query) and a block is `#give_way_order` grouped back. A reader
     # that had opened a ledger of its own would move this number, which is what the pin is for.
     #
-    # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, AND IT IS FOURTEEN SINCE THE BLOCKS (§3). **
+    # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, THEN FOURTEEN WITH THE BLOCKS (§3) — AND IT IS
+    # FIFTEEN AGAIN BECAUSE THE PIN GREW A READER, NOT BECAUSE THE SCREEN DID (fix round 1 — LOW-1).
+    # ** Line 15 was always run by a rendered Home; this block simply never walked the two readers
+    # that reach it. The blocks' own saving (line 15 of the old list, `#holder_spending_this_period`)
+    # is real and unchanged — see the rule-less-holder example below, which is what it costs there.**
     # The three that left first were `Budget.steady_need`'s own — its
     # `for_user(user).includes(:item, category: :user)` re-fetched rules, categories and users this
     # screen already held — and it takes the page's `ledger:` now, so lines 5-7 answer for it. The
@@ -969,14 +990,14 @@ RSpec.describe HomePresenter do
     # is `#holder_spending_this_period`, and it left because its last reader did: a per-CATEGORY
     # spending sum was what `#period_rows` printed, and a per-RULE row reads its own lane off the
     # ledger. It still runs for the one shape that needs it — see the example below.
-    it "costs fourteen statements for a whole render" do
+    it "costs fifteen statements for a whole render" do
       income(2_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 400)
       spend(groceries, 310)
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
 
-      expect(count_statements { read_the_screen }).to eq(14)
+      expect(count_statements { read_the_screen }).to eq(15)
     end
 
     # THE UNBUDGETED FETCH IS CONDITIONAL, and this is what says so: the same screen with nothing
@@ -988,7 +1009,7 @@ RSpec.describe HomePresenter do
       rate(groceries, 400)
       spend(groceries, 310)
 
-      expect(count_statements { read_the_screen }).to eq(13)
+      expect(count_statements { read_the_screen }).to eq(14)
     end
 
     # ** AND THE HOLDER SUM IS CONDITIONAL TOO — THE OTHER DIRECTION OF THE STATEMENT THAT LEFT. **
@@ -1003,7 +1024,7 @@ RSpec.describe HomePresenter do
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
       spend(holder("Car Repairs", priority: 2), 45)
 
-      expect(count_statements { read_the_screen }).to eq(15)
+      expect(count_statements { read_the_screen }).to eq(16)
     end
   end
 
@@ -1079,7 +1100,8 @@ RSpec.describe HomePresenter do
       expect(line).to be_bar
     end
 
-    # ** A ROW PER CATEGORY, A LINE PER RULE — THE RULING (see HomePresenter::PeriodRow). ** A rate
+    # ** A BLOCK PER CATEGORY, A ROW PER RULE — THE RULING (see HomePresenter#category_blocks; it was
+    # `PeriodRow`'s until the blocks replaced it). ** A rate
     # rule beside an item-backed bill cannot honestly print one figure: `spent of rate` and `built up
     # of target` are denominated in different things and summing them would state a number that is
     # true of neither. PLANTED: $400 rate with $150 spent on an UN-ruled item → claim $250; a $600
