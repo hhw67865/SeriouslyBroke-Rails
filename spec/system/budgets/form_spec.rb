@@ -931,5 +931,28 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(radio.x + radio.width).to be <= card.x + card.width
       expect(preview.y).to be > card.y
     end
+
+    # ** THE SENTENCE BREAKS BETWEEN ITS CLAUSES, NOT INSIDE ONE (mobile pass, 2026-09-06). **
+    # "Set aside $___ for [the whole category ▾]" is one wrapping row of five children, and at 375
+    # it broke wherever the width ran out: `Set aside $[___] for` on line one and the select alone
+    # on line two, measured — the preposition orphaned from the thing it points at. `for` and the
+    # select are bound into one full-width span below `sm` now, so the only break available is the
+    # one between the clauses.
+    #
+    # THE SELECT BEING WIDER THAN THE AMOUNT BOX IS WHAT SAYS IT TOOK THE LINE: a select that had
+    # merely wrapped would still be at its own content width beside a hanging word.
+    it "puts the sentence's select on its own line rather than orphaning the word before it", :aggregate_failures do
+      visit new_budget_path(category_id: groceries.id)
+
+      expect(page).to have_field("Amount")
+
+      step = page.find("[data-step='1']").native.rect
+      amount = page.find("#budget_amount").native.rect
+      item = page.find("#budget_item_id").native.rect
+
+      expect(item.y).to be > (amount.y + amount.height) - 1
+      expect(item.width).to be > amount.width
+      expect(item.x + item.width).to be <= step.x + step.width
+    end
   end
 end

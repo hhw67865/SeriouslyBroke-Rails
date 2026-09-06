@@ -36,7 +36,11 @@
     findable: a user who cannot see the top card's ▲ cannot tell "already first" from "the arrows
     stopped working". Grey-500 on a grey-100 fill is 4.2:1, and the FILL rather than a paler glyph
     is what tells it apart from the enabled state, so neither reading depends on colour alone. %>
-<span class="flex items-center gap-1 shrink-0">
+<%# ** STACKED AT 375, SIDE BY SIDE ABOVE IT (mobile pass, 2026-09-06). ** Two 44px targets in a row
+    are 92px of a 343px card, and that width came out of the category's NAME — see the marker on
+    `_category_row`. A column of ▲ over ▼ is 44px wide, spans the row's two lines, and is the
+    direction the arrows mean anyway. %>
+<span class="flex flex-col items-center gap-1 shrink-0 sm:flex-row">
   <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
     <%= button_to glyph,
                   budget_page_reorder_path,

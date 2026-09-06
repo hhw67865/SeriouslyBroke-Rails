@@ -34,8 +34,15 @@
     `draggable="false"` IS LOAD-BEARING. The `<section data-category-row>` this sits inside is
     `draggable="true"` for the reorder, and a text input inside a draggable ancestor loses its
     selection to the drag in Chrome — the whole panel opts out so the fields behave like fields. %>
+<%# ** THE SUMMARY IS A FULL-WIDTH BUTTON AT 375 (mobile pass, 2026-09-06), IN THE SAME SKIN AS THE
+    `Edit` LINK IT SITS UNDER. ** It measured 41×20. `inline-block` STAYS the display at every
+    width and is load-bearing: a `<summary>` whose display is `list-item` draws a disclosure
+    triangle, and `block` would bring it back — the width comes from `w-full`, not from the
+    display. %>
 <details class="mt-2" draggable="false" data-adjust="<%= budget_rule_name(line.rule) %>">
-  <summary class="text-sm text-brand-dark hover:text-brand cursor-pointer inline-block">Adjust</summary>
+  <summary class="inline-block w-full cursor-pointer rounded border border-gray-200 py-2.5 text-center text-sm
+                  text-brand-dark hover:bg-gray-50 sm:w-auto sm:rounded-none sm:border-0 sm:p-0 sm:text-left
+                  sm:hover:bg-transparent sm:hover:text-brand">Adjust</summary>
 
   <%# `max-w-xl` (design pass at 1440): the panel is two short fields and three buttons, and left to
       the row's full width it stretched to the far edge of a 1440px card with two-thirds of it
@@ -87,6 +94,10 @@
         </div>
       </div>
 
+      <%# THE TWO DIRECTIONS SHARE THE LINE AT 375 (mobile pass): `flex-wrap` left them at their
+          label widths — 95 and 100 of 283 — so two thirds of the row under the fields was empty
+          while each button was smaller than the finger pressing it. `flex-1` splits the row; above
+          `sm` they go back to their own widths. %>
       <div class="flex flex-wrap gap-2">
         <%# ** THE WORDS SPLIT ON `#allowance?` AND NOT ON `#rate?` (two-shapes §12's ruling). ** A
             fund arrives every period and is spent from every period, so its deltas are a period
@@ -96,12 +107,12 @@
                        type: :submit,
                        name: "amount_sign",
                        value: "1",
-                       class: "btn btn-primary" %>
+                       class: "btn btn-primary flex-1 sm:flex-none" %>
         <%= button_tag line.allowance? ? "Reduce this period" : "Take back",
                        type: :submit,
                        name: "amount_sign",
                        value: "-1",
-                       class: "btn btn-secondary" %>
+                       class: "btn btn-secondary flex-1 sm:flex-none" %>
       </div>
 
       <%# WHERE THIS RULE COUNTS, IN ITS OWN SHAPE'S WORDS (fix round 2, NEW-5). "It only changes
@@ -131,7 +142,7 @@
             three questions, each labelled. %>
         <%= button_tag "Skip this period (−#{number_to_currency(line.accrued)})",
                        type: :submit,
-                       class: "btn btn-secondary",
+                       class: "btn btn-secondary w-full sm:w-auto",
                        data: { adjust_skip: true } %>
       <% end %>
     <% end %>

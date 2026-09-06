@@ -254,4 +254,40 @@ RSpec.describe "Budget page open category", type: :system do
       expect(page).to have_css("[data-tiles]")
     end
   end
+
+  # ── THE OPEN PANEL ON A PHONE ──────────────────────────────────────────────────────────────────
+  #
+  # A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE — Chrome refuses a headless
+  # window narrower than 500px, so every window-based spelling of this is a 500px test wearing a 375
+  # label. `Emulation.setDeviceMetricsOverride` sets the LAYOUT viewport, which is what CSS media
+  # queries read; the idiom and its measurements are `home/money_spec.rb`'s. Selenium's own geometry
+  # only — a trailing `evaluate_script` is what that file measured as the cause of its own
+  # InvalidSessionIdError.
+  describe "on a narrow screen" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    # ** THE TWO DOORS ONTO A RULE ARE BUTTONS AT 375 (mobile pass, 2026-09-06). ** `Edit` measured
+    # **25×20** and the `Adjust` summary **41×20** — two words, one under the other, as the only way
+    # into a rule's declaration and into this period's money, on the screen where a finger is doing
+    # the pressing. Above `sm` they are the underlined link and the bare summary the desktop column
+    # was designed with; this is the mobile skin, and the widths are what say so.
+    it "gives each rule's Edit and Adjust a full-width button", :aggregate_failures do
+      groceries = holder("Groceries")
+      rate(groceries, 400)
+
+      visit budget_page_path(open: groceries.id)
+
+      rule = find("[data-rule='Groceries']").native.rect
+      edit = find("[data-rule='Groceries'] a", text: "Edit").native.rect
+      adjust = find("[data-adjust='Groceries'] summary").native.rect
+
+      expect([edit.width, adjust.width]).to all(be_within(2).of(rule.width))
+      expect([edit.height, adjust.height]).to all(be >= 40)
+      expect(adjust.y).to be > edit.y
+    end
+  end
 end

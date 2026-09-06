@@ -92,5 +92,7 @@
       shipped as — application.css says in so many words that white on the brand sage fails
       contrast, which is why `.btn-primary` paints sage-700 instead. Caught at the browser: the
       label was barely legible on the rendered button. %>
-  <%= f.button :submit, "Save period and income", class: "btn btn-primary" %>
+  <%# FULL WIDTH ON A PHONE (mobile pass, 2026-09-06): a 192px button under three full-width fields
+      reads as an afterthought, and the thumb is at the bottom of the screen. %>
+  <%= f.button :submit, "Save period and income", class: "btn btn-primary w-full sm:w-auto" %>
 <% end %>

@@ -14,7 +14,7 @@
     `$1,200.00 every 6 months` beside the claim's own figure, which on a dated rule repeated the
     target inside the same sentence; `bill · every 6 months` says the schedule without saying the
     money twice, and the Edit form is one click away for the declaration itself. %>
-<div class="px-4 py-4 space-y-5" data-category-panel="<%= row.name %>">
+<div class="p-4 space-y-5 sm:p-5" data-category-panel="<%= row.name %>">
   <% if row.ruled? %>
     <div data-rules-table>
       <%# THE HEADER ROW IS THE TABLE'S ONLY LABELS, and it is hidden below `sm` with the bar: at
@@ -86,8 +86,20 @@
               <p class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
                 <%# THE ADJUST SUMMARY IS RENDERED BY `_adjust` ITSELF (it is a `<details>`), so this
                     column holds only Edit — the panel opens inline UNDER the row, which is where a
-                    form about one rule belongs and where it has always opened. %>
-                <%= link_to "Edit", edit_budget_path(line.rule), class: "text-brand-dark hover:text-brand underline" %>
+                    form about one rule belongs and where it has always opened.
+
+                    ** A FULL-WIDTH BUTTON AT 375 AND AN UNDERLINED LINK ABOVE IT (mobile pass,
+                    2026-09-06). ** `Edit` measured **25×20**: a four-letter word as the only door
+                    onto a rule's declaration, on the screen where a finger is doing the pressing.
+                    The same class string is on `_adjust`'s summary, because the two sit one under
+                    the other and a pair of controls that differ in shape reads as two kinds of
+                    thing. `inline-block` rather than `block` is deliberate on the summary — see the
+                    marker there — and is kept here so the two are one string. %>
+                <%= link_to "Edit",
+                            edit_budget_path(line.rule),
+                            class: "mt-1 inline-block w-full rounded border border-gray-200 py-2.5 text-center " \
+                                   "text-brand-dark hover:bg-gray-50 sm:mt-0 sm:w-auto sm:rounded-none " \
+                                   "sm:border-0 sm:p-0 sm:text-right sm:underline sm:hover:bg-transparent" %>
               </p>
             </div>
 
@@ -129,8 +141,13 @@
   <% suggestions = presenter.suggestions_for(row.category) %>
   <% hidden = presenter.hidden_suggestions_for(row.category) %>
 
+  <%# ** AT 375 THE BOX BECOMES A BAND (mobile pass, 2026-09-06). ** A bordered card, inside the
+      panel, inside the row's own card is three frames around one sentence — Home's ruling of the
+      same night was no boxes in boxes. `-mx-4` takes it out to the panel's own edges and the side
+      borders and the rounding come off with it, so what is left is a ruled band; above `sm`, where
+      there is width to spare for a frame, it is the card it was. %>
   <% if suggestions.any? %>
-    <div class="rounded border border-gray-200" data-suggestions="<%= row.name %>">
+    <div class="-mx-4 border-y border-gray-200 sm:mx-0 sm:rounded sm:border" data-suggestions="<%= row.name %>">
       <div class="px-4 py-2 border-b border-gray-100 bg-gray-50">
         <h4 class="text-xs font-semibold tracking-wide text-gray-500">Your entries suggest</h4>
       </div>
@@ -146,8 +163,9 @@
       COLLAPSED, NOT ABSENT, and the COUNT is in the summary because the count is the part that has
       to be true whether or not anyone opens it. %>
   <% if hidden.any? %>
-    <details class="rounded border border-gray-200" data-hidden-suggestions="<%= row.name %>">
-      <summary class="px-4 py-2 text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+    <details class="-mx-4 border-y border-gray-200 sm:mx-0 sm:rounded sm:border"
+             data-hidden-suggestions="<%= row.name %>">
+      <summary class="px-4 py-3 text-xs text-gray-500 cursor-pointer hover:text-gray-700 sm:py-2">
         <%= pluralize(hidden.size, "hidden suggestion") %>
       </summary>
       <% hidden.each do |row_hidden| %>
@@ -163,7 +181,7 @@
                           suggestion_dismissal_path(row_hidden.dismissal),
                           method: :delete,
                           form: { draggable: "false" },
-                          class: "btn btn-secondary whitespace-nowrap" %>
+                          class: "btn btn-secondary w-full whitespace-nowrap sm:w-auto" %>
           </div>
         </article>
       <% end %>
@@ -178,7 +196,7 @@
   <div>
     <%= link_to "+ New rule for #{row.name}",
                 new_budget_path(category_id: row.category.id),
-                class: "btn btn-secondary",
+                class: "btn btn-secondary w-full sm:w-auto",
                 draggable: "false",
                 data: { new_rule_for: row.category.id } %>
   </div>

@@ -523,5 +523,25 @@ RSpec.describe "Budget page adjustments", type: :system do
       expect(panel.x + panel.width).to be <= 375
       expect(skip.x + skip.width).to be <= panel.x + panel.width
     end
+
+    # ** THE TWO DIRECTIONS SHARE ONE LINE AND SPLIT IT (mobile pass, 2026-09-06). ** `flex-wrap`
+    # left each button at its label's width — 95 and 100 of the 283px the panel has at 375 — so a
+    # third of the row was empty while each button was smaller than the finger pressing it. They
+    # are `flex-1` below `sm` now: one line, halved, which is also what says the two are a PAIR of
+    # answers to one question rather than a primary and an afterthought.
+    it "splits the two directions across one line at 375", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+      open_category("Groceries")
+      open_adjust("Groceries")
+
+      panel = find("[data-adjust='Groceries']").native.rect
+      top_up = find("[data-adjust='Groceries'] button[value='1']").native.rect
+      reduce = find("[data-adjust='Groceries'] button[value='-1']").native.rect
+
+      expect(reduce.y).to eq(top_up.y)
+      expect(top_up.width).to be_within(2).of(reduce.width)
+      expect(top_up.width).to be > 100
+      expect(reduce.x + reduce.width).to be <= panel.x + panel.width
+    end
   end
 end

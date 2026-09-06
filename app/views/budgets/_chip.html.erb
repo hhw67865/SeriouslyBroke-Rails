@@ -44,12 +44,15 @@
 
   <% if prefill.any? %>
     <div class="shrink-0">
-      <%# THE TWO LABELS ARE THE SERVER'S, on the button, exactly as the entry form's submit carries
+      <%# FULL WIDTH AT 375 (mobile pass, 2026-09-06). Under the chip's own two sentences an 88px
+          button reads as a footnote to them rather than the thing that fills the form in, and it is
+          the one control on the card.
+          THE TWO LABELS ARE THE SERVER'S, on the button, exactly as the entry form's submit carries
           both of its own: the controller chooses between two strings this app wrote rather than
           composing a third in JavaScript. `type="button"`, because a chip must never submit the
           form it is filling in. %>
       <button type="button"
-              class="btn btn-secondary whitespace-nowrap"
+              class="btn btn-secondary w-full whitespace-nowrap sm:w-auto"
               data-action="app--budget--rule-form#useChip"
               data-chip-button
               data-default-label="Use this"

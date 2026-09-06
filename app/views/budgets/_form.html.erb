@@ -118,9 +118,16 @@
           `item_id` IS OWNERSHIP-SCOPED ON THE WAY IN (`BudgetsController#scoped_owners`) on all
           three doors (GET, POST and the preview): a stranger's id would write a rule against THEIR
           spending, so it 404s rather than rendering their item's name here. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="1">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="1">
         <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
 
+        <%# ** THE SENTENCE BREAKS BETWEEN ITS TWO CLAUSES AT 375, NOT INSIDE ONE (mobile pass,
+            2026-09-06). ** `flex-wrap` over five children broke wherever the width ran out, which
+            measured as `Set aside $[___] for` on line one and the select alone on line two — the
+            preposition orphaned from the thing it points at. Binding `for` to the select in one
+            wrapping span makes the only available break the one between the clauses, and the
+            select then takes the line it is on: full width at 375, its own content width above it,
+            where the whole sentence fits on one line as before. %>
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
           <span>Set aside</span>
           <%= f.label :amount, "Amount", class: "sr-only" %>
@@ -133,13 +140,15 @@
                 min: 0,
                 data: { "app--budget--rule-form-target": "amount" } %>
           </span>
-          <span>for</span>
-          <%= f.label :item_id, "Pays", class: "sr-only" %>
-          <%= f.select :item_id,
-              options_from_collection_for_select(category ? category.items.order(:name) : [], :id, :name, rule_form.item_id),
-              { include_blank: "the whole category" },
-              class: "form-select w-auto",
-              data: { "app--budget--rule-form-target": "item" } %>
+          <span class="flex w-full items-center gap-2 sm:w-auto">
+            <span>for</span>
+            <%= f.label :item_id, "Pays", class: "sr-only" %>
+            <%= f.select :item_id,
+                options_from_collection_for_select(category ? category.items.order(:name) : [], :id, :name, rule_form.item_id),
+                { include_blank: "the whole category" },
+                class: "form-select w-full sm:w-auto",
+                data: { "app--budget--rule-form-target": "item" } %>
+          </span>
         </div>
 
         <p class="form-hint">
@@ -213,7 +222,7 @@
           ** THE UNSPENT-MONEY STEP AND ITS TARGET FIELD ARE DELETED (§7). ** A fund IS a dated rule
           whose amount is its target, so "builds up toward $5,000" is written as "$5,000" in step 1
           and "by Jun 1, 2027" here. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="2">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="2">
         <h2 class="text-sm font-semibold text-gray-900">2. When is it needed?</h2>
 
         <% schedules = [
@@ -317,7 +326,7 @@
           an untyped row claims neither "must be paid" nor "up to you", but a form that pre-answered
           the question would be deciding what this person is willing to sacrifice. A proposal DOES
           arrive typed, and its radio is checked. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="3">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="3">
         <h2 class="text-sm font-semibold text-gray-900">3. What kind of rule is this?</h2>
 
         <% type_help = {

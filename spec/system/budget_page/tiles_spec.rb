@@ -510,4 +510,57 @@ RSpec.describe "Budget page tiles", type: :system do
       expect(page).to have_select("How long is a period?", selected: "Biweekly")
     end
   end
+
+  # ── THE THREE TILES ON A PHONE ─────────────────────────────────────────────────────────────────
+  #
+  # A TRUE 375px LAYOUT VIEWPORT, AND CDP IS THE ONLY WAY TO GET ONE. Chrome refuses to make a
+  # headless window narrower than 500px — `resize_to(375, 667)` and `--window-size=375,667` alike
+  # report `width=500`, measured — so every window-based spelling of this is a 500px test wearing a
+  # 375 label. `Emulation.setDeviceMetricsOverride` sets the LAYOUT viewport, which is what CSS
+  # media queries read. The idiom and the measurements behind it are in `home/money_spec.rb`, and
+  # there is no trailing `evaluate_script` in either example below: Selenium's own geometry says
+  # everything these assert, and a trailing JS call is what that file measured as the cause of its
+  # own InvalidSessionIdError.
+  describe "on a narrow screen" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    # ** NEED SPANS, INCOME AND LEFT OVER HALVE THE ROW BENEATH IT (mobile pass, 2026-09-06). **
+    # Stacked one under the other the three tiles measured 362px tall and pushed the FIRST ROW OF
+    # THE CATEGORY LIST to y=659 — off a 667px screen, so a phone opening this page saw three tiles
+    # and no budget. The geometry IS the ruling: need is above both of the others and as wide as the
+    # row; the two below share a top edge, split the width, and the subtraction reads left to right.
+    #
+    # `home/money_spec.rb` pins the same shape on Home's own three tiles, deliberately: one ruling,
+    # two screens.
+    it "spans the need tile and halves the other two inside a 375px viewport", :aggregate_failures do
+      declared_user(2_400)
+      rate(holder("Rent"), 1_000)
+
+      visit budget_page_path
+
+      need, income, leftover = ["need", "income", "leftover"].map { |name| tile(name).native.rect }
+      figure = find("[data-tile='leftover'] [data-tile-figure]").native.rect
+
+      expect(income.y).to be > (need.y + need.height) - 1
+      expect(leftover.y).to eq(income.y)
+      expect(leftover.x).to be > income.x
+      expect([need, leftover].map { |rect| rect.x + rect.width }).to all(be <= 375)
+      expect(figure.x + figure.width).to be <= leftover.x + leftover.width
+    end
+
+    # THE ONE DOOR ONTO THE DECLARATION, AND ON A PHONE IT HAS TO BE PRESSABLE. It measured 42×14 —
+    # a fourteen-pixel target for the only control that can change the period every figure on this
+    # page is divided by.
+    it "gives the income tile's change link a box a finger can hit" do
+      declared_user(2_400)
+
+      visit budget_page_path
+
+      expect(find("[data-declare-link]").native.rect.height).to be >= 40
+    end
+  end
 end

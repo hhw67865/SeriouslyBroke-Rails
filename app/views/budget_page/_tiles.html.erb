@@ -15,12 +15,26 @@
     EVERY FIGURE IS `standing_ask` — a constant of the rules and the grid — and never Σ claims,
     which is this afternoon's answer and would report a different split tomorrow with nothing
     edited. That is also what makes the bands add up to the figure above them. %>
-<section class="grid grid-cols-1 sm:grid-cols-3 gap-3" data-tiles>
+<%# ** AT 375 THE NEED TILE SPANS AND THE OTHER TWO HALVE THE ROW BENEATH IT (mobile pass,
+    2026-09-06). ** Stacked one under the other the three tiles were 362px tall, which put the FIRST
+    ROW OF THE LIST at y=659 — below a 667px screen, so a phone opening the Budget page saw three
+    tiles and no budget. Measured. Halving the second row brings the list back above the fold and
+    costs nothing: the two half tiles hold `$12,500.00` and `$11,674.07` at `text-xl` inside 133px of
+    content box.
+
+    ** THE ORDER IS THE DOM'S AND THAT IS THE POINT. ** Need spans because it is the widest thing on
+    the page — a bar and three labelled bands — and because leaving it beside income would break the
+    reading: income and left over are the two halves of ONE subtraction and belong on one line.
+
+    ** AND THE UNIT DROPS TO ITS OWN LINE BELOW `md`. ** Inline, `$12,500.00 a period` broke at the
+    space the box ran out at — measured as `$12,500.00 a` over `period`, a phrase cut in half under
+    a figure. `block` puts the break where the meaning is: the money, then what it is per. %>
+<section class="grid grid-cols-2 gap-3 sm:grid-cols-3" data-tiles>
   <%# TILE 1 — WHAT THE RULES ASK OF A PERIOD, and what kind of rules they are. %>
-  <div class="bg-white border border-gray-200 rounded px-5 py-4" data-tile="need">
+  <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:p-5" data-tile="need">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your rules need</h2>
     <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
-      <%= number_to_currency(presenter.tiles.need) %> <span class="text-sm font-normal text-gray-500">a period</span>
+      <%= number_to_currency(presenter.tiles.need) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
     </p>
 
     <% if presenter.tiles.segments.any? %>
@@ -54,28 +68,39 @@
   </div>
 
   <%# TILE 2 — WHAT THE USER SAYS THEY BRING IN, and the one door to changing it. %>
-  <div class="bg-white border border-gray-200 rounded px-5 py-4" data-tile="income">
+  <div class="bg-white border border-gray-200 rounded p-4 sm:p-5" data-tile="income">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">You bring in</h2>
     <% if presenter.tiles.declared? %>
       <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
-        <%= number_to_currency(presenter.tiles.income) %> <span class="text-sm font-normal text-gray-500">a period</span>
+        <%= number_to_currency(presenter.tiles.income) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
       </p>
-      <p class="mt-2 text-xs text-gray-500">
-        <span data-tile-cadence><%= presenter.tiles.cadence.humanize %></span> ·
-        <%= link_to "change", budget_page_path(declare: 1), class: "text-brand-dark hover:text-brand underline", data: { declare_link: true } %>
+      <%# ** THE ONE DOOR ONTO THE DECLARATION, AND ON A PHONE IT HAS TO BE PRESSABLE. ** It measured
+          42×14 — a fourteen-pixel target for the only control that can change the period every
+          figure on this page is divided by. `min-h-10` is 40px of box around the same word; the
+          line's own height is unchanged above `sm`, where a pointer does not need it. %>
+      <p class="mt-2 flex flex-wrap items-center gap-1 text-xs text-gray-500">
+        <span data-tile-cadence><%= presenter.tiles.cadence.humanize %></span>
+        <span aria-hidden="true">·</span>
+        <%= link_to "change",
+                    budget_page_path(declare: 1),
+                    class: "inline-flex min-h-10 items-center text-brand-dark hover:text-brand underline sm:min-h-0",
+                    data: { declare_link: true } %>
       </p>
     <% else %>
       <%# NOT YET SAID IS NOT ZERO. Zero is a claim about the user's income; this is the absence of
           one, and the tile invites rather than reporting. %>
       <p class="mt-1 text-sm text-gray-500" data-tile-figure>Not said yet</p>
       <p class="mt-2 text-xs">
-        <%= link_to "Declare your income", budget_page_path(declare: 1), class: "text-brand-dark hover:text-brand underline", data: { declare_link: true } %>
+        <%= link_to "Declare your income",
+                    budget_page_path(declare: 1),
+                    class: "inline-flex min-h-10 items-center text-brand-dark hover:text-brand underline sm:min-h-0",
+                    data: { declare_link: true } %>
       </p>
     <% end %>
   </div>
 
   <%# TILE 3 — THE SUBTRACTION, GREEN WHEN IT FITS AND RED WHEN IT DOES NOT (§4). %>
-  <div class="bg-white border rounded px-5 py-4 <%= presenter.tiles.declared? && !presenter.tiles.fits? ? "border-status-danger" : "border-gray-200" %>"
+  <div class="bg-white border rounded p-4 sm:p-5 <%= presenter.tiles.declared? && !presenter.tiles.fits? ? "border-status-danger" : "border-gray-200" %>"
        data-tile="leftover">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Left over</h2>
     <% if presenter.tiles.declared? %>
@@ -94,7 +119,7 @@
       <% unless presenter.tiles.fits? %>
         <%= link_to("What could you cut?",
                     sacrifice_path,
-                    class: "mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded border " \
+                    class: "mt-3 inline-flex items-center gap-2 px-3 py-2.5 rounded border sm:py-1.5 " \
                            "border-status-danger bg-status-danger-light text-status-danger " \
                            "text-xs font-medium hover:bg-white",
                     data: { sacrifice_link: true }) %>

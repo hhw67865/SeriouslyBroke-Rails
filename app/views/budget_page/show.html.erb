@@ -40,7 +40,7 @@
   <%# THE FORM, ONLY WHEN ASKED FOR — or when a submission was refused, in which case it is holding
       what the user typed and the errors, and hiding it would throw both away. %>
   <% if @presenter.declaring? %>
-    <section class="bg-white border border-gray-200 rounded px-6 py-5" data-declaration>
+    <section class="bg-white border border-gray-200 rounded p-4 sm:p-5" data-declaration>
       <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period and income</h2>
       <%= render "declaration_form", presenter: @presenter %>
     </section>

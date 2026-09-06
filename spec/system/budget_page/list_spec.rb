@@ -247,9 +247,28 @@ RSpec.describe "Budget page list", type: :system do
     end
 
     # §4: "375: tiles stack; rows keep handle · name · dots · claimed". Measured with Selenium's own
-    # geometry rather than with a media-query read, and the tiles' stacking is asserted as three
-    # boxes at three different tops — a `grid-cols-3` that had not collapsed would put them on one.
-    it "stacks the tiles and keeps the row's four parts inside 375px", :aggregate_failures do
+    # geometry rather than with a media-query read.
+    #
+    # ** THE THREE-DIFFERENT-TOPS ASSERTION WAS DELETED HERE AND REPLACED IN `tiles_spec.rb`
+    # (mobile pass, 2026-09-06). ** Three tiles stacked measured 362px, which put the first row of
+    # this list at y=659 — off a 667px screen, so a phone opening the Budget page saw the tiles and
+    # no budget. Need spans the row now and the other two halve the line beneath it, which is a
+    # statement about the tiles and belongs on the tiles' own file; what stays here is what this
+    # file is about — that the row's parts are inside the viewport.
+    # ** THE NAME IS THE LAST THING ON THE ROW THAT MAY BE CUT (mobile pass, 2026-09-06). ** The row
+    # stacked into two lines at 375 but the ▲▼ pair rode on the FIRST of them, and two 44px targets
+    # plus their gaps left 145px for the name: "Miscellaneous Expenses" was clipped by its own
+    # `truncate`, measured on the demo. The arrows are a column of their own now and the name has
+    # the width; `truncate` is `sm:` only, so below that it WRAPS.
+    #
+    # THE WRAP IS WHAT IS ASSERTED, and its spelling is the height of the heading's own box: a
+    # truncated name is exactly one line tall whatever it says, so a `truncate` that came back would
+    # fail this without a screenshot to read. The claim is then measured BELOW the name, which is
+    # the two-line row §4 asks for, and the chevron is measured as a real target.
+    # THE LONGEST NAME ON THE DEMO, which is where the clipping was found.
+    let(:long_name) { "Utilities Monthly (Phone, Housing)" }
+
+    it "keeps the row's four parts inside 375px", :aggregate_failures do
       rate(holder("Groceries"), 400)
 
       visit budget_page_path
@@ -258,10 +277,26 @@ RSpec.describe "Budget page list", type: :system do
       claimed = find("[data-category-row='Groceries'] [data-category-claim]").native.rect
       dots = find("[data-category-row='Groceries'] [data-type-dots]").native.rect
 
-      expect(tiles.map(&:y).uniq.size).to eq(3)
       expect(tiles.map { |rect| rect.x + rect.width }).to all(be <= 375)
       expect(claimed.x + claimed.width).to be <= 375
       expect(dots.x + dots.width).to be <= 375
+    end
+
+    def row_rects(name, *selectors) = selectors.map { |selector| row(name).find(selector).native.rect }
+
+    it "gives a long category name the line and wraps it rather than cutting it", :aggregate_failures do
+      rate(holder(long_name), 400)
+
+      visit budget_page_path
+
+      card = row(long_name).native.rect
+      name, claimed, chevron = row_rects(long_name, "h3", "[data-category-claim]", "[data-category-toggle]")
+
+      expect(name.height).to be > 24
+      expect(name.x + name.width).to be <= card.x + card.width
+      expect(claimed.y).to be > (name.y + name.height) - 1
+      expect(chevron.height).to be >= 40
+      expect(chevron.x + chevron.width).to be <= card.x + card.width
     end
   end
 end

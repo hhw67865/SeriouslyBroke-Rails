@@ -19,7 +19,9 @@
 
     `data-suggestion` is kind AND subject id: a category and a pool may share a name, and
     `Capybara.exact` is unset, so a name-keyed row is one rename away from matching two. %>
-<article class="px-6 py-4 border-b border-gray-100 last:border-b-0" data-suggestion="<%= suggestion_key(suggestion) %>">
+<%# `p-4 sm:p-5` (mobile pass, 2026-09-06): `px-6` spent 48 of 343px on margins inside a box that is
+    already inside the panel, which is inside the row's card. %>
+<article class="p-4 border-b border-gray-100 last:border-b-0 sm:p-5" data-suggestion="<%= suggestion_key(suggestion) %>">
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <div class="text-sm text-gray-700 space-y-1">
       <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>

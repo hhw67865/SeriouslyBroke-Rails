@@ -23,13 +23,33 @@
            data-action="dragstart->app--budget-page--reorder#start
                         dragend->app--budget-page--reorder#finish"
          <% end %>>
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 px-4 py-3">
-    <div class="flex items-center gap-3 min-w-0">
-      <% if row.reorderable? %>
-        <%= render "reorder_controls", group: row, groups: reorderable %>
-      <% end %>
+  <%# ** THE ROW IS A GRID AT 375 AND A FLEX ROW ABOVE IT (mobile pass, 2026-09-06). ** It was
+      `flex-col sm:flex-row`, which stacked the row into two lines — but the ▲▼ pair rode on the
+      FIRST line with the name, and two 44px targets plus their gaps leave 145px for a category
+      name: **"Miscellaneous Expenses" was clipped by its own `truncate`**, measured, and
+      "Utilities Monthly (Phone, Housing)" worse. A name is what a row IS; it is the last thing on
+      it that may be cut.
 
-      <h3 class="text-sm font-semibold text-gray-900 truncate"><%= row.name %></h3>
+      So at 375 the arrows are a COLUMN of their own spanning both lines (stacked ▲ over ▼, which is
+      also the truer spelling of up-and-down), the chevron is a second column spanning both, and the
+      middle column gets the whole remaining width: the name and its dots on line one, what the
+      category claims and its badge on line two. The name WRAPS there rather than truncating —
+      `sm:truncate` keeps the one-line ellipsis on the desktop row, where the columns are real.
+
+      ** THE GRID CLASSES ARE INERT ABOVE `sm`. ** `col-start-*` and `row-span-*` say nothing in a
+      flex container, so `sm:flex` restores the original row exactly, and the horizontal spacing is
+      MARGINS rather than `gap-x` — a `gap-x` would print 12px of empty first column on every
+      rule-less row, which draws no arrows at all. %>
+  <div class="grid grid-cols-[auto_1fr_auto] items-center gap-y-1 px-4 py-3
+              sm:flex sm:items-center sm:justify-between sm:gap-4">
+    <% if row.reorderable? %>
+      <div class="col-start-1 row-span-2 mr-3 sm:mr-0">
+        <%= render "reorder_controls", group: row, groups: reorderable %>
+      </div>
+    <% end %>
+
+    <div class="col-start-2 row-start-1 flex items-center gap-3 min-w-0 sm:flex-1">
+      <h3 class="text-sm font-semibold text-gray-900 sm:truncate"><%= row.name %></h3>
 
       <% if row.ruled? %>
         <span class="text-xs text-gray-500 shrink-0"><%= pluralize(row.rule_count, "rule") %></span>
@@ -51,7 +71,7 @@
       <% end %>
     </div>
 
-    <div class="flex items-center gap-3 shrink-0">
+    <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 sm:row-start-1">
       <%# WHAT THE CATEGORY CLAIMS, or — where no rule claims anything — what has been spent here
           over the suggestion engine's own window. The two are different facts and they are
           deliberately in different registers: a claim is money spoken for, and a rule-less
@@ -76,21 +96,26 @@
           <%= pluralize(row.suggestion_count, "suggestion") %>
         </span>
       <% end %>
-
-      <%# THE CHEVRON IS A LINK, and that is the whole no-JavaScript mechanism: it carries
-          `?open=<id>` on a closed row and bare `/budget` on the open one (see
-          `BudgetPageHelper#category_toggle_path`). `category_list_controller` intercepts it and
-          flips the panels in place. `draggable="false"` so a click on it is a click and not the
-          start of a drag on the card around it. %>
-      <%= link_to category_toggle_path(row),
-                  class: "shrink-0 inline-flex h-8 w-8 items-center justify-center rounded text-gray-500 " \
-                         "hover:bg-gray-100 hover:text-gray-900",
-                  draggable: "false",
-                  aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
-                  data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>
-        <span class="text-xs" aria-hidden="true"><%= row.open? ? "&#9652;".html_safe : "&#9662;".html_safe %></span>
-      <% end %>
     </div>
+
+    <%# THE CHEVRON IS A LINK, and that is the whole no-JavaScript mechanism: it carries
+        `?open=<id>` on a closed row and bare `/budget` on the open one (see
+        `BudgetPageHelper#category_toggle_path`). `category_list_controller` intercepts it and
+        flips the panels in place. `draggable="false"` so a click on it is a click and not the
+        start of a drag on the card around it.
+
+        ** ITS OWN COLUMN AT 375, SPANNING BOTH LINES, AND 40px SQUARE THERE (mobile pass). ** It
+        measured 32×32 — the control that opens the panel, and the smallest target on the row. It
+        stays `h-8` above `sm`, where the row is one line and a pointer is doing the pressing. %>
+    <%= link_to category_toggle_path(row),
+                class: "col-start-3 row-start-1 row-span-2 ml-3 shrink-0 inline-flex h-10 w-10 items-center " \
+                       "justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 " \
+                       "sm:ml-0 sm:h-8 sm:w-8",
+                draggable: "false",
+                aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
+                data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>
+      <span class="text-xs" aria-hidden="true"><%= row.open? ? "&#9652;".html_safe : "&#9662;".html_safe %></span>
+    <% end %>
   </div>
 
   <%# ** EVERY PANEL IS RENDERED AND THE CLOSED ONES ARE `hidden`. ** §4 asks for expand/collapse
