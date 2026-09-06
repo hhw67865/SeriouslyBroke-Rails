@@ -91,6 +91,12 @@ IMMEDIATELY after implementing any front-end change:
 
 This verification ensures changes meet design standards and user requirements.
 
+**The 500px window floor below is a SPEC-suite problem, not a browser-tool one.** The Playwright MCP
+`browser_resize` (and `agent-browser`'s `set viewport`) drives Playwright's own `setViewportSize`,
+which is device-metrics emulation rather than a window resize — measured at 375: `window.innerWidth`
+375, `documentElement.clientWidth` 375, `matchMedia("(min-width: 640px)")` false. So a 375 screenshot
+needs no CDP override; only a Selenium/Capybara system spec does.
+
 ### Browser Login Credentials
 
 When accessing the website through agent-browser, use these credentials:
@@ -148,7 +154,7 @@ Procedure: confirm the machine is quiet; run the file 3× looking only at the fi
 
 ### Narrow-viewport tests: Chrome floors the window at 500px
 
-**Headless Chrome refuses to make a window narrower than 500px.** `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500` — measured — so every window-based spelling of a 375px test in this suite is really a 500px test wearing a 375 label, and a layout that breaks between the two passes. A true mobile layout viewport (the width CSS media queries actually read) needs CDP: `page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false)`. The worked idiom, with the measurements behind it, is in `spec/system/home/hero_spec.rb` — search for `setDeviceMetricsOverride`. Note also that a trailing `evaluate_script` in such an example leaves the session in a state Capybara's teardown does not survive here, which is the first cause above wearing a different last statement; prefer Selenium's own geometry (element rects) over JS for the assertion.
+**Headless Chrome refuses to make a window narrower than 500px.** `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500` — measured — so every window-based spelling of a 375px test in this suite is really a 500px test wearing a 375 label, and a layout that breaks between the two passes. A true mobile layout viewport (the width CSS media queries actually read) needs CDP: `page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false)`. The worked idiom, with the measurements behind it, is in `spec/system/home/money_spec.rb` (it was `hero_spec.rb` until the money column renamed it) — search for `setDeviceMetricsOverride`. Note also that a trailing `evaluate_script` in such an example leaves the session in a state Capybara's teardown does not survive here, which is the first cause above wearing a different last statement; prefer Selenium's own geometry (element rects) over JS for the assertion.
 
 ---
 

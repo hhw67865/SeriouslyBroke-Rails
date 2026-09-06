@@ -14,6 +14,20 @@ cause-established discipline the arm table encodes — every one of the hero's s
 gated on a predicate that establishes its cause. The shortfall arm is the fix apparatus's
 replacement: the figure, the give-way list in reverse priority, and the per-day pace.
 
+**SUPERSEDED further by `2026-09-05-two-shapes-and-the-runway-design.md`** (DELIVERED 2026-09-05),
+which REBUILDS this page. **The hero has TWO arms, not four**, because `free` is no longer capped:
+`free = pot − Σ claims`, so the card says how much of checking is claimed and, separately, how much
+sits elsewhere — `#free_cap_bound?`, `#claims_outrun_the_money?` and `#rest_in_checking?` are all
+deleted, and §7's four-arm table is void. `#anything_claimed?` and `#money_parked_elsewhere?` survive
+as the two gates, and the cause-established discipline this document encodes survives with them:
+both halves of the negative arm are gated, so "you have spent past what you had" is unreachable while
+anything is claimed. **The period-as-progress bar becomes THE RUNWAY** — the same `Progress`, now
+carrying one tick per dated rule due inside the period at its own day, `ready` green or `short` red,
+under a three-sentence pace line (`free ÷ days left`, `Σ due before <period end>`, and the short ones
+named) whose negative-`free` arm is this document's own per-day pace. The spent-of-planned rows
+become CATEGORY BLOCKS, a block per category and a row per rule, in give-way order. The trouble strip
+keeps its place and its arms; its shortfall arm gained "Move some in from your other accounts."
+
 **Status:** DELIVERED 2026-09-03 (`feature/envelope-budgeting`, commits `917ee35..` — see §10 for
 the as-built and the two design calls still open for Henry).
 **Was:** APPROVED in chat (Henry, 2026-09-02) — "the mechanism is right but the UI hurts…

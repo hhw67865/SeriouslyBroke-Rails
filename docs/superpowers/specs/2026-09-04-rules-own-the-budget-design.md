@@ -2,7 +2,30 @@
 
 **Status:** DELIVERED (2026-09-04) — plan in `docs/superpowers/plans/2026-09-04-rules-own-the-budget.md`,
 as built in §10, open questions in §11.
+**SUPERSEDED IN PART by `2026-09-05-two-shapes-and-the-runway-design.md` (DELIVERED 2026-09-05).**
 **Date:** 2026-09-04
+
+> **Read this document as history for one half of what it decided.** One day after it shipped, Henry
+> ruled that build-up is not a thing — *"Build up is just a higher target on a timeline longer than a
+> period"* — and the successor spec retired the shape this one added.
+>
+> **RETIRED, and gone from the schema and the code:** `budgets.carries_over` and
+> `budgets.target_amount` (dropped by `20260906000000_two_shapes`, every `carries_over` row converted
+> to a dated one-off whose `amount` is its target); `ClaimCalculator`'s `:building` shape, `#capped?`
+> and the uncapped arms; `Budget#set_aside_only?` (the `amount = 0` permission) and the
+> `carries_over`/`target_amount` validations and CHECK; `Budget::BUILDS_UP_THE_CATEGORY` + scope +
+> predicate; `Category#building_rule` and `.fund_is_the_whole_category?`; the form's "unspent money"
+> step, its Target field and its Stimulus reveal; the Savings band's building-rule population; the
+> "grows without limit" shape entirely (an emergency fund is now "$10,000 by next September"). §2's
+> eight-column table is SIX columns now, §3's `#shape` reads ONE column, and §4/§5/§6/§9's
+> `carries_over` clauses, the §10.2 `capped?` ruling and the §10.5 `fund_is_the_whole_category?`
+> ruling are all void. **§11's open questions 1 and 3 are closed by retirement** — see §11.
+>
+> **SURVIVING, and still normative:** `budgets.rule_type` (bill / usage / choice) and
+> `Budget::TYPE_RANK`; give-way order keyed on TYPE before priority; `RuleForm` as the rule's one
+> typed door (its WORDS changed — see the successor's §5); targets living on rules rather than on
+> categories, and `categories.target_amount` staying dropped; the per-rule adjustments; every claim
+> formula it inherited from `2026-09-03-computed-claims-design.md`.
 **Builds on:** `2026-09-03-computed-claims-design.md` (DELIVERED). The claim formulas, the
 adjustments, the physical ledger and the screens all survive; this changes WHAT A RULE CAN SAY and
 moves the last budget figure off categories.
@@ -328,24 +351,27 @@ Holiday Gifts — the same total, absorbed by four `choice` rules.
 
 ## 11. Open for Henry
 
-1. **An uncapped building rule grows without limit and nothing warns.** §2.1 row 2 is the emergency
-   fund that "grows for as long as the user keeps it", and that is the declared behaviour — but its
-   claim rises every period for ever, so it eats into `free` indefinitely and no screen says so. A
-   fund nobody has looked at in two years is indistinguishable from one being used. Whether the
-   Budget page should say anything (a "no ceiling" marker, a suggested target) is a design call.
+1. **CLOSED by `2026-09-05-two-shapes-and-the-runway` (DELIVERED) — by retirement.**
+   ~~An uncapped building rule grows without limit and nothing warns.~~ The shape is gone: every rule
+   names a target and a date, the migration REFUSES an uncapped fund by name rather than converting
+   it, and a rule that has finished accruing stops claiming. The residue of the question is the
+   successor's §11.2.3 — an arrived fund goes on claiming its target with nothing prompting the user
+   to raise it.
 2. **Every pre-existing rule is typed `usage`, and only the user can correct it.** §6 step 3's
    default is the widest of the three, and the Budget page prints the label so it is visible — but a
    database of thirty rules arrives with thirty of them claiming to be "a real need whose amount
    moves with how you live", and the give-way order reads that. There is no bulk retype and no
    prompt; the user meets one rule at a time on the edit form.
-3. **An uncapped fund's bar on the entry form's impact card always reads full.** `EntryImpact
-   Presenter#building_target` is nil for a fund that names no ceiling (§2.1 row 2), so the card falls
-   back to `#steady_claim` — `Σ standing_ask`, what the rules ask of ONE period. The numerator is the
-   fund's built-up, which is a walk over EVERY period since it started, so the fraction is ≥ 1 from
-   the second period onward and the bar is pinned at 100% for the life of the fund. Nothing is
-   arithmetically wrong; the two figures are simply denominated in different spans, and there is no
-   honest one-period denominator for a multi-period accrual. The options are a bar that measures the
-   period's own movement instead, or no bar at all on that arm — a design call, not a defect fix.
+3. **CLOSED by `2026-09-05-two-shapes-and-the-runway` (DELIVERED) — by retirement.** There is no
+   uncapped fund left to have the bar: `ClaimCalculator#target` is `amount` for a dated rule and 0
+   for a rate rule, never nil, so the impact card always has a real denominator and
+   `EntryImpactPresenter#building_target` is gone. That presenter's noun is now `envelope` / `bill` /
+   `target`, decided by the dated rules' `rule_type`. The question as it stood: ~~An uncapped fund's
+   bar on the entry form's impact card always reads full.~~ `EntryImpact
+   Presenter#building_target` was nil for a fund that named no ceiling (§2.1 row 2), so the card fell
+   back to `#steady_claim` — `Σ standing_ask`, what the rules ask of ONE period — while the numerator
+   was a walk over EVERY period since the fund started, so the fraction was ≥ 1 from the second period
+   onward and the bar sat at 100% for the life of the fund.
 4. **The migration refuses a legacy anchorless `monthly` rule with `interval_months ≠ 1` after its
    writes rather than at preflight.** The five preflight refusals fire before the first write (§10.6);
    this shape is caught by the post-write restatement of `Budget#shape_must_be_valid` in SQL, which

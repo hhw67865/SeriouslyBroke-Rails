@@ -37,6 +37,18 @@ purpose side stops being a conserved partition: claims are derived, so the old
 `available + Σ holdings == total` identity is replaced by the DEFINITION `free = total − Σ claims`
 (capped at pot as ruled in the answers-first spec §3).
 
+> **SUPERSEDED by `2026-09-05-two-shapes-and-the-runway-design.md` §1/§2 (DELIVERED 2026-09-05):
+> `free = pot − Σ claims`.** Henry's ruling: *"Shouldn't checking show the full number and free to
+> spend is minus the claimed?"* The `total_money` term and the cap are gone, and with them
+> `ClaimLedger#unclaimed` and `#free_cap_bound?`, `HomePresenter#claims_outrun_the_money?` /
+> `#rest_in_checking?` / `#free_cap_bound?`, and the hero's four-arm table (two arms now — how much
+> of checking is claimed, and separately how much sits elsewhere). `#total_money` survives as a
+> different question: money in other accounts is SHOWN, never subtracted from or added to anything.
+> Everything else in this document's model — the claim formulas, the lane partition, the adjustments,
+> the physical ledger — is unchanged. The successor also cuts the rule shapes to two: `:building`,
+> `#capped?` and `Budget#set_aside_only?` are gone, so §3.2's "dateless target" arm and §10.1's
+> ruling 3 below no longer describe a shape the app can hold.
+
 ## 3. How a claim is computed
 
 **One category, one catch-all rule** (ruling, 2026-09-03; Task 1). An ITEM-LESS rule's spending lane
@@ -359,17 +371,23 @@ browsing — reading never writes. Figures, formulas and screenshots:
    rate rule typed `choice` gives way ahead of an item-backed `bill` on the same category.
    `Budget::TYPE_RANK` is the one spelling of `choice → usage → bill`; `HomePresenter#give_way_key`
    is the one place the three terms meet.
-2. **The strip's arm 1 never names money parked elsewhere, though the two can co-occur.** "Your
-   rules claim more than you have" is true when `unclaimed < 0`, and a user in that state may ALSO
-   be holding money outside checking; arm 3's sentence about it is reachable only when the claims do
-   NOT outrun. Whether arm 1 should carry the same clause is a design call.
+2. **CLOSED by `2026-09-05-two-shapes-and-the-runway` (DELIVERED): arm 1 carries the clause.**
+   ~~The strip's arm 1 never names money parked elsewhere, though the two can co-occur.~~ With
+   `free = pot − Σ claims` there are two arms, not four, and the negative one says "Your rules claim
+   $X more than checking holds." followed by **"Move some in from your other accounts."** whenever the
+   other accounts hold money (else "You have spent past what you had."). Both halves are gated on
+   `#anything_claimed?`, and the trouble strip mirrors the hero sentence for sentence. Verified live
+   in the browser at `free = −$898.98` with $800 in a second account.
 3. **CLOSED by `2026-09-04-rules-own-the-budget` (DELIVERED).**
    ~~`Category#saving_toward_a_target?` widens the dashboard's Savings band.~~ The predicate is
-   deleted and `Category#building_rule` answers instead: the band lists the categories whose
-   item-less rule **carries its unspent money over**, capped or not. "Which money is being saved" is
-   a question about the SHAPE of a rule rather than about a figure on a neighbouring record — a
-   goal fed by a real rate rule is on the band because it builds up, and a rate rule beside a figure
-   is not because it does not. `categories.target_amount` is dropped outright.
+   deleted and the answer is a question about the SHAPE of a rule rather than about a figure on a
+   neighbouring record. `categories.target_amount` is dropped outright.
+   **Re-answered by `2026-09-05-two-shapes-and-the-runway` (DELIVERED):** `Category#building_rule` is
+   deleted with the shape it named, and the scope is now **`Budget.saving_toward_a_date`** — anchored,
+   `interval_months IS NULL`, `item_id IS NULL`, and NOT `rule_type: bill`. The lane clause keeps the
+   band single-valued per category (`#savings_row` calls `#sole`); the type clause is the classifier,
+   and both are pinned in both directions off a fixture whose goal and one-off bill have IDENTICAL
+   shape columns, so only the word the user chose separates them.
 4. **The adjust panel's "planned this period" is PRE-delta while the row above it is POST-delta.**
    On a rate rule topped up by $50 the row reads `$0.00 of $450.00` and the panel, an inch below,
    reads `$400.00 planned this period`. Both are labelled and the delta list sits between them, but
@@ -386,14 +404,19 @@ browsing — reading never writes. Figures, formulas and screenshots:
    without asking.** Found live on Ming's Home above five rules claiming $1,668.37. The arm is now
    gated on `#anything_claimed?` and, with claims and parked money both present, names both:
    "$1,668.37 is claimed and more is parked in other accounts." The arm table is pinned in full,
-   including the exact tie (Σ claims == Σ other accounts).
+   including the exact tie (Σ claims == Σ other accounts). *(The four-arm table itself is superseded
+   by `2026-09-05-two-shapes` §2 — two arms now — but the gate survives in both of them.)*
 7. **A settled one-time bill keeps asking until its rule is deleted** (fix wave 2, `233e349`).
    The structural check prices a one-off at its STANDING ask — `amount ÷ periods from the rule's
    start through its due date`, a constant of the rule's shape — so that "your budget doesn't fit
    your income" cannot flip with this afternoon's spending. The cost of that constancy is that a
-   one-off already paid still counts toward `steady_need`; the row beside it reads
-   `$0.00 built up of $600.00`. Whether a fulfilled one-off should retire its standing ask (or
-   its rule) is a design call.
+   one-off already paid still counts toward `steady_need`. **Half-answered by
+   `2026-09-05-two-shapes-and-the-runway` (DELIVERED):** a settled one-off now has a `paid` STATE —
+   `ClaimCalculator#settled?` is public, `#settled_on` names the day, and the row reads `paid Sep 2`
+   rather than `$0.00 built up of $600.00`, with no runway tick, no "short", no "overdue" and no
+   trouble strip line. `#over?` deliberately survives the payment (a $600 bill paid $700 still reads
+   `over by $100.00` — that excess left checking). The STANDING ASK is unchanged, so the structural
+   check still counts a paid one-off, and whether it should retire is still a design call.
 8. **`spec/system/entries/impact_spec.rb` reads the clock lazily at eight sites** and failed once
    in a full-suite run that crossed UTC midnight (CLAUDE.md's third cause in its crossing form —
    the grid slides a day between a fixture and the request). Passes alone, every time. Freezing
