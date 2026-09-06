@@ -119,6 +119,81 @@ RSpec.describe BudgetPageHelper, type: :helper do
     end
   end
 
+  # ---------------------------------------------------------------------------------------------
+  # §5's preview card — the rule said back
+  # ---------------------------------------------------------------------------------------------
+  #
+  # ** A REAL `RulePreview` OVER A REAL RULE, never a double. ** Every sentence below branches on a
+  # shape that `ClaimCalculator` reads off columns `Budget`'s own validations decide are legal, and a
+  # double is free to claim a shape the model would refuse — which is how a card comes to print a
+  # sentence about a rule that cannot exist.
+  describe "the preview sentences" do
+    let(:user) { create(:user, :biweekly) }
+    let(:groceries) { create(:category, :expense, :funded, user: user, name: "Groceries") }
+
+    def preview_of(**columns)
+      budget = Budget.new(category: groceries, **columns)
+      RulePreview.new(RuleForm.new(user, RuleForm.from(budget), budget: budget), user: user)
+    end
+
+    # §5's own copy target, and the bold half is the RULE — who gets how much, how often. The due
+    # date of a repeating rule trails it, because "every 2 months" is the rule and "next due Oct 3"
+    # is where the cycle happens to stand today.
+    it "says a repeating dated rule back with its interval and its next occurrence" do
+      water = build(:item, category: groceries, name: "Water")
+      preview = preview_of(amount: 48.20, basis: :monthly, interval_months: 2, anchor_date: Date.current + 1.month, rule_type: :bill, item: water)
+
+      expect(helper.rule_preview_sentence(preview)).to eq(
+        "<strong>Water gets $48.20 every 2 months</strong>, next due " \
+        "#{(Date.current + 1.month).strftime("%b %-d, %Y")}."
+      )
+    end
+
+    # THE OTHER TWO SHAPES. A one-off's date is INSIDE the bold — the day IS the rule there — and a
+    # rate rule has no day at all.
+    it "says the other two shapes back", :aggregate_failures do
+      rate = preview_of(amount: 400, basis: :per_period, rule_type: :usage)
+      goal = preview_of(amount: 5_000, basis: :monthly, anchor_date: Date.new(2027, 6, 1), rule_type: :choice)
+
+      expect(helper.rule_preview_sentence(rate)).to eq("<strong>Groceries gets $400.00 every period</strong>.")
+      expect(helper.rule_preview_sentence(goal)).to eq("<strong>Groceries gets $5,000.00 by Jun 1, 2027</strong>.")
+    end
+
+    # WHAT BECOMES OF THE MONEY — the one sentence that separates §2's two shapes, and the question
+    # the deleted "Unspent money" radio used to make the user answer.
+    it "says what becomes of the money, per shape", :aggregate_failures do
+      rate = preview_of(amount: 400, basis: :per_period, rule_type: :usage)
+      goal = preview_of(amount: 5_000, basis: :monthly, anchor_date: Date.new(2027, 6, 1), rule_type: :choice)
+
+      expect(helper.rule_preview_holding_sentence(rate)).to start_with("Whatever's unspent resets on ")
+      expect(helper.rule_preview_holding_sentence(goal))
+        .to eq("Each period sets aside its share so the money is there on the day.")
+    end
+
+    # ** WHERE THE RULE SITS IN THE GIVE-WAY ORDER, WHICH IS WHAT THE TYPE IS FOR (§3). ** All three,
+    # because the sentence is the only place on the form that says what choosing one COSTS.
+    it "says which end of the give-way order each type is", :aggregate_failures do
+      expect(helper.rule_preview_type_sentence(preview_of(amount: 90, basis: :per_period, rule_type: :bill)))
+        .to eq("It's a bill, so it's the last thing to give way.")
+      expect(helper.rule_preview_type_sentence(preview_of(amount: 90, basis: :per_period, rule_type: :usage)))
+        .to eq("It's usage, so it gives way after your choices and before your bills.")
+      expect(helper.rule_preview_type_sentence(preview_of(amount: 90, basis: :per_period, rule_type: :choice)))
+        .to eq("It's a choice, so it's the first thing to give way.")
+    end
+
+    # ** THE TWO UNITS, FOR THE ONE ROW WHOSE WORDS DO NOT DESCRIBE ITS OWN COLUMNS (§5's ruling;
+    # this task's carry). ** $260 a month is $120.00 a period on a fortnightly grid, and the second
+    # figure is `Budget#steady_ask`'s — the app's one normaliser — rather than a division written
+    # here. Nil on every other rule, so the line is never a fixture of the card.
+    it "states both units for a monthly rule read back as every period", :aggregate_failures do
+      monthly = create(:budget, :rate, category: groceries, amount: 260, rule_type: :usage)
+      preview = RulePreview.new(RuleForm.new(user, RuleForm.from(monthly), budget: monthly), user: user)
+
+      expect(helper.rule_preview_units(preview)).to eq("$260.00 a month · $120.00 a period on your biweekly grid")
+      expect(helper.rule_preview_units(preview_of(amount: 400, basis: :per_period, rule_type: :usage))).to be_nil
+    end
+  end
+
   # ** `#pool_balance_clause` AND ITS TWO EXAMPLES ARE DELETED (computed-claims spec §6). ** They
   # asserted, over all seven `HoldingStatus` states, that a group said its BALANCE exactly once:
   # the clause `· holds $250.00` printed for the three states whose label named a bill's shortfall

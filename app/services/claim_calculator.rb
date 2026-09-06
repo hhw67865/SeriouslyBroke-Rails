@@ -581,12 +581,28 @@ class ClaimCalculator
   # Pro-rating it would be a second, finer clock beside the period grid — the app has one — and it
   # would make the figure a user sees depend on the hour they clicked Save.
   #
-  # NIL ON EITHER ARM IS SIMPLY ABSENT, not zero: an unsaved rule has no `created_at` to be born on,
-  # and a category with no funding date holds nothing at all — its spending drains available — so
-  # with neither there is no history to walk and the current period is the whole of it.
+  # NIL ON EITHER ARM IS SIMPLY ABSENT, not zero: a category with no funding date holds nothing at
+  # all — its spending drains available — so with neither there is no history to walk and the
+  # current period is the whole of it.
   def accrual_start = [category&.funded_since, rule_born_on].compact.max || today
 
+  # ** AN UNSAVED RULE IS BORN TODAY, AND THAT IS THE RULE FORM'S PREVIEW (two-shapes spec §5). **
+  # This read `nil` for a new record on the reasoning that a rule with no `created_at` has no
+  # birthday, and nothing but the preview ever asks — but nil is not "no history", it is "no LOWER
+  # BOUND", so the walk fell through to the CATEGORY's `funded_since` and priced a rule that does
+  # not exist yet against every period since the category started holding money. Measured: a "$600
+  # by Dec 1" written today on a category funded two years ago has `#standing_ask` divide $600 over
+  # 58 fortnights instead of 6 — $10.34 a period on the preview against the $100.00 the rule would
+  # cost the moment it was saved.
+  #
+  # `today` IS WHAT SAVING WOULD MAKE TRUE, so the preview's arithmetic is the arithmetic the Budget
+  # page will print a second later — which is the whole claim the preview makes ("Home will show …").
+  # It is the calculator's own `today` (the OWNER's day, `User#today`), never `Date.current`.
+  #
+  # NO SAVED ROW REACHES THIS ARM: `#created_at` is stamped by the insert, so a persisted rule always
+  # answers the second line. Nothing about any existing screen moves.
   def rule_born_on
+    return today if rule.new_record?
     return nil if rule.created_at.blank?
 
     user ? user.local_day(rule.created_at) : rule.created_at.to_date

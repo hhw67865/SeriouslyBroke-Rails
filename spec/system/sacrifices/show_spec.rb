@@ -217,7 +217,7 @@ RSpec.describe "Sacrifice view", type: :system do
       within(row(rules[:groceries])) { click_link "Edit the rule" }
 
       expect(page).to have_current_path(edit_budget_path(rules[:groceries]))
-      expect(page).to have_field("Rule Amount")
+      expect(page).to have_field("Amount")
     end
   end
 

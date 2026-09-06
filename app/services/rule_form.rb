@@ -38,9 +38,8 @@
 # ** WHAT THIS CLASS DOES NOT DO IS OWNERSHIP. ** `category_id` and `item_id` arrive off the wire
 # and a stranger's id must 404 rather than 422 — a foreign record the user cannot see is not a form
 # error, it is a record that does not exist for them — so `BudgetsController#scoped_owners` looks
-# both up through `current_user` before this class ever sees them. What the USER is held for here is
-# the two collections the form renders (`#category_options`, `#item_options`); the boundary stays
-# where §7a drew it.
+# both up through `current_user` before this class ever sees them. The two collections this class
+# used to render are deleted with the picker (see below); the boundary stays where §7a drew it.
 #
 # ** `anchor_date` AND `interval_months` ARE REFUSED RATHER THAN LAUNDERED, and the refusal lands
 # under "When is it needed?". ** There is no honest reading of a due date on a per-period rule:
@@ -126,11 +125,19 @@ class RuleForm
   # existing one is handed in so the words are applied to the row the user is editing — including a
   # SHAPE CHANGE, which §4 rules is legal (the claim is computed, so the walk re-runs from the
   # rule's accrual start under the new shape).
+  # ** THE FLAG IS READ AFTER `#assign`, AND IT IS GATED ON THE SCHEDULE THAT SURVIVED THE MERGE. **
+  # It says one thing — "the figure in this box is a MONTH's and this form is about to call it a
+  # PERIOD's" — which stops being true the moment the user answers "When is it needed?" with a date.
+  # Both callers that merge (`BudgetsController#update` and `#preview`) put `RuleForm.from`'s words
+  # UNDER the submission, so a monthly row switched to "By a date" arrived carrying the flag from the
+  # row and a schedule from the user: the note beside the amount, and the preview's two-unit line,
+  # would both have warned about a conversion that is not happening.
   def initialize(user, params = {}, budget: nil)
     @user = user
     @budget = budget || Budget.new
-    @converted_from_monthly = params.to_h.symbolize_keys[:converted_from_monthly].present?
     assign(params)
+    @converted_from_monthly =
+      params.to_h.symbolize_keys[:converted_from_monthly].present? && schedule == "per_period"
     apply_to_budget
   end
 
@@ -198,26 +205,22 @@ class RuleForm
     written
   end
 
-  # The category select on the "new" path: this user's EXPENSE categories, because income lands in
-  # available and is allocated out of it (two-ledger spec §2), so a rule on one would claim money
-  # that category never holds.
-  def category_options = user.categories.expenses.order(:name)
-
-  # EVERY ITEM THE USER COULD POINT A RULE AT, all categories at once and each carrying its own
-  # `data-category-id`. The select is filtered in the browser rather than re-fetched, so choosing a
-  # category re-populates "Pays" with no round trip — and WITHOUT JavaScript the whole list renders
-  # and the server still answers, because `Budget#item_must_belong_to_category` refuses an item from
-  # somewhere else.
+  # ** `#category_options` AND `#item_options` ARE DELETED WITH THE CONTROLS THEY FILLED
+  # (two-shapes spec §5). **
   #
-  # ONE STATEMENT, WHATEVER THE SIZE OF THE ACCOUNT. `User#items` is `has_many through: :categories`,
-  # so `categories` is ALREADY in the join and `merge(Category.expenses)` and the `categories.name`
-  # ordering both reach it — the explicit `.joins(:category)` this used to carry was a second join on
-  # the same table (fix round 1 — L5). Pinned by strict statement equality in
-  # `spec/requests/budgets_spec.rb`, because a select that grew a query per category would look
-  # exactly the same on the page.
-  def item_options
-    user.items.merge(Category.expenses).order("categories.name", :name)
-  end
+  # `#category_options` was the OWNER PICKER — this user's expense categories, offered on a bare
+  # `/budgets/new`. There is no bare `/budgets/new`: every door into the form names the category
+  # (`BudgetsController::NEW_NEEDS_A_CATEGORY`), the page is titled "New rule for Groceries", and a
+  # select beside that title would offer to send the rule somewhere the title does not promise.
+  #
+  # `#item_options` was EVERY item the user owns, rendered at once and filtered in the browser as
+  # the picker moved. With one category in force there is nothing to filter BETWEEN: the select is
+  # `category.items` — one statement, the category's own — and the Stimulus controller loses the
+  # branch that used to hide the other categories' options. What the old list bought (a form that
+  # worked with no JavaScript) is bought more cheaply by not needing the filter at all.
+  #
+  # WHAT THE USER IS STILL HELD FOR is the ownership scoping the CONTROLLER does (`#scoped_owners`)
+  # and the period grid `RulePreview` prices against; the boundary §7a drew has not moved.
 
   delegate :persisted?, to: :budget
 

@@ -130,12 +130,17 @@ RSpec.describe "Budget proposals", type: :request do
       expect(response).to have_http_status(:not_found)
     end
 
-    # `params.expect` raises ParameterMissing on a bare `/budgets/new`, which is how this form is
-    # ordinarily reached — so the absence of the key must be an empty prefill and not a 400.
-    it "still renders the plain form with no prefill at all" do
+    # ** A BARE `/budgets/new` IS NOT A PAGE ANY MORE (two-shapes spec §5), AND WHAT THIS EXAMPLE
+    # PROTECTS SURVIVES THE CHANGE. ** It pinned that the absence of a `budget[…]` key was an empty
+    # prefill rather than `params.expect`'s ParameterMissing 400 — the failure mode of reaching a
+    # form through a door that carries nothing. The door with nothing in it now leads back to the
+    # Budget page, because the form is per category and there is no picker to stand in for one; a
+    # 400 there would still be the bug, and a redirect is not one.
+    it "answers a prefill-less URL with the Budget page rather than a 400", :aggregate_failures do
       get new_budget_path
 
-      expect(response).to have_http_status(:ok)
+      expect(response).to redirect_to(budget_page_path)
+      expect(flash[:alert]).to eq(BudgetsController::NEW_NEEDS_A_CATEGORY)
     end
   end
 

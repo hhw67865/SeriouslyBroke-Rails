@@ -17,9 +17,15 @@
     THE DECLARATION FORM SURVIVES, behind the income tile's "change" — `?declare=1`. It was
     permanently open under a paragraph of prose, which put a three-field settings form in the middle
     of the one screen that is about rules. %>
-<%= page_header(title: "Budget",
-                subtitle: "The rules that claim your money",
-                actions: [standard_action_button(label: "New rule", url: new_budget_path, icon: "plus")]) %>
+<%# ** THE HEADER'S "New rule" BUTTON IS DELETED (two-shapes spec §5). ** It went to a bare
+    `/budgets/new`, whose whole purpose was the owner PICKER — a select asking which category the
+    rule was for. The form is per category now (`/budgets/new?category_id=`), titled "New rule for
+    Groceries", with that category's items in its select and that category's suggestions above step
+    1; there is nothing for a category-less door to open. The door that replaced it is inside each
+    category's own panel, one click from the rules it will sit beside, and it is the same door a
+    suggestion's "Write it →" goes through. `BudgetsController::NEW_NEEDS_A_CATEGORY` turns anyone
+    still holding the old URL back to this page and says so. %>
+<%= page_header(title: "Budget", subtitle: "The rules that claim your money") %>
 
 <div class="space-y-6">
   <%# §3.5'S ONE QUESTION, AT THE TOP OF THE PAGE BECAUSE NOTHING BELOW IT IS TRUE YET. The

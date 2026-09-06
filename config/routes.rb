@@ -71,7 +71,27 @@ Rails.application.routes.draw do
       patch :update_tracked
     end
   end
-  resources :budgets, only: [:new, :create, :edit, :update, :destroy]
+  # ** THE RULE FORM'S PREVIEW FRAME (two-shapes spec §5). ** The form's sticky card says the rule
+  # back in words and in arithmetic, and every figure on it comes off ONE `ClaimCalculator` built on
+  # the UNSAVED rule — so the preview is a SERVER render of the same reader the Budget page and Home
+  # use, refreshed as the blanks change, rather than a second arithmetic written in JavaScript.
+  #
+  # A COLLECTION ROUTE, because the rule it previews may not exist: the new form's submission has no
+  # id to nest under. The rule being EDITED rides as `?id=`, looked up through `Budget.for_user` like
+  # every other member of this controller.
+  #
+  # ** `via: [:post, :patch]` AND THE PATCH ARM IS THE EDIT FORM'S OWN `_method` (this task). ** The
+  # preview is submitted by a button inside the rule form — `formaction`, so the fields it previews
+  # are exactly the fields that would be saved, and a browser with no JavaScript gets the same
+  # preview by pressing it. On the edit path that form carries Rails' `_method=patch` hidden field,
+  # which Rack applies to every POST it makes, so the preview submission arrives as a PATCH. Naming
+  # the second verb is honest about that; the alternative was a second copy of every field in a form
+  # of its own, free to drift from the one the user is filling in.
+  resources :budgets, only: [:new, :create, :edit, :update, :destroy] do
+    collection do
+      match :preview, via: [:post, :patch]
+    end
+  end
 
   # The rules page (spec §8): every funding rule, grouped by the pool it fills. Named
   # `budget_page` rather than taking the bare `budget` name — `budget_path` is already the member

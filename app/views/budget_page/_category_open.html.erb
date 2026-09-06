@@ -171,9 +171,10 @@
   <% end %>
 
   <%# ** ONE BUTTON, AND THE FORM IS ITS OWN PAGE (§4/§5). ** It carries the category, so the form
-      opens knowing what the rule is for and the user never picks an owner out of a select. This is
-      also the only door on the page that is about a category rather than about a rule that exists
-      — the header's "New rule" is the same form with nothing filled in. %>
+      opens knowing what the rule is for and the user never picks an owner out of a select. It is now
+      the ONLY door onto a new rule: the header's category-less "New rule" button is deleted with
+      the picker it existed to open (see `show.html.erb`), because a form titled "New rule for
+      Groceries" has nothing to say when nobody has said Groceries. %>
   <div>
     <%= link_to "+ New rule for #{row.name}",
                 new_budget_path(category_id: row.category.id),

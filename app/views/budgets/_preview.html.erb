@@ -1,0 +1,90 @@
+<%# ** THE RULE SAID BACK, AND THE ARITHMETIC UNDER IT (two-shapes spec §5). ** Local: `preview`
+    (RulePreview).
+
+    §5: "The preview says the rule back … and under it the arithmetic: per period, periods until the
+    date, already built up, 'Home will show …'. It is rendered by the SERVER (a Turbo Frame refreshed
+    on change, reading `ClaimCalculator` on the unsaved rule — one spelling of the per-period
+    figure), so it is never a second arithmetic."
+
+    ** WHY A FRAME AND NOT JAVASCRIPT. ** Every figure here is one some other screen prints about the
+    same rule, and each is the answer of a reader the app already trusts — `#standing_ask` is what
+    the Budget page's tiles sum, and the last row is a `ClaimLine` rendered through Home's own
+    `#when_words` / `#figure_words`. A browser-side copy of any of them would be a second answer to a
+    question this app has spent three specs collapsing to one, and it would be the copy a user
+    comparing this card against the page it links to would catch.
+
+    ** THE CARD RENDERS BEFORE THE FORM IS FINISHED, AND SAYS WHAT IS MISSING. ** A blank is not a
+    refusal — nothing has been submitted — so a half-answered form gets "Pick a date." rather than a
+    422 or an empty box. No calculator is built in that state: a dated rule with no date is not a
+    rule, and `ClaimLine`'s stripe reads a `rule_type` that has not been chosen yet.
+
+    ** ONE CALCULATOR PER RENDER, pinned by `spec/requests/budgets_spec.rb`. ** `RulePreview`
+    memoises it and every member below reads it; nothing here may call `Budget#claim_shape` or
+    `#steady_ask`, both of which build one of their own. %>
+<%= turbo_frame_tag "rule_preview" do %>
+  <div class="bg-white border border-gray-200 rounded p-5 space-y-4" data-preview>
+    <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">What this rule will do</h2>
+
+    <% if preview.ready? %>
+      <div class="text-sm text-gray-700 space-y-2">
+        <p data-preview-sentence><%= rule_preview_sentence(preview) %></p>
+        <p class="text-gray-500" data-preview-holding><%= rule_preview_holding_sentence(preview) %></p>
+        <p class="text-gray-500" data-preview-type><%= rule_preview_type_sentence(preview) %></p>
+
+        <%# THE ONE ROW WHOSE FIGURE IS IN A UNIT THE FORM IS ABOUT TO CHANGE (§5's ruling). Amber,
+            beside the same warning the amount field carries, because the two are one fact said in
+            two registers — what saving does, and what the two numbers are. %>
+        <% if units = rule_preview_units(preview) %>
+          <p class="text-status-warning" data-preview-units><%= units %></p>
+        <% end %>
+      </div>
+
+      <%# THE ARITHMETIC. `tabular-nums` on every figure, the app's rule for money in a column. %>
+      <dl class="border-t border-gray-100 pt-3 space-y-2 text-sm">
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="text-gray-500">Per period</dt>
+          <dd class="tabular-nums text-gray-900 font-medium" data-preview-figure="per_period">
+            <%= number_to_currency(preview.standing_ask) %>
+          </dd>
+        </div>
+
+        <%# ABSENT FOR A RATE RULE, which has no day to count toward — a row reading "Periods until
+            —" would be a blank where a figure belongs. %>
+        <% if preview.periods_left %>
+          <div class="flex items-baseline justify-between gap-3">
+            <dt class="text-gray-500">Periods until <%= rule_preview_date(preview.next_due_on) %></dt>
+            <dd class="tabular-nums text-gray-900" data-preview-figure="periods_left">
+              <%= preview.periods_left %>
+            </dd>
+          </div>
+        <% end %>
+
+        <%# WHAT THE RULE HOLDS. Zero for every rate rule (use-it-or-lose-it accrues nothing) and, on
+            a NEW dated rule, the share this period would land the moment it is saved — which is what
+            "Home will show" says one row down, off the same calculator. %>
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="text-gray-500">Already built up</dt>
+          <dd class="tabular-nums text-gray-900" data-preview-figure="built_up">
+            <%= number_to_currency(preview.built_up) %>
+          </dd>
+        </div>
+
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="text-gray-500">Home will show</dt>
+          <dd class="text-right text-gray-900" data-preview-figure="home">
+            <span class="tabular-nums"><%= figure_words(preview.line) %></span>
+            <% if clause = when_words(preview.line) %>
+              <span class="block text-xs text-gray-500"><%= clause %></span>
+            <% end %>
+          </dd>
+        </div>
+      </dl>
+    <% else %>
+      <ul class="text-sm text-gray-500 space-y-1" data-preview-missing>
+        <% preview.missing.each do |blank| %>
+          <li><%= blank %></li>
+        <% end %>
+      </ul>
+    <% end %>
+  </div>
+<% end %>

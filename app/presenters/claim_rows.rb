@@ -42,6 +42,36 @@ class ClaimRows
     def trouble? = rows.any? { |row| row.trouble? || row.short? }
   end
 
+  # ** ONE RULE'S ROW, OFF ONE CALCULATOR, WITH NO LEDGER — the door the rule form's PREVIEW comes
+  # in by (two-shapes spec §5). ** Every screen in this app builds its rows through a `ClaimLedger`,
+  # which is right for a screen listing rules and impossible for a form previewing a rule that has
+  # not been saved: there is no row for a ledger to fetch. So the seventeen members are assembled
+  # HERE either way, and the preview differs from Home in exactly two arguments — the calculator it
+  # hands in and the (empty) adjustments beside it.
+  #
+  # A CLASS METHOD RATHER THAN A SECOND `ClaimLine.new` IN `RulePreview`. The alternative is the
+  # defect this whole class was hoisted to end: three presenters spelling one row type by hand and
+  # drifting on which noun a figure gets. A row built for the preview and a row built for Home are
+  # the same seventeen answers off the same reader, which is what lets the preview say "Home will
+  # show …" and be believed.
+  def self.line_for(rule, calculator, period_range: nil, adjustments: [])
+    ClaimLine.new(
+      **figures(calculator),
+      **context(rule, calculator, period_range: period_range, adjustments: adjustments)
+    )
+  end
+
+  # ** WHICH PERIOD ROWS ARE READ AGAINST, FOR A CALLER WITH NO `ClaimRows` — the rule form's
+  # preview again. ** The gate is the point: `User#period_containing` falls back to the calendar
+  # month for a user who has declared no cadence, which is the right fallback for a normaliser and a
+  # lie on a card, since "resets Oct 1" would state a boundary the user never set. One spelling, so
+  # the preview and the page it is previewing cannot disagree about whether there IS a period.
+  def self.period_range_for(user, today)
+    return nil if user.period_cadence.blank? || user.period_anchor_date.blank?
+
+    user.period_containing(today)
+  end
+
   attr_reader :ledger, :today
 
   # `categories:` IS THE CALLER'S `Category.in_fill_order` LIST, and it is required only by
@@ -119,12 +149,7 @@ class ClaimRows
   def period_range
     return @period_range if defined?(@period_range)
 
-    @period_range =
-      if user.period_cadence.blank? || user.period_anchor_date.blank?
-        nil
-      else
-        user.period_containing(today)
-      end
+    @period_range = self.class.period_range_for(user, today)
   end
 
   # EVERY CATEGORY A CLAIM LINE CAN BELONG TO, in `Category.in_fill_order`'s own key — the holders,
@@ -143,15 +168,18 @@ class ClaimRows
   def lines = @lines ||= ledger.rules.map { |rule| build_line(rule) }
 
   def build_line(rule)
-    calculator = ledger.calculator_for(rule)
-
-    ClaimLine.new(**figures(calculator), **context(rule, calculator))
+    self.class.line_for(
+      rule,
+      ledger.calculator_for(rule),
+      period_range: period_range,
+      adjustments: @adjustments.fetch(rule.id, [])
+    )
   end
 
   # THE CALCULATOR'S OWN ANSWERS, in one read of one object — a row cannot pair one rule's figure
   # with another's state, which is the whole reason these are members rather than a calculator the
   # row holds on to.
-  def figures(calculator)
+  def self.figures(calculator)
     {
       shape: calculator.shape,
       claim: calculator.claim,
@@ -172,13 +200,13 @@ class ClaimRows
 
   # WHAT THE CALCULATOR CANNOT KNOW: the rule's owner, the page's period window, and the deltas only
   # the Budget page fetches.
-  def context(rule, calculator)
+  def self.context(rule, calculator, period_range:, adjustments:)
     {
       category: rule.category,
       rule: rule,
-      due_this_period: due_this_period?(calculator.next_due_on),
-      resets_on: calculator.rate? ? next_period_opens_on : nil,
-      adjustments: @adjustments.fetch(rule.id, [])
+      due_this_period: due_this_period?(calculator.next_due_on, period_range),
+      resets_on: calculator.rate? ? next_period_opens_on(period_range) : nil,
+      adjustments: adjustments
     }
   end
 
@@ -186,11 +214,15 @@ class ClaimRows
   # boundary (§3.1), so the day is the one after this period's close — `#period_range`'s own last
   # day, never a second calendar. Nil for a dated rule (nothing resets; it has a due date instead)
   # and for a user who has declared no period, where the row simply says one clause fewer.
-  def next_period_opens_on = period_range.nil? ? nil : period_range.last + 1
+  def self.next_period_opens_on(period_range) = period_range.nil? ? nil : period_range.last + 1
 
   # ** IS THE DAY THIS RULE'S MONEY IS NEEDED ON INSIDE THE PERIOD ON THE SCREEN? ** Nil for a user
   # who has declared no period, where the honest answer is false rather than a month nobody set.
-  def due_this_period?(due) = due.present? && period_range.present? && period_range.cover?(due)
+  def self.due_this_period?(due, period_range)
+    due.present? && period_range.present? && period_range.cover?(due)
+  end
+
+  private_class_method :figures, :context, :next_period_opens_on, :due_this_period?
 
   # ONE LINE'S PLACE IN THE GIVE-WAY ORDER. See #give_way_order for what each term is and why.
   def give_way_key(line)

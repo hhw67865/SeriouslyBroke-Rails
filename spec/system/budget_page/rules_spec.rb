@@ -304,13 +304,16 @@ RSpec.describe "Budget page rules", type: :system do
     end
 
     it "opens a form about the category rather than about a pool" do
-      expect(page).to have_content("What Groceries claims each period")
-      expect(page).to have_field("Rule Amount")
+      # ** THE FORM IS ITS OWN PAGE AND IT IS TITLED BY THE RULE (two-shapes spec §5). ** It read
+      # "What Groceries claims each period" — the subtitle of the picker-era form — and the page now
+      # names the rule it opened on, with the category in the breadcrumb above it.
+      expect(page).to have_content("Groceries — edit rule")
+      expect(page).to have_field("Amount")
       expect(page).to have_no_select("Pool")
     end
 
     it "saves the new amount and comes back to the Budget page" do
-      fill_in "Rule Amount", with: "425"
+      fill_in "Amount", with: "425"
       click_button "Update rule"
 
       expect(page).to have_current_path(budget_page_path)

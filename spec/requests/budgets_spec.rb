@@ -16,6 +16,11 @@ require "rails_helper"
 # A request spec rather than a system spec for the pairs a browser cannot compose: a stranger's id,
 # and an unpermitted key. The picker itself is covered in spec/system/budgets/form_spec.rb.
 RSpec.describe "Budgets", type: :request do
+  # THE PREVIEW'S FIGURES ARE PINNED AS THE STRINGS THE CARD PRINTS, which means the spec has to be
+  # able to format money the way `number_to_currency` does — the same helper the view uses, so a
+  # change of currency format cannot make a passing pin describe a different number.
+  include ActionView::Helpers::NumberHelper
+
   let(:user) { create(:user) }
   let(:groceries) { create(:category, :expense, :funded, user: user, name: "Groceries") }
 
@@ -137,15 +142,16 @@ RSpec.describe "Budgets", type: :request do
   # would render THEIR category's name on this user's form, which is the read-shaped half of §7a's
   # leak. Both directions, because a `find` that returned nothing would pass the refusal alone.
   describe "GET /budgets/new?category_id", :aggregate_failures do
-    it "opens on the user's own category with no picker" do
+    it "opens on the user's own category, titled by it and with no picker" do
       get new_budget_path(category_id: groceries.id)
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include("What Groceries claims each period")
+      expect(response.body).to include("New rule for Groceries")
       # NO PICKER: the owner is named by the button that got here, so a SELECT beside it would offer
       # to send the rule somewhere that button did not promise. The hidden field carrying the id
       # stays — that is the form submitting the owner it was opened on.
       expect(response.body).not_to include(%(<select name="budget[category_id]"))
+      expect(response.body).to include(%(name="budget[category_id]" id="budget_category_id"))
     end
 
     it "is a 404 for a category that is not the user's" do
@@ -158,18 +164,54 @@ RSpec.describe "Budgets", type: :request do
     end
   end
 
-  describe "GET /budgets/new — the Pays select" do
-    def item_statements
-      statements = []
+  # ** A CATEGORY IS REQUIRED, AND THE ANSWER IS THE PAGE THE DOORS ARE ON (two-shapes spec §5). **
+  # The owner picker is deleted: the form is titled "New rule for Groceries", its select is that
+  # category's items and its chips are that category's suggestions, so a category-less form has
+  # nothing to render. A 404 would be a lie — the form exists — and a blank picker is the control
+  # this task removed, so the answer is the Budget page and a sentence saying where the door is.
+  describe "GET /budgets/new with no category", :aggregate_failures do
+    it "sends the user to the Budget page and says where the door is" do
+      get new_budget_path
+
+      expect(response).to redirect_to(budget_page_path)
+      expect(flash[:alert]).to eq(BudgetsController::NEW_NEEDS_A_CATEGORY)
+    end
+  end
+
+  # ** WHAT THE FORM PAGE COSTS, NAMED (two-shapes spec §5). ** Ten statements, and every one of them
+  # is here on purpose:
+  #
+  #   1. the user               — Devise, once per request
+  #   2. the category, SCOPED   — `#scoped_owners`, which is what makes a stranger's id a 404
+  #   3. the category, loaded   — `#category_in_force` reading the owner off the record the words
+  #                               were applied to (the id above proved whose it is; this is the row)
+  #   4-9. `SuggestionEngine`   — the chips: the expense categories, their items, the rules, the
+  #                               rules' owners and those owners' users, and the entry history
+  #   10. the category's items  — the "for …" select, ONE statement whatever the size of the account
+  #
+  # THE PREVIEW COSTS NONE OF ITS OWN: a new rule's lanes are `[]` (`RulePreview#lanes`), so the one
+  # calculator on the card runs no query at all.
+  #
+  # BOTH HALVES OF THE PIN ARE STRICT. The absolute figure catches a reader added to the page; the
+  # equality across account sizes catches the thing an absolute figure cannot — a select or a chip
+  # list that grows a statement per category, which would look exactly the same on the page.
+  describe "GET /budgets/new — what the page reads" do
+    # A DECLARED PERIOD, so `SuggestionEngine` actually runs: without a cadence every detector is
+    # suppressed (`#periods` is empty) and the pin would be measuring a page with no chips on it —
+    # exactly the reads it exists to hold flat.
+    before { user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
+
+    def statements
+      captured = []
       recorder = lambda do |_name, _start, _finish, _id, payload|
-        statements << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
+        captured << payload[:sql] unless ["SCHEMA", "TRANSACTION"].include?(payload[:name])
       end
-      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") { get new_budget_path }
-      statements.count { |sql| sql.include?(%("items")) }
+      ActiveSupport::Notifications.subscribed(recorder, "sql.active_record") do
+        get new_budget_path(category_id: groceries.id)
+      end
+      captured
     end
 
-    # STRICT EQUALITY, and the absolute figure beside it: equality alone would be satisfied by a page
-    # that read the items zero times, which is what a select rendered from an empty relation does.
     def stock_two_more_categories
       2.times do |index|
         category = create(:category, :expense, :funded, user: user, name: "Cat #{index}")
@@ -177,16 +219,20 @@ RSpec.describe "Budgets", type: :request do
       end
     end
 
-    it "reads the items once, whatever the size of the account", :aggregate_failures do
+    it "reads the items once and costs the same whatever the size of the account", :aggregate_failures do
       create(:item, category: groceries, name: "Milk")
-      one_category = item_statements
+      # ONE REQUEST FIRST, UNMEASURED: Warden loads the user from the session on the first request of
+      # an example and remembers them, so a measurement taken cold carries a `users` statement the
+      # second one does not — a difference about the session rather than about the page.
+      statements
+      one_category = statements
 
       stock_two_more_categories
-      three_categories = item_statements
+      three_categories = statements
 
       expect([user.categories.count, user.items.count]).to eq([3, 9])
-      expect(three_categories).to eq(one_category)
-      expect(one_category).to eq(1)
+      expect(three_categories.size).to eq(one_category.size)
+      expect(one_category.size).to eq(10)
     end
   end
 
@@ -521,6 +567,195 @@ RSpec.describe "Budgets", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.body).to include("When it is needed does not take a due date")
       expect(rule.reload.anchor_date).to be_nil
+    end
+  end
+
+  # ---------------------------------------------------------------------------------------------
+  # The preview frame (two-shapes spec §5)
+  # ---------------------------------------------------------------------------------------------
+  #
+  # ** THE CARD IS THE SERVER'S, AND ITS FIGURES ARE `ClaimCalculator`'s — WHICH IS THE ONLY THING
+  # WORTH PINNING ABOUT IT. ** §5: "one spelling of the per-period figure … so it is never a second
+  # arithmetic". So every expectation below computes the figure by building the SAME calculator the
+  # preview builds and asserting the rendered string is that answer: a pin against a literal would
+  # pass a preview that agreed with the spec and disagreed with the Budget page.
+  #
+  # A REQUEST SPEC IS ALSO THE BROWSER WITH NO JAVASCRIPT, which is why both responses are here: a
+  # Turbo frame request gets the frame alone (the cheap per-keystroke refresh), and a plain one gets
+  # the whole form page with the card updated (what pressing "Preview" does with no Turbo at all).
+  describe "POST /budgets/preview" do
+    # A DECLARED PERIOD, because the figures this card prints are per PERIOD: without a cadence
+    # `#periods_left` floors at one and the card would be pinned against a grid nobody set.
+    before { user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 2, 6)) }
+
+    let(:dining) { create(:category, :expense, :funded, user: user, name: "Dining Out") }
+
+    # A BRACED HASH FOR THE WORDS, ALWAYS: with `query:` and `headers:` as keywords beside it, a
+    # bare `preview(amount: "400")` would be parsed as keywords and leave the positional empty.
+    def preview(words, query: {}, headers: { "Turbo-Frame" => "rule_preview" })
+      post preview_budgets_path(**query), params: { budget: rule_words(**words) }, headers: headers
+    end
+
+    # THE CALCULATOR THE PREVIEW WILL BUILD, built here the same way: an UNSAVED rule of the shape
+    # the payload describes, with EMPTY lanes (`RulePreview#lanes` — a rule that does not exist has
+    # no spending of its own to read).
+    def calculator_for(**columns)
+      Budget.new(category: dining, **columns).claim_calculator(today: user.today, spending: [], adjustments: [])
+    end
+
+    # THE TWO DATED PAYLOADS, NAMED ONCE. A six-key hash spelled inline is five lines of an example
+    # saying nothing its name does not, and both are previewed by more than one example below.
+    def one_off_words
+      { category_id: dining.id, amount: "600.00", rule_type: "bill", schedule: "by_date", anchor_date: "2026-12-01" }
+    end
+
+    def repeating_words
+      one_off_words.merge(amount: "48.20", repeats: "1", interval_months: "2", anchor_date: "2026-10-03")
+    end
+
+    it "answers in the frame the form's button targets", :aggregate_failures do
+      preview({ category_id: dining.id, amount: "400.00" })
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+    end
+
+    # §2 ROW 1, AND THE PER-PERIOD FIGURE IS THE RATE ITSELF.
+    it "says a per-period rate back, with the calculator's own figure", :aggregate_failures do
+      expected = calculator_for(amount: 400, basis: :per_period, rule_type: :usage)
+
+      preview({ category_id: dining.id, amount: "400.00" })
+
+      expect(expected.standing_ask).to eq(400)
+      expect(response.body).to include("Dining Out gets #{number_to_currency(expected.standing_ask)} every period")
+      expect(response.body).to include("Whatever&#39;s unspent resets on")
+      expect(response.body).to include("It&#39;s usage, so it gives way after your choices and before your bills.")
+    end
+
+    # §2 ROW 3 — a one-off, which is the shape a goal takes too. BOTH figures come off the same
+    # calculator: what it costs a period, and how many periods are left to fill it.
+    it "prices a dated rule at the calculator's ask over the calculator's own count", :aggregate_failures do
+      expected = calculator_for(amount: 600, basis: :monthly, anchor_date: Date.new(2026, 12, 1), rule_type: :bill)
+
+      preview(one_off_words)
+
+      expect(response.body).to include("Dining Out gets #{number_to_currency(600)} by Dec 1, 2026")
+      expect(response.body).to include("It&#39;s a bill, so it&#39;s the last thing to give way.")
+      expect(response.body).to include(number_to_currency(expected.standing_ask))
+      expect(response.body).to match(/data-preview-figure="periods_left">\s*#{expected.periods_left}\s*</)
+    end
+
+    # THE REPEATING ROW SAYS ITS INTERVAL AND WHERE THE CYCLE STANDS — the date is `#next_due_on`,
+    # which rolls on payment rather than on the calendar, so it is the calculator's and not the
+    # column's.
+    it "says a repeating bill back with its interval and its next occurrence", :aggregate_failures do
+      preview(repeating_words)
+
+      expect(response.body).to include("Dining Out gets $48.20 every 2 months")
+      expect(response.body).to include("next due Oct 3, 2026")
+    end
+
+    # ** ONE CALCULATOR PER RENDER (§5, and this task's constraint). ** Two on one card is how the
+    # per-period figure and the row beneath it come to describe different money, and a card
+    # re-rendered on every keystroke is the last place to pay for a second walk.
+    it "builds exactly one calculator" do
+      allow(ClaimCalculator).to receive(:new).and_call_original
+
+      preview(one_off_words)
+
+      expect(ClaimCalculator).to have_received(:new).once
+    end
+
+    # ** A BLANK IS NOT A REFUSAL. ** Nothing has been submitted; the user is mid-sentence. The card
+    # names the blank instead of returning a 422, which is what a form whose preview refreshes on
+    # every keystroke has to do to be usable at all.
+    it "names the missing blank rather than refusing", :aggregate_failures do
+      preview(one_off_words.merge(anchor_date: ""))
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Pick a date.")
+      expect(response.body).not_to include("Per period")
+    end
+
+    it "names an amount that has not been filled in" do
+      preview({ category_id: dining.id, amount: "" })
+
+      expect(response.body).to include("Fill in an amount.")
+    end
+
+    # §7a ON THIS DOOR TOO. The card RENDERS what it is handed — an item's name in its sentence, a
+    # category's in the breadcrumb — so an unscoped id here is the read-shaped half of the same leak
+    # the POST closes, and it would price a rule against a stranger's spending besides.
+    it "is a 404 for a stranger's category" do
+      preview({ category_id: stranger_category.id, amount: "400.00" })
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is a 404 for a stranger's item" do
+      foreign_item = create(:item, category: stranger_category, name: "Their Phone")
+
+      preview({ category_id: dining.id, item_id: foreign_item.id, amount: "400.00" })
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is a 404 for a stranger's rule" do
+      foreign = create(:budget, :rate, category: stranger_category)
+
+      preview({ amount: "400.00" }, query: { id: foreign.id })
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    # ** THE `monthly`-NO-ANCHOR ROW STATES BOTH UNITS (§5's ruling; this task's carry). ** The row
+    # is $260 a MONTH and the form reads it back as "Every period", so saving it unchanged prices it
+    # at $260 a PERIOD — 2.17× on a fortnightly grid. `Budget#steady_ask` is the app's one
+    # normaliser and the card asks it, so the second figure here is the one every other screen would
+    # print for that rule.
+    it "states both units when a monthly rule is being read back as every period", :aggregate_failures do
+      monthly = create(:budget, :rate, category: dining, amount: 260, rule_type: :usage)
+      normalised = monthly.steady_ask(user, today: user.today)
+
+      preview({ amount: "260.0", schedule: "per_period" }, query: { id: monthly.id })
+
+      expect(normalised).to eq(120)
+      expect(response.body).to include("$260.00 a month · #{number_to_currency(normalised)} a period on your biweekly grid")
+    end
+
+    # AND NOT ON A ROW WHOSE WORDS MATCH ITS COLUMNS, or the line would be a fixture of the card.
+    it "says nothing of the sort about a per-period rule" do
+      rate = create(:budget, :per_period_rate, category: dining, amount: 400, rule_type: :usage)
+
+      preview({ amount: "400.0", schedule: "per_period" }, query: { id: rate.id })
+
+      expect(response.body).not_to include("a month ·")
+    end
+
+    # ** THE NO-JAVASCRIPT ANSWER. ** Without Turbo the "Preview" button navigates, so the response
+    # has to be the whole page with the card updated — the same act, one navigation instead of one
+    # frame. The frame is still in it, which is what lets one action serve both.
+    it "renders the whole form page for a request that is not a frame", :aggregate_failures do
+      preview({ category_id: dining.id, amount: "400.00" }, headers: {})
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("New rule for Dining Out")
+      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+    end
+
+    # AN EDIT'S PREVIEW IS MERGED OVER THE RULE'S OWN WORDS, for `#update`'s reason: a submission
+    # naming only an amount must not strip a six-monthly bill of its interval on the card any more
+    # than it may in the database.
+    it "keeps a dated bill's shape when only the amount is previewed", :aggregate_failures do
+      insurance = create(:item, category: dining, name: "Insurance")
+      bill = create(:budget, :recurring, category: dining, amount: 800, rule_type: :bill, item: insurance)
+
+      post preview_budgets_path(id: bill.id),
+           params: { budget: { amount: "900" } },
+           headers: { "Turbo-Frame" => "rule_preview" }
+
+      expect(response.body).to include("Insurance gets $900.00 every 6 months")
+      expect(bill.reload.amount).to eq(800)
     end
   end
 

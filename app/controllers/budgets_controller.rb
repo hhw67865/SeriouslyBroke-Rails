@@ -2,6 +2,19 @@
 
 class BudgetsController < ApplicationController
   before_action :set_budget, only: [:edit, :update, :destroy]
+  before_action :set_previewed_budget, only: [:preview]
+
+  # ** WHY A BARE `/budgets/new` IS NOT A PAGE ANY MORE (two-shapes spec §5). ** The form is
+  # `/budgets/new?category_id=`: every door into it — the category panel's "+ New rule for
+  # Groceries" and a suggestion's "Write it →" — names the category the rule is for, and the page
+  # itself is titled "New rule for Groceries" with the category's own items in its select and the
+  # category's own suggestions above step 1. Without one there is no page to render: the picker that
+  # used to stand in for it is deleted, because a select offering to send the rule somewhere the
+  # button did not promise is the thing §4 moved this form onto a per-category door to end.
+  #
+  # THE ANSWER IS THE BUDGET PAGE, WHICH IS WHERE THE DOORS ARE, and a flash saying so — a 404 would
+  # be a lie (the form exists) and a blank picker would be the control this task deleted.
+  NEW_NEEDS_A_CATEGORY = "Open a category on the Budget page to write a rule for it."
 
   # ** EVERY FIELD THIS FORM MAY SUBMIT, AND THEY ARE THE USER'S WORDS RATHER THAN THE COLUMNS
   # (two-shapes spec §5; rules-own-the-budget §4). ** `basis` is not on the list; `schedule`
@@ -43,15 +56,16 @@ class BudgetsController < ApplicationController
   # goes through the same ownership scoping the POST does — a stranger's `item_id` in a GET would
   # render THEIR item's name on this user's form, which is the read-shaped half of the same leak.
   #
-  # A BARE `/budgets/new` IS A HAND-MADE RULE (Henry's ruling of 2026-08-20), and it opens as a
-  # PER-PERIOD RATE THAT RESETS — `RuleForm::DEFAULT_SCHEDULE`, not a `basis:` assigned here. The
-  # column's own default is `monthly`, which with no interval and no anchor is the one combination
-  # `Budget#shape_must_be_valid` refuses outright, so the default has to be stated somewhere; it is
-  # stated once, on the class that owns the mapping, and a proposal's own `schedule` simply
-  # overwrites it.
+  # THE FORM OPENS AS A PER-PERIOD RATE THAT RESETS — `RuleForm::DEFAULT_SCHEDULE`, not a `basis:`
+  # assigned here. The column's own default is `monthly`, which with no interval and no anchor is the
+  # one combination `Budget#shape_must_be_valid` refuses outright, so the default has to be stated
+  # somewhere; it is stated once, on the class that owns the mapping, and a proposal's own `schedule`
+  # simply overwrites it.
   def new
     @rule_form = RuleForm.new(current_user, prefill_attributes)
-    @owner_picker = prefill_attributes[:category_id].blank?
+    return redirect_to budget_page_path, alert: NEW_NEEDS_A_CATEGORY if category_in_force.blank?
+
+    prepare_page
   end
 
   # GET /budgets/1/edit
@@ -81,6 +95,7 @@ class BudgetsController < ApplicationController
     @current_amount = @budget.amount
     words = RuleForm.from(@budget).merge(prefill_attributes.slice(:amount))
     @rule_form = RuleForm.new(current_user, words, budget: @budget)
+    prepare_page
   end
 
   # POST /budgets
@@ -94,15 +109,13 @@ class BudgetsController < ApplicationController
     if @rule_form.save
       redirect_to budget_page_path, notice: "Budget was successfully created."
     else
-      # THE PICKER SURVIVES A REFUSAL, AND ON EVERY PATH. `category_id` is now whatever the
-      # request carried, so it cannot answer "was this form asking for an owner" the way it can on
-      # the GET — and the honest answer for a refused create is that it may as well be. A suggestion
-      # accept that fails validation (an item already claimed) comes back with the picker
-      # preselected to the category the panel named rather than its name in a grey box: a form that
-      # still says the right owner and now lets it be changed, on a screen the user has just been
-      # refused by. The owner-less create — a bare `/budgets/new` submitted with nothing chosen —
-      # needs the picker outright, since it is the control the refusal is about.
-      @owner_picker = true
+      # ** THE REFUSED FORM COMES BACK ON THE CATEGORY IT WAS OPENED ON. ** The owner is read off the
+      # record the words were applied to rather than off the query string, because on this path the
+      # query string is empty — a submission carries `budget[category_id]` in the form's own hidden
+      # field, already ownership-scoped by `#budget_params`. `#prepare_page` is nil-safe for the one
+      # shape that has no owner at all (a hand-made POST), which `Budget#must_have_an_owner` answers
+      # with a 422 the form prints in its base notification.
+      prepare_page
       render :new, status: :unprocessable_content
     end
   end
@@ -134,8 +147,39 @@ class BudgetsController < ApplicationController
     if @rule_form.save
       redirect_to budget_page_path, notice: "Budget was successfully updated."
     else
+      prepare_page
       render :edit, status: :unprocessable_content
     end
+  end
+
+  # POST/PATCH /budgets/preview
+  #
+  # ** THE FORM'S STICKY CARD, SAID BY THE SERVER (two-shapes spec §5). ** It builds the rule the
+  # blanks currently describe — UNSAVED, through the same `RuleForm` and the same ownership scoping
+  # `#create` uses — and prices it with ONE `ClaimCalculator`, so the per-period figure on the card
+  # is `ClaimCalculator#standing_ask` itself rather than a second arithmetic that could drift from
+  # the page it links to. Nothing is written and nothing is validated: a half-filled form gets the
+  # blanks it is missing (`RulePreview#missing`), never a 422.
+  #
+  # ** TWO RESPONSES, AND THE SECOND IS THE NO-JAVASCRIPT ONE. ** A Turbo frame request gets the
+  # frame alone, which is what makes a refresh-per-keystroke cheap — the chips, the item select and
+  # the suggestion engine behind them are not re-rendered. Anything else gets the WHOLE form page
+  # with the card updated, which is what the "Preview" button does in a browser with no JavaScript
+  # at all: the same act, one navigation instead of one frame.
+  #
+  # `?id=` IS THE RULE BEING EDITED, and `#set_previewed_budget` looks it up through
+  # `Budget.for_user` — so a stranger's rule is the same 404 `#edit` gives, and the preview cannot
+  # be used to read one. The words are merged over the rule's own (`RuleForm.from`) for exactly the
+  # reason `#update` merges them: a submission naming only an amount must not silently re-shape a
+  # six-monthly bill on the card.
+  def preview
+    @rule_form = RuleForm.new(current_user, preview_words, budget: @budget)
+    @preview = RulePreview.new(@rule_form, user: current_user)
+
+    return render partial: "budgets/preview", locals: { preview: @preview } if turbo_frame_request?
+
+    prepare_page
+    render @budget ? :edit : :new
   end
 
   # DELETE /budgets/1
@@ -153,6 +197,76 @@ class BudgetsController < ApplicationController
   # a pre-cutover rule reachable by its own Edit link — died with the column.
   def set_budget
     @budget = Budget.for_user(current_user).find(params[:id])
+  end
+
+  # THE SAME SCOPED LOOKUP FOR THE PREVIEW, whose rule rides as a query parameter rather than in the
+  # path (the route is a collection one, because the rule being previewed may not exist yet). A
+  # stranger's id is the same 404 every other member of this controller gives.
+  #
+  # THE AMOUNT IS READ BEFORE ANYTHING IS ASSIGNED, because `RuleForm` applies the submitted words
+  # to this very record in its constructor — so a reader taken afterwards would be the SUBMITTED
+  # figure wearing the label "Currently".
+  def set_previewed_budget
+    return if params[:id].blank?
+
+    @budget = Budget.for_user(current_user).find(params[:id])
+    @current_amount = @budget.amount
+  end
+
+  # ** WHAT EVERY RENDER OF THIS FORM NEEDS BESIDES THE FORM OBJECT (two-shapes spec §5). ** The
+  # page is titled and breadcrumbed by its CATEGORY, its item select is that category's items, its
+  # chips are that category's suggestions, and its right-hand column is the preview. All four are
+  # set here so that `#new`, `#edit`, a refused `#create`/`#update` and the no-JavaScript `#preview`
+  # render the same page rather than four subsets of it.
+  #
+  # `@preview` IS `||=` BECAUSE `#preview` HAS ALREADY BUILT ONE — one card, one calculator, whatever
+  # brought the request in.
+  def prepare_page
+    @category = category_in_force
+    @preview ||= RulePreview.new(@rule_form, user: current_user)
+    @chips = chips_for(@category)
+  end
+
+  # THE OWNER, OFF THE RECORD THE WORDS HAVE BEEN APPLIED TO — never off the query string. On every
+  # path that reaches this the id has already been through `#scoped_owners` (a GET's prefill, a
+  # POST's payload) or off the row itself (`#set_budget`), so this is a read of an owner already
+  # proven to be the user's rather than a second, weaker check.
+  def category_in_force = @rule_form.budget.category
+
+  # ** THE CHIPS ABOVE STEP 1 — THIS CATEGORY'S SUGGESTIONS, IN THE ENGINE'S OWN ORDER (§5). ** The
+  # same rows the Budget page's open panel prints, rendered as fill-the-blanks chips: the engine has
+  # already MEASURED a rule the user is here to write, so making them re-type it would be asking for
+  # a figure the page is holding.
+  #
+  # ** ON AN EDIT, ONLY THE ONES ABOUT THIS RULE. ** A drift and a dead-rule suggestion name a
+  # `Budget` as their subject; a dated bill names an Item and a rate names the Category, and neither
+  # is about the rule on screen — offering "Water — $48.20 every 2 months" on the Electric rule's
+  # edit form would be a chip that silently re-points what the user opened.
+  def chips_for(category)
+    return [] if category.blank?
+
+    found = SuggestionEngine.new(user: current_user).by_category.fetch(category.id, [])
+    @budget ? found.select { |suggestion| suggestion.subject == @budget } : found
+  end
+
+  # THE WORDS THE PREVIEW IS ABOUT. A submission carries every control on the form, so on the new
+  # path this is simply what was typed; on an edit it is merged over the RULE's own words for
+  # `#update`'s reason — a request naming only an amount must not strip a six-monthly bill of its
+  # interval on the card any more than it may in the database.
+  #
+  # `category_id` IS DROPPED ON THE EDIT PATH, matching `#update_params`: the category is not
+  # writable there, so it must not be previewable there either.
+  #
+  # ** `#scoped_owners` IS ON THIS PATH TOO, AND IT IS THE WHOLE OF §7a's POINT. ** The preview
+  # RENDERS what it is handed — an item's name in a sentence, a category's in the breadcrumb — so an
+  # unscoped id here is the read-shaped half of the same leak the POST closes: `POST /budgets/preview`
+  # with a stranger's `item_id` would price a rule against THEIR spending and print their item's
+  # name back. A stranger's id is a 404, the same answer every other owner on this controller gets.
+  def preview_words
+    submitted = scoped_owners(payload)
+    return submitted if @budget.blank?
+
+    RuleForm.from(@budget).merge(submitted.except(:category_id))
   end
 
   # THE WRITE SIDE OF OWNERSHIP, and it has to be asked here because nothing else asks it.

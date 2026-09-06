@@ -1,26 +1,27 @@
-<%# THE RULES FORM WRITES EVERY SHAPE BY HAND (rules-own-the-budget spec §4).
+<%# ** THE RULE FORM IS ITS OWN PAGE, ON ONE CATEGORY, IN THREE STEPS (two-shapes spec §5). **
 
-    WHAT THIS FORM HAS BEEN, AND WHY THE LAST VERSION HAD TO GO. It was a mode-aware form serving a
-    category CAP and a pool rule at once; then a pool-only rule form with an ENVELOPE half for the
-    accept flow; then a rule on the category that holds the money — and in all three it could reach
-    exactly TWO of the shapes the model allowed. A hand-made rule was always a per-period rate (`basis` rode
-    hidden saying so), and a dated bill could only arrive MEASURED, from the suggestion panel, with
-    its interval and anchor prefilled. "Rules form needs to be able to set the complex rules too,
-    not just the per period catchall" (Henry, 2026-09-04) is the ruling this rewrite encodes.
+    Henry, 2026-09-05: "Expanded should just show all rules and suggestions. The new rule thing
+    should be a form we go to." So this is a page rather than a panel, it is reached at
+    `/budgets/new?category_id=` from the category it is about, and it asks three questions in the
+    order a person answers them:
 
-    THE FIVE CONTROLS: Category · Pays · Type · Amount · When is it needed (with its date and its
-    repeats checkbox). Every one of them renders on BOTH paths except the category, which is
-    read-only on an edit —
-    the page that lists rules groups them BY category, so moving one between categories is a
-    re-parenting that list should own rather than a control buried in one rule's form.
+      1. What is this rule for, and how much?   — "Set aside $___ for [the whole category ▾]"
+      2. When is it needed?                     — Every period · By a date (+ repeats every N months)
+      3. What kind of rule is this?             — Bill · Usage · Choice
 
-    THE SCHEDULE IS EDITABLE ON AN EDIT NOW, and the hint that used to say otherwise ("the schedule
-    itself is already set on this rule") is deleted with the branch that showed it. §4 rules a shape
-    change legal outright: the claim is COMPUTED, so an allowance made into a dated rule simply has
-    the walk re-run from its accrual start under the new shape. Nothing is migrated and nothing is
-    stale.
+    ** THE OWNER PICKER IS DELETED, AND THAT IS THE STRUCTURAL CHANGE (§5). ** Every door into this
+    form names the category — the panel's "+ New rule for Groceries", a suggestion's "Write it →" —
+    so the page is TITLED by it, its item select is that category's items, its chips are that
+    category's suggestions, and `BudgetsController::NEW_NEEDS_A_CATEGORY` turns a bare
+    `/budgets/new` back to the Budget page rather than offering a select that could send the rule
+    somewhere the button did not promise. On the create path the owner rides in ONE hidden field;
+    on an edit it is not on the wire at all (fix round 1 — M1).
 
-    THE FORM SUBMITS WORDS, NOT COLUMNS. `schedule` is the radio and `repeats` the checkbox;
+    ** THE SECOND COLUMN IS THE PREVIEW, AND IT IS THE SERVER'S (§5). ** It says the rule back in
+    words and in arithmetic, off ONE `ClaimCalculator` on the unsaved rule, refreshed into a Turbo
+    Frame as the blanks change — see `_preview.html.erb`. Two columns at ≥1024px, one below.
+
+    THE FORM SUBMITS WORDS, NOT COLUMNS. `schedule` is the radio pair and `repeats` the checkbox;
     `RuleForm` turns them into `basis`, `interval_months` and `anchor_date`, and turns them back for
     this form to render. Nothing here knows that a repeating dated rule is
     `monthly + interval N + anchor`.
@@ -28,319 +29,300 @@
     THE REVEALS ARE AN ENHANCEMENT AND NOT A GATE. Each conditional block renders with `hidden` set
     to the state the CURRENT choice implies, and `rule_form_controller.js` toggles it as the radios
     move — but the `<noscript>` rule below forces every one of them visible, so a browser with no
-    JavaScript gets the whole form and the server answers whatever it submits. The controller CLEARS
-    a field as it hides it (and puts the value back when it returns), which is why `RuleForm` can
-    refuse a due date on a per-period rule rather than laundering it away: with JS that refusal is
-    unreachable, and without JS the message lands under a control that is on screen. %>
+    JavaScript gets the whole form, a "Preview" button that works, and a server that answers whatever
+    it submits. The controller CLEARS a field as it hides it (and puts the value back when it
+    returns), which is why `RuleForm` can refuse a due date on a per-period rule rather than
+    laundering it away. %>
 <% rule_form = @rule_form %>
 <% budget = rule_form.budget %>
-<%# WHETHER THIS FORM IS ASKING WHO OWNS THE RULE. The controller's answer, not a re-derivation:
-    "an owner is already in context" is a fact about how the request arrived (a prefill, a persisted
-    rule) and cannot be read off the record once the picker's own choice has been assigned to it. %>
-<% owner_picker = @owner_picker.present? %>
-<% named_owner = !owner_picker && budget.category.present? %>
-<% subtitle = "What a category claims each period" %>
-<% subtitle = "Pick what this rule is for, and how much it claims each period" if owner_picker %>
-<% subtitle = "What #{budget.category.name} claims each period" if named_owner %>
-<%# "RULE", NOT "BUDGET" (design review M1). The screen this form is reached from calls the thing a
-    RULE in every one of its own words, and the model class keeps its name while the user-facing
-    noun is one word everywhere. %>
-<%= page_header(title: rule_form.persisted? ? "Edit rule" : "New rule", subtitle: subtitle) %>
+<% category = @category %>
+<% chips = @chips || [] %>
+
+<%# THE BREADCRUMB IS THE TRAIL THE USER CAME DOWN (§5): the Budget page, the category whose panel
+    holds the button, and this rule. On an edit the last crumb is the rule's own name, because that
+    is what the user clicked "Edit" on. %>
+<% last_crumb = rule_form.persisted? ? budget_rule_name(budget) : "New rule" %>
+<% title = rule_form.persisted? ? "#{budget_rule_name(budget)} — edit rule" : "New rule" %>
+<% title = "New rule for #{category.name}" if category.present? && !rule_form.persisted? %>
+<%= page_header(
+      title: title,
+      subtitle: "Change any blank. Nothing is saved until you press the button.",
+      breadcrumbs: breadcrumb_trail(["Budget", budget_page_path], *[category&.name].compact, last_crumb)
+    ) %>
 
 <noscript>
   <style>[data-rule-reveal][hidden] { display: block !important; }</style>
 </noscript>
 
-<div class="max-w-2xl mx-auto">
-  <%= simple_form_for rule_form,
-      as: :budget,
-      url: rule_form.persisted? ? budget_path(budget) : budgets_path,
-      method: rule_form.persisted? ? :patch : :post,
-      html: {
-        class: "space-y-6",
-        data: {
-          controller: "app--budget--rule-form",
-          # THE CATEGORY IN FORCE, AS A FACT RATHER THAN AS A FIELD. "Pays" filters by it, and on the
-          # EDIT path there is no longer an input carrying it (fix round 1 — M1: the category is not
-          # writable there, so the form does not submit it). A Stimulus value says the same thing
-          # without putting a writable copy of the owner back on the wire; the picker's own select
-          # overrides it while the user is choosing.
-          "app--budget--rule-form-category-value": rule_form.category_id
-        }
-      } do |f| %>
-    <%= f.error_notification %>
-    <%# ERRORS WITH NOWHERE ELSE TO LAND. simple_form prints an attribute's error under that
-        attribute's input, so an error on a field this form does not RENDER produces a 422 whose
-        only visible text is "please review the problems below". `:base` is lifted here for that
-        reason — an owner-less rule is a fact about the whole record and has no control at all.
-
-        THE OWNER JOINS IT EXACTLY WHEN THE FORM IS NOT ASKING FOR ONE. On the picker path
-        `category_must_be_an_expense` lands under the select the user chose in, which is right; on
-        the EDIT path the category is a read-only box and a hidden field, so the same message would
-        be invisible — and that is the one path the validation exists to close, since `#update` is
-        what `BudgetProposal` never sees. %>
-    <% lifted = rule_form.errors[:base] + (owner_picker ? [] : rule_form.errors[:category_id]) %>
-    <%= f.error_notification message: lifted.to_sentence if lifted.present? %>
-
-    <div class="bg-white shadow-sm rounded border border-gray-100 p-6">
-      <div class="space-y-6">
-        <%# ── 1. CATEGORY ──────────────────────────────────────────────────────────────────────
-            `RuleForm#category_options` is this user's EXPENSE categories, which is both halves of
-            the scoping: the collection answers WHAT KIND of category may own a rule and the
-            association answers WHOSE. A foreign id typed into a submit is refused a second time on
-            the way in — `BudgetsController#scoped_owner` looks `category_id` up through
-            `current_user.categories` and 404s — so this select is the affordance, not the boundary.
-
-            THE BLANK IS OFFERED because "I have not chosen yet" is a real state on a form that opens
-            with nothing chosen, not because a rule may have no owner: `Budget#must_have_a_category`
-            refuses the blank on `:base`, which is where this form renders base errors.
-
-            ** THE READ-ONLY BRANCH SUBMITS NOTHING (fix round 1 — M1). ** It used to carry a hidden
-            `category_id` so the record "kept the owner it arrived with" — but a persisted rule keeps
-            its owner because the ROW has one, and the hidden field's only real effect was to make a
-            re-parent a legal PATCH that no control here could ask for. `#update` does not permit the
-            key at all now. On the CREATE path that names an owner (a suggestion accept) the hidden
-            field stays: there is no row yet, so the form is the only thing that can say who owns it.
-
-            "Pays" still filters by the category in force, which the form element states as a
-            Stimulus VALUE — see the `simple_form_for` call above. %>
-        <% if owner_picker %>
-          <div>
-            <%= f.input :category_id,
-                as: :select,
-                collection: rule_form.category_options,
-                label_method: :name,
-                value_method: :id,
-                include_blank: "Select a category",
-                label: "Category",
-                hint: "The category this rule claims for each period. A rule is one of the two things " \
-                      "that make a category start holding its own money.",
-                input_html: {
-                  data: {
-                    "app--budget--rule-form-target": "category",
-                    action: "change->app--budget--rule-form#refresh"
-                  }
-                } %>
-          </div>
-        <% elsif named_owner %>
-          <div>
-            <label class="form-label">Category</label>
-            <div class="form-input flex items-center bg-gray-50">
-              <%= budget.category.name %>
-            </div>
-            <%= f.hidden_field :category_id unless rule_form.persisted? %>
-          </div>
+<div class="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start">
+  <%# ** THE CONTROLLER IS ON THE COLUMN, NOT ON THE FORM, BECAUSE THE CHIPS ARE ABOVE IT. ** A
+      Stimulus action binds only inside its controller's own element, so a "Use this" button in a
+      chip that sat OUTSIDE the form would never reach `#useChip` — measured: every blank stayed
+      empty and the chip never said it was being used. The column contains both, the form is a
+      TARGET, and every read and every submit goes through that target rather than through
+      `this.element`. The listeners live here too: `input` and `change` bubble out of the form. %>
+  <div class="lg:col-span-2 space-y-6"
+       data-controller="app--budget--rule-form"
+       data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
+    <%# ** THE CHIPS, ABOVE STEP 1 (§5). ** What the entries already suggest for this category, each
+        one able to fill every blank below it. On an edit only the ones about THIS rule are here
+        (`BudgetsController#chips_for`) — a chip about another rule would be a control that silently
+        re-points the one the user opened. %>
+    <% if chips.any? %>
+      <section class="space-y-2" data-chips>
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your entries suggest</h2>
+        <% chips.each do |suggestion| %>
+          <%= render "chip", suggestion: suggestion %>
         <% end %>
+      </section>
+    <% end %>
 
-        <%# ── 2. PAYS ──────────────────────────────────────────────────────────────────────────
-            WHAT THE RULE PAYS FOR: the whole category (the default, and the shape every rate rule
-            has) or ONE of its items. An item-backed rule has a spending lane of its own — the claim
-            reads that item's entries to decide whether the bill has been settled this cycle
-            (`ClaimCalculator#due_on`) — which is what lets a category carry one catch-all rule and a
-            dated bill beside it.
+    <%= simple_form_for rule_form,
+        as: :budget,
+        url: rule_form.persisted? ? budget_path(budget) : budgets_path,
+        method: rule_form.persisted? ? :patch : :post,
+        html: {
+          class: "space-y-6",
+          data: { "app--budget--rule-form-target": "form" }
+        } do |f| %>
+      <%# ERRORS WITH NOWHERE ELSE TO LAND. simple_form prints an attribute's error under that
+          attribute's input, so an error on a field this form does not RENDER produces a 422 whose
+          only visible text is "please review the problems below". `:base` is lifted here for that
+          reason — an owner-less rule is a fact about the whole record and has no control at all,
+          and neither does the category on either path now. %>
+      <%= f.error_notification %>
+      <% lifted = rule_form.errors[:base] + rule_form.errors[:category_id] %>
+      <%= f.error_notification message: lifted.to_sentence if lifted.present? %>
 
-            EVERY ITEM THE USER OWNS IS RENDERED, each stamped with its own category, and the
-            controller HIDES the ones that do not belong to the category in force. Filtering in the
-            browser rather than re-fetching is what makes the category select feel immediate; and
-            because every option is really there, a browser with no JavaScript gets the full list
-            and `Budget#item_must_belong_to_category` refuses the wrong one with a legible 422.
+      <%# ── 1. WHAT IS THIS RULE FOR, AND HOW MUCH? ─────────────────────────────────────────────
+          §5's sentence, with the two blanks inside it: "Set aside $___ for [the whole category ▾]".
+          The labels are there for a screen reader and the sentence is there for everyone else — the
+          words around the controls ARE the question, so a second visible label above each would say
+          it twice.
 
-            `item_id` IS OWNERSHIP-SCOPED ON THE WAY IN (`BudgetsController#scoped_owners`): a
-            stranger's id would write a rule against THEIR spending, so it 404s rather than
-            rendering their item's name here. %>
-        <div>
-          <label class="form-label" for="budget_item_id">Pays</label>
-          <%= f.select :item_id,
-              options_for_select(
-                rule_form.item_options.map { |item| [item.name, item.id, { "data-category-id" => item.category_id }] },
-                rule_form.item_id
-              ),
-              { include_blank: "The whole category" },
-              class: "form-select",
-              data: { "app--budget--rule-form-target": "item" } %>
-          <p class="form-hint">
-            Leave this on the whole category for a rate that covers all of its spending, or name one
-            item for a bill of its own.
-          </p>
-          <% if rule_form.errors[:item_id].any? %>
-            <p class="form-error"><%= rule_form.errors[:item_id].to_sentence %></p>
-          <% end %>
-        </div>
+          ** THE SELECT IS THIS CATEGORY'S ITEMS AND NOTHING ELSE (§5), IN ONE STATEMENT. ** It used
+          to be every item the user owns, stamped with its category and filtered in the browser as
+          the owner picker moved; with one category in force there is nothing to filter between.
+          "The whole category" is the default and the blank, and it MEANS something the user has to
+          be told — the lane no other rule pays for — which is the hint underneath.
 
-        <%# ── 3. TYPE ──────────────────────────────────────────────────────────────────────────
-            BILL, USAGE OR CHOICE (§3, Henry's ruling of 2026-09-04) — "bills are must pays, usage
-            is like power bill (can be lowered by adjusting life), choice is like a restaurant".
-            It is a fact about the RULE and not about the category, because one category can carry a
-            fixed bill on one of its items and a discretionary catch-all beside it, and it decides
-            the GIVE-WAY ORDER when free money goes below zero: choice gives way first, bill last.
+          `item_id` IS OWNERSHIP-SCOPED ON THE WAY IN (`BudgetsController#scoped_owners`) on all
+          three doors (GET, POST and the preview): a stranger's id would write a rule against THEIR
+          spending, so it 404s rather than rendering their item's name here. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="1">
+        <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
 
-            REQUIRED, WITH NO RADIO PRESELECTED ON A HAND-MADE RULE. The column defaults to `usage`
-            so an untyped row in the database claims neither "must be paid" nor "up to you", but a
-            form that pre-answered the question would let a user write a rule without ever making
-            the choice the give-way order is built on. A proposal DOES arrive typed, and its radio is
-            checked (§3: dated bills propose `bill`, rates and drifts propose `usage`). %>
-        <div>
-          <span class="form-label">Type</span>
-          <% type_help = { "bill" => "must be paid", "usage" => "a need you can trim", "choice" => "up to you" } %>
-          <div class="mt-2 space-y-2">
-            <% Budget.rule_types.keys.each do |type| %>
-              <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
-                <%= f.radio_button :rule_type, type, class: "form-radio mt-1" %>
-                <span class="flex-1">
-                  <span class="block text-sm font-medium text-gray-900"><%= type.capitalize %></span>
-                  <span class="block text-xs text-gray-500"><%= type_help[type] %></span>
-                </span>
-              </label>
-            <% end %>
-          </div>
-          <% if rule_form.errors[:rule_type].any? %>
-            <p class="form-error">Type <%= rule_form.errors[:rule_type].to_sentence %></p>
-          <% end %>
-        </div>
-
-        <%# ── 4. AMOUNT ────────────────────────────────────────────────────────────────────────
-            ITS UNIT IS NAMED BY THE SCHEDULE BELOW, and `#budget_amount_hint` says so in the rule's
-            own words — "per period", "a month", "every 6 months", "once".
-
-            ** ONE ROW'S UNIT IS THE RECORD'S AND NOT THE SCHEDULE'S (fix round 1 — MED-5). ** A
-            `monthly`-no-anchor rule is read back as "Every period" (§5's ruling), so the record this
-            hint would otherwise read has already been re-shaped and would call a month's figure a
-            period's. `RuleForm#amount_unit` is the row's own unit, and the note under the field says
-            what saving will do to it. %>
-        <div>
-          <%= f.input :amount,
-              as: :decimal,
-              label: "Rule Amount",
-              input_html: {
+        <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
+          <span>Set aside</span>
+          <%= f.label :amount, "Amount", class: "sr-only" %>
+          <span class="flex items-center gap-1">
+            <span class="text-gray-500">$</span>
+            <%= f.number_field :amount,
+                class: "form-input w-32 tabular-nums",
                 placeholder: "0.00",
                 step: 0.01,
-                min: 0
-              },
-              hint: budget_amount_hint(budget, unit: rule_form.amount_unit) %>
+                min: 0,
+                data: { "app--budget--rule-form-target": "amount" } %>
+          </span>
+          <span>for</span>
+          <%= f.label :item_id, "Pays", class: "sr-only" %>
+          <%= f.select :item_id,
+              options_from_collection_for_select(category ? category.items.order(:name) : [], :id, :name, rule_form.item_id),
+              { include_blank: "the whole category" },
+              class: "form-select w-auto",
+              data: { "app--budget--rule-form-target": "item" } %>
+        </div>
 
-          <% if note = budget_monthly_conversion_note(rule_form) %>
-            <p class="mt-1 text-sm text-status-warning" data-monthly-conversion><%= note %></p>
+        <p class="form-hint">
+          <%= budget_amount_hint(budget, unit: rule_form.amount_unit) %>
+          <% if category %>
+            "The whole category" means anything in <%= category.name %> no other rule pays.
           <% end %>
+        </p>
 
-          <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
-              The prefilled figure is in THE RULE'S OWN UNIT — SuggestionEngine inverts
-              `Budget#steady_ask` before putting it on the wire, precisely so that nothing here
-              converts it — and the label above already names that unit, so the two figures on
-              screen are directly comparable. Shown only when they differ: on every other edit the
-              field IS the current amount and repeating it would be one number printed twice. %>
-          <% if @current_amount.present? && rule_form.amount.present? && rule_form.amount.to_d != @current_amount.to_d %>
-            <p class="mt-2 text-sm text-gray-500" data-current-amount>
-              <%# ** THE UNIT IS `RuleForm#amount_unit`, THE SAME ONE THE LABEL ABOVE READS. ** It was
-                  `budget_rule_basis_phrase(budget)`, and `budget` is the record AFTER the words have
-                  been applied — so on the one row §5's read-back re-shapes (a `monthly`-no-anchor
-                  rule, which reads back as "Every period"), the hint said "asks for a month" and
-                  this line said "per period" about the same figure, an inch apart. Two clauses about
-                  one unit must not be able to disagree. %>
-              Currently <%= number_to_currency(@current_amount) %>
-              <%= rule_form.amount_unit || budget_rule_basis_phrase(budget) %>.
-            </p>
+        <%# ** THE ROW WHOSE FIGURE IS IN A UNIT THE FORM IS ABOUT TO CHANGE (fix round 1 — MED-5;
+            §5's ruling). ** A `monthly`-no-anchor rule reads back as "Every period", so the record
+            has already been re-shaped and the figure in the box is still a month's. The note names
+            both figures and what to do; the preview card says the same thing in its own units. %>
+        <% if note = budget_monthly_conversion_note(rule_form) %>
+          <p class="text-sm text-status-warning" data-monthly-conversion><%= note %></p>
+        <% end %>
+
+        <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say. The
+            prefilled figure is in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts
+            `Budget#steady_ask` before putting it on the wire, precisely so nothing here converts —
+            and `RuleForm#amount_unit` names that unit, the same reader the hint above uses. Shown
+            only when the two differ: on every other edit the field IS the current amount. %>
+        <% if @current_amount.present? && rule_form.amount.present? && rule_form.amount.to_d != @current_amount.to_d %>
+          <p class="text-sm text-gray-500" data-current-amount>
+            Currently <%= number_to_currency(@current_amount) %>
+            <%= rule_form.amount_unit || budget_rule_basis_phrase(budget) %>.
+          </p>
+        <% end %>
+
+        <% if rule_form.errors[:amount].any? %>
+          <p class="form-error">Amount <%= rule_form.errors[:amount].to_sentence %></p>
+        <% end %>
+        <% if rule_form.errors[:item_id].any? %>
+          <p class="form-error"><%= rule_form.errors[:item_id].to_sentence %></p>
+        <% end %>
+
+        <%# THE OWNER, ON THE ONE PATH WHERE THERE IS NO ROW TO CARRY IT. An edit submits no category
+            at all — `#update` does not permit the key — because the rule already has one. %>
+        <%= f.hidden_field :category_id unless rule_form.persisted? %>
+      </section>
+
+      <%# ── 2. WHEN IS IT NEEDED? ───────────────────────────────────────────────────────────────
+          THE TWO SHAPES OF §2, AS TWO OPTION CARDS. "Every period" is a spending allowance that
+          resets with the paycheck; "By a date" is money saved up toward a day — a bill or a goal,
+          which are ONE shape — and it reveals the date and a "repeats every N months" checkbox.
+          `RuleForm` maps the pair onto the three columns, and `Budget`'s own shape refusals land
+          back here, under the control that chose them, rather than under a `basis` field this form
+          does not have.
+
+          ** "Every month" LEFT THE OPTIONS AND NOT THE MODEL (§5's ruling). ** `monthly` with no due
+          date is a legal row and `SuggestionEngine` still writes one; it is not a shape people write
+          by hand, so the form does not offer it and `RuleForm.from` reads such a row back as "Every
+          period" with its amount shown per month. Saving it unchanged converts it — which is why
+          both the note in step 1 and the preview's two-unit line exist.
+
+          ** THE UNSPENT-MONEY STEP AND ITS TARGET FIELD ARE DELETED (§7). ** A fund IS a dated rule
+          whose amount is its target, so "builds up toward $5,000" is written as "$5,000" in step 1
+          and "by Jun 1, 2027" here. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="2">
+        <h2 class="text-sm font-semibold text-gray-900">2. When is it needed?</h2>
+
+        <% schedules = [
+             ["per_period", "Every period", "a spending allowance that resets with your paycheck"],
+             ["by_date", "By a date", "money saved up toward a day — a bill or a goal"]
+           ] %>
+        <div class="space-y-2">
+          <% schedules.each do |value, label, help| %>
+            <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+              <%= f.radio_button :schedule, value, class: "form-radio mt-1" %>
+              <span class="flex-1">
+                <span class="block text-sm font-medium text-gray-900"><%= label %></span>
+                <span class="block text-xs text-gray-500"><%= help %></span>
+              </span>
+            </label>
           <% end %>
         </div>
 
-        <%# ── 5. WHEN IS IT NEEDED? ────────────────────────────────────────────────────────────
-            THE TWO SHAPES OF §2, AS TWO WORDS (two-shapes spec §5, Henry's ruling of 2026-09-05).
-            "Every period" is a spending allowance that resets with the paycheck; "By a date" is
-            money saved up toward a day — a bill or a goal, which are ONE shape — and it reveals the
-            date and a "repeats every N months" checkbox. `RuleForm` maps the pair onto the three
-            columns, and the errors from `Budget`'s own shape validations land back here (under the
-            control that chose them) rather than under a `basis` field this form does not have.
+        <% if rule_form.errors[:schedule].any? %>
+          <p class="form-error">When it is needed <%= rule_form.errors[:schedule].to_sentence %></p>
+        <% end %>
 
-            ** "Every month" LEFT THE RADIOS AND NOT THE MODEL (§5's ruling). ** `monthly` with no
-            due date is a legal row and `SuggestionEngine` still writes one; it is not a shape people
-            write by hand, so the form does not offer it and `RuleForm.from` reads such a row back as
-            "Every period" with its amount shown per month. Saving it unchanged converts it, which is
-            the ruling taken rather than a defect hidden.
-
-            ** THE UNSPENT-MONEY STEP AND ITS TARGET FIELD ARE DELETED (§7). ** They asked what
-            becomes of money the period did not spend and revealed a Target under "Builds up". A fund
-            IS a dated rule whose amount is its target, so "builds up toward $5,000" is written as
-            "$5,000" in step 4 and "by Jun 1, 2027" here — and `budgets.carries-over` and
-            `budgets.target-amount` are dropped.
-
-            TASK 4 REBUILDS THIS PAGE on §5's mocks (a two-column layout with a sticky preview and
-            suggestion chips). What is here is the same controls in the new words, working. %>
-        <div>
-          <span class="form-label">When is it needed?</span>
-          <% schedules = [
-               ["per_period", "Every period", "a spending allowance that resets with your paycheck"],
-               ["by_date", "By a date", "money saved up toward a day — a bill or a goal"]
-             ] %>
-          <div class="mt-2 space-y-2">
-            <% schedules.each do |value, label, help| %>
-              <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
-                <% radio_data = { action: "change->app--budget--rule-form#refresh" } %>
-                <%= f.radio_button :schedule, value, class: "form-radio mt-1", data: radio_data %>
-                <span class="flex-1">
-                  <span class="block text-sm font-medium text-gray-900"><%= label %></span>
-                  <span class="block text-xs text-gray-500"><%= help %></span>
-                </span>
-              </label>
-            <% end %>
+        <div class="space-y-4 pl-3 border-l-2 border-gray-100">
+          <%# THE DATE. It rode HIDDEN beside the basis until Henry's real-use testing of 2026-08-20:
+              `SuggestionEngine#next_due_on` walks the LAST PAYMENT forward by the interval, so a
+              bill paid late once proposed a rule whose every future due date was late with it — and
+              the amount on the same form was editable while the date that decides when the money is
+              needed was not. %>
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="anchorField"
+               <%= "hidden" unless rule_form.schedule == "by_date" %>>
+            <%= f.input :anchor_date,
+                as: :date,
+                html5: true,
+                label: "Due",
+                hint: "The day the money has to be there. Change it if the last payment was early or late." %>
           </div>
-          <% if rule_form.errors[:schedule].any? %>
-            <p class="form-error">When it is needed <%= rule_form.errors[:schedule].to_sentence %></p>
-          <% end %>
 
-          <div class="mt-4 space-y-4 pl-3 border-l-2 border-gray-100">
-            <%# THE DATE. It rode HIDDEN beside the basis until Henry's real-use testing of
-                2026-08-20: `SuggestionEngine#next_due_on` walks the LAST PAYMENT forward by the
-                interval, so a bill paid late once proposed a rule whose every future due date was
-                late with it — and the amount on the same form was editable while the date that
-                decides when the money is needed was not. %>
-            <div data-rule-reveal
-                 data-app--budget--rule-form-target="anchorField"
-                 <%= "hidden" unless rule_form.schedule == "by_date" %>>
-              <%= f.input :anchor_date,
-                  as: :date,
-                  html5: true,
-                  label: "Due",
-                  hint: "The day the money has to be there. Change it if the last payment was early or late." %>
-            </div>
+          <%# REPEATS — a checkbox rather than a third option, because "every 6 months" is a detail OF
+              "by a date" and not a different answer to when the money is needed. Its own reveal is
+              the interval below; two nested reveals would each stash and clear the other's inputs on
+              the way past, so every reveal on this form is a leaf. %>
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="repeatsField"
+               <%= "hidden" unless rule_form.schedule == "by_date" %>>
+            <%= f.input :repeats,
+                as: :boolean,
+                label: "Repeats every N months",
+                hint: "leave this off for a one-off bill or a savings goal" %>
+          </div>
 
-            <%# REPEATS — a checkbox rather than a third schedule, because "every 6 months" is a
-                detail OF "by a date" and not a different answer to when the money is needed. Its own
-                reveal is the interval below; two nested reveals would each stash and clear the
-                other's inputs on the way past, so every reveal on this form is a leaf. %>
-            <div data-rule-reveal
-                 data-app--budget--rule-form-target="repeatsField"
-                 <%= "hidden" unless rule_form.schedule == "by_date" %>>
-              <%= f.input :repeats,
-                  as: :boolean,
-                  label: "Repeats every N months",
-                  input_html: { data: { action: "change->app--budget--rule-form#refresh" } },
-                  hint: "leave this off for a one-off bill or a savings goal" %>
-            </div>
-
-            <%# THE INTERVAL, revealed by the checkbox alone. §2's row 4 is
-                `monthly + interval + anchor`; a form offering the N without the date could submit
-                row 2 with an N > 1, which `shape_must_be_valid` refuses. %>
-            <div data-rule-reveal
-                 data-app--budget--rule-form-target="intervalField"
-                 <%= "hidden" unless rule_form.schedule == "by_date" && rule_form.repeats? %>>
-              <%= f.input :interval_months,
-                  as: :integer,
-                  label: "Comes round every (months)",
-                  input_html: { min: 1, step: 1 },
-                  hint: "6 for a half-yearly bill, 3 for a quarterly one." %>
-            </div>
+          <%# THE INTERVAL, revealed by the checkbox alone. §2's row 4 is
+              `monthly + interval + anchor`; a form offering the N without the date could submit
+              row 2 with an N > 1, which `shape_must_be_valid` refuses. %>
+          <div data-rule-reveal
+               data-app--budget--rule-form-target="intervalField"
+               <%= "hidden" unless rule_form.schedule == "by_date" && rule_form.repeats? %>>
+            <%= f.input :interval_months,
+                as: :integer,
+                label: "Comes round every (months)",
+                input_html: { min: 1, step: 1 } %>
           </div>
         </div>
+      </section>
+
+      <%# ── 3. WHAT KIND OF RULE IS THIS? ───────────────────────────────────────────────────────
+          BILL, USAGE OR CHOICE (§3, Henry's ruling of 2026-09-04) — "bills are must pays, usage is
+          like power bill (can be lowered by adjusting life), choice is like a restaurant". It is a
+          fact about the RULE and not about the category, because one category can carry a fixed bill
+          on one of its items and a discretionary catch-all beside it, and it decides the GIVE-WAY
+          ORDER when free money goes below zero: choice gives way first, bill last. The preview says
+          which, in a sentence, because that consequence is the whole reason the question is asked.
+
+          REQUIRED, WITH NO RADIO PRESELECTED ON A HAND-MADE RULE. The column defaults to `usage` so
+          an untyped row claims neither "must be paid" nor "up to you", but a form that pre-answered
+          the question would be deciding what this person is willing to sacrifice. A proposal DOES
+          arrive typed, and its radio is checked. %>
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-6 space-y-3" data-step="3">
+        <h2 class="text-sm font-semibold text-gray-900">3. What kind of rule is this?</h2>
+
+        <% type_help = {
+             "bill" => "must be paid — gives way last",
+             "usage" => "a need you can trim",
+             "choice" => "up to you — gives way first"
+           } %>
+        <div class="space-y-2">
+          <% Budget.rule_types.keys.each do |type| %>
+            <label class="flex items-start gap-3 rounded border border-gray-200 p-3 cursor-pointer hover:border-gray-300">
+              <%= f.radio_button :rule_type, type, class: "form-radio mt-1" %>
+              <span class="flex-1">
+                <span class="block text-sm font-medium text-gray-900"><%= type.capitalize %></span>
+                <span class="block text-xs text-gray-500"><%= type_help[type] %></span>
+              </span>
+            </label>
+          <% end %>
+        </div>
+
+        <% if rule_form.errors[:rule_type].any? %>
+          <p class="form-error">Type <%= rule_form.errors[:rule_type].to_sentence %></p>
+        <% end %>
+      </section>
+
+      <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
+        <%# Back where the rule is listed, which is the Budget page — the same destination
+            BudgetsController sends a save to. %>
+        <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
+
+        <%# ** THE PREVIEW'S OWN SUBMIT, AND IT IS THE NO-JAVASCRIPT PATH (§5). ** `formaction` sends
+            THIS form — every control, exactly as it would be saved — to `BudgetsController#preview`
+            instead of to the save, so the card can never be previewing a different set of answers
+            from the one on screen. `data-turbo-frame` puts the response in the preview frame; with
+            Turbo running, Stimulus presses this button for the user on every change (debounced), and
+            with no JavaScript at all pressing it renders the whole page with the card updated.
+
+            `formnovalidate`, because a preview of a HALF-FILLED form is the thing the card is for:
+            browser validation would refuse to submit exactly the states whose missing blanks it is
+            supposed to name. %>
+        <%= button_tag "Preview",
+            type: :submit,
+            name: nil,
+            class: "btn btn-secondary",
+            formaction: rule_form.persisted? ? preview_budgets_path(id: budget.id) : preview_budgets_path,
+            formmethod: :post,
+            formnovalidate: true,
+            data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
+
+        <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
       </div>
-    </div>
+    <% end %>
+  </div>
 
-    <%# Action Buttons %>
-    <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-      <%# Back where the rule is listed, which is the Budget page — the same destination
-          BudgetsController sends a save to. %>
-      <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
-
-      <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule",
-          class: "btn btn-primary" %>
-    </div>
-  <% end %>
+  <%# THE PREVIEW COLUMN — sticky at ≥1024px, under the form below it (§5). %>
+  <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
+    <%= render "preview", preview: @preview %>
+  </aside>
 </div>

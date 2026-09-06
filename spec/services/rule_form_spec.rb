@@ -194,6 +194,26 @@ RSpec.describe RuleForm do
       expect(described_class.new(user, described_class.from(per_period), budget: per_period).amount_unit).to be_nil
     end
 
+    # ** AND IT STOPS BEING TRUE THE MOMENT THE USER ANSWERS "When is it needed?" WITH A DATE
+    # (this task). ** The flag says one thing — the figure in the box is a MONTH's and this form is
+    # about to call it a PERIOD's — and both callers that merge (`BudgetsController#update` and
+    # `#preview`) put `RuleForm.from`'s words UNDER the submission, so a monthly row switched to "By
+    # a date" arrived carrying the flag from the row and the schedule from the user. The note beside
+    # the amount and the preview's two-unit line would both have warned about a conversion that is
+    # not happening.
+    # THE WORDS ARE READ ONCE, BEFORE EITHER FORM IS BUILT, and the order of the two assertions is
+    # load-bearing: `RuleForm` applies the words to the RECORD in its constructor, so a second
+    # `.from(monthly)` after the dated form has been built would be reading the rule the first one
+    # re-shaped rather than the row on the table.
+    it "drops the flag when the schedule has moved off every period", :aggregate_failures do
+      monthly = create(:budget, :rate, category: groceries, amount: 260)
+      words = described_class.from(monthly)
+
+      expect(described_class.new(user, words, budget: monthly)).to be_converted_from_monthly
+      expect(described_class.new(user, words.merge(schedule: "by_date", anchor_date: "2026-12-01"), budget: monthly))
+        .not_to be_converted_from_monthly
+    end
+
     # ** THE WIRE CANNOT SET IT. ** It is a fact about the ROW, not an answer the user gave, so it is
     # absent from `BudgetsController::BUDGET_FIELDS` and a hand-made POST that names it is dropped
     # before this class ever sees it — which is what keeps a form from claiming a conversion that is
@@ -440,28 +460,19 @@ RSpec.describe RuleForm do
     end
   end
 
-  # ---------------------------------------------------------------------------------------------
-  # The collections the form renders
-  # ---------------------------------------------------------------------------------------------
-  describe "the collections", :aggregate_failures do
-    it "offers this user's expense categories and nothing else" do
-      create(:category, :income, user: user, name: "Salary")
-      create(:category, :expense, :funded, user: create(:user), name: "Their Rent")
-
-      expect(form.category_options.map(&:name)).to eq(["Groceries"])
-    end
-
-    # EVERY ITEM AT ONCE, because the "Pays" select is filtered in the browser: the options for a
-    # category the user has not chosen yet still have to be in the document for the filter to reveal
-    # them without a round trip.
-    it "offers every item of every expense category the user owns" do
-      create(:item, category: groceries, name: "Phone")
-      other = create(:category, :expense, :funded, user: user, name: "Utilities")
-      create(:item, category: other, name: "Power")
-      create(:item, category: create(:category, :income, user: user), name: "Bonus")
-      create(:item, category: create(:category, :expense, :funded, user: create(:user)), name: "Their Item")
-
-      expect(form.item_options.map(&:name)).to eq(["Phone", "Power"])
-    end
-  end
+  # ** THE TWO COLLECTIONS AND THEIR EXAMPLES ARE DELETED WITH THE CONTROLS THEY FILLED
+  # (two-shapes spec §5). **
+  #
+  # `#category_options` was the OWNER PICKER — this user's expense categories, offered on a bare
+  # `/budgets/new` — and its example pinned that an income category and a stranger's were both out
+  # of it. There is no picker: the form is per category (`BudgetsController::NEW_NEEDS_A_CATEGORY`),
+  # and the ownership half of what that example protected is asked where it is now decided, in
+  # `spec/requests/budgets_spec.rb` — a stranger's `category_id` in the URL is a 404 rather than a
+  # name rendered on this user's form.
+  #
+  # `#item_options` was EVERY item the user owns, listed at once so the browser could filter them as
+  # the picker moved; its example pinned that the list crossed categories and stopped at this user's
+  # own. The select is `category.items` now — one category, one statement, no filter — and what it
+  # offers is pinned on the page itself (`spec/system/budgets/form_spec.rb`, "offers this category's
+  # items") with the cost pinned in the request spec.
 end

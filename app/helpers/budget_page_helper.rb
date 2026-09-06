@@ -267,4 +267,98 @@ module BudgetPageHelper
   # "every month" / "every 6 months", said of a PROPOSED interval rather than of a saved rule.
   # `budget_rule_basis` reads a Budget and there is no Budget yet, so this reads the integer.
   def suggestion_interval_label(months) = months == 1 ? "every month" : "every #{months} months"
+
+  # -----------------------------------------------------------------------------------------
+  # §5's preview card — the rule said back
+  # -----------------------------------------------------------------------------------------
+  #
+  # ** THE COPY TARGET IS §5 VERBATIM: ** "Water gets $48.20 every 2 months, next due Oct 3. Each
+  # period sets aside its share so the money is there on the day. It's a bill, so it's the last
+  # thing to give way."
+  #
+  # ** THESE ARE THE SECOND PERSON'S WORDS FOR A SHAPE THE APP ALREADY CLASSIFIES, NOT A FIFTH
+  # CLASSIFICATION. ** Which shape a rule is comes off `RulePreview`, which reads it off the one
+  # `ClaimCalculator` it holds — the same reader behind `HomeHelper#shape_words`' `usage · every 12
+  # months`. A row has space for three words; a preview is a sentence a person can check their own
+  # intention against, which is why the two registers exist and why neither re-derives the shape.
+  #
+  # THEY LIVE HERE, BESIDE `#budget_amount_hint` AND `#budget_monthly_conversion_note`, which are the
+  # rule form's other copy. This module is the Budget page AND the form it opens.
+
+  # THE DATE ON THIS CARD ALWAYS CARRIES ITS YEAR, and that is a deliberate difference from the rows
+  # (`HomeHelper#when_words` prints `Sep 17`). A row is read in the context of a period the screen
+  # has already named; this is read seconds after the user typed the date into a date input, where a
+  # mistyped year is both the easiest error to make and the one no other figure on the page reveals —
+  # "$600 by Dec 1, 2036" is a rule whose per-period cost the card would otherwise report as $6.
+  PREVIEW_DATE = "%b %-d, %Y"
+
+  def rule_preview_date(date) = date&.strftime(PREVIEW_DATE)
+
+  # THE HEADLINE. The bold half is the rule itself — who gets how much, how often — and the due date
+  # of a REPEATING rule trails it unbolded, because "every 2 months" is the rule and "next due Oct 3"
+  # is where the cycle happens to stand today. A one-off's date is inside the bold: the day IS the
+  # rule there.
+  def rule_preview_sentence(preview)
+    lead = "#{budget_rule_name(preview.rule)} gets #{number_to_currency(preview.amount)} " \
+           "#{rule_preview_schedule_words(preview)}"
+
+    safe_join([tag.strong(lead), rule_preview_due_clause(preview), "."])
+  end
+
+  def rule_preview_schedule_words(preview)
+    return "every period" if preview.rate?
+    return suggestion_interval_label(preview.rule.interval_months) if preview.repeating?
+
+    "by #{rule_preview_date(preview.next_due_on)}"
+  end
+
+  def rule_preview_due_clause(preview)
+    preview.repeating? ? ", next due #{rule_preview_date(preview.next_due_on)}" : ""
+  end
+
+  # WHAT BECOMES OF THE MONEY — the one sentence that separates §2's two shapes, and the question
+  # the deleted "Unspent money" radio used to ask the user to answer. It is not a question any more:
+  # an allowance resets and a dated rule accrues, and which one this is was decided in step 2.
+  #
+  # THE DATELESS ARM IS FOR A USER WHO HAS DECLARED NO PERIOD, whose rate rule genuinely has no
+  # boundary to name (`ClaimRows.period_range_for` returns nil for them). It says the fact without
+  # the date rather than inventing a month nobody set.
+  def rule_preview_holding_sentence(preview)
+    return "Each period sets aside its share so the money is there on the day." unless preview.rate?
+    return "Whatever's unspent resets when your next period starts." if preview.line.resets_on.blank?
+
+    "Whatever's unspent resets on #{rule_preview_date(preview.line.resets_on)}."
+  end
+
+  # ** WHERE THIS RULE SITS IN THE GIVE-WAY ORDER, WHICH IS WHAT THE TYPE IS FOR (§3). ** The radio
+  # in step 3 names three kinds; this says what choosing one COSTS, which is the only reason the
+  # question is asked — when free money goes below zero the walk takes the choices first and the
+  # bills last. `fetch` for `TYPE_HEADINGS`' own reason: a fourth type added to the enum without a
+  # sentence is a card that silently stops explaining the most consequential answer on the form.
+  TYPE_GIVE_WAY = {
+    "bill" => "It's a bill, so it's the last thing to give way.",
+    "usage" => "It's usage, so it gives way after your choices and before your bills.",
+    "choice" => "It's a choice, so it's the first thing to give way."
+  }.freeze
+
+  def rule_preview_type_sentence(preview) = TYPE_GIVE_WAY.fetch(preview.rule.rule_type)
+
+  # ** THE TWO UNITS, FOR THE ONE ROW WHOSE WORDS DO NOT DESCRIBE ITS OWN COLUMNS (§5's ruling; this
+  # task's carry). ** A `monthly`-no-anchor rule reads back as "Every period", so the figure in the
+  # box is a MONTH's money on a form that is about to save it as a PERIOD's. `#budget_monthly_
+  # conversion_note` says that beside the field; this says what the two figures ARE, because the
+  # conversion is not a rounding — $260 a month is $120.00 a period on a fortnightly grid, and a
+  # drift suggestion accepted on such a rule writes 3.6× the per-period figure it proposed. The card
+  # is where a user can see both numbers before pressing the button.
+  #
+  # NIL ON EVERY OTHER RULE, so the line is never a fixture of the card.
+  def rule_preview_units(preview)
+    return nil unless preview.converted_from_monthly?
+
+    grid = preview.user.period_cadence.presence
+    per_period = "#{number_to_currency(preview.monthly_as_per_period)} a period"
+    per_period = "#{per_period} on your #{grid} grid" if grid
+
+    "#{number_to_currency(preview.amount)} a month · #{per_period}"
+  end
 end

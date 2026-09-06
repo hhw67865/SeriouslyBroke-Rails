@@ -2,17 +2,17 @@
 
 require "rails_helper"
 
-# THE RULE FORM, ONE OWNER (two-ledger spec §3) AND EVERY SHAPE (rules-own-the-budget spec §4).
+# THE RULE FORM, ONE CATEGORY (two-shapes spec §5) AND EVERY SHAPE (rules-own-the-budget spec §4).
 #
-# WHAT THIS FILE USED TO BE, THREE TIMES OVER. Every example was once about the monthly category CAP
+# WHAT THIS FILE USED TO BE, FOUR TIMES OVER. Every example was once about the monthly category CAP
 # — a form reached as `/budgets/new?category_id=…`, a "Set spending limits for Groceries" heading, a
 # "Prorate daily" checkbox — and all of it was deleted with the cap in plan 3. What replaced it was
-# a POOL-mode rule form; that went with the pool layer. What is added here is the half the form
-# never had: a hand-made rule could only ever be a per-period rate ("Rules form needs to be able to
-# set the complex rules too, not just the per period catchall", Henry, 2026-09-04), and the controls
-# reach every row of the shape table. THE TABLE IS TWO SHAPES NOW (two-shapes spec §2) — an allowance
-# that resets, and money saved toward a day — so the "Unspent money" step and its Target are gone
-# with `budgets.carries_over` and `budgets.target_amount` (§7).
+# a POOL-mode rule form; that went with the pool layer. Then came the hand-made rule form with an
+# owner PICKER, which could write every row of the shape table but had to ask which category it was
+# for. It does not ask any more: §5 makes the form its own PAGE, opened from the category it is
+# about, titled by it, with that category's items in its select and that category's suggestions as
+# chips above step 1 — so `?category_id=` is back in the URL, meaning the opposite of what it meant
+# in the cap era (the OWNER of the rule, not a category being capped).
 #
 # ONE BROWSER PASS PER SHAPE, and each asserts the COLUMNS rather than a flash: a form that posts
 # the right words to a mapping that has quietly changed still says "successfully created".
@@ -23,14 +23,11 @@ RSpec.describe "Budgets Forms", type: :system do
   before { sign_in user, scope: :user }
 
   # ---------------------------------------------------------------------------------------------
-  # §2.1's seven rows, written by hand
+  # §2.1's rows, written by hand
   # ---------------------------------------------------------------------------------------------
   describe "writing every shape by hand", :aggregate_failures do
-    let!(:vacation) { create(:category, :expense, :funded, user: user, name: "Vacation to Europe") }
-
     before do
-      visit new_budget_path
-      select "Groceries", from: "Category"
+      visit new_budget_path(category_id: groceries.id)
       choose "Usage"
     end
 
@@ -38,7 +35,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # is exactly what a hand-made rule meant before this task, and is now the default rather than
     # the ceiling.
     it "writes a per-period rate that resets" do
-      fill_in "Rule Amount", with: "400"
+      fill_in "Amount", with: "400"
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
@@ -61,7 +58,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # §2 row 4 — the half-yearly bill, which could only ever arrive MEASURED from the suggestion panel
     # before this form. The checkbox is what adds the interval.
     it "writes a bill that repeats every N months from a date" do
-      fill_in "Rule Amount", with: "600"
+      fill_in "Amount", with: "600"
       choose "By a date"
       fill_in "Due", with: Date.new(2026, 12, 1)
       check "Repeats every N months"
@@ -77,7 +74,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # §2 row 3. A NULL interval beside a date is the whole of "one-time", and the box is UNTICKED by
     # default so a repeating rule is the deliberate choice.
     it "writes a one-time bill on a date" do
-      fill_in "Rule Amount", with: "600"
+      fill_in "Amount", with: "600"
       choose "By a date"
 
       expect(page).to have_no_field("Comes round every (months)")
@@ -95,7 +92,7 @@ RSpec.describe "Budgets Forms", type: :system do
     # changed for this form: "$5,000 by Jun 1, 2027" writes the same three columns a bill does, so
     # there is no second question to ask about what becomes of the money.
     it "writes a goal as a one-off with a distant date" do
-      fill_in "Rule Amount", with: "5000"
+      fill_in "Amount", with: "5000"
       choose "By a date"
       fill_in "Due", with: Date.new(2027, 6, 1)
       click_button "Create rule"
@@ -108,20 +105,128 @@ RSpec.describe "Budgets Forms", type: :system do
 
     it "writes the type the user chose" do
       choose "Choice"
-      fill_in "Rule Amount", with: "75"
+      fill_in "Amount", with: "75"
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(groceries.budgets.sole).to be_choice
     end
 
-    it "lands one on a savings category too" do
-      select "Vacation to Europe", from: "Category"
-      fill_in "Rule Amount", with: "60"
+    # ** "lands one on a savings category too" IS THIS EXAMPLE, THROUGH THE DOOR THAT REPLACED THE
+    # PICKER. ** It used to `select "Vacation to Europe", from: "Category"`; there is no select, so
+    # what it now pins is that the category in the URL is the category the rule lands on — which is
+    # the whole promise "+ New rule for Vacation to Europe" makes.
+    it "lands the rule on the category the door named" do
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation to Europe")
+
+      visit new_budget_path(category_id: vacation.id)
+      choose "Usage"
+      fill_in "Amount", with: "60"
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
       expect(vacation.budgets.sole.amount).to eq(60)
+      expect(groceries.budgets).to be_empty
+    end
+  end
+
+  # ---------------------------------------------------------------------------------------------
+  # The page §5 describes: three numbered steps, a preview beside them
+  # ---------------------------------------------------------------------------------------------
+  describe "the page", :aggregate_failures do
+    before { visit new_budget_path(category_id: groceries.id) }
+
+    it "is titled and breadcrumbed by the category it was opened from" do
+      expect(page).to have_content("New rule for Groceries")
+      expect(page).to have_content("Change any blank. Nothing is saved until you press the button.")
+      expect(page).to have_link("Budget", href: budget_page_path)
+      expect(page).to have_no_select("Category")
+    end
+
+    it "asks the three questions in order" do
+      expect(page).to have_content("1. What is this rule for, and how much?")
+      expect(page).to have_content("2. When is it needed?")
+      expect(page).to have_content("3. What kind of rule is this?")
+    end
+
+    # ** THE SELECT IS THIS CATEGORY'S ITEMS AND NOTHING ELSE (§5). ** It used to be every item the
+    # user owns, filtered in the browser as the owner picker moved; with one category in force there
+    # is nothing to filter between, so the assertion is on the whole option list rather than on what
+    # is selectable. "The whole category" is the blank, first, and its MEANING is on the page —
+    # "anything in Groceries no other rule pays" — because a lane nobody named is the one thing a
+    # user cannot infer from a select.
+    it "offers this category's items, the whole category first, and says what that means" do
+      create(:item, category: groceries, name: "Milk")
+      utilities = create(:category, :expense, :funded, user: user, name: "Utilities")
+      create(:item, category: utilities, name: "Power")
+
+      visit new_budget_path(category_id: groceries.id)
+
+      expect(page).to have_select("Pays", options: ["the whole category", "Milk"])
+      expect(page).to have_content("means anything in Groceries no other rule pays")
+    end
+
+    it "lands the rule on the item it says it pays" do
+      milk = create(:item, category: groceries, name: "Milk")
+
+      visit new_budget_path(category_id: groceries.id)
+      select "Milk", from: "Pays"
+      choose "Bill"
+      fill_in "Amount", with: "90"
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole.item).to eq(milk)
+    end
+
+    # ** THE PREVIEW SAYS THE RULE BACK, AND IT IS THE SERVER'S (§5). ** Rendered on first load with
+    # the blanks it is missing, then re-rendered into its Turbo Frame as they are filled — every
+    # figure off ONE `ClaimCalculator`, which is why the per-period figure here and the Budget page's
+    # tiles cannot disagree.
+    it "starts by naming the blanks it needs" do
+      within("[data-preview]") do
+        expect(page).to have_content("Fill in an amount.")
+        expect(page).to have_content("Choose what kind of rule this is.")
+      end
+    end
+
+    it "says a per-period rule back as the blanks are filled" do
+      choose "Usage"
+      fill_in "Amount", with: "400"
+
+      within("[data-preview]") do
+        expect(page).to have_content("Groceries gets $400.00 every period")
+        expect(page).to have_content("It's usage, so it gives way after your choices and before your bills.")
+        expect(page).to have_css("[data-preview-figure='per_period']", text: "$400.00")
+      end
+    end
+
+    # THE OTHER SHAPE, AND THE ARITHMETIC UNDER IT: a dated rule's card names the periods it has to
+    # fill in and prices itself over them, which is the figure a per-period allowance has no need of.
+    it "prices a dated rule over the periods it has left" do
+      choose "Bill"
+      fill_in "Amount", with: "600"
+      choose "By a date"
+      fill_in "Due", with: Date.current + 6.months
+
+      within("[data-preview]") do
+        expect(page).to have_content("It's a bill, so it's the last thing to give way.")
+        expect(page).to have_content("Each period sets aside its share so the money is there on the day.")
+        expect(page).to have_css("[data-preview-figure='periods_left']")
+      end
+    end
+
+    # AND IT KEEPS UP. The card is re-rendered by the server on every change (debounced), so a figure
+    # that stopped following the box would be a card describing a rule the user has moved on from.
+    it "follows the amount box" do
+      choose "Usage"
+      fill_in "Amount", with: "400"
+
+      expect(page).to have_css("[data-preview-figure='per_period']", text: "$400.00")
+
+      fill_in "Amount", with: "550"
+
+      expect(page).to have_css("[data-preview-figure='per_period']", text: "$550.00")
     end
   end
 
@@ -129,10 +234,7 @@ RSpec.describe "Budgets Forms", type: :system do
   # What each choice reveals, and what it hides
   # ---------------------------------------------------------------------------------------------
   describe "the reveals", :aggregate_failures do
-    before do
-      visit new_budget_path
-      select "Groceries", from: "Category"
-    end
+    before { visit new_budget_path(category_id: groceries.id) }
 
     # THE FORM OPENS ON "Every period", so all three dated controls are away. A blank date input on a
     # per-period form is an invitation to write a shape the model refuses.
@@ -181,7 +283,7 @@ RSpec.describe "Budgets Forms", type: :system do
       fill_in "Due", with: Date.new(2026, 12, 1)
       choose "Every period"
       choose "Usage"
-      fill_in "Rule Amount", with: "400"
+      fill_in "Amount", with: "400"
       click_button "Create rule"
 
       expect(page).to have_content("Budget was successfully created")
@@ -198,68 +300,115 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(page).to have_field("Due", with: "2026-12-01")
     end
 
-    # "PAYS" IS FILTERED BY THE CATEGORY IN FORCE, in the browser and with no round trip. Every item
-    # the user owns is really in the document — which is what lets a browser with no JavaScript
-    # submit any of them and get `Budget#item_must_belong_to_category`'s legible 422 — so the filter
-    # has to be asserted on what is SELECTABLE rather than on what exists.
-    it "offers only the chosen category's items under Pays" do
-      create(:item, category: groceries, name: "Milk")
-      utilities = create(:category, :expense, :funded, user: user, name: "Utilities")
-      create(:item, category: utilities, name: "Power")
+    # ** THE ITEM FILTER IS DELETED WITH THE PICKER (§5), AND SO ARE ITS TWO EXAMPLES. ** They
+    # pinned that "Pays" listed every item the user owns while hiding and disabling the ones outside
+    # the chosen category, and that the list changed as the picker moved. There is no picker and no
+    # cross-category list: the select IS the category's items, which "offers this category's items"
+    # above asserts as a whole option list rather than as a filter's residue.
+  end
 
-      visit new_budget_path
-      select "Groceries", from: "Category"
+  # ---------------------------------------------------------------------------------------------
+  # The chips (§5)
+  # ---------------------------------------------------------------------------------------------
+  #
+  # ** THE ENGINE HAS ALREADY MEASURED THE RULE THE USER CAME HERE TO WRITE. ** A chip is that
+  # measurement offered as a fill: the same sentence the Budget page's panel prints, with a button
+  # that puts every figure in the blanks. The history is PLANTED rather than stubbed, for
+  # `suggestions_spec`'s own reason — a stubbed engine would pin this page against a fixture instead
+  # of against the app.
+  describe "the suggestion chips", :aggregate_failures do
+    let!(:phone) { create(:item, category: groceries, name: "Phone") }
 
-      expect(selectable_items).to eq(["The whole category", "Milk"])
-      expect(rendered_items).to include("Power")
-
-      select "Utilities", from: "Category"
-
-      expect(selectable_items).to eq(["The whole category", "Power"])
+    before do
+      plant_bill(phone, 85)
+      visit new_budget_path(category_id: groceries.id)
     end
 
-    it "lands the rule on the item it says it pays" do
-      milk = create(:item, category: groceries, name: "Milk")
-
-      visit new_budget_path
-      select "Groceries", from: "Category"
-      select "Milk", from: "Pays"
-      choose "Bill"
-      fill_in "Rule Amount", with: "90"
-      click_button "Create rule"
-
-      expect(page).to have_content("Budget was successfully created")
-      expect(groceries.budgets.sole.item).to eq(milk)
+    it "offers the category's own suggestions above the first step" do
+      within("[data-chips]") do
+        expect(page).to have_content("Phone — $85.00 every month")
+        expect(page).to have_button("Use this")
+      end
     end
+
+    # ** ONE CLICK FILLS EVERY BLANK IT HAS A MEASUREMENT FOR. ** Not some of them: the amount, the
+    # lane, the type, the schedule, the interval and the date are one proposal, and a chip that
+    # filled four of the six would leave the user to guess which two it had opinions about.
+    it "fills every blank from one click" do
+      click_button "Use this"
+
+      expect(page).to have_field("Amount", with: "85.0")
+      expect(page).to have_select("Pays", selected: "Phone")
+      expect(page).to have_checked_field("Bill")
+      expect(page).to have_checked_field("By a date")
+      expect(page).to have_checked_field("Repeats every N months")
+      expect(page).to have_field("Comes round every (months)", with: "1")
+      expect(page).to have_field("Due", with: expected_due_on.strftime("%Y-%m-%d"))
+    end
+
+    # ** "✓ Using this" IS A READING OF THE BLANKS, NOT A MEMORY OF THE CLICK (§5). ** A user who
+    # accepts a chip and then edits the amount has stopped using it, and a chip that went on claiming
+    # otherwise would be the page asserting something the fields on it contradict.
+    it "says it is being used while the blanks still match, and stops when they do not" do
+      click_button "Use this"
+
+      expect(page).to have_button("✓ Using this")
+
+      fill_in "Amount", with: "90"
+
+      expect(page).to have_button("Use this")
+    end
+
+    # THE PREVIEW FOLLOWS THE CHIP, which is what makes the pair one act: the chip says what the
+    # engine measured and the card says what that rule would DO.
+    it "brings the preview with it" do
+      click_button "Use this"
+
+      within("[data-preview]") do
+        expect(page).to have_content("Phone gets $85.00 every month")
+      end
+    end
+
+    # ** A "Write it →" ARRIVAL LANDS WITH THE CHIP ALREADY APPLIED (§5). ** The link carries the
+    # payload in the query string, the server renders the form holding it, and the chip's own state
+    # is computed from those blanks — so the two doors into this form (fill it here, or arrive
+    # filled) end in the same place with the same thing said about it.
+    it "arrives already applied when the Budget page wrote it into the URL" do
+      visit budget_page_path
+      find("[data-category-row='Groceries'] a[href*='open=']", match: :first).click
+      within("[data-suggestions='Groceries']") { click_link "Write it →" }
+
+      expect(page).to have_field("Amount", with: "85.0")
+      expect(page).to have_button("✓ Using this")
+    end
+
+    # TWO PAYMENTS A WHOLE MONTH APART, THE SAME SIZE: the measured dated-bill shape, exactly as
+    # `suggestions_spec` plants it.
+    def plant_bill(item, amount)
+      create(:entry, item: item, amount: amount, date: Date.current - 2.months)
+      create(:entry, item: item, amount: amount, date: Date.current - 1.month)
+    end
+
+    def expected_due_on = (Date.current - 1.month) >> 1
   end
 
   # ---------------------------------------------------------------------------------------------
   # The refusals a user can actually meet
   # ---------------------------------------------------------------------------------------------
   describe "refusals", :aggregate_failures do
-    before do
-      visit new_budget_path
-      select "Groceries", from: "Category"
-    end
+    before { visit new_budget_path(category_id: groceries.id) }
 
-    # THE OWNER-LESS SAVE IS STILL REFUSED, and on `:base` where the form renders base errors —
-    # the picker offers a blank because "I have not chosen yet" is a real state, not because a rule
-    # may have no owner.
-    it "refuses the save when no category is chosen, and says why" do
-      visit new_budget_path
-      choose "Usage"
-      fill_in "Rule Amount", with: "500"
-      click_button "Create rule"
-
-      expect(page).to have_css(".bg-status-danger-light", text: "must belong to a category")
-      expect(page).to have_select("Category")
-      expect(Budget.count).to eq(0)
-    end
+    # ** THE OWNER-LESS SAVE LEFT THIS FILE WITH THE PICKER (§5). ** It pinned that a form submitted
+    # with no category chosen came back with `must belong to a category` on `:base` and the select
+    # still on screen. There is no select and no way to reach that state from a browser — the form
+    # carries the category it was opened on in a hidden field — so what survives of it is the
+    # request spec's own `answers a rule with no owner at all with a 422`, which is the shape a
+    # hand-made POST can still make.
 
     # EVERY RULE HAS A TYPE (§3) and the give-way order is built on it, so no radio is preselected
     # on a hand-made rule and the save is refused until one is.
     it "refuses a rule with no type chosen" do
-      fill_in "Rule Amount", with: "400"
+      fill_in "Amount", with: "400"
       click_button "Create rule"
 
       expect(page).to have_content("Type can't be blank")
@@ -281,7 +430,7 @@ RSpec.describe "Budgets Forms", type: :system do
       choose "By a date"
       fill_in "Due", with: Date.new(2026, 12, 1)
       check "Repeats every N months"
-      fill_in "Rule Amount", with: "600"
+      fill_in "Amount", with: "600"
       click_button "Create rule"
 
       expect(page).to have_content("When it is needed needs the number of months")
@@ -291,7 +440,7 @@ RSpec.describe "Budgets Forms", type: :system do
     it "refuses a dated rule with no date, under When it is needed" do
       choose "Usage"
       choose "By a date"
-      fill_in "Rule Amount", with: "600"
+      fill_in "Amount", with: "600"
       click_button "Create rule"
 
       expect(page).to have_content("When it is needed needs the date it is first due")
@@ -308,8 +457,7 @@ RSpec.describe "Budgets Forms", type: :system do
     before { visit edit_budget_path(rule) }
 
     it "shows the rule's own controls and none of the cap's" do
-      expect(page).to have_content("Edit rule")
-      expect(page).to have_content("What Groceries claims each period")
+      expect(page).to have_content("Groceries — edit rule")
       expect(page).to have_field("Amount")
       expect(page).to have_button("Update rule")
       expect(page).to have_link("Cancel")
@@ -326,7 +474,8 @@ RSpec.describe "Budgets Forms", type: :system do
     # ** IT SUBMITS NOTHING FOR THE CATEGORY EITHER (fix round 1 — M1). ** The read-only box used to
     # sit over a hidden field, and the field's only real effect was to make a re-parent a legal
     # PATCH that no control here could ask for. `#update` does not permit the key any more, so the
-    # form does not carry it; the rule keeps its owner because the ROW has one.
+    # form does not carry it; the rule keeps its owner because the ROW has one, and the category is
+    # said by the breadcrumb instead.
     it "exposes every control but the category" do
       expect(page).to have_no_select("Category")
       expect(page).to have_content("Groceries")
@@ -449,9 +598,10 @@ RSpec.describe "Budgets Forms", type: :system do
   # Saving it unchanged really does convert the rule, and `Budget#steady_ask` prices the two
   # differently: $260 a month is $120.00 a fortnight.
   #
-  # THE FORM SAYS BOTH THINGS: the hint names the unit the FIGURE is in, and the note under it names
-  # what saving would do. Asserted on the rendered page, because the whole point is what a person
-  # reading the form is told before they press the button.
+  # THE PAGE SAYS IT THREE TIMES, IN THREE REGISTERS: the hint names the unit the FIGURE is in, the
+  # note names what saving would do, and the PREVIEW states both units as money — which is this
+  # task's carry, because a drift suggestion accepted on such a rule writes 3.6× the per-period
+  # figure it proposed and the card is the last place a user can see that before pressing the button.
   describe "editing a monthly rule the form does not offer", :aggregate_failures do
     let!(:monthly) { create(:budget, :rate, category: groceries, amount: 260, rule_type: :usage) }
 
@@ -466,74 +616,65 @@ RSpec.describe "Budgets Forms", type: :system do
       )
     end
 
-    # THE OTHER DIRECTION, so the note is not a fixture of every edit form: an ordinary per-period
-    # rule says nothing about months at all.
+    it "states both units on the preview card" do
+      expect(find("[data-preview-units]")).to have_content("$260.00 a month · $120.00 a period on your biweekly grid")
+    end
+
+    # THE OTHER DIRECTION, so neither the note nor the two-unit line is a fixture of every edit form:
+    # an ordinary per-period rule says nothing about months at all.
     it "says nothing of the sort on a rule whose words match its columns" do
       visit edit_budget_path(create(:budget, :per_period_rate, category: groceries, amount: 400, item: create(:item, category: groceries)))
 
       expect(page).to have_content("What this rule asks for per period.")
       expect(page).to have_no_css("[data-monthly-conversion]")
+      expect(page).to have_no_css("[data-preview-units]")
     end
   end
 
   # ---------------------------------------------------------------------------------------------
-  # The picker, and the two dead eras' controls
+  # The door, and the two dead eras' controls
   # ---------------------------------------------------------------------------------------------
-  describe "New rule form with no owner", :aggregate_failures do
-    let!(:salary) { create(:category, :income, user: user, name: "Salary") }
-
-    # A SAVINGS CATEGORY IS OFFERED and an INCOME one is not — §3's "typically no refill rule" is a
-    # typically, and a goal a rate rule refills is the demo's own Retirement Supplement. Planted in
-    # the `before` rather than as a `let!` because the picker's whole option list is the assertion:
-    # no example names this record, they name the list it has to appear in.
-    before do
-      create(:category, :expense, :funded, user: user, name: "Vacation to Europe")
-      create(:category, :expense, :funded, user: create(:user), name: "Their Rent")
+  #
+  # ** THE PICKER IS DELETED AND THE DOOR MOVED INSIDE THE CATEGORY (§4/§5). ** This block used to
+  # be "New rule form with no owner": it clicked the Budget page's header button, asserted the
+  # picker offered this user's expense categories and no income one, and wrote a rule by choosing
+  # one. There is no header button and no picker. What those examples were really protecting —
+  # that a rule lands on the category the user meant, and that neither dead era's control has come
+  # back — is asserted here on the door that replaced them.
+  describe "the door onto a new rule", :aggregate_failures do
+    it "is inside the category's own panel, and carries it" do
       visit budget_page_path
-    end
+      find("[data-category-row='Groceries'] a[href*='open=']", match: :first).click
+      click_link "+ New rule for Groceries"
 
-    # THE TWO NEGATIVES ARE THE OLD EXAMPLE'S SURVIVING HALF, and they are not redundant with the
-    # picker assertion beside them: they guard against the two dead eras' controls coming back —
-    # the cap's `prorated` checkbox and the pool picker. Neither column can be written any more, and
-    # this is the screen where a regression restoring either would show up first.
-    it "is reachable from the Budget page's own header, and offers no dead-era control" do
-      click_link "New rule"
-
-      expect(page).to have_current_path(new_budget_path)
-      expect(page).to have_content("New rule")
-      expect(page).to have_select("Category")
+      expect(page).to have_current_path(new_budget_path(category_id: groceries.id))
+      expect(page).to have_content("New rule for Groceries")
       expect(page).to have_no_select("Pool")
       expect(page).to have_no_field("Prorate daily")
     end
 
-    # A RULE'S OWNER IS AN EXPENSE CATEGORY, never an income one — income lands in available and is
-    # allocated out of it (§2), so a rule on one would claim money that category never holds. A
-    # SAVINGS category IS offered: a goal a rate rule refills is the demo's own Retirement
-    # Supplement.
-    it "offers this user's expense categories, and nothing else" do
-      click_link "New rule"
+    # ** AND THE CATEGORY-LESS URL IS NOT A PAGE. ** `/budgets/new` with nothing named has no title,
+    # no item select and no chips — everything on this form is about one category — so it answers
+    # with the page the doors are on and a sentence saying so, rather than with the picker it used
+    # to open.
+    it "sends a category-less URL back to the Budget page" do
+      visit new_budget_path
 
-      expect(page).to have_select(
-        "Category",
-        options: ["Select a category", "Groceries", "Vacation to Europe"]
-      )
-      expect(salary.reload.budgets).to be_empty
+      expect(page).to have_current_path(budget_page_path)
+      expect(page).to have_content(BudgetsController::NEW_NEEDS_A_CATEGORY)
     end
 
-    # THE STAMP, THROUGH THE BROWSER (two-ledger spec §4). A rule is one of the two things that make
-    # a category start holding its own money, and the hand-made path writes it exactly as the accept
-    # flow does — `BudgetProposal` is the one writer, and `RuleForm#save` is the one door onto it.
-    it "starts an unfunded category holding money from today" do
-      unfunded = create(:category, :expense, user: user, name: "Coffee")
+    # A RULE'S OWNER IS AN EXPENSE CATEGORY, never an income one — income lands in available and is
+    # allocated out of it (§2), so a rule on one would claim money that category never holds. The
+    # picker used to be the affordance; the LIST is, since the Budget page's rows are expense
+    # categories and an income one has no door at all.
+    it "does not exist for an income category" do
+      salary = create(:category, :income, user: user, name: "Salary")
 
-      click_link "New rule"
-      select "Coffee", from: "Category"
-      choose "Usage"
-      fill_in "Rule Amount", with: "35.00"
-      click_button "Create rule"
+      visit budget_page_path
 
-      expect(page).to have_content("Budget was successfully created")
-      expect(unfunded.reload.funded_since).to eq(Date.current)
+      expect(page).to have_no_css("[data-category-row='Salary']")
+      expect(salary.reload.budgets).to be_empty
     end
   end
 
@@ -545,7 +686,7 @@ RSpec.describe "Budgets Forms", type: :system do
   # `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500`, measured — so every
   # window-based spelling of this test is really a 500px test wearing a 375 label.
   # `Emulation.setDeviceMetricsOverride` sets the LAYOUT viewport, which is what CSS media queries
-  # read. The idiom, and the measurements behind it, are in `spec/system/home/money_spec.rb` (`hero_spec.rb` before the money column renamed it).
+  # read. The idiom, and the measurements behind it, are in `spec/system/home/money_spec.rb`.
   #
   # SELENIUM'S OWN GEOMETRY AND NO TRAILING `evaluate_script`: an example whose last statement runs
   # JS leaves the session in a state Capybara's teardown does not survive here.
@@ -556,33 +697,23 @@ RSpec.describe "Budgets Forms", type: :system do
       )
     end
 
-    # THE RADIO ROWS ARE THE THING AT RISK. Each is a control, a title and a line of help on one
-    # line, which is the shape that pushes a page sideways when it cannot wrap — and there are two
-    # such groups on this form where there were none before.
-    it "fits the form and its radio rows inside a 375px viewport", :aggregate_failures do
-      visit new_budget_path
+    # THE TWO COLUMNS ARE THE NEW RISK (§5: "two columns at ≥1024px, one below"). Below that the
+    # preview has to sit UNDER the form rather than beside it, and the radio rows — a control, a
+    # title and a line of help on one line — are the shape that pushes a page sideways when it
+    # cannot wrap.
+    it "stacks the preview under the form and fits inside a 375px viewport", :aggregate_failures do
+      visit new_budget_path(category_id: groceries.id)
 
-      expect(page).to have_content("When is it needed?")
-      expect(page).to have_field("Rule Amount")
+      expect(page).to have_content("2. When is it needed?")
+      expect(page).to have_field("Amount")
 
       card = page.find("form[action=\"#{budgets_path}\"]").native.rect
       radio = page.find("label", text: "money saved up toward a day").native.rect
+      preview = page.find("[data-preview]").native.rect
 
       expect(card.x + card.width).to be <= 375
       expect(radio.x + radio.width).to be <= card.x + card.width
+      expect(preview.y).to be > card.y
     end
   end
-
-  # ** WHAT IS SELECTABLE, NOT WHAT IS RENDERED. ** Every item the user owns is really in the
-  # document — that is what lets a browser with no JavaScript submit any of them and meet
-  # `Budget#item_must_belong_to_category`'s legible 422 — so `have_select(options:)` sees the whole
-  # list whatever the filter did. The filter's own effect is the `disabled`/`hidden` pair the
-  # controller sets, which is what a user can actually reach.
-  def selectable_items
-    item_options.reject(&:disabled?).map(&:text)
-  end
-
-  def rendered_items = item_options.map(&:text)
-
-  def item_options = page.all("select[name='budget[item_id]'] option", visible: :all)
 end

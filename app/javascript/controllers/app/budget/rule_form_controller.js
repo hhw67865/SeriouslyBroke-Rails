@@ -1,104 +1,101 @@
 import { Controller } from "@hotwired/stimulus"
 
-// THE RULES FORM'S REVEALS (two-shapes spec §5; rules-own-the-budget §4).
+// THE RULE FORM'S THREE JOBS, AND NONE OF THEM IS A GATE (two-shapes spec §5).
 //
-// Two jobs, and neither of them is a gate. The server renders every control with the `hidden` state
-// the current choice implies and validates whatever comes back, so a browser with no JavaScript
-// gets the whole form (the partial's `<noscript>` rule forces the blocks visible) and a legible 422
-// if the answers do not hang together. What this adds is that the form follows the radios:
+// The server renders every control with the `hidden` state the current choice implies, renders the
+// preview card on first load, and validates whatever comes back — so a browser with no JavaScript
+// gets the whole form (the partial's `<noscript>` rule forces the blocks visible), a "Preview"
+// button that works by navigating, and a legible 422 if the answers do not hang together. What this
+// adds is that the page keeps up with the person filling it in:
 //
-//   * "Pays" lists EVERY item the user owns, each stamped with its own category, and the ones that
-//     belong to some other category are hidden as the category changes. Filtering here rather than
-//     re-fetching is what makes the category select feel immediate.
 //   * "By a date" reveals the due date and the "repeats" checkbox, and the checkbox reveals the
 //     interval. "Every period" hides all three.
+//   * A chip fills every blank it has a measurement for, and reads "✓ Using this" while the blanks
+//     still match it.
+//   * Any change re-submits the form to `BudgetsController#preview`, debounced, so the card beside
+//     it is always describing what is on screen.
 //
-// ** THE UNSPENT-MONEY REVEAL AND ITS TARGET ARE DELETED (§7). ** They asked what became of money
-// the period did not spend, and the dated schedules DISABLED them as well as hiding them because a
-// dated rule's build-up is defined by its date. A fund is a dated rule now, so there is no second
-// question to keep in step and `#setDisabled` goes with the pair that needed it.
+// ** THE PREVIEW IS NOT COMPUTED HERE, AND THAT IS THE WHOLE DESIGN (§5). ** Every figure on the
+// card is `ClaimCalculator`'s — the same reader Home and the Budget page print — so the browser's
+// job is to ASK for it, not to work it out. This controller presses the form's own Preview button
+// (`requestSubmit`, with that button as the submitter), which means the request carries exactly the
+// fields a save would carry, through the `formaction` the server wrote. There is no second URL, no
+// hand-built payload, and nothing here that can describe the rule differently from the save.
+//
+// ** THE ITEM FILTER IS DELETED WITH THE OWNER PICKER (§5). ** "Pays" used to list every item the
+// user owns, each stamped with its category, hidden and disabled as the category select moved. The
+// form is per category now — `category.items` is the whole select — so there is nothing to filter
+// between and no `categoryValue` to filter by.
 //
 // ** A HIDDEN FIELD IS CLEARED, AND ITS VALUE IS PUT BACK WHEN IT RETURNS. ** A hidden input still
 // submits, so a user who typed a due date and then chose "per period" would send a date the form no
 // longer shows — and `RuleForm` refuses a due date on a per-period rule rather than laundering it
-// away, so the refusal would be about a control that is not on screen. Stashing on the element
-// keeps a toggle back and forth from costing the user their typing.
+// away, so the refusal would be about a control that is not on screen. Stashing on the element keeps
+// a toggle back and forth from costing the user their typing.
 export default class extends Controller {
   static targets = [
-    "category",
+    "form",
+    "amount",
     "item",
     "intervalField",
     "anchorField",
-    "repeatsField"
+    "repeatsField",
+    "previewButton"
   ]
 
-  // THE OWNER, WHERE NO INPUT CARRIES IT. On an EDIT the category is read-only and the form submits
-  // nothing for it (fix round 1 - M1), so the value on the form element is the only statement of
-  // which category "Pays" should be filtered by.
-  static values = { category: String }
+  // HOW LONG THE FORM WAITS BEFORE ASKING THE SERVER AGAIN. Long enough that typing "1200" is one
+  // request rather than four, short enough that the card is not visibly behind the box.
+  static DEBOUNCE_MS = 400
+
+  // EVERY BLANK A CHIP CAN FILL, keyed by the `data-prefill-*` attribute that carries it. The list
+  // is `BudgetsController::BUDGET_FIELDS` minus the owner, which no control on this form sets — a
+  // chip naming a category is naming the one the page is already about.
+  static FIELDS = ["amount", "itemId", "ruleType", "schedule", "repeats", "intervalMonths", "anchorDate"]
 
   connect() {
+    if (this.hasFormTarget) this.refresh()
+  }
+
+  disconnect() {
+    this.cancelPreview()
+  }
+
+  // ONE HANDLER FOR EVERY CONTROL. The reveals and the chip states are instant — they are facts
+  // about what is already on screen — and the preview is debounced, because it is a request.
+  changed() {
     this.refresh()
+    this.schedulePreview()
   }
 
   refresh() {
-    this.filterItems()
     this.revealFields()
+    this.markChips()
   }
 
-  // The category in force: the picker's selection while the user is choosing, and otherwise the one
-  // the form was rendered for. The target wins because it is the live one.
-  get categoryId() {
-    return this.hasCategoryTarget ? this.categoryTarget.value : this.categoryValue
-  }
+  // ---- the reveals -----------------------------------------------------------------------------
 
   get schedule() {
-    const checked = this.element.querySelector('input[name="budget[schedule]"]:checked')
+    const checked = this.formTarget.querySelector('input[name="budget[schedule]"]:checked')
     return checked ? checked.value : "per_period"
   }
 
   // THE CHECKBOX'S OWN STATE. `:checked` on the element rather than its `value`, which is the
   // constant "1" a checkbox submits when it is on and says nothing at all when it is off.
   get repeats() {
-    const box = this.element.querySelector('input[type=checkbox][name="budget[repeats]"]')
+    const box = this.field("repeats")
     return box ? box.checked : false
-  }
-
-  filterItems() {
-    if (!this.hasItemTarget) return
-
-    const categoryId = this.categoryId
-
-    this.itemTarget.querySelectorAll("option[data-category-id]").forEach((option) => {
-      const belongs = option.dataset.categoryId === categoryId
-      option.hidden = !belongs
-      option.disabled = !belongs
-    })
-
-    // An item left selected under a category it does not belong to would submit a pairing
-    // `Budget#item_must_belong_to_category` refuses; "the whole category" is the default anyway.
-    const selected = this.itemTarget.selectedOptions[0]
-    if (selected && selected.disabled) this.itemTarget.value = ""
   }
 
   revealFields() {
     const dated = this.schedule === "by_date"
 
-    this.toggle(this.anchorFieldTarget_, dated)
-    this.toggle(this.repeatsFieldTarget_, dated)
-    this.toggle(this.intervalFieldTarget_, dated && this.repeats)
+    this.toggle(this.optional("anchorField"), dated)
+    this.toggle(this.optional("repeatsField"), dated)
+    this.toggle(this.optional("intervalField"), dated && this.repeats)
   }
 
-  get intervalFieldTarget_() {
-    return this.hasIntervalFieldTarget ? this.intervalFieldTarget : null
-  }
-
-  get anchorFieldTarget_() {
-    return this.hasAnchorFieldTarget ? this.anchorFieldTarget : null
-  }
-
-  get repeatsFieldTarget_() {
-    return this.hasRepeatsFieldTarget ? this.repeatsFieldTarget : null
+  optional(name) {
+    return this[`has${name[0].toUpperCase()}${name.slice(1)}Target`] ? this[`${name}Target`] : null
   }
 
   // Nothing happens when the state already matches, which is what keeps `connect()` from clearing a
@@ -121,5 +118,145 @@ export default class extends Controller {
         input.value = ""
       }
     })
+  }
+
+  // ---- the chips -------------------------------------------------------------------------------
+
+  // ** A CHIP FILLS THE BLANKS AND THEN ASKS THE SERVER. ** Nothing is saved and nothing is
+  // validated here: the fields end up holding what the engine measured, the preview re-renders from
+  // the server, and the user still presses Create.
+  //
+  // `change` IS DISPATCHED ON EVERY FIELD IT WRITES, because a value set by script fires no event of
+  // its own — and the reveals, the chip states and the preview all hang off that event. It is
+  // dispatched on the element rather than announced through a second channel so that a chip's fill
+  // is indistinguishable from a person typing the same thing.
+  useChip(event) {
+    const chip = event.target.closest("[data-chip]")
+    if (!chip) return
+
+    this.constructor.FIELDS.forEach((field) => this.fill(field, chip.dataset[`prefill${this.capitalize(field)}`]))
+    this.changed()
+  }
+
+  fill(name, value) {
+    if (value === undefined) return
+
+    const wire = this.snake(name)
+    const field = this.field(wire)
+    if (!field) return
+
+    if (field.type === "checkbox") {
+      field.checked = this.truthy(value)
+    } else if (field.type === "radio") {
+      this.chooseRadio(wire, value)
+    } else {
+      field.value = value
+    }
+    field.dispatchEvent(new Event("change", { bubbles: true }))
+  }
+
+  // ** THE CHIP READS "✓ Using this" WHILE THE BLANKS MATCH IT (§5). ** The comparison is against
+  // what is IN the form rather than against a flag set when the button was pressed: a user who
+  // accepts a chip and then edits the amount has stopped using it, and a chip that went on claiming
+  // otherwise would be the page asserting something the fields contradict.
+  markChips() {
+    this.element.querySelectorAll("[data-chip]").forEach((chip) => {
+      const button = chip.querySelector("[data-chip-button]")
+      if (!button) return
+
+      const using = this.matchesChip(chip)
+      button.textContent = using ? button.dataset.usingLabel : button.dataset.defaultLabel
+      button.setAttribute("aria-pressed", using ? "true" : "false")
+      chip.toggleAttribute("data-chip-using", using)
+    })
+  }
+
+  matchesChip(chip) {
+    const claimed = this.constructor.FIELDS.filter((field) => chip.dataset[`prefill${this.capitalize(field)}`] !== undefined)
+    if (claimed.length === 0) return false
+
+    return claimed.every((field) => this.fieldMatches(field, chip.dataset[`prefill${this.capitalize(field)}`]))
+  }
+
+  fieldMatches(name, expected) {
+    const field = this.field(this.snake(name))
+    if (!field) return false
+    if (field.type === "checkbox") return field.checked === this.truthy(expected)
+
+    const current = this.currentValue(this.snake(name), field)
+    // MONEY COMPARES AS A NUMBER. "600.0" off a record and "600.00" typed into the box are the same
+    // amount, and a chip that unset itself the moment the browser reformatted its own value would be
+    // worse than no state at all.
+    if (this.numeric(current) && this.numeric(expected)) return Number(current) === Number(expected)
+
+    return current === expected
+  }
+
+  // ---- the preview -----------------------------------------------------------------------------
+
+  // THE FORM'S OWN PREVIEW BUTTON, PRESSED FOR THE USER. `requestSubmit(submitter)` is what carries
+  // the button's `formaction`, `formmethod`, `formnovalidate` and `data-turbo-frame` — a bare
+  // `submit()` would post the form to the SAVE, which is the one thing this must never do.
+  schedulePreview() {
+    if (!this.hasPreviewButtonTarget || !this.hasFormTarget) return
+
+    this.cancelPreview()
+    this.previewTimer = setTimeout(() => {
+      this.previewTimer = null
+      this.formTarget.requestSubmit(this.previewButtonTarget)
+    }, this.constructor.DEBOUNCE_MS)
+  }
+
+  cancelPreview() {
+    if (this.previewTimer) clearTimeout(this.previewTimer)
+    this.previewTimer = null
+  }
+
+  // ---- reading the form ------------------------------------------------------------------------
+
+  // BY THE NAME THE SERVER GAVE IT, not by a target per field. Seven targets for seven blanks would
+  // be seven chances for a renamed control to stop being filled in silence; the wire name is the one
+  // both halves already agree on, and a chip's own attributes are keyed to it.
+  //
+  // ** THE HIDDEN TWIN IS SKIPPED, AND THAT IS NOT A DEFENCE — IT IS THE CHECKBOX (measured). ** A
+  // Rails checkbox is TWO inputs under one name: a hidden `value="0"` first, so an unticked box
+  // still submits, then the box itself. A plain `querySelector` finds the hidden one, whose
+  // `.checked` is false whatever the user did — so the interval field was hidden and CLEARED on
+  // every render of a repeating bill's edit form, and ticking the box revealed nothing.
+  field(name) {
+    const found = Array.from(this.formTarget.querySelectorAll(`[name="budget[${name}]"]`))
+
+    return found.find((element) => element.type !== "hidden") || found[0] || null
+  }
+
+  currentValue(name, field) {
+    if (field.type === "radio") {
+      const checked = this.formTarget.querySelector(`[name="budget[${name}]"]:checked`)
+      return checked ? checked.value : ""
+    }
+    return field.value
+  }
+
+  chooseRadio(name, value) {
+    const radio = this.formTarget.querySelector(`[name="budget[${name}]"][value="${value}"]`)
+    if (radio) radio.checked = true
+  }
+
+  truthy(value) {
+    return ["true", "1", "on", "yes"].includes(String(value).toLowerCase())
+  }
+
+  numeric(value) {
+    return value !== "" && value !== null && Number.isFinite(Number(value))
+  }
+
+  capitalize(name) {
+    return `${name[0].toUpperCase()}${name.slice(1)}`
+  }
+
+  // `itemId` → `item_id`: the data attribute arrives camel-cased by `dataset`, and the wire name is
+  // the column's.
+  snake(name) {
+    return name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
   }
 }

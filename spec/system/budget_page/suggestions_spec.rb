@@ -309,8 +309,11 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "lands on a form prefilled with everything the engine measured" do
       accept(:dated_bill, phone)
 
-      expect(page).to have_content("What Utilities claims each period")
-      expect(page).to have_field("Rule Amount", with: "85.0")
+      # ** THE FORM IS ITS OWN PAGE, TITLED BY THE CATEGORY THE PANEL NAMED (two-shapes spec §5). **
+      # "What Utilities claims each period" was the picker-era subtitle; the accept link carries
+      # `category_id` beside its payload, so the page it lands on says whose rule this is going to be.
+      expect(page).to have_content("New rule for Utilities")
+      expect(page).to have_field("Amount", with: "85.0")
       expect(page).to have_field("Comes round every (months)", with: "1")
       expect(page).to have_select("Pays", selected: "Phone")
     end
@@ -431,7 +434,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "offers no date field" do
       accept(:rate, groceries)
 
-      expect(page).to have_field("Rule Amount", with: "300.0")
+      expect(page).to have_field("Amount", with: "300.0")
       expect(page).to have_no_field("First due")
     end
 
@@ -525,7 +528,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "prefills the observed figure beside the current one" do
       accept(:drift, dining_rule)
 
-      expect(page).to have_field("Rule Amount", with: "45.0")
+      expect(page).to have_field("Amount", with: "45.0")
       expect(page).to have_content("Currently $150.00 per period")
     end
 
@@ -561,13 +564,27 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    it "prefills the form in the rule's own unit and labels it there" do
+    # ** THE FIELD IS IN THE RULE'S OWN UNIT, AND THE CARD IS WHERE THE OTHER UNIT NOW BELONGS
+    # (two-shapes §5; this task's carry). ** The per-period figure used to be asserted ABSENT from
+    # this whole page — the point being that a form must not put two units on one screen without
+    # saying which is which. The preview says which: "$433.33 a month · $200.00 a period on your
+    # biweekly grid" is the sentence that makes the 3.6× conversion visible BEFORE the click, which
+    # is what the example below pins as behaviour rather than as agreement. The rule's CURRENT
+    # per-period cost ($120.00) is still absent, because nothing on this form is about it.
+    it "prefills the form in the rule's own unit and names the other one on the card", :aggregate_failures do
       accept(:drift, retirement_rule)
 
-      expect(page).to have_field("Rule Amount", with: "433.33")
+      expect(page).to have_field("Amount", with: "433.33")
       expect(page).to have_content("Currently $260.00 a month")
-      expect(page).to have_no_content("$200.00")
-      expect(page).to have_no_content("$120.00")
+      expect(page).to have_css("[data-preview-units]", text: "$433.33 a month · $200.00 a period")
+      # ** THE NEGATIVE IS SCOPED TO THE FORM, WHICH IS WHERE IT WAS ALWAYS REALLY ABOUT. ** The chip
+      # above restates the drift sentence ("your rule asks for $120.00 a period") and the card beside
+      # it names both units — each labelled, each in its own place. What must not happen is a
+      # per-period figure appearing among the CONTROLS, where it would be read as the field's.
+      within("form[action='#{budget_path(retirement_rule)}']") do
+        expect(page).to have_no_content("$200.00")
+        expect(page).to have_no_content("$120.00")
+      end
     end
 
     # ** THE ROUND TRIP DOES NOT CLOSE, AND THIS EXAMPLE NOW PINS THAT IT DOES NOT (Task 1's concern
@@ -605,7 +622,7 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "opens the rule for review rather than deleting it" do
       within(suggestion(:dead_rule, netflix_rule)) { click_link "Review the rule" }
 
-      expect(page).to have_field("Rule Amount", with: "120.0")
+      expect(page).to have_field("Amount", with: "120.0")
       expect(Budget.exists?(netflix_rule.id)).to be true
     end
 
