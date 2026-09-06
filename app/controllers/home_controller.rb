@@ -14,19 +14,20 @@ class HomeController < ApplicationController
 
   protected
 
-  # SHARED BY EVERY HOME-SCREEN DOOR'S 422 BRANCH (BankAccountsController, AccountFundings
-  # Controller — a third is coming with onboarding step 3), and by #index itself, so the two
-  # never drift the way a hand-rebuilt copy in each controller eventually would. Both halves this
-  # method assigns are read by `home/index` no matter which controller rendered it.
+  # SHARED BY EVERY HOME-SCREEN DOOR'S 422 BRANCH (BankAccountsController, AccountOpeningsController)
+  # and by #index itself, so the two never drift the way a hand-rebuilt copy in each controller
+  # eventually would. Both halves this method assigns are read by `home/index` no matter which
+  # controller rendered it.
   #
-  # `rejected_movement:` reaches #index too, always nil there — HomePresenter's own default — so
+  # `rejected_opening:` reaches #index too, always nil there — HomePresenter's own default — so
   # this stays the one place `HomePresenter.new` is called for a Home render rather than a second
-  # constructor call free to forget the keyword.
+  # constructor call free to forget the keyword. It was `rejected_movement:` while onboarding asked
+  # about funding movements; nothing on this screen asks the user about a movement now.
   #
   # `Pool.new`, not `current_user.pools.new` — the association form would append the unsaved
   # record to any loaded target for the rest of the request.
-  def assign_home_state(rejected_movement: nil)
-    @presenter = HomePresenter.new(user: current_user, today: current_user.today, rejected_movement: rejected_movement)
+  def assign_home_state(rejected_opening: nil)
+    @presenter = HomePresenter.new(user: current_user, today: current_user.today, rejected_opening: rejected_opening)
     @new_bank_account = Pool.new(user: current_user, pool_type: :account)
   end
 end

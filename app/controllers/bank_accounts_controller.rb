@@ -39,23 +39,20 @@ class BankAccountsController < HomeController
   end
 
   # POST /bank_accounts
+  #
+  # ** THE ADD ROW CARRIES A BALANCE NOW (account-openings spec §3). ** "+ Add an account" asks for a
+  # name and what is in it, in one row, because those are one act for the user — and the balance is
+  # NOT a column on `pools`: it is handed straight to `AccountOpening`, which writes the same opening
+  # record the card's other rows write. A blank balance is legal and leaves the account awaiting its
+  # own row, which is how a user who does not know the figure yet gets past this line.
   def create
-    pool = Pool.new(user: current_user, pool_type: :account, **bank_account_params)
+    pool = Pool.new(user: current_user, pool_type: :account, name: bank_account_params[:name])
+    opening = opening_for(pool)
 
-    if pool.save
-      # The FIRST account a user creates is their main account (spec §2) — the place income
-      # lands and displaced history reads against. Later accounts never steal the role;
-      # changing main is a deliberate future affordance, not a side effect of adding a bank.
-      current_user.update!(default_account: pool) if current_user.default_account.blank?
+    if add(pool, opening)
       redirect_to root_path, notice: "#{pool.name} added."
     else
-      # Same shape as BudgetPageController#update, the other inline form on a presenter-heavy
-      # screen: re-render the page at 422 — nothing was written — with the rejected record as
-      # the form object, so the field keeps its input and the error prints beside it. The
-      # presenter re-queries every figure, so the unsaved pool leaks into none of them.
-      assign_home_state
-      @new_bank_account = pool
-      render "home/index", status: :unprocessable_content
+      refuse(pool, opening)
     end
   end
 
@@ -63,7 +60,9 @@ class BankAccountsController < HomeController
   def update
     @bank_account = scoped_account
 
-    if @bank_account.update(bank_account_params)
+    # `name:` ALONE, NOT THE WHOLE OF `#bank_account_params`: that hash now also carries the add
+    # row's `balance`, which is not a column on this record and is not this form's business.
+    if @bank_account.update(name: bank_account_params[:name])
       redirect_to root_path, notice: "#{@bank_account.name} updated."
     else
       render :edit, status: :unprocessable_content
@@ -110,7 +109,59 @@ class BankAccountsController < HomeController
   # of pool, so a non-account id arriving here is a URL nothing in the app produces.
   def scoped_account = current_user.pools.accounts.find(params[:id])
 
+  # ONE TRANSACTION FOR THE PAIR, so a refused balance leaves no half-added account behind: the
+  # account and what it holds arrived in one submission, and they land or fail together.
+  #
+  # `break false` for a refused NAME rather than a rollback, because nothing was written to undo; the
+  # rollback is for the other order — an account that saved and an opening that would not.
+  def add(pool, opening)
+    Pool.transaction do
+      break false unless pool.save
+
+      # The FIRST account a user creates is their main account (spec §2) — the place income lands and
+      # displaced history reads against. Later accounts never steal the role; changing main is a
+      # deliberate future affordance, not a side effect of adding a bank. It is set BEFORE the
+      # opening is written, because a non-main opening needs a main to transfer out of.
+      current_user.update!(default_account: pool) if current_user.default_account.blank?
+
+      next true if opening.blank? || opening.save
+
+      raise ActiveRecord::Rollback
+    end
+  end
+
+  # Same shape as BudgetPageController#update, the other inline form on a presenter-heavy screen:
+  # re-render the page at 422 — nothing was written — with the rejected record as the form object, so
+  # the field keeps its input and the error prints beside it. The presenter re-queries every figure,
+  # so the unsaved pool leaks into none of them.
+  #
+  # THE ROLLED-BACK ACCOUNT IS UNPERSISTED AGAIN BY HAND. `raise ActiveRecord::Rollback` undoes the
+  # INSERT but leaves the in-memory record believing it has an id, and a form built on it would post
+  # to `PATCH /bank_accounts/:a-row-that-does-not-exist`.
+  #
+  # `@new_account_balance` is the add row's own half of "keep what was typed": the figure has no
+  # record to ride back on, since the opening was never written and the account it named is gone.
+  def refuse(pool, opening)
+    assign_home_state
+    flash.now[:alert] = opening.errors.full_messages.to_sentence if opening&.errors&.any?
+    @new_bank_account = pool.persisted? ? Pool.new(user: current_user, pool_type: :account, name: pool.name) : pool
+    @new_account_balance = bank_account_params[:balance]
+    render "home/index", status: :unprocessable_content
+  end
+
+  # A BLANK BALANCE IS NOT AN OPENING OF ZERO. "I don't know yet" and "it holds nothing" are
+  # different answers, and only the second one is a record: an account added with the field left
+  # empty keeps its row in the "Your accounts" card until the user says.
+  def opening_for(pool)
+    balance = bank_account_params[:balance]
+    return if balance.blank?
+
+    AccountOpening.new(current_user, pool, balance: balance)
+  end
+
+  # `balance` IS PERMITTED BUT IS NOT A COLUMN — `#create` hands it to `AccountOpening` and passes
+  # only `name` to the record. `#update` (the rename form) never sees one.
   def bank_account_params
-    params.expect(bank_account: [:name])
+    params.expect(bank_account: [:name, :balance])
   end
 end

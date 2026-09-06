@@ -59,8 +59,8 @@ class Pool < ApplicationRecord
   # this class still carries, and it is about the PHYSICAL LEDGER rather than about anything nested:
   #
   #   MEASURED, on the shape Home offered before this callback existed. Main is on one side of EVERY
-  #   `AccountMovement` the app can write — `Entry#route_income_to!` and `AccountFundingsController
-  #   #build_movement` both put `user.default_account` on `from_pool` — so `dependent: :destroy` over
+  #   `AccountMovement` the app can write — `Entry#route_income_to!` and `AccountOpening#write_movement`
+  #   both put `user.default_account` on one end — so `dependent: :destroy` over
   #   `movements_in`/`movements_out` does not merely take main's own transfers: it takes every
   #   transfer there is. `users.default_account_id` then nullifies (`on_delete: :nullify`),
   #   `AccountLedger#pot` answers 0 because there is no main to read entries against, and every other

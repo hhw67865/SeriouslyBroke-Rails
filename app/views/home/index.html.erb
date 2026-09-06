@@ -64,8 +64,13 @@
   </p>
 
   <%= render "accounts_line", presenter: @presenter %>
-  <% @presenter.onboarding_accounts.each do |account| %>
-    <%= render "account", presenter: @presenter, account: account %>
-  <% end %>
-  <%= render "new_account", bank_account: @new_bank_account %>
+  <%# ** ONE CARD WHERE THERE WERE A STACK AND AN ADD FORM (account-openings spec §3). ** Home used
+      to render a full account card per unfinished account here — each carrying its own onboarding
+      form — above the add-account card. Every one of those questions is now a ROW inside "Your
+      accounts", so the unfinished accounts and the door to a new one are one card, and a user who
+      has finished sees the add row alone. %>
+  <%= render "your_accounts",
+      presenter: @presenter,
+      bank_account: @new_bank_account,
+      balance: @new_account_balance %>
 </div>

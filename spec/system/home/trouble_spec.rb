@@ -179,13 +179,18 @@ RSpec.describe "Home Trouble", type: :system do
 
   # A MOVE ON THE PHYSICAL LEDGER. `move_out` puts CHECKING in the red; `move_in` is its mirror and is
   # the only way to put a NON-main account below zero while every claim stays healthy.
+  #
+  # `:opened` — the account has said what it holds (account-openings §3). It is load-bearing for the
+  # transfer line: `#money_parked_elsewhere?` totals `#other_accounts`, which EXCLUDES an account
+  # still being asked what is in it, so an unanswered Ally would hold the money and the strip would
+  # offer no remedy for it.
   def move_out(amount)
-    ally = create(:pool, :account, user: user, name: "Ally")
+    ally = create(:pool, :account, :opened, user: user, name: "Ally")
     create(:account_movement, from_pool: checking, to_pool: ally, amount: amount, date: Date.current, kind: :transfer)
   end
 
   def move_in(amount)
-    ally = create(:pool, :account, user: user, name: "Ally")
+    ally = create(:pool, :account, :opened, user: user, name: "Ally")
     create(:account_movement, from_pool: ally, to_pool: checking, amount: amount, date: Date.current, kind: :transfer)
   end
 

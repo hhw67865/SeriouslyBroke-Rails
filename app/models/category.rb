@@ -3,20 +3,30 @@
 class Category < ApplicationRecord
   include ModelSearchable
 
-  # ONBOARDING STEP 3'S LATCH (main-account spec §5): the name of the auto-created category that
-  # records the one-time main correction, and the ONE spelling of it — `OpeningBalancesController`
-  # and `HomePresenter` both read #opening_balance below rather than each carrying their own copy
-  # of this string, so a typo in one cannot leave the controller's latch and the card's render gate
-  # disagreeing about which category means "already done".
+  # WHERE AN ACCOUNT'S OPENING RECORD LANDS (account-openings spec §2), and the ONE spelling of the
+  # two names — `AccountOpening` is the only writer of either, and `#opening_balance` below is the
+  # only reader, so a typo cannot leave the writer and the reader disagreeing about which categories
+  # mean "this is what an account started with".
   #
-  # THE LATCH IS DELIBERATELY REOPENABLE (fix round 1 — MED-2/LOW-2/MED-3 doc ruling). Renaming
-  # or deleting the row this scope matches reopens onboarding's card on the next Home load —
-  # there is no separate "onboarding complete" flag guarding against it. That is ACCEPTED, not a
-  # gap: it is the only escape hatch a user has for a mistyped opening figure, since
-  # `OpeningBalancesController` offers no `destroy` of its own. A user who wants to correct the
-  # correction renames or deletes the category through the ordinary categories screen and the
-  # card comes back, honestly, exactly as if onboarding had never finished.
+  # ** TWO NAMES, BECAUSE A CATEGORY HAS ONE TYPE AND AN OPENING HAS TWO SIGNS. ** Every account's
+  # opening entry lives in the SAME category — the user has one of each, not one per account — and a
+  # user can perfectly well hold an overdrawn checking account and a funded savings account on the
+  # same day. Under the old one-time correction the sign could ride on the single category's type
+  # (income when the correction was a raise, expense when it was a lowering) because there was only
+  # ever one correction; there are as many opening records as accounts now, so the two signs need two
+  # categories:
+  #
+  #   `Opening Balance`   (income)  — money the account already had.
+  #   `Opening Shortfall` (expense) — the amount an account is stated BELOW what the app has tracked
+  #                                   into it: an overdrawn main, or untracked history that left an
+  #                                   account holding less than its transfers say.
+  #
+  # BOTH ARE AUTO-CREATED ON DEMAND AND BOTH ARE `tracked: false` (see `AccountOpening#category_for`).
+  # Renaming or deleting either one is still the user's own escape hatch — the entries go with the
+  # category, and the accounts they belonged to read as never having said what they hold, honestly.
   OPENING_BALANCE_NAME = "Opening Balance"
+  OPENING_SHORTFALL_NAME = "Opening Shortfall"
+  OPENING_NAMES = [OPENING_BALANCE_NAME, OPENING_SHORTFALL_NAME].freeze
 
   # THE COLOUR A CATEGORY HAS WHEN IT HAS NONE, and the ONE spelling of it. The brand sage was
   # written out as a literal `"#C9C78B"` in four places — the index card's chip, the show page's
@@ -161,13 +171,17 @@ class Category < ApplicationRecord
   # would be the hazard).
   scope :with_a_rule, -> { where(id: Budget.where.not(category_id: nil).select(:category_id)) }
 
-  # THE LATCH ITSELF, CASE-INSENSITIVE — matching, not merely resembling, the `uniqueness:
-  # { case_sensitive: false }` validation above. An exact-case `where(name: OPENING_BALANCE_NAME)`
-  # would miss a category a user already named "opening balance" through the ordinary categories
-  # screen: the latch would read "not yet recorded" while `create!` below collided with it on the
-  # very uniqueness rule this scope has to agree with, turning an onboarding click into a crash.
+  # THE OPENING CATEGORIES, CASE-INSENSITIVE — matching, not merely resembling, the `uniqueness:
+  # { case_sensitive: false }` validation above. An exact-case `where(name: OPENING_NAMES)` would
+  # miss a category a user already named "opening balance" through the ordinary categories screen:
+  # `AccountOpening` would read "not written yet" while its own `create!` collided with the row on
+  # the very uniqueness rule this scope has to agree with, turning a saved balance into a crash.
   # Same spelling `Item#move_to_category` already uses for the same reason.
-  scope :opening_balance, -> { where("LOWER(name) = ?", OPENING_BALANCE_NAME.downcase) }
+  #
+  # BOTH NAMES, ONE SCOPE: a reader asking "is this an opening category" never cares which sign it
+  # is, and the two questions that do (which one to write into, what an existing entry means) read
+  # the category's own `#income?`.
+  scope :opening_balance, -> { where("LOWER(name) IN (?)", OPENING_NAMES.map(&:downcase)) }
 
   # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed, and `:pool` left it with the column
   # (Task 8): the Categories index prints what a category HOLDS now, which is read off the category

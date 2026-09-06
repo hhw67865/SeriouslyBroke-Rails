@@ -17,6 +17,20 @@ FactoryBot.define do
       pool_type { :account }
     end
 
+    # ** AN ACCOUNT THAT HAS SAID WHAT IT HOLDS (account-openings spec §3). ** `pools.opened_on` is
+    # the whole of `HomePresenter#awaiting_opening?`: NULL means the account still has a row in the
+    # "Your accounts" card and is OUT of the money row's "Elsewhere" tile, the accounts line and
+    # `#collapsed_accounts`. A fixture that wants a settled account — money parked elsewhere, a card
+    # with Rename and Delete on it, an overdraft on a finished account — says so with this trait.
+    #
+    # NOT THE DEFAULT, DELIBERATELY: a freshly minted account has not answered anything, which is
+    # what the onboarding examples are about and what `AccountOpening` computes its opening day for.
+    # The date is a bare marker here — the real one comes from `AccountOpening`, which is the only
+    # thing that writes an opening entry to go with it.
+    trait :opened do
+      opened_on { Date.current }
+    end
+
     # THE FIRST ACCOUNT A USER GETS IS THEIR MAIN ONE, the same rule
     # `BankAccountsController#create` applies for real — later accounts for the same user are left
     # alone, exactly as a second bank account never steals the role.

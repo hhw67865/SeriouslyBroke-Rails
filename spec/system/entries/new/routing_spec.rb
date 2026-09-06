@@ -19,7 +19,7 @@ RSpec.describe "Entries New Routing", type: :system do
   # a user is given becomes their MAIN one, and this fixture's whole shape is "Checking is main,
   # Ally is somewhere income can be routed TO". A lazy `let` was enough only while the deleted
   # envelope below referenced it; with that gone, nothing forced it and Ally became main.
-  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  let!(:checking) { create(:pool, :account, :opened, user: user, name: "Checking") }
   # rubocop:enable RSpec/LetSetup
 
   # ORDER IS THE FIXTURE. Checking is minted by the `let!` above, before anything here, and Ally
@@ -30,7 +30,7 @@ RSpec.describe "Entries New Routing", type: :system do
   before do
     salary = create(:category, :income, user: user, name: "Salary")
     create(:item, category: salary, name: "Paycheck")
-    create(:pool, :account, user: user, name: "Ally")
+    create(:pool, :account, :opened, user: user, name: "Ally")
 
     food = create(:category, user: user, name: "Food", category_type: :expense)
     create(:item, category: food, name: "Bananas")
@@ -69,9 +69,10 @@ RSpec.describe "Entries New Routing", type: :system do
   def expect_home_buffers(checking:, ally:)
     visit root_path
     # THE CARDS ARE INSIDE THE ACCOUNTS LINE'S EXPANSION (answers-first spec §6): Home collapses the
-    # accounts to one quiet line and this opens it. An account still mid-onboarding surfaces
-    # top-level and is not inside the `<details>` at all, so the click is guarded rather than
-    # assumed — `spec/system/home/accounts_spec.rb` owns which accounts land on which side.
+    # accounts to one quiet line and this opens it. An account that has not said what it holds has no
+    # card at all — it has a ROW in the "Your accounts" card (account-openings §3) — which is why
+    # both fixtures above are `:opened`; `spec/system/home/accounts_spec.rb` owns that split. The
+    # click stays guarded rather than assumed.
     find("[data-accounts-line]").click if page.has_css?("[data-accounts-line]")
 
     within("[data-account-group='Checking']") { expect(page).to have_content("balance now #{checking}") }

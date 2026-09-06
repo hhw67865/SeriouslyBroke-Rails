@@ -336,7 +336,7 @@ RSpec.describe HomePresenter do
     # account's money was folded into the subtraction and then capped away. The two hero figures were
     # the same number for every user whose savings covered their rules.
     it "does not count another account's money, and does not cap at the pot", :aggregate_failures do
-      ally = create(:pool, :account, user: user, name: "Ally")
+      ally = create(:pool, :account, :opened, user: user, name: "Ally")
       income(2_000)
       rate(holder("Groceries", priority: 1), 400)
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
@@ -439,7 +439,7 @@ RSpec.describe HomePresenter do
       # predicate is the TOTAL's sign and not `#other_accounts.any?`: Ally has walked $200 into
       # checking and is $200 overdrawn, so it is a DEBT the strip names, not a place to transfer from.
       it "is false for an account that is itself overdrawn", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(1_000)
         create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
 
@@ -449,7 +449,7 @@ RSpec.describe HomePresenter do
       end
 
       it "is true once that account actually holds money", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(1_000)
         create(:account_movement, from_pool: checking, to_pool: ally, amount: 600, date: today, kind: :transfer)
 
@@ -550,7 +550,7 @@ RSpec.describe HomePresenter do
       # sentence becomes "Move some in from your other accounts", which is the remedy the old card
       # could only reach through the cap.
       it "arm 1 — the rules claim more than checking holds, and another account has money", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(1_150)
         rate(holder("Groceries", priority: 1), 400)
         create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_000, date: today, kind: :transfer)
@@ -577,7 +577,7 @@ RSpec.describe HomePresenter do
       # whole pot, with the claims invisible — because the savings covered them and the cap answered
       # the pot.
       it "arm 2 — free is positive, something is claimed, and money sits elsewhere", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(2_000)
         rate(holder("Groceries", priority: 1), 400)
         create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_500, date: today, kind: :transfer)
@@ -602,7 +602,7 @@ RSpec.describe HomePresenter do
       # shape. `#money_parked_elsewhere?` is the accounts line's own sum, so the card cannot claim
       # money the line below it shows as absent.
       it "arm 2 — nothing is claimed and money is parked", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(1_000)
         create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: today, kind: :transfer)
 
@@ -623,7 +623,7 @@ RSpec.describe HomePresenter do
       # TOTAL's sign: $200 walked IN from an Ally that is now $200 overdrawn is a DEBT the strip
       # names, not a place to transfer from.
       it "arm 2 — an overdrawn second account is not money parked", :aggregate_failures do
-        ally = create(:pool, :account, user: user, name: "Ally")
+        ally = create(:pool, :account, :opened, user: user, name: "Ally")
         income(1_000)
         create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: today, kind: :transfer)
 
@@ -1048,12 +1048,12 @@ RSpec.describe HomePresenter do
       read_the_foot_of_the_page(other)
     end
 
-    # ** THE ACCOUNTS LINE AND THE ONBOARDING CARDS, WHICH THE PIN DID NOT WALK (fix round 1 —
+    # ** THE ACCOUNTS LINE AND THE "YOUR ACCOUNTS" CARD, WHICH THE PIN DID NOT WALK (fix round 1 —
     # LOW-1). ** `index.html.erb` calls `#onboarding_accounts` on every render and
-    # `_accounts_line.html.erb` calls `#collapsed_accounts`; both go through `#onboarding?` to
-    # `#awaiting_opening_balance?`, which runs `Category.opening_balance.exists?` — a real statement
-    # that no example in this block was counting. A reader the pin never calls is a reader free to
-    # open a ledger of its own without either figure moving, which is the whole point of the block.
+    # `_accounts_line.html.erb` calls `#collapsed_accounts`; both go through `#awaiting_opening?`. A
+    # reader the pin never calls is a reader free to open a ledger of its own without either figure
+    # moving, which is the whole point of the block. It costs NOTHING today — see the count's own
+    # note — and it is walked here so that stops being invisible if it ever changes.
     def read_the_foot_of_the_page(other)
       other.collapsed_accounts
       other.onboarding_accounts
@@ -1091,22 +1091,24 @@ RSpec.describe HomePresenter do
     #         `#unruled_holders` partitions them.
     #     13. `#unbudgeted_spending_this_period` — the entry sum read for its NULL answer.
     #     14. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
-    #     15. `Category.opening_balance.exists?` — onboarding step 3's latch, reached through
-    #         `#collapsed_accounts` / `#onboarding_accounts` (the accounts line and the cards under
-    #         it). ONE statement however many accounts the user has: `#opening_balance_recorded?` is
-    #         memoised with `defined?`, and every account but main is answered `false` by the first
-    #         half of `#awaiting_opening_balance?` before the latch is ever asked.
+    #
+    # ** THE FIFTEENTH WAS ONBOARDING'S LATCH AND IT IS GONE (account-openings spec §3). **
+    # `Category.opening_balance.exists?` was a statement of its own, run once per render through
+    # `#collapsed_accounts` / `#onboarding_accounts`, because "has onboarding finished" was a fact
+    # about a CATEGORY. It is a fact about each account now — `pools.opened_on`, a column on rows
+    # line 10 has already loaded — so the same two readers answer for free. Nothing was removed from
+    # the screen and no reader was made lazier: one question moved onto data already in hand.
     #
     # ** NOTHING ON THIS LIST IS THE RUNWAY OR THE BLOCKS. ** Both are readings of `#claim_lines`,
     # which is lines 5-9 already paid for: a tick is a dated line placed on `#period_progress` (the
     # user's own cadence columns, no query) and a block is `#give_way_order` grouped back. A reader
     # that had opened a ledger of its own would move this number, which is what the pin is for.
     #
-    # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, THEN FOURTEEN WITH THE BLOCKS (§3) — AND IT IS
-    # FIFTEEN AGAIN BECAUSE THE PIN GREW A READER, NOT BECAUSE THE SCREEN DID (fix round 1 — LOW-1).
-    # ** Line 15 was always run by a rendered Home; this block simply never walked the two readers
-    # that reach it. The blocks' own saving (line 15 of the old list, `#holder_spending_this_period`)
-    # is real and unchanged — see the rule-less-holder example below, which is what it costs there.**
+    # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, THEN FOURTEEN WITH THE BLOCKS (§3), THEN
+    # FIFTEEN AGAIN WHEN THE PIN GREW A READER (fix round 1 — LOW-1) — AND IT IS FOURTEEN NOW BECAUSE
+    # ONBOARDING'S LATCH LEFT THE QUERY LOG. ** The blocks' own saving (line 15 of the old list,
+    # `#holder_spending_this_period`) is real and unchanged — see the rule-less-holder example below,
+    # which is what it costs there.**
     # The three that left first were `Budget.steady_need`'s own — its
     # `for_user(user).includes(:item, category: :user)` re-fetched rules, categories and users this
     # screen already held — and it takes the page's `ledger:` now, so lines 5-7 answer for it. The
@@ -1115,14 +1117,14 @@ RSpec.describe HomePresenter do
     # is `#holder_spending_this_period`, and it left because its last reader did: a per-CATEGORY
     # spending sum was what `#period_rows` printed, and a per-RULE row reads its own lane off the
     # ledger. It still runs for the one shape that needs it — see the example below.
-    it "costs fifteen statements for a whole render" do
+    it "costs fourteen statements for a whole render" do
       income(2_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 400)
       spend(groceries, 310)
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
 
-      expect(count_statements { read_the_screen }).to eq(15)
+      expect(count_statements { read_the_screen }).to eq(14)
     end
 
     # THE UNBUDGETED FETCH IS CONDITIONAL, and this is what says so: the same screen with nothing
@@ -1134,7 +1136,7 @@ RSpec.describe HomePresenter do
       rate(groceries, 400)
       spend(groceries, 310)
 
-      expect(count_statements { read_the_screen }).to eq(14)
+      expect(count_statements { read_the_screen }).to eq(13)
     end
 
     # ** AND THE HOLDER SUM IS CONDITIONAL TOO — THE OTHER DIRECTION OF THE STATEMENT THAT LEFT. **
@@ -1149,7 +1151,7 @@ RSpec.describe HomePresenter do
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
       spend(holder("Car Repairs", priority: 2), 45)
 
-      expect(count_statements { read_the_screen }).to eq(16)
+      expect(count_statements { read_the_screen }).to eq(15)
     end
   end
 
@@ -1884,20 +1886,42 @@ RSpec.describe HomePresenter do
 
   # ── THE ACCOUNTS LINE (answers-first §6) ──────────────────────────────────────────────────────
   describe "#other_accounts" do
-    # MAIN IS OUT OF THE FIGURE because its balance IS the hero's "In Checking" number; an onboarding
-    # account is out because its card renders top-level, and a figure in the line for a card sitting
-    # above it reads as two accounts.
-    it "totals the finished accounts that are not main", :aggregate_failures do
-      create(:category, :expense, user: user, name: "Opening Balance")
+    # MAIN IS OUT OF THE FIGURE because its balance IS the hero's "In Checking" number; an account
+    # that has not said what it holds is out because it has a ROW in the "Your accounts" card, and a
+    # figure in the line for an account still being asked about reads as two accounts.
+    #
+    # ** THE SIGNAL IS `pools.opened_on`, NOT MONEY (account-openings spec §3). ** The old gate was a
+    # pair — "not main and holding nothing" plus "is main and the Opening Balance category does not
+    # exist" — so this fixture used to close the latch with that category and fund Ally by movement.
+    # Neither stands in for an answer now: `:opened` is the account saying what it holds, and Fresh
+    # is the one that has not.
+    it "totals the accounts that have answered and are not main", :aggregate_failures do
       income(1_000)
-      ally = create(:pool, :account, user: user, name: "Ally")
+      ally = create(:pool, :account, :opened, user: user, name: "Ally")
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: today, kind: :transfer)
       create(:pool, :account, user: user, name: "Fresh")
+      checking.update!(opened_on: today)
 
       expect(presenter.other_accounts).to eq([ally])
       expect(presenter.other_accounts_total).to eq(400)
       expect(presenter.onboarding_accounts.map(&:name)).to eq(["Fresh"])
       expect(presenter.collapsed_accounts).to eq([ally, checking])
+    end
+
+    # ** ONBOARDING IS ONE QUESTION PER ACCOUNT AND IT IS OVER WHEN THE LAST ONE ANSWERS (§3). **
+    # Both directions on one fixture, because "is the user still setting up" is the gate the whole
+    # card renders on.
+    it "is finished only once every account has answered", :aggregate_failures do
+      fresh = create(:pool, :account, user: user, name: "Fresh")
+      checking.update!(opened_on: today)
+
+      expect(presenter).to be_onboarding
+      expect(presenter.awaiting_opening?(fresh)).to be(true)
+      expect(presenter.awaiting_opening?(checking)).to be(false)
+
+      fresh.update!(opened_on: today)
+
+      expect(described_class.new(user: user, today: today)).not_to be_onboarding
     end
   end
 

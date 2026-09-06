@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_07_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_08_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -79,8 +79,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_000000) do
     t.datetime "date", null: false
     t.text "description"
     t.uuid "item_id", null: false
+    t.uuid "opening_account_id"
     t.datetime "updated_at", null: false
     t.index ["item_id"], name: "index_entries_on_item_id"
+    t.index ["opening_account_id"], name: "index_entries_on_opening_account_id", unique: true
   end
 
   create_table "items", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -95,6 +97,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_000000) do
   create_table "pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "name", null: false
+    t.date "opened_on"
     t.integer "pool_type", default: 0, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
@@ -149,6 +152,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_07_000000) do
   add_foreign_key "budgets", "items"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "items"
+  add_foreign_key "entries", "pools", column: "opening_account_id"
   add_foreign_key "items", "categories"
   add_foreign_key "pools", "users"
   add_foreign_key "suggestion_dismissals", "users"

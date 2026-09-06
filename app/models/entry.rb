@@ -15,6 +15,13 @@ class Entry < ApplicationRecord
   # migration cleared every override in the database before the column went.
   has_many :account_movements, foreign_key: :source_entry_id, dependent: :destroy, inverse_of: :source_entry
 
+  # ** THE ACCOUNT THIS ENTRY IS THE OPENING OF (account-openings spec §2), or nil — which is every
+  # ordinary entry there is. ** NOT a lane and not a "paid from": no balance reader looks at this
+  # column. It says only that `AccountOpening` wrote this row as the record of what one account held
+  # on its opening day, so a correction can find that row again and REWRITE it rather than write a
+  # second one. The unique index behind it is the "never a second entry" rule made structural.
+  belongs_to :opening_account, class_name: "Pool", optional: true
+
   validates :amount, presence: true, numericality: { greater_than: 0 }
   validates :date, presence: true
 

@@ -2,9 +2,14 @@
 
 require "rails_helper"
 
-# The wire contract of the Home add-account door: `bank_account[name]` is the ONLY writable
-# attribute, and the pool type is a server fact. Pinned here rather than in a system spec —
+# The wire contract of the Home add-account door: `bank_account[name]` is the only writable
+# ATTRIBUTE, and the pool type is a server fact. Pinned here rather than in a system spec —
 # no user submits a crafted param through Chrome, and this layer can see the status codes.
+#
+# ** `bank_account[balance]` IS PERMITTED AND IS NOT AN ATTRIBUTE (account-openings spec §3). ** The
+# add row asks for a name and what is in the account in one submission, because for the user that is
+# one act; the figure never touches the record, it is handed to `AccountOpening`, which writes the
+# same opening record every other row on that card writes.
 RSpec.describe "BankAccounts", type: :request do
   let(:user) { create(:user) }
   let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
@@ -47,6 +52,36 @@ RSpec.describe "BankAccounts", type: :request do
     # `[:name]` ignores whatever arrives beside it.
     it "keeps the pool's type the server's own" do
       expect(post_crafted).to be_pool_type_account
+    end
+
+    # ** THE BALANCE ARM: ONE SUBMISSION, TWO WRITES, AND THEY LAND TOGETHER OR NOT AT ALL. **
+    it "opens the account at the balance it was added with", :aggregate_failures do
+      post bank_accounts_path, params: { bank_account: { name: "Ally Savings", balance: "500" } }
+
+      ally = user.pools.find_by(name: "Ally Savings")
+      expect(response).to redirect_to(root_path)
+      expect(ally.opened_on).to eq(user.today)
+      expect(AccountLedger.new(user).balance_of(ally)).to eq(500)
+    end
+
+    # A BLANK BALANCE IS NOT AN OPENING OF ZERO: "I don't know yet" and "it holds nothing" are
+    # different answers, and only the second is a record. The account keeps its row in the card.
+    it "leaves an account added with no balance still to answer", :aggregate_failures do
+      post bank_accounts_path, params: { bank_account: { name: "Ally Savings", balance: "" } }
+
+      expect(user.pools.find_by(name: "Ally Savings").opened_on).to be_nil
+      expect(Entry.where.not(opening_account_id: nil)).to be_empty
+    end
+
+    # THE REFUSED HALF TAKES THE OTHER WITH IT — a mirror cannot be overdrawn (§4), and an account
+    # left behind with no balance would be a row the user did not ask for.
+    it "writes no account at all when the balance is refused", :aggregate_failures do
+      post bank_accounts_path, params: { bank_account: { name: "Ally Savings", balance: "-50" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(user.pools.find_by(name: "Ally Savings")).to be_nil
+      expect(response.body).to include("can&#39;t be negative")
+      expect(response.body).to include('value="Ally Savings"')
     end
 
     it "answers 422 with nothing written when the name is refused", :aggregate_failures do

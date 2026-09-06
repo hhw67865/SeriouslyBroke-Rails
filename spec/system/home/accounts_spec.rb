@@ -33,19 +33,23 @@ RSpec.describe "Home Accounts", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  # ONBOARDING STEP 3'S ONE-TIME LATCH, CLOSED. `HomePresenter#awaiting_opening_balance?` is open
-  # for every freshly created user, so main carries the opening-balance card and surfaces top-level
-  # — which is correct, and is exactly what the examples about the COLLAPSED set must not be
-  # measuring. The latch is the "Opening Balance" category's own existence
-  # (`Category.opening_balance`, case-insensitive), so this is the same signal the controller writes.
-  def opening_balance_recorded!
-    create(:category, :expense, user: user, name: "Opening Balance")
+  # ** MAIN HAS SAID WHAT IT HOLDS (account-openings spec §3). ** `HomePresenter#awaiting_opening?`
+  # is open for every freshly created account, so main gets a ROW in the "Your accounts" card and is
+  # out of the collapsed set — which is correct, and is exactly what the examples about the COLLAPSED
+  # set must not be measuring. It was `opening_balance_recorded!`, which closed the one-time latch by
+  # minting the "Opening Balance" category; the signal is `pools.opened_on` now, per account.
+  def answered!(account = checking)
+    account.update!(opened_on: Date.current)
   end
 
   # A SECOND ACCOUNT WITH MONEY IN IT. Account funding is a move on the PHYSICAL ledger (main → the
   # account it is really in), which is the only way a non-main account comes to hold anything.
+  # `:opened` — the account has said what it holds, which is what keeps it out of the "Your accounts"
+  # card and inside the line this file is about. The MOVEMENT is what puts money in it: this file is
+  # about the line, not about the opening, so the transfer is planted directly rather than through
+  # `AccountOpening` (whose own arithmetic is `spec/services/account_opening_spec.rb`'s subject).
   def other_account(name, balance)
-    create(:pool, :account, user: user, name: name).tap do |account|
+    create(:pool, :account, :opened, user: user, name: name).tap do |account|
       create(
         :account_movement,
         from_pool: checking,
@@ -112,11 +116,11 @@ RSpec.describe "Home Accounts", type: :system do
   # reading "$0.00 across 0 other accounts" would be the app inventing an absence.
   it "names the accounts plainly when there is only a main one", :aggregate_failures do
     deposit(1_000)
-    opening_balance_recorded!
+    answered!
 
     visit root_path
 
-    expect(line).to have_content("Your accounts")
+    expect(line).to have_content("Account details")
     expect(line).to have_no_content("other account")
   end
 
@@ -154,7 +158,7 @@ RSpec.describe "Home Accounts", type: :system do
   it "keeps the main account reachable inside the expansion", :aggregate_failures do
     deposit(1_000)
     other_account("Ally", 400)
-    opening_balance_recorded!
+    answered!
 
     visit root_path
     line.click
@@ -169,7 +173,7 @@ RSpec.describe "Home Accounts", type: :system do
   # expansion.
   it "prints an overdrawn account's balance as the debt it is", :aggregate_failures do
     spend_past_zero(400)
-    opening_balance_recorded!
+    answered!
 
     visit root_path
     line.click
@@ -194,10 +198,10 @@ RSpec.describe "Home Accounts", type: :system do
   # OPENED FIRST, deliberately: a collapsed `<details>` hides its fields from Capybara, so this
   # assertion would pass against a card that IS inside the expansion. With it open the containment
   # is the thing being measured.
-  it "keeps the add-account card outside the line", :aggregate_failures do
+  it "keeps the add-account door outside the line", :aggregate_failures do
     deposit(1_000)
     other_account("Ally", 400)
-    opening_balance_recorded!
+    answered!
 
     visit root_path
     line.click
@@ -206,40 +210,34 @@ RSpec.describe "Home Accounts", type: :system do
     expect(disclosure).to have_no_field("Account name")
   end
 
-  # ONBOARDING STEP 2: an account holding nothing yet asks to be funded, and that card cannot be
-  # collapsed — the user has not finished setting the app up, so this is the loudest unfinished
-  # thing on the screen.
-  it "surfaces a fund-this-account card outside the line", :aggregate_failures do
+  # ** AN ACCOUNT THAT HAS NOT ANSWERED HAS NO CARD AT ALL — it has a ROW (account-openings §3). **
+  # It was two examples, one per deleted onboarding step: "surfaces a fund-this-account card outside
+  # the line" (step 2, `Real balance today` under a non-main account) and "surfaces the
+  # opening-balance card outside the line" (step 3, `Main's real balance today` under main). Both
+  # cards are deleted, and what replaced them is not a card in this file's sense: the question lives
+  # in the "Your accounts" card, one row per account, which `spec/system/home/openings_spec.rb` owns.
+  # What this file still has to say is the SPLIT — an unanswered account is not in the line.
+  it "keeps an account that has not answered out of the line", :aggregate_failures do
     deposit(1_000)
     create(:pool, :account, user: user, name: "Ally")
 
     visit root_path
 
-    expect(account_card("Ally")).to have_field("Real balance today")
+    expect(page).to have_css("[data-accounts-onboarding] [data-account-row='Ally']")
     expect(page).to have_no_css("[data-accounts] [data-account-group='Ally']", visible: :all)
   end
 
-  # THE OTHER DIRECTION: the moment that account holds money the card is gone and the account drops
-  # into the collapsed line with the rest.
-  it "drops a funded account back into the line", :aggregate_failures do
+  # THE OTHER DIRECTION: the moment that account answers, its row is gone and its card drops into
+  # the collapsed line with the rest.
+  it "drops an account that has answered back into the line", :aggregate_failures do
     deposit(1_000)
     other_account("Ally", 400)
 
     visit root_path
 
+    expect(page).to have_no_css("[data-account-row='Ally']")
     expect(page).to have_no_css("[data-account-group='Ally']")
     expect(line).to have_content("across 1 other account")
-  end
-
-  # ONBOARDING STEP 3: main's opening-balance card is the same rule one step on — it renders under
-  # MAIN alone, while the one-time latch is open, and it surfaces top-level for the same reason.
-  it "surfaces the opening-balance card outside the line", :aggregate_failures do
-    deposit(1_000)
-
-    visit root_path
-
-    expect(account_card("Checking")).to have_field("Main's real balance today")
-    expect(page).to have_no_css("[data-accounts] [data-account-group='Checking']", visible: :all)
   end
 
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────

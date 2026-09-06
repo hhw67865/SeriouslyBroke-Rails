@@ -95,8 +95,8 @@
           deletes the account's transfers.
 
           "GOES BACK TO YOUR MAIN ACCOUNT" IS TRUE, CHECKED AGAINST THE WRITERS RATHER THAN ASSUMED.
-          Both of them — `Entry#route_income_to!` and `AccountFundingsController#build_movement` —
-          put `user.default_account` on `from_pool`, so main is on the OTHER side of every movement
+          Both of them — `Entry#route_income_to!` and `AccountOpening#write_movement` — put
+          `user.default_account` on one end, so main is on the OTHER side of every movement
           this account has. Deleting them subtracts nothing from main and restores each `moves out`
           it was carrying: the pot rises by exactly what this account held, and `pot + Σ accounts` is
           unchanged to the penny. The sentence is only ever rendered here, on a NON-main account,
@@ -115,20 +115,34 @@
     </div>
   </div>
 
-  <%# ONBOARDING STEP 2 (main-account spec §5): `HomePresenter#awaiting_funding?` is the ONE gate,
-      asked here and by AccountFundingsController. It reads `AccountLedger#balance_of` now — money
-      is the only signal, and there is no envelope inside an account whose existence could ever
-      have stood in for one. %>
-  <% if presenter.awaiting_funding?(account) %>
-    <%= render "fund_account",
-        account: account,
-        movement: presenter.funding_movement_for(account),
-        main_account: presenter.user.default_account %>
-  <% end %>
+  <%# ** EDIT BALANCE (account-openings spec §3): the account says what it holds again. ** The two
+      onboarding cards that used to render here are DELETED — `_fund_account` (step 2's movement from
+      main) and `_opening_balance` (step 3's one-time main correction) — and this is what replaced
+      them BOTH: one door, on every account, open forever rather than latched after one use.
 
-  <%# ONBOARDING STEP 3 (main-account spec §5): renders under MAIN alone, and only while the
-      one-time latch is open — `HomePresenter#awaiting_opening_balance?` is the one gate. %>
-  <% if presenter.awaiting_opening_balance?(account) %>
-    <%= render "opening_balance", account: account %>
-  <% end %>
+      IT REWRITES THE ACCOUNT'S OPENING RECORD RATHER THAN ADDING TO IT (§2, Henry: "Corrections
+      should be done on the same initial entry"), and the field opens on TODAY'S balance because that
+      is the figure the user is being asked to confirm or correct — `AccountOpening` subtracts
+      everything that has flowed through since, so what they type is what this card shows afterwards.
+
+      `<details>`/`<summary>` RATHER THAN A STIMULUS CONTROLLER — the house idiom, stated where the
+      same choice was made in `_accounts_line.html.erb` and `budget_page/_suggestions.html.erb`: the
+      whole interaction is "show me the form", it needs no JavaScript and it survives a Turbo
+      navigation. The link IS the summary.
+
+      A CARD ONLY RENDERS HERE ONCE ITS ACCOUNT HAS AN OPENING RECORD (`#collapsed_accounts`), so
+      this is always a correction and never a first answer — the first answer is a row in the "Your
+      accounts" card, which is the same form. %>
+  <details class="border-t border-gray-200" data-edit-balance="<%= account.name %>">
+    <summary class="px-6 py-3 text-xs font-medium text-brand hover:text-brand-dark cursor-pointer">
+      Edit balance
+    </summary>
+    <%= render "opening_row",
+        account: account,
+        name: nil,
+        url: bank_account_opening_path(account),
+        method: :patch,
+        value: presenter.balance_field_for(account),
+        data: { account_balance_form: account.name } %>
+  </details>
 </section>

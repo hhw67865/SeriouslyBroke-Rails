@@ -86,7 +86,7 @@ RSpec.describe "Home Money Column", type: :system do
   # sentence and the third tile. It lowers the pot and raises nothing the rules can claim, which is
   # exactly the state §2 says is SHOWN and never subtracted.
   def walk_over(name, amount)
-    account = create(:pool, :account, user: user, name: name)
+    account = create(:pool, :account, :opened, user: user, name: name)
     create(
       :account_movement,
       from_pool: checking,
@@ -252,7 +252,7 @@ RSpec.describe "Home Money Column", type: :system do
   # figures were the same number. "Why is free to spend and the number in checking the same when some
   # is claimed?" is the question this example is the answer to.
   it "subtracts the claims from checking and says what sits elsewhere", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
+    ally = create(:pool, :account, :opened, user: user, name: "Ally")
     envelope("Groceries", 400)
     deposit(1_000)
     create(:account_movement, from_pool: checking, to_pool: ally, amount: 700, date: Date.current, kind: :transfer)
@@ -308,7 +308,7 @@ RSpec.describe "Home Money Column", type: :system do
   # sign: $200 walked IN from an Ally that is now $200 overdrawn is a DEBT the strip names, not a
   # place to transfer from. PLANTED: pot $1,200, nothing claimed, so `free` is $1,200.
   it "does not call an overdrawn second account money that sits elsewhere", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
+    ally = create(:pool, :account, :opened, user: user, name: "Ally")
     deposit(1_000)
     create(:account_movement, from_pool: ally, to_pool: checking, amount: 200, date: Date.current, kind: :transfer)
 
@@ -377,7 +377,7 @@ RSpec.describe "Home Money Column", type: :system do
   # claims` has one cause per sign, so the arm is `#anything_claimed?` and `#money_parked_elsewhere?`
   # — the accounts line's own sum — and the two fixtures below are the two answers it can give.
   it "tells a user with money elsewhere to move some in", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
+    ally = create(:pool, :account, :opened, user: user, name: "Ally")
     deposit(1_000)
     create(:account_movement, from_pool: checking, to_pool: ally, amount: 1_200, date: Date.current, kind: :transfer)
 

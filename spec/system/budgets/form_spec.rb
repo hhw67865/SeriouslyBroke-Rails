@@ -388,8 +388,9 @@ RSpec.describe "Budgets Forms", type: :system do
     # that says what happens to unspent money off the screen where the answer is most surprising.
     # ** THE HINT SAYS THE SHAPE WITHOUT THE RETIRED NOUN (fix round — LOW). ** §7 took "fund" off
     # every screen and §10.6 recorded what survived — an informal "a bill or a goal" in the option
-    # help, and "Fund account" on the onboarding card, which is a verb about a bank account. The
-    # checkbox's own hint must not put the noun back.
+    # help. ("Fund account" was the other survivor, on onboarding's step-2 card; that card is deleted
+    # with the step — account-openings §3 — so the word is off every screen now.) The checkbox's own
+    # hint must not put the noun back.
     it "explains the box in the app's own words, without the retired noun", :aggregate_failures do
       expect(page).to have_content("an allowance that keeps building")
       expect(page).to have_content("whatever you don't spend stays claimed, with no limit")

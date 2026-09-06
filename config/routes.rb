@@ -21,18 +21,18 @@ Rails.application.routes.draw do
   # screen about accounts, and it belongs on the resource that names them. `index`, `show` and
   # `new` are deliberately absent: Home IS the accounts index and each account's own card is its
   # show, and the create form is the card on Home.
-  resources :bank_accounts, only: [:create, :edit, :update, :destroy]
-
-  # ONBOARDING STEP 2 (main-account spec §5): giving a fresh account its real balance, as one
-  # movement from main. Create-only, same shape as `bank_accounts` above and for the same
-  # reason — there is one door and it is on Home, where the card lives.
-  resources :account_fundings, only: [:create]
-
-  # ONBOARDING STEP 3 (main-account spec §5): the one-time correction that sets MAIN to its real
-  # bank number. Singular — there is at most one of these a user ever writes, the same reason
-  # `resource :account` above is singular — and create-only for the same reason as the two routes
-  # above it: one door, on Home, where the card lives.
-  resource :opening_balance, only: [:create]
+  # ** WHAT AN ACCOUNT HOLDS, NESTED UNDER THE ACCOUNT IT IS ABOUT (account-openings spec §3). **
+  # SINGULAR, because an account has exactly one opening record and there is nothing to index or to
+  # name by id; `create` is the "Your accounts" row for an account that has not answered yet and
+  # `update` is **Edit balance** on a finished one, which are the same act a day apart.
+  #
+  # ** IT REPLACES BOTH OF ONBOARDING'S OLD DOORS. ** `resources :account_fundings, only: [:create]`
+  # (step 2: one movement from main per account) and `resource :opening_balance, only: [:create]`
+  # (step 3: the one-time main correction) are DELETED with their controllers, their cards and their
+  # request specs — the app asks one question per account now, and this is where the answer goes.
+  resources :bank_accounts, only: [:create, :edit, :update, :destroy] do
+    resource :opening, only: [:create, :update], controller: "account_openings"
+  end
 
   # ── `resources :pools` IS GONE (two-ledger spec §5, Task 7), and with it `PoolsController`,
   # `Pools::CategoriesController`, every view under `app/views/pools/` and `PoolsHelper`. The

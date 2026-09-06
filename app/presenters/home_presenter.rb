@@ -154,15 +154,17 @@ class HomePresenter
 
   attr_reader :user, :today
 
-  # `rejected_movement:` IS ONBOARDING STEP 2'S OWN 422 (main-account spec §5), threaded through
-  # rather than read off an ivar the view would have to know about. AccountFundingsController's
-  # failure branch hands back the unsaved, invalid AccountMovement it tried to save, and
-  # #funding_movement_for is how the ONE account it was for gets it back — every other account's card
-  # renders a fresh, blank one.
-  def initialize(user:, today: user.today, rejected_movement: nil)
+  # `rejected_opening:` IS THE "YOUR ACCOUNTS" CARD'S OWN 422 (account-openings spec §3), threaded
+  # through rather than read off an ivar the view would have to know about. `AccountOpeningsController`
+  # (and `BankAccountsController`, for the add row) hands back the refused `AccountOpening`, and
+  # #rejected_opening_for is how the ONE row it was for gets it back — every other row renders blank.
+  #
+  # IT WAS `rejected_movement:`, onboarding step 2's AccountMovement, and the object changed with the
+  # question: nothing on this screen asks the user about a movement any more.
+  def initialize(user:, today: user.today, rejected_opening: nil)
     @user = user
     @today = today
-    @rejected_movement = rejected_movement
+    @rejected_opening = rejected_opening
   end
 
   # ── THE PHYSICAL LEDGER ────────────────────────────────────────────────────────────────────────
@@ -191,26 +193,23 @@ class HomePresenter
   # The debt as a positive figure, for the sentence that states it.
   def overdraft_for(account) = -balance_of(account)
 
-  # ONBOARDING STEP 2'S ONE GATE (main-account spec §5): not main, and holding no money yet. ONE
-  # predicate, asked by the view (which account gets the card — home/_account.html.erb) and by
-  # AccountFundingsController (which write is legal), so the two cannot drift into two different
-  # answers about the same account.
+  # ** ONBOARDING'S ONE GATE (account-openings spec §3): has this account said what it holds? **
   #
-  # `user.default_account.present?` FIRST (HIGH-1, a 500 fixed): the card used to read
-  # `main_account.name` unconditionally, and a user with no main account 500'd on Home with no door
-  # back in. No main account means no card anywhere.
-  def awaiting_funding?(account)
-    user.default_account.present? && account != user.default_account && balance_of(account).zero?
-  end
+  # IT REPLACES TWO — `#awaiting_funding?` (step 2: "not main, and holding no money yet") and
+  # `#awaiting_opening_balance?` (step 3: "is main, and the one-time latch is open") — and the
+  # collapse is the whole point of the spec: the app asks one question per account now, and every
+  # account answers it the same way, main included.
+  #
+  # `pools.opened_on`, NOT A BALANCE AND NOT A CATEGORY'S EXISTENCE. A balance-based gate could not
+  # tell an account that holds nothing from one that has never been asked, and $0.00 is a real
+  # answer to "what's in it right now". The old latch (`Category.opening_balance.exists?`) was one
+  # fact for the whole USER, which cannot say anything about a particular account.
+  def awaiting_opening?(account) = account.opened_on.nil?
 
-  # ONBOARDING STEP 3'S OWN GATE (main-account spec §5): the account under review must BE the user's
-  # main account, and the one-time latch — the "Opening Balance" category's own existence — must still
-  # be open. Asked here and LITERALLY BY `OpeningBalancesController#create`, which builds its own
-  # presenter and calls this same method, so the card's render gate and the write's legality gate
-  # cannot drift into two different answers.
-  def awaiting_opening_balance?(account)
-    user.default_account.present? && account == user.default_account && !opening_balance_recorded?
-  end
+  # IS THE USER STILL SETTING UP? Any account that has not said what it holds. Onboarding is complete
+  # when the last one has (§3), and a user with no accounts at all is not "finished" — they are at
+  # the add-account row, which is the same card.
+  def onboarding? = accounts.empty? || accounts.any? { |account| awaiting_opening?(account) }
 
   # IS THIS THE ACCOUNT EVERYTHING FLOWS THROUGH? The view's gate on the Delete button, and it is
   # `Pool#main?` rather than a comparison of this screen's own: the model REFUSES the destroy on
@@ -218,13 +217,27 @@ class HomePresenter
   # then rejects — or hide one it would have accepted.
   def main?(account) = account.main?
 
-  # THE FUND-ACCOUNT CARD'S FORM OBJECT (onboarding step 2). The rejected movement if THIS is the
-  # account it was refused for — so its typed amount and its errors survive the re-render — and a
-  # fresh unsaved one otherwise.
-  def funding_movement_for(account)
-    return @rejected_movement if @rejected_movement&.to_pool_id == account.id
+  # THE REFUSED SAVE, IF THIS IS THE ROW IT WAS FOR — so the typed figure and the sentence that
+  # refused it survive the re-render, exactly as the add-account row's name does. nil everywhere
+  # else, which is every row on an ordinary render.
+  def rejected_opening_for(account)
+    return @rejected_opening if @rejected_opening&.account&.id == account.id
 
-    AccountMovement.new(to_pool: account)
+    nil
+  end
+
+  # WHAT THE "EDIT BALANCE" ROW OPENS ON: today's balance, which is the figure the user is being
+  # asked to confirm or correct. `AccountLedger#balance_of` through the screen's one ledger — the
+  # same snapshot the card's own "balance now" line prints, so the field and the sentence above it
+  # cannot disagree.
+  def balance_field_for(account)
+    rejected = rejected_opening_for(account)
+    return rejected.typed if rejected
+
+    # `format` RATHER THAN THE BARE BigDecimal (measured in the browser): `650.0.to_s` puts "650.0"
+    # in a money field, which reads as a figure the app half-knows. Two decimal places is the only
+    # unit this app has anywhere else.
+    format("%.2f", balance_of(account))
   end
 
   # ── THE CLAIMS (computed-claims spec §§2-3) ────────────────────────────────────────────────────
@@ -522,21 +535,19 @@ class HomePresenter
   # its balance IS the hero's "In Checking" figure, and counting it here would answer one question
   # twice with two different numbers; an onboarding account is out because its card is rendered
   # top-level and a figure in the line for a card sitting above it reads as two accounts.
-  def other_accounts = accounts.reject { |account| main?(account) || onboarding?(account) }
+  def other_accounts = accounts.reject { |account| main?(account) || awaiting_opening?(account) }
 
   def other_accounts_total = other_accounts.sum(0.to_d) { |account| balance_of(account) }
 
   # THE CARDS THE LINE HIDES, which is every account whose onboarding is finished — MAIN INCLUDED.
   # The line's FIGURE is about the others; the expansion is the accounts INDEX, and Home carries
   # rename and delete since `pools/index` and `pools/show` were deleted.
-  def collapsed_accounts = accounts.reject { |account| onboarding?(account) }
+  def collapsed_accounts = accounts.reject { |account| awaiting_opening?(account) }
 
-  # STILL UNFINISHED, so the card surfaces top-level (answers-first §6). Both gates asked through the
-  # presenter's own predicates rather than re-spelled, because each is ALSO the gate a controller
-  # checks before accepting the write the card submits.
-  def onboarding_accounts = accounts.select { |account| onboarding?(account) }
-
-  def onboarding?(account) = awaiting_funding?(account) || awaiting_opening_balance?(account)
+  # STILL UNFINISHED, so it gets a ROW in the "Your accounts" card rather than a card of its own
+  # (§3). The gate is asked through the presenter's own predicate rather than re-spelled, because it
+  # is ALSO the gate that decides whether the account's finished card renders in the expander.
+  def onboarding_accounts = accounts.select { |account| awaiting_opening?(account) }
 
   # ── THE PERIOD, AND THE STRUCTURAL VERDICT ─────────────────────────────────────────────────────
 
@@ -779,19 +790,9 @@ class HomePresenter
   # pot the hero prints.
   def account_ledger = claim_ledger.account_ledger
 
-  # THE LATCH ITSELF, memoised: #awaiting_opening_balance? is asked once per account this screen
-  # renders, and every account but main gets a `false` from the first half of that predicate before
-  # this one is ever reached.
-  #
-  # `Category.opening_balance`, NOT a hand-rolled `exists?(name: …)`: that scope is CASE-INSENSITIVE,
-  # matching `Category`'s own uniqueness validation, so a user who already has a category spelled
-  # "opening balance" reads as latched here exactly as it would refuse a second `create!`.
-  #
-  # `defined?` rather than `||=`: the open latch is `false`, the common case for as long as onboarding
-  # is unfinished, and `||=` would re-run the EXISTS on every hit.
-  def opening_balance_recorded?
-    return @opening_balance_recorded if defined?(@opening_balance_recorded)
-
-    @opening_balance_recorded = user.categories.opening_balance.exists?
-  end
+  # ** THE LATCH READER IS GONE (account-openings spec §3). ** `#opening_balance_recorded?` ran
+  # `Category.opening_balance.exists?` — ONE fact for the whole user, which was the right shape while
+  # onboarding's last step was a single main correction and is the wrong shape for a question asked
+  # once per account. `#awaiting_opening?` reads `pools.opened_on` off a row this screen has already
+  # loaded, which is also why the render's statement count fell by one.
 end

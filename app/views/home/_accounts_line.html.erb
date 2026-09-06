@@ -32,10 +32,15 @@
             wave is undoing. What this line keeps is its own job: the total, and the door to the
             cards behind it. `data-account-chip` on the tile is the one hook that names them. %>
       <% else %>
-        <%# NOTHING IS ELSEWHERE, so there is no total to state — "$0.00 across 0 other accounts"
+        <%# NOTHING IS ELSEWHERE, so there is no figure to state — "$0.00 across 0 other accounts"
             would be the app inventing an absence. The line still exists, because the cards behind it
-            do and this is the only door to them. %>
-        Your accounts
+            do and this is the only door to them.
+
+            "ACCOUNT DETAILS", NOT "YOUR ACCOUNTS" (account-openings spec §3): that is the heading of
+            the card below, and one screen saying the same three words twice about two different
+            things reads as one thing rendered twice. This line is the door to the finished accounts'
+            cards; the card below is where an account is added and where it says what it holds. %>
+        Account details
       <% end %>
     </summary>
 

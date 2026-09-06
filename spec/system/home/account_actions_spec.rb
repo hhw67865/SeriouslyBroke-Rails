@@ -29,15 +29,25 @@ require "rails_helper"
 # `spec/requests/bank_accounts_spec.rb`, where the status and the flash are visible.
 RSpec.describe "Home account actions", type: :system do
   let(:user) { create(:user) }
-  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
-  let!(:ally) { create(:pool, :account, user: user, name: "Ally") }
+  let!(:checking) { create(:pool, :account, :opened, user: user, name: "Checking") }
+  let!(:ally) { create(:pool, :account, :opened, user: user, name: "Ally") }
 
   before { sign_in user, scope: :user }
 
   def account_section(name) = find("[data-account-group='#{name}']")
 
+  # ** THE CARDS LIVE BEHIND THE ACCOUNTS LINE, AND `:opened` IS WHAT PUTS THEM THERE
+  # (account-openings spec §3). ** An account that has not said what it holds has a ROW in the "Your
+  # accounts" card and no card of its own — no Rename, no Delete — so every example in this file is
+  # about an account that has answered. Before this task both fixtures were mid-onboarding and their
+  # cards rendered top-level; the two doors this file is about were reachable by accident.
+  def open_the_line
+    visit root_path
+    find("[data-accounts-line]").click
+  end
+
   describe "the buttons", :aggregate_failures do
-    before { visit root_path }
+    before { open_the_line }
 
     it "offers rename and delete on an ordinary account's own section" do
       within(account_section("Ally")) do
@@ -65,7 +75,7 @@ RSpec.describe "Home account actions", type: :system do
   end
 
   describe "the delete confirm", :aggregate_failures do
-    before { visit root_path }
+    before { open_the_line }
 
     def confirm_text
       find("form[action='#{bank_account_path(ally)}']")["data-turbo-confirm"]
@@ -75,7 +85,7 @@ RSpec.describe "Home account actions", type: :system do
     # moved ends up.
     #
     # ** "GOES BACK TO YOUR MAIN ACCOUNT" IS TRUE, RE-VERIFIED (final fix wave, C-1). ** Both writers
-    # of an AccountMovement — `Entry#route_income_to!` and `AccountFundingsController#build_movement`
+    # of an AccountMovement — `Entry#route_income_to!` and `AccountOpening#write_movement`
     # — put `user.default_account` on `from_pool`, so main is on the OTHER side of every movement a
     # deletable account has: destroying them restores main's `moves out` and the pot rises by exactly
     # what the account held. The ledger half of that claim is asserted in the request spec; here it is
@@ -101,7 +111,7 @@ RSpec.describe "Home account actions", type: :system do
 
   describe "deleting", :aggregate_failures do
     it "removes the account's section" do
-      visit root_path
+      open_the_line
 
       within(account_section("Ally")) { accept_confirm { click_button "Delete" } }
 
@@ -114,10 +124,11 @@ RSpec.describe "Home account actions", type: :system do
     # with its section, its Rename and no Delete — so a user cannot reach the empty-of-accounts state
     # the C-1 regression produced by clicking twice.
     it "leaves the main account on the page with no way to delete it" do
-      visit root_path
+      open_the_line
       within(account_section("Ally")) { accept_confirm { click_button "Delete" } }
       expect(page).to have_content("Ally deleted.")
 
+      find("[data-accounts-line]").click
       within(account_section("Checking")) do
         expect(page).to have_link("Rename")
         expect(page).to have_no_button("Delete")
