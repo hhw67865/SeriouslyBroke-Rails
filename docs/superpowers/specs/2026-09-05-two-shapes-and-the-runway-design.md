@@ -587,3 +587,29 @@ list is biggest-claim-first.
    pinned on 2026-09-03 is now six claims and Σ $856.19. Nothing in this delivery wrote to her: every
    one of her rows was last written hours BEFORE the plan's base commit, and Task 1 already recorded
    the new figures at BASE.
+
+## 12. Amendment (Henry, 2026-09-06): the fund that keeps growing comes back
+
+> "I tried to set a $510 rule per period on BaBay Duck but there was no option to have it grow
+> endlessly (no limit)… Basically the claimed for the rule would be the total every period minus any
+> adjustments made. And it will keep growing. So the claim amount will grow."
+
+§1's retirement of the open-ended shape is reversed. A per-period rule may **keep what it doesn't
+spend**:
+
+```
+budgets.keeps_unspent  boolean NOT NULL default false   (per-period rules only; a dated rule never)
+claim = clamp≥0 per period of  Σ over periods since the rule started (amount + Σ adjustments in P) − spent in P
+```
+— the §3.2 walk with no target and no cap: `ClaimCalculator#shape` gains `:fund` (per-period AND
+`keeps_unspent`); `planned_this_period` is the amount; `standing_ask` is the amount; adjustments are
+deltas on their own period (a skip is −accrued this period, as everywhere); `over?` when spending
+outruns the built-up. Rows read `built up $X · +$amount a period`; the Budget row and the preview the
+same; the Savings band does not list it (it has no date — it is an allowance that keeps, not a target).
+The form: a checkbox under **Every period**, "Keeps what it doesn't spend", ignored for "By a date".
+`RuleForm` word: `keeps` (bool). Cadence change scales it like any per-period rule.
+
+Also ruled the same day: the form's **Preview button is deleted**; the card renders only when
+JavaScript runs (Stimulus reveals it and refreshes it on change, with a brief highlight); without
+JavaScript there is no preview at all. And the Budget page and the form get a 375px pass with
+screenshots, like Home.
