@@ -409,6 +409,37 @@ RSpec.describe HomeHelper, type: :helper do
       end
     end
 
+    # ── ** THE RUNWAY TICK'S OWN WORDS, SAID ONCE FOR TWO PLACES ON ONE PANEL ** ─────────────────
+    #
+    # The runway prints these beside the dot at full width AND down in the pace block whenever a
+    # label is suppressed or the screen is narrow, so the two spellings of one screen cannot come to
+    # disagree about whether a bill is ready. A `RunwayTick` is a `Data`, so the fixture is the real
+    # thing rather than a double — a double would let the state and the gap drift apart, which is the
+    # one relationship these two arms are about.
+    #
+    # NO DATE IN THE WORDS, and that is the panel's ruling rather than an omission: a tick's PLACE on
+    # the ruler is its day, which is the thing the deleted list could not say. `#when_words` still
+    # carries the date, for the rows in "This period" that have no ruler to sit on.
+    describe "#runway_tick_words" do
+      def runway_tick(state:, gap: 0.to_d)
+        HomePresenter::RunwayTick.new(
+          line: nil, day_index: 11, percent: 79, label: "Electric", amount: 120.to_d, state: state, gap: gap
+        )
+      end
+
+      # THE MONEY IS THERE FOR THE DAY: the name, and the one word that says so.
+      it "calls a tick whose money is there ready" do
+        expect(helper.runway_tick_words(runway_tick(state: :ready))).to eq("Electric · ready")
+      end
+
+      # THE MONEY IS NOT THERE, AND THE GAP IS NAMED — `ClaimLine#fund_gap`, the same figure the
+      # trouble strip prints about the same rule. "Short" without an amount is a fact nobody can act
+      # on, which is why the arm carries the figure rather than the adjective alone.
+      it "names the gap on a tick that is short" do
+        expect(helper.runway_tick_words(runway_tick(state: :short, gap: 40.to_d))).to eq("Electric · $40.00 short")
+      end
+    end
+
     # ── THE PACE, SAID ONCE FOR THE RUNWAY AND THE SHORTFALL STRIP ───────────────────────────────
     describe "#pace_words" do
       it "says what a day may cost while free is above zero" do

@@ -537,13 +537,24 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-money] > [data-tile='free'] [data-free]")
     expect(page).to have_css("[data-money] > [data-tile='checking'] [data-in-checking]")
     expect(page).to have_css("[data-money] > [data-tile='elsewhere'][data-other-accounts]")
-    expect(page).to have_no_css("[data-money].border")
-    expect(page).to have_no_css("[data-money].bg-white")
+    expect(page).to have_no_css("[data-money].border").and have_no_css("[data-money].bg-white")
+    expect(find("[data-money]")[:class]).to include("lg:grid-cols-3")
   end
 
   # THE OTHER DIRECTION ON THE ROW: a user who banks in one place has two tiles, not three and not a
   # third one drawn empty. It is the same refusal `#other_accounts` makes, measured on the row.
-  it "draws two tiles for a user with no other accounts", :aggregate_failures do
+  #
+  # ** AND THE ROW COUNTS ITS COLUMNS TO MATCH (fix round 2 — LOW-2). ** `index.html.erb` reads the
+  # same `#other_accounts` the tile does and drops to `lg:grid-cols-2`, because a three-column grid
+  # holding two tiles leaves the pair an empty third of the screen. THE GRID CHOICE STAYS IN THE
+  # INDEX rather than folding into `_money`: the index owns the top band's layout (it also places the
+  # runway beneath), and `_money` owns what a tile SAYS. The cost is that one predicate is read in
+  # two files and they must agree — which is exactly what this example is.
+  #
+  # THE CLASS IS READ OFF THE ATTRIBUTE, not matched as a CSS selector: `.lg\:grid-cols-2` needs an
+  # escaped colon that Capybara hands to the driver verbatim, and a pin should not turn on how a
+  # backslash survives that trip.
+  it "draws two tiles and two columns for a user with no other accounts", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(1_000)
 
@@ -552,6 +563,7 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-money] > [data-tile]", count: 2)
     expect(page).to have_css("[data-money] > [data-tile='free']")
     expect(page).to have_css("[data-money] > [data-tile='checking']")
+    expect(find("[data-money]")[:class]).to include("lg:grid-cols-2")
   end
 
   # ── THE THIRD TILE: MONEY THAT IS NOT IN CHECKING (§3) ─────────────────────────────────────────
@@ -665,6 +677,26 @@ RSpec.describe "Home Money Column", type: :system do
     # THE CHIPS ARE NOT DRAWN AT THIS WIDTH: three account names in half of 375px is three ellipses,
     # and the figure is what the tile is for. The names are still a tap away, on the accounts line at
     # the foot of the page — which is the door that survived the chips moving up to the tile.
+    # ** THE FIGURE THAT SET THE TYPE SIZE (fix round 2 — LOW-1). ** At `text-2xl` the account
+    # holding **$222,544.87** was wider than its own half-tile and hung out of it — measured on
+    # Ming's Home, which is where the `text-xl sm:text-2xl` came from. The pin is the rect, not the
+    # class: the figure's box inside the tile's box, on both edges, so reverting the size fails here
+    # rather than in a screenshot nobody reruns.
+    it "fits a six-figure balance inside its half-width tile at 375px", :aggregate_failures do
+      deposit(300_000)
+      walk_over("Ally", 222_544.87)
+
+      visit root_path
+
+      expect(page).to have_css("[data-other-accounts-total]", text: "$222,544.87")
+
+      tile = tile_rect("elsewhere")
+      figure = page.find("[data-other-accounts-total]").native.rect
+
+      expect(figure.x).to be >= tile.x
+      expect(figure.x + figure.width).to be <= tile.x + tile.width
+    end
+
     it "leaves the account names off the tile at 375px", :aggregate_failures do
       deposit(1_000)
       walk_over("Vanguard", 100)

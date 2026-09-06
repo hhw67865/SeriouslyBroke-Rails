@@ -28,11 +28,15 @@
     their money is. Each tick is ONE element: the amount ABOVE the dot, the name and its state BELOW,
     both centred on the dot with `-translate-x-1/2` so the group's centre IS the day.
 
-    THE COLLISION IS ANSWERED AT 375 RATHER THAN AVOIDED EVERYWHERE. Below `sm` the name is
-    `invisible` — held in place, so the group stays symmetric about its dot and the dot stays on the
-    rail — and the words move into the pace block, which is a line that may wrap. So the narrow
-    screen reads the amount on the rail and the name underneath in prose, and the wide screen reads
-    both in place.
+    ** A LABEL NEVER OVERPRINTS ANOTHER, AND THE WORDS ARE NEVER LOST (fix round 2 — MED-1/2). **
+    The first cut assumed full width was room enough; it is not. Two bills on ONE day are 6px apart
+    (the dot nudge does nothing for a 96px name) and two on ADJACENT days are ~75px apart at 1440,
+    which is narrower than a name. So the tick loop carries a CLEARANCE — see it for the number and
+    where the number comes from — and a tick too close to the last LABELLED one keeps its dot and
+    goes `invisible`, held in place so the group stays symmetric about its dot and the dot stays on
+    the rail. Nothing is lost: the moment any label is suppressed, the pace block's list appears at
+    every width and says every tick's words in order. Below `sm` that list is always there and the
+    rail carries amounts only, because at ~310px of rail no two labels fit.
 
     THE PANEL IS FULL WIDTH (see `index.html.erb`): the money is a row of tiles above it, not a
     column beside it, and a ruler is the one shape on this screen that spends width well. %>
@@ -75,11 +79,38 @@
                 it is counted here rather than carried on `RunwayTick`.
               TODAY IS DRAWN LAST, ABOVE, WITH A WHITE HALO. Later siblings paint over earlier ones in
                 one stacking context, so the mark is below the tick loop and takes `z-10` as well —
-                and `ring-1 ring-white` separates it from whatever colour it is standing on. %>
+                and `ring-1 ring-white` separates it from whatever colour it is standing on.
+
+            ** AND THE WORDS NEED THE SAME RULING, WHICH THE NUDGE CANNOT GIVE THEM (fix round 2 —
+            MED-1/2). ** 6px separates two DOTS; it does nothing for two ~96px names centred 6px
+            apart, which simply overprint — and so do two ticks on ADJACENT days, because a day of a
+            fortnight is about 75px of rail at 1440 and a name is wider than that. So the same pass
+            carries `last_labelled` and a CLEARANCE, and a tick closer than the clearance to the last
+            tick that KEPT its label is suppressed: its dot is drawn exactly as before, and its
+            amount and name go `invisible`.
+
+            `LABEL_CLEARANCE` IS 22 PERCENTAGE POINTS OF THE RAIL, and that is one spelling chosen
+            deliberately over a per-breakpoint one. The bound is a ~110px label; the NARROWEST rail
+            that renders labels at all is `sm` (640px viewport − 48 layout − 32 card − 2 border − 48
+            rail inset ≈ 510px), and 110 ÷ 510 ≈ 21.5%, rounded up. Measuring against the narrowest
+            means the rule is "never overprints at any width that shows a label" rather than "usually
+            fits" — it costs some labels at 1440 that would have had room, and those words are in the
+            list below, which is the trade this fix is making.
+
+            INVISIBLE, NOT HIDDEN, AND NEVER ON A SECOND ROW. `visibility: hidden` keeps the group
+            symmetric about its dot, so the dot stays on the rail (see the note on the name below);
+            alternating labels between two rows would put the words at a height that no longer says
+            which dot they belong to, which is the whole reason they came onto the rail. %>
         <% nudged_by = Hash.new(0) %>
+        <% label_clearance = 22 %>
+        <% last_labelled = nil %>
+        <% any_suppressed = false %>
         <% runway.ticks.each do |tick| %>
           <% nudge = nudged_by[tick.day_index] %>
           <% nudged_by[tick.day_index] += 1 %>
+          <% suppressed = !last_labelled.nil? && (tick.percent - last_labelled).abs < label_clearance %>
+          <% last_labelled = tick.percent unless suppressed %>
+          <% any_suppressed ||= suppressed %>
           <%# ** KEYED ON THE RULE, LABELLED SEPARATELY (fix round 1 — LOW-4). ** Two categories may
               each own an item called "Electric", and a hook keyed on the label answers for both — an
               ambiguous find in a spec and, worse, two marks a reader cannot tell apart. The id is
@@ -94,7 +125,7 @@
                style="left: calc(<%= tick.percent %>% + <%= nudge * 6 %>px);"
                data-tick="<%= tick.line.rule.id %>"
                data-tick-label="<%= tick.label %>">
-            <span class="mb-2 text-xs font-medium leading-4 tabular-nums whitespace-nowrap <%= tick.short? ? "text-status-danger" : "text-gray-900" %>"
+            <span class="mb-2 text-xs font-medium leading-4 tabular-nums whitespace-nowrap <%= "invisible" if suppressed %> <%= tick.short? ? "text-status-danger" : "text-gray-900" %>"
                   data-tick-amount>
               <%= number_to_currency(tick.amount) %>
             </span>
@@ -106,7 +137,7 @@
                 on the ruler is the day, said in the one way a list could not say it. The state is in
                 words as well as in colour, because a colour is not a sentence and a red dot with no
                 word beside it is a screen asking to be interpreted. %>
-            <span class="invisible sm:visible mt-2 text-xs leading-4 whitespace-nowrap <%= tick.short? ? "text-status-danger" : "text-gray-600" %>"
+            <span class="invisible <%= "sm:visible" unless suppressed %> mt-2 text-xs leading-4 whitespace-nowrap <%= tick.short? ? "text-status-danger" : "text-gray-600" %>"
                   data-tick-name>
               <%= runway_tick_words(tick) %>
             </span>
@@ -152,12 +183,22 @@
         period it meets. The trailing stop is dropped from each part, because a sentence ending in
         "." beside a "·" is two punctuations doing one job. %>
     <div class="mt-4 border-t border-gray-100 pt-3" data-pace>
-      <%# ** THE TICKS' WORDS AT 375, WHICH IS WHERE THE RAIL CANNOT HOLD THEM. ** Two labels three
-          days apart overlap at this width, so the amount stays on the rail (it is short, and it is
-          the figure) and the name comes down here, where a line may wrap. Above `sm` this is gone
-          entirely and the rail's own labels are the only copy of these words. %>
+      <%# ** THE TICKS' WORDS, WHEREVER THE RAIL CANNOT HOLD THEM. ** Below `sm` that is always: the
+          rail is ~310px and two labels two days apart go through each other, so the amount stays up
+          there (it is short, and it is the figure) and the names come down here, where a line may
+          wrap.
+
+          ** AND FROM `sm` UP, WHENEVER ANY TICK LOST ITS LABEL (fix round 2 — MED-1/2). ** The
+          clearance above suppresses a label rather than overprinting it, and a suppressed label is a
+          fact the screen has stopped saying — so the list appears at EVERY width the moment one is
+          suppressed, and it lists every tick, not only the suppressed ones. Naming just the
+          suppressed ones would read as a footnote about the odd bill out; the list is the same
+          ticks in the same order, which is a thing a reader can check the rail against.
+
+          `sm:hidden` ONLY WHEN NOTHING IS SUPPRESSED — that is the quiet period's panel, where the
+          rail says everything and a list under it would be the same words twice. %>
       <% if runway.any_due? %>
-        <ul class="mb-2 space-y-1 sm:hidden">
+        <ul class="mb-2 space-y-1 <%= "sm:hidden" unless any_suppressed %>" data-tick-list>
           <% runway.ticks.each do |tick| %>
             <li class="text-sm text-gray-700" data-tick-words="<%= tick.line.rule.id %>">
               <span class="font-medium tabular-nums <%= tick.short? ? "text-status-danger" : "text-gray-900" %>">

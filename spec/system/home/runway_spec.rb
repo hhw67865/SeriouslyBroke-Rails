@@ -84,6 +84,17 @@ RSpec.describe "Home Runway", type: :system do
     ]
   end
 
+  # TWO DATED BILLS ON THE SAME DAY — the fixture behind the dot nudge and behind the label
+  # suppression, which are the two answers this panel gives to one collision.
+  def two_bills_one_day
+    utilities = holder("Utilities")
+
+    [
+      bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24)),
+      bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 24))
+    ]
+  end
+
   # THE TWO HOOKS, FOUND BY THE RULE THAT OWNS THEM. Both take the `Budget` the fixture helpers
   # return, so no example in this file can be satisfied by another rule's mark.
   # THE SCREEN, READ AT THIS FILE'S FROZEN DAY — every example travels, and an example that reads it
@@ -293,9 +304,7 @@ RSpec.describe "Home Runway", type: :system do
   # render two elements.
   it "nudges a second tick that falls on the same day", :aggregate_failures do
     deposit(1_000)
-    utilities = holder("Utilities")
-    electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
-    water = bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 24))
+    electric, water = two_bills_one_day
 
     travel_to(today) { visit root_path }
 
@@ -303,6 +312,72 @@ RSpec.describe "Home Runway", type: :system do
     # now, and a group whose label is an odd number of pixels wide centres on a half pixel. The
     # assertion is the nudge, and a `left:` that ignored it would put both dots at the same x.
     expect(tick_mark(water).native.rect.x - tick_mark(electric).native.rect.x).to be_within(0.1).of(6)
+  end
+
+  # ── ** A LABEL NEVER OVERPRINTS ANOTHER (fix round 2 — MED-1/2) ** ────────────────────────────
+  #
+  # ** 6px SEPARATES TWO DOTS AND DOES NOTHING FOR TWO NAMES. ** The fixture directly above draws
+  # "Electric · ready" and "Water · ready" — about 96px each, `whitespace-nowrap` — centred 6px
+  # apart, which is two sentences printed through each other. The clearance suppresses the second
+  # one's words: its DOT is untouched (the example above still passes, on the same fixture), its
+  # amount and name go `invisible`, and the pace block's list appears to say what the rail stopped
+  # saying.
+  #
+  # BOTH DIRECTIONS ON THE HOOK: `have_no_css` is visible-only, so it is the assertion that the words
+  # are not readable; `visible: :all` is the assertion that they are still IN the group, which is
+  # what keeps it symmetric about its dot. A fix that deleted the span would pass the first and fail
+  # the second, and would drop the dot off the rail.
+  it "suppresses the second label when two ticks fall on one day", :aggregate_failures do
+    deposit(1_000)
+    electric, water = two_bills_one_day
+
+    travel_to(today) { visit root_path }
+
+    expect(tick(electric)).to have_css("[data-tick-name]", text: "Electric · ready")
+    expect(tick(water)).to have_no_css("[data-tick-name]").and have_css("[data-tick-name]", visible: :all)
+    expect(find("[data-tick-list]")).to have_content("$120.00 Electric · ready").and have_content("$30.00 Water · ready")
+  end
+
+  # ** TWO TICKS A WEEK APART BOTH KEEP THEIR WORDS, AND THERE IS NO LIST. ** Aug 17 is day 4 (29%)
+  # and Aug 24 is day 11 (79%) — fifty points of rail between them, well past the clearance — so the
+  # rail says everything and the list under it would be the same words twice. This is the other
+  # direction of the gate, and without it "suppress" could be spelled "always suppress".
+  it "labels two ticks a week apart and prints no list under them", :aggregate_failures do
+    deposit(1_000)
+    utilities = holder("Utilities")
+    rent = bill_on_item(utilities, "Rent", amount: 60, due: Date.new(2026, 8, 17))
+    electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
+
+    travel_to(today) { visit root_path }
+
+    expect(tick(rent)).to have_css("[data-tick-name]", text: "Rent · ready")
+    expect(tick(electric)).to have_css("[data-tick-name]", text: "Electric · ready")
+    expect(page).to have_no_css("[data-tick-list]")
+  end
+
+  # ** THE COLLISION THAT FULL WIDTH DOES NOT FIX EITHER. ** Two ticks on ADJACENT days are one
+  # fourteenth of the rail apart — about 75px at 1440 and less at 1024, against a ~96px name — so
+  # "it fits on a big screen" was never true. Measured at 1024, the narrowest desktop the sidebar
+  # leaves room at: the second tick's words are suppressed and the list carries them.
+  describe "at 1024" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 1024, height: 768, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    it "suppresses the second label when two ticks fall on adjacent days", :aggregate_failures do
+      deposit(1_000)
+      utilities = holder("Utilities")
+      electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
+      water = bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 25))
+
+      travel_to(today) { visit root_path }
+
+      expect(tick(electric)).to have_css("[data-tick-name]", text: "Electric · ready")
+      expect(tick(water)).to have_no_css("[data-tick-name]")
+      expect(find("[data-tick-list]")).to have_content("$30.00 Water · ready")
+    end
   end
 
   # ** TWO ITEMS WITH ONE NAME, IN TWO CATEGORIES (LOW-4). ** "Electric" is an ordinary item name and
@@ -316,11 +391,17 @@ RSpec.describe "Home Runway", type: :system do
 
     travel_to(today) { visit root_path }
 
-    # TWO MARKS AND TWO ROWS carry the label — it is on both halves of a tick — so the count is
+    # TWO MARKS AND TWO GROUPS carry the label — it is on both halves of a tick — so the count is
     # asserted on the MARKS, which is the half a shared hook made ambiguous.
+    #
+    # ** `visible: :all` ON THE SECOND (fix round 2 — MED-1/2). ** Aug 24 and Aug 26 are 14 points of
+    # rail apart, inside the label clearance, so the second tick's words are suppressed here — which
+    # is this fixture meeting the new rule rather than a hole in it. What this example is about is
+    # IDENTITY: each group holds its own amount, keyed on its own rule, whether or not the screen is
+    # currently reading it out. The suppression itself is pinned by its own examples above.
     expect(page).to have_css("[data-tick-mark][data-tick-label='Electric']", count: 2)
-    expect(tick(first)).to have_content("$120.00")
-    expect(tick(second)).to have_content("$40.00")
+    expect(tick(first)).to have_css("[data-tick-amount]", text: "$120.00")
+    expect(tick(second)).to have_css("[data-tick-amount]", text: "$40.00", visible: :all)
   end
 
   # ── THE PACE LINE, BOTH SIGNS OF FREE ─────────────────────────────────────────────────────────
