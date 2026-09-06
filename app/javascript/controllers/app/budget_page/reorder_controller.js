@@ -20,6 +20,8 @@ export default class extends Controller {
   start(event) {
     this.dragged = event.currentTarget
     this.orderBefore = this.categoryIds
+    // WHERE EACH CARD WAS, not just what order the cards were in — see `#restore`.
+    this.placeBefore = this.rowTargets.map((row) => [row, row.nextSibling])
     this.dropped = false
     event.dataTransfer.effectAllowed = "move"
     // Firefox will not begin a drag whose dataTransfer carries nothing.
@@ -59,11 +61,24 @@ export default class extends Controller {
     if (this.categoryIds.join() !== this.orderBefore.join()) this.submit()
   }
 
-  // Back to the order recorded at `dragstart`. Each card is re-inserted before the hidden form,
-  // which is the list's last child — so the header stays first, the form stays last, and the
-  // cards land between them in the order they were in.
+  // Back to where each card was at `dragstart` — its own recorded `nextSibling`, not "before the
+  // form".
+  //
+  // The old spelling re-inserted every row target before the hidden form in turn, which puts the
+  // cards back in the right order relative to EACH OTHER and moves anything that is not a row target
+  // out from between them: the list holds more than draggable cards (a ruled category that no longer
+  // holds money renders a band rather than a card, and it is not a `row` target), so a cancelled
+  // drag left the page visibly rearranged in a way no drop had asked for and no PATCH recorded.
+  // Restoring to the recorded siblings puts every child back, targets and non-targets alike.
+  //
+  // WALKED IN REVERSE, because a recorded sibling must already be in place before the card that
+  // goes in front of it moves. Only `this.dragged` has actually moved, so by the time the walk
+  // reaches it every later card is where it was.
   restore() {
-    this.orderBefore.forEach((id) => this.element.insertBefore(this.rowFor(id), this.formTarget))
+    for (let index = this.placeBefore.length - 1; index >= 0; index--) {
+      const [row, next] = this.placeBefore[index]
+      this.element.insertBefore(row, next)
+    }
   }
 
   // THE DOM ORDER IS THE WIRE ORDER. The list is drawn in PRIORITY order — the key

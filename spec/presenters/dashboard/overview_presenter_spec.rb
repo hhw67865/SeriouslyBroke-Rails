@@ -78,7 +78,7 @@ RSpec.describe Dashboard::OverviewPresenter do
     it "reads every fund's claim off that one statement", :aggregate_failures do
       ["Vacation", "Roof", "Car", "Trip", "Rainy Day"].each { |name| fund(name) }
 
-      expect(presenter.savings_summary.pluck(:balance)).to all(eq(BigDecimal("1000")))
+      expect(presenter.savings_summary.map(&:built_up)).to all(eq(BigDecimal("1000")))
       expect(presenter.total_savings_balance).to eq(BigDecimal("5000"))
     end
   end
@@ -100,8 +100,8 @@ RSpec.describe Dashboard::OverviewPresenter do
 
       row = presenter.savings_summary.sole
 
-      expect(row[:name]).to eq("Vacation")
-      expect(row[:target]).to eq(5_000)
+      expect(row.category.name).to eq("Vacation")
+      expect(presenter.savings_target(row)).to eq(5_000)
     end
 
     # ** A RULE WHOSE MONEY RESETS IS AN ENVELOPE, which no classifier this strip has ever had would
@@ -148,8 +148,46 @@ RSpec.describe Dashboard::OverviewPresenter do
       one_off("Tax Estimate", :bill, 3_000)
       goal = one_off("Vacation", :choice, 5_000)
 
-      expect(presenter.savings_summary.pluck(:name)).to eq(["Vacation"])
-      expect(presenter.savings_summary.sole[:target]).to eq(goal.amount)
+      expect(presenter.savings_summary.map { |row| row.category.name }).to eq(["Vacation"])
+      expect(presenter.savings_target(presenter.savings_summary.sole)).to eq(goal.amount)
+    end
+
+    # ** A GOAL THAT HAS BEEN SPENT IS `paid`, AND THE STRIP HAD NO WORD FOR IT (fix wave — MED-3). **
+    # The rows were a hash of four figures with no `paid` member, so a settled one-off — whose
+    # `#built_up` is $0.00 BY CONSTRUCTION, because the payment emptied the fund — took the `progress
+    # < 10` arm and badged `$0.00 of $5,000.00 · low`. The rows are `ClaimLine`s now and the line
+    # already knows: `ClaimCalculator#settled?` (Task 3), off the same walk every other screen reads.
+    #
+    # PLANTED AND RE-DERIVED: the $5,000 goal `#fund` builds, funded a year back, with $5,000 spent
+    # on its lane TODAY. `walk.paid` reaches the target, so `#settled?` is true and `#settled_on` is
+    # today; `#built_up` is `target − paid` clamped at zero = **$0.00**, and the target it was for is
+    # still **$5,000.00**. The strip prints the target and the day, and draws no bar.
+    it "reads a spent goal as paid rather than as barely started", :aggregate_failures do
+      vacation = fund("Vacation")
+      create(:entry, item: create(:item, category: vacation), amount: 5_000, date: Date.current)
+
+      row = presenter.savings_summary.sole
+
+      expect(row).to be_paid
+      expect(row.paid_on).to eq(Date.current)
+      expect(row.built_up).to eq(0)
+      expect(row.target).to eq(5_000)
+    end
+
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THAT SAYS WHY `paid` HAD TO BE A READER OF ITS OWN:
+    # A FUND AT $0.00 IS NOT A FUND PAID. ** One dollar less spent — $4,999 against a $5,000 target —
+    # and `walk.paid` does not reach it, so nothing is settled. The built-up is $0.00 either way
+    # (this period accrued `5,000 ÷ 5` = $1,000 and $4,999 of spending clamps it at zero), which is
+    # exactly why a strip reading the FIGURE cannot tell the two apart and one reading `#paid?` can.
+    it "leaves a goal one dollar short unpaid, at the same $0.00", :aggregate_failures do
+      vacation = fund("Vacation")
+      create(:entry, item: create(:item, category: vacation), amount: 4_999, date: Date.current)
+
+      row = presenter.savings_summary.sole
+
+      expect(row).not_to be_paid
+      expect(row.paid_on).to be_nil
+      expect(row.built_up).to eq(0)
     end
 
     # AN ITEM-BACKED RULE IS NOT THE CATEGORY'S OWN LANE (§3.1's partition): money saved for one item
@@ -213,9 +251,9 @@ RSpec.describe Dashboard::OverviewPresenter do
 
       row = presenter.savings_summary.sole
 
-      expect(row[:balance]).to eq(BigDecimal("600"))
-      expect(row[:target]).to be_nil
-      expect(row[:progress_percentage]).to eq(0)
+      expect(row.built_up).to eq(BigDecimal("600"))
+      expect(presenter.savings_target(row)).to be_nil
+      expect(presenter.savings_progress(row)).to eq(0)
       expect(presenter.total_savings_balance).to eq(BigDecimal("600"))
     end
 
@@ -227,9 +265,9 @@ RSpec.describe Dashboard::OverviewPresenter do
 
       row = presenter.savings_summary.sole
 
-      expect(row[:balance]).to eq(BigDecimal("600"))
-      expect(row[:target]).to eq(2_400)
-      expect(row[:progress_percentage]).to eq(25)
+      expect(row.built_up).to eq(BigDecimal("600"))
+      expect(presenter.savings_target(row)).to eq(2_400)
+      expect(presenter.savings_progress(row)).to eq(25)
       expect(presenter.total_savings_balance).to eq(BigDecimal("600"))
     end
   end

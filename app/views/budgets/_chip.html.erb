@@ -27,7 +27,14 @@
     a date input to that string is setting it to nothing: the Due field stayed empty on every chip
     click, and the chip then read "Use this" for ever because its own value could never match the
     blank it had just failed to fill. `#to_s` is the same rendering the form's own inputs carry. %>
+<%# ** AND THE AMOUNT IS RENDERED AS MONEY, NOT AS A `BigDecimal#to_s` (fix wave — Task 5's minor).
+    ** `122.0` is what `to_s` gives, so clicking a chip filled the box with a figure no user would
+    type and none of this app's other controls hold — the edit form's own box opens at `"120.0"`'s
+    two-decimal twin and the panel's sentence beside the chip says `$122.00`. Two decimals is what
+    the input's `step: 0.01` is for and what the sentence promised. `to_d` first, because the value
+    may already be a string by the time a caller hands it over. %>
 <% prefill = suggestion.prefill[:budget].to_h.transform_values(&:to_s) %>
+<% prefill[:amount] = format("%.2f", prefill[:amount].to_d) if prefill[:amount].present? %>
 <%= tag.article class: "rounded border border-gray-200 bg-gray-50 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3",
                 data: prefill.transform_keys { |field| :"prefill_#{field}" }
                         .merge(chip: suggestion_key(suggestion)) do %>

@@ -168,6 +168,89 @@ RSpec.describe "Budget page reorder", type: :system do
     end
   end
 
+  # ** A CANCELLED DRAG PUTS EVERY ROW BACK, NOT JUST THE DRAGGABLE ONES (fix wave — LOW-2). **
+  #
+  # `reorder_controller#restore` re-inserted each row TARGET before the hidden form in turn, which
+  # restores the draggable cards' order relative to each other and shoves every non-target row out
+  # from between them — and the list holds non-targets by design: `CategoryRow#reorderable?` is
+  # `holder? && ruled?`, so a category carrying a rule that has stopped holding money renders a card
+  # with no handle. Pressing Escape mid-drag therefore left the page rearranged in a way no drop had
+  # asked for and no PATCH had recorded, which is the worst kind of wrong: the screen disagreeing
+  # with the database with no act in between. Each row is restored to its own recorded `nextSibling`
+  # now.
+  #
+  # ** THE DRAG IS SYNTHESISED, WHICH THIS FILE OTHERWISE REFUSES TO DO — and the reason it is
+  # allowed here is that the drag is the SUBJECT. ** Every other example goes through the ▲▼ buttons
+  # because they carry the same `category_ids[]` to the same endpoint, so the buttons test the write.
+  # Nothing is written here: the whole claim is what the DOM looks like after a drag that was
+  # abandoned, and no button can abandon one. Selenium's own `drag_and_drop` does not drive HTML5
+  # drag events, so the three events the controller listens for are dispatched directly.
+  #
+  # THE LAST STATEMENT IS A CAPYBARA QUERY AND NOT `evaluate_script` (CLAUDE.md's first flake cause,
+  # narrow-viewport note): a JS call as the final act leaves the session in a state the teardown does
+  # not survive here.
+  describe "a drag the user abandons", :aggregate_failures do
+    # THE ROW THAT IS NOT A TARGET, planted BETWEEN the two that are. `[priority, name]` puts a
+    # priority-1 "Vacation" after "Groceries" and before priority-2 "Fun Money", and `update_column`
+    # clears the funding stamp WITHOUT touching the rule — the shape is "a rule on a category that
+    # stopped holding money", which the Budget page draws as a handle-less card.
+    let!(:stalled) do
+      holder("Vacation", rate: 100, priority: 1).tap do |category|
+        # rubocop:disable Rails/SkipsModelValidations -- the shape is illegal to WRITE and legal to
+        # HOLD: `BudgetProposal` stamps `funded_since` when a rule is accepted, and a category that
+        # later stops holding money keeps its rule. `update!` would run the model's own guards on a
+        # state a user reaches by a different door.
+        category.update_column(:funded_since, nil)
+        # rubocop:enable Rails/SkipsModelValidations
+      end
+    end
+
+    # dragstart on Fun Money, dragover the TOP half of Groceries (so `#over` inserts before it), then
+    # dragend with no `drop` — which is exactly what Escape produces.
+    def drag_and_abandon = <<~JS
+      const list = document.querySelector("[data-category-list]");
+      const row = (name) => list.querySelector(`[data-category-row="${name}"]`);
+      const transfer = new DataTransfer();
+      const fire = (element, type, extra = {}) => element.dispatchEvent(
+        new DragEvent(type, Object.assign({ bubbles: true, cancelable: true, dataTransfer: transfer }, extra))
+      );
+      const dragged = row("Fun Money");
+      const over = row("Groceries");
+      fire(dragged, "dragstart");
+      fire(over, "dragover", { clientY: over.getBoundingClientRect().top + 1 });
+      fire(dragged, "dragend");
+    JS
+
+    it "leaves the list exactly as it found it, handle-less rows included" do
+      visit budget_page_path
+
+      expect(stalled.reload.funded_since).to be_nil
+      expect(cards).to eq(["Groceries", "Vacation", "Fun Money"])
+      within(group("Vacation")) { expect(page).to have_no_button("Move Vacation up") }
+
+      page.execute_script(drag_and_abandon)
+
+      expect(cards).to eq(["Groceries", "Vacation", "Fun Money"])
+    end
+
+    # THE OTHER DIRECTION, so the example above cannot pass against a controller whose drag does
+    # nothing at all: the same three events with a `drop` in the middle DO reorder the list, and the
+    # PATCH that follows writes the new priorities.
+    it "reorders and writes when the same drag is dropped" do
+      visit budget_page_path
+
+      page.execute_script(
+        drag_and_abandon.sub(
+          'fire(dragged, "dragend");',
+          'fire(over, "drop"); fire(dragged, "dragend");'
+        )
+      )
+
+      expect(page).to have_content("Your money fills them in that order now.")
+      expect(cards).to eq(["Fun Money", "Groceries", "Vacation"])
+    end
+  end
+
   private
 
   def holder(name, rate:, priority:, type: :usage)

@@ -75,6 +75,10 @@ RSpec.describe "Home Runway", type: :system do
 
   # THE TWO HOOKS, FOUND BY THE RULE THAT OWNS THEM. Both take the `Budget` the fixture helpers
   # return, so no example in this file can be satisfied by another rule's mark.
+  # THE SCREEN, READ AT THIS FILE'S FROZEN DAY — every example travels, and an example that reads it
+  # twice (before and after a payment) says so twice.
+  def read_home = travel_to(today) { visit root_path }
+
   def tick(rule) = find("[data-tick='#{rule.id}']")
 
   def tick_mark(rule) = find("[data-tick-mark='#{rule.id}']")
@@ -96,21 +100,26 @@ RSpec.describe "Home Runway", type: :system do
   #
   # BOTH DIRECTIONS ON ONE FIXTURE, because a page that drew no ticks at all would pass the second
   # half alone: the same rule has a mark and a due total before the payment and neither after.
-  it "takes a paid one-off off the rail and out of the total", :aggregate_failures do
+  # THE ONE FIXTURE BOTH HALVES READ: $120 due Aug 24 on the Utilities category's Water lane.
+  def unpaid_water_bill
     deposit(1_000)
     water = create(:item, category: holder("Utilities"), name: "Water")
-    rule = bill(water.category, amount: 120, due: Date.new(2026, 8, 24), item: water)
+    [water, bill(water.category, amount: 120, due: Date.new(2026, 8, 24), item: water)]
+  end
 
-    travel_to(today) { visit root_path }
+  it "takes a paid one-off off the rail and out of the total", :aggregate_failures do
+    water, rule = unpaid_water_bill
+    read_home
 
     expect(page).to have_css("[data-tick-mark='#{rule.id}']")
       .and have_css("[data-due-total]", text: "$120.00 due")
 
     create(:entry, item: water, amount: 120, date: Date.new(2026, 8, 18))
-    travel_to(today) { visit root_path }
+    read_home
 
-    expect(page).to have_no_css("[data-tick-mark='#{rule.id}']").and have_no_css("[data-due-total]")
-    expect(page).to have_no_css("[data-short-list]")
+    expect(page).to have_no_css("[data-tick-mark='#{rule.id}']")
+      .and have_css("[data-due-total]", text: "Nothing is due before Aug 27")
+      .and have_no_css("[data-short-list]")
   end
 
   # ── THE RULER (carried from the hero's bar) ────────────────────────────────────────────────────
@@ -192,7 +201,13 @@ RSpec.describe "Home Runway", type: :system do
 
   # ** THE WINDOW, BOTH DIRECTIONS, ON THE SCREEN. ** A date in the NEXT period is not on this ruler
   # (Aug 30 is past Aug 27), and neither is a rate rule, which has no day at all. The panel still
-  # draws — the ruler and the pace line are the answer — and says nothing about what is due.
+  # draws — the ruler and the pace line are the answer.
+  #
+  # ** AND IT SAYS SO IN WORDS (fix wave — Task 5's minor). ** A quiet period is the ORDINARY period,
+  # and the due-total line was simply absent on it — leaving the panel a rail, one pace sentence and
+  # two-thirds of a card of white space at 1440, with no statement anywhere that nothing is coming.
+  # The line is there in both arms now: a figure when something is due, and this sentence when
+  # nothing is. It is not "$0.00 due", which reports nothing; it is the answer.
   it "leaves off a date past the period's close and a rule with no date at all", :aggregate_failures do
     deposit(1_000)
     envelope("Groceries", 400)
@@ -202,7 +217,8 @@ RSpec.describe "Home Runway", type: :system do
 
     expect(page).to have_css("[data-runway]")
     expect(page).to have_no_css("[data-tick-mark]")
-    expect(page).to have_no_css("[data-due-total]")
+    expect(page).to have_css("[data-due-total]", text: "Nothing is due before Aug 27")
+    expect(page).to have_no_content("$0.00 due")
     expect(page).to have_css("[data-pace-line]")
   end
 

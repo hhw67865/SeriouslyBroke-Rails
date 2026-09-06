@@ -317,10 +317,16 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # visits one period. `planned = 2,000 ÷ 4` = **$500.00**, nothing is spent, so `built_up` = $500.00
     # and the claim is that. The bar is `(500 ÷ 2,000 × 100).round` = **25** — the same 25% the
     # moved-money version of this example asserted over a $500 allocation.
-    it "calls it a fund and states its built-up against the rule's target" do
+    # ** THE HEADING IS "Target", NOT "Fund" (fix wave — LOW-5). ** "Fund" was the noun of the
+    # retired model, where money had been MOVED into a pot; what is true of this card now is that a
+    # figure is being reached by a day. "Fund" is asserted ABSENT beside it, so the rename cannot be
+    # half-done.
+    it "calls it a target and states its built-up against the rule's figure", :aggregate_failures do
       visit category_path(fund("Vacation", target: 2_000, rate_amount: 500))
 
-      within(card) { expect(page).to have_content("Fund") }
+      # THE HEADING ITSELF, not the word anywhere on the card: "Target: $2,000.00" rides in the
+      # progress block below it, so a bare `have_content` would pass with no heading at all.
+      within(card) { expect(page).to have_css("h2", exact_text: "Target") }
       expect(card).to have_no_content("Envelope")
       expect(card).to have_no_content("Goal")
       expect(find("[data-figure='claim']").text).to eq("$500.00")
@@ -362,8 +368,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       visit category_path(repeating_bill("Emergency", 3_000))
 
       within(card) do
-        expect(page).to have_content("Envelope")
-        expect(page).to have_no_content("Fund")
+        expect(page).to have_css("h2", exact_text: "Envelope")
+        expect(page).to have_no_css("h2", exact_text: "Target")
       end
       expect(find("[data-figure='claim']").text).to eq("$750.00")
       expect(page).to have_no_css("[data-building-progress]")
@@ -400,13 +406,13 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # after one period, which is `(150 ÷ 90,000 × 100).round` = **0**% — a bar drawn at zero, which is
     # exactly the row that would have been unassertable if the percentage rode on the fill rather
     # than on the track.
-    it "is still a fund when it is barely started" do
+    it "is still a target when it is barely started" do
       retirement = fund("Retirement", target: 90_000, rate_amount: 150)
 
       visit category_path(retirement)
 
       within(card) do
-        expect(page).to have_content("Fund")
+        expect(page).to have_css("h2", exact_text: "Target")
         expect(page).to have_no_content("Envelope")
       end
       expect(find("[data-figure='claim']").text).to eq("$150.00")
@@ -421,7 +427,7 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
     # this card and the index card did not, which is the whole of MED-1.
     #
     # THE NOUN IS UNAFFECTED, and that is the half worth asserting beside the absence: a sibling bill
-    # does not make this category's money stop building up, so the heading still says "Fund".
+    # does not make this category's money stop building up, so the heading still says "Target".
     #
     # PLANTED, RE-DERIVED. This user's period is biweekly anchored today, and both rules are written
     # now, so each walks exactly ONE period:
@@ -447,12 +453,12 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       end
     end
 
-    it "keeps the fund heading and draws no track where the fund is not the whole category" do
+    it "keeps the target heading and draws no track where the fund is not the whole category" do
       car = car_fund_beside_its_insurance_bill
 
       visit category_path(car)
 
-      within(card) { expect(page).to have_content("Fund") }
+      within(card) { expect(page).to have_css("h2", exact_text: "Target") }
       expect(find("[data-figure='claim']").text).to eq("$1,200.00")
       expect(page).to have_no_css("[data-building-progress]")
       expect(page).to have_no_content("Target:")
@@ -470,8 +476,8 @@ RSpec.describe "Categories Show - Holdings card", type: :system do
       visit category_path(groceries)
 
       within(card) do
-        expect(page).to have_content("Envelope")
-        expect(page).to have_no_content("Fund")
+        expect(page).to have_css("h2", exact_text: "Envelope")
+        expect(page).to have_no_css("h2", exact_text: "Target")
       end
       expect(page).to have_no_css("[data-building-progress]")
     end

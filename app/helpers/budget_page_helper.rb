@@ -160,14 +160,37 @@ module BudgetPageHelper
   # that", which asked the reader to defend themselves against the form. What is left to say is why
   # the figure in the box is not the figure they remember typing, and that the cost is unchanged.
   # Nil on every other rule, so the note is never a fixture of the page.
-  def budget_monthly_conversion_note(rule_form)
+  #
+  # ** TWO SENTENCES, BECAUSE THE BOX HOLDS TWO DIFFERENT THINGS (fix wave — MED-4). ** The note
+  # above is true of an UNTOUCHED edit, where the box holds `RuleForm.from`'s divided figure. A drift
+  # suggestion overwrites that box with the figure it MEASURED — `BudgetsController#edit` merges
+  # `?budget[amount]=` over the read-back — so on that path the box said $200.00 while the note
+  # underneath it claimed to be showing "what it costs each period" and promised "Saving keeps that
+  # cost". Both halves were false: the figure was not the conversion and saving would change the
+  # cost, which is the whole point of accepting a drift. The second sentence names all three figures
+  # instead — what the entries suggest, what the rule says today, and what that comes to on this
+  # grid — and promises nothing.
+  #
+  # `on_grid` IS " on your biweekly grid", or nothing at all for a user who has declared no cadence:
+  # naming a grid they never set would state a boundary the app invented.
+  #
+  # `suggested:` COMES FROM THE CONTROLLER AND NOT FROM COMPARING FIGURES, because a figure the user
+  # TYPED on a submission the model refused also differs from the conversion, and "your entries
+  # suggest" would then be putting words in the entries' mouth. Only `#edit` can tell a prefill from
+  # a typed amount, so only `#edit` says so.
+  def budget_monthly_conversion_note(rule_form, suggested: nil)
     return nil unless rule_form.converted_from_monthly?
 
-    grid = rule_form.user&.period_cadence.presence
     was = number_to_currency(rule_form.converted_from_monthly)
+    grid = rule_form.user&.period_cadence.presence
+    on_grid = (" on your #{grid} grid" if grid)
+    if suggested.blank?
+      return "This rule was #{was} a month — shown here as what it costs each period#{on_grid}. " \
+             "Saving keeps that cost."
+    end
 
-    "This rule was #{was} a month — shown here as what it costs each period" \
-      "#{" on your #{grid} grid" if grid}. Saving keeps that cost."
+    "Your entries suggest #{number_to_currency(suggested)} a period. " \
+      "This rule was #{was} a month (#{number_to_currency(rule_form.converted_per_period)} a period#{on_grid})."
   end
 
   # ** WHERE THE CHEVRON GOES WITH SCRIPTING OFF (two-shapes spec §4). ** One category is open at a

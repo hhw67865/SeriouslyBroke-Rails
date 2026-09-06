@@ -92,10 +92,11 @@ class AdjustmentsController < BudgetPageController
   # four writing flashes use, off the same two facts they branch on: the rule's shape and the sign.
   #
   # `rule` IS CAPTURED BEFORE THE DESTROY, not read back off the frozen record.
-  # `ClaimCalculator#rate?` reads TWO COLUMNS OF THE RULE'S OWN — `anchor_date` and `carries-over`
-  # (rules-own-the-budget spec §2.1) — and no more, so asking the shape here costs no statement. It
-  # used to read the CATEGORY's `target-amount`, which is the read the shapes moved off: a figure on
-  # a neighbouring record decided one rule's formula, and this flash would have followed it.
+  # `ClaimCalculator#rate?` reads ONE COLUMN OF THE RULE'S OWN — `anchor_date`, since the two shapes
+  # (two-shapes spec §2/§3) — and no more, so asking the shape here costs no statement. It was that
+  # column plus `carries-over` while three shapes existed, and the CATEGORY's `target-amount` before
+  # that: a figure on a neighbouring record decided one rule's formula, and this flash would have
+  # followed it.
   def removal(adjustment, rule)
     money = helpers.number_to_currency(adjustment.amount.abs)
     name = helpers.budget_rule_name(rule)

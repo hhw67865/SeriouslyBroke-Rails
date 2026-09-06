@@ -114,7 +114,7 @@ class RuleForm
   # IT IS NOT ONE OF `BUDGET_FIELDS` — a POST cannot set it, because it is a fact about the row
   # rather than an answer the user gave — and it is gated on the schedule the merge left standing
   # (see #initialize), because it stops being true the moment the user answers with a date.
-  attr_reader :user, :budget, :anchor_date, :converted_from_monthly
+  attr_reader :user, :budget, :anchor_date, :converted_from_monthly, :converted_per_period
   attr_accessor :category_id,
                 :item_id,
                 :rule_type,
@@ -142,10 +142,22 @@ class RuleForm
     @budget = budget || Budget.new
     assign(params)
     @converted_from_monthly = monthly_amount_in(params)
+    @converted_per_period = monthly_row_per_period(budget)
     apply_to_budget
   end
 
   def converted_from_monthly? = converted_from_monthly.present?
+
+  # ** WHAT THAT MONTHLY FIGURE COSTS A PERIOD ON THIS FORM'S GRID — the number the box holds on an
+  # UNTOUCHED edit (fix wave — MED-4). ** The note has to name it on the path where the box does
+  # NOT: a drift suggestion prefills the amount with the figure it measured, so the box says $200.00
+  # while the rule is $260.00 a month and $120.00 a period, and a note that claimed the box was
+  # "what it costs each period" was describing a figure that had been replaced.
+  #
+  # TAKEN IN THE CONSTRUCTOR, BEFORE `#apply_to_budget` (see #initialize): by the time anything asks,
+  # the record has had the form's words written onto it — its `amount` is the BOX's and its `basis`
+  # is `per_period` — so asking then would divide the answer by the grid a second time. It is read
+  # off the row as it arrived, through the same `.per_period_amount` `.from` used to fill the box.
 
   # ** THE UNIT THE ROW'S STORED AMOUNT IS IN, AND IT IS NO LONGER THE BOX'S. ** Since the read-back
   # divides, the figure on the form is per-period money on every path and `#budget_amount_hint` reads
@@ -162,7 +174,13 @@ class RuleForm
   # six-monthly bill uses. `Budget#cadence` calls that shape `:monthly` and is right to, because it
   # is answering what a period of this rule IS; this is answering which control the user set, and the
   # two questions part company on exactly this row.
-  def self.from(budget)
+  # ** `user:` IS THE GRID THE DIVISION IS DONE ON, AND IT IS THE FORM'S OWN (fix wave — T4(d)). **
+  # The conversion below used to read the OWNER off the row (`Budget#user`, which walks the category)
+  # while the note beside the box named `RuleForm#user`'s cadence — the same person in production and
+  # two different people in a fixture, which is how a note came to say "$120.00 a period on your
+  # biweekly grid" over a figure divided on a monthly one. One grid, named once, passed in.
+  # Nil for the two in-memory rules `SuggestionEngine` builds, neither of which is this shape.
+  def self.from(budget, user: nil)
     schedule = schedule_for(budget)
     repeats = schedule == "by_date" && budget.interval_months.present?
 
@@ -175,7 +193,7 @@ class RuleForm
       # ** DIVIDED ON THE ONE ROW WHOSE UNIT THE READ-BACK CHANGES (fix round 1's ruling). ** The
       # form's box is per-period money, so a monthly row's own figure would be the wrong number in
       # it — and saving it would be a 2.17× rise the user never asked for.
-      amount: converted ? per_period_amount(budget) : budget.amount,
+      amount: converted ? per_period_amount(budget, user) : budget.amount,
       schedule: schedule,
       repeats: repeats,
       # SEE `#converted_from_monthly`: THE ROW'S MONTHLY FIGURE, which is the one number the form no
@@ -212,17 +230,21 @@ class RuleForm
   # detector and `ClaimCalculator` all ask; a second spelling would be a second answer, on the one
   # screen that WRITES the figure.
   #
-  # THE OWNER COMES OFF THE ROW (`Budget#user`, which walks the category), because this is a class
-  # method and the only rows that reach it are persisted ones — the two in-memory rules
-  # `SuggestionEngine` builds are a per-period rate and an ANCHORED bill, neither of which is this
-  # shape. The nil arm is the honest fallback for a record with no owner to have a grid: the figure
-  # is left exactly as stored, which is what an undeclared user's `steady_ask` answers anyway
+  # ** THE GRID IS THE FORM'S USER, FALLING BACK TO THE ROW'S OWNER (fix wave — T4(d)). ** It read
+  # `Budget#user` alone, which is the same person on every path a browser can reach and a DIFFERENT
+  # one in a fixture that hands the form a user the row does not belong to — and the note beside the
+  # box names the form's cadence, so the two could describe two grids in one sentence. The row's
+  # owner stays as the fallback for the callers that pass none (`SuggestionEngine`'s two in-memory
+  # rules, neither of which is this shape).
+  #
+  # The nil arm is the honest fallback for a record with no owner to have a grid: the figure is left
+  # exactly as stored, which is what an undeclared user's `steady_ask` answers anyway
   # (`periods_per_year` falls back to 12, so `260 × 12 ÷ 12` is $260).
-  def self.per_period_amount(budget)
-    owner = budget.user
+  def self.per_period_amount(budget, user = nil)
+    owner = user || budget.user
     return budget.amount if owner.nil?
 
-    budget.steady_ask(owner, today: budget.today)
+    budget.steady_ask(owner, today: owner.today)
   end
 
   # True and the rule is written, false and `#errors` says why, keyed by the controls on screen.
@@ -304,6 +326,15 @@ class RuleForm
     return nil unless value.present? && schedule == "per_period"
 
     value.to_d
+  end
+
+  # SEE `#converted_per_period`. The row is asked BEFORE `#apply_to_budget` rewrites it, and only
+  # where the flag above says this form is looking at that shape — a `Budget.new` on the create path
+  # has no columns to divide and answers nil, which is the note's own "say nothing" arm.
+  def monthly_row_per_period(budget)
+    return nil unless converted_from_monthly? && budget&.basis_monthly?
+
+    self.class.per_period_amount(budget, user)
   end
 
   # `params.key?`, not `params[field].present?`: a field the request did not mention is left as it

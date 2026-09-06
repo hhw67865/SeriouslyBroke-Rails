@@ -726,6 +726,20 @@ RSpec.describe "Budgets", type: :request do
       expect(response.body).not_to include("Per period")
     end
 
+    # ** THE POSITIVE ARM, WHICH THE REFUSAL ABOVE WAS PINNED WITHOUT (fix wave — T4(b)). ** As it
+    # stood, a `#missing_item` that returned the sentence for EVERY item-backed rule — a `return nil`
+    # dropped, the comparison inverted — would satisfy the example above and break the ordinary case
+    # silently: an item in the rule's OWN category is the shape this control exists for, and it must
+    # price. Same pair of records, the item moved to the category the rule is on.
+    it "prices an item that belongs to the rule's own category", :aggregate_failures do
+      steak = create(:item, category: dining, name: "Steak")
+
+      preview({ category_id: dining.id, item_id: steak.id, amount: "400.00" })
+
+      expect(response.body).to include("Steak gets $400.00 every period")
+      expect(response.body).not_to include("Pick an item in")
+    end
+
     # ** A BLANK IS NOT A REFUSAL. ** Nothing has been submitted; the user is mid-sentence. The card
     # names the blank instead of returning a 422, which is what a form whose preview refreshes on
     # every keystroke has to do to be usable at all.

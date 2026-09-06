@@ -92,9 +92,17 @@ class BudgetsController < ApplicationController
   # unit: the engine measures per-period money and `RuleForm.from` shows per-period money on both
   # rate shapes (fix round 1's ruling), so nothing on either side converts. Nothing is written: the
   # user still has to submit.
+  #
+  # ** THE PREFILLED FIGURE IS NAMED AS SUCH (fix wave — MED-4). ** When a drift suggestion supplies
+  # the amount, the box no longer holds what `RuleForm.from` put there — and on the one shape whose
+  # read-back CONVERTS, the note under the box said "shown here as what it costs each period" about a
+  # figure that had been replaced ($200.00 proposed over a $260.00-a-month rule that costs $120.00).
+  # The note needs to know that the box is a proposal rather than the row, and this is where that
+  # fact is: nowhere else can tell a prefill from a figure the user typed on a refused submit.
   def edit
     @current_amount = @budget.amount
-    words = RuleForm.from(@budget).merge(prefill_attributes.slice(:amount))
+    @suggested_amount = prefill_attributes[:amount]
+    words = RuleForm.from(@budget, user: current_user).merge(prefill_attributes.slice(:amount))
     @rule_form = RuleForm.new(current_user, words, budget: @budget)
     prepare_page
   end
@@ -142,7 +150,7 @@ class BudgetsController < ApplicationController
   # obeys. `Budget#category_must_be_an_expense` stays where it is: a category the user later switches
   # to income can still refuse a save from this action.
   def update
-    words = RuleForm.from(@budget).merge(update_params.to_h.symbolize_keys)
+    words = RuleForm.from(@budget, user: current_user).merge(update_params.to_h.symbolize_keys)
     @rule_form = RuleForm.new(current_user, words, budget: @budget)
 
     if @rule_form.save
@@ -267,7 +275,7 @@ class BudgetsController < ApplicationController
     submitted = scoped_owners(payload)
     return submitted if @budget.blank?
 
-    RuleForm.from(@budget).merge(submitted.except(:category_id))
+    RuleForm.from(@budget, user: current_user).merge(submitted.except(:category_id))
   end
 
   # THE WRITE SIDE OF OWNERSHIP, and it has to be asked here because nothing else asks it.

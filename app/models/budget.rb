@@ -96,11 +96,26 @@ class Budget < ApplicationRecord
   # one-off dated rule, which is `anchor_date IS NOT NULL AND interval_months IS NULL` and is exactly
   # §2's row 5 (a goal). A rule that REPEATS is a recurring bill, not something being saved toward.
   #
-  # ONE SCOPE AND NO IN-MEMORY TWIN, deliberately. The old pair existed because `Category#building-rule`
-  # and `CategoryBudgetPresenter` each had to pick the fund out of rows already loaded; both of those
-  # readers are deleted with the shape, and the only surviving caller is the dashboard's own
-  # `IN (SELECT category_id …)` subquery. A predicate nobody asks is a second spelling waiting for a
-  # caller to disagree with.
+  # ** THE SCOPE AND THE PREDICATE COME OFF ONE PAIR OF HASHES (fix wave — MED-2), which is
+  # `BUILDS_UP_THE_CATEGORY`'s own pattern from the plan before this one. ** The comment here used to
+  # say "ONE SCOPE AND NO IN-MEMORY TWIN, deliberately" and there were two twins under it:
+  # `Dashboard::OverviewPresenter#saving_toward_a_date?` and `CategoryBudgetPresenter#fund_line` each
+  # spelled the four clauses out in Ruby, because both are asked of rows something else has already
+  # LOADED — the strip's `includes(:budgets)` and the category card's one `ClaimLedger` — and
+  # `budgets.merge(scope).first` issues a statement against a loaded association, which is a SELECT
+  # per card. So the twin is real and necessary; what was wrong was that it was written out twice
+  # more, free to drift from the SQL and from each other. Both readers ask `#saving_toward_a_date?`
+  # now, and the equivalence over every clause combination is pinned in `budget_spec`.
+  #
+  # TWO HASHES BECAUSE TWO OF THE CLAUSES ARE NEGATIVE, and `where.not(a, b)` is `NOT (a AND b)` —
+  # which would list an interval-less rule with no anchor as savings. They are chained one at a time
+  # for the same reason.
+  #
+  # `self[column].to_s` IN THE PREDICATE: `rule_type` is an enum and reads back as a STRING, while
+  # the scope names it as the symbol the enum declares. Every other column compares as itself, and
+  # `nil.to_s` is `""` for exactly the two columns whose required value is nil.
+  SAVING_TOWARD_A_DATE = { item_id: nil, interval_months: nil }.freeze
+  NOT_SAVING_TOWARD_A_DATE = { anchor_date: nil, rule_type: :bill }.freeze
   #
   # ** `item_id IS NULL` SURVIVES THE CHANGE OF SHAPE UNCHANGED, and it is §3.1's lane partition. **
   # An item-backed rule speaks for ONE item's spending, so a goal carved out for the flights line is
@@ -117,7 +132,11 @@ class Budget < ApplicationRecord
   # `choice` both are, so the band lists them and leaves the household's tax estimate off a strip
   # headed "Savings".
   scope :saving_toward_a_date,
-        -> { where(item_id: nil, interval_months: nil).where.not(anchor_date: nil).where.not(rule_type: :bill) }
+        lambda {
+          NOT_SAVING_TOWARD_A_DATE.reduce(where(SAVING_TOWARD_A_DATE)) do |relation, (column, value)|
+            relation.where.not(column => value)
+          end
+        }
 
   # A rule that demands nothing is what deleting it is for, and a negative one is money
   # flowing the wrong way.
@@ -204,6 +223,18 @@ class Budget < ApplicationRecord
   # IT COSTS NO QUERY WHERE THE OWNER IS LOADED: `#shape` reads two columns and the constructor's
   # `today:` default walks `category.user`, which every caller of this method already preloads.
   def claim_shape = claim_calculator.shape
+
+  # ** THE IN-MEMORY SIDE OF `.saving_toward_a_date`, AND IT READS THAT SCOPE'S OWN TWO HASHES
+  # RATHER THAN RESTATING THE CLAUSES (fix wave — MED-2). ** See the note beside the constants for
+  # why the twin exists at all (both callers ask it of rows already loaded, where the relation would
+  # cost a statement per card) and why the negative half is a second hash.
+  #
+  # `self[column]` and not the attribute readers, so the columns are named in exactly one place;
+  # `.to_s` because `rule_type` is an enum, which reads back as a string against the scope's symbol.
+  def saving_toward_a_date?
+    SAVING_TOWARD_A_DATE.all? { |column, value| self[column].to_s == value.to_s } &&
+      NOT_SAVING_TOWARD_A_DATE.none? { |column, value| self[column].to_s == value.to_s }
+  end
 
   # HOW OFTEN THIS RULE COMES ROUND, as one symbol. `basis`, `interval_months` and `anchor_date`
   # are three columns whose COMBINATION is the shape (§3.1), and reading the shape off them takes

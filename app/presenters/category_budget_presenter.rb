@@ -196,10 +196,11 @@ class CategoryBudgetPresenter
   def fund_line
     return @fund_line if defined?(@fund_line)
 
-    @fund_line = lines.detect do |line|
-      rule = line.rule
-      rule.item_id.nil? && rule.anchor_date.present? && rule.interval_months.nil? && !rule.bill?
-    end
+    # ** `Budget#saving_toward_a_date?`, NOT THE FOUR CLAUSES AGAIN (fix wave — MED-2/LOW-4). ** They
+    # were written out here, in `Dashboard::OverviewPresenter` and in the scope — three spellings of
+    # one question, two of them reading raw columns. The predicate is the scope's own hashes asked of
+    # a loaded row, which is what this line needs (see `Budget::SAVING_TOWARD_A_DATE`).
+    @fund_line = lines.detect { |line| line.rule.saving_toward_a_date? }
   end
 
   def fund_rule = fund_line&.rule

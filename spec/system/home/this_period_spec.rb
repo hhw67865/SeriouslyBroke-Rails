@@ -59,8 +59,18 @@ RSpec.describe "Home This Period", type: :system do
 
   def when_clause(category, lane: "Whole category") = rule_row(category, lane: lane).find("[data-rule-when]")
 
-  # A CATEGORY THAT HOLDS MONEY (spec §3): an expense category with a `funded_since`. A year back, so
-  # every entry this file dates "today" counts against it.
+  # A CATEGORY THAT HOLDS MONEY (spec §3): an expense category with a `funded_since`, a year before
+  # the day the dated examples travel to — so every entry this file dates "today" counts against it.
+  #
+  # ** THE DATE IS A LITERAL AND NOT `Date.current - 1.year` (fix wave — LOW-6; CLAUDE.md's third
+  # flake cause). ** The fixtures are built at REAL NOW and the dated examples then read the screen
+  # inside `travel_to(Date.new(2026, 8, 20))`, so a wall-clock funding date walks forward one day per
+  # day while the travelled `today` does not: on 2027-08-21 it lands AFTER the day the walk is read
+  # against, `ClaimCalculator#accrual_start` opens on a day that has not arrived, and every figure in
+  # this file goes to zero. The failure would be stable BY NAME and attributable to any commit that
+  # happened to be current, which is what makes the clock the worst of the three causes.
+  def a_year_before_the_travelled_day = Date.new(2025, 8, 20)
+
   def holder(name, priority: 1, **attrs)
     create(
       :category,
@@ -68,7 +78,7 @@ RSpec.describe "Home This Period", type: :system do
       user: user,
       name: name,
       priority: priority,
-      funded_since: Date.current - 1.year,
+      funded_since: a_year_before_the_travelled_day,
       **attrs
     )
   end
@@ -178,8 +188,9 @@ RSpec.describe "Home This Period", type: :system do
     )
   end
 
-  # A BILL THAT COMES ROUND ONCE A YEAR — `every 12 months` in the row's own words. Born a year back
-  # so §3.2's walk has periods to visit.
+  # A BILL THAT COMES ROUND ONCE A YEAR — `every 12 months` in the row's own words. Born on
+  # `#a_year_before_the_travelled_day`, the day the dated examples read, so §3.2's walk has periods to visit
+  # — a LITERAL rather than `1.year.ago`, for the reason given on `#holder` (fix wave — LOW-6).
   def annual(name, amount:, priority: 1)
     holder(name, priority: priority).tap do |category|
       create(
@@ -189,7 +200,7 @@ RSpec.describe "Home This Period", type: :system do
         interval_months: 12,
         rule_type: :bill,
         anchor_date: Date.current + 40.days,
-        created_at: 1.year.ago
+        created_at: a_year_before_the_travelled_day.in_time_zone
       )
     end
   end

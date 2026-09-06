@@ -178,8 +178,14 @@ class SacrificePresenter
   # A one-off IS a decision: it happens once, on a day the user chose, and moving the day or the
   # figure is exactly what this page exists to offer. `Budget#cadence` is the one place the schedule
   # cascade lives, so the test is asked of it rather than re-read off the three columns.
+  #
+  # ** AND SO IS THE FIRST CLAUSE (fix wave — LOW-4). ** It read `anchor_date.blank?`, which is
+  # `ClaimCalculator#shape`'s own expression written out here — the column that decides between §3's
+  # two formulas, read raw by a screen. `Budget#claim_shape` is the one door onto that answer from
+  # outside a calculator, and it costs no statement where the owner is loaded (which it is: these
+  # rows come off `Budget.for_user` with the category preloaded).
   def reason_for(budget)
-    return nil if budget.anchor_date.blank? || budget.cadence == :one_off
+    return nil if budget.claim_shape == :rate || budget.cadence == :one_off
 
     :fixed
   end

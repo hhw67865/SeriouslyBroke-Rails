@@ -334,10 +334,16 @@ RSpec.describe "Budgets Forms", type: :system do
     # ** ONE CLICK FILLS EVERY BLANK IT HAS A MEASUREMENT FOR. ** Not some of them: the amount, the
     # lane, the type, the schedule, the interval and the date are one proposal, and a chip that
     # filled four of the six would leave the user to guess which two it had opinions about.
+    # ** THE AMOUNT ARRIVES AS MONEY (fix wave — Task 5's minor). ** The prefill carried
+    # `BigDecimal#to_s`, so a click filled the box with `85.0` — and a measured $122.14 with `122.0`
+    # beside a chip whose own sentence said `$122.00`. `%.2f` in the chip's data is what the box's
+    # `step: 0.01` is for. "✓ Using this" is unaffected: `fieldMatches` compares money as a NUMBER
+    # precisely so a reformat cannot unset a chip, which is what keeps the query-string door below
+    # (still server-rendered as `85.0`) reading as applied.
     it "fills every blank from one click" do
       click_button "Use this"
 
-      expect(page).to have_field("Amount", with: "85.0")
+      expect(page).to have_field("Amount", with: "85.00")
       expect(page).to have_select("Pays", selected: "Phone")
       expect(page).to have_checked_field("Bill")
       expect(page).to have_checked_field("By a date")
@@ -614,6 +620,31 @@ RSpec.describe "Budgets Forms", type: :system do
         "This rule was $260.00 a month — shown here as what it costs each period on your biweekly grid. " \
         "Saving keeps that cost."
       )
+    end
+
+    # ** AND IT SAYS IT ONCE (fix wave — MED-4/T4(a)). ** The "Currently $260.00 a month." line
+    # renders wherever the box differs from the row's stored figure, which is TRUE of every converted
+    # edit — so it stood under the note saying the same thing in fewer words. The note is the fuller
+    # sentence and this shape is exactly the one it exists for, so the line stands down here.
+    it "does not repeat the row's monthly figure in a second line" do
+      expect(page).to have_no_css("[data-current-amount]")
+    end
+
+    # ** THE DRIFT-ACCEPT PATH, WHERE THE NOTE WAS FALSE (fix wave — MED-4). ** `#edit` merges the
+    # suggestion's measured amount over the read-back, so the box holds $200.00 — and the sentence
+    # above went on claiming the box was "what it costs each period" and that "Saving keeps that
+    # cost", about a figure that is neither the row's nor the conversion's, on the one act whose
+    # entire purpose is to CHANGE the cost. The note names the three figures instead.
+    it "names the proposal and the row where a suggestion filled the box", :aggregate_failures do
+      visit edit_budget_path(monthly, budget: { amount: "200.0" })
+
+      expect(page).to have_field("Amount", with: "200.0")
+      expect(find("[data-monthly-conversion]")).to have_content(
+        "Your entries suggest $200.00 a period. This rule was $260.00 a month " \
+        "($120.00 a period on your biweekly grid)."
+      )
+      expect(page).to have_no_content("Saving keeps that cost")
+      expect(page).to have_no_css("[data-current-amount]")
     end
 
     it "states both units on the preview card" do

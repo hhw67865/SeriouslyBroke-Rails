@@ -104,6 +104,18 @@ RSpec.describe "Sacrifice view", type: :system do
       expect(page).to have_no_css("[data-unwinnable]")
     end
 
+    # ** THE LIST'S ORDER IS STATED, AND IT IS TRUE (fix wave — LOW-3). ** `SacrificePresenter#rows`
+    # sorts `[-claim, owner name, id]` and the page said nothing about it, which leaves a column of
+    # money in an order a reader has to guess at. Both halves are asserted together: the sentence,
+    # and the order it describes — Groceries ($2,000) then Rent ($692.31 of a period) then Dining
+    # Out ($150), which is neither alphabetical nor the order they were written in.
+    it "says the biggest claim is first, and lists them that way", :aggregate_failures do
+      expect(find("[data-cut-list-order]")).to have_content("The biggest claim is first")
+      expect(page.all("[data-sacrifice-row]").pluck("data-sacrifice-row"))
+        .to eq([rules.fetch(:groceries).id, rules.fetch(:dining).id])
+      expect(page.all("[data-fixed-row]").pluck("data-fixed-row")).to eq([rules.fetch(:rent).id])
+    end
+
     it "opens with nothing cut and the whole gap still open", :aggregate_failures do
       expect(figure("frees")).to have_content("$0.00 a period")
       expect(figure("verdict")).to have_content("Still underwater $442.31 a period")

@@ -140,12 +140,19 @@
           <% end %>
         </p>
 
-        <%# ** THE ROW WHOSE FIGURE IS IN A UNIT THE FORM IS ABOUT TO CHANGE (fix round 1 — MED-5;
-            §5's ruling). ** A `monthly`-no-anchor rule reads back as "Every period", so the record
-            has already been re-shaped and the figure in the box is still a month's. The note names
-            both figures and what to do; the preview card says the same thing in its own units. %>
-        <% if note = budget_monthly_conversion_note(rule_form) %>
-          <p class="text-sm text-status-warning" data-monthly-conversion><%= note %></p>
+        <%# ** THE ROW WHOSE FIGURE IS IN A UNIT THE FORM IS ABOUT TO CHANGE (fix wave — MED-4;
+            §5's ruling). ** A `monthly`-no-anchor rule reads back as "Every period" at its DIVIDED
+            figure — the read-back preserves the money, not the number — so the box holds $120.00
+            where the row says $260.00 a month, and this sentence is what accounts for the
+            difference. On the drift-accept path the box holds neither figure but the one the
+            entries measured, and the note says all three (see the helper).
+
+            EXPLANATORY, NOT A WARNING, AND STYLED AS ONE: nothing here is wrong and there is nothing
+            to defend against — `text-status-warning` was left over from the sentence this replaced
+            ("change the amount if you mean that"), which asked the reader to guard themselves
+            against their own form. %>
+        <% if note = budget_monthly_conversion_note(rule_form, suggested: @suggested_amount) %>
+          <p class="text-sm text-gray-600" data-monthly-conversion><%= note %></p>
         <% end %>
 
         <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
@@ -153,8 +160,15 @@
             per-period money on every path since the read-back divides (fix round 1's ruling), and
             `@current_amount` is the ROW's — a month's, on the one shape where those differ — so it
             is `RuleForm#amount_unit` that names it and not the record's phrase. Shown only when the
-            two differ: on every other edit the field IS the current amount. %>
-        <% if @current_amount.present? && rule_form.amount.present? && rule_form.amount.to_d != @current_amount.to_d %>
+            two differ: on every other edit the field IS the current amount.
+
+            ** AND NEVER BESIDE THE NOTE (fix wave — MED-4/T4(a)). ** The one shape where the row's
+            unit differs from the box's is the one the note is about, and the note already names the
+            row's monthly figure — so both rendered together on every converted edit, saying
+            "$260.00 a month" twice in two sentences. The note is the fuller one; this line is what
+            is left for every other row, where there is no conversion to explain. %>
+        <% if @current_amount.present? && rule_form.amount.present? &&
+              rule_form.amount.to_d != @current_amount.to_d && !rule_form.converted_from_monthly? %>
           <p class="text-sm text-gray-500" data-current-amount>
             Currently <%= number_to_currency(@current_amount) %>
             <%= rule_form.amount_unit || budget_rule_basis_phrase(budget) %>.

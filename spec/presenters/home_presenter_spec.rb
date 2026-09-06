@@ -928,19 +928,44 @@ RSpec.describe HomePresenter do
       presenter.period_progress
     end
 
-    # ONE CATEGORY, `count` PER-PERIOD RATE RULES: the first names no item (the catch-all lane) and
-    # the rest name one each (the item lane), so BOTH of the claim ledger's two spending statements
-    # run at every size and the comparison is not measuring a lane appearing.
+    # ONE CATEGORY, `count` RULES: the first names no item (the catch-all lane) and the rest name one
+    # each (the item lane), so BOTH of the claim ledger's two spending statements run at every size
+    # and the comparison is not measuring a lane appearing.
     #
-    # PER-PERIOD AND NOT DATED, deliberately: `Budget.steady_need` — which the :structural trouble
-    # reads — builds a `BudgetCalculator` per ONE-OFF rule and runs a SUM inside it, which is a
-    # per-rule cost this task did not introduce and cannot fix from here. A per-period rule's
-    # `#steady_ask` is its own amount, so the pin measures what it is about.
+    # ** EVERY SHAPE A ROW CAN BE, AND NOT RATE RULES ALONE (fix wave — Task 2's deferred minor). **
+    # This planted `:per_period_rate` at both sizes, which is the ONE shape whose row costs nothing
+    # extra by construction: a rate rule's walk is a single period and it never reaches `#settled?`
+    # or `#settled_on`. A reader that queried per DATED rule — or per settled one — was therefore
+    # invisible to a pin whose whole subject is per-rule cost. The ladder is mixed now and it is
+    # PROPORTIONAL: two rules are a catch-all rate and one unpaid one-off, six are those plus two
+    # more item rates and two PAID one-offs, so the N side carries three dated rules to the small
+    # side's one and `#settled_on`'s pass over the spending rows runs twice more.
+    #
+    # STILL STRICT `eq`, and it holds — measured. `Budget.steady_need`'s one-off arm builds a
+    # `ClaimCalculator` per rule, which was the reason this fixture avoided dated rules; the ledger
+    # the screen already holds answers it without a second statement, which is exactly the claim the
+    # pin should have been making all along.
     def rules_on_one_category(count)
       category = holder("Pet Care", priority: 1)
       rate(category, 400)
-      (count - 1).times { |n| create(:budget, :per_period_rate, category: category, amount: 50, item: lane(category, "Lane #{n}")) }
+      one_off(category, "Bill 0", amount: 300)
+      (count - 2).times do |n|
+        if n.even?
+          create(:budget, :per_period_rate, category: category, amount: 50, item: lane(category, "Lane #{n}"))
+        else
+          one_off(category, "Bill #{n}", amount: 90, paid: true)
+        end
+      end
       category
+    end
+
+    # ONE DATED RULE ON ITS OWN LANE, optionally already settled. A payment of the whole amount on a
+    # day the walk counts is what `ClaimCalculator#settled?` reads, and `#settled_on` then makes a
+    # second pass over those rows — the reader a rate-only fixture could never reach.
+    def one_off(category, name, amount:, paid: false)
+      item = lane(category, name)
+      bill(category, amount: amount, due: today + 10.days, item: item)
+      create(:entry, item: item, amount: amount, date: today) if paid
     end
 
     # ** 1-vs-N: SIX RULES COST EXACTLY WHAT TWO COST. ** Same categories, same accounts, same
@@ -958,6 +983,9 @@ RSpec.describe HomePresenter do
 
       expect(cost_of(6)).to eq(cost_of(2))
       expect(Budget.for_user(user).count).to eq(2)
+      # THE SMALL SIDE IS THE ONE LEFT STANDING (`#cost_of` destroys and replants), and naming its
+      # shapes is what stops the ladder quietly reverting to rate rules at both ends.
+      expect(Budget.for_user(user).map(&:claim_shape)).to contain_exactly(:rate, :dated)
     end
 
     # ** THE STRIP'S OWN READERS ARE IN THE LIST (fix round 2 — LOW-2). ** A cost pin is only as
@@ -1424,6 +1452,42 @@ RSpec.describe HomePresenter do
       expect(presenter.troubles.first.subject).to eq(ally)
       expect(presenter.troubles.third.subject.category.name).to eq("Dining Out")
       expect(presenter).to be_trouble
+    end
+
+    # ** THE STRIP AND THE SECTION BELOW IT WALK ONE ORDER (fix wave — MED-1). ** `#trouble_lines`
+    # walked `#budgeted_categories` — `[priority, name]`, the FILL order — while every block under it
+    # is `#give_way_order` grouped back, so the two panels could rank one pair of categories opposite
+    # ways. This is the pair that shows it.
+    #
+    # PLANTED, and each figure re-derived: Rent is a `bill` on a priority-0 category, $600 anchored
+    # Jan 2 2026 against a `today` of Feb 6 — a date a month past, nothing spent, so the fund is
+    # whole and the trigger is `:overdue`. Fun is a `choice` rate of $50 with $80 spent on it, on a
+    # priority-1 category — `:over` by $30. FILL order ranks the categories `[0, "Rent"]` before
+    # `[1, "Fun"]`; GIVE-WAY order ranks on the rule's type first (`choice` 0 before `bill` 2), so
+    # the choice goes without before the rent does and Fun leads. The section says Fun, Rent — and
+    # now so does the strip.
+    def overdue_rent_and_overspent_fun
+      create(
+        :budget,
+        :one_time,
+        category: holder("Rent", priority: 0),
+        amount: 600,
+        rule_type: :bill,
+        anchor_date: Date.new(2026, 1, 2),
+        created_at: Time.zone.local(2025, 1, 1)
+      )
+      fun = holder("Fun", priority: 1)
+      rate(fun, 50, type: :choice)
+      spend(fun, 80)
+    end
+
+    it "lists its rows in the order the blocks below are drawn in", :aggregate_failures do
+      income(2_000)
+      overdue_rent_and_overspent_fun
+
+      expect(presenter.troubles.map(&:kind)).to eq([:over, :overdue])
+      expect(presenter.troubles.map { |trouble| trouble.subject.category.name }).to eq(["Fun", "Rent"])
+      expect(presenter.category_blocks.map(&:name)).to eq(["Fun", "Rent"])
     end
 
     # ** AN OVERDUE BILL IS A DATE PAST, FUND OR NO FUND (fix round 1 — MED-1). ** This pinned the

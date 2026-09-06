@@ -445,6 +445,65 @@ itself, $3,039.33. Her pot was $3,039.33 before and after the browsing and the p
 held; reading never writes. Figures, formulas and screenshots:
 `.superpowers/sdd/2026-09-05-two-shapes-and-the-runway/task-5-report.md`.
 
+### 10.7 The final fix wave (whole-branch review)
+
+The rulings taken on the whole-plan review's findings, after Task 5 landed. Measurements and the
+per-finding pins are in `.superpowers/sdd/2026-09-05-two-shapes-and-the-runway/fix-wave-report.md`.
+
+41. **The trouble strip walks the give-way order — Home has ONE sort (MED-1).** `HomePresenter
+    #trouble_lines` walked `#budgeted_categories` (`[priority, name]`, the FILL order) and flat-mapped
+    each category's lines, while every block under it is `#give_way_order` grouped back. It is
+    `#category_blocks` flattened and filtered now, so the strip's rows and the section's blocks are
+    one list read twice. Pinned on the pair that shows the difference: Rent (a `bill` on priority 0)
+    overdue beside Fun (a `choice` on priority 1) over — fill order says Rent first, give-way says
+    Fun first, and both panels now say Fun, Rent. `#claim_lines_for` is deleted with its last caller,
+    and the two comments that claimed one sort while two existed are corrected.
+
+42. **`Budget::SAVING_TOWARD_A_DATE` derives the scope AND `#saving_toward_a_date?` (MED-2).** The
+    model asserted "ONE SCOPE AND NO IN-MEMORY TWIN, deliberately" while two twins stood under it:
+    `Dashboard::OverviewPresenter` and `CategoryBudgetPresenter` each spelled the four clauses in
+    Ruby, because both are asked of rows something else has already LOADED (the relation would be a
+    `SELECT` per card). The twin is necessary; three spellings were not. Two frozen hashes — the
+    columns that must match and the two that must NOT — derive both, on `BUILDS_UP_THE_CATEGORY`'s
+    own pattern from the previous plan, and `budget_spec` pins them equal row by row over every clause
+    combination (repeating, rate, item-backed, `bill`) plus an unsaved record. Two hashes because
+    `where.not(a, b)` is `NOT (a AND b)`, which would list an interval-less rule with no anchor.
+
+43. **The dashboard Savings strip's rows are `ClaimLine`s, and a paid goal is "achieved" (MED-3).**
+    The rows were a hash of four figures with no `paid` member, so a settled one-off — whose
+    `#built_up` is $0.00 by construction, the payment having emptied the fund — took the `progress
+    < 10` arm and badged `$0.00 of $5,000.00 · low` at the user who had just taken their holiday.
+    `ClaimRows.line_for` builds the rows now, off the page's own `ClaimLedger`, so the strip reads
+    `ClaimCalculator#settled?` like every other screen did from Task 3. A paid one-off gets a green
+    "achieved" badge, prints the target it reached and the day, and draws no bar. The two remaining
+    presentation gates that a bare line cannot answer — the target is printed only where the fund is
+    the whole category — are `#savings_target` / `#savings_progress` on the presenter, read off
+    `#savings_categories`' own preload so no card costs a statement (cost pin unchanged, still `eq`).
+    The badges take the app's words: "saving" → "on the way", "funded" → "ready" (LOW-5).
+
+44. **The conversion note tells the truth on the drift-accept path, and says it once (MED-4).**
+    `BudgetsController#edit` merges a drift suggestion's measured amount over `RuleForm.from`'s
+    read-back, so the box holds $200.00 while the note underneath claimed to be showing "what it
+    costs each period" and promised "Saving keeps that cost" — both false, on the one act whose
+    purpose is to change the cost. On that path the note now reads *"Your entries suggest $200.00 a
+    period. This rule was $260.00 a month ($120.00 a period on your biweekly grid)."*; on an
+    untouched edit it keeps its explanation, and the duplicate "Currently $260.00 a month." line
+    stands down wherever the note renders (deferred minor 4). It is styled `text-gray-600`, not
+    `text-status-warning` — nothing is wrong and there is nothing to defend against (minor 5).
+    `suggested:` comes from the controller rather than from comparing figures, because an amount the
+    user TYPED on a refused submit also differs from the conversion and "your entries suggest" would
+    then be putting words in the entries' mouth. `RuleForm.from` takes a `user:` and
+    `.per_period_amount` divides on it, so the figure and the grid the note names are one person's
+    (minor 6). All three states pinned, in the helper and on the rendered page.
+
+45. **Home's free-below-zero else-clause is about PARKED MONEY, which is what §2 says (LOW-1).** It
+    was gated `elsif !anything_claimed?`, making *"You have spent past what you had."* unreachable for
+    the user it is truest of — free below zero, rules claiming, and no other account to move anything
+    in from. That user read the shortfall figure and was told nothing about what to do with it. The
+    else takes the spec's clause; `_shortfall.html.erb`'s HEADLINE still splits on
+    `#anything_claimed?`, which is a different question and unchanged. Pinned at (free −$250, one
+    account, a $400 rate rule): both sentences render.
+
 ### 10.6 §7's copy sweep, narrowed
 
 §7 says "the 'goal' and 'fund' words" die. As built, what died is **goal and fund as MODEL nouns and
@@ -456,26 +515,41 @@ account" on the onboarding card, which is a correct sentence about a bank accoun
 panels are swept for the whole retired vocabulary in one example
 (`spec/system/home/money_spec.rb`), scoped to the four panels for exactly that reason.
 
+The fix wave finished the sweep in three places the delivery had missed: the categories show card's
+heading (`"Fund"` → **`"Target"`**, with the prose under it — the predicate keeps its own name,
+`#fund?`, because it is the SHAPE and renaming it is five files for one heading), the dashboard
+strip's badges (`"saving"` / `"funded"` → **`"on the way"` / `"ready"`**, which are Home's own
+words), and the search placeholder ("Emergency Fund" → "Emergency"). Each is pinned, and "Fund" is
+asserted absent beside the heading so the rename cannot be half-done.
+
 ## 11. Open for Henry
 
-### 11.1 Deferred minors (each was found, ruled minor, and left)
+### 11.1 Deferred minors — all eight closed by the fix wave
 
-1. `app/helpers/search_helper.rb:118` — the placeholder still says "Emergency Fund".
-2. The 1-vs-N cost pin on Home plants RATE rules only, so a reader that ran per DATED rule would
-   pass it. (The Budget page's equivalent was widened to seven rules of four shapes; Home's was not.)
-3. `spec/presenters/budget_page_presenter_spec.rb:798` — an example titled "seven rules" plants five.
-4. An untouched `monthly` edit renders the conversion note AND "Currently $260.00 a month." — the
-   same fact twice, an inch apart.
-5. The conversion note is styled `text-status-warning`, which is a warning's colour for what is now
-   an explanation (ruling 38).
-6. `RuleForm.per_period_amount` divides on the ROW's owner while the note names the FORM's user. The
-   same person in production; they diverge only in `budget_page_helper_spec`'s fixture.
-7. `RulePreview`'s "own item of another category" refusal is pinned; its positive arm (a matching
-   item still prices) is not.
-8. **A chip fills the amount box with the payload's raw value** — the form reads `122.0` where every
-   other figure on the page reads `$122.00` (visible in `runway-form-1440.png`). It is a `number`
-   input and it saves as `122.00`, so this is cosmetic; the fix is formatting the prefill, not the
-   box.
+Each was found, ruled minor, left, and then taken in the one fix wave that followed Task 5.
+
+1. ~~`search_helper.rb:118` — the placeholder still says "Emergency Fund".~~ It says "Emergency".
+2. ~~The 1-vs-N cost pin on Home plants RATE rules only.~~ The ladder is mixed and PROPORTIONAL now:
+   two rules are a catch-all rate and one unpaid one-off, six are those plus two item rates and two
+   PAID one-offs, so the N side carries three dated rules to the small side's one and `#settled_on`'s
+   pass over the spending rows runs twice more. Still strict `eq`, measured.
+3. ~~`budget_page_presenter_spec` titles an example "seven rules" and plants five.~~ Counted off the
+   fixture, renamed, and the count asserted so the title cannot go stale again.
+4. ~~An untouched `monthly` edit renders the note AND "Currently $260.00 a month."~~ Ruling 44.
+5. ~~The note is styled `text-status-warning`.~~ Ruling 44 — `text-gray-600`.
+6. ~~`RuleForm.per_period_amount` divides on the ROW's owner while the note names the FORM's user.~~
+   Ruling 44 — `.from` takes a `user:` and both read it.
+7. ~~`RulePreview`'s positive item arm is unpinned.~~ Pinned: an item in the rule's own category
+   prices, on the same pair of records as the refusal.
+8. ~~A chip fills the amount box with `122.0`.~~ `%.2f` in the chip's prefill data. The query-string
+   door is still server-rendered as `85.0`; "✓ Using this" is unaffected either way, because
+   `fieldMatches` compares money as a NUMBER precisely so a reformat cannot unset a chip.
+
+Two more found by the same wave and closed with them: a cancelled drag reshuffled the non-draggable
+rows (`reorder_controller#restore` re-inserted every row TARGET before the hidden form, shoving
+handle-less cards out from between them; it restores each row to its own recorded `nextSibling` now,
+pinned with a synthesised drag and a ruled non-holder present), and the sacrifice page never said its
+list is biggest-claim-first.
 
 ### 11.2 Design consequences worth a decision
 
@@ -499,11 +573,13 @@ panels are swept for the whole retired vocabulary in one example
 6. **Every closed panel is in the DOM** (ruling 27). For six categories that is nothing; for forty it
    is forty rules tables and forty suggestion lists. No extra queries; a Turbo frame per panel is the
    answer if it bites.
-7. **A quiet period leaves the runway panel two-thirds empty at 1440.** Carried from Task 2's own
-   concern and now visible on the delivery's screenshot: Ming's Sep 1–15 has ONE tick, so the panel
-   is a rail, one label and two sentences beside a money column three tiles tall.
-   `lg:items-start` is deliberate (stretching would put the whitespace inside the panel), but a
-   period with nothing due is a large blank rectangle on the page's most-read screen.
+7. ~~**A quiet period leaves the runway panel two-thirds empty at 1440.**~~ Closed by the fix wave,
+   at the copy rather than at the layout: the due-total line was ABSENT when nothing was due, so the
+   ordinary period — the quiet one — was a rail, one pace sentence and white space, with no statement
+   anywhere that nothing is coming. It renders in both arms now: a figure when something is due, and
+   *"Nothing is due before Sep 15."* when nothing is. Not "$0.00 due", which reports nothing; this is
+   the answer to the question the panel exists to ask. `lg:items-start` is unchanged and still
+   deliberate (stretching would put the whitespace inside the panel).
 8. **Found in Task 5's browser pass, and it is Henry's own data rather than a defect:** Ming's
    figures have MOVED since the computed-claims delivery, because she changed her own budget between
    the two — her cadence went monthly → semimonthly and her Food & Grocery rate went $1,409 → $704.50

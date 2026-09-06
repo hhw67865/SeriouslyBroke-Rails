@@ -162,9 +162,13 @@ RSpec.describe Budget, type: :model do
   # is an anchor with NO interval (§2's row 5) that the user did not call a `bill`. A rule that
   # REPEATS is a recurring bill, and so is a one-off the user typed as one.
   #
-  # ONE SCOPE AND NO IN-MEMORY TWIN, so there is no equality left to pin — the two readers that
-  # needed the predicate are deleted with the shape. What this group pins instead is the population,
-  # over one of each way to fail the FOUR clauses.
+  # ** THE TWIN CAME BACK, AND SO DOES THE EQUALITY (fix wave — MED-2). ** This note said "ONE SCOPE
+  # AND NO IN-MEMORY TWIN, so there is no equality left to pin" while TWO readers were spelling the
+  # four clauses out in Ruby — `Dashboard::OverviewPresenter` and `CategoryBudgetPresenter`, both of
+  # them asked of rows already loaded, where the relation would cost a statement per card. So the
+  # predicate is necessary; three spellings of it were not. `Budget::SAVING_TOWARD_A_DATE` and its
+  # negative half derive the scope AND `#saving_toward_a_date?`, and this group pins them equal over
+  # every clause combination again, exactly as `BUILDS_UP_THE_CATEGORY`'s did.
   describe "the categories saving toward a day" do
     let(:groceries) { create(:category, :expense, :funded, name: "Groceries") }
 
@@ -197,6 +201,31 @@ RSpec.describe Budget, type: :model do
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:item_backed_one_off))
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:repeating))
       expect(described_class.saving_toward_a_date).not_to include(rules.fetch(:resetting))
+    end
+
+    # ** THE SCOPE AND THE PREDICATE, EQUAL OVER EVERY COMBINATION (fix wave — MED-2). ** Two
+    # spellings of one question are two answers waiting to happen, and the ones that had drifted were
+    # in Ruby: the presenters' twins read raw columns while the scope read `rule_type` as an enum.
+    # The whole planted set is walked, so each of the four clauses is exercised in both directions on
+    # the same row — a predicate that dropped the `bill` clause, or the `item_id` one, disagrees here
+    # rather than on a screen.
+    it "answers the same in Ruby as in SQL, row by row", :aggregate_failures do
+      rules = planted
+      selected = described_class.saving_toward_a_date.to_a
+
+      expect(rules.values.select(&:saving_toward_a_date?)).to eq(selected)
+      expect(rules.fetch(:one_off)).to be_saving_toward_a_date
+      expect(rules.fetch(:bill_one_off)).not_to be_saving_toward_a_date
+      expect(rules.fetch(:item_backed_one_off)).not_to be_saving_toward_a_date
+      expect(rules.fetch(:repeating)).not_to be_saving_toward_a_date
+      expect(rules.fetch(:resetting)).not_to be_saving_toward_a_date
+    end
+
+    # THE PREDICATE ANSWERS BEFORE THERE IS A ROW TO SELECT, which is half of why it exists: it is
+    # asked of records a caller holds, and an unsaved one is the sharpest version of that.
+    it "answers on a rule that has never been saved", :aggregate_failures do
+      expect(build(:budget, :by_date, :choice, category: groceries, amount: 5_000)).to be_saving_toward_a_date
+      expect(build(:budget, :by_date, :bill, category: groceries, amount: 5_000)).not_to be_saving_toward_a_date
     end
 
     # ** THE `bill` CLAUSE ON ITS OWN, BOTH DIRECTIONS, ON ONE PAIR OF ROWS THAT DIFFER BY THAT WORD

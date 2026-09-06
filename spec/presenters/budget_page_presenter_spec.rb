@@ -795,8 +795,13 @@ RSpec.describe BudgetPagePresenter do
 
       # ** THE N SIDE CARRIES EVERY SHAPE A ROW CAN BE (fix round MED-3): two more rate rules with
       # deltas, an unpaid dated one-off, and a PAID one — whose `#settled_on` walks the rule's own
-      # spending rows. Strict `eq`: seven rules on one category cost exactly what one costs.
-      it "costs the same for seven rules on a category as for one", :aggregate_failures do
+      # spending rows. Strict `eq`: five rules on one category cost exactly what one costs.
+      #
+      # FIVE, COUNTED OFF THE FIXTURE (fix wave — T3's deferred minor): the title said seven while
+      # the block planted `rule_with_a_delta` + two more + `dated_bill` + `paid_one_off`. A count in
+      # a title that nothing derives is a number that goes stale the first time the fixture moves,
+      # and this one had.
+      it "costs the same for five rules on a category as for one", :aggregate_failures do
         category = holder("Groceries")
         rule_with_a_delta(category, "Bread", 100)
 
@@ -806,6 +811,7 @@ RSpec.describe BudgetPagePresenter do
         dated_bill(category, amount: 300, due: today + 20.days, item: lane(category, "Vet"))
         paid_one_off(category, "Water", amount: 90)
 
+        expect(category.budgets.count).to eq(5)
         expect(count_statements { read_every_row }).to eq(one_rule)
         expect(one_rule).to be_positive
       end

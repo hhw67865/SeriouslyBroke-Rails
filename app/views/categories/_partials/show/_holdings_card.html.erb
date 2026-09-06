@@ -38,15 +38,22 @@
      data-holdings-card
      data-holdings-state="<%= presenter.state %>">
   <% if presenter.holding? %>
-    <%# THE CATEGORY HAS A CLAIM. The heading names what it is — a FUND, or an envelope — from the
+    <%# THE CATEGORY HAS A CLAIM. The heading names what it is — a TARGET, or an envelope — from the
         one reader, so the word and the bar below it cannot describe different things.
 
         ** "GOAL" IS RETIRED (rules-own-the-budget spec §7). ** A goal was a kind of CATEGORY, told
         apart by a figure on the category record; what tells these two apart now is whether a rule
-        here is saving toward a DAY (two-shapes spec §2). "Fund" is the word for that and it is true
-        of a bill's fund and a savings goal alike, which is the point of their being one shape. %>
+        here is saving toward a DAY (two-shapes spec §2).
+
+        ** AND THE WORD IS "Target", NOT "Fund" (fix wave — LOW-5). ** "Fund" is the noun of the
+        retired model — money that had been MOVED into a pot — and every screen this plan rebuilt
+        stopped using it: `EntryImpactPresenter#noun` says "bill" or "target", the trouble strip
+        says "$X short", and nothing anywhere moves money into anything. What is true of both the
+        bill's saving-up and the savings goal is that a figure is being reached by a day, which is
+        what a target is. The reader keeps its own name (`#fund?`) — it is the shape, and renaming
+        the predicate is a change to five files for one heading. %>
     <h2 class="text-xl font-semibold mb-4">
-      <%= presenter.fund? ? "Fund" : "Envelope" %>
+      <%= presenter.fund? ? "Target" : "Envelope" %>
     </h2>
 
     <%# WHAT THE FIGURE BELOW IS MADE OF, SAID PLAINLY. It is the one thing about the computed model
@@ -56,8 +63,8 @@
         heading above them already said. %>
     <p class="text-sm text-gray-500 mb-4">
       <% if presenter.fund? %>
-        This category's money is being saved toward a day rather than reset each period. Nothing was
-        moved here to put it there — what it has is what its rules have built up since
+        This category is saving toward a figure by a day rather than resetting each period. Nothing
+        was moved here to put it there — what it has is what its rules have built up since
         <%= presenter.funded_since.strftime("%b %-d, %Y") %>, less what has been spent here.
       <% else %>
         Nothing was moved here. What this category claims is worked out from its rules on the Budget

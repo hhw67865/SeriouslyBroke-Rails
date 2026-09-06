@@ -101,21 +101,49 @@ RSpec.describe BudgetPageHelper, type: :helper do
   # period — change the amount if you mean that", which asked a reader to defend themselves against
   # their own form.
   describe "#budget_monthly_conversion_note" do
-    def form_for(budget) = RuleForm.new(build(:user, :biweekly), RuleForm.from(budget), budget: budget)
+    # ** ONE USER, AND THE DIVISION IS DONE ON THEIR GRID (fix wave — T4(d)). ** This handed the form
+    # a biweekly user while `RuleForm.from` divided on the ROW's owner — the factory's, whose cadence
+    # is not this one — so the sentence named a grid the arithmetic had not used. In production they
+    # are the same person and nothing showed; here they were two, which is exactly the fixture that
+    # would have caught it. `user:` is passed through now, so one grid answers both halves.
+    let(:owner) { build(:user, :biweekly) }
 
-    it "names the row's own figure and says the cost is kept" do
-      note = helper.budget_monthly_conversion_note(form_for(build(:budget, :rate, amount: 260)))
+    def form_for(budget) = RuleForm.new(owner, RuleForm.from(budget, user: owner), budget: budget)
 
-      expect(note).to eq(
+    # RE-DERIVED: `Budget#steady_ask` on a biweekly grid is `amount × 12 ÷ 26 ÷ interval`, so
+    # `260 × 12 ÷ 26` = **$120.00**, which is what the box holds and what the note is accounting for.
+    it "names the row's own figure and says the cost is kept", :aggregate_failures do
+      form = form_for(build(:budget, :rate, amount: 260))
+
+      expect(form.amount).to eq(120)
+      expect(helper.budget_monthly_conversion_note(form)).to eq(
         "This rule was $260.00 a month — shown here as what it costs each period on your " \
         "biweekly grid. Saving keeps that cost."
       )
     end
 
+    # ** THE DRIFT-ACCEPT PATH, WHERE THE BOX HOLDS NEITHER OF THE ROW'S FIGURES (fix wave — MED-4).
+    # ** `BudgetsController#edit` merges the suggestion's measured amount over the read-back, so the
+    # box says $200.00 — and the sentence above, left unchanged, claimed that $200.00 was "what it
+    # costs each period" and that saving would keep the cost. It is $120.00 that costs what the rule
+    # costs, and accepting a drift is precisely a change of cost. All three figures, no promise.
+    it "names all three figures where a suggestion filled the box" do
+      note = helper.budget_monthly_conversion_note(form_for(build(:budget, :rate, amount: 260)), suggested: 200)
+
+      expect(note).to eq(
+        "Your entries suggest $200.00 a period. This rule was $260.00 a month " \
+        "($120.00 a period on your biweekly grid)."
+      )
+    end
+
     # THE OTHER DIRECTION, so the note is never a fixture of the page: every other shape says
-    # nothing at all.
+    # nothing at all — with or without a suggestion, since a per-period row's box is already in the
+    # unit the figure was measured in and there is no conversion to account for.
     it "says nothing on a rule whose words describe its own columns", :aggregate_failures do
-      expect(helper.budget_monthly_conversion_note(form_for(build(:budget, :per_period_rate, amount: 400)))).to be_nil
+      per_period = form_for(build(:budget, :per_period_rate, amount: 400))
+
+      expect(helper.budget_monthly_conversion_note(per_period)).to be_nil
+      expect(helper.budget_monthly_conversion_note(per_period, suggested: 200)).to be_nil
       expect(helper.budget_monthly_conversion_note(form_for(build(:budget, :by_date, amount: 5_000)))).to be_nil
     end
   end

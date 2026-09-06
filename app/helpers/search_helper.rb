@@ -115,7 +115,9 @@ module SearchHelper
       "item" => "e.g., Coffee, Rent, Salary",
       "description" => "e.g., Monthly payment, Grocery shopping",
       "category" => "e.g., Food, Housing, Income",
-      "name" => "e.g., Coffee, Food, Emergency Fund",
+      # "Emergency Fund" IS "Emergency" (fix wave — LOW-5): a fund was a kind of record and there is
+      # no such thing; what a user names a category is the thing itself.
+      "name" => "e.g., Coffee, Food, Emergency",
       # `"target-amount"` IS DELETED (rules-own-the-budget spec §7). It was a placeholder for a
       # search field nothing declares — `Category` is `searchable :name` and nothing else — and the
       # column it named is the one moving onto the rule. A placeholder for a field no form renders

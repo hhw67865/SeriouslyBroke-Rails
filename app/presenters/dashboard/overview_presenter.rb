@@ -85,9 +85,11 @@ module Dashboard
     # required: something is being saved toward a day, and the category is counting.
     #
     # COMPOSED IN SQL RATHER THAN SELECTED IN RUBY: the scope as an `IN (SELECT category_id …)`
-    # subquery is one statement with no Ruby pass over every category the user owns, and it is the
-    # ONE spelling of the population — `CategoryBudgetPresenter#fund_line` asks the same two clauses
-    # of rows already loaded, and this file pins the pair.
+    # subquery is one statement with no Ruby pass over every category the user owns. It is one of TWO
+    # doors onto one population and neither restates it: the scope and `Budget#saving_toward_a_date?`
+    # come off the same pair of condition hashes (`Budget::SAVING_TOWARD_A_DATE`), the predicate is
+    # what `#savings_line` here and `CategoryBudgetPresenter#fund_line` ask of rows already loaded,
+    # and `budget_spec` pins the two equal row by row (fix wave — MED-2).
     #
     # ** THE TARGET IS THE RULE'S OWN AMOUNT, AND IT IS NIL WHERE THE FUND IS NOT THE WHOLE CATEGORY
     # (spec §10.5; fix wave — MED-1). ** A target is a ceiling on the FUND's built-up, so printing it
@@ -112,36 +114,46 @@ module Dashboard
     # unbatched door costs a spending query and an adjustment query PER RULE. The two are pinned
     # against each other figure for figure in `claim_ledger_spec`, so the batching cannot make this
     # page disagree with a category's own.
+    # ** THE ROWS ARE `ClaimLine`s, THE APP'S ONE ROW TYPE (fix wave — MED-3). ** They were a hash of
+    # four figures assembled here, and what that hash had no member for was `paid`: a goal whose
+    # money has been spent has a built-up of $0 — the payment emptied the fund — and the strip badged
+    # it `$0.00 of $5,000.00 · low`, telling a user who has just taken their holiday that they have
+    # barely started saving for it. Every other screen in this app learned `ClaimCalculator#settled?`
+    # in Task 3 and reads it off `ClaimLine#paid?`; this one did not, because its rows were not
+    # lines. `ClaimRows.line_for` is the same builder Home's rows, the Budget page's rows and the
+    # rule form's preview come off, so the strip cannot describe a rule differently from the page it
+    # links to.
+    #
+    # THE TWO FIGURES THE CARD PRINTS ARE THE LINE'S OWN: `#built_up` and `#target`, with `#percent`
+    # for the bar — one reader per figure, and no arithmetic left in the view.
     def savings_summary
-      @savings_summary ||= savings_categories.map { |category| savings_row(category) }
+      @savings_summary ||= savings_categories.map { |category| savings_line(category) }
     end
 
     # ONE CARD, off the rules the preload already fetched. `#sole` is deliberate — see the header:
     # `Budget.saving_toward_a_date`'s `item_id IS NULL` clause makes it single-valued per category,
     # and a `#first` would silently name one of two where a raise says so.
-    def savings_row(category)
-      rules = category.budgets.to_a
-      rule = rules.select { |budget| saving_toward_a_date?(budget) }.sole
-      built_up = claim_ledger.calculator_for(rule).built_up
-      target = rules.one? ? rule.amount.to_d : nil
+    #
+    # `Budget#saving_toward_a_date?` AND NOT THE CLAUSES AGAIN (fix wave — MED-2): the scope's own
+    # hashes, asked of a loaded row. The relation cannot be used here — `budgets.merge(scope)` issues
+    # a statement against an association the preload has already fetched, one per card.
+    def savings_line(category)
+      rule = category.budgets.select(&:saving_toward_a_date?).sole
 
-      {
-        id: category.id,
-        name: category.name,
-        balance: built_up,
-        target: target,
-        progress_percentage: progress_percentage(built_up, target)
-      }
+      ClaimRows.line_for(rule, claim_ledger.calculator_for(rule))
     end
 
-    # `Budget.saving_toward_a_date`'s four clauses in Ruby, asked of a row already loaded — the
-    # `bill` one included (fix round 1 — LOW-7): a one-off on the whole category is the shape of a
-    # goal and of an un-itemised bill alike, and the word the user chose is what tells them apart.
-    def saving_toward_a_date?(budget)
-      budget.item_id.nil? && budget.anchor_date.present? && budget.interval_months.nil? && !budget.bill?
-    end
+    # ** THE TARGET IS PRINTED ONLY WHERE THE FUND IS THE WHOLE CATEGORY. ** See the header: a
+    # ceiling beside a figure that is not the fund's own is a fraction of the wrong number. The gate
+    # is read off `#savings_categories`' OWN preload rather than off the line's category, so it
+    # cannot become a `SELECT budgets` per card.
+    def whole_category_fund?(line) = sole_rule_category_ids.include?(line.rule.category_id)
 
-    def total_savings_balance = savings_summary.sum { |row| row[:balance] }
+    def savings_target(line) = whole_category_fund?(line) ? line.target : nil
+
+    def savings_progress(line) = progress_percentage(line.built_up, savings_target(line))
+
+    def total_savings_balance = savings_summary.sum(0.to_d, &:built_up)
 
     private
 
@@ -197,6 +209,12 @@ module Dashboard
     # `includes(:budgets)` BECAUSE THE ROW READS THE RULES — the fund itself, and how many siblings
     # it has. Without the preload this strip costs one statement per card for rows the ledger has
     # already fetched, which is the very per-row cost `ClaimLedger` exists to keep off this page.
+    # THE CATEGORIES WHOSE ONLY RULE IS THE FUND — `#savings_categories`' own preloaded rows, counted
+    # once for the whole strip rather than per card.
+    def sole_rule_category_ids
+      @sole_rule_category_ids ||= savings_categories.select { |category| category.budgets.size == 1 }.to_set(&:id)
+    end
+
     def savings_categories
       @savings_categories ||= @user.categories
         .expenses

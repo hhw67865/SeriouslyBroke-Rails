@@ -210,9 +210,13 @@ class EntryImpactPresenter
   # THE DATED RULES THEMSELVES, so `#noun` can ask what the user called them. A category mixing a
   # bill with a target reads "bill": the sharper word wins, because a receipt landing on a bill's
   # lane is money that has to be there on a day somebody else set.
-  def dated_rules
-    holding.budgets.select { |budget| budget.anchor_date.present? }
-  end
+  #
+  # ** OFF `#claim_calculators`, NOT OFF `anchor_date` (fix wave — LOW-4). ** The shape is
+  # `ClaimCalculator#shape`'s to answer (`Budget#claim_shape` is the one door onto it from outside),
+  # and `#fund?` two readers up already asks it that way — so the column read here was the same
+  # question spelled a second way, on the same list, four lines apart. The calculators are memoised
+  # and each carries its own `rule`, so this costs nothing beyond the `select`.
+  def dated_rules = claim_calculators.select(&:dated?).map(&:rule)
 
   # WHAT THE CATEGORY CLAIMS, AS IF THIS ENTRY WERE BEING DECIDED NOW.
   #

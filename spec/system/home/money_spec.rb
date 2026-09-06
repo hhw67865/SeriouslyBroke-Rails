@@ -339,9 +339,15 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-free].text-status-danger")
     expect(page).to have_css("[data-free-subline]", text: "Your rules claim $250.00 more than checking holds")
     expect(page).to have_no_css("[data-free-subline]", text: "Move some in")
-    # ** AND IT DOES NOT ALSO SAY THE OVERSPEND'S SENTENCE. ** The pot is a healthy $150; what is
-    # wrong is the rules, and "You have spent past what you had" would be a second, false cause.
-    expect(page).to have_no_css("[data-free-subline]", text: "You have spent past what you had")
+    # ** AND THEN THE SECOND CLAUSE, WHICH IS ABOUT WHERE THE MONEY IS (fix wave — LOW-1). ** This
+    # pinned the sentence ABSENT here, on the reasoning that the pot is a healthy $150 and the fault
+    # is the rules'. §2 does not draw the line there: the second clause answers "is there money
+    # somewhere else?" and its two arms are "Move some in from your other accounts" and "You have
+    # spent past what you had" — the else, not a third silence. The view gated the else on
+    # `#anything_claimed?` instead, which made it unreachable for the one user it is truest of: free
+    # below zero, rules claiming, and no other account to move anything in from. That user read the
+    # figure and was told nothing about what to do with it.
+    expect(page).to have_css("[data-free-subline]", text: "You have spent past what you had")
   end
 
   # ** THE MONEY IS IN THE WRONG ACCOUNT, AND THE CARD SAYS SO AS AN INSTRUCTION. ** $1,000 of

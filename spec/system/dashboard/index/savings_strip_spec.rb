@@ -284,9 +284,13 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
 
       visit reports_path
 
+      # THE BADGE IS "on the way" AND NOT "saving" (fix wave — LOW-5): the card says what the fund is
+      # doing because it has no ceiling to be a fraction of, in the app's own words rather than the
+      # strip's private ones.
       within(card(car)) do
         expect(page).to have_content("$600.00")
         expect(page).to have_content("built up")
+        expect(page).to have_content("on the way")
         expect(page).to have_no_content("of $2,400.00")
       end
       expect(page).to have_content("$1,600.00")
@@ -324,14 +328,56 @@ RSpec.describe "Dashboard Index - Savings strip", type: :system do
 
     # `planned_for` CAPS THE PERIOD'S ACCRUAL AT WHAT IS STILL MISSING (§3.2), so a $1,000 rule on a
     # $1,000 target lands exactly on it in one period rather than overshooting.
-    it "says 'funded' once the claim reaches the target" do
+    #
+    # ** THE WORD IS "ready", NOT "funded" (fix wave — LOW-5). ** `ready` is what Home's own rows say
+    # of a fund that has reached its figure (`HomeHelper#when_words`), and a strip using a private
+    # vocabulary for the state the row beside it already names is two words for one fact.
+    it "says 'ready' once the claim reaches the target" do
       small = goal("Small Goal", 1_000, accrues: 1_000) # 100%
 
       visit reports_path
 
       within(card(small)) do
-        expect(page).to have_content("funded")
+        expect(page).to have_content("ready")
         expect(page).to have_no_content("low")
+      end
+    end
+
+    # ** A SPENT GOAL IS "achieved", AND IT WAS THE STRIP'S WORST SENTENCE (fix wave — MED-3). **
+    # Paying for the holiday empties the fund, so `#built_up` is $0.00 and every figure-reading arm
+    # here called it `low` — a warning at the user who has just done the thing. `ClaimLine#paid?`
+    # (`ClaimCalculator#settled?`) is the reader, and the card says what the goal WAS and when it
+    # was met rather than what is left of it.
+    #
+    # RE-DERIVED: a $5,000 goal accruing $1,000 a period, with $5,000 spent on its lane today —
+    # `walk.paid` reaches the target, so the rule is settled today. `#built_up` clamps to $0.00.
+    it "says 'achieved' on a goal that has been spent, with no bar", :aggregate_failures do
+      vacation = goal("Vacation", 5_000, accrues: 1_000)
+      spend(vacation, 5_000)
+
+      visit reports_path
+
+      within(card(vacation)) do
+        expect(page).to have_content("achieved")
+        expect(page).to have_content("$5,000.00")
+        expect(page).to have_no_content("low")
+        expect(page).to have_no_content("of $5,000.00")
+      end
+    end
+
+    # THE OTHER DIRECTION: one dollar short of the target is not paid, and the card goes back to
+    # saying how far along it is — over the SAME $0.00 built-up, which is what makes `#paid?` a
+    # reader the strip cannot do without.
+    it "keeps calling a goal one dollar short low", :aggregate_failures do
+      vacation = goal("Vacation", 5_000, accrues: 1_000)
+      spend(vacation, 4_999)
+
+      visit reports_path
+
+      within(card(vacation)) do
+        expect(page).to have_content("low")
+        expect(page).to have_content("of $5,000.00")
+        expect(page).to have_no_content("achieved")
       end
     end
   end

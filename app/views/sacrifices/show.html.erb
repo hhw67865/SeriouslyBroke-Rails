@@ -74,9 +74,15 @@
   <section class="bg-white border border-gray-200 rounded">
     <div class="px-6 py-4 border-b border-gray-200">
       <h3 class="text-sm font-semibold text-gray-900">What could you cut?</h3>
-      <p class="mt-1 text-sm text-gray-500">
+      <%# ** THE ORDER IS PART OF THE OFFER, SO IT IS SAID (fix wave — LOW-3). ** `SacrificePresenter
+          #rows` sorts `[-claim, owner name, id]` — the biggest claim first, because the fastest way
+          to close a gap is at the top — and the page said nothing about it. A list of money with an
+          unexplained order reads as arbitrary, and a reader who assumes alphabetical or "as entered"
+          draws the wrong conclusion from where their own rules sit. %>
+      <p class="mt-1 text-sm text-gray-500" data-cut-list-order>
         Tick a rule and type what you would keep it at, per period. Nothing is saved — this is a
-        question, not a change. The link on each row is where the rule is actually edited.
+        question, not a change. The link on each row is where the rule is actually edited. The
+        biggest claim is first, so the cuts that close the gap fastest are at the top.
       </p>
     </div>
 

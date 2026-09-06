@@ -656,13 +656,24 @@ class HomePresenter
       .map { |category| UnbudgetedRow.new(category: category, spent: spending.fetch(category.id)) }
   end
 
-  # ONE CATEGORY'S LINES — `ClaimRows#lines_for`, the same list the blocks are grouped out of.
-  def claim_lines_for(category) = claim_rows.lines_for(category)
-
-  # THE LINES THE STRIP IS ABOUT, in the order the section lists their categories, so a reader
-  # scanning down the strip and then down the section meets the same categories in the same order.
+  # ** THE LINES THE STRIP IS ABOUT, WALKED IN THE ORDER THE BLOCKS BELOW ARE DRAWN IN — ONE SORT
+  # ON THE SCREEN (fix wave — MED-1). **
+  #
+  # It walked `#budgeted_categories` (`ClaimRows#ranked_categories`, which is `[priority, name]` —
+  # FILL order) and flat-mapped each category's lines, while every block under it is
+  # `#give_way_order` grouped back. Those are two different orders and the difference is visible on
+  # the ordinary case: Rent (a `bill` on a priority-0 category) overdue beside Fun (a `choice` on
+  # priority 1) over listed Rent first in the strip and Fun first in the section, so a reader
+  # scanning down the strip and then down the section met the same two categories ranked opposite
+  # ways — the very defect `ClaimRows` was hoisted to end, back in a third reader.
+  #
+  # `#category_blocks` RATHER THAN `#give_way_order` DIRECTLY, so the strip is grouped exactly as
+  # the section is: a category's troubled rules arrive together, at the position its first-giving-way
+  # rule puts the block. Flattening the blocks and flattening the walk differ only where one
+  # category's rules straddle another's in the give-way order, and there the section is what a
+  # reader is looking at.
   def trouble_lines
-    @trouble_lines ||= budgeted_categories.flat_map { |category| claim_lines_for(category) }.select(&:trouble?)
+    @trouble_lines ||= category_blocks.flat_map(&:rows).select(&:trouble?)
   end
 
   # ** `#give_way_key` AND `#give_way_rank` LEFT WITH THE SORT (`ClaimRows`). ** The key is the

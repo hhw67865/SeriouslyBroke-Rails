@@ -72,12 +72,18 @@
         that ESTABLISHES it rather than inferred from the signs of two figures:
 
           claimed, money elsewhere   → "Your rules claim $X more…" + "Move some in…"
-          claimed, one account       → "Your rules claim $X more…"
+          claimed, one account       → "Your rules claim $X more…" + "You have spent past what you had."
           nothing claimed, elsewhere → "Move some in…"   (the pot is under; the money exists)
           nothing claimed, one acct  → "You have spent past what you had."
 
-        "You have spent past what you had" is therefore unreachable while anything is claimed, which
-        is the same split `_shortfall.html.erb`'s headline makes. %>
+        ** THE SECOND CLAUSE IS ABOUT PARKED MONEY AND NOTHING ELSE (fix wave — LOW-1). ** It was
+        gated `elsif !anything_claimed?`, which made "You have spent past what you had" unreachable
+        for the user it is truest of: free below zero, rules claiming, and no other account to move
+        anything in from. That user got the shortfall figure and then silence about what it means.
+        §2 draws the line where the MONEY is — there is somewhere to move it from, or there is not —
+        so the else takes the spec's clause. `_shortfall.html.erb`'s HEADLINE still splits on
+        `#anything_claimed?`, which is a different question (whose fault the gap is), and that split
+        stays. %>
     <p class="mt-2 text-sm <%= presenter.free_to_spend.negative? ? "text-status-danger" : "text-brand-dark" %>"
        data-free-subline>
       <% if presenter.free_to_spend.negative? %>
@@ -86,7 +92,7 @@
         <% end %>
         <% if presenter.money_parked_elsewhere? %>
           Move some in from your other accounts.
-        <% elsif !presenter.anything_claimed? %>
+        <% else %>
           You have spent past what you had.
         <% end %>
       <% elsif presenter.money_parked_elsewhere? %>

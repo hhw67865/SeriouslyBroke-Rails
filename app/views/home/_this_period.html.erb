@@ -8,9 +8,10 @@
     claim between them, and a row per rule that says what shape it is, what it has, and when.
 
     ** THE ORDER IS `#give_way_order` GROUPED BACK, AND IT IS THE ONLY SORT ON THE SCREEN. ** A
-    block sits where its first-giving-way rule sits, and its rows sit where each of theirs does — so
-    the strip above and this section cannot rank one category two ways. See
-    `HomePresenter#category_blocks`.
+    block sits where its first-giving-way rule sits, and its rows sit where each of theirs does. The
+    strip above walks THESE blocks (`HomePresenter#trouble_lines` is `#category_blocks` flattened
+    and filtered, fix wave — MED-1), so the two panels cannot rank one category two ways: they are
+    one list, read twice. See `ClaimRows#give_way_order` for what the key is.
 
     ** EVERY FIGURE IS A CLAIM, off the page's ONE `ClaimLedger`. ** Nothing is allocated into a
     category (computed-claims §5); each row comes off one `ClaimCalculator` and says the sentence its

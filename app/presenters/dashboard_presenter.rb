@@ -98,6 +98,8 @@ class DashboardPresenter
            :buffer_categories_breakdown,
            :envelope_categories_breakdown,
            :savings_summary,
+           :savings_target,
+           :savings_progress,
            :total_savings_balance,
            to: :overview
 

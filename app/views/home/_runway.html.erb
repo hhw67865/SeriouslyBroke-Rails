@@ -119,11 +119,17 @@
     <%# THE PACE LINE (§3), which is three sentences and never more:
 
           what a day may cost from here      — both signs of `free`, `HomeHelper#pace_words`
-          what falls due before the period closes — Σ the ticks, absent when nothing does
+          what falls due before the period closes — Σ the ticks, or that nothing does
           which of them is short, by name    — absent when none is
 
-        THE SECOND AND THIRD ARE ABSENT RATHER THAN ZEROED. "$0.00 due before Sep 30" is a line that
-        reports nothing, and a period with nothing due is the ordinary one. %>
+        THE THIRD IS ABSENT RATHER THAN ZEROED: "0 rules are short" is a line that reports nothing.
+
+        ** THE SECOND IS NOT (fix wave — Task 5's minor). ** It WAS absent on a quiet period, on the
+        same reasoning — and a quiet period is the ordinary one, so the ordinary panel was a rail, a
+        pace line and two-thirds of a card of white space at 1440. "$0.00 due before Sep 30" is
+        indeed a figure pretending to be news; "Nothing is due before Sep 30" is an ANSWER, and it is
+        the answer to the question this panel exists to ask. One sentence either way, in one place,
+        so the panel has the same shape whether or not anything is coming. %>
     <div class="mt-4 border-t border-gray-100 pt-3 space-y-1" data-pace>
       <% if pace = presenter.pace_line %>
         <p class="text-sm <%= pace.fine? ? "text-gray-700" : "text-status-danger" %>" data-pace-line>
@@ -134,6 +140,10 @@
       <% if runway.any_due? %>
         <p class="text-sm text-gray-700 tabular-nums" data-due-total>
           <%= number_to_currency(runway.due_total) %> due before <%= runway.last.strftime("%b %-d") %>.
+        </p>
+      <% else %>
+        <p class="text-sm text-gray-700" data-due-total>
+          Nothing is due before <%= runway.last.strftime("%b %-d") %>.
         </p>
       <% end %>
 

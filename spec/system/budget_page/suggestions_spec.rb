@@ -571,13 +571,23 @@ RSpec.describe "Budget page suggestions", type: :system do
     # per-period figure used to be asserted ABSENT from this whole page, because the box held monthly
     # money and two unlabelled units on one screen is how a user comes to write the wrong number. The
     # box holds per-period money, so the panel's $200.00 goes straight into it; what needs labelling
-    # is the ROW's $260.00 a month, which the "Currently …" line and the card's two-unit line each
-    # say once.
+    # is the ROW's $260.00 a month.
+    #
+    # ** THE NOTE SAYS IT, AND THE "Currently …" LINE STANDS DOWN (fix wave — MED-4). ** Both
+    # rendered here, and the note's version was FALSE: "shown here as what it costs each period …
+    # Saving keeps that cost" over a box holding $200.00, on the one act whose entire purpose is to
+    # change the cost. The note names the three figures instead — what the entries suggest, what the
+    # row says, and what the row comes to on this grid — and the duplicate line beside it goes.
     it "prefills the form with the money the panel proposed, and labels the row's own unit", :aggregate_failures do
       accept(:drift, retirement_rule)
 
       expect(page).to have_field("Amount", with: "200.0")
-      expect(page).to have_content("Currently $260.00 a month")
+      expect(page).to have_css(
+        "[data-monthly-conversion]",
+        text: "Your entries suggest $200.00 a period. This rule was $260.00 a month " \
+              "($120.00 a period on your biweekly grid)."
+      )
+      expect(page).to have_no_css("[data-current-amount]")
       expect(page).to have_css("[data-preview-units]", text: "$260.00 a month · $200.00 a period")
     end
 
@@ -592,7 +602,10 @@ RSpec.describe "Budget page suggestions", type: :system do
     it "writes the money the drift proposed, and says what it did to the shape", :aggregate_failures do
       accept(:drift, retirement_rule)
 
-      expect(page).to have_css("[data-monthly-conversion]", text: "Saving keeps that cost")
+      # NOT "Saving keeps that cost" — it does not, and that is the point of accepting a drift
+      # (fix wave — MED-4). The note names the row's own figures and promises nothing.
+      expect(page).to have_css("[data-monthly-conversion]", text: "This rule was $260.00 a month")
+      expect(page).to have_no_content("Saving keeps that cost")
 
       click_button "Update rule"
 
