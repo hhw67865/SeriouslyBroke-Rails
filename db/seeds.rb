@@ -81,12 +81,14 @@
 #   waterfall to draw a cutoff on.
 #
 #     In Checking            $5,561.00   the pot — `AccountLedger#pot`, main's balance
-#     Free to spend         -$4,904.84   `pot − Σ claims` (two-shapes §2), unclamped
-#     Claimed               $10,465.84   Σ over all 19 rules
+#     Free to spend         -$5,660.84   `pot − Σ claims` (two-shapes §2), unclamped
+#     Claimed               $11,221.84   Σ over all 19 rules
 #     total money            $7,461.00   pot + the three other accounts ($1,900.00), SHOWN and never
 #                                        subtracted — the hero says it in its own clause
 #
-#   ** THE FREE FIGURE MOVED FROM -$2,740.34 TO -$4,904.84 AND THE TWO SHAPES ARE WHY (§2). ** Two
+#   ** THE FREE FIGURE MOVED FROM -$2,740.34 TO -$4,904.84 AND THE TWO SHAPES ARE WHY (§2), AND
+#   THEN TO -$5,660.84 WHEN PET CARE BECAME A FUND (§12): $806.00 claimed where the resetting $50
+#   rule it replaces claimed $50.00, which is fourteen periods of accrual instead of one. ** Two
 #   changes compound. The cap is gone, so money in the three other accounts no longer offsets a
 #   claim — worth $1,900. And the three GOALS are dated rules now: a fund with no deadline asked
 #   nothing of a period and held only what the household set aside, while a goal with a day on it
@@ -96,11 +98,12 @@
 #
 #   THE TROUBLE STRIP (§4), and this demo lights four of its five arms:
 #     :overdraft   Side Gig Checking is overdrawn $300.00
-#     :shortfall   $4,904.84 short, at $377.30 a day for the thirteen days left, and the give-way
+#     :shortfall   $5,660.84 short, at $435.45 a day for the thirteen days left, and the give-way
 #                  walk BY TYPE AND THEN BY REVERSE PRIORITY (rules-own-the-budget §3):
 #                    choice  Vacation to Europe $725.47 · Holiday Gifts $933.34 · Streaming $25.00
 #                    usage   House Down Payment $1,800.96 · Medical Copays $60.00 ·
-#                            Commuter Pass $60.00 · Pet Care $50.00 · Household Supplies $75.00 ·
+#                            Commuter Pass $60.00 · Pet Care $806.00 (the fund — fourteen periods
+#                            of $60 less the $34 kibble run) · Household Supplies $75.00 ·
 #                            Groceries $400.00 · Utilities $120.00 — the Electric Bill is typed
 #                            `usage` though it is dated, which is the row that keeps the type from
 #                            being a synonym for the schedule
@@ -113,12 +116,12 @@
 #                  the goals would have led the list in a different order entirely.
 #     :over        Dining Out — over by $10.00
 #     :overdue     Renters Insurance — was due 6 days ago, $180.00 built up of $180.00, all there
-#     :structural  rules need $2,236.57 a period against a declared $2,050.00 — the standing ask of
+#     :structural  rules need $2,246.57 a period against a declared $2,050.00 — the standing ask of
 #                  every rule (`Budget.steady_need`), which for a one-off is the amount spread from
 #                  the day the rule was born to the day it falls due and moves with nothing else
 #                  (fix wave 2 — MED-A). It read $2,103.42 while the three goals asked NOTHING of a
 #                  period; a goal that names a day states its cost, which is the ruling's point, and
-#                  the horizons below are chosen so the verdict stays a **$186.57** near miss rather
+#                  the horizons below are chosen so the verdict stays a **$196.57** near miss rather
 #                  than a wall.
 #
 #   "THIS PERIOD" (§3.4), one row per category and one line per rule. The period ANCHORS ON TODAY,
@@ -129,6 +132,8 @@
 #     RATE, UNDER      Household Supplies   $45.00 of $120.00       today's detergent run
 #     RATE, OVER       Dining Out           $110.00 of $100.00      red, `over by $10.00` beneath
 #     RATE, UNTOUCHED  Groceries            $0.00 of $400.00        the period opened this morning
+#     FUND             Pet Care             built up $806.00 · +$60.00 a period — no bar (it is
+#                                             aiming at nothing) and no runway tick (it has no day)
 #     ACCRUING         Rent                 $1,500.00 built up of $1,500.00 · next due <today+10>
 #     ACCRUING         Car Insurance        $1,050.00 built up of $1,200.00 · next due <today+1mo>
 #                                             · $75.00 per period
@@ -161,7 +166,7 @@
 #   fund's own dated rule off a strip about saving.
 #
 #   THE BUDGET PAGE'S TYPE OVERVIEW (§3), summed from `Budget#steady_ask` over all 19 rules:
-#     `Bills $1,200.99 · Usage $800.33 · Choice $235.25 a period` — which adds to the $2,236.57
+#     `Bills $1,200.99 · Usage $810.33 · Choice $235.25 a period` — which adds to the $2,246.57
 #     `Budget.steady_need` reports, because it is the same sum partitioned three ways. Every one of
 #     the three goals is inside it now: the emergency fund's $64.10 lands in Bills, the house
 #     deposit's $54.95 in Usage and the vacation's $64.10 in Choice, where the old funds asked
@@ -188,8 +193,9 @@
 #                     each offering to JOIN the Utilities category — the reuse branch.
 #     rate (4)        Transportation, Shopping, Personal Care, Entertainment — the categories that
 #                     hold nothing, so their spending reads straight against free
-#     drift (4)       Groceries (the one UPWARD suggestion, $460 spent against a $400 rule),
-#                     Dining Out, Household Supplies, Pet Care
+#     drift (3)       Groceries (the one UPWARD suggestion, $460 spent against a $400 rule),
+#                     Dining Out and Household Supplies. PET CARE LEFT THIS LIST WITH §12: its rule
+#                     keeps what it doesn't spend, and an accruing rule never drifts.
 #     dead_rule (1)   Commuter Pass — the fortnightly pass stopped five periods ago
 #
 #   ONE DELIBERATE $0.00 DRIFT, AND IT IS THE BRANCH THE DETECTOR'S OWN HEADER ASKS FOR. Household
@@ -307,6 +313,12 @@ today = Time.find_zone!(user.timezone).today
 # stays at $2,050 because it is what the user SAYS they bring in; what was tuned instead is the
 # goals' HORIZONS, so the verdict stays a near miss a person could act on — see the goals for the
 # arithmetic and for why the house deposit is $10,000.
+#
+# ** AND §12 TOOK IT FROM $186.57 TO $196.57, WHICH IS TEN DOLLARS AND NOT A CHANGE OF SHAPE. **
+# Pet Care's rule keeps what it doesn't spend now and its amount went $50 → $60; a fund's standing
+# ask is its plain rate (`Budget#steady_ask` takes a per-period amount verbatim, keeping or not), so
+# the whole of the difference is the $10. `Budget.steady_need` is **$2,246.57** against the same
+# declared $2,050, and the verdict is still the near miss the sacrifice view has a screen for.
 user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_income: 2_050)
 
 # ---------------------------------------------------------------------------------------------
@@ -527,11 +539,38 @@ rule.call(category: groceries, amount: 400, basis: :per_period, rule_type: :usag
 # funded-category-that-quietly-stopped branch, which no other detector can report.
 rule.call(category: supplies, amount: 120, basis: :per_period, rule_type: :usage)
 
-# THE MIXED CATEGORY, and it is what §3.1's lane PARTITION exists for: a rate rule whose lane is
-# everything in Pet Care EXCEPT the items that carry their own rule, beside a dated vet bill whose
+# THE MIXED CATEGORY, and it is what §3.1's lane PARTITION exists for: a per-period rule whose lane
+# is everything in Pet Care EXCEPT the items that carry their own rule, beside a dated vet bill whose
 # lane is the Vet item alone. Without the partition the kibble and the vet's fee would come off both
 # claims, Σ claims would fall twice for one payment, and `free` would RISE when a bill was paid.
-rule.call(category: pet_care, amount: 50, basis: :per_period, rule_type: :usage)
+#
+# ** AND IT IS THE DEMO'S ONE FUND — "$60 a period, and it keeps what it doesn't spend"
+# (two-shapes §12, Henry's ruling of 2026-09-06). ** The shape the spec restores needs a row on the
+# screens it changed, and pet care is the household shape it is for: there is no day the money is
+# needed on and no figure being saved toward, but a quiet fortnight should leave more in the
+# envelope for the fortnight the dog eats something it shouldn't. It was `amount: 50` and resetting.
+#
+# ** WHAT IT HOLDS, BY THE FORMULA (§12), SO THE `seeds_spec` LITERAL CAN BE REDONE BY HAND: **
+#
+#     claim = clamp≥0 per period of  Σ over the periods since the rule started
+#                                      (amount + Σ adjustments in P) − spent in P
+#
+# The rule is born on `demo_start`, which is thirteen periods back, so the walk visits FOURTEEN
+# periods (demo_start's own through today's). Every one contributes the plain $60 — a fund never
+# re-plans and is never capped — and the only spending on its lane is the $34 kibble run one period
+# back (the vet's $180 is on the Vet item, which carries its own rule and is therefore a different
+# lane). No adjustment touches it.
+#
+#     14 × $60.00 − $34.00 = **$806.00**
+#
+# and the per-period clamp never bites, because the built-up is $660 before the period the $34
+# lands in. It asks **$60.00** of a typical period (`Budget#steady_ask` takes a per-period amount
+# verbatim, keeping or not), which is what puts it in `Budget.steady_need` at its plain rate.
+#
+# IT ALSO TAKES PET CARE OUT OF THE DRIFT PANEL, deliberately: `SuggestionEngine#rate_shape?` is
+# `claim_shape == :rate`, and an accruing rule never drifts (§12). Four drift suggestions become
+# three, and the three that remain are the ones whose sentences are about money that resets.
+rule.call(category: pet_care, amount: 60, basis: :per_period, rule_type: :usage, keeps_unspent: true)
 rule.call(category: pet_care, item: vet, amount: 180, anchor_date: today + 20, rule_type: :bill)
 
 # A RULE STILL FUNDING SOMETHING THAT STOPPED — detector 4's only subject on this demo, and the

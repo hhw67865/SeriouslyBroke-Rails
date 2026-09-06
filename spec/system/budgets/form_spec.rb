@@ -43,12 +43,38 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(rule).to have_attributes(basis: "per_period", interval_months: nil, anchor_date: nil, amount: 400)
     end
 
-    # ** ROWS 2, 3 AND 4 ARE DELETED WITH THE SHAPE THEY WROTE (two-shapes spec §2/§7). ** They were
-    # the uncapped fund ("a number saved per period … that you could allow to infinitely grow"), the
-    # goal that built toward a target, and the goal fed by hand at a $0 rate — all three written by
-    # choosing "Builds up" and filling (or leaving blank) a Target. That step is gone from the form
-    # and its two columns from the table: a fund IS a dated rule whose amount is its target, so a goal
-    # is written as "$5,000 by Jun 1, 2027" and appears below as a one-off.
+    # ** ROWS 2, 3 AND 4 WERE DELETED WITH THE SHAPE THEY WROTE (two-shapes spec §2/§7), AND ONE OF
+    # THEM IS BACK (§12). ** They were the uncapped fund ("a number saved per period … that you could
+    # allow to infinitely grow"), the goal that built toward a target, and the goal fed by hand at a
+    # $0 rate — all three written by choosing "Builds up" and filling (or leaving blank) a Target.
+    # The Target and the radio pair stay deleted: a goal IS a dated rule whose amount is its target,
+    # written "$5,000 by Jun 1, 2027". What §12 restores is the FIRST of the three, as one checkbox
+    # under "Every period" — an allowance that grows with no limit and no day.
+    #
+    # ** THE CHECKBOX IS THE WHOLE CONTROL, AND THE COLUMNS ARE WHAT IS ASSERTED. ** "Keeps what it
+    # doesn't spend" beside a $510 amount is `per_period, no interval, no anchor, keeps_unspent` —
+    # the rate rule's own three columns plus the one that says the boundary leaves the money alone.
+    it "writes a fund that keeps what it doesn't spend" do
+      fill_in "Amount", with: "510"
+      check "Keeps what it doesn't spend"
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      rule = groceries.budgets.sole
+      expect(rule).to have_attributes(
+        basis: "per_period", interval_months: nil, anchor_date: nil, amount: 510, keeps_unspent: true
+      )
+    end
+
+    # THE OTHER DIRECTION, one click apart: the same form with the box left alone writes an
+    # allowance that resets, so the example above cannot be passing on a default.
+    it "leaves the box alone and writes an allowance that resets" do
+      fill_in "Amount", with: "510"
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole.keeps_unspent).to be(false)
+    end
 
     # ** "Every month" IS NOT ON THE FORM ANY MORE (two-shapes §5's ruling). ** `monthly` with no due
     # date is a legal row and `SuggestionEngine` still writes one; it is not a shape people write by
@@ -183,6 +209,29 @@ RSpec.describe "Budgets Forms", type: :system do
     # the blanks it is missing, then re-rendered into its Turbo Frame as they are filled — every
     # figure off ONE `ClaimCalculator`, which is why the per-period figure here and the Budget page's
     # tiles cannot disagree.
+    # §12'S OWN FORM STATE, filled once for the two examples that read the card it produces.
+    def describe_a_fund
+      choose "Usage"
+      fill_in "Amount", with: "510"
+      check "Keeps what it doesn't spend"
+    end
+
+    # ** A MUTATION OBSERVER, INSTALLED BEFORE THE CHANGE (§12). ** The highlight class is added on
+    # `turbo:frame-load` and removed 600ms later, so polling for it is a race; this records that it
+    # happened onto the document, where an ordinary Capybara matcher can wait for it.
+    def watch_for_the_highlight
+      page.execute_script(<<~JS)
+        const frame = document.querySelector("turbo-frame#rule_preview");
+        new MutationObserver((records) => {
+          records.forEach((record) => {
+            if (record.target.classList && record.target.classList.contains("preview-refreshed")) {
+              document.documentElement.setAttribute("data-saw-highlight", "1");
+            }
+          });
+        }).observe(frame, { subtree: true, attributes: true, attributeFilter: ["class"] });
+      JS
+    end
+
     it "starts by naming the blanks it needs" do
       within("[data-preview]") do
         expect(page).to have_content("Fill in an amount.")
@@ -228,6 +277,77 @@ RSpec.describe "Budgets Forms", type: :system do
 
       expect(page).to have_css("[data-preview-figure='per_period']", text: "$550.00")
     end
+
+    # ** §12'S CARD: THE FUND SAID BACK. ** Three sentences and two figures, and what is NOT there is
+    # as much of the assertion as what is: there is no "Periods until" row, because a rule that keeps
+    # what it doesn't spend has no day to count toward.
+    it "says a fund back in words", :aggregate_failures do
+      describe_a_fund
+
+      within("[data-preview]") do
+        expect(page).to have_content("Groceries gets $510.00 every period and keeps what it doesn't spend")
+        expect(page).to have_content("It builds up with no limit.")
+      end
+    end
+
+    # AND THE ARITHMETIC UNDER THEM — with the "Periods until" row ABSENT, which is as much of the
+    # assertion as the two figures that are there: a rule that keeps what it doesn't spend has no day
+    # to count toward. The "Home will show" row is `HomeHelper`'s own words off the same calculator,
+    # which is what makes the card's promise checkable against the Budget page a click away.
+    it "prices a fund with no day to count to", :aggregate_failures do
+      describe_a_fund
+
+      within("[data-preview]") do
+        expect(page).to have_css("[data-preview-figure='per_period']", text: "$510.00")
+        expect(page).to have_css("[data-preview-figure='built_up']", text: "$510.00")
+        expect(page).to have_no_css("[data-preview-figure='periods_left']")
+        expect(page).to have_css("[data-preview-figure='home']", text: "built up $510.00")
+        expect(page).to have_css("[data-preview-figure='home']", text: "+$510.00 a period")
+      end
+    end
+
+    # ** THE PREVIEW BUTTON IS DELETED (§12). ** It was a visible secondary control beside Cancel and
+    # it was the no-JavaScript path; §12 rules that there is no preview without JavaScript, so the
+    # button has nothing left to be for. The SUBMITTER survives hidden — a hidden button is still a
+    # valid `requestSubmit` submitter — which is what carries the `formaction` the refreshes above go
+    # through, and `have_no_button` is exactly the right assertion for it: it asks about what a user
+    # can see and press.
+    it "offers no Preview button, and refreshes without one", :aggregate_failures do
+      expect(page).to have_no_button("Preview")
+      expect(page).to have_button("Create rule")
+
+      choose "Usage"
+      fill_in "Amount", with: "400"
+
+      expect(page).to have_css("[data-preview-figure='per_period']", text: "$400.00")
+    end
+
+    # ** THE CARD IS REVEALED BY STIMULUS, WHICH IS WHY IT IS THERE AT ALL (§12). ** The server
+    # renders the frame `hidden`; `connect()` lifts it. A browser is the only place that half can be
+    # asserted — the request spec pins the other half, that a non-Turbo response leaves it hidden.
+    it "reveals the card that the server rendered hidden", :aggregate_failures do
+      expect(page).to have_css("turbo-frame#rule_preview", visible: :visible)
+      expect(page).to have_css("[data-preview]", visible: :visible)
+    end
+
+    # ** EVERY REFRESH BRIEFLY HIGHLIGHTS THE CARD (§12). ** The card sits in the second column,
+    # inches from the box, and a figure that changes with no other signal is a change nobody looks
+    # for. The class is added on `turbo:frame-load` and removed 600ms later, so it cannot be caught
+    # by polling reliably — a MutationObserver installed BEFORE the change records that it happened,
+    # and the assertion is an ordinary Capybara one against the flag it leaves on the document.
+    #
+    # THE OBSERVER IS INSTALLED FIRST AND THE LAST STATEMENT IS A CAPYBARA WAIT, which is CLAUDE.md's
+    # rule about JavaScript in this suite: it is a trailing `evaluate_script` that leaves the session
+    # in a state teardown does not survive.
+    it "highlights the card each time it is refreshed" do
+      watch_for_the_highlight
+
+      choose "Usage"
+      fill_in "Amount", with: "400"
+
+      expect(page).to have_css("[data-preview-figure='per_period']", text: "$400.00")
+      expect(page).to have_css("html[data-saw-highlight='1']", visible: :all)
+    end
   end
 
   # ---------------------------------------------------------------------------------------------
@@ -259,11 +379,55 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(page).to have_field("Comes round every (months)")
     end
 
-    # ** THE "Unspent money" EXAMPLES ARE DELETED WITH THE STEP (two-shapes §5/§7). ** Four of them
-    # pinned that the radios and the Target were on screen for a dateless schedule, hidden AND
-    # DISABLED for a dated one (the state a browser with no JavaScript is served), live again on the
-    # way back, and that the Target appeared only under "Builds up". There is no such control: a fund
-    # IS a dated rule, so there is nothing about unspent money left to ask and nothing to disable.
+    # ** THE "Unspent money" EXAMPLES WERE DELETED WITH THE STEP (two-shapes §5/§7) AND ONE
+    # CHECKBOX TOOK THEIR PLACE (§12). ** Four of them pinned that the radios and the Target were on
+    # screen for a dateless schedule, hidden AND DISABLED for a dated one, live again on the way
+    # back, and that the Target appeared only under "Builds up". The Target is gone for good — a goal
+    # IS a dated rule — and what is left of the question is "Keeps what it doesn't spend", which is
+    # NOT hidden under "By a date" but DISABLED and cleared: hiding it would take the one control
+    # that says what happens to unspent money off the screen where the answer is most surprising.
+    it "keeps the keeps box on screen and disables it under By a date", :aggregate_failures do
+      expect(page).to have_field("Keeps what it doesn't spend", disabled: false)
+
+      choose "By a date"
+
+      expect(page).to have_field("Keeps what it doesn't spend", disabled: true)
+
+      choose "Every period"
+
+      expect(page).to have_field("Keeps what it doesn't spend", disabled: false)
+    end
+
+    # ** AND THE TICK IS CLEARED ON THE WAY PAST, NOT STASHED. ** A hidden or disabled box still
+    # describes an answer, and `Budget#keeps_unspent_never_dates` refuses a dated rule that keeps —
+    # so a box left ticked would be a 422 about a control the user cannot reach. Nothing is put back
+    # when the schedule returns, unlike the date field: the box is a two-state answer to a question
+    # this schedule does not ask, and restoring it would re-tick a box the user last saw empty.
+    it "clears the keeps box when the schedule moves to a date and does not put it back", :aggregate_failures do
+      check "Keeps what it doesn't spend"
+      choose "By a date"
+
+      expect(page).to have_field("Keeps what it doesn't spend", checked: false, disabled: true)
+
+      choose "Every period"
+
+      expect(page).to have_field("Keeps what it doesn't spend", checked: false, disabled: false)
+    end
+
+    # AND THE SAVE AGREES WITH THE SCREEN: a fund switched to "By a date" writes a dated rule with
+    # the keeping off, rather than the pair the model refuses.
+    it "writes a dated rule with no keeping when the user changes their mind" do
+      check "Keeps what it doesn't spend"
+      choose "By a date"
+      fill_in "Due", with: Date.new(2026, 12, 1)
+      choose "Bill"
+      fill_in "Amount", with: "600"
+      click_button "Create rule"
+
+      expect(page).to have_content("Budget was successfully created")
+      expect(groceries.budgets.sole)
+        .to have_attributes(anchor_date: Date.new(2026, 12, 1), keeps_unspent: false)
+    end
 
     it "takes the interval away again when the box is unticked" do
       choose "By a date"

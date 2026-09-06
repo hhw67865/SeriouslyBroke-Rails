@@ -97,8 +97,14 @@ RSpec.describe "Budgets", type: :request do
   end
 
   # ** WHAT A BROWSER WITH NO JAVASCRIPT IS SERVED. ** A request spec IS that browser: the reveals
-  # are an enhancement, the `<noscript>` rule in the partial forces every hidden block visible, and
-  # the server has to answer for whatever such a form submits.
+  # are an enhancement, the server renders each of them in the state the rule's own columns imply,
+  # and it has to answer for whatever such a form submits.
+  #
+  # ** THE `<noscript>` RULE IS DELETED WITH THE PREVIEW BUTTON (§12), so a hidden block really is
+  # hidden here. ** It forced every `[data-rule-reveal]` visible, which was the other half of a
+  # promise the Preview button made — and §12 rules that there is no preview without JavaScript. What
+  # a no-JavaScript browser still gets is a form that SAVES, and a refusal that lands under the
+  # control that caused it, which is what the examples below and the POSTs further down assert.
   #
   # ** THE "UNSPENT MONEY" EXAMPLES ARE DELETED WITH THE CONTROL (two-shapes spec §5/§7). ** They
   # pinned that the radios and the Target field were DISABLED on a dated schedule — not merely
@@ -126,6 +132,34 @@ RSpec.describe "Budgets", type: :request do
       get edit_budget_path(rule)
 
       expect(input_tag("budget_repeats")).not_to include('checked="checked"')
+    end
+
+    # ** THE KEEPS BOX IS RENDERED IN THE STATE THE ROW IS IN (§12), on both paths, because it is the
+    # one control whose default answer would silently change a rule's shape: an edit form that opened
+    # a fund with the box empty would write an allowance that resets the moment the user pressed
+    # Update.
+    it "ticks the keeps box for a fund and leaves it empty for an allowance", :aggregate_failures do
+      pet_care = create(:category, :expense, :funded, user: user, name: "Pet Care")
+      fund = create(:budget, :keeps_unspent, category: pet_care, amount: 60)
+
+      get edit_budget_path(fund)
+      expect(input_tag("budget_keeps")).to include('checked="checked"')
+
+      get edit_budget_path(rule)
+      expect(input_tag("budget_keeps")).not_to include('checked="checked"')
+    end
+
+    # ** AND IT IS DISABLED UNDER "By a date" WITHOUT JAVASCRIPT TOO. ** The Stimulus controller
+    # disables it as the radios move; the SERVER has to render the same state for a browser where
+    # nothing moves it, or a no-JavaScript user could tick a box on a dated rule and meet a refusal
+    # about a combination the form told them was available.
+    it "disables the keeps box on a dated rule", :aggregate_failures do
+      bill = create(:budget, :recurring, category: groceries, amount: 800, item: create(:item, category: groceries))
+
+      get edit_budget_path(bill)
+
+      expect(input_tag("budget_keeps")).to include("disabled")
+      expect(input_tag("budget_keeps")).not_to include('checked="checked"')
     end
   end
 
@@ -296,19 +330,26 @@ RSpec.describe "Budgets", type: :request do
     {
       "a per-period rate" => [
         { schedule: "per_period", amount: "400.00" },
-        { basis: "per_period", interval_months: nil, anchor_date: nil }
+        { basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: false }
+      ],
+      # ** §12'S ROW, AND THE COLUMN IS THE POINT OF IT. ** `keeps` is a permitted parameter and
+      # `RuleForm` turns it into `budgets.keeps_unspent`; dropped from `BUDGET_FIELDS` it would be a
+      # checkbox on the form that writes nothing, which is the exact failure this table exists for.
+      "a fund that keeps what it doesn't spend" => [
+        { schedule: "per_period", keeps: "1", amount: "510.00" },
+        { basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: true }
       ],
       "a bill every 6 months" => [
         { schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "2026-12-01", amount: "600.00" },
-        { basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1) }
+        { basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1), keeps_unspent: false }
       ],
       "a one-time bill" => [
         { schedule: "by_date", anchor_date: "2026-12-01", amount: "600.00" },
-        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1) }
+        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1), keeps_unspent: false }
       ],
       "a goal" => [
         { schedule: "by_date", anchor_date: "2027-06-01", amount: "5000.00" },
-        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1) }
+        { basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1), keeps_unspent: false }
       ]
     }.each do |name, (submitted, columns)|
       it "writes #{name}", :aggregate_failures do
@@ -623,11 +664,17 @@ RSpec.describe "Budgets", type: :request do
       one_off_words.merge(amount: "48.20", repeats: "1", interval_months: "2", anchor_date: "2026-10-03")
     end
 
+    # ** THE FRAME IS MATCHED BY ITS ID AND NOT BY ITS WHOLE OPENING TAG (§12). ** It carries three
+    # more attributes since the preview lost its button — `hidden`, the Stimulus target and the
+    # highlight action — and a pin on the literal tag would fail on any of them for reasons that have
+    # nothing to do with what this example is about, which is that Turbo's frame request is answered
+    # by the frame the form's submitter targets.
     it "answers in the frame the form's button targets", :aggregate_failures do
       preview({ category_id: dining.id, amount: "400.00" })
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+      expect(response.body).to include(%(id="rule_preview"))
+      expect(response.body).to include("<turbo-frame")
     end
 
     # §2 ROW 1, AND THE PER-PERIOD FIGURE IS THE RATE ITSELF.
@@ -640,6 +687,29 @@ RSpec.describe "Budgets", type: :request do
       expect(response.body).to include("Dining Out gets #{number_to_currency(expected.standing_ask)} every period")
       expect(response.body).to include("Whatever&#39;s unspent resets on")
       expect(response.body).to include("It&#39;s usage, so it gives way after your choices and before your bills.")
+    end
+
+    # ** §12'S CARD, WORD FOR WORD. ** "<name> gets $510.00 every period and keeps what it doesn't
+    # spend. It builds up with no limit. It's a usage, so…" — the three sentences, and under them the
+    # arithmetic a fund actually has: Per period and Already built up, with NO "Periods until" row,
+    # because there is no day to count toward.
+    #
+    # THE "Home will show" ROW IS `HomeHelper`'s OWN WORDS off the same calculator, which is what
+    # makes the card's promise checkable: `built up $510.00 · +$510.00 a period` is the string the
+    # Budget page prints about the rule the second it is saved. $510.00 built up on a rule written
+    # TODAY is `#rule_born_on`'s ruling doing its work — the walk visits one period, and that
+    # period's whole accrual lands the day it opens (§3.2).
+    it "says a fund back, with no periods-left row", :aggregate_failures do
+      preview({ category_id: dining.id, amount: "510.00", keeps: "1" })
+
+      expect(response.body).to include("Dining Out gets $510.00 every period and keeps what it doesn&#39;t spend")
+      expect(response.body).to include("It builds up with no limit.")
+      expect(response.body).to include("It&#39;s usage, so it gives way after your choices and before your bills.")
+      expect(response.body).to match(/data-preview-figure="per_period">\s*\$510\.00/)
+      expect(response.body).to match(/data-preview-figure="built_up">\s*\$510\.00/)
+      expect(response.body).not_to include("periods_left")
+      expect(response.body).to include("built up $510.00")
+      expect(response.body).to include("+$510.00 a period")
     end
 
     # §2 ROW 3 — a one-off, which is the shape a goal takes too. BOTH figures come off the same
@@ -707,7 +777,7 @@ RSpec.describe "Budgets", type: :request do
             headers: { "Turbo-Frame" => "rule_preview" }
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+      expect(response.body).to include(%(id="rule_preview"))
       expect(response.body).to include("Dining Out gets $550.00 every period")
       expect(rate.reload.amount).to eq(400)
     end
@@ -806,15 +876,21 @@ RSpec.describe "Budgets", type: :request do
       expect(response.body).not_to include("a month ·")
     end
 
-    # ** THE NO-JAVASCRIPT ANSWER. ** Without Turbo the "Preview" button navigates, so the response
-    # has to be the whole page with the card updated — the same act, one navigation instead of one
-    # frame. The frame is still in it, which is what lets one action serve both.
-    it "renders the whole form page for a request that is not a frame", :aggregate_failures do
+    # ** THE NON-FRAME ANSWER IS THE WHOLE PAGE, AND ITS CARD IS HIDDEN (§12). ** This used to be the
+    # NO-JAVASCRIPT path: the "Preview" button navigated and the whole page came back with the card
+    # updated. §12 deletes the button, so nothing a browser does without JavaScript reaches this
+    # action any more — what is left is the answer to a hand-made POST, and it still renders the whole
+    # page because the alternative is a bare frame with no document around it.
+    #
+    # THE PIN IS THE `hidden` ATTRIBUTE, which is §12's own sentence said in HTML: the only thing
+    # that ever reveals this card is `rule_form_controller.js#connect`, so a response body carrying
+    # a visible card would be a preview rendered for a browser that cannot refresh it.
+    it "renders the whole form page with the card hidden for a request that is not a frame", :aggregate_failures do
       preview({ category_id: dining.id, amount: "400.00" }, headers: {})
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to include("New rule for Dining Out")
-      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+      expect(response.body).to match(/<turbo-frame[^>]*hidden[^>]*id="rule_preview"/)
     end
 
     # AN EDIT'S PREVIEW IS MERGED OVER THE RULE'S OWN WORDS, for `#update`'s reason: a submission

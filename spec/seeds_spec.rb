@@ -260,8 +260,8 @@ RSpec.describe "db/seeds.rb" do
     # ** §2'S DEFINITION, ON THE DEMO: `free = pot − Σ claims` (two-shapes §2). **
     #
     #   pot            $5,561.00   main's balance, and the whole of what `free` is about
-    #   − Σ claims    $10,465.84   over all 19 rules — the sum of the figures the examples below pin
-    #   = free        -$4,904.84
+    #   − Σ claims    $11,221.84   over all 19 rules — the sum of the figures the examples below pin
+    #   = free        -$5,660.84
     #
     # `total_money` IS ASSERTED BESIDE IT AND IS NO LONGER A TERM IN IT. The $1,900 in the three
     # other accounts is SHOWN by the hero and never subtracted from or added to anything: "why is
@@ -277,8 +277,8 @@ RSpec.describe "db/seeds.rb" do
     it "reports what the claims leave free", :aggregate_failures do
       expect(ledger.total_money).to eq(7_461.00)
       expect(ledger.pot).to eq(5_561.00)
-      expect(ledger.total_claims).to eq(10_465.84)
-      expect(ledger.free).to eq(-4_904.84)
+      expect(ledger.total_claims).to eq(11_221.84)
+      expect(ledger.free).to eq(-5_660.84)
     end
 
     # ** §3.1, ALL THREE WAYS A RATE ROW CAN READ, ON THE MORNING THE PERIOD OPENS. **
@@ -298,6 +298,40 @@ RSpec.describe "db/seeds.rb" do
       expect(claim_of("Dining Out").over?).to be(true)
       expect([claim_of("Groceries").spent_this_period, claim_of("Groceries").claim]).to eq([0, 400])
       expect(claim_of("Groceries").over?).to be(false)
+    end
+
+    # ** §12, THE ONE RULE THAT KEEPS WHAT IT DOESN'T SPEND. ** Pet Care is "$60 a period, keeps" —
+    # the demo's only fund, and the shape the amendment restores. The formula, which is the seeds'
+    # own comment beside the rule:
+    #
+    #     claim = clamp≥0 per period of  Σ over the periods since the rule started
+    #                                      (amount + Σ adjustments in P) − spent in P
+    #
+    # The rule is born on `demo_start`, thirteen periods back, so the walk visits FOURTEEN periods
+    # (`demo_start`'s own through today's) — the same count the goals below walk. Every one
+    # contributes the plain $60: a fund never re-plans against a deadline and is never capped. The
+    # only spending on its lane is the $34 kibble run one period back, because the $180 vet bill sits
+    # on the Vet item, which carries its own rule and is therefore a different lane (§3.1's
+    # partition). No adjustment touches it.
+    #
+    #     14 × $60.00 − $34.00 = **$806.00**
+    #
+    # AND THE PER-PERIOD CLAMP NEVER BITES: the built-up is $660.00 before the period the $34 lands
+    # in, so nothing is lost at a boundary — which is the whole difference between this rule and the
+    # $50 resetting one it replaces, whose claim on this same morning was $50.00.
+    #
+    # WHAT IT HAS NO ANSWER TO is asserted beside the figure: no target (it is aiming at nothing), no
+    # due date, and therefore no runway tick and no place on the savings strip.
+    it "keeps every unspent penny in the demo's one fund", :aggregate_failures do
+      pet_care = claim_of("Pet Care")
+
+      expect(pet_care.shape).to eq(:fund)
+      expect(pet_care.built_up).to eq(806)
+      expect(pet_care.claim).to eq(806)
+      expect(pet_care.planned_this_period).to eq(60)
+      expect(pet_care.target).to be_nil
+      expect(pet_care.next_due_on).to be_nil
+      expect(rule_for("Pet Care").steady_ask(user, today: today)).to eq(60)
     end
 
     # ** §3.2, A FUND BUILDING UP TOWARD A DATE. ** The walk runs from `demo_start` — six months
@@ -430,7 +464,7 @@ RSpec.describe "db/seeds.rb" do
     # ** FREE BELOW ZERO IS A SIGNAL (§4), AND THE STRIP SAYS WHO GIVES WAY. ** The walk runs
     # `HomePresenter#give_way_order` — TYPE first (choice, then usage, then bill), and inside a type
     # the highest priority number first, which is `#budgeted_categories` read backwards — taking each
-    # rule's claim until the $4,904.84 is absorbed. ** THE TABLE IS THE ELEVEN ROWS THE WALK ACTUALLY
+    # rule's claim until the $5,660.84 is absorbed. ** THE TABLE IS THE ELEVEN ROWS THE WALK ACTUALLY
     # VISITS (fix round 2), and it was four for a shape that no longer exists — the two goals that
     # asked nothing of a period are gone from the seeds and the three that remain accrue, so the walk
     # now reaches past the discretionary rules into the household's usage and stops inside a bill. **
@@ -449,8 +483,9 @@ RSpec.describe "db/seeds.rb" do
     #   House Down Payment     1,800.96   17 — goal, `14 × (10,000 ÷ 182)` plus $1,050 set aside
     #   Medical Copays            60.00   13 — rate, nothing spent this period
     #   Commuter Pass             60.00    9 — rate, nothing spent
-    #   Pet Care                  50.00    8 — rate, nothing spent (the $180 vet bill is `bill` and
-    #                                     is never reached)
+    #   Pet Care                 806.00    8 — THE FUND (§12): fourteen periods of $60 less the $34
+    #                                     kibble run, and it keeps every unspent penny. The $180 vet
+    #                                     bill is `bill` on its own lane and is never reached
     #   Household Supplies        75.00    7 — rate $120.00 less today's $45.00 detergent run, which
     #                                     is why this row is not the $120.00 the rule says
     #   Groceries                400.00    6 — rate, the period opened this morning
@@ -461,7 +496,7 @@ RSpec.describe "db/seeds.rb" do
     #                                     needs $655.07 of it, which is the whole reason this is a
     #                                     walk rather than a filter — "$655.07 of it is uncovered" is
     #                                     a different sentence from "the Emergency Fund is uncovered"
-    #   ────────────────────   4,904.84   which is the headline exactly, so `#uncovered_remainder`
+    #   ────────────────────   5,660.84   which is the headline exactly, so `#uncovered_remainder`
     #                                     is zero and no part of the shortfall goes unnamed
     #
     # DINING OUT IS ABSENT and is not an omission: its $100 rate is spent ($110, the `:over` trouble),
@@ -481,10 +516,10 @@ RSpec.describe "db/seeds.rb" do
       home = HomePresenter.new(user: user, today: today)
 
       expect(home.short?).to be(true)
-      expect(home.shortfall).to eq(4_904.84)
-      # `4,904.84 ÷ 13` days left = **$377.30** — the period is anchored on today, so today is its
+      expect(home.shortfall).to eq(5_660.84)
+      # `5,660.84 ÷ 13` days left = **$435.45** — the period is anchored on today, so today is its
       # only elapsed day of fourteen.
-      expect(home.per_day_pace).to eq(377.30)
+      expect(home.per_day_pace).to eq(435.45)
       expect(home.troubles.map(&:kind)).to eq([:overdraft, :shortfall, :over, :overdue, :structural])
     end
 
@@ -502,7 +537,7 @@ RSpec.describe "db/seeds.rb" do
         ["House Down Payment", 1_800.96],
         ["Medical Copays", 60],
         ["Commuter Pass", 60],
-        ["Pet Care", 50],
+        ["Pet Care", 806],
         ["Household Supplies", 75],
         ["Groceries", 400],
         ["Utilities", 120],
@@ -530,7 +565,7 @@ RSpec.describe "db/seeds.rb" do
     end
 
     # ** THE TYPE OVERVIEW (§3), WHICH IS THE OTHER THING THE TYPES BOUGHT. ** `BudgetPagePresenter
-    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,236.57
+    # #type_overview` sums `Budget#steady_ask` by type, so the three figures ADD to the $2,246.57
     # `Budget.steady_need` reports two examples down — the same sum, partitioned three ways. Planted,
     # and the sum asserted beside them so a partition that lost a rule could not pass.
     #
@@ -543,8 +578,8 @@ RSpec.describe "db/seeds.rb" do
     it "partitions the standing ask across the three types", :aggregate_failures do
       overview = BudgetPagePresenter.new(user: user, today: today).type_overview
 
-      expect(overview).to eq([[:bill, 1_200.99], [:usage, 800.33], [:choice, 235.25]])
-      expect(overview.sum { |_type, amount| amount }).to eq(2_236.57)
+      expect(overview).to eq([[:bill, 1_200.99], [:usage, 810.33], [:choice, 235.25]])
+      expect(overview.sum { |_type, amount| amount }).to eq(2_246.57)
     end
 
     # ** THE NEED FELL $356.58 WHEN `BudgetCalculator` DIED (fix wave — MED-3). ** `#steady_ask`'s
@@ -569,8 +604,13 @@ RSpec.describe "db/seeds.rb" do
     # the seed hiding the ruling's consequence. What WAS tuned is the goals' horizons (fix round 1 —
     # HIGH-2), so the gap stays **$186.57** — a near miss the sacrifice view can offer a way out of
     # rather than a wall.
+    #
+    # ** AND $10.00 WHEN PET CARE BECAME A FUND (§12). ** $2,236.57 → **$2,246.57**, which is the
+    # whole of the change: a fund's standing ask is its plain rate (`Budget#steady_ask` takes a
+    # per-period amount verbatim, keeping or not), and the rule went $50 → $60. The gap is **$196.57**
+    # and still the near miss this fixture exists to show.
     it "leaves the household structurally underwater, so the sacrifice view has a screen", :aggregate_failures do
-      expect(Budget.steady_need(user, today: today)).to eq(2_236.57)
+      expect(Budget.steady_need(user, today: today)).to eq(2_246.57)
       expect(user.typical_income).to eq(2_050.00)
       expect(Budget.steady_need(user, today: today) - user.typical_income).to be < 200
       expect(HomePresenter.new(user: user, today: today)).to be_structurally_underwater
@@ -587,18 +627,25 @@ RSpec.describe "db/seeds.rb" do
     # the two changed rows are Dining Out (a $100 rule where the pool era had $150, so the overspend
     # this period is reachable at all) and Household Supplies (its one receipt moved into today).
     #
-    # WHICH FOUR DRIFT, AND WHY NOT MORE: Groceries (the one UPWARD suggestion, $460 a period against
-    # a $400 rule), Dining Out, Household Supplies and Pet Care are the categories whose spending
-    # genuinely diverges from their rules. Every other rate rule in the demo either has spending that
+    # WHICH THREE DRIFT, AND WHY NOT MORE: Groceries (the one UPWARD suggestion, $460 a period against
+    # a $400 rule), Dining Out and Household Supplies are the categories whose spending genuinely
+    # diverges from a rule that RESETS. Every other rate rule in the demo either has spending that
     # matches it or is dated instead — `db/seeds.rb` chooses those shapes deliberately, because a
     # rate rule on a category with no spending at all is drift's starkest sentence and four of those
     # would be four suggestions telling the demo user to zero rules they have not spent from yet.
     # ONE of them is planted on purpose (Household Supplies), and the seeds' header says why.
+    #
+    # ** `drift` WAS 4 AND PET CARE IS THE ONE THAT LEFT (two-shapes §12). ** Its rule keeps what it
+    # doesn't spend, and `SuggestionEngine#rate_shape?` is `claim_shape == :rate` — an accruing rule
+    # never drifts. "You averaged $8.50 a period, your rule says $60.00, lower it" would be advice to
+    # stop a fund doing the one thing it exists to do, and the two figures are not about the same
+    # money: the detector compares a PERIOD's spending against a rate, while the fund's claim is
+    # every period since it was written.
     it "feeds all four suggestion detectors" do
       kinds = SuggestionEngine.new(user: user, today: today).suggestions.group_by(&:kind)
         .transform_values(&:length)
 
-      expect(kinds).to eq(dated_bill: 3, rate: 4, drift: 4, dead_rule: 1)
+      expect(kinds).to eq(dated_bill: 3, rate: 4, drift: 3, dead_rule: 1)
     end
   end
 end

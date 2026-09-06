@@ -20,8 +20,25 @@
 
     ** ONE CALCULATOR PER RENDER, pinned by `spec/requests/budgets_spec.rb`. ** `RulePreview`
     memoises it and every member below reads it; nothing here may call `Budget#claim_shape` or
-    `#steady_ask`, both of which build one of their own. %>
-<%= turbo_frame_tag "rule_preview" do %>
+    `#steady_ask`, both of which build one of their own.
+
+    ** THE FRAME RENDERS `hidden`, AND WITHOUT JAVASCRIPT THERE IS NO PREVIEW AT ALL (§12). ** The
+    card used to render open on first load and be refreshed by a "Preview" button that worked by
+    navigating; the button is deleted, so a no-JavaScript browser would have been left with a card
+    frozen at whatever the page was rendered with — which is worse than no card, because it is a
+    confident sentence about a rule the user has since changed. `hidden` on the FRAME rather than a
+    class, so Capybara, a screen reader and the eye agree (the Budget page's closed panels' own
+    rule); `rule_form_controller.js` removes it in `connect()`, and Turbo preserves the element's
+    attributes across every later refresh — it replaces the frame's children, not the frame.
+
+    THE ACTION IS ON THE FRAME AND NOT ON THE CONTROLLER'S ELEMENT, so the highlight fires whether
+    or not `turbo:frame-load` bubbles in the Turbo version installed. %>
+<%= turbo_frame_tag "rule_preview",
+                    hidden: true,
+                    data: {
+                      "app--budget--rule-form-target": "preview",
+                      action: "turbo:frame-load->app--budget--rule-form#highlight"
+                    } do %>
   <div class="bg-white border border-gray-200 rounded p-5 space-y-4" data-preview>
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">What this rule will do</h2>
 
