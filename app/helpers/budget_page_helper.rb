@@ -137,32 +137,37 @@ module BudgetPageHelper
   # ** It read "— the schedule itself is already set on this rule", and it was true of exactly one
   # form: the edit form that refused to re-offer a rule's shape. §4's form offers every control on
   # both paths, so the sentence now points away from a radio the user is looking straight at, four
-  # rows down. What is left is the clause that was always the point — the amount's UNIT — and it now
-  # carries the build-up too, because "$300 per period" means one thing for a fund and another for a
-  # grocery budget.
-  # `unit:` IS THE ONE OVERRIDE, and it exists for exactly one row (fix round 1 — MED-5): a
-  # `monthly`-no-anchor rule is read back as "Every period" by `RuleForm.from` (§5's ruling), so by
-  # the time this renders the RECORD says per-period while the FIGURE in the box is still a month's.
-  # `RuleForm#amount_unit` is what the form passes; every other caller passes nothing and gets the
-  # record's own phrase.
-  def budget_amount_hint(budget, unit: nil)
-    "What this rule asks for #{unit || budget_rule_basis_phrase(budget)}."
+  # rows down. What is left is the clause that was always the point — the amount's UNIT.
+  #
+  # ** THE `unit:` OVERRIDE IS DELETED WITH THE MIXED UNIT IT DESCRIBED (fix round 1's ruling). ** It
+  # existed for exactly one row: a `monthly`-no-anchor rule read back as "Every period" with its
+  # MONTHLY figure still in the box, so the record's own phrase would have called a month's money a
+  # period's. `RuleForm.from` DIVIDES that figure now — the box is per-period money on every path —
+  # so the record's phrase is the true one on every path and there is nothing left to override. The
+  # note below is what names the row's own unit.
+  def budget_amount_hint(budget)
+    "What this rule asks for #{budget_rule_basis_phrase(budget)}."
   end
 
-  # ** THE SENTENCE BESIDE A ROW WHOSE WORDS DO NOT DESCRIBE ITS OWN COLUMNS (fix round 1 — MED-5).
-  # ** §5 rules that a `monthly`-no-anchor rule reads back as "Every period" and CONVERTS on save.
-  # That is a real change to what the rule costs — `Budget#steady_ask` prices $260 a month at $120 a
-  # fortnight, so saving it unchanged multiplies the claim by 2.17× — and a form that made it in
-  # silence would be re-shaping a rule the user opened to correct a typo in.
+  # ** THE SENTENCE BESIDE A ROW WHOSE SHAPE THE READ-BACK CHANGES (fix round 1's ruling). ** §5 rules
+  # that a `monthly`-no-anchor rule reads back as "Every period" and converts on save; the fix round
+  # settled which of the two things the conversion preserves, and it is the MONEY: `RuleForm.from`
+  # divides by `Budget#steady_ask`, so $260 a month opens at $120.00 on a fortnightly grid and saves
+  # as $120.00 a period. Nothing the user has budgeted moves.
   #
-  # IT NAMES BOTH FIGURES AND WHAT TO DO, because "this will change" without the numbers is a warning
-  # a reader cannot act on. Nil on every other rule, so the note is never a fixture of the page.
+  # ** SO THIS IS NO LONGER A WARNING — IT IS AN EXPLANATION, and that is the change. ** It used to
+  # say "saving it as every period would make it $260.00 a period — change the amount if you mean
+  # that", which asked the reader to defend themselves against the form. What is left to say is why
+  # the figure in the box is not the figure they remember typing, and that the cost is unchanged.
+  # Nil on every other rule, so the note is never a fixture of the page.
   def budget_monthly_conversion_note(rule_form)
     return nil unless rule_form.converted_from_monthly?
 
-    amount = number_to_currency(rule_form.amount)
-    "This rule is #{amount} a month; saving it as every period would make it #{amount} a period — " \
-      "change the amount if you mean that."
+    grid = rule_form.user&.period_cadence.presence
+    was = number_to_currency(rule_form.converted_from_monthly)
+
+    "This rule was #{was} a month — shown here as what it costs each period" \
+      "#{" on your #{grid} grid" if grid}. Saving keeps that cost."
   end
 
   # ** WHERE THE CHEVRON GOES WITH SCRIPTING OFF (two-shapes spec §4). ** One category is open at a
@@ -343,22 +348,22 @@ module BudgetPageHelper
 
   def rule_preview_type_sentence(preview) = TYPE_GIVE_WAY.fetch(preview.rule.rule_type)
 
-  # ** THE TWO UNITS, FOR THE ONE ROW WHOSE WORDS DO NOT DESCRIBE ITS OWN COLUMNS (§5's ruling; this
-  # task's carry). ** A `monthly`-no-anchor rule reads back as "Every period", so the figure in the
-  # box is a MONTH's money on a form that is about to save it as a PERIOD's. `#budget_monthly_
-  # conversion_note` says that beside the field; this says what the two figures ARE, because the
-  # conversion is not a rounding — $260 a month is $120.00 a period on a fortnightly grid, and a
-  # drift suggestion accepted on such a rule writes 3.6× the per-period figure it proposed. The card
-  # is where a user can see both numbers before pressing the button.
+  # ** THE TWO UNITS, FOR THE ONE ROW WHOSE STORED FIGURE IS NOT THE ONE ON SCREEN (§5's ruling;
+  # this task's carry). ** A `monthly`-no-anchor rule reads back as "Every period" at its DIVIDED
+  # amount (fix round 1), so the row says $260.00 a month and the box says $120.00. Both numbers are
+  # true and a user who remembers typing one of them is owed the other: the note beside the field
+  # says why the box changed, and this says what the pair IS, in money, on the card that prices the
+  # rule. The monthly figure is the ROW's (`RuleForm#converted_from_monthly` carries it); the
+  # per-period one is whatever is in the box, so it follows an edit.
   #
   # NIL ON EVERY OTHER RULE, so the line is never a fixture of the card.
   def rule_preview_units(preview)
     return nil unless preview.converted_from_monthly?
 
     grid = preview.user.period_cadence.presence
-    per_period = "#{number_to_currency(preview.monthly_as_per_period)} a period"
+    per_period = "#{number_to_currency(preview.amount)} a period"
     per_period = "#{per_period} on your #{grid} grid" if grid
 
-    "#{number_to_currency(preview.amount)} a month · #{per_period}"
+    "#{number_to_currency(preview.monthly_amount)} a month · #{per_period}"
   end
 end

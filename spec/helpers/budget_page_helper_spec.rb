@@ -85,29 +85,30 @@ RSpec.describe BudgetPageHelper, type: :helper do
         .to eq("What this rule asks for once.")
     end
 
-    # ** THE ONE ROW WHOSE UNIT IS THE RECORD'S AND NOT THE SCHEDULE'S (fix round 1 — MED-5). **
-    # `RuleForm.from` reads a `monthly`-no-anchor rule back as "Every period" (§5's ruling) and
-    # `#apply_to_budget` has already written `per_period` onto the record, so the phrase this helper
-    # would derive calls a MONTH's figure a period's. `RuleForm#amount_unit` overrides it.
-    it "takes the unit it is given over the record's own" do
-      expect(helper.budget_amount_hint(rule(:per_period_rate, amount: 260), unit: "a month"))
-        .to eq("What this rule asks for a month.")
-    end
+    # ** THE `unit:` OVERRIDE AND ITS EXAMPLE ARE DELETED (fix round 1's ruling). ** It existed for
+    # exactly one row: a `monthly`-no-anchor rule read back as "Every period" with its MONTHLY figure
+    # still in the box, so the record's own phrase would have called a month's money a period's.
+    # `RuleForm.from` DIVIDES that figure now — the box is per-period money on every path — so the
+    # record's phrase is the true one everywhere and there is no unit left to override.
+    # `#budget_monthly_conversion_note` below is what names the ROW's unit.
   end
 
-  # ** THE NOTE BESIDE THAT ROW'S AMOUNT (fix round 1 — MED-5). ** §5 rules the `monthly`-no-anchor
-  # shape converts on save; a form that made that change in silence would be re-shaping a rule the
-  # user opened to fix a typo in. Both figures are named because "this will change" without the
-  # numbers is a warning nobody can act on.
+  # ** THE NOTE BESIDE THAT ROW'S AMOUNT (fix round 1's ruling). ** §5 rules the `monthly`-no-anchor
+  # shape converts on save, and the fix round settled that what the conversion preserves is the
+  # MONEY: the box opens at `Budget#steady_ask` and saving writes that. So the sentence is an
+  # EXPLANATION rather than a warning — why the figure is not the one the user remembers typing, and
+  # that the cost is unchanged. It used to read "saving it as every period would make it $260.00 a
+  # period — change the amount if you mean that", which asked a reader to defend themselves against
+  # their own form.
   describe "#budget_monthly_conversion_note" do
     def form_for(budget) = RuleForm.new(build(:user, :biweekly), RuleForm.from(budget), budget: budget)
 
-    it "names both figures and what to do about them" do
+    it "names the row's own figure and says the cost is kept" do
       note = helper.budget_monthly_conversion_note(form_for(build(:budget, :rate, amount: 260)))
 
       expect(note).to eq(
-        "This rule is $260.00 a month; saving it as every period would make it $260.00 a period — " \
-        "change the amount if you mean that."
+        "This rule was $260.00 a month — shown here as what it costs each period on your " \
+        "biweekly grid. Saving keeps that cost."
       )
     end
 
@@ -185,6 +186,9 @@ RSpec.describe BudgetPageHelper, type: :helper do
     # this task's carry). ** $260 a month is $120.00 a period on a fortnightly grid, and the second
     # figure is `Budget#steady_ask`'s — the app's one normaliser — rather than a division written
     # here. Nil on every other rule, so the line is never a fixture of the card.
+    # THE MONTHLY HALF IS THE ROW'S (carried on the flag) AND THE PER-PERIOD HALF IS THE BOX'S, which
+    # after the read-back's division is `Budget#steady_ask` — so the card names the two figures a
+    # user has to be able to reconcile, and neither is derived from the other here.
     it "states both units for a monthly rule read back as every period", :aggregate_failures do
       monthly = create(:budget, :rate, category: groceries, amount: 260, rule_type: :usage)
       preview = RulePreview.new(RuleForm.new(user, RuleForm.from(monthly), budget: monthly), user: user)

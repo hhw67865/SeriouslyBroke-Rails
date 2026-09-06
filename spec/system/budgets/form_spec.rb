@@ -592,32 +592,43 @@ RSpec.describe "Budgets Forms", type: :system do
   end
 
   # ** THE `monthly`-NO-ANCHOR ROW, WHICH THE FORM DOES NOT OFFER AND HAS TO OPEN ANYWAY
-  # (fix round 1 — MED-5; two-shapes §5's ruling). ** `SuggestionEngine` still writes "$260 every
-  # month", and `RuleForm.from` reads it back as "Every period" — so the record the page renders has
-  # ALREADY been re-shaped, and every hint derived from it would call a month's figure a period's.
-  # Saving it unchanged really does convert the rule, and `Budget#steady_ask` prices the two
-  # differently: $260 a month is $120.00 a fortnight.
+  # (two-shapes §5's ruling, corrected in fix round 1). ** `SuggestionEngine` still writes "$260 every
+  # month", and `RuleForm.from` reads it back as "Every period" — at what the rule COSTS a period,
+  # `Budget#steady_ask`'s $120.00 on this user's fortnightly grid. Saving it untouched writes
+  # `per_period 120.00`, so the shape changes and the money does not.
   #
-  # THE PAGE SAYS IT THREE TIMES, IN THREE REGISTERS: the hint names the unit the FIGURE is in, the
-  # note names what saving would do, and the PREVIEW states both units as money — which is this
-  # task's carry, because a drift suggestion accepted on such a rule writes 3.6× the per-period
-  # figure it proposed and the card is the last place a user can see that before pressing the button.
+  # THE PAGE SAYS IT TWICE, IN TWO REGISTERS: the note under the amount explains why the box is not
+  # the figure the user remembers typing, and the PREVIEW states the two figures as money. That pair
+  # is what closes this task's carry — a drift suggestion accepted on such a rule used to write 3.6×
+  # the per-period figure it proposed, and now writes exactly it.
   describe "editing a monthly rule the form does not offer", :aggregate_failures do
     let!(:monthly) { create(:budget, :rate, category: groceries, amount: 260, rule_type: :usage) }
 
     before { visit edit_budget_path(monthly) }
 
-    it "opens as Every period, in the rule's own unit, and warns what saving would do" do
+    it "opens as Every period, at what the rule costs a period, and says why" do
       expect(page).to have_checked_field("Every period")
-      expect(page).to have_field("Amount", with: "260.0")
-      expect(page).to have_content("What this rule asks for a month.")
+      expect(page).to have_field("Amount", with: "120.0")
+      expect(page).to have_content("What this rule asks for per period.")
       expect(find("[data-monthly-conversion]")).to have_content(
-        "This rule is $260.00 a month; saving it as every period would make it $260.00 a period"
+        "This rule was $260.00 a month — shown here as what it costs each period on your biweekly grid. " \
+        "Saving keeps that cost."
       )
     end
 
     it "states both units on the preview card" do
       expect(find("[data-preview-units]")).to have_content("$260.00 a month · $120.00 a period on your biweekly grid")
+    end
+
+    # ** AND SAVING IT UNTOUCHED KEEPS THE COST, WHICH IS THE WHOLE OF THE RULING. ** The columns
+    # change — this is the conversion §5 rules legal — and `Budget#steady_ask` reads the same figure
+    # on both sides of it, which is the only sense in which a shape change can be said to be safe.
+    it "saves the cost it opened on" do
+      click_button "Update rule"
+
+      expect(page).to have_content("Budget was successfully updated")
+      expect(monthly.reload).to have_attributes(basis: "per_period", amount: 120)
+      expect(monthly.steady_ask(user)).to eq(120)
     end
 
     # THE OTHER DIRECTION, so neither the note nor the two-unit line is a fixture of every edit form:

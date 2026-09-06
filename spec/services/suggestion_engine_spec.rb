@@ -567,10 +567,19 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.detail[:direction]).to eq(:up)
     end
 
-    # THE SAME TRAP IN THE HALF THAT WRITES. Everything the panel reports is per-period; the column
-    # the form writes into is MONTHLY on this shape. `amount: 200` there is $92.31 a period — LESS
-    # than the $120 the user was just told was too low, on a suggestion that asked them to raise it.
-    it "puts the drift prefill in the rule's own unit, not in per-period money", :aggregate_failures do
+    # ** THE PREFILL IS THE OBSERVED FIGURE, UNCONVERTED — AND THIS EXAMPLE IS THE INVERSE OF WHAT IT
+    # WAS (two-shapes Task 4, fix round 1's ruling). ** It pinned `amount: 433.33`, the observed $200
+    # a period multiplied back into the rule's MONTHLY column, because the rule form's box held that
+    # column raw and writing $200 into it would have been $92.31 a period — less than the figure the
+    # user had just been told was too low.
+    #
+    # The box does not hold that column. `RuleForm.from` reads a monthly-no-anchor row back as
+    # per-period money, so the panel, the wire and the field are one unit and the inversion had
+    # become the trap: $433.33 in a per-period box saves a rule asking 3.6× what the panel proposed.
+    # `#rule_unit_amount` is deleted; the identity is the conversion.
+    #
+    # THE ROW'S OWN UNIT IS STILL REPORTED — `detail[:basis]` — because the drift sentence names it.
+    it "puts the observed per-period figure on the wire, whatever the rule's own column", :aggregate_failures do
       utilities = funded_category("Utilities")
       rule = create(:budget, :rate, category: utilities, amount: 260)
       in_drift_window(item("Bills", in_category: utilities), 200)
@@ -578,10 +587,10 @@ RSpec.describe SuggestionEngine do
       suggestion = of_kind(:drift).sole
 
       expect(suggestion.detail[:basis]).to eq("monthly")
-      expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 433.33 })
-      expect(suggestion.prefill[:budget][:amount]).not_to eq(200)
-      # And the round trip through the app's own normaliser lands back on the observed figure.
-      expect(Budget.new(amount: 433.33, basis: :monthly, interval_months: 1).steady_ask(user, today: today)).to eq(200)
+      expect(suggestion.prefill).to eq(id: rule.id, budget: { amount: 200 })
+      expect(suggestion.prefill[:budget][:amount]).not_to eq(433.33)
+      # And the form it lands on is in that unit: the read-back divides the row to what it costs.
+      expect(RuleForm.from(rule)).to include(schedule: "per_period", amount: 120.0)
     end
 
     it "leaves a per-period rule's prefill alone, because its column is already per-period", :aggregate_failures do

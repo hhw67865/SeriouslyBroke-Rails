@@ -134,7 +134,7 @@
         </div>
 
         <p class="form-hint">
-          <%= budget_amount_hint(budget, unit: rule_form.amount_unit) %>
+          <%= budget_amount_hint(budget) %>
           <% if category %>
             "The whole category" means anything in <%= category.name %> no other rule pays.
           <% end %>
@@ -148,11 +148,12 @@
           <p class="text-sm text-status-warning" data-monthly-conversion><%= note %></p>
         <% end %>
 
-        <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say. The
-            prefilled figure is in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts
-            `Budget#steady_ask` before putting it on the wire, precisely so nothing here converts —
-            and `RuleForm#amount_unit` names that unit, the same reader the hint above uses. Shown
-            only when the two differ: on every other edit the field IS the current amount. %>
+        <%# WHAT THE RULE SAYS TODAY, beside what a drift suggestion is proposing it should say.
+            ** THIS IS THE ONE FIGURE ON THE PAGE THAT IS NOT IN THE FORM'S OWN UNIT. ** The box is
+            per-period money on every path since the read-back divides (fix round 1's ruling), and
+            `@current_amount` is the ROW's — a month's, on the one shape where those differ — so it
+            is `RuleForm#amount_unit` that names it and not the record's phrase. Shown only when the
+            two differ: on every other edit the field IS the current amount. %>
         <% if @current_amount.present? && rule_form.amount.present? && rule_form.amount.to_d != @current_amount.to_d %>
           <p class="text-sm text-gray-500" data-current-amount>
             Currently <%= number_to_currency(@current_amount) %>
@@ -238,7 +239,7 @@
             <%= f.input :repeats,
                 as: :boolean,
                 label: "Repeats every N months",
-                hint: "leave this off for a one-off bill or a savings goal" %>
+                hint: "leave this off for something you pay once" %>
           </div>
 
           <%# THE INTERVAL, revealed by the checkbox alone. §2's row 4 is

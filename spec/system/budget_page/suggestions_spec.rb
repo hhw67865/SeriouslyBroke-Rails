@@ -542,15 +542,18 @@ RSpec.describe "Budget page suggestions", type: :system do
     end
   end
 
-  # THE UNITS SEPARATED. The anchorless MONTHLY rule is the shape `rate_shape?` deliberately admits
-  # alongside `per_period`, and it is the one where `budgets.amount` is NOT a per-period figure:
-  # a $260-a-month rule claims $260 * 12 / 26 = $120.00 a period from a biweekly user. Observed
-  # $200 a period, so the engine inverts back into the rule's column and the field must read
-  # $433.33 — the mixed-unit trap's fifth strike was writing the per-period $200 straight in, which
-  # is $92.31 a period, LESS than the figure the user was just told was too low.
+  # ** THE UNITS SEPARATED, AND THE SEPARATION CLOSED (two-shapes Task 4, fix round 1's ruling). **
+  # The anchorless MONTHLY rule is the shape `rate_shape?` deliberately admits alongside
+  # `per_period`, and it is the one where `budgets.amount` is NOT a per-period figure: a $260-a-month
+  # rule claims `260 × 12 ÷ 26` = $120.00 a period from a biweekly user.
   #
-  # THREE FACTS, and the absence is the one that matters: the field in the rule's unit, the current
-  # figure labelled in the same unit, and the panel's per-period figure NOWHERE on this screen.
+  # The engine used to invert its observed per-period figure back into that column ($200 a period →
+  # $433.33 a month) because the FORM's box held the column raw. It does not: `RuleForm.from` reads
+  # such a row back as per-period money, so the box, the panel and the engine are all in one unit and
+  # the inversion is deleted (`SuggestionEngine#rule_unit_amount`). What the examples below pin is
+  # that the drift now writes the money it proposed — $200.00 a period, exactly — and that the two
+  # figures a user has to reconcile ($260 a month, $120 a period) are each said once, in their own
+  # place.
   describe "accepting a drift on a monthly rule", :aggregate_failures do
     before do
       plant_monthly_drift
@@ -564,50 +567,38 @@ RSpec.describe "Budget page suggestions", type: :system do
       end
     end
 
-    # ** THE FIELD IS IN THE RULE'S OWN UNIT, AND THE CARD IS WHERE THE OTHER UNIT NOW BELONGS
-    # (two-shapes §5; this task's carry). ** The per-period figure used to be asserted ABSENT from
-    # this whole page — the point being that a form must not put two units on one screen without
-    # saying which is which. The preview says which: "$433.33 a month · $200.00 a period on your
-    # biweekly grid" is the sentence that makes the 3.6× conversion visible BEFORE the click, which
-    # is what the example below pins as behaviour rather than as agreement. The rule's CURRENT
-    # per-period cost ($120.00) is still absent, because nothing on this form is about it.
-    it "prefills the form in the rule's own unit and names the other one on the card", :aggregate_failures do
+    # ** THE FIELD IS IN THE PANEL'S OWN UNIT NOW, AND THE ROW'S UNIT IS SAID BESIDE IT. ** The
+    # per-period figure used to be asserted ABSENT from this whole page, because the box held monthly
+    # money and two unlabelled units on one screen is how a user comes to write the wrong number. The
+    # box holds per-period money, so the panel's $200.00 goes straight into it; what needs labelling
+    # is the ROW's $260.00 a month, which the "Currently …" line and the card's two-unit line each
+    # say once.
+    it "prefills the form with the money the panel proposed, and labels the row's own unit", :aggregate_failures do
       accept(:drift, retirement_rule)
 
-      expect(page).to have_field("Amount", with: "433.33")
+      expect(page).to have_field("Amount", with: "200.0")
       expect(page).to have_content("Currently $260.00 a month")
-      expect(page).to have_css("[data-preview-units]", text: "$433.33 a month · $200.00 a period")
-      # ** THE NEGATIVE IS SCOPED TO THE FORM, WHICH IS WHERE IT WAS ALWAYS REALLY ABOUT. ** The chip
-      # above restates the drift sentence ("your rule asks for $120.00 a period") and the card beside
-      # it names both units — each labelled, each in its own place. What must not happen is a
-      # per-period figure appearing among the CONTROLS, where it would be read as the field's.
-      within("form[action='#{budget_path(retirement_rule)}']") do
-        expect(page).to have_no_content("$200.00")
-        expect(page).to have_no_content("$120.00")
-      end
+      expect(page).to have_css("[data-preview-units]", text: "$260.00 a month · $200.00 a period")
     end
 
-    # ** THE ROUND TRIP DOES NOT CLOSE, AND THIS EXAMPLE NOW PINS THAT IT DOES NOT (Task 1's concern
-    # 4). ** It read "what was written reads back as the observed figure, so the rule now asks for
-    # what the entries actually say" — `steady_ask == 200` — and that stopped being true when §5
-    # ruled that a `monthly`-no-anchor rule reads back as "Every period" and CONVERTS on save. The
-    # figure the engine put on the wire is in the rule's MONTHLY unit ($433.33 a month = $200 a
-    # period); saving the form writes it as a PER-PERIOD amount, so the rule ends up asking $433.33
-    # every fortnight — 3.6× what the drift row proposed.
-    #
-    # PINNED AS IT BEHAVES, NOT AS IT SHOULD, and named here so nobody reads the green as agreement:
-    # the form warns in words (`#budget_monthly_conversion_note`, asserted below) and the rule form's
-    # own task owns the fix — a preview card that prices the conversion before the click.
-    it "converts the monthly rule to a per-period one on save, warning first", :aggregate_failures do
+    # ** THE ROUND TRIP CLOSES (Task 1's concern 4, closed by fix round 1's ruling). ** For three
+    # tasks this example was pinned AS IT BEHAVED and disclaimed in its own header: the engine put
+    # $433.33 a month on the wire, the form saved it as a PER-PERIOD amount, and the rule came out
+    # asking 3.6× what the drift row had proposed — with a warning in words as the only defence.
+    # Both halves of that are gone. The engine's inversion is deleted and the read-back divides, so
+    # accepting a drift writes the money the panel measured: **$200.00 a period**, which is what
+    # `Budget#steady_ask` reads back off the saved row. The conversion still happens — the shape
+    # changes — and the note now explains it rather than warning about it.
+    it "writes the money the drift proposed, and says what it did to the shape", :aggregate_failures do
       accept(:drift, retirement_rule)
 
-      expect(page).to have_css("[data-monthly-conversion]", text: "would make it $433.33 a period")
+      expect(page).to have_css("[data-monthly-conversion]", text: "Saving keeps that cost")
 
       click_button "Update rule"
 
       expect(page).to have_content("Budget was successfully updated")
-      expect(retirement_rule.reload.amount).to eq(433.33)
-      expect(retirement_rule.steady_ask(user)).to eq(433.33)
+      expect(retirement_rule.reload).to have_attributes(basis: "per_period", amount: 200)
+      expect(retirement_rule.steady_ask(user)).to eq(200)
     end
   end
 

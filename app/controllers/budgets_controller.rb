@@ -87,10 +87,11 @@ class BudgetsController < ApplicationController
   #     date still in it (`toggle()` early-returns when the state already matches), and Save was
   #     then refused for a due date on a control that was not on screen.
   #
-  # Both are shapes the user never chose, arriving as a URL. The amount survives because the figure
-  # is in THE RULE'S OWN UNIT — `SuggestionEngine#rule_unit_amount` inverts `Budget#steady_ask`
-  # before putting it on the wire, precisely so nothing downstream converts — and because it is the
-  # one field the panel has a measurement for. Nothing is written: the user still has to submit.
+  # Both are shapes the user never chose, arriving as a URL. The amount survives because it is the
+  # one field the panel has a measurement for, and because the figure and the box are in the SAME
+  # unit: the engine measures per-period money and `RuleForm.from` shows per-period money on both
+  # rate shapes (fix round 1's ruling), so nothing on either side converts. Nothing is written: the
+  # user still has to submit.
   def edit
     @current_amount = @budget.amount
     words = RuleForm.from(@budget).merge(prefill_attributes.slice(:amount))

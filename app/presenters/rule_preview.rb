@@ -62,7 +62,9 @@ class RulePreview
   # a card that tried to price a rule with no owner would raise instead (`ClaimCalculator` reaches
   # the user THROUGH the category). One sentence, and the page stays legible.
   def missing
-    @missing ||= [missing_owner, missing_amount, missing_date, missing_interval, missing_type].compact
+    @missing ||= [
+      missing_owner, missing_amount, missing_item, missing_date, missing_interval, missing_type
+    ].compact
   end
 
   # ONE READER PER BLANK, in the order the steps ask. Five `if`s in one array literal is the same
@@ -71,6 +73,21 @@ class RulePreview
   def missing_owner = ("Pick the category this rule is for." if rule.category.blank?)
 
   def missing_amount = ("Fill in an amount." unless amount.positive?)
+
+  # ** AN ITEM FROM SOMEWHERE ELSE IS A RULE THE SAVE WILL REFUSE, AND THE CARD MUST NOT PRICE IT
+  # (fix round 1 — L2). ** `Budget#item_must_belong_to_category` states it as a 422 ("must belong to
+  # this category"); the preview said nothing and quoted a per-period figure for a rule that cannot
+  # be written, which is the one thing a card whose whole job is to be believed must not do. The
+  # state is reachable: `#scoped_owners` admits the user's OWN item from another category (whose is
+  # the controller's question, what shape is the model's), so a stale prefill or a hand-made URL
+  # lands here. The predicate is the validation's own comparison, said once more rather than the
+  # record asked to validate itself — `#valid?` here would run the catch-all rule's query on every
+  # keystroke of a form that re-previews as it is typed into.
+  def missing_item
+    return nil if rule.item.blank? || rule.item.category_id == rule.category_id
+
+    "Pick an item in #{rule.category&.name}."
+  end
 
   def missing_date = ("Pick a date." if by_date? && rule.anchor_date.blank?)
 
@@ -123,17 +140,15 @@ class RulePreview
   # money. That is what saving would do — and it is a 2.17× rise on a fortnightly grid, which the
   # user has to be able to see before they press the button. `BudgetPageHelper
   # #budget_monthly_conversion_note` says it beside the field; this says it in the card's own units.
+  # ** THE ROW'S OWN MONTHLY FIGURE, WHICH IS THE ONE NUMBER THE FORM NO LONGER HOLDS. **
+  # `RuleForm.from` divides on the way in (fix round 1's ruling), so the box is per-period money and
+  # $260.00 a month exists nowhere on the page except on the flag that travels with the words. This
+  # class does NOT re-derive it by multiplying the box back up: that would be a second normaliser
+  # beside `Budget#steady_ask`, and it would move the moment the user edited the amount — the row's
+  # figure is a fact about the database, not about the box.
   delegate :converted_from_monthly?, to: :rule_form
 
-  # WHAT THE FIGURE IN THE BOX IS WORTH A PERIOD WHILE IT IS STILL A MONTH'S — `Budget#steady_ask`
-  # asked of a rule of exactly that shape, which is the app's ONE normaliser
-  # (`SuggestionEngine#bill_per_period_cost` asks it the same way, about a rule that does not exist
-  # yet). A local `amount * 12 / periods_per_year` here would be a second answer to the question that
-  # reader exists to have one answer to. It builds no calculator: the monthly branch is arithmetic on
-  # two columns.
-  def monthly_as_per_period
-    Budget.new(amount: amount, basis: :monthly, interval_months: 1).steady_ask(user, today: today)
-  end
+  def monthly_amount = rule_form.converted_from_monthly
 
   private
 

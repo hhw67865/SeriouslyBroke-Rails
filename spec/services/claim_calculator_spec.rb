@@ -890,6 +890,24 @@ RSpec.describe ClaimCalculator, type: :model do
       expect(calc(closed, Date.new(2026, 8, 31)).built_up).to eq(150)
     end
 
+    # ** AND THE ARM THAT ANSWERS FOR AN UNSAVED RULE DOES NOT REACH A SAVED ONE (two-shapes Task 4,
+    # fix round 1 — M1). ** `#rule_born_on` answers `today` for a NEW record, because the rule form's
+    # preview prices a rule that has no `created_at` to be born on — and the hazard of that arm is
+    # that it might be taken by rows which DO have one, making every saved rule's standing figure
+    # move with the afternoon it is asked on. `created_at` governs, and the two literals are what say
+    # so: born Sep 1, this goal spreads $1,200 over the seven boundaries left to Mar 31 (Sep … Mar) =
+    # **$171.43** whichever day it is asked about, where the SAME SHAPE unsaved on Dec 3 opens in
+    # December and spreads it over four (Dec, Jan, Feb, Mar) = **$300.00**.
+    it "spreads a saved rule over the periods since it was written, not since today", :aggregate_failures do
+      written = goal_born_on("Vacation", Time.utc(2026, 9, 1, 9, 0), funded_since: Date.new(2024, 9, 1))
+      unsaved = Budget.new(
+        category: written.category, amount: 1_200, basis: :monthly, anchor_date: Date.new(2027, 3, 31)
+      )
+
+      expect(calc(written, Date.new(2026, 12, 3)).standing_ask).to eq(171.43)
+      expect(calc(unsaved, Date.new(2026, 12, 3)).standing_ask).to eq(300)
+    end
+
     # ** A RULE ASKED ABOUT A DAY BEFORE IT EXISTED HOLDS NOTHING. ** The walk visits no periods at
     # all, and zero is the answer rather than the current period invented in its place — which is what
     # the old `visited.presence || [current_period]` fallback did, accruing a period the rule was not

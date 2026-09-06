@@ -857,7 +857,10 @@ class SuggestionEngine
       subject: rule,
       amount: observed,
       detail: drift_detail(rule, rule_amount, observed, window),
-      prefill: { id: rule.id, budget: { amount: rule_unit_amount(rule, observed) } }
+      # ** THE OBSERVED FIGURE GOES ON THE WIRE UNCONVERTED (fix round 1's ruling). ** It used to be
+      # multiplied back into the rule's own column by `#rule_unit_amount`; see that method's
+      # tombstone below for why the form's change of unit deleted it.
+      prefill: { id: rule.id, budget: { amount: observed } }
     )
   end
 
@@ -873,24 +876,24 @@ class SuggestionEngine
     }
   end
 
-  # THE FORM'S FIELD IS IN THE RULE'S OWN UNIT, and getting there means INVERTING `steady_ask`.
+  # ** `#rule_unit_amount` IS DELETED, AND THE DELETION IS THE FORM CHANGING UNITS UNDER IT (fix
+  # round 1's ruling; two-shapes §5). **
   #
-  # Everything this class reports is per-period, because that is the unit a user's money leaves in.
-  # `budgets.amount` is not: on the anchorless monthly rule — which #rate_shape? admits deliberately
-  # — it is a MONTHLY figure, and `steady_ask` is what divides it down. Writing a per-period observed
-  # figure straight into that column is the mixed-unit trap in the half that WRITES: a $260/month
-  # rule reads $120 a period, an observed $200 says raise it, and `amount: 200` in a monthly field
-  # is $92.31 a period — LESS than the figure the user was just told was too low, on a suggestion
-  # that asked them to raise it. The inverse of `amount * 12 / (periods_per_year * interval)`.
+  # It inverted `steady_ask` — `per_period × periods_per_year × interval ÷ 12` — because the rule
+  # FORM's amount box used to hold `budgets.amount` raw, which on the anchorless monthly rule (the
+  # one #rate_shape? admits beside the per-period one) is a MONTHLY figure. Writing a per-period
+  # observed figure straight into a monthly field was the mixed-unit trap in the half that WRITES,
+  # and the inversion was the fix for it.
   #
-  # It cannot be read off `steady_ask` — no reader inverts itself — so it is spelled here, once, and
-  # the spec pins it by round-tripping the answer back through `steady_ask` as well as by literal.
-  # `detail[:basis]` carries the unit so Task 7 can label the field rather than guess.
-  def rule_unit_amount(rule, per_period)
-    return per_period if rule.basis_per_period?
-
-    (per_period * user.periods_per_year * (rule.interval_months || 1) / 12).round(2)
-  end
+  # The form does not hold that unit any more. `RuleForm.from` reads a monthly-no-anchor row back as
+  # `per_period` at its DIVIDED amount, so the box is per-period money for BOTH shapes drift can
+  # fire on (`#rate_shape?` is `claim_shape == :rate`, which is anchorless by definition) — and the
+  # inversion, which existed to match a unit that is gone, had become the trap itself: a $260/month
+  # rule drifting to an observed $200 a period carried $433.33 into a per-period box and saved a
+  # rule asking 3.6× what the panel proposed. The identity is the correct conversion now, so there
+  # is nothing left to convert and nothing left to spell.
+  #
+  # `detail[:basis]` stays: it is the ROW's unit, which the drift sentence still names.
 
   # ---------------------------------------------------------------------------------------------
   # Detector 4 — a rule still funding something that stopped

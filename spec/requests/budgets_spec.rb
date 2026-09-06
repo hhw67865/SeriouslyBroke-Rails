@@ -192,6 +192,10 @@ RSpec.describe "Budgets", type: :request do
   # THE PREVIEW COSTS NONE OF ITS OWN: a new rule's lanes are `[]` (`RulePreview#lanes`), so the one
   # calculator on the card runs no query at all.
   #
+  # THE ITEM SELECT IS PINNED SEPARATELY BESIDE THE TOTAL (fix round 1 — L3), because the total alone
+  # cannot see it: `items` is read three times on this page and a select that grew a statement per
+  # category would sit inside a total that a chip's read had shrunk by one.
+  #
   # BOTH HALVES OF THE PIN ARE STRICT. The absolute figure catches a reader added to the page; the
   # equality across account sizes catches the thing an absolute figure cannot — a select or a chip
   # list that grows a statement per category, which would look exactly the same on the page.
@@ -233,7 +237,13 @@ RSpec.describe "Budgets", type: :request do
       expect([user.categories.count, user.items.count]).to eq([3, 9])
       expect(three_categories.size).to eq(one_category.size)
       expect(one_category.size).to eq(10)
+      expect(one_category.count { |sql| sql.include?(item_select) }).to eq(1)
     end
+
+    # THE SELECT'S OWN STATEMENT, told from the two other reads of `items` on this page (the
+    # engine's `#expense_items` and the join behind its entry history) by the one clause neither of
+    # them carries: the select is ordered by name, because a human is going to read it.
+    def item_select = %(ORDER BY "items"."name")
   end
 
   # ** THE WIRE CARRIES THE USER'S WORDS (two-shapes spec §5). ** `basis` is not a permitted
@@ -666,6 +676,56 @@ RSpec.describe "Budgets", type: :request do
       expect(ClaimCalculator).to have_received(:new).once
     end
 
+    # ** WHAT A RULE THAT DOES NOT EXIST YET COSTS A PERIOD, AS A LITERAL (fix round 1 — M1). **
+    # `ClaimCalculator#rule_born_on` answers `today` for a new record, and the arm needs a pin that a
+    # revert can fail: the example above builds its expectation from the SAME new-record calculator,
+    # so dropping the arm would move both sides together and stay green.
+    #
+    # THE ARITHMETIC, SPELLED: `dining` is `:funded` a YEAR ago, `due` is eight weeks past this
+    # period's open, and the grid is fortnightly — so the periods this rule has to fill in are the
+    # five boundaries at 0, 2, 4, 6 and 8 weeks, and $100 over five periods is **$20.00**. Reverted,
+    # the walk would open at the CATEGORY's funding date instead: some thirty periods, and about
+    # $3.33 a period for a rule the user is about to be charged $20.00 a period for.
+    it "prices a new rule from today and not from the category's whole funded history" do
+      due = user.period_containing(user.today).first + 8.weeks
+
+      preview(one_off_words.merge(amount: "100.00", anchor_date: due.to_s))
+
+      expect(response.body).to match(/data-preview-figure="per_period">\s*\$20\.00/)
+    end
+
+    # ** THE EDIT FORM'S PREVIEW ARRIVES AS A PATCH, AND THE ROUTE'S SECOND VERB IS WHAT ANSWERS IT
+    # (fix round 1 — M2). ** The card is submitted by a button inside the rule form (`formaction`),
+    # and on an edit that form carries Rails' `_method=patch` — which Rack applies to every POST it
+    # makes. Dropping `:patch` from the route breaks every edit page's preview and nothing else, so
+    # it is pinned here as the verb rather than inferred from the frame.
+    it "answers the edit form's own PATCH and writes nothing", :aggregate_failures do
+      rate = create(:budget, :per_period_rate, category: dining, amount: 400, rule_type: :usage)
+
+      patch preview_budgets_path(id: rate.id),
+            params: { budget: { amount: "550" } },
+            headers: { "Turbo-Frame" => "rule_preview" }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(%(<turbo-frame id="rule_preview">))
+      expect(response.body).to include("Dining Out gets $550.00 every period")
+      expect(rate.reload.amount).to eq(400)
+    end
+
+    # ** THE CARD MUST NOT PRICE A RULE THE SAVE WILL REFUSE (fix round 1 — L2). **
+    # `#scoped_owners` admits the user's OWN item from another category — whose is the controller's
+    # question, what shape is the model's (`Budget#item_must_belong_to_category`) — so a stale
+    # prefill or a hand-made URL lands a mismatched pair here, and a per-period figure quoted for a
+    # rule that cannot be written is the one thing this card must never say.
+    it "names the mismatch rather than pricing an item from another category", :aggregate_failures do
+      elsewhere = create(:item, category: groceries, name: "Milk")
+
+      preview({ category_id: dining.id, item_id: elsewhere.id, amount: "400.00" })
+
+      expect(response.body).to include("Pick an item in Dining Out.")
+      expect(response.body).not_to include("Per period")
+    end
+
     # ** A BLANK IS NOT A REFUSAL. ** Nothing has been submitted; the user is mid-sentence. The card
     # names the blank instead of returning a 422, which is what a form whose preview refreshes on
     # every keystroke has to do to be usable at all.
@@ -709,18 +769,18 @@ RSpec.describe "Budgets", type: :request do
     end
 
     # ** THE `monthly`-NO-ANCHOR ROW STATES BOTH UNITS (§5's ruling; this task's carry). ** The row
-    # is $260 a MONTH and the form reads it back as "Every period", so saving it unchanged prices it
-    # at $260 a PERIOD — 2.17× on a fortnightly grid. `Budget#steady_ask` is the app's one
-    # normaliser and the card asks it, so the second figure here is the one every other screen would
-    # print for that rule.
+    # is $260 a MONTH and the form reads it back as "Every period" at what it COSTS a period — $120.00
+    # on a fortnightly grid (fix round 1's ruling) — so the box submits $120.00 and the two figures
+    # on screen are the row's and the box's. The card names both, because a user who remembers typing
+    # $260 is owed the arithmetic that turned it into $120.
     it "states both units when a monthly rule is being read back as every period", :aggregate_failures do
       monthly = create(:budget, :rate, category: dining, amount: 260, rule_type: :usage)
       normalised = monthly.steady_ask(user, today: user.today)
 
-      preview({ amount: "260.0", schedule: "per_period" }, query: { id: monthly.id })
+      preview({ amount: normalised.to_s, schedule: "per_period" }, query: { id: monthly.id })
 
       expect(normalised).to eq(120)
-      expect(response.body).to include("$260.00 a month · #{number_to_currency(normalised)} a period on your biweekly grid")
+      expect(response.body).to include("$260.00 a month · $120.00 a period on your biweekly grid")
     end
 
     # AND NOT ON A ROW WHOSE WORDS MATCH ITS COLUMNS, or the line would be a fixture of the card.

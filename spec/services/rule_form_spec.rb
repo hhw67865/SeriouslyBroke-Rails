@@ -152,40 +152,45 @@ RSpec.describe RuleForm do
       expect(described_class.from(rule)).to include(schedule: "by_date", repeats: true, interval_months: 1)
     end
 
-    # ** AN ANCHORLESS `monthly` ROW READS BACK AS "Every period", AND THE SHAPE DOES NOT SURVIVE A
-    # SAVE (two-shapes §5's ruling). ** "$260 every month" with no due date is a legal row and
-    # `SuggestionEngine` still writes one; the form's two options do not include it, so opening such a
-    # rule and saving it unchanged CONVERTS it to a per-period rate stated in the same figure. That is
-    # the ruling taken rather than a defect hidden — the shape stays reachable for existing rows and
-    # for the engine, it is not offered, and the second option covers what people actually write.
+    # ** AN ANCHORLESS `monthly` ROW READS BACK AS "Every period" AT WHAT IT COSTS A PERIOD, AND
+    # SAVING IT KEEPS THAT COST (two-shapes §5's ruling, corrected in fix round 1). ** "$260 every
+    # month" with no due date is a legal row and `SuggestionEngine` still writes one; the form's two
+    # options do not include it, so opening such a rule and saving it unchanged CONVERTS it. What the
+    # conversion preserves is the MONEY, not the number: `Budget#steady_ask` prices $260 a month at
+    # `260 × 12 ÷ 26` = **$120.00** on this user's fortnightly grid, the box opens holding that, and
+    # the row is written `per_period 120.00`. The earlier reading kept the number and multiplied the
+    # user's real cost by 2.17× under a note that could only warn about it.
     #
-    # BOTH HALVES ARE ASSERTED, so neither "it reads back as something else" nor "the conversion is
-    # silent" can change without this example saying so.
-    it "reads an anchorless monthly rule back as per-period, and converts it on save", :aggregate_failures do
+    # THE WRITTEN COLUMNS AND THE WRITTEN AMOUNT ARE BOTH ASSERTED, and the amount is the half this
+    # fix round is about: neither "it reads back as something else" nor "it saves a different cost"
+    # can change without this example saying so.
+    it "reads an anchorless monthly rule back as what it costs a period, and saves that", :aggregate_failures do
       rule = create(:budget, :rate, category: groceries, amount: 260)
 
-      expect(described_class.from(rule)).to include(schedule: "per_period", repeats: false, interval_months: nil)
+      expect(described_class.from(rule))
+        .to include(schedule: "per_period", repeats: false, interval_months: nil, amount: 120.0)
+      expect(rule.steady_ask(user)).to eq(120)
 
       rebuilt = described_class.new(user, described_class.from(rule), budget: rule)
 
       expect(rebuilt.save).to be true
       expect(columns_of(rule.reload)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
-      expect(rule.amount).to eq(260)
+      expect(rule.amount).to eq(120)
+      expect(rule.steady_ask(user)).to eq(120)
     end
 
-    # ** AND IT CARRIES A FLAG SAYING SO, BECAUSE THE CONVERSION IS NOT FREE (fix round 1 — MED-5). **
-    # `#apply_to_budget` writes `basis: per_period` onto the record in the CONSTRUCTOR, so by the
-    # time a view renders it the row says per-period while the figure in the box is still a month's —
-    # and `Budget#steady_ask` prices $260 a month at `260 × 12 ÷ 26` = **$120.00** a fortnight, so
-    # saving it unchanged multiplies what the rule really costs by 2.17×. The flag is what lets the
-    # form say the amount in the ROW's unit and warn about the save.
+    # ** AND IT CARRIES THE ROW'S OWN MONTHLY FIGURE, BECAUSE NOTHING ELSE ON THE FORM DOES. ** The
+    # box holds $120.00 after the division, so $260.00 a month exists nowhere on the page — and three
+    # sentences have to name it: the note under the amount, the preview's two-unit line, and the
+    # "Currently …" line beside a drift's proposal. The flag IS the figure, and
+    # `#converted_from_monthly?` is the predicate over its presence.
     #
-    # BOTH DIRECTIONS, because a flag that was always true would read the same on this example.
-    it "flags the monthly read-back, and only that one", :aggregate_failures do
+    # BOTH DIRECTIONS, because a flag that was always set would read the same on this example.
+    it "carries the row's monthly figure on the read-back, and only there", :aggregate_failures do
       monthly = create(:budget, :rate, category: groceries, amount: 260)
       per_period = create(:budget, :per_period_rate, category: create(:category, :expense, :funded, user: user), amount: 400)
 
-      expect(described_class.from(monthly)).to include(converted_from_monthly: true)
+      expect(described_class.from(monthly)).to include(converted_from_monthly: 260)
       # ABSENT RATHER THAN `false`, on `interval_months`' own convention: `SuggestionEngine` puts
       # these words on an accept URL through `.compact`, and a `false` would ride in every query
       # string the panel builds to say nothing.

@@ -30,10 +30,14 @@
 # whose amount is its target, so "builds up toward $5,000" is written as "$5,000 by Jun 1, 2027" —
 # the same words a bill uses, which is why one option covers both.
 #
-# ** `monthly` LEFT THE FORM AND NOT THE MODEL. ** "$260 every month" with no due date is still a
-# legal row (§2 row 2) and `SuggestionEngine` still writes one; the form simply does not OFFER it,
-# because it is not a shape people write by hand — and `.from` reads such a row back as `per_period`
-# so an existing one opens, edits and saves without silently re-shaping. See `.schedule_for`.
+# ** `monthly` LEFT THE FORM AND NOT THE MODEL, AND THE READ-BACK PRESERVES THE MONEY RATHER THAN
+# THE NUMBER (fix round 1's ruling). ** "$260 every month" with no due date is still a legal row (§2
+# row 2) and `SuggestionEngine` still writes one; the form simply does not OFFER it, because it is
+# not a shape people write by hand. `.from` reads such a row back as `per_period` — and it divides:
+# the box holds `Budget#steady_ask`, WHAT THE RULE COSTS EACH PERIOD ON THIS USER'S GRID ($260 a
+# month is $120.00 a fortnight), so saving it untouched writes `per_period 120.00` and the user's
+# money is exactly where it was. The earlier reading kept the NUMBER and multiplied the cost by
+# 2.17×, which the form could only warn about. See `.schedule_for` and `.per_period_amount`.
 #
 # ** WHAT THIS CLASS DOES NOT DO IS OWNERSHIP. ** `category_id` and `item_id` arrive off the wire
 # and a stranger's id must 404 rather than 422 — a foreign record the user cannot see is not a form
@@ -99,16 +103,17 @@ class RuleForm
     category: :category_id
   }.freeze
 
-  # ** WHETHER THE ROW THIS FORM IS EDITING IS THE `monthly`-NO-ANCHOR SHAPE (fix round 1 — MED-5).
-  # ** `.from` reads such a row back as `per_period` (see `.schedule_for`), which is the ruling — but
-  # the columns are applied to `#budget` in the constructor, so by the time the view renders, the
-  # record says `per_period` and every hint on the page reads the amount in the WRONG UNIT. A $260-a-
-  # month rule showed "What this rule asks for per period", and saving it unchanged multiplies its
-  # real cost by 2.17× on a fortnightly grid (`Budget#steady_ask`: `260 × 12 ÷ 26` = $120).
+  # ** THE ROW'S OWN MONTHLY FIGURE, WHERE THIS FORM IS EDITING THE `monthly`-NO-ANCHOR SHAPE. **
+  # `.from` reads such a row back as `per_period` at its DIVIDED amount (fix round 1's ruling), so
+  # the box holds $120.00 where the row says $260.00 a month. Everything on the page that has to name
+  # the row rather than the box — the note under the amount, the preview's two-unit line, the
+  # "Currently …" line beside a drift's proposal — needs the figure that is no longer anywhere on the
+  # form, so the flag CARRIES it: it is the monthly amount, and `#converted_from_monthly?` is the
+  # predicate over its presence.
   #
-  # SO THE FLAG TRAVELS WITH THE WORDS. `.from` sets it, the form reads it for the hint's unit and
-  # for the note beside the field, and it is NOT one of `BUDGET_FIELDS` — a POST cannot set it,
-  # because it is a fact about the row rather than an answer the user gave.
+  # IT IS NOT ONE OF `BUDGET_FIELDS` — a POST cannot set it, because it is a fact about the row
+  # rather than an answer the user gave — and it is gated on the schedule the merge left standing
+  # (see #initialize), because it stops being true the moment the user answers with a date.
   attr_reader :user, :budget, :anchor_date, :converted_from_monthly
   attr_accessor :category_id,
                 :item_id,
@@ -136,15 +141,17 @@ class RuleForm
     @user = user
     @budget = budget || Budget.new
     assign(params)
-    @converted_from_monthly =
-      params.to_h.symbolize_keys[:converted_from_monthly].present? && schedule == "per_period"
+    @converted_from_monthly = monthly_amount_in(params)
     apply_to_budget
   end
 
   def converted_from_monthly? = converted_from_monthly.present?
 
-  # THE UNIT THE RULE'S OWN AMOUNT IS IN, for the hint beside the amount field. It is the SCHEDULE's
-  # unit on every ordinary path, and the ROW's on the one path where the two disagree.
+  # ** THE UNIT THE ROW'S STORED AMOUNT IS IN, AND IT IS NO LONGER THE BOX'S. ** Since the read-back
+  # divides, the figure on the form is per-period money on every path and `#budget_amount_hint` reads
+  # the record for it. What still needs this is the "Currently $260.00 a month." line, which names
+  # the figure on the ROW beside a drift's proposal — the one number on the page that is not in the
+  # form's own unit.
   def amount_unit = converted_from_monthly? ? "a month" : nil
 
   # ** THE COLUMNS → THE WORDS. ** The reverse of `#apply_to_budget`, and it must round-trip every
@@ -159,18 +166,24 @@ class RuleForm
     schedule = schedule_for(budget)
     repeats = schedule == "by_date" && budget.interval_months.present?
 
+    converted = schedule == "per_period" && budget.basis_monthly?
+
     {
       category_id: budget.category_id,
       item_id: budget.item_id,
       rule_type: budget.rule_type,
-      amount: budget.amount,
+      # ** DIVIDED ON THE ONE ROW WHOSE UNIT THE READ-BACK CHANGES (fix round 1's ruling). ** The
+      # form's box is per-period money, so a monthly row's own figure would be the wrong number in
+      # it — and saving it would be a 2.17× rise the user never asked for.
+      amount: converted ? per_period_amount(budget) : budget.amount,
       schedule: schedule,
       repeats: repeats,
-      # SEE `#converted_from_monthly`: the one row whose words do not describe its own columns.
-      # TRUE OR ABSENT, never `false`, on `interval_months`' own convention two lines down —
-      # `SuggestionEngine` puts these words on an accept URL through `.compact`, and a `false` there
-      # would ride in every query string the panel builds to say nothing at all.
-      converted_from_monthly: (true if schedule == "per_period" && budget.basis_monthly?),
+      # SEE `#converted_from_monthly`: THE ROW'S MONTHLY FIGURE, which is the one number the form no
+      # longer holds anywhere and which three sentences on the page have to name. PRESENT OR ABSENT,
+      # never `false`, on `interval_months`' own convention two lines down — `SuggestionEngine` puts
+      # these words on an accept URL through `.compact`, and a `false` there would ride in every
+      # query string the panel builds to say nothing at all.
+      converted_from_monthly: (budget.amount if converted),
       # NOT the column unless the checkbox is on: an interval handed back for a control that is not
       # revealed is a value the user never typed, and #check_interval refuses exactly that on the way
       # in.
@@ -179,16 +192,38 @@ class RuleForm
     }
   end
 
-  # ** AN ANCHORLESS `monthly` ROW READS BACK AS `per_period`, AND THE SHAPE SURVIVES THE READ (§5's
-  # ruling). ** "$260 every month" with no due date is a legal row and `SuggestionEngine` still
-  # writes one, but the form's two options do not include it: this returns `per_period`, whose
-  # columns are `basis: per_period, interval nil, anchor nil` — so opening such a rule and saving it
-  # unchanged CONVERTS it to a per-period rate stated in the same figure. That is the ruling taken
-  # rather than a defect hidden: the shape stays reachable for existing rows and for the suggestion
-  # engine, it is not offered, and the form's second option covers what people actually write. The
-  # amount is shown per month exactly as it is stored, which is what `budget_page_helper`'s hint
-  # says beside it.
+  # ** AN ANCHORLESS `monthly` ROW READS BACK AS `per_period`, AND WHAT SURVIVES THE READ IS THE
+  # MONEY (§5's ruling, corrected in fix round 1). ** "$260 every month" with no due date is a legal
+  # row and `SuggestionEngine` still writes one, but the form's two options do not include it: this
+  # returns `per_period`, whose columns are `basis: per_period, interval nil, anchor nil`.
+  #
+  # THE FIGURE IS DIVIDED WITH THE SHAPE. Opening such a rule and saving it unchanged converts it —
+  # that much was always the ruling — and the question the fix round settled is WHICH of the two
+  # things is preserved, the number or the cost. It is the cost: `#per_period_amount` below is
+  # `Budget#steady_ask`, the app's one normaliser, so a $260-a-month rule opens at $120.00 on a
+  # fortnightly grid and saves as $120.00 a period. Nothing the user has budgeted moves. The earlier
+  # reading kept the number, which the form could only WARN about — and a warning is not a defence
+  # against a save the user has no reason to doubt.
   def self.schedule_for(budget) = budget.anchor_date.present? ? "by_date" : "per_period"
+
+  # ** WHAT THE ROW COSTS A PERIOD ON ITS OWNER'S GRID — `Budget#steady_ask` AND NEVER A DIVISION
+  # SPELLED HERE. ** That reader is the app's one answer to "what does this rule cost a period"
+  # (`amount × 12 ÷ periods_per_year ÷ interval`), and it is what the Budget page's tiles, the drift
+  # detector and `ClaimCalculator` all ask; a second spelling would be a second answer, on the one
+  # screen that WRITES the figure.
+  #
+  # THE OWNER COMES OFF THE ROW (`Budget#user`, which walks the category), because this is a class
+  # method and the only rows that reach it are persisted ones — the two in-memory rules
+  # `SuggestionEngine` builds are a per-period rate and an ANCHORED bill, neither of which is this
+  # shape. The nil arm is the honest fallback for a record with no owner to have a grid: the figure
+  # is left exactly as stored, which is what an undeclared user's `steady_ask` answers anyway
+  # (`periods_per_year` falls back to 12, so `260 × 12 ÷ 12` is $260).
+  def self.per_period_amount(budget)
+    owner = budget.user
+    return budget.amount if owner.nil?
+
+    budget.steady_ask(owner, today: budget.today)
+  end
 
   # True and the rule is written, false and `#errors` says why, keyed by the controls on screen.
   #
@@ -256,6 +291,20 @@ class RuleForm
   end
 
   private
+
+  # ** THE ROW'S MONTHLY FIGURE, KEPT ONLY WHILE IT IS STILL TRUE OF THE FORM. ** It says one thing —
+  # the box holds the per-period reading of a row stored per MONTH — which stops being true the
+  # moment the user answers "When is it needed?" with a date. Both callers that merge
+  # (`BudgetsController#update` and `#preview`) put `RuleForm.from`'s words UNDER the submission, so
+  # a monthly row switched to "By a date" arrived carrying the figure from the row and the schedule
+  # from the user, and the note and the preview's two-unit line would both have described a
+  # conversion that is not happening.
+  def monthly_amount_in(params)
+    value = params.to_h.symbolize_keys[:converted_from_monthly]
+    return nil unless value.present? && schedule == "per_period"
+
+    value.to_d
+  end
 
   # `params.key?`, not `params[field].present?`: a field the request did not mention is left as it
   # is (the edit path hands in the rule's own words first), while a field it mentioned as BLANK is a
