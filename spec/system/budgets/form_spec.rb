@@ -914,10 +914,14 @@ RSpec.describe "Budgets Forms", type: :system do
     end
 
     # THE TWO COLUMNS ARE THE NEW RISK (§5: "two columns at ≥1024px, one below"). Below that the
-    # preview has to sit UNDER the form rather than beside it, and the radio rows — a control, a
+    # preview has to sit UNDER the steps rather than beside them, and the radio rows — a control, a
     # title and a line of help on one line — are the shape that pushes a page sideways when it
     # cannot wrap.
-    it "stacks the preview under the form and fits inside a 375px viewport", :aggregate_failures do
+    #
+    # ** THE PREVIEW IS MEASURED AGAINST STEP 3 AND NOT AGAINST THE FORM (fix round). ** The form is
+    # the grid now and the card is INSIDE it, so `preview.y > form.y` had become true of any layout
+    # whatsoever — an assertion that cannot fail is not one.
+    it "stacks the preview under the steps and fits inside a 375px viewport", :aggregate_failures do
       visit new_budget_path(category_id: groceries.id)
 
       expect(page).to have_content("2. When is it needed?")
@@ -925,11 +929,30 @@ RSpec.describe "Budgets Forms", type: :system do
 
       card = page.find("form[action=\"#{budgets_path}\"]").native.rect
       radio = page.find("label", text: "money saved up toward a day").native.rect
+      last_step = page.find("[data-step='3']").native.rect
       preview = page.find("[data-preview]").native.rect
 
       expect(card.x + card.width).to be <= 375
       expect(radio.x + radio.width).to be <= card.x + card.width
-      expect(preview.y).to be > card.y
+      expect(preview.y).to be > (last_step.y + last_step.height) - 1
+    end
+
+    # ** THE PREVIEW COMES BEFORE THE BUTTON ON A PHONE (fix round, 2026-09-06). ** The card says the
+    # rule back — in words and in arithmetic — and the whole point of saying it is that it is read
+    # BEFORE the rule is written. At ≥1024px it is beside the form, so the order is never in
+    # question; stacked, it was after "Create rule", which asked a phone to press the button and
+    # then scroll down to find out what it had agreed to. The grid is on the form now and the card
+    # is a grid child between the steps and the buttons.
+    it "puts the preview above the button that commits to it", :aggregate_failures do
+      visit new_budget_path(category_id: groceries.id)
+
+      expect(page).to have_field("Amount")
+
+      preview = page.find("[data-preview]").native.rect
+      create = page.find("input[type=submit]").native.rect
+
+      expect(create.y).to be > (preview.y + preview.height) - 1
+      expect(create.x + create.width).to be <= 375
     end
 
     # ** THE SENTENCE BREAKS BETWEEN ITS CLAUSES, NOT INSIDE ONE (mobile pass, 2026-09-06). **
@@ -953,6 +976,51 @@ RSpec.describe "Budgets Forms", type: :system do
       expect(item.y).to be > (amount.y + amount.height) - 1
       expect(item.width).to be > amount.width
       expect(item.x + item.width).to be <= step.x + step.width
+    end
+
+    # ** THE CHIP'S ONE CONTROL IS FULL WIDTH AT 375 (mobile pass, fix round). ** Under two
+    # sentences of measurement an 88px button reads as a footnote to them rather than as the thing
+    # that fills the form in — and it is the only control on the card. The two entries are what make
+    # a chip that HAS a button: a dead-rule chip carries no figure to fill a blank with and renders
+    # none (`_chip.html.erb`), which is the shape the demo's own categories are in.
+    it "gives a chip's Use this button the width of the chip", :aggregate_failures do
+      phone = create(:item, category: groceries, name: "Phone")
+      [2, 1].each { |back| create(:entry, item: phone, amount: 85, date: Date.current - back.months) }
+
+      visit new_budget_path(category_id: groceries.id)
+
+      chip = page.find("[data-chip]").native.rect
+      button = page.find("[data-chip-button]").native.rect
+
+      expect(button.width).to be > chip.width - 40
+      expect(button.x + button.width).to be <= chip.x + chip.width
+      expect(button.height).to be >= 40
+    end
+  end
+
+  # ── THE DESKTOP THE MOBILE PASS MUST NOT MOVE ─────────────────────────────────────────────────
+  #
+  # ** A PADDING PIN, BECAUSE A MOBILE PASS ALREADY DRIFTED THIS ONCE. ** Adding `p-4` to the step
+  # cards was spelled `p-4 sm:p-5`, which quietly took 24px of desktop padding down to 20 on every
+  # step of this form — a change nobody asked for, in a commit whose report said the desktop was
+  # unchanged. The value is asserted through Selenium's own geometry: the inset from the card's box
+  # to its heading's is the padding plus the card's 1px border.
+  describe "at a desktop width" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 1440, height: 900, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    it "keeps 24px of padding inside each step card", :aggregate_failures do
+      visit new_budget_path(category_id: groceries.id)
+
+      expect(page).to have_content("1. What is this rule for, and how much?")
+
+      card = page.find("[data-step='1']").native.rect
+      heading = page.find("[data-step='1'] h2").native.rect
+
+      expect(heading.x - card.x).to eq(25)
     end
   end
 end

@@ -35,14 +35,15 @@
     `draggable="true"` for the reorder, and a text input inside a draggable ancestor loses its
     selection to the drag in Chrome — the whole panel opts out so the fields behave like fields. %>
 <%# ** THE SUMMARY IS A FULL-WIDTH BUTTON AT 375 (mobile pass, 2026-09-06), IN THE SAME SKIN AS THE
-    `Edit` LINK IT SITS UNDER. ** It measured 41×20. `inline-block` STAYS the display at every
-    width and is load-bearing: a `<summary>` whose display is `list-item` draws a disclosure
-    triangle, and `block` would bring it back — the width comes from `w-full`, not from the
-    display. %>
+    `Edit` LINK IT SITS UNDER — and the skin is literally one string, `RULE_ACTION_CLASSES` on
+    `BudgetPageHelper`, rather than two copies with a comment swearing they match (fix round — M2).
+    It measured 41×20.
+
+    `inline-block` STAYS the display at every width and is load-bearing: a `<summary>` whose display
+    is `list-item` draws a disclosure triangle, and `block` would bring it back — the width comes
+    from `w-full`, not from the display. %>
 <details class="mt-2" draggable="false" data-adjust="<%= budget_rule_name(line.rule) %>">
-  <summary class="inline-block w-full cursor-pointer rounded border border-gray-200 py-2.5 text-center text-sm
-                  text-brand-dark hover:bg-gray-50 sm:w-auto sm:rounded-none sm:border-0 sm:p-0 sm:text-left
-                  sm:hover:bg-transparent sm:hover:text-brand">Adjust</summary>
+  <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust</summary>
 
   <%# `max-w-xl` (design pass at 1440): the panel is two short fields and three buttons, and left to
       the row's full width it stretched to the far edge of a 1440px card with two-thirds of it

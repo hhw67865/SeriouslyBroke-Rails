@@ -60,40 +60,47 @@
     refused with the message under the control that chose it, which then re-renders revealed. What
     is lost is one round trip on that path; what is gained is that the form has exactly one story
     about which controls are on screen. %>
-<div class="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start"
-     data-controller="app--budget--rule-form"
+<div data-controller="app--budget--rule-form"
      data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
-  <%# ** THE CONTROLLER IS ON THE GRID, NOT ON THE FORM, BECAUSE THE CHIPS ARE ABOVE IT AND THE
-      PREVIEW IS BESIDE IT. ** A Stimulus action binds only inside its controller's own element, so
-      a "Use this" button in a chip that sat OUTSIDE the form would never reach `#useChip` —
-      measured: every blank stayed empty and the chip never said it was being used. It moved one
-      level out with §12: the preview card is a SIBLING of this column, and the controller is what
-      reveals it (`connect()`) and highlights it on every refresh, so the frame has to be inside the
-      controller's element too. The form is a TARGET, and every read and every submit goes through
-      that target rather than through `this.element`; the listeners are here because `input` and
-      `change` bubble out of the form. %>
-  <div class="lg:col-span-2 space-y-6">
-    <%# ** THE CHIPS, ABOVE STEP 1 (§5). ** What the entries already suggest for this category, each
-        one able to fill every blank below it. On an edit only the ones about THIS rule are here
-        (`BudgetsController#chips_for`) — a chip about another rule would be a control that silently
-        re-points the one the user opened. %>
-    <% if chips.any? %>
-      <section class="space-y-2" data-chips>
-        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your entries suggest</h2>
-        <% chips.each do |suggestion| %>
-          <%= render "chip", suggestion: suggestion %>
-        <% end %>
-      </section>
-    <% end %>
+  <%# ** THE CONTROLLER IS ON A WRAPPER AND NOT ON THE FORM. ** A Stimulus action binds only inside
+      its controller's own element, so a "Use this" button in a chip that sat OUTSIDE the form would
+      never reach `#useChip` — measured: every blank stayed empty and the chip never said it was
+      being used. The controller is also what REVEALS the preview (`connect()`) and highlights it on
+      every refresh, so the frame has to be inside its element too. The form is a TARGET, and every
+      read and every submit goes through that target rather than through `this.element`; the
+      listeners are here because `input` and `change` bubble out of the form.
 
-    <%= simple_form_for rule_form,
-        as: :budget,
-        url: rule_form.persisted? ? budget_path(budget) : budgets_path,
-        method: rule_form.persisted? ? :patch : :post,
-        html: {
-          class: "space-y-6",
-          data: { "app--budget--rule-form-target": "form" }
-        } do |f| %>
+      ** THE FORM IS THE GRID NOW, AND THE REASON IS THE ORDER ON A PHONE (fix round, 2026-09-06).
+      ** The preview says the rule back BEFORE you commit to it — beside the form at ≥1024px, and
+      below it under that — but with the buttons living inside a form that was itself inside the
+      left column, the card came AFTER "Create rule": a phone was asked to press the button and then
+      scroll to read what it had agreed to. The three panels are grid children of the form itself
+      now (steps · preview · buttons), so stacked they fall in that order and at `lg` the buttons
+      still sit under the left column, right-aligned to it, exactly where they were. Nothing about
+      the SUBMISSION moved: one form, one submitter, the same fields inside it. %>
+  <%= simple_form_for rule_form,
+      as: :budget,
+      url: rule_form.persisted? ? budget_path(budget) : budgets_path,
+      method: rule_form.persisted? ? :patch : :post,
+      html: {
+        class: "lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start",
+        data: { "app--budget--rule-form-target": "form" }
+      } do |f| %>
+    <div class="space-y-6 lg:col-span-2">
+      <%# ** THE CHIPS, ABOVE STEP 1 (§5). ** What the entries already suggest for this category,
+          each one able to fill every blank below it. On an edit only the ones about THIS rule are
+          here (`BudgetsController#chips_for`) — a chip about another rule would be a control that
+          silently re-points the one the user opened. Inside the form since the fix round above;
+          every control on a chip is `type="button"`, so none of them can submit it. %>
+      <% if chips.any? %>
+        <section class="space-y-2" data-chips>
+          <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your entries suggest</h2>
+          <% chips.each do |suggestion| %>
+            <%= render "chip", suggestion: suggestion %>
+          <% end %>
+        </section>
+      <% end %>
+
       <%# ERRORS WITH NOWHERE ELSE TO LAND. simple_form prints an attribute's error under that
           attribute's input, so an error on a field this form does not RENDER produces a 422 whose
           only visible text is "please review the problems below". `:base` is lifted here for that
@@ -118,7 +125,7 @@
           `item_id` IS OWNERSHIP-SCOPED ON THE WAY IN (`BudgetsController#scoped_owners`) on all
           three doors (GET, POST and the preview): a stranger's id would write a rule against THEIR
           spending, so it 404s rather than rendering their item's name here. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="1">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="1">
         <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
 
         <%# ** THE SENTENCE BREAKS BETWEEN ITS TWO CLAUSES AT 375, NOT INSIDE ONE (mobile pass,
@@ -222,7 +229,7 @@
           ** THE UNSPENT-MONEY STEP AND ITS TARGET FIELD ARE DELETED (§7). ** A fund IS a dated rule
           whose amount is its target, so "builds up toward $5,000" is written as "$5,000" in step 1
           and "by Jun 1, 2027" here. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="2">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="2">
         <h2 class="text-sm font-semibold text-gray-900">2. When is it needed?</h2>
 
         <% schedules = [
@@ -326,7 +333,7 @@
           an untyped row claims neither "must be paid" nor "up to you", but a form that pre-answered
           the question would be deciding what this person is willing to sacrifice. A proposal DOES
           arrive typed, and its radio is checked. %>
-      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-5" data-step="3">
+      <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="3">
         <h2 class="text-sm font-semibold text-gray-900">3. What kind of rule is this?</h2>
 
         <% type_help = {
@@ -350,16 +357,28 @@
           <p class="form-error">Type <%= rule_form.errors[:rule_type].to_sentence %></p>
         <% end %>
       </section>
+    </div>
 
-      <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
-        <%# Back where the rule is listed, which is the Budget page — the same destination
-            BudgetsController sends a save to. %>
-        <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
+    <%# THE PREVIEW COLUMN — sticky at ≥1024px, and BETWEEN THE STEPS AND THE BUTTONS below that
+        (fix round, 2026-09-06). The card inside it renders `hidden` and Stimulus reveals it on
+        connect (§12), so a browser with no JavaScript gets no preview rather than a stale one it
+        has no way to refresh. %>
+    <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
+      <%= render "preview", preview: @preview %>
+    </aside>
 
-        <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
-      </div>
+    <%# THE BUTTONS, UNDER THE LEFT COLUMN AT `lg` AND UNDER THE PREVIEW BELOW IT. `lg:col-span-2`
+        with `lg:col-start-1` is what keeps them right-aligned to the FORM's column rather than to
+        the page, which is where they have always been. %>
+    <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end lg:col-span-2 lg:col-start-1">
+      <%# Back where the rule is listed, which is the Budget page — the same destination
+          BudgetsController sends a save to. %>
+      <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
 
-      <%# ** THE PREVIEW'S SUBMITTER, HIDDEN — THERE IS NO "Preview" BUTTON ANY MORE (§12). ** It was
+      <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
+    </div>
+
+    <%# ** THE PREVIEW'S SUBMITTER, HIDDEN — THERE IS NO "Preview" BUTTON ANY MORE (§12). ** It was
           a visible secondary button beside Cancel, and it was the no-JavaScript path: pressing it
           navigated, and the whole page came back with the card updated. §12 deletes it. What the
           button DID is still needed, because it is what makes the request carry exactly the fields a
@@ -376,23 +395,15 @@
           `formnovalidate`, because a preview of a HALF-FILLED form is the thing the card is for:
           browser validation would refuse to submit exactly the states whose missing blanks it is
           supposed to name. %>
-      <%= button_tag "Preview",
-          type: :submit,
-          name: nil,
-          hidden: true,
-          tabindex: -1,
-          "aria-hidden": true,
-          formaction: rule_form.persisted? ? preview_budgets_path(id: budget.id) : preview_budgets_path,
-          formmethod: :post,
-          formnovalidate: true,
-          data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
-    <% end %>
-  </div>
-
-  <%# THE PREVIEW COLUMN — sticky at ≥1024px, under the form below it (§5). The card inside it
-      renders `hidden` and Stimulus reveals it on connect (§12), so a browser with no JavaScript
-      gets no preview rather than a stale one it has no way to refresh. %>
-  <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
-    <%= render "preview", preview: @preview %>
-  </aside>
+    <%= button_tag "Preview",
+        type: :submit,
+        name: nil,
+        hidden: true,
+        tabindex: -1,
+        "aria-hidden": true,
+        formaction: rule_form.persisted? ? preview_budgets_path(id: budget.id) : preview_budgets_path,
+        formmethod: :post,
+        formnovalidate: true,
+        data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
+  <% end %>
 </div>

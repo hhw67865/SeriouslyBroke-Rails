@@ -14,7 +14,7 @@
     `$1,200.00 every 6 months` beside the claim's own figure, which on a dated rule repeated the
     target inside the same sentence; `bill · every 6 months` says the schedule without saying the
     money twice, and the Edit form is one click away for the declaration itself. %>
-<div class="p-4 space-y-5 sm:p-5" data-category-panel="<%= row.name %>">
+<div class="p-4 space-y-5" data-category-panel="<%= row.name %>">
   <% if row.ruled? %>
     <div data-rules-table>
       <%# THE HEADER ROW IS THE TABLE'S ONLY LABELS, and it is hidden below `sm` with the bar: at
@@ -91,15 +91,14 @@
                     ** A FULL-WIDTH BUTTON AT 375 AND AN UNDERLINED LINK ABOVE IT (mobile pass,
                     2026-09-06). ** `Edit` measured **25×20**: a four-letter word as the only door
                     onto a rule's declaration, on the screen where a finger is doing the pressing.
-                    The same class string is on `_adjust`'s summary, because the two sit one under
-                    the other and a pair of controls that differ in shape reads as two kinds of
-                    thing. `inline-block` rather than `block` is deliberate on the summary — see the
-                    marker there — and is kept here so the two are one string. %>
+                    `_adjust`'s summary wears the SAME skin because the two sit one under the other,
+                    and the skin is `BudgetPageHelper::RULE_ACTION_CLASSES` — ONE string that both
+                    read, not two that a comment claims are equal. They were two, and the copy here
+                    had lost `sm:hover:text-brand` (fix round — M2). All that differs is what is
+                    passed below: the side each aligns to above `sm`. %>
                 <%= link_to "Edit",
                             edit_budget_path(line.rule),
-                            class: "mt-1 inline-block w-full rounded border border-gray-200 py-2.5 text-center " \
-                                   "text-brand-dark hover:bg-gray-50 sm:mt-0 sm:w-auto sm:rounded-none " \
-                                   "sm:border-0 sm:p-0 sm:text-right sm:underline sm:hover:bg-transparent" %>
+                            class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
               </p>
             </div>
 

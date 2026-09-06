@@ -36,6 +36,11 @@ RSpec.describe "Budget page list", type: :system do
 
   def row(name) = find("[data-category-row='#{name}']")
 
+  # THE PARTS OF ONE ROW, BY THE HOOKS THAT NAME THEM — the layout examples measure three or four
+  # of them against each other and against the card, and a `find(...).native.rect` line each says the
+  # same thing three or four times.
+  def row_rects(name, *selectors) = selectors.map { |selector| row(name).find(selector).native.rect }
+
   def rows = page.all("[data-category-row]").pluck("data-category-row")
 
   # A RULE THAT NAMES AN ITEM of its category — the lane a second rule on one category needs
@@ -282,8 +287,6 @@ RSpec.describe "Budget page list", type: :system do
       expect(dots.x + dots.width).to be <= 375
     end
 
-    def row_rects(name, *selectors) = selectors.map { |selector| row(name).find(selector).native.rect }
-
     it "gives a long category name the line and wraps it rather than cutting it", :aggregate_failures do
       rate(holder(long_name), 400)
 
@@ -297,6 +300,41 @@ RSpec.describe "Budget page list", type: :system do
       expect(claimed.y).to be > (name.y + name.height) - 1
       expect(chevron.height).to be >= 40
       expect(chevron.x + chevron.width).to be <= card.x + card.width
+    end
+  end
+
+  # ── THE BAND BETWEEN THE PHONE AND THE DESKTOP ─────────────────────────────────────────────────
+  #
+  # ** THE ROW'S TWO-LINE GRID HOLDS TO 768 AND NOT TO 640 (fix round, 2026-09-06). ** At `sm` the
+  # one-line row came back at 640px, where it has 92px of arrows, three `gap-4`s and a `truncate` to
+  # spend on a name — measured: "Utilities Monthly (Phone, Housing)" needs 231px and had 188. That
+  # was true before this pass and 8px worse after it, so the breakpoint moved to `md`, where the row
+  # has the width the desktop layout was drawn for.
+  #
+  # ** THE ASSERTION IS THE CLAIM'S POSITION AND NOT THE NAME'S HEIGHT. ** A wrap is what a
+  # too-narrow column produces at 375; at 700 the grid gives the name 248px and it fits on ONE line,
+  # so a height test here would fail on the fixed layout and pass on nothing. What tells the two
+  # layouts apart at this width is the SHAPE: two lines with the claim under the name (grid) against
+  # one line with the claim beside it (flex). The name's box being inside the card is what says it
+  # was not cut to fit.
+  describe "at 700px, between the phone and the desktop" do
+    before do
+      page.driver.browser.execute_cdp(
+        "Emulation.setDeviceMetricsOverride", width: 700, height: 800, deviceScaleFactor: 1, mobile: false
+      )
+    end
+
+    it "keeps the row on two lines and the long name whole", :aggregate_failures do
+      rate(holder("Utilities Monthly (Phone, Housing)"), 400)
+
+      visit budget_page_path
+
+      card = row("Utilities Monthly (Phone, Housing)").native.rect
+      name, claimed = row_rects("Utilities Monthly (Phone, Housing)", "h3", "[data-category-claim]")
+
+      expect(claimed.y).to be > (name.y + name.height) - 1
+      expect(name.width).to be > 200
+      expect(name.x + name.width).to be <= card.x + card.width
     end
   end
 end

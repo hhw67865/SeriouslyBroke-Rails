@@ -11,7 +11,7 @@
 
     ** `priority N` STAYS, AND IT IS NOT DECORATION. ** This is the screen where priority is SET;
     the number is what the arrows write, what the give-way sentence on Home is about and what the
-    category form's own field says. Hidden below `sm`, where the row keeps handle · name · dots ·
+    category form's own field says. Hidden below `md`, where the row keeps handle · name · dots ·
     claimed and nothing else (§4). %>
 <section class="bg-white border border-gray-200 rounded"
          data-category-row="<%= row.name %>"
@@ -30,26 +30,32 @@
       "Utilities Monthly (Phone, Housing)" worse. A name is what a row IS; it is the last thing on
       it that may be cut.
 
-      So at 375 the arrows are a COLUMN of their own spanning both lines (stacked ▲ over ▼, which is
-      also the truer spelling of up-and-down), the chevron is a second column spanning both, and the
-      middle column gets the whole remaining width: the name and its dots on line one, what the
+      So below `md` the arrows are a COLUMN of their own spanning both lines (stacked ▲ over ▼, which
+      is also the truer spelling of up-and-down), the chevron is a second column spanning both, and
+      the middle column gets the whole remaining width: the name and its dots on line one, what the
       category claims and its badge on line two. The name WRAPS there rather than truncating —
-      `sm:truncate` keeps the one-line ellipsis on the desktop row, where the columns are real.
+      `md:truncate` keeps the one-line ellipsis on the desktop row, where the columns are real.
 
-      ** THE GRID CLASSES ARE INERT ABOVE `sm`. ** `col-start-*` and `row-span-*` say nothing in a
-      flex container, so `sm:flex` restores the original row exactly, and the horizontal spacing is
+      ** THE BREAKPOINT IS `md` AND NOT `sm`, AND THAT IS MEASURED TOO (fix round). ** At `sm` the
+      one-line row comes back at 640px, where it has 92px of arrows, three `gap-4`s and a `truncate`
+      to spend on a name — so "Miscellaneous Expenses" clipped again from 640 to 768, which was true
+      before this pass and 8px worse after it. The two-line grid holds until 768, where the row has
+      the width the desktop layout was designed for.
+
+      ** THE GRID CLASSES ARE INERT ABOVE `md`. ** `col-start-*` and `row-span-*` say nothing in a
+      flex container, so `md:flex` restores the original row exactly, and the horizontal spacing is
       MARGINS rather than `gap-x` — a `gap-x` would print 12px of empty first column on every
       rule-less row, which draws no arrows at all. %>
   <div class="grid grid-cols-[auto_1fr_auto] items-center gap-y-1 px-4 py-3
-              sm:flex sm:items-center sm:justify-between sm:gap-4">
+              md:flex md:items-center md:justify-between md:gap-4">
     <% if row.reorderable? %>
-      <div class="col-start-1 row-span-2 mr-3 sm:mr-0">
+      <div class="col-start-1 row-span-2 mr-3 md:mr-0">
         <%= render "reorder_controls", group: row, groups: reorderable %>
       </div>
     <% end %>
 
-    <div class="col-start-2 row-start-1 flex items-center gap-3 min-w-0 sm:flex-1">
-      <h3 class="text-sm font-semibold text-gray-900 sm:truncate"><%= row.name %></h3>
+    <div class="col-start-2 row-start-1 flex items-center gap-3 min-w-0 md:flex-1">
+      <h3 class="text-sm font-semibold text-gray-900 md:truncate"><%= row.name %></h3>
 
       <% if row.ruled? %>
         <span class="text-xs text-gray-500 shrink-0"><%= pluralize(row.rule_count, "rule") %></span>
@@ -67,11 +73,11 @@
       <% end %>
 
       <% if row.reorderable? %>
-        <span class="hidden sm:inline text-xs text-gray-500 shrink-0">priority <%= row.priority %></span>
+        <span class="hidden md:inline text-xs text-gray-500 shrink-0">priority <%= row.priority %></span>
       <% end %>
     </div>
 
-    <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 sm:row-start-1">
+    <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 md:row-start-1">
       <%# WHAT THE CATEGORY CLAIMS, or — where no rule claims anything — what has been spent here
           over the suggestion engine's own window. The two are different facts and they are
           deliberately in different registers: a claim is money spoken for, and a rule-less
@@ -110,7 +116,7 @@
     <%= link_to category_toggle_path(row),
                 class: "col-start-3 row-start-1 row-span-2 ml-3 shrink-0 inline-flex h-10 w-10 items-center " \
                        "justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 " \
-                       "sm:ml-0 sm:h-8 sm:w-8",
+                       "md:ml-0 md:h-8 md:w-8",
                 draggable: "false",
                 aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
                 data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>

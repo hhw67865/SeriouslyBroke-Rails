@@ -31,7 +31,7 @@
     a figure. `block` puts the break where the meaning is: the money, then what it is per. %>
 <section class="grid grid-cols-2 gap-3 sm:grid-cols-3" data-tiles>
   <%# TILE 1 — WHAT THE RULES ASK OF A PERIOD, and what kind of rules they are. %>
-  <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:p-5" data-tile="need">
+  <div class="col-span-2 bg-white border border-gray-200 rounded p-4 sm:col-span-1 sm:px-5 sm:py-4" data-tile="need">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your rules need</h2>
     <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
       <%= number_to_currency(presenter.tiles.need) %> <span class="block text-sm font-normal text-gray-500 md:inline">a period</span>
@@ -68,7 +68,7 @@
   </div>
 
   <%# TILE 2 — WHAT THE USER SAYS THEY BRING IN, and the one door to changing it. %>
-  <div class="bg-white border border-gray-200 rounded p-4 sm:p-5" data-tile="income">
+  <div class="bg-white border border-gray-200 rounded p-4 sm:px-5 sm:py-4" data-tile="income">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">You bring in</h2>
     <% if presenter.tiles.declared? %>
       <p class="mt-1 text-xl font-semibold text-gray-900 tabular-nums" data-tile-figure>
@@ -77,10 +77,14 @@
       <%# ** THE ONE DOOR ONTO THE DECLARATION, AND ON A PHONE IT HAS TO BE PRESSABLE. ** It measured
           42×14 — a fourteen-pixel target for the only control that can change the period every
           figure on this page is divided by. `min-h-10` is 40px of box around the same word; the
-          line's own height is unchanged above `sm`, where a pointer does not need it. %>
-      <p class="mt-2 flex flex-wrap items-center gap-1 text-xs text-gray-500">
-        <span data-tile-cadence><%= presenter.tiles.cadence.humanize %></span>
-        <span aria-hidden="true">·</span>
+          line's own height is unchanged above `sm`, where a pointer does not need it.
+
+          ** THE LINE IS TEXT FLOW AND NOT A FLEX ROW (fix round — L2). ** It was briefly
+          `flex gap-1`, which replaced the interpunct's own word spacing with a 4px gap at EVERY
+          width — a desktop change made in passing for a mobile target. `inline-flex` on the link
+          alone buys the box without touching the sentence around it. %>
+      <p class="mt-2 text-xs text-gray-500">
+        <span data-tile-cadence><%= presenter.tiles.cadence.humanize %></span> ·
         <%= link_to "change",
                     budget_page_path(declare: 1),
                     class: "inline-flex min-h-10 items-center text-brand-dark hover:text-brand underline sm:min-h-0",
@@ -100,7 +104,7 @@
   </div>
 
   <%# TILE 3 — THE SUBTRACTION, GREEN WHEN IT FITS AND RED WHEN IT DOES NOT (§4). %>
-  <div class="bg-white border rounded p-4 sm:p-5 <%= presenter.tiles.declared? && !presenter.tiles.fits? ? "border-status-danger" : "border-gray-200" %>"
+  <div class="bg-white border rounded p-4 sm:px-5 sm:py-4 <%= presenter.tiles.declared? && !presenter.tiles.fits? ? "border-status-danger" : "border-gray-200" %>"
        data-tile="leftover">
     <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Left over</h2>
     <% if presenter.tiles.declared? %>
