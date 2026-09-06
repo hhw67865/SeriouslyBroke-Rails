@@ -386,6 +386,16 @@ RSpec.describe "Budgets Forms", type: :system do
     # IS a dated rule — and what is left of the question is "Keeps what it doesn't spend", which is
     # NOT hidden under "By a date" but DISABLED and cleared: hiding it would take the one control
     # that says what happens to unspent money off the screen where the answer is most surprising.
+    # ** THE HINT SAYS THE SHAPE WITHOUT THE RETIRED NOUN (fix round — LOW). ** §7 took "fund" off
+    # every screen and §10.6 recorded what survived — an informal "a bill or a goal" in the option
+    # help, and "Fund account" on the onboarding card, which is a verb about a bank account. The
+    # checkbox's own hint must not put the noun back.
+    it "explains the box in the app's own words, without the retired noun", :aggregate_failures do
+      expect(page).to have_content("an allowance that keeps building")
+      expect(page).to have_content("whatever you don't spend stays claimed, with no limit")
+      expect(find("[data-step='2']")).to have_no_content("fund")
+    end
+
     it "keeps the keeps box on screen and disables it under By a date", :aggregate_failures do
       expect(page).to have_field("Keeps what it doesn't spend", disabled: false)
 

@@ -71,8 +71,15 @@
             What the fund state decides is the INSTRUCTION: find $200 more, or write the cheque. %>
         <p class="mt-1 text-sm text-gray-600" data-problem-detail>
           <%= pool_rule_label(trouble.subject.rule) %> ·
+          <%# ** THE OVERSPEND'S TWO FIGURES ARE `HomeHelper#claim_over_detail`'s, NOT THIS VIEW'S
+              (fix round — MED). ** They were written out here as `<spent> spent of <accrued>`, and
+              `accrued` is THIS PERIOD's accrual — right for an allowance that resets and nonsense
+              for a fund, which is spent against what it HAD: a $60-a-period fund holding $806 and
+              spent $900 read "$900.00 spent of $60.00" beside "over by $34.00". The helper carries
+              both shapes; the excess clause below is the same either way, because the money left
+              checking whatever the rule was. %>
           <% if trouble.kind == :over %>
-            <%= number_to_currency(trouble.subject.spent) %> spent of <%= number_to_currency(trouble.subject.accrued) %>
+            <%= claim_over_detail(trouble.subject) %>
             — the excess comes straight out of what is free.
           <%# ** "THE FUND" IS GONE FROM BOTH ARMS (fix round 1 — MED-6). ** "fund" named the retired
               shape — a rule whose unspent money carried over — and this row is about a DATED rule,

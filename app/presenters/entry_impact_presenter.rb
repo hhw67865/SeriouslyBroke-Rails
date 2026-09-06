@@ -483,8 +483,9 @@ class EntryImpactPresenter
 
   # THE MOST THIS CATEGORY COULD POSSIBLY CLAIM — a rate rule's whole accrual for the period (§3.1's
   # `rate + Σ adjustments`, floored at zero because a big enough negative delta would otherwise make
-  # the ceiling itself negative), and a CAPPED accruing rule's target (§3.2 caps its built-up there).
-  # `#ceiling_for` carries the third arm and why it is what it is.
+  # the ceiling itself negative), a DATED rule's target (§3.2 caps its built-up there), and a FUND's
+  # built-up plus this period's share (§12 — it has no target to be capped at). `#ceiling_for`
+  # carries all three arms and why each is what it is.
   #
   # A CATEGORY CARRYING TWO CAPPED ACCRUING RULES COUNTS BOTH CEILINGS, and
   # that is accepted rather than corrected: it makes the ceiling LOOSER, never tighter, so it cannot
@@ -494,13 +495,27 @@ class EntryImpactPresenter
     claim_calculators.sum(0.to_d) { |calculator| ceiling_for(calculator) }
   end
 
-  # ** THE UNCAPPED ARM IS DELETED WITH THE SHAPE (two-shapes spec §7). ** `ClaimCalculator#target`
-  # was NIL for a fund that named no figure, and a `BigDecimal + nil` raised on the entry form the
-  # moment a category held one; the arm's ceiling was `built_up + this period's share`, the most such
-  # a rule COULD hold on the day the card was drawn. Every accruing rule is dated now and its target
-  # is its own amount, which is a real ceiling and the one this method wanted all along.
+  # ** THE UNCAPPED ARM CAME BACK WITH THE SHAPE, AND ITS DELETION WAS A 500 (two-shapes §7, then
+  # §12; fix round HIGH). ** The note §7 left here said it exactly: `ClaimCalculator#target` is NIL
+  # for a rule that names no figure, and `BigDecimal + nil` raises — `#most_it_could_claim` sums this
+  # method, so the moment a category held such a rule the entry form's EDIT path answered
+  # `TypeError: nil can't be coerced into BigDecimal` from `#balance`. §7 could delete the arm
+  # because every accruing rule then named a figure; §12 restores one that names none, so the arm is
+  # restored with it — and the seeded demo is exactly the shape that raises (the Pet Care fund with
+  # the kibble entry on its own lane), which is what the pin below plants.
+  #
+  # ** A FUND'S CEILING IS `built_up + planned_this_period` — the most it COULD hold on the day the
+  # card is drawn, ** which is the same figure the retired arm carried. It is not `built_up` alone:
+  # this period's accrual lands in full the day the period opens (§3.2), so a card drawn before any
+  # spending must be allowed to describe a claim that includes it. And it is not unbounded: the
+  # ceiling is `#balance`'s second line of defence behind the three gates on `#own_contribution`, so
+  # a nil (or an infinity) there would take the clamp out of the arithmetic rather than loosen it.
+  #
+  # THE ORDER IS `rate?` THEN `fund?` THEN THE TARGET, matching `ClaimCalculator#shape`'s own arms —
+  # a dated rule is the only one left when both predicates are false, and its target is its amount.
   def ceiling_for(calculator)
     return [calculator.accrued_this_period, 0.to_d].max if calculator.rate?
+    return calculator.built_up + calculator.planned_this_period if calculator.fund?
 
     calculator.target
   end

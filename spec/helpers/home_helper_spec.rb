@@ -344,6 +344,27 @@ RSpec.describe HomeHelper, type: :helper do
       end
     end
 
+    # ** THE TROUBLE STRIP'S OVERSPEND SENTENCE, BOTH SHAPES (fix round — MED). ** The view wrote
+    # `<spent> spent of <accrued>` itself, and `accrued` is THIS PERIOD's accrual — right for an
+    # allowance that resets and nonsense for a fund, which is spent against what it HAD. Both arms
+    # here, because the rate arm is the string the view used to hold and must not have moved.
+    describe "#claim_over_detail" do
+      it "measures a rate rule's spending against this period's accrual" do
+        line = block_line(spent: 110.to_d, accrued: 100.to_d)
+
+        expect(helper.claim_over_detail(line)).to eq("$110.00 spent of $100.00")
+      end
+
+      # A $60-a-period fund holding $806 and spent $900: `$900.00 spent of $60.00` was the sentence
+      # before, beside a header reading `over by $34.00` — two figures that cannot both be about one
+      # rule. The second figure is what the fund HAD, and the sentence says which it is.
+      it "measures a fund's spending against what it had built up" do
+        line = block_line(rate?: false, fund?: true, denominator: nil, spent: 900.to_d, built_up: 806.to_d)
+
+        expect(helper.claim_over_detail(line)).to eq("$900.00 spent, $806.00 built up")
+      end
+    end
+
     describe "#when_words" do
       # USE-IT-OR-LOSE-IT IS RESET AT THE BOUNDARY (§3.1), so what a rate row has to say about time
       # is the day it starts again — `ClaimLine#resets_on`, which is the period's own close plus one.

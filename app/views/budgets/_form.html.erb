@@ -28,11 +28,13 @@
 
     THE REVEALS ARE AN ENHANCEMENT AND NOT A GATE. Each conditional block renders with `hidden` set
     to the state the CURRENT choice implies, and `rule_form_controller.js` toggles it as the radios
-    move — but the `<noscript>` rule below forces every one of them visible, so a browser with no
-    JavaScript gets the whole form, a "Preview" button that works, and a server that answers whatever
-    it submits. The controller CLEARS a field as it hides it (and puts the value back when it
-    returns), which is why `RuleForm` can refuse a due date on a per-period rule rather than
-    laundering it away. %>
+    move; the server answers whatever the form submits either way. The controller CLEARS a field as
+    it hides it (and puts the value back when it returns), which is why `RuleForm` can refuse a due
+    date on a per-period rule rather than laundering it away.
+
+    ** THE `<noscript>` RULE AND THE "Preview" BUTTON ARE BOTH DELETED (§12) ** — see the note above
+    the grid. A browser with no JavaScript gets a form that SAVES and refusals under the control that
+    caused them; what it does not get is a preview. %>
 <% rule_form = @rule_form %>
 <% budget = rule_form.budget %>
 <% category = @category %>
@@ -247,10 +249,16 @@
             schedule whatever arrives, so the two halves agree with nothing to keep in step by hand. %>
         <div class="pl-3 border-l-2 border-gray-100"
              data-app--budget--rule-form-target="keepsField">
+          <%# ** THE HINT SAYS THE SHAPE WITHOUT THE RETIRED NOUN (fix round — LOW). ** §12's own
+              draft read "like a fund you add to every period", and "fund" is the word §7 took off
+              every screen (§10.6: it survives only as a bank-account verb). The sentence says the
+              same thing in the app's own vocabulary — an allowance, what the boundary does to it,
+              and that nothing caps it. %>
           <%= f.input :keeps,
               as: :boolean,
               label: "Keeps what it doesn't spend",
-              hint: "like a fund you add to every period — it builds up with no limit",
+              hint: "an allowance that keeps building — whatever you don't spend stays claimed, " \
+                    "with no limit",
               input_html: { disabled: rule_form.schedule == "by_date" } %>
         </div>
 

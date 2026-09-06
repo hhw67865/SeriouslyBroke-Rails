@@ -194,6 +194,28 @@ module HomeHelper
     "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
   end
 
+  # ** WHAT THE TROUBLE STRIP SAYS ABOUT AN OVERSPEND — ONE SPELLING, BOTH SHAPES (fix round —
+  # MED). ** The strip's `:over` row wrote its own sentence in the view, `<spent> spent of
+  # <accrued>`, and `accrued` is THIS PERIOD's accrual — which is the right denominator for an
+  # allowance that resets and a nonsense one for a fund: a $60-a-period fund holding $806 and spent
+  # $900 read "$900.00 spent of $60.00" beside a header saying "over by $34.00", two figures that
+  # cannot both be about the same rule. A fund's spending is measured against what it HAD, so the
+  # second figure is the built-up and the sentence says which it is.
+  #
+  # ** IT IS NOT `#figure_words`, AND THE DIFFERENCE IS THE WORD "spent". ** That reader is rendered
+  # by three screens over a COLUMN of figures and must not name spending on a dated row — a running
+  # total printed as "spent" is the money screen's oldest lie, which its own header forbids. This is
+  # a SENTENCE in a strip about things that have gone wrong, where the spending is the subject. One
+  # helper rather than a view, so the strip and any later reader of the same fact cannot drift.
+  #
+  # THE NON-FUND ARM IS THE VIEW'S OWN STRING, UNCHANGED, so no existing row moves.
+  def claim_over_detail(line)
+    spent = number_to_currency(line.spent)
+    return "#{spent} spent, #{number_to_currency(line.built_up)} built up" if line.fund?
+
+    "#{spent} spent of #{number_to_currency(line.accrued)}"
+  end
+
   # `paid Aug 14` / `resets Oct 1` / `Sep 17 · ready` / `Apr 2 · +$41.67` / `Sep 20 · $40.00 short` /
   # `overdue · was Aug 15`.
   #

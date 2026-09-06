@@ -677,6 +677,95 @@ RSpec.describe EntryImpactPresenter do
     end
   end
 
+  # ===========================================================================================
+  # §12 — A RULE THAT KEEPS WHAT IT DOESN'T SPEND, AND THE CEILING THAT HAS TO EXIST FOR IT
+  # ===========================================================================================
+  #
+  # ** THE EDIT PATH SUMS `#ceiling_for` AND A FUND HAS NO TARGET, WHICH WAS A 500 (fix round —
+  # HIGH). ** `#balance` clamps at `#most_it_could_claim` whenever this entry has already been
+  # counted by the claim, and that sum was `calculator.target` for every non-rate rule — nil for a
+  # fund, so `BigDecimal + nil` raised `TypeError: nil can't be coerced into BigDecimal` on
+  # `EntriesController#impact` and `#entry_impact` the moment a category held one. §7 deleted the
+  # arm that answered for a targetless rule on the grounds that no such rule could exist; §12 made
+  # one, and the DEMO is exactly this shape (the Pet Care fund with the kibble entry on its own
+  # lane), so it is planted here as the demo plants it: a persisted entry, on an item of the fund's
+  # own category, dated inside the period the card is drawn for.
+  #
+  # ** THE CEILING IS `built_up + planned_this_period`. ** PLANTED so both terms are visible: a $510
+  # fund born as the period opened walks ONE period, so `built_up` is `510 − 60` = **$450.00** with
+  # the $60 entry counted, and this period's share is **$510.00** — a ceiling of **$960.00**, which
+  # is above the figure the give-back produces and therefore does not cut it.
+  #
+  #   pre-clamp claim  = built_up                              = $450.00
+  #   given back       = +$60.00 (this entry, counted by the claim on the edit path)
+  #   balance          = clamp(450 + 60, 0, 960)               = **$510.00**
+  #
+  # which is the fund as it stood before the entry — the question the card is asking.
+  describe "a fund that keeps what it doesn't spend" do
+    let(:pet_care) do
+      create(:category, :expense, user: user, name: "Pet Care", funded_since: funded_since)
+    end
+
+    let(:kibble) { create(:item, category: pet_care, name: "Pet Food") }
+
+    # `born:` DEFAULTS TO THIS FILE'S OWN — the day the current period opens, so the walk visits one
+    # period — and the clamp example moves it back one period to make both terms of the ceiling
+    # visible at once.
+    def keeps(amount, born: self.born)
+      create(:budget, :keeps_unspent, category: pet_care, amount: amount, rule_type: :usage, created_at: born)
+    end
+
+    it "renders the card on the edit path rather than raising on a missing ceiling", :aggregate_failures do
+      keeps(510)
+      entry = create(:entry, item: kibble, amount: 60, date: today)
+
+      impact = present(pet_care.reload, amount: "60", entry: entry)
+
+      expect(impact.balance).to eq(BigDecimal("510"))
+      expect(impact.balance_after).to eq(BigDecimal("450"))
+    end
+
+    # ** THE CEILING DOES BIND, AND IT BINDS IN THE UNDERSTATING DIRECTION — which is this class's
+    # own stated preference (see `#balance`). ** PLANTED where the give-back is larger than a period:
+    # a $60 fund born TWO periods back, so the walk visits Jan 23–Feb 5 and Feb 6–19, with a $100
+    # receipt dated today.
+    #
+    #   walk   P1  0 + 60          − 0   = $60.00
+    #          P2  60 + 60         − 100 = $20.00     (not over: the pre-clamp figure is +$20)
+    #   pre-clamp claim = built_up                    = $20.00
+    #   given back      = +$100.00
+    #   ceiling         = built_up 20 + planned 60    = $80.00
+    #   balance         = clamp(120, 0, 80)           = **$80.00**
+    #
+    # The world without the entry holds $120.00, so the ceiling UNDERSTATES by $40 — deliberately.
+    # It is the second line of defence behind the three gates on `#own_contribution`, and an
+    # unbounded arm would take the clamp out of the arithmetic rather than loosen it. Without the arm
+    # at all this example does not understate, it RAISES.
+    it "clamps the give-back at what the fund could possibly have held", :aggregate_failures do
+      keeps(60, born: Time.utc(2026, 1, 23, 9))
+      entry = create(:entry, item: kibble, amount: 100, date: today)
+
+      impact = present(pet_care.reload, amount: "100", entry: entry)
+
+      expect(impact.balance).to eq(BigDecimal("80"))
+      expect(impact.balance_after).to eq(BigDecimal("-20"))
+    end
+
+    # ** AND THE NOUN IS "envelope", WHICH IS §7'S COPY SWEEP STILL HOLDING. ** `#fund?` here asks
+    # `ClaimCalculator#dated?` — the two things a person accrues TOWARD are a bill and a target — and
+    # a fund is aiming at neither, so the card takes the fallback arm and calls the category what it
+    # is. The word "fund" is not rendered anywhere on this card.
+    it "calls a category holding a fund an envelope", :aggregate_failures do
+      keeps(510)
+
+      impact = present(pet_care.reload, amount: "60")
+
+      expect(impact.noun).to eq("envelope")
+      expect(impact.fund?).to be(false)
+      expect(impact.fund_target).to be_nil
+    end
+  end
+
   describe "a fund" do
     # ** A FUND IS A RULE THAT ACCRUES TOWARD A DAY (two-shapes spec §2), asked of the calculators
     # this card already builds. ** The classifier has moved twice: from a figure on the CATEGORY, to

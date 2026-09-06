@@ -106,6 +106,22 @@ RSpec.describe "Home Trouble", type: :system do
     end
   end
 
+  # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (two-shapes §12). ** `#envelope`'s columns plus
+  # the one that says the boundary leaves the money alone, born as the current period opened — so the
+  # walk visits exactly one period and the built-up is one period's rate before any spending.
+  def a_fund(name, amount, priority: 1, type: :usage)
+    holder(name, priority: priority).tap do |category|
+      create(
+        :budget,
+        :keeps_unspent,
+        category: category,
+        amount: amount,
+        rule_type: type,
+        created_at: Time.current.beginning_of_day
+      )
+    end
+  end
+
   def deposit(amount)
     category = create(:category, :income, user: user, name: "Pay #{SecureRandom.hex(3)}")
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
@@ -457,6 +473,30 @@ RSpec.describe "Home Trouble", type: :system do
     expect(problem_row("Dining Out").find("[data-problem-detail]"))
       .to have_content("$180.00 spent of $150.00")
     expect(problem_row("Dining Out")).to have_content("comes straight out of what is free")
+  end
+
+  # ** AND A FUND'S OVERSPEND IS MEASURED AGAINST WHAT IT HAD, NOT AGAINST A PERIOD (two-shapes §12;
+  # fix round — MED). ** The detail was `<spent> spent of <accrued>`, written out in the view, and
+  # `accrued` is THIS PERIOD's accrual: a fund holding hundreds and spent past them read
+  # "$900.00 spent of $60.00" beside a header saying "over by $34.00" — two figures that cannot both
+  # be about one rule. `HomeHelper#claim_over_detail` is the one spelling now and it names the
+  # built-up, which is the figure the spending actually outran.
+  #
+  # PLANTED SO EVERY FIGURE IS DERIVABLE, on the file's biweekly grid anchored today: a $60 fund born
+  # on the period's own open walks ONE period, so it holds $60.00 before the receipt; $94 spent
+  # leaves `60 − 94` = **−$34.00** before the clamp, which is `over by $34.00` and a claim of zero.
+  # `$94.00 spent, $0.00 built up` is the pair — the built-up AFTER the spending, which is what the
+  # row's own figure says everywhere else on this screen.
+  it "measures a fund's overspend against what it had built up", :aggregate_failures do
+    deposit(1_000)
+    spend(a_fund("Pet Care", 60), 94)
+
+    visit root_path
+
+    expect(problem_row("Pet Care").find("[data-problem-state]")).to have_content("over by $34.00")
+    expect(problem_row("Pet Care").find("[data-problem-detail]"))
+      .to have_content("$94.00 spent, $0.00 built up")
+    expect(problem_row("Pet Care").find("[data-problem-detail]")).to have_no_content("spent of")
   end
 
   # THE OTHER DIRECTION, on a category that spent to the penny: exactly the rate is the tidiest
