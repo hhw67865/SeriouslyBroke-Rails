@@ -116,19 +116,34 @@ class BudgetPagePresenter
     )
   end
 
-  # ** EVERY EXPENSE CATEGORY THE USER OWNS, RULED ONES IN GIVE-WAY ORDER THEN RULE-LESS ONES BY
+  # ** EVERY EXPENSE CATEGORY THE USER OWNS, RULED ONES IN PRIORITY ORDER THEN RULE-LESS ONES BY
   # NAME (§4). ** Two populations and one list, because §4's list is the user's whole expense budget
   # and not only the part of it that has been written down yet: a category nobody has given a rule is
   # exactly where the next rule goes, and a page that omitted it would send that user hunting.
   #
-  # ** THE RULED HALF IS `ClaimRows#blocks` AND IS NOT RE-SORTED HERE. ** That is the give-way order
-  # grouped back by category — Home's own section, off the same shared reader (this task) — so the
-  # Budget list and Home's blocks cannot rank one category two ways. What this adds around each block
-  # is the three things Home's does not carry: the dots, the suggestion count and whether it is open.
+  # ** THE ORDER IS PRIORITY — `Category.in_fill_order` — AND THAT IS THE FIX ROUND'S RULING
+  # (MAJOR-1). ** It was `ClaimRows#blocks`' order, which is the GIVE-WAY order: type first, then
+  # priority. A list ordered on a key the drag does not write cannot be dragged. Measured on Rent
+  # (bill, priority 0) beside Fun (choice, priority 1), which give-way draws `[Fun, Rent]`: "move Fun
+  # down" produced `[Fun, Rent]` again, `apply_fill_order` wrote Fun 0 and Rent 1, and the page came
+  # back IDENTICAL under a flash saying the order had changed — while Rent's priority had moved
+  # though the user never touched it. The type is what ranks first in the give-way walk and no arrow
+  # can reach it, so the only honest thing for this list to draw is the number the arrows write.
+  #
+  # ** THE ROWS ARE STILL `ClaimRows#blocks`' — the same `ClaimLine`s and the same `claimed` — and
+  # only the ORDER is this page's. ** Home draws the give-way order and says so; this page draws the
+  # priority order and says so above the list. They are two readings of ONE set of rows, which is the
+  # whole point of the shared reader: a category's rules and its claimed figure are identical on both
+  # screens, and only the sentence each screen is answering differs.
+  #
+  # `[priority, name]` IS `Category.in_fill_order`'S OWN KEY, in memory. Priority alone is not a total
+  # order, and a tie falling through to database order means the same data ranks differently between
+  # loads — and `apply_fill_order` walks `in_fill_order` when it renumbers, so a page sorted any other
+  # way would be dropping the dragged category into a slot list it does not share.
   #
   # ** THE RULE-LESS HALF IS BY NAME, and that is a refusal rather than an omission. ** These
-  # categories have no rule, so they have no type to rank and no claim to rank by; sorting them by
-  # what has been SPENT there would imply an order the app is not asking the user to act on.
+  # categories have no rule, so they have no priority the reorder can write and no claim to rank by;
+  # sorting them by what has been SPENT there would imply an order the app is not asking for.
   def category_rows
     @category_rows ||= ruled_rows + unruled_rows
   end
@@ -280,7 +295,9 @@ class BudgetPagePresenter
   # ** THE RULED ROWS, OFF `ClaimRows#blocks` — the give-way order grouped back (§4). ** Not
   # re-sorted and not re-grouped: this is Home's own section with three more facts hung on it.
   def ruled_rows
-    claim_rows.blocks.map { |block| row_for(block.category, lines: block.rows, claimed: block.claimed) }
+    claim_rows.blocks
+      .sort_by { |block| [block.category.priority, block.category.name] }
+      .map { |block| row_for(block.category, lines: block.rows, claimed: block.claimed) }
   end
 
   # ** EVERY EXPENSE CATEGORY WITH NO RULE, BY NAME. ** One statement for the whole list, with the

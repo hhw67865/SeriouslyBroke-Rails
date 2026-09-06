@@ -182,17 +182,22 @@ class SuggestionEngine
     end
   end
 
+  # ** WHICH CATEGORY A SUGGESTION'S SUBJECT IS ABOUT — ONE PUBLIC SPELLING (fix round LOW-4). ** A
+  # rate's subject IS the category; every other kind's — an Item for a bill, a Budget for drift and
+  # for a dead rule — CARRIES one. It takes the SUBJECT rather than the suggestion because
+  # `SuggestionDismissalsController` has only that: a dismissal stores the (kind, subject) pair, and
+  # its redirect has to come back to the category the row was in. That controller asked the same
+  # question with its own `is_a?(Category)` branch for one commit — the engine's taxonomy re-derived
+  # by a controller, which is exactly how the panel and the door come to disagree about where a row
+  # lives.
+  #
+  # A CLASS METHOD, because the caller that needs it has no engine and no reason to build one (the
+  # detectors are eight queries; this is one `case`).
+  def self.category_id_for(subject) = subject.is_a?(Category) ? subject.id : subject.category_id
+
   private
 
-  # WHICH CATEGORY A SUGGESTION IS ABOUT, per kind — a bill's is its ITEM's, a rate's is the category
-  # it IS, and drift's and a dead rule's is their RULE's. Stated once here rather than in the view,
-  # because the four subjects are three different classes and a `case` in a partial would be the
-  # engine's own taxonomy re-derived by a screen.
-  def category_id_for(suggestion)
-    # A RATE'S SUBJECT IS THE CATEGORY ITSELF; every other kind's subject — an Item for a bill, a
-    # Budget for drift and for a dead rule — CARRIES one.
-    suggestion.kind == :rate ? suggestion.subject.id : suggestion.subject.category_id
-  end
+  def category_id_for(suggestion) = self.class.category_id_for(suggestion.subject)
 
   # EVERY SUGGESTION THE FOUR DETECTORS FOUND, before anything is set aside — the list #suggestions
   # and #hidden are the two halves of. Memoised here rather than in each, so the detectors run once

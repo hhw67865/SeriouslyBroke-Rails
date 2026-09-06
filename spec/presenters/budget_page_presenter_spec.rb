@@ -89,18 +89,13 @@ RSpec.describe BudgetPagePresenter do
   # the population widened to the whole expense budget, and the order is `ClaimRows#give_way_order`
   # grouped back, which is Home's own section read off the same object.
   describe "#category_rows" do
-    # ** THE ORDER IS GIVE-WAY AND NOT FILL, WHICH IS THE REVERSE (two-shapes spec §4). ** This
-    # example asserted `[Groceries(1), Rent(2)]` under `#category_groups`, whose key was
-    # `[priority, name]` — the order money would have been handed out in. Nothing is handed out: the
-    # HIGHER priority number is the one that goes without first, so the list reads the other way and
-    # the row at the TOP is the one the shortfall reaches first. Same list Home's blocks print.
-    it "puts each rule under the category it claims for, highest priority first", :aggregate_failures do
+    it "puts each rule under the category it claims for, lowest priority number first", :aggregate_failures do
       groceries = holder("Groceries")
       rent = holder("Rent", priority: 2)
       groceries_rule = rate(groceries, 400)
       rent_rule = rate(rent, 1_500)
 
-      expect(presenter.category_rows.map(&:category)).to eq([rent, groceries])
+      expect(presenter.category_rows.map(&:category)).to eq([groceries, rent])
       expect(names(row("Groceries").lines)).to eq([groceries_rule.id])
       expect(names(row("Rent").lines)).to eq([rent_rule.id])
     end
@@ -111,31 +106,45 @@ RSpec.describe BudgetPagePresenter do
     # the order is whatever Postgres hands back, and a plain UPDATE relocates a row in the heap:
     # renaming a category would reshuffle the fill order with no change to what actually fills
     # first.
-    # PRIORITY FIRST, NAME AS THE TIE-BREAK, on a fixture where all three candidate orders disagree
-    # — and both terms REVERSED, because this is the give-way walk: the category that would have
-    # been funded LAST goes without first, and a tie on priority breaks on the later NAME.
-    # Insertion order is Zebra, Alpha, Middle and fill order is Middle, Alpha, Zebra, so a sort that
-    # fell through to either would fail.
-    it "orders categories by priority and then by name, both reversed" do
+    # PRIORITY FIRST, NAME AS THE TIE-BREAK — `Category.in_fill_order`'s own key, which is what
+    # `Category.apply_fill_order` renumbers against. Insertion order is Zebra, Alpha, Middle and name
+    # order alone is Alpha, Middle, Zebra, so a sort that fell through to either would fail; so would
+    # the give-way order this list carried for one commit, which is this list reversed.
+    it "orders categories by priority and then by name" do
       ["Zebra", "Alpha"].each { |name| rate(holder(name, priority: 2), 100) }
       rate(holder("Middle", priority: 1), 100)
 
-      expect(row_names).to eq(["Zebra", "Alpha", "Middle"])
+      expect(row_names).to eq(["Middle", "Alpha", "Zebra"])
     end
 
-    # ** THE ORDER IS `HomePresenter#give_way_order`'S, GROUPED BACK — the same list, off the same
-    # object (`ClaimRows`). ** The type decides BEFORE priority does (rules-own-the-budget §3), so a
-    # choice rule on a priority-1 category gives way before a bill on a priority-9 one — and
-    # `[priority, name]` alone would rank these the other way round. Pinned against Home's own
-    # reader rather than against a literal, because the two lists agreeing IS the property: a second
-    # sort here is exactly how the strip came to name a category the section below it ranked
-    # elsewhere.
-    it "reads the same order Home's blocks do", :aggregate_failures do
-      create(:budget, :per_period_rate, category: holder("Rent", priority: 9), amount: 900, rule_type: :bill)
+    # ** THIS LIST IS PRIORITY ORDER AND HOME'S IS GIVE-WAY ORDER, AND THEY DISAGREE ON PURPOSE
+    # (fix round MAJOR-1). ** The type ranks first in the give-way walk (rules-own-the-budget §3), so
+    # a choice on a priority-0 category gives way before a bill on a priority-1 one — and Home draws
+    # exactly that. This page draws the NUMBER, because the number is what its arrows write: a list
+    # whose first key is the rule type cannot be dragged into a priority at all (measured, see
+    # `#category_rows`). Both directions in one example, off ONE set of rows, because the point is
+    # not that they differ but that they are two readings of the same blocks.
+    it "orders by priority where Home orders by give-way", :aggregate_failures do
+      create(:budget, :per_period_rate, category: holder("Rent", priority: 0), amount: 900, rule_type: :bill)
       create(:budget, :per_period_rate, category: holder("Fun", priority: 1), amount: 100, rule_type: :choice)
 
-      expect(row_names).to eq(["Fun", "Rent"])
-      expect(row_names).to eq(HomePresenter.new(user: user, today: today).category_blocks.map(&:name))
+      expect(row_names).to eq(["Rent", "Fun"])
+      expect(HomePresenter.new(user: user, today: today).category_blocks.map(&:name)).to eq(["Fun", "Rent"])
+    end
+
+    # ** AND THE ROWS THEMSELVES ARE THE SAME OBJECTS. ** Only the ORDER is this page's: a category's
+    # `ClaimLine`s and its `claimed` figure come off `ClaimRows#blocks`, so the two screens cannot
+    # print different money or a different rule list for one category on one afternoon — which is
+    # what the shared reader exists for and what re-deriving the rows here would give up.
+    it "carries Home's own rows and claimed figure", :aggregate_failures do
+      groceries = holder("Groceries")
+      rule = rate(groceries, 400)
+      create(:entry, item: create(:item, category: groceries), amount: 250, date: today)
+      block = HomePresenter.new(user: user, today: today).category_blocks.sole
+
+      expect(names(row("Groceries").lines)).to eq([rule.id])
+      expect(row("Groceries").lines).to eq(block.rows)
+      expect(row("Groceries").claimed).to eq(block.claimed)
     end
 
     # ** EVERY EXPENSE CATEGORY, RULE-LESS ONES AFTER THE RULED ONES, BY NAME (§4). ** The old list
@@ -751,10 +760,11 @@ RSpec.describe BudgetPagePresenter do
       #
       # `created_at:` PLANTED as the current period opens, so the rule walks exactly one period and
       # nothing here depends on the wall clock.
-      def dated_bill(category, amount:, due:)
+      def dated_bill(category, amount:, due:, item: nil)
         create(
           :budget,
           category: category,
+          item: item,
           amount: amount,
           interval_months: nil,
           anchor_date: due,
@@ -762,22 +772,39 @@ RSpec.describe BudgetPagePresenter do
         )
       end
 
+      # ** A ONE-OFF ON AN ITEM, AND A SECOND ONE ALREADY PAID (fix round MED-3). ** The N side of
+      # the delta pin below was five `:per_period_rate` rules, which is the ONE shape whose row costs
+      # nothing extra by construction: a rate rule's walk is a single period and it never reaches
+      # `#settled?` or `#settled_on`. A dated one-off walks its whole accrual span, and a PAID one
+      # additionally runs `#settled_on`'s pass over the spending rows — so without one on the N side
+      # a reader that queried per settled rule would be invisible here.
+      def paid_one_off(category, name, amount:)
+        item = lane(category, name)
+        dated_bill(category, amount: amount, due: today + 10.days, item: item)
+        create(:entry, item: item, amount: amount, date: today)
+      end
+
       # THE WHOLE PAGE, AT ITS SMALLEST HONEST SIZE: a group with a rule and a delta on it, a DATED
       # bill on a second category (the `:one_off` arm, and a second group for the give-way order), and
-      # a rule on a category that holds nothing — which is the only thing `#unfilled_rules` can list.
+      # a rule on a category that holds nothing — the row that draws no drag handle.
       def a_whole_page
         rule_with_a_delta(holder("Groceries"), "Bread", 100)
         dated_bill(holder("Rent", priority: 2), amount: 1_500, due: today + 3.days)
         unshowable_rule
       end
 
-      it "costs the same for five rules on a category as for one", :aggregate_failures do
+      # ** THE N SIDE CARRIES EVERY SHAPE A ROW CAN BE (fix round MED-3): two more rate rules with
+      # deltas, an unpaid dated one-off, and a PAID one — whose `#settled_on` walks the rule's own
+      # spending rows. Strict `eq`: seven rules on one category cost exactly what one costs.
+      it "costs the same for seven rules on a category as for one", :aggregate_failures do
         category = holder("Groceries")
         rule_with_a_delta(category, "Bread", 100)
 
         one_rule = count_statements { read_every_row }
 
-        4.times { |n| rule_with_a_delta(category, "Item #{n}", 50) }
+        2.times { |n| rule_with_a_delta(category, "Item #{n}", 50) }
+        dated_bill(category, amount: 300, due: today + 20.days, item: lane(category, "Vet"))
+        paid_one_off(category, "Water", amount: 90)
 
         expect(count_statements { read_every_row }).to eq(one_rule)
         expect(one_rule).to be_positive
@@ -895,7 +922,7 @@ RSpec.describe BudgetPagePresenter do
 
     # ** IT COUNTS A RULE NO GROUP CAN SHOW, and that is the same population `Budget.steady_need`
     # sums. ** A rule on a category with no `funded_since` is a claim on income that the fill order
-    # cannot reach — `#unfilled_rules` is the band that says so — and an overview that omitted it
+    # cannot reach — its row draws no drag handle, which is what says so — and a split that omitted it
     # would split a total the structural check two blocks down prints whole.
     it "counts a rule whose category is not filling yet", :aggregate_failures do
       typed(holder("Groceries"), 600, :usage)

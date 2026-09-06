@@ -778,6 +778,30 @@ RSpec.describe HomePresenter do
       expect(presenter.troubles).to be_empty
     end
 
+    # ** A ONE-OFF PAID ABOVE ITS TARGET IS PAID *AND* OVER, AND THAT IS THE RULING (fix round
+    # MED-2). ** The narrowing carry (a) took is `#short?` and `#overdue?` — both were readings of a
+    # date that cannot roll. `#over?` is NOT narrowed with them: "spent past what the rule had" is a
+    # different fact and it survives the payment, because the excess left checking and no rule
+    # reserved it. So the row says `paid <date>` while the strip says `over by $30.00`, at the same
+    # time, about the same rule — two true sentences about two different things.
+    #
+    # PLANTED: a $120 bill due Feb 14, paid $150 on Feb 10. The walk caps the accrual at the $120
+    # target and then settles $150 against it, so `walk.raw` is −$30 and `#over_by` is $30.
+    it "calls a one-off paid above its target both paid and over", :aggregate_failures do
+      income(2_000)
+      bill_item = lane(utilities, "Water")
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 14), item_name: nil)
+      create(:entry, item: bill_item, amount: 150, date: Date.new(2026, 2, 10))
+
+      line = presenter.give_way_order.sole
+
+      expect(line).to be_paid
+      expect(line).not_to be_short
+      expect(line).to be_over
+      expect(line.over_by).to eq(30)
+      expect(presenter.troubles.map(&:kind)).to eq([:over])
+    end
+
     # A PERIOD WITH NOTHING DUE IS THE ORDINARY ONE, and it still has a runway: the rail, today's
     # mark and the pace line are the answer, and a rate rule is not a day.
     it "draws a period with nothing due and no ticks", :aggregate_failures do

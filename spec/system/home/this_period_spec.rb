@@ -20,8 +20,9 @@ require "rails_helper"
 #     named by its LANE now (the item, or "Whole category"), because a block may carry two rows and
 #     both would answer to the category's name.
 #   * THE DATED FIGURE LOST TWO WORDS. `$424.00 built up of $2,400.00` → `$424.00 of $2,400.00`
-#     (`HomeHelper#figure_words`). Neither figure moved. The old wording survives on the Budget page
-#     and the categories card, which still render `#claim_figure` — see that helper's own note.
+#     (`HomeHelper#figure_words`). Neither figure moved. The old wording survived on the Budget page
+#     and the categories card for one task, off a second helper; Task 3 folded both screens onto this
+#     one and DELETED `#claim_figure` and `#claim_schedule`, so the three screens say one sentence.
 #   * THE CLAUSE IS THE STATE AND THE DAY, not the schedule. `next due Oct 9 · $60.00 per period` →
 #     `Oct 9 · +$60.00`, and a rate row gains one it never had: `resets <the next boundary>`.
 #

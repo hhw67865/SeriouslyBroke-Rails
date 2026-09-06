@@ -130,6 +130,34 @@ RSpec.describe "Budgets", type: :request do
   # category would look exactly the same on the page. `User#items` is `has_many through: :categories`
   # so `categories` is already in the join — the explicit `.joins(:category)` this used to carry was
   # a second join on the same table, and nothing but a count would have said so.
+  # ** THE BARE `?category_id=` DOOR — the category panel's "+ New rule for <category>" button
+  # (two-shapes spec §4). ** It carries the category and nothing else, so it is the ONE owner on this
+  # controller that does not arrive nested under `budget[…]`, and it goes through the same
+  # `current_user.categories` scoping every other one takes: unscoped, a GET with a stranger's id
+  # would render THEIR category's name on this user's form, which is the read-shaped half of §7a's
+  # leak. Both directions, because a `find` that returned nothing would pass the refusal alone.
+  describe "GET /budgets/new?category_id", :aggregate_failures do
+    it "opens on the user's own category with no picker" do
+      get new_budget_path(category_id: groceries.id)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("What Groceries claims each period")
+      # NO PICKER: the owner is named by the button that got here, so a SELECT beside it would offer
+      # to send the rule somewhere that button did not promise. The hidden field carrying the id
+      # stays — that is the form submitting the owner it was opened on.
+      expect(response.body).not_to include(%(<select name="budget[category_id]"))
+    end
+
+    it "is a 404 for a category that is not the user's" do
+      get new_budget_path(category_id: stranger_category.id)
+
+      # THE STATUS AND NOTHING ELSE: `find` raises `RecordNotFound`, so the body in the test
+      # environment is Rails' own exception page and asserting on it would be pinning the debug
+      # middleware rather than the app. What matters is that the form never rendered.
+      expect(response).to have_http_status(:not_found)
+    end
+  end
+
   describe "GET /budgets/new — the Pays select" do
     def item_statements
       statements = []

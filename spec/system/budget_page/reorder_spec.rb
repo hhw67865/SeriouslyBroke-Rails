@@ -5,6 +5,13 @@ require "rails_helper"
 # THE BUDGET PAGE IS WHERE THE GIVE-WAY ORDER IS SET (spec §8), and this is the file that says what
 # that means.
 #
+# ── ** THE LIST IS PRIORITY ORDER, AND THE GIVE-WAY ORDER IS HOME'S (fix round MAJOR-1). ** For one
+# commit this page drew the give-way order — type first, then priority — and it could not be dragged:
+# the type ranks first and no arrow can reach it, so moving a card produced a list in the same order
+# under a flash saying it had changed, and moved a DIFFERENT category's priority. The page draws the
+# number these buttons write; `spec/system/home/this_period_spec.rb` and
+# `budget_page_presenter_spec` pin that the same rows read the other way round on Home.
+#
 # ── IT IS A GIVE-WAY ORDER, NOT A FILL ORDER (computed-claims spec §§5-6), and that changes what
 # this file can honestly measure. Nothing hands money out any more: a category's money is a CLAIM
 # computed from its rules (`ClaimCalculator`/`ClaimLedger`), and every claim is stated in full
@@ -36,29 +43,50 @@ RSpec.describe "Budget page reorder", type: :system do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 500)
   end
 
+  # ** TWO TYPES, NOT ONE, AND THAT IS THE FIX ROUND'S FIXTURE (MAJOR-1). ** Both rules were `usage`
+  # here, which is the one shape where the give-way order and the priority order agree — so a list
+  # drawn on the wrong key looked right on every example in this file. Groceries is a BILL at
+  # priority 1 and Fun Money a CHOICE at priority 2, which give-way ranks `[Fun Money, Groceries]`
+  # (choice gives way first, whatever the numbers say) and priority ranks `[Groceries, Fun Money]`.
+  # The list draws the second, because the second is what these arrows write.
+  #
+  # $500 of available against $700 of rules: the user is $200 short, so the order is the only thing
+  # deciding who goes without.
   before do
     sign_in user, scope: :user
-    holder("Groceries", rate: 400, priority: 1)
-    holder("Fun Money", rate: 300, priority: 2)
-    # $500 of available against $700 of rules: the user is $200 short, so the order is the only
-    # thing deciding who goes without.
+    holder("Groceries", rate: 400, priority: 1, type: :bill)
+    holder("Fun Money", rate: 300, priority: 2, type: :choice)
     deposit(500)
     visit budget_page_path
   end
 
   describe "moving a category up the fill order", :aggregate_failures do
-    # ** THE LIST IS IN GIVE-WAY ORDER, SO THE HIGHEST PRIORITY NUMBER IS AT THE TOP (§4). **
-    # Groceries is priority 1 and Fun Money 2, so the page opens `["Fun Money", "Groceries"]` — the
-    # order the shortfall reaches them in — and moving Fun Money UP the fill order (to priority 0)
-    # moves it DOWN this list. That is not a contradiction: the arrows write `priority`, which is
-    # what "up" means, and the list draws who gives way first.
+    # ** THE LIST IS PRIORITY ORDER, WHICH IS WHAT THESE ARROWS WRITE (fix round MAJOR-1). ** The
+    # page opens `["Groceries", "Fun Money"]` — priority 1 then 2 — even though the give-way walk
+    # reaches Fun Money first, because it is a choice. Moving Fun Money UP the list is moving it up
+    # the priority order, and the two words mean one thing again.
     it "changes the order of the cards" do
-      expect(cards).to eq(["Fun Money", "Groceries"])
+      expect(cards).to eq(["Groceries", "Fun Money"])
 
-      click_button "Move Groceries up"
+      click_button "Move Fun Money up"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      expect(cards).to eq(["Groceries", "Fun Money"])
+      expect(cards).to eq(["Fun Money", "Groceries"])
+    end
+
+    # ** THE DEFECT THIS ROUND FIXED, AS AN EXAMPLE (MAJOR-1). ** Under the give-way list the page
+    # drew `[Fun Money, Groceries]`; "move Fun Money down" reversed that to `[Fun Money, Groceries]`
+    # on the wire, `apply_fill_order` wrote Fun Money 0 and Groceries 1, and the page came back
+    # IDENTICAL under a flash saying the order had changed — while GROCERIES' priority had moved
+    # though the user never touched it. Three assertions, and the third is the one that was false:
+    # the moved category's own number changed, the untouched one's did NOT, and the list shows it.
+    it "moves the dragged category's number and leaves the other's alone", :aggregate_failures do
+      click_button "Move Fun Money up"
+
+      expect(page).to have_content("Your money fills them in that order now.")
+      expect(cards).to eq(["Fun Money", "Groceries"])
+      expect(user.categories.find_by!(name: "Fun Money").priority).to eq(0)
+      expect(user.categories.find_by!(name: "Groceries").priority).to eq(1)
     end
 
     # ** THE NUMBER IS STILL ON THE ROW, AND IT IS NOT DECORATION. ** This is the screen where
@@ -66,11 +94,11 @@ RSpec.describe "Budget page reorder", type: :system do
     # says, and what "the highest number gives way first" is about. It sits beside the handle and is
     # hidden below `sm`, where the row keeps handle · name · dots · claimed (§4).
     it "restates each category's new position on the page it comes back to" do
-      click_button "Move Groceries up"
+      click_button "Move Fun Money up"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      within(group("Groceries")) { expect(page).to have_content("priority 1") }
       within(group("Fun Money")) { expect(page).to have_content("priority 0") }
+      within(group("Groceries")) { expect(page).to have_content("priority 1") }
     end
 
     # THE DATABASE, NOT THE LIST ON SCREEN. $500 of income cannot cover $700 of rules, so exactly
@@ -78,19 +106,17 @@ RSpec.describe "Budget page reorder", type: :system do
     # Read back off the model's own give-way scope rather than off the page that ordered it: the
     # page is what is being ordered, and asking it what the order means would be one screen
     # agreeing with itself.
-    # ** THE DATABASE, NOT THE LIST ON SCREEN — and the two run in OPPOSITE directions, which is
-    # exactly what this example is for. ** `in_fill_order` is `[priority, name]` ascending, the
-    # order money would have been handed out in; the page draws the reverse, the order the shortfall
-    # reaches. Moving Groceries UP the drawn list therefore moves it DOWN this one, and a page that
-    # submitted the order it drew verbatim would leave this reading unchanged while the cards
-    # visibly swapped (measured — see `BudgetPageHelper#reordered_category_ids`).
-    it "writes the new give-way order rather than only redrawing the cards" do
-      expect(give_way_order).to eq(["Groceries", "Fun Money"])
+    # ** THE DATABASE, NOT THE LIST ON SCREEN, AND THE TWO NOW READ THE SAME WAY ROUND (fix round
+    # MAJOR-1). ** `in_fill_order` is `[priority, name]` ascending and so is the list, so this is the
+    # durable half of the same claim rather than the mirror of it — read back off the model instead
+    # of off the page that ordered it, because the page is what is being ordered.
+    it "writes the new order rather than only redrawing the cards" do
+      expect(fill_order).to eq(["Groceries", "Fun Money"])
 
-      click_button "Move Groceries up"
+      click_button "Move Fun Money up"
       expect(page).to have_content("Your money fills them in that order now.")
 
-      expect(give_way_order).to eq(["Fun Money", "Groceries"])
+      expect(fill_order).to eq(["Fun Money", "Groceries"])
     end
   end
 
@@ -98,10 +124,10 @@ RSpec.describe "Budget page reorder", type: :system do
   # that got the sign wrong would move the wrong row while still producing a valid order.
   describe "moving a category down the fill order", :aggregate_failures do
     it "arrives at the same order as moving the other one up" do
-      click_button "Move Fun Money down"
+      click_button "Move Groceries down"
 
       expect(page).to have_content("Your money fills them in that order now.")
-      expect(cards).to eq(["Groceries", "Fun Money"])
+      expect(cards).to eq(["Fun Money", "Groceries"])
     end
   end
 
@@ -114,14 +140,15 @@ RSpec.describe "Budget page reorder", type: :system do
 
     # Both directions on both rows, on one screen: an unconditionally disabled pair would pass
     # half of this and an unconditionally enabled one the other half.
-    # THE ENDS ARE THE ENDS OF THE LIST AS DRAWN, and the list is give-way order — so Fun Money is
-    # the top row and cannot move up, and Groceries is the bottom one and cannot move down.
+    # THE ENDS ARE THE ENDS OF THE LIST AS DRAWN, and the list is priority order — so Groceries
+    # (priority 1) is the top row and cannot move up, and Fun Money (2) is the bottom one and cannot
+    # move down.
     it "offers no move off either end" do
       within("[data-category-list]") do
-        expect(page).to have_button("Move Fun Money up", disabled: true)
-        expect(page).to have_button("Move Fun Money down", disabled: false)
-        expect(page).to have_button("Move Groceries up", disabled: false)
-        expect(page).to have_button("Move Groceries down", disabled: true)
+        expect(page).to have_button("Move Groceries up", disabled: true)
+        expect(page).to have_button("Move Groceries down", disabled: false)
+        expect(page).to have_button("Move Fun Money up", disabled: false)
+        expect(page).to have_button("Move Fun Money down", disabled: true)
       end
     end
 
@@ -143,9 +170,9 @@ RSpec.describe "Budget page reorder", type: :system do
 
   private
 
-  def holder(name, rate:, priority:)
+  def holder(name, rate:, priority:, type: :usage)
     category = create(:category, :expense, :funded, user: user, name: name, priority: priority)
-    create(:budget, :per_period_rate, category: category, amount: rate)
+    create(:budget, :per_period_rate, category: category, amount: rate, rule_type: type)
     category
   end
 
@@ -154,10 +181,10 @@ RSpec.describe "Budget page reorder", type: :system do
     create(:entry, item: create(:item, category: category), amount: amount, date: Date.current)
   end
 
-  # THE ORDER AS THE DATABASE HOLDS IT — the same `[priority, name]` scope every claim figure is
-  # ranked by, so a rewrite that only renumbered the cards on screen would not satisfy it. Never
-  # read off the page, for the reason given on the example that uses it.
-  def give_way_order
+  # THE ORDER AS THE DATABASE HOLDS IT — `Category.in_fill_order`'s own `[priority, name]`, which is
+  # also the order the page draws, so a rewrite that only renumbered the cards on screen would not
+  # satisfy it. Never read off the page, for the reason given on the example that uses it.
+  def fill_order
     user.reload.categories.in_fill_order.with_a_rule.pluck(:name)
   end
 

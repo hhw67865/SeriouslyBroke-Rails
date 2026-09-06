@@ -96,7 +96,11 @@ RSpec.describe "Budget page suggestions", type: :system do
       within(suggestion(:dead_rule, netflix_rule)) do
         expect(page).to have_content("Netflix stopped on")
           .and have_content("nothing for 3 periods")
-          .and have_content("still funding it at $55.38 a period")
+          # "still CLAIMING $X a period for it", not "still funding it" (fix round LOW-8): nothing
+          # funds anything — a claim is computed and no money is moved into a category — so
+          # "funding" was the moved-money vocabulary surviving in the one sentence that names what
+          # the rule is doing wrong.
+          .and have_content("still claiming $55.38 a period for it")
           .and have_content("The rule says $120.00 a month")
       end
     end

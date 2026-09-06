@@ -70,6 +70,13 @@ ClaimLine = Data.define(
   # next occurrence to fund.
   def paid? = paid
 
+  # ** AND `#over?` IS NOT NARROWED WITH THEM, WHICH IS THE RULING (this task's carry (a), pinned in
+  # the fix round). ** A paid one-off is never SHORT and never OVERDUE — both were readings of a date
+  # that cannot roll — but "spent past what the rule had" is a different fact and it survives the
+  # payment: a $600 bill paid $700 left $100 of checking that no rule reserved, which lowered `free`
+  # and belongs in the strip. So a bill paid at or under its amount is not trouble, which is every
+  # ordinary payment; one paid OVER reads `paid <date>` on its row and `over by $100.00` in the strip
+  # at the same time, deliberately, because those are two true sentences about two different things.
   def trouble? = over? || overdue?
 
   # ** IS THE MONEY FOR THIS OCCURRENCE THERE, OR NOT? ** What it is exactly right for is which

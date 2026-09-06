@@ -21,10 +21,11 @@
 # sentences are per RULE — `spent of rate` for a rate rule, `built up of target · next due · $X per
 # period` for an accruing one — and `Category#claim` is a SUM, so a category carrying a rate rule
 # beside an item-backed bill cannot honestly print one figure: the two are denominated in different
-# things. `Line` below is the same object shape `BudgetPagePresenter::Rule` and
-# `HomePresenter::ClaimLine` are, so `HomeHelper#claim_figure`, `#claim_schedule` and
-# `#claim_trouble_label` render all three — one sentence about one rule across the three screens
-# that show it, rather than a third vocabulary invented here.
+# things. The row IS `ClaimLine` — the one row type on the three screens that show a rule — and the
+# words are `HomeHelper#shape_words` / `#figure_words` / `#when_words` / `#claim_trouble_label`, so
+# this card says one sentence about one rule rather than a third vocabulary invented here. (It had a
+# `Line` of its own, alongside `BudgetPagePresenter::Rule` and `HomePresenter::ClaimLine`; all three
+# are deleted — see the note below `#lines`.)
 #
 # ** A `ClaimLedger`, NOT `Category#claim`, EVEN THOUGH THIS PAGE RENDERS EXACTLY ONE CATEGORY. **
 # The old class refused a `CategoryLedger` on precisely that ground — "a ledger's whole point is
@@ -115,9 +116,10 @@ class CategoryBudgetPresenter
   #
   # ** ITS RULES MAY STILL ACCRUE, AND THAT IS NOT THIS ARM'S SUBJECT. ** A rate rule on a category
   # whose date was cleared goes on claiming its whole rate — `accrual_start` falls back to the rule's
-  # own birthday — which is precisely why `BudgetPagePresenter#unfilled_rules` exists to list it.
-  # This card is about the CATEGORY, and the honest thing to say about one nothing counts against is
-  # that nothing claims its spending; the rule's own state is said on the page that owns rules.
+  # own birthday — which is why the Budget page gives such a category a row like any other and
+  # withholds only its drag handle (`BudgetPagePresenter::CategoryRow#reorderable?`; the band that
+  # used to list these rules is gone with `#unfilled_rules`). This card is about the CATEGORY, and
+  # the honest thing to say about one nothing counts against is that nothing claims its spending.
 
   # ---- The holding arm --------------------------------------------------------------------------
 

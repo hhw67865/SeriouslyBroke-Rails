@@ -97,25 +97,22 @@ module BudgetPageHelper
   # A move off either end returns the list unchanged, so the button at an edge is a no-op even if
   # the `disabled` attribute on it is ever bypassed. #reorder_edge? is what hides it.
   #
-  # ** THE WIRE CARRIES THE FILL ORDER AND THE PAGE DRAWS THE GIVE-WAY ORDER, WHICH IS ITS REVERSE
-  # (two-shapes spec §4). ** `Category.apply_fill_order` reads position 0 as `priority: 0` — funded
-  # first, gives way LAST — and it is unchanged, deliberately: it is the model's own contract and
-  # three other things read that column. What changed is the LIST: it used to be drawn in fill order
-  # and is now drawn in the order the shortfall reaches, so the top card is the one that goes
-  # without first and its priority is the HIGHEST. Submitting the drawn order verbatim would write
-  # every priority backwards — measured: moving the top card down swapped the two rows on screen and
-  # left the give-way walk naming them in the order it had before.
-  #
-  # ONE REVERSAL, HERE, and `reorder_controller.js#submit` mirrors it with a comment pointing at
-  # this method — the drag reads the same DOM this list is drawn from, so it has the same job to do
-  # and there is nowhere else it could be done once for both.
+  # ** THE DRAWN ORDER IS WHAT THE ENDPOINT TAKES, AND THE REVERSAL IS DELETED (fix round MAJOR-1).
+  # ** For one commit this list was drawn in GIVE-WAY order — type first, then priority — and this
+  # method reversed the list before submitting it, because `Category.apply_fill_order` reads position
+  # 0 as `priority: 0`. That reversal was a symptom: a list whose FIRST key is the rule type cannot
+  # be dragged into a priority at all. Measured on Rent (bill, priority 0) beside Fun (choice,
+  # priority 1): "move Fun down" produced the same two rows in the same places and moved RENT's
+  # priority. The list is priority order now (`BudgetPagePresenter#category_rows`), so what the user
+  # sees IS what `apply_fill_order` is handed, and `reorder_controller.js#submit` reads the DOM the
+  # same way.
   def reordered_category_ids(groups, group, offset)
     ids = groups.map { |candidate| candidate.category.id }
     index = ids.index(group.category.id)
     target = index + offset
-    return ids.reverse unless target.between?(0, ids.size - 1)
+    return ids unless target.between?(0, ids.size - 1)
 
-    ids.insert(target, ids.delete_at(index)).reverse
+    ids.insert(target, ids.delete_at(index))
   end
 
   # Whether this category is already as far as `offset` would take it — the top row cannot move up

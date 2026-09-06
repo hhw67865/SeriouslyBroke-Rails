@@ -70,11 +70,11 @@ class SuggestionDismissalsController < ApplicationController
   # category they are about now, so hiding one — or showing it again — has to come back to that
   # category open, or the row the user just acted on is off screen with a flash about it at the top.
   #
-  # THE CATEGORY IS THE SUBJECT'S OWN, in `SuggestionEngine#category_id_for`'s three shapes: a rate's
-  # subject IS the category, and an item's and a rule's both carry one.
-  def back_to(subject)
-    budget_page_path(open: subject.is_a?(Category) ? subject.id : subject.category_id)
-  end
+  # THE CATEGORY IS THE SUBJECT'S OWN, and `SuggestionEngine.category_id_for` is the ONE spelling of
+  # that (fix round LOW-4): the engine partitions its panel by exactly this reading, so a controller
+  # answering it separately is how the row a user hid and the category they land back in come to be
+  # two different categories.
+  def back_to(subject) = budget_page_path(open: SuggestionEngine.category_id_for(subject))
 
   # THE RECORD THIS DISMISSAL IS ABOUT, looked up through `current_user`, or nil where the wire
   # named a class no suggestion carries.

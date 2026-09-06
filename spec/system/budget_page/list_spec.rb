@@ -68,46 +68,23 @@ RSpec.describe "Budget page list", type: :system do
     holder(name, priority: priority).tap { |category| lane_rule(category, "#{name} item", amount: 400) }
   end
 
-  # A CATEGORY WITH SPENDING AND NO RULE — the shape the engine proposes a rate for, and the shape
-  # whose row prints a window figure instead of a claim. Three periods of $150, fourteen days apart.
-  def spender(name, amount: 150)
-    create(:category, :expense, user: user, name: name).tap do |category|
-      item = create(:item, category: category, name: "#{name} item")
-      [42, 28, 14].each { |back| create(:entry, item: item, amount: amount, date: Date.current - back.days) }
-    end
-  end
-
-  # A HOLDER WHOSE RULE NAMES AN ITEM, so no detector fires on it: drift measures item-LESS rate
-  # rules only, and the dead-rule detector needs its item to have had entries. A plain rate rule on a
-  # holder with no spending IS a drift suggestion, which is correct and would make a "no badge here"
-  # assertion say nothing.
-  def quiet_holder(name, priority: 1)
-    holder(name, priority: priority).tap do |category|
-      create(
-        :budget,
-        :per_period_rate,
-        category: category,
-        item: create(:item, category: category, name: "#{name} item"),
-        amount: 400
-      )
-    end
-  end
-
   describe "which rows the page draws, and in what order", :aggregate_failures do
-    # ** THE ORDER IS THE GIVE-WAY ORDER, WHICH IS THE FILL ORDER READ BACKWARDS (§4). ** The list
-    # used to be `[priority, name]` — the order money would have been handed out in — and nothing is
-    # handed out: what priority decides is who goes WITHOUT first when the claims outrun the money,
-    # so the row at the top is the one the shortfall reaches first. The type decides before priority
-    # does (rules-own-the-budget §3), which is why the choice rule on the priority-1 category leads
-    # a bill on the priority-9 one.
-    it "puts the categories in give-way order, type first" do
-      rate(holder("Rent", priority: 9), 900, type: :bill)
+    # ** THE ORDER IS PRIORITY — THE NUMBER THE ARROWS ON THESE ROWS WRITE (fix round MAJOR-1). **
+    # For one commit it was the GIVE-WAY order, type first, and that list could not be dragged: the
+    # type ranks before priority and no control here can reach it, so moving a card produced the same
+    # order under a flash saying it had changed. The same three categories read `[Fun, Groceries,
+    # Rent]` in give-way order — asserted here off HOME, so the two screens are pinned as two
+    # readings of ONE set of rows rather than one of them being wrong.
+    it "puts the categories in priority order, where Home puts them in give-way order", :aggregate_failures do
+      rate(holder("Rent", priority: 1), 900, type: :bill)
       rate(holder("Groceries", priority: 5), 400, type: :usage)
-      rate(holder("Fun", priority: 1), 100, type: :choice)
+      rate(holder("Fun", priority: 9), 100, type: :choice)
 
       visit budget_page_path
+      expect(rows).to eq(["Rent", "Groceries", "Fun"])
 
-      expect(rows).to eq(["Fun", "Groceries", "Rent"])
+      visit root_path
+      expect(page.all("[data-category-block]").pluck("data-category-block")).to eq(["Fun", "Groceries", "Rent"])
     end
 
     # ** EVERY EXPENSE CATEGORY IS ON THE PAGE, RULE-LESS ONES AFTER THE RULED ONES, BY NAME. ** The
@@ -131,7 +108,8 @@ RSpec.describe "Budget page list", type: :system do
     # order the page had just drawn.
     it "gives a rule on a category that holds nothing a row and no arrows" do
       # TWO HOLDERS, so the arrow the holder DOES get is enabled: with one draggable row both of its
-      # arrows are at an end and disabled, and the pair below would read the same either way.
+      # arrows are at an end and disabled, and the pair below would read the same either way. The
+      # list is PRIORITY order, so Rent (2) is the lower of the two and is the one that can move up.
       rate(holder("Groceries", priority: 1), 400)
       rate(holder("Rent", priority: 2), 900)
       rate(unfunded("Coffee"), 35)
@@ -140,7 +118,7 @@ RSpec.describe "Budget page list", type: :system do
 
       expect(rows).to include("Coffee")
       within(row("Coffee")) { expect(page).to have_no_button("Move Coffee up").and have_content("1 rule") }
-      within(row("Groceries")) { expect(page).to have_button("Move Groceries up") }
+      within(row("Rent")) { expect(page).to have_button("Move Rent up") }
     end
 
     # AN INCOME CATEGORY IS NOT ON THIS PAGE AT ALL — a rule cannot claim one
