@@ -48,7 +48,23 @@ ClaimLine = Data.define(
   # MONEY SAVED UP TOWARD A DAY (two-shapes spec §2) — a bill or a goal, which are one shape.
   def dated? = shape == :dated
 
+  # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (two-shapes spec §12). ** It walks like a dated
+  # rule and asks like a rate one, and what makes it its own row type here is that it is aiming at
+  # NOTHING: `#target` is nil, so there is no denominator, no bar and no shortfall to name.
+  def fund? = shape == :fund
+
   def anchored? = next_due_on.present?
+
+  # ** WHICH VOCABULARY THE ADJUST PANEL SPEAKS (two-shapes §12's ruling). ** A dated rule's deltas
+  # are money "set aside" toward a day and "taken back" from it; an allowance's are a period being
+  # "topped up" or "reduced". A fund is an allowance — it arrives every period and is spent from
+  # every period — so it takes the per-period words even though it walks like a dated rule.
+  #
+  # ** IT IS NOT `#rate?` AND IT IS NOT THE SAME SPLIT AS THE PANEL'S HINT, DELIBERATELY. ** The hint
+  # says WHICH DAYS a delta may be dated on, and there a fund is on the dated side: its walk sums
+  # every period since the rule was written (`ClaimCalculator#countable_span`), so "this period only"
+  # would be false about it. Two questions, two splits, both said once.
+  def allowance? = rate? || fund?
 
   # WHICH KIND OF RULE THIS IS — bill, usage or choice (rules-own-the-budget §3). Off the record
   # rather than a member: the dot beside the row and the type bar above the list are two readings of
@@ -95,13 +111,22 @@ ClaimLine = Data.define(
   # halves are read by different parts of the row.
   def filled = rate? ? spent : built_up
 
-  # THIS PERIOD'S ACCRUAL FOR A RATE RULE, THE TARGET FOR A DATED ONE. Never nil since the two
-  # shapes: the uncapped fund that had no figure to be a fraction of is retired (§7).
+  # THIS PERIOD'S ACCRUAL FOR A RATE RULE, THE TARGET FOR A DATED ONE — AND NOTHING AT ALL FOR A
+  # FUND, which is the shape whose nil came back with it (§12). It was never nil between `TwoShapes`
+  # and §12, and the uncapped fund is exactly the shape that made it nil before: a rule aiming at no
+  # figure has nothing for its running total to be a fraction OF. `ClaimCalculator#target` is the one
+  # place that is decided.
   def denominator = rate? ? accrued : target
 
-  # A BAR NEEDS SOMETHING TO BE A FRACTION OF, and a rate rule skipped to nothing this period has
-  # none — the row prints the fact and no track, `EntryImpactPresenter#bar?`'s rule for its reason.
-  def bar? = denominator.positive?
+  # A BAR NEEDS SOMETHING TO BE A FRACTION OF, and two shapes have none: a rate rule skipped to
+  # nothing this period, and a FUND, which is aiming at nothing by construction. The row prints the
+  # fact and no track — `EntryImpactPresenter#bar?`'s rule, for its reason.
+  #
+  # ** THE NIL ARM IS A FUND AND IS NOT DEFENSIVE (§12). ** `#denominator` above answers nil for
+  # exactly that shape, and `nil.positive?` is a 500 on a money screen; every caller of `#percent`
+  # and `#bar_state` is gated on this predicate, which is why neither of them needs an arm of its
+  # own.
+  def bar? = denominator.present? && denominator.positive?
 
   # WHOLE PERCENT, CLAMPED, matching `HomePresenter::Progress#percent` — the app's bars draw alike,
   # every one of them `style="width: <percent>%"`.

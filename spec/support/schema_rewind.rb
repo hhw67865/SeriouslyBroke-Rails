@@ -7,6 +7,7 @@ require Rails.root.join("db/migrate/20260821010000_drop_the_pool_layer")
 require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 require Rails.root.join("db/migrate/20260906000000_two_shapes")
+require Rails.root.join("db/migrate/20260907000000_a_fund_keeps_unspent")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -114,6 +115,16 @@ require Rails.root.join("db/migrate/20260906000000_two_shapes")
 # which is why `RulesOwnTheBudgetColumns` is NOT on this list: those columns belong to that file, no
 # `down` here gives or takes them away, and adding it would put a `down` in the list that no `up` in
 # the list depends on — the dead-entry shape the `CreateAdjustments` paragraph above rules out.
+#
+# ** AN EIGHTH IS `require`d HERE AND IS ON NOBODY'S LIST, WHICH IS THE RULE THIS FILE STATES
+# WORKING (two-shapes §12). ** `AFundKeepsUnspent` (2026-09-07) ADDS `budgets.keeps_unspent` and
+# nothing else. `spec/migrations/a_fund_keeps_unspent_spec.rb` includes this context with
+# `described_class` for the newest-migration reason above — its own `up` would meet its own column —
+# so the constant has to be loadable from here. But no `down` on any list gives or takes that column
+# away, and no `up` on any list reads it, so adding it to the six older specs' forward lists would
+# cost each of them an add/remove cycle of a column nothing in them plants and would leave a dead
+# entry in the list that reads as a dependency. That is `CreateAdjustments`' own paragraph, below,
+# applied to a migration on the other end of the sequence.
 #
 # ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
 # It is newer than the first four and older than the fifth, so the question is live in both

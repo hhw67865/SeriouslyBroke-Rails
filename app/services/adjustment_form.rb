@@ -92,7 +92,10 @@ class AdjustmentForm
 
   def skip? = @params[:skip].present?
 
-  delegate :rate?, to: :calculator
+  # `#rate?` IS THE DATE QUESTION (which days a delta may land on — see `#reach_clause`) and
+  # `#allowance?` IS THE VOCABULARY ONE (two-shapes §12's ruling): a fund answers NO to the first
+  # and YES to the second, because it walks like a dated rule and is topped up like a rate one.
+  delegate :rate?, :allowance?, to: :calculator
 
   private
 

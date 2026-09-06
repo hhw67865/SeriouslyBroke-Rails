@@ -13,6 +13,8 @@ require "rails_helper"
 # `category_list_controller.js` flip them in place without a round trip and what makes Capybara's
 # default visibility filter the right test for "is this open".
 RSpec.describe "Budget page open category", type: :system do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:user) do
     create(:user, period_cadence: :biweekly, period_anchor_date: Date.current, typical_income: 2_400)
   end
@@ -30,6 +32,27 @@ RSpec.describe "Budget page open category", type: :system do
   def chevron(name) = row(name).find("[data-category-toggle]")
 
   def open_panels = page.all("[data-category-panel]", visible: true).pluck("data-category-panel")
+
+  # ** THE DEMO'S SHAPE, ON A GRID WHERE NOTHING MOVES WITH THE WALL CLOCK (two-shapes §12). **
+  # Biweekly anchored Aug 14 2026, the category holding from Jul 31 and the rule born there, read on
+  # Aug 20 — so the walk visits Jul 31–Aug 13 and Aug 14–27, TWO periods at the plain $510 with
+  # nothing spent: `2 × 510` = **$1,020.00**. A fund never re-plans and is never capped.
+  def visit_the_fund
+    pet_care = create(
+      :category, :expense, user: user, name: "Pet Care", priority: 3, funded_since: Date.new(2026, 7, 31)
+    )
+    create(
+      :budget,
+      :keeps_unspent,
+      category: pet_care,
+      amount: 510,
+      rule_type: :usage,
+      created_at: Time.zone.local(2026, 7, 31)
+    )
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+
+    travel_to(Date.new(2026, 8, 20)) { visit budget_page_path(open: pet_care.id) }
+  end
 
   describe "the `open` parameter, which is the whole no-JavaScript mechanism", :aggregate_failures do
     before do
@@ -144,6 +167,45 @@ RSpec.describe "Budget page open category", type: :system do
       within("[data-category-panel='Groceries']") do
         expect(page).to have_css("[data-rule='Groceries']")
         expect(page).to have_no_css("[data-rule='Utilities']")
+      end
+    end
+
+    # ** A FUND'S ROW SAYS THE SAME THREE SENTENCES HOME SAYS (two-shapes §12), and that is the
+    # whole reason `ClaimLine` and its helpers were hoisted: `usage · a period, keeps`,
+    # `built up $1,020.00`, `+$510.00 a period`, and no bar. Two screens, one row type, one set of
+    # words — a fund row that read differently here would be exactly the drift Task 3 collapsed.
+    #
+    # ** PLANTED SO EVERY FIGURE IS DERIVABLE: ** biweekly anchored Aug 14 2026, the category holding
+    # from Jul 31 and the rule born there, read on Aug 20 — two periods at the plain $510 with
+    # nothing spent, which is `2 × 510` = **$1,020.00**. A fund never re-plans and is never capped.
+    #
+    # ** AND THE ADJUST PANEL SPEAKS THE PER-PERIOD WORDS TO IT (§12's ruling). ** Top up / reduce /
+    # skip: a fund is an allowance that keeps, so its deltas top a period up rather than setting
+    # money aside toward a day it does not have.
+    it "reads a fund as an allowance that keeps, with no bar", :aggregate_failures do
+      visit_the_fund
+
+      within("[data-category-panel='Pet Care']") do
+        expect(page).to have_css("[data-rule-shape]", text: "usage · a period, keeps")
+        expect(page).to have_css("[data-rule-figure]", text: "built up $1,020.00")
+        expect(page).to have_css("[data-rule-when]", text: "+$510.00 a period")
+        expect(page).to have_no_css("[data-rule-bar]")
+      end
+    end
+
+    # THE ADJUST PANEL IS A CLOSED `<details>` UNTIL IT IS PRESSED, which is the idiom this page uses
+    # everywhere — so the buttons are OPENED rather than read through `visible: :all`: what is
+    # asserted is what a user sees after the one click that reaches them.
+    it "offers a fund the per-period words and a skip", :aggregate_failures do
+      visit_the_fund
+
+      within("[data-category-panel='Pet Care']") do
+        find("[data-adjust='Pet Care'] summary").click
+
+        expect(page).to have_button("Top up this period")
+        expect(page).to have_button("Reduce this period")
+        expect(page).to have_button("Skip this period (−$510.00)")
+        expect(page).to have_no_button("Set aside")
       end
     end
 

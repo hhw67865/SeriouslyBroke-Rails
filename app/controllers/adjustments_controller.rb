@@ -78,7 +78,11 @@ class AdjustmentsController < BudgetPageController
     negative = form.adjustment.amount.negative?
     return "Skipped this period for #{name} — #{money} less set aside." if form.skip?
 
-    if form.rate?
+    # ** `#allowance?` AND NOT `#rate?` (two-shapes §12's ruling). ** The panel labels a fund's two
+    # buttons "Top up this period" / "Reduce this period" (`ClaimLine#allowance?`), so the sentence
+    # that follows the press has to be the same vocabulary — "Set aside $100.00 for Pet Care" about a
+    # button that said "Top up" is the flash contradicting the control that produced it.
+    if form.allowance?
       negative ? "Reduced #{name} by #{money} this period." : "Topped up #{name} by #{money} this period."
     else
       negative ? "Took back #{money} from #{name}." : "Set aside #{money} for #{name}."
@@ -92,17 +96,17 @@ class AdjustmentsController < BudgetPageController
   # four writing flashes use, off the same two facts they branch on: the rule's shape and the sign.
   #
   # `rule` IS CAPTURED BEFORE THE DESTROY, not read back off the frozen record.
-  # `ClaimCalculator#rate?` reads ONE COLUMN OF THE RULE'S OWN — `anchor_date`, since the two shapes
-  # (two-shapes spec §2/§3) — and no more, so asking the shape here costs no statement. It was that
-  # column plus `carries-over` while three shapes existed, and the CATEGORY's `target-amount` before
-  # that: a figure on a neighbouring record decided one rule's formula, and this flash would have
-  # followed it.
+  # `ClaimCalculator#allowance?` reads TWO COLUMNS OF THE RULE'S OWN — `anchor_date` and, since §12,
+  # `keeps_unspent` — and no more, so asking the shape here costs no statement. It was one column
+  # between the two shapes and §12, `anchor_date` plus `carries-over` while the retired third shape
+  # existed, and the CATEGORY's `target-amount` before that: a figure on a neighbouring record
+  # decided one rule's formula, and this flash would have followed it.
   def removal(adjustment, rule)
     money = helpers.number_to_currency(adjustment.amount.abs)
     name = helpers.budget_rule_name(rule)
     negative = adjustment.amount.negative?
 
-    if rule.claim_calculator(today: current_user.today).rate?
+    if rule.claim_calculator(today: current_user.today).allowance?
       negative ? "Removed the #{money} reduction on #{name}." : "Removed the #{money} top-up on #{name}."
     else
       negative ? "Removed the #{money} taken back from #{name}." : "Removed the #{money} set aside for #{name}."

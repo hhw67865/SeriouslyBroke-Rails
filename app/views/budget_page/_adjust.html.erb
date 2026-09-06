@@ -88,12 +88,16 @@
       </div>
 
       <div class="flex flex-wrap gap-2">
-        <%= button_tag line.rate? ? "Top up this period" : "Set aside",
+        <%# ** THE WORDS SPLIT ON `#allowance?` AND NOT ON `#rate?` (two-shapes §12's ruling). ** A
+            fund arrives every period and is spent from every period, so its deltas are a period
+            being topped up or reduced rather than money set aside toward a day — even though it
+            WALKS like a dated rule, which is what the hint below splits on instead. %>
+        <%= button_tag line.allowance? ? "Top up this period" : "Set aside",
                        type: :submit,
                        name: "amount_sign",
                        value: "1",
                        class: "btn btn-primary" %>
-        <%= button_tag line.rate? ? "Reduce this period" : "Take back",
+        <%= button_tag line.allowance? ? "Reduce this period" : "Take back",
                        type: :submit,
                        name: "amount_sign",
                        value: "-1",

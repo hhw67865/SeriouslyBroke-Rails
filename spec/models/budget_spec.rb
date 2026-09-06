@@ -484,6 +484,59 @@ RSpec.describe Budget, type: :model do
     end
   end
 
+  # ** A RULE THAT KEEPS WHAT IT DOESN'T SPEND NEVER HAS A DUE DATE (two-shapes spec §12). ** The
+  # two columns are the two arms of `ClaimCalculator#shape`, asked in order, and a rule answering
+  # both would be a rule with two shapes — the pair `#build_up_must_be_valid` refereed before
+  # `TwoShapes` dropped its columns, restored on the one column that came back.
+  #
+  # BOTH DIRECTIONS, and the accepted half is what makes the refusal about the PAIR rather than
+  # about the box: a fund with no date saves, a dated rule with the box off saves, and only the two
+  # together are refused.
+  describe "a rule that keeps what it doesn't spend" do
+    let(:user) { create(:user) }
+    let(:owner) { create(:category, :expense, :funded, user: user) }
+
+    it "accepts an anchorless rule that keeps" do
+      expect(build(:budget, :keeps_unspent, category: owner, amount: 60)).to be_valid
+    end
+
+    it "accepts a dated rule that does not keep" do
+      expect(build(:budget, :by_date, category: owner, amount: 600)).to be_valid
+    end
+
+    # ON `:anchor_date`, WHICH `RuleForm::BUDGET_ERROR_FIELDS` ROUTES TO THE "When is it needed?"
+    # radio — the control that produced the column, and the one a user could act on.
+    it "refuses a rule that both keeps and names a day", :aggregate_failures do
+      budget = build(:budget, :by_date, category: owner, amount: 600, keeps_unspent: true)
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:anchor_date])
+        .to include("cannot be set on a rule that keeps what it doesn't spend")
+    end
+
+    # AND AN INTERVAL IS NOT THE TEST. A repeating dated rule is refused for its ANCHOR, which every
+    # repeating rule carries (`#shape_must_be_valid` requires one) — so the refusal is about the day
+    # the money is needed rather than about how often it comes round.
+    it "refuses a repeating rule that keeps, on the date rather than the interval", :aggregate_failures do
+      columns = { basis: :monthly, interval_months: 6, anchor_date: Date.new(2026, 12, 1) }
+      budget = build(:budget, category: owner, amount: 600, keeps_unspent: true, **columns)
+
+      expect(budget).not_to be_valid
+      expect(budget.errors[:anchor_date]).to be_present
+    end
+
+    # ** THE CADENCE IS UNTOUCHED BY THE KEEPING (§12), which is what lets `CadenceChange` scale a
+    # fund and `Budget#steady_ask` take its amount verbatim. ** A fund is a per-period rule in every
+    # sentence the app says about it except the one about the boundary.
+    it "is a per-period rule to every other reader", :aggregate_failures do
+      fund = create(:budget, :keeps_unspent, category: owner, amount: 60)
+
+      expect(fund.cadence).to eq(:per_period)
+      expect(fund.steady_ask(user, today: user.today)).to eq(60)
+      expect(fund.saving_toward_a_date?).to be(false)
+    end
+  end
+
   # THE FOUR SHAPES ABOVE, READ BACK OUT AS ONE SYMBOL. `HomeHelper#pool_rule_label` and
   # `BudgetPageHelper#budget_rule_basis` each held a copy of this cascade, in the same
   # hazard-ordered sequence; the classification lives here now and the two helpers keep only

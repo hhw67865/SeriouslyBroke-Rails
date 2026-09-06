@@ -184,8 +184,16 @@ class SacrificePresenter
   # two formulas, read raw by a screen. `Budget#claim_shape` is the one door onto that answer from
   # outside a calculator, and it costs no statement where the owner is loaded (which it is: these
   # rows come off `Budget.for_user` with the category preloaded).
+  # ** AND A FUND IS CUTTABLE, WHICH IS THE SAME MISTAKE THE ONE-OFF PARAGRAPH ABOVE RECORDS
+  # (two-shapes §12). ** `== :rate` is not "does this rule reset", it is "is this an allowance the
+  # user chose the size of" — and a rule that keeps what it doesn't spend is the most discretionary
+  # thing on the page: nobody else set its amount and no day depends on it. Left as `:fixed` it would
+  # be marked uncuttable beside the rent, and on the demo — whose one fund claims $806.00 — the
+  # sacrifice view would have refused to name the largest thing the household could actually change.
+  # `ClaimCalculator#allowance?` is the app's one reading of "arrives every period", and it is the
+  # same predicate the adjust panel's words split on.
   def reason_for(budget)
-    return nil if budget.claim_shape == :rate || budget.cadence == :one_off
+    return nil if budget.claim_calculator.allowance? || budget.cadence == :one_off
 
     :fixed
   end

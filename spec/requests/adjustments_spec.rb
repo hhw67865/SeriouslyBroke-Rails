@@ -319,6 +319,52 @@ RSpec.describe "Adjustments", type: :request do
       expect(response).to have_http_status(:unprocessable_content)
       expect(target_rule.adjustments.count).to eq(1)
     end
+
+    # ** A FUND TAKES A SKIP, AND WHAT IT SKIPS IS ITS PLAIN RATE (two-shapes §12). ** The ruling:
+    # a rule that keeps what it doesn't spend takes the per-period words — top up, reduce, skip —
+    # because it is an allowance that keeps. `#skippable?` is `!rate? && accrued.positive?`, so a
+    # fund is offered the button and a resetting rate rule still is not (skipping an envelope that
+    # empties itself at the boundary is what spending less already does).
+    #
+    # THE AMOUNT IS −$60.00, NOT A CATCH-UP SHARE: a fund plans its rate every period and never
+    # re-plans, so the figure that lands `accrued_this_period` at zero is the rate itself. The
+    # rule is born Aug 1 and the walk visits August and September, so the built-up carries and only
+    # SEPTEMBER's accrual is skipped.
+    it "skips a fund's own rate, leaving what earlier periods built up", :aggregate_failures do
+      pet_care = create(:category, :expense, :funded, user: user, name: "Pet Care")
+      fund = create(:budget, :keeps_unspent, category: pet_care, amount: 60, created_at: Time.utc(2026, 8, 1))
+
+      adjust(rule_id: fund.id, skip: "1")
+
+      expect(response).to redirect_to(back_to(fund))
+      expect(fund.adjustments.sole.amount).to eq(-60)
+      expect(fund.adjustments.sole.local_day).to eq(Date.new(2026, 9, 4))
+      # August's $60 survives; September accrues nothing.
+      expect(fund.reload.claim_calculator(today: Date.new(2026, 9, 4)).built_up).to eq(60)
+    end
+
+    # AND BOTH SIGNS ON THE SAME RULE, which are the panel's other two buttons ("Top up this
+    # period" / "Reduce this period" — `ClaimLine#allowance?` chooses those words for a fund). The
+    # deltas land in the period containing their date and the built-up carries them both.
+    #
+    # ** THE FLASH SPEAKS THE SAME VOCABULARY, off `ClaimCalculator#allowance?` (§12's ruling). **
+    # "Set aside $100.00 for Pet Care" after pressing a button labelled "Top up this period" would be
+    # the sentence contradicting the control that produced it — the button and the flash split on one
+    # predicate now, and this is where the pair is asserted.
+    it "takes a top-up and a reduction on a fund, in the panel's own words", :aggregate_failures do
+      pet_care = create(:category, :expense, :funded, user: user, name: "Pet Care")
+      fund = create(:budget, :keeps_unspent, category: pet_care, amount: 60, created_at: Time.utc(2026, 8, 1))
+
+      adjust(rule_id: fund.id, amount: "100", amount_sign: "1")
+      expect(flash[:notice]).to eq("Topped up Pet Care by $100.00 this period.")
+
+      adjust(rule_id: fund.id, amount: "40", amount_sign: "-1")
+      expect(flash[:notice]).to eq("Reduced Pet Care by $40.00 this period.")
+
+      expect(fund.adjustments.pluck(:amount)).to contain_exactly(100, -40)
+      # Aug $60 + Sep ($60 + $100 − $40) = **$180.00**
+      expect(fund.reload.claim_calculator(today: Date.new(2026, 9, 4)).built_up).to eq(180)
+    end
   end
 
   # DELETE IS SCOPED THROUGH THE RULE, because `adjustments` carries no user column — the row's

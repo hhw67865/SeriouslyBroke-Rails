@@ -275,6 +275,13 @@ RSpec.describe SuggestionEngine do
     # `repeats` IS TRUE because the proposal names an interval: `by_date` + `repeats` is §2's row 4,
     # and the same pair with the box off is the one-off. There is no "unspent money" word on the wire
     # any more (two-shapes §7) — a dated rule's build-up has always been defined by its DATE.
+    #
+    # ** `keeps` RIDES AS `false` ON EVERY PROPOSAL (§12), AND IT IS THE CHECKBOX'S CONVENTION RATHER
+    # THAN AN OPINION ABOUT THIS BILL. ** `RuleForm.from` reads back both boxes as booleans, so the
+    # word is on the wire whichever way it points — `repeats: true` here is the same shape of answer.
+    # No detector proposes a fund: a rule that keeps what it doesn't spend is a deliberate act about
+    # money the household wants to accumulate, and there is nothing in spending history that measures
+    # one.
     it "carries a prefill for the rule the proposal would create, owner included", :aggregate_failures do
       bills = category("Bills")
       water = item("Water", in_category: bills)
@@ -285,7 +292,7 @@ RSpec.describe SuggestionEngine do
       due = Date.new(2026, 4, 15)
 
       expect(prefill.keys).to eq([:budget])
-      expect(prefill[:budget]).to eq(amount: 210, schedule: "by_date", repeats: true, interval_months: 3, anchor_date: due, item_id: water.id, category_id: bills.id, rule_type: "bill")
+      expect(prefill[:budget]).to eq(amount: 210, schedule: "by_date", repeats: true, keeps: false, interval_months: 3, anchor_date: due, item_id: water.id, category_id: bills.id, rule_type: "bill")
     end
 
     # TWO BILLS IN ONE CATEGORY ARE TWO RULES ON ONE OWNER, and that is now the ordinary case rather
@@ -469,7 +476,7 @@ RSpec.describe SuggestionEngine do
 
       expect(of_kind(:rate).sole.prefill).to eq(
         budget: {
-          amount: 120, schedule: "per_period", repeats: false, category_id: coffee.id, rule_type: "usage"
+          amount: 120, schedule: "per_period", repeats: false, keeps: false, category_id: coffee.id, rule_type: "usage"
         }
       )
     end
@@ -644,6 +651,25 @@ RSpec.describe SuggestionEngine do
       in_drift_window(item("Flights", in_category: vacation), 200)
 
       expect(rule.claim_shape).to eq(:dated)
+      expect(of_kind(:drift)).to be_empty
+    end
+
+    # ** AND NOT ON A FUND, WHICH IS THE SHAPE §12 BROUGHT BACK (two-shapes §12). ** It arrives with
+    # a per-period cadence, an item-less lane and no anchor, so every clause of the pre-fix-wave
+    # spelling would have admitted it — and drift's sentence is false about it twice. "You averaged
+    # $200.00 a period, your rule says $50.00" is advice to stop a fund doing the one thing it exists
+    # to do, and the two figures are not even about the same money: the detector compares a PERIOD's
+    # spending against a rate, while a fund's claim is every period since it was written.
+    #
+    # THE SAME $50 RULE AND THE SAME $200 OF SPENDING AS THE EXAMPLE BELOW, one column apart, so the
+    # pair is the gate rather than the fixture. The shape symbol is asserted by name for the reason
+    # the goal example states.
+    it "does not fire on a fund, which is meant to keep what it doesn't spend", :aggregate_failures do
+      pet_care = funded_category("Pet Care")
+      rule = create(:budget, :keeps_unspent, category: pet_care, amount: 50)
+      in_drift_window(item("Kibble", in_category: pet_care), 200)
+
+      expect(rule.claim_shape).to eq(:fund)
       expect(of_kind(:drift)).to be_empty
     end
 
@@ -824,6 +850,32 @@ RSpec.describe SuggestionEngine do
       spend(item("Fillings", in_category: dentist), 75, on: Date.new(2025, 11, 20))
 
       expect(of_kind(:dead_rule)).to be_empty
+    end
+
+    # ** A FUND IS NEVER DEAD, AND SILENCE IS WHAT IT IS FOR (two-shapes §12). ** An item-backed fund
+    # is a legal shape — a vet envelope on the Vet item that quietly builds until the day it is
+    # needed — and this detector reads an item's silence as a rule that has stopped being used. For
+    # a fund the silence is the point: the claim grew every period nothing was spent, and the money
+    # is sitting there. "Consider deleting this rule" about a rule holding a year of savings is the
+    # panel proposing to delete the household's savings.
+    #
+    # PAIRED WITH THE SAME HISTORY ON A RESETTING RULE, one column apart, so the gate is the SHAPE
+    # and not the fixture.
+    it "does not fire on an item-backed fund, whose silence is what it is for", :aggregate_failures do
+      netflix = funded_category("Netflix")
+      backed = create(:item, category: netflix, name: "Streaming")
+      rule = create(:budget, :keeps_unspent, category: netflix, amount: 75, item: backed)
+      spend(backed, 75, on: Date.new(2025, 11, 20))
+
+      expect(rule.claim_shape).to eq(:fund)
+      expect(of_kind(:dead_rule)).to be_empty
+    end
+
+    it "fires on the same item and the same history once the rule's money resets", :aggregate_failures do
+      rule, = rule_with_history(amount: 75, last_seen_on: Date.new(2025, 11, 20), basis: :per_period, interval_months: nil)
+
+      expect(rule.claim_shape).to eq(:rate)
+      expect(of_kind(:dead_rule).sole.subject).to eq(rule)
     end
   end
 

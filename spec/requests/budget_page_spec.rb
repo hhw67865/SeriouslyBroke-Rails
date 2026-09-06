@@ -239,16 +239,38 @@ RSpec.describe "Budget page declaration", type: :request do
       )
     end
 
-    # ** THE THREE "$0 GOAL RULE" AND "BUILDING RULE" EXAMPLES ARE DELETED WITH THEIR SHAPES
-    # (two-shapes spec §2/§7). ** They pinned that a hand-fed goal (`amount: 0`) was neither scaled
-    # nor offered — `CadenceChange::SMALLEST_RATE` had floored `0 × 12/26` at $0.01, a standing
-    # contribution the owner never declared — and that a per-period rule which CARRIED ITS MONEY OVER
-    # scaled like any other, because what the amount is denominated in is the whole question.
+    # ** THE THREE "$0 GOAL RULE" AND "BUILDING RULE" EXAMPLES WERE DELETED WITH THEIR SHAPES
+    # (two-shapes spec §2/§7), AND ONE OF THEM COMES BACK (§12). ** They pinned that a hand-fed goal
+    # (`amount: 0`) was neither scaled nor offered — `CadenceChange::SMALLEST_RATE` had floored
+    # `0 × 12/26` at $0.01, a standing contribution the owner never declared — and that a per-period
+    # rule which CARRIED ITS MONEY OVER scaled like any other, because what the amount is
+    # denominated in is the whole question.
     #
-    # Neither row can be written now: `Budget` validates `amount > 0` on every shape, and the fund
-    # that carried its money over is a DATED rule whose `#cadence` is `:one_off` — already excluded
-    # by the one clause `#scalable_rules` keeps. The `amount > 0` filter went with the zero it
-    # existed for; nothing else in `CadenceChange` moved.
+    # The zero row still cannot be written (`Budget` validates `amount > 0` on every shape), and the
+    # goal that carries its money toward a DATE is `:one_off`, already excluded. But §12 restores an
+    # allowance that keeps what it doesn't spend, whose `#cadence` is `:per_period` — so the second
+    # example's sentence is true again and it is asserted below rather than left to the classifier.
+
+    # ** A FUND SCALES LIKE ANY OTHER PER-PERIOD RULE (§12), AND THE REASON IS THE ONE
+    # `CadenceChange` STATES: what the amount is DENOMINATED IN. ** "$510 a period, keeps" means
+    # $13,260 a year on a fortnightly grid and $6,120 on a monthly one, exactly as a resetting $510
+    # would — the keeping changes what the rule is worth after the boundary, not what it asks of a
+    # period. `Budget#steady_ask` hands `Budget.steady_need` its amount verbatim either way, so a
+    # fund left behind by a cadence change would be a claim in the wrong unit on every screen.
+    #
+    # $510 × 12 ÷ 26 = **$235.38**, and the rate rule beside it is scaled in the same request so a
+    # fix that simply stopped scaling could not pass.
+    it "scales a fund exactly as it scales the rate rule beside it", :aggregate_failures do
+      user.update!(period_cadence: :monthly, period_anchor_date: Date.new(2026, 1, 1))
+      fund = create(:budget, :keeps_unspent, amount: 510, category: fund_category)
+      rate = create(:budget, :per_period_rate, amount: 400, category: holding_category)
+
+      answer_scale(period_cadence: "biweekly", period_anchor_date: "2026-02-06")
+
+      expect(fund.reload.amount).to eq(BigDecimal("235.38"))
+      expect(fund).to be_keeps_unspent
+      expect(rate.reload.amount).to eq(BigDecimal("184.62"))
+    end
 
     # ** A DATED RULE IS NOT SCALED AND IS NOT OFFERED, which is the surviving half of the pair. **
     # "$5,000 by Jun 1, 2027" names an OCCURRENCE rather than a period and the catch-up formula

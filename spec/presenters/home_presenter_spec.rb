@@ -106,6 +106,22 @@ RSpec.describe HomePresenter do
     create(:budget, :per_period_rate, category: category, amount: amount, rule_type: type, item: item)
   end
 
+  # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (two-shapes §12). ** `#rate`'s columns plus the
+  # one that says the boundary leaves the money alone — and `created_at:` for the reason `#bill`
+  # states, because unlike a rate rule this one WALKS: a fund born at real-now would visit no period
+  # of this file's Feb 2026 clock and hold nothing.
+  def keeps(category, amount, type: :usage, item: nil, created_at: Time.zone.local(2025, 1, 1))
+    create(
+      :budget,
+      :keeps_unspent,
+      category: category,
+      amount: amount,
+      rule_type: type,
+      item: item,
+      created_at: created_at
+    )
+  end
+
   def lane(category, name) = create(:item, category: category, name: name)
 
   # ** `created_at:` IS PLANTED ON EVERY ACCRUING RULE IN THIS FILE (the ruling of 2026-09-03). ** A
@@ -698,6 +714,20 @@ RSpec.describe HomePresenter do
       expect(tick).to be_ready
     end
 
+    # ** A FUND DRAWS NO TICK, BECAUSE A TICK IS A DAY (two-shapes §12). ** The runway's ruler is the
+    # period and its marks are the days money is needed on; a rule that keeps what it doesn't spend
+    # has none — `ClaimCalculator#next_due_on` is nil for it — so there is nothing to place. Asserted
+    # beside a bill that DOES draw one, so a runway that had simply stopped drawing ticks could not
+    # pass.
+    it "draws no tick for a fund, beside a bill that draws one", :aggregate_failures do
+      income(2_000)
+      due_on(utilities, amount: 120, due: Date.new(2026, 2, 14))
+      keeps(holder("Pet Care", priority: 2), 510, created_at: Time.zone.local(2026, 2, 6))
+
+      expect(presenter.runway.ticks.map(&:label)).to eq(["Utilities"])
+      expect(presenter.runway.due_total).to eq(120)
+    end
+
     # ** THE SAME RULE ON A MONTHLY GRID, AND ONLY THE GRID MOVES. ** Anchored on the 1st, the period
     # containing Feb 6 is Feb 1–28 — twenty-eight days, today day **6** — and a bill due Feb 21 is
     # `21 − 1 + 1` = **day 21**, so `round(21 ÷ 28 × 100)` = **75%**. The same $120 on the same
@@ -1177,12 +1207,46 @@ RSpec.describe HomePresenter do
       expect(line.percent).to eq(18)
     end
 
-    # ** THE UNCAPPED-FUND EXAMPLE IS DELETED WITH THE SHAPE (two-shapes §7). ** It planted a fund
-    # naming no figure, whose `ClaimCalculator#target` was NIL — `#denominator` handed that nil
-    # straight to `.positive?` and every Home render for a user holding an emergency fund was a 500 —
-    # and asserted the row existed with no bar. Every accruing rule names a figure now, so `#target`
-    # is never nil and `#denominator` never is either; the nil arms of both are gone rather than
-    # guarded.
+    # ** THE UNCAPPED-FUND EXAMPLE CAME BACK WITH THE SHAPE (two-shapes §12), AND SO DID THE NIL. **
+    # It was deleted under §7 with the note that "every accruing rule names a figure now, so
+    # `#target` is never nil and `#denominator` never is either". §12 restores exactly one shape that
+    # names none — an allowance that keeps what it doesn't spend, aiming at nothing — so the nil arm
+    # is back, deliberately, and it is `ClaimLine#bar?` that answers it rather than every caller.
+    #
+    # THE ORIGINAL DEFECT IS WHAT THIS EXAMPLE EXISTS TO STOP COMING BACK: `#denominator` handed a
+    # nil straight to `.positive?`, and every Home render for a user holding such a rule was a 500.
+    #
+    # PLANTED: a $510-a-period fund on a category funded Jan 2025, born the same day. The walk from
+    # Jan 2025 to Feb 6 2026 is long, so what the ROW says is asserted rather than the figure — the
+    # arithmetic is `claim_calculator_spec`'s — and what it says is: something built up, nothing to
+    # be a fraction of, and no bar.
+    it "draws a fund's row with no bar at all", :aggregate_failures do
+      pet_care = holder("Pet Care", priority: 1)
+      keeps(pet_care, 510)
+      line = presenter.category_blocks.sole.rows.sole
+
+      expect(line).to be_fund
+      expect(line).not_to be_rate
+      expect(line.target).to be_nil
+      expect(line.denominator).to be_nil
+      expect(line).not_to be_bar
+      expect(line.percent).to eq(0)
+      expect(line.filled).to be_positive
+    end
+
+    # ** AND IT IS NOT SHORT, NOT OVERDUE AND NOT IN TROUBLE, WHICH IS THE OTHER HALF OF "aiming at
+    # nothing". ** `#fund_short?` is a comparison against a target, so a shape with none can never be
+    # behind on anything — the strip has nothing to say about a fund until it is overSPENT.
+    it "never calls a fund short or late", :aggregate_failures do
+      pet_care = holder("Pet Care", priority: 1)
+      keeps(pet_care, 510)
+      line = presenter.category_blocks.sole.rows.sole
+
+      expect(line.fund_short?).to be(false)
+      expect(line.short?).to be(false)
+      expect(line.overdue?).to be(false)
+      expect(line.trouble?).to be(false)
+    end
 
     # THE OTHER DIRECTION ON THE BAR: a goal DOES draw one, so a presenter that had simply stopped
     # drawing bars would fail here.

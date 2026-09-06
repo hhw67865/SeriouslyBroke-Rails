@@ -160,6 +160,25 @@ RSpec.describe SacrificePresenter do
       expect(ids(presenter.fixed_rows)).not_to include(goal_rule.id)
     end
 
+    # ** AND SO IS A FUND, WHICH IS THE SAME MISTAKE ONE SHAPE LATER (two-shapes §12). ** `#reason_for`
+    # asked `claim_shape == :rate`, and a rule that keeps what it doesn't spend is not `:rate` — so
+    # the shape §12 restored would have arrived on this page marked `:fixed`, beside the rent. It is
+    # the most discretionary claim a household has: nobody else set its amount and no day depends on
+    # it. `ClaimCalculator#allowance?` is the test now, and it is the same predicate the adjust
+    # panel's words split on.
+    #
+    # PLANTED BESIDE THE REPEATING BILL THAT IS GENUINELY FIXED, so a presenter that had stopped
+    # marking anything could not pass.
+    it "offers a fund, which nobody but its owner decided the size of", :aggregate_failures do
+      rent = rolling(holder("Rent"), amount: 1_500)
+      fund = create(:budget, :keeps_unspent, category: holder("Pet Care", priority: 2), amount: 510)
+
+      expect(ids(presenter.cuttable_rows)).to include(fund.id)
+      expect(ids(presenter.fixed_rows)).to eq([rent.id])
+      expect(presenter.cuttable_rows.detect { |row| row.budget.id == fund.id })
+        .to have_attributes(claim: BigDecimal("510"), reason: nil)
+    end
+
     # PER-PERIOD CLAIMS, NOT AMOUNTS — the one assertion that catches the mixed-unit slip head on.
     # $1,500 a month is $692.31 of a biweekly period; a row carrying $1,500 would offer the user
     # five sixths of a period they do not have.

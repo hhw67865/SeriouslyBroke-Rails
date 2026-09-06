@@ -23,6 +23,7 @@
 # TWO schedules and a checkbox:
 #
 #   per_period            "a spending allowance that resets with your paycheck"
+#   per_period + keeps    …and "Keeps what it doesn't spend" (§12) — the fund
 #   by_date               "money saved up toward a day — a bill or a goal", revealing Due <date>
 #   by_date + repeats     …and "repeats every [N] months"
 #
@@ -74,6 +75,12 @@ class RuleForm
   # EVERY FIELD THE FORM SUBMITS, and `BudgetsController::BUDGET_FIELDS` is this list. Named here
   # because the list IS this class's interface: a field added to the controller and not to this
   # class is a control that writes nothing.
+  # ** `keeps` IS THE SECOND CHECKBOX AND IT BELONGS TO "Every period" (§12). ** "Keeps what it
+  # doesn't spend" is the whole of what `budgets.keeps_unspent` says, and it is a detail OF the
+  # per-period answer rather than a third schedule — the money still arrives every period; the only
+  # question is what the boundary does to what is left. Under "By a date" it is disabled, cleared and
+  # written `false` (see `#schedule_columns`), because a dated rule's unspent money is already
+  # defined by its date.
   FIELDS = [
     :category_id,
     :item_id,
@@ -81,6 +88,7 @@ class RuleForm
     :amount,
     :schedule,
     :repeats,
+    :keeps,
     :interval_months,
     :anchor_date
   ].freeze
@@ -122,9 +130,9 @@ class RuleForm
                 :schedule,
                 :interval_months
 
-  # `repeats` HAS A WRITER AND A READER OF ITS OWN (below), because the reader CASTS: the accessor's
-  # would hand the view the raw string the wire carried.
-  attr_writer :repeats
+  # `repeats` AND `keeps` HAVE WRITERS AND READERS OF THEIR OWN (below), because the readers CAST:
+  # the accessors' would hand the view the raw string the wire carried.
+  attr_writer :repeats, :keeps
 
   # `budget:` IS THE EDIT PATH AND NOTHING ELSE. A new rule is a `Budget.new` this class builds; an
   # existing one is handed in so the words are applied to the row the user is editing — including a
@@ -196,6 +204,11 @@ class RuleForm
       amount: converted ? per_period_amount(budget, user) : budget.amount,
       schedule: schedule,
       repeats: repeats,
+      # ** THE COLUMN, READ BACK AS THE BOX (§12). ** A dated row can never carry it
+      # (`Budget#keeps_unspent_never_dates`), so no arm is needed here for the same reason `repeats`
+      # needs none on the per-period side: the model refuses the pair, and the read-back cannot be
+      # asked to invent a state the database cannot hold.
+      keeps: budget.keeps_unspent,
       # SEE `#converted_from_monthly`: THE ROW'S MONTHLY FIGURE, which is the one number the form no
       # longer holds anywhere and which three sentences on the page have to name. PRESENT OR ABSENT,
       # never `false`, on `interval_months`' own convention two lines down — `SuggestionEngine` puts
@@ -304,6 +317,17 @@ class RuleForm
   # category panel.
   def repeats = ActiveModel::Type::Boolean.new.cast(@repeats)
 
+  # ** THE SAME PAIR FOR THE KEEPS BOX (§12), AND FOR `#repeats`' OWN MEASURED REASON. ** `check_box`
+  # decides `checked` by `value.to_s == checked_value`, so the STRING `"true"` a prefill URL carries
+  # renders UNCHECKED — and the browser then submits the state of the control, which would silently
+  # write a fund back as an allowance that resets. One cast, two readers off one ivar.
+  def keeps = ActiveModel::Type::Boolean.new.cast(@keeps)
+
+  # ** ONLY A PER-PERIOD RULE KEEPS, AND THE GATE IS HERE RATHER THAN IN `#schedule_columns` ALONE.
+  # ** The view reads this to decide the box's state as well, so a form re-rendered after the user
+  # switched to "By a date" shows the box off — which is what the columns it is about to write say.
+  def keeps? = keeps.present? && schedule != "by_date"
+
   # A DATE, NOT THE STRING THE WIRE CARRIED. `date_field` formats its value with `strftime`, so a
   # String reaches it as a NoMethodError rather than as a rendered form — and this is the one field
   # whose raw value is not already renderable. Everything else is left exactly as it arrived, so a
@@ -368,10 +392,21 @@ class RuleForm
   # ** §2'S TABLE, IN THREE ROWS. ** `per_period` → its own basis and neither of the other two
   # columns; `by_date` → the `monthly` basis an anchor needs, with `repeats` deciding whether an
   # interval rides along. The one-off is `interval NULL` and is the shape a goal takes.
+  #
+  # ** AND `keeps_unspent` IS WRITTEN ON BOTH ROWS (§12), FALSE ON THE DATED ONE. ** Not omitted:
+  # this method's hash is what an EDIT assigns, so a rule switched from "Every period" to "By a
+  # date" has to have the column turned off by the same write that gives it a date — leaving it out
+  # would save a dated rule carrying `keeps_unspent`, which `Budget#keeps_unspent_never_dates` then
+  # refuses, under a message about a control the form has hidden.
   def schedule_columns
-    return { basis: :per_period, interval_months: nil, anchor_date: nil } unless schedule == "by_date"
+    return { basis: :per_period, interval_months: nil, anchor_date: nil, keeps_unspent: keeps? } unless schedule == "by_date"
 
-    { basis: :monthly, interval_months: (interval_months.presence if repeats?), anchor_date: anchor_date }
+    {
+      basis: :monthly,
+      interval_months: (interval_months.presence if repeats?),
+      anchor_date: anchor_date,
+      keeps_unspent: false
+    }
   end
 
   def rule_type_known? = rule_type.blank? || Budget.rule_types.key?(rule_type)

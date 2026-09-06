@@ -793,9 +793,32 @@ class SuggestionEngine
   # ANY spending reported it "drifting" from a figure it never claimed. Zero was how a hand-fed fund
   # said "no rate"; `Budget` validates `amount > 0` on every shape now, so nothing can plant one —
   # the clause stays because a detector that read a zero would be wrong in exactly that way again.
+  # ** A FUND IS NOT A RATE RULE HERE EITHER, AND `== :rate` IS WHAT SAYS SO (two-shapes §12). ** The
+  # third shape arrives with a per-period CADENCE and an item-less lane, so every clause of the old
+  # hand-rolled spelling would have admitted it — and drift's sentence is false about it twice over.
+  # "You averaged $34.00 a period, your rule says $60.00, lower it" is advice to stop a fund from
+  # doing the one thing it exists to do: a quiet period is the point, not a divergence. And the
+  # figure the detector compares against is a PERIOD's spending, while a fund's claim is every period
+  # since it was written — so the two are not even about the same money.
+  #
+  # ONE DOOR, `Budget#claim_shape`, exactly as the fix wave left it: this method asks a symbol and
+  # never re-derives the shape, so a fourth shape is a decision somebody takes on `ClaimCalculator`
+  # rather than one this file makes by accident. Pinned by symbol in `suggestion_engine_spec`.
   def rate_shape?(budget)
     budget.claim_shape == :rate && budget.item_id.blank? && budget.amount.to_d.positive?
   end
+
+  # ** AND A FUND IS NEVER DEAD (§12). ** Detector 4's subject is a rule "still funding something
+  # that stopped", which reads an ITEM's silence — and an item-backed fund is a legal shape (a vet
+  # envelope on the Vet item that quietly builds until the day it is needed). Silence is what a fund
+  # is FOR: the claim grew every period it was quiet, and the money is sitting there. Saying "this
+  # rule has counted nothing for five periods, consider deleting it" about a rule holding $806.00
+  # would be the panel proposing to delete the household's savings.
+  #
+  # IT IS ASKED IN `#dead_rules` RATHER THAN FOLDED INTO `#rate_shape?`, because that predicate is
+  # drift's population and this detector's is disjoint from it (item-backed, every cadence). The two
+  # exclusions are one ruling and two tests, which is why they are named on one line each.
+  def fund_shape?(budget) = budget.claim_shape == :fund
 
   # `{ category_id => total }` over the drift window, in one query for every category at once.
   #
@@ -921,6 +944,7 @@ class SuggestionEngine
 
     budgets.filter_map do |rule|
       next if rule.item_id.blank?
+      next if fund_shape?(rule)
 
       occurrences = entries_by_item[rule.item_id]
       next if occurrences.blank?

@@ -29,13 +29,18 @@ RSpec.describe RuleForm do
 
   def form(**overrides) = described_class.new(user, words(**overrides))
 
-  # ** THREE COLUMNS WHERE THERE WERE FIVE (two-shapes spec §5/§7). ** `carries_over` and
-  # `target_amount` are dropped, so what the words map onto is the CADENCE and nothing else.
+  # ** FOUR COLUMNS: THE CADENCE, AND WHAT THE BOUNDARY DOES TO WHAT IS LEFT. ** It was five before
+  # the two shapes (`carries_over` and `target_amount`) and three after them; §12 adds
+  # `keeps_unspent`, which is HERE rather than in an example of its own so that every round-trip in
+  # the table below asserts it. A reverse mapping that dropped the column would otherwise re-shape a
+  # fund into an allowance that resets the moment its edit form was opened, silently, which is the
+  # exact defect this table exists to catch.
   def columns_of(budget)
     {
       basis: budget.basis,
       interval_months: budget.interval_months,
-      anchor_date: budget.anchor_date
+      anchor_date: budget.anchor_date,
+      keeps_unspent: budget.keeps_unspent
     }
   end
 
@@ -46,7 +51,8 @@ RSpec.describe RuleForm do
     # §2 row 1 — the allowance that resets with the paycheck. The shape a hand-made rule means, and
     # the one the form opens on.
     it "writes a per-period rule" do
-      expect(columns_of(form.budget)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
+      expect(columns_of(form.budget))
+        .to eq(basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: false)
     end
 
     # ** §2 rows 3 AND 5 ARE ONE COMBINATION, WHICH IS THE WHOLE OF WHAT THIS TASK CHANGED. ** "$600
@@ -57,7 +63,7 @@ RSpec.describe RuleForm do
       form = form(schedule: "by_date", anchor_date: "2026-12-01", amount: "600")
 
       expect(columns_of(form.budget)).to eq(
-        basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1)
+        basis: "monthly", interval_months: nil, anchor_date: Date.new(2026, 12, 1), keeps_unspent: false
       )
     end
 
@@ -65,7 +71,7 @@ RSpec.describe RuleForm do
       form = form(schedule: "by_date", anchor_date: "2027-06-01", amount: "5000")
 
       expect(columns_of(form.budget)).to eq(
-        basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1)
+        basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1), keeps_unspent: false
       )
     end
 
@@ -74,7 +80,7 @@ RSpec.describe RuleForm do
       form = form(schedule: "by_date", repeats: "1", interval_months: "6", anchor_date: "2026-12-01", amount: "600")
 
       expect(columns_of(form.budget)).to eq(
-        basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1)
+        basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1), keeps_unspent: false
       )
     end
 
@@ -94,7 +100,37 @@ RSpec.describe RuleForm do
     it "leaves a per-period rule with neither date nor interval" do
       form = form(schedule: "per_period", repeats: "1", interval_months: "6")
 
-      expect(columns_of(form.budget)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
+      expect(columns_of(form.budget))
+        .to eq(basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: false)
+    end
+
+    # ** §12'S ROW — "Every period" with the keeps box ticked. ** The same three cadence columns as
+    # row 1, and the fourth one on.
+    it "writes a fund when the keeps box is ticked under every period" do
+      form = form(schedule: "per_period", keeps: "1", amount: "510")
+
+      expect(columns_of(form.budget))
+        .to eq(basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: true)
+    end
+
+    # AN UNCHECKED BOX SUBMITS `"0"`, on `#repeats?`'s own measured reason: a truthiness test would
+    # read the string as ticked and write a fund where the user asked for an allowance that resets.
+    it "writes no keeping when the box submits an unchecked zero" do
+      expect(form(schedule: "per_period", keeps: "0").budget.keeps_unspent).to be(false)
+    end
+
+    # ** THE BOX IS IGNORED UNDER "By a date", AND IGNORED IS THE RIGHT WORD HERE (§12). ** It is not
+    # refused the way a stray date on a per-period rule is: a date changes WHEN the money is needed,
+    # so dropping one would save a rule the user did not describe, while the keeps box on a dated
+    # rule is a control the form disables — the answer it would carry is not an answer the user gave.
+    # The column is written FALSE rather than left alone, so switching a fund to "By a date" turns
+    # the keeping off in the same write that gives it a day.
+    it "ignores the keeps box on a dated rule and writes the column false", :aggregate_failures do
+      form = form(schedule: "by_date", keeps: "1", anchor_date: "2026-12-01", amount: "600")
+
+      expect(form.budget.keeps_unspent).to be(false)
+      expect(form.keeps?).to be(false)
+      expect(form.save).to be(true)
     end
 
     # `item_id` BLANK IS THE WHOLE CATEGORY, and blank means blank rather than "".
@@ -130,7 +166,12 @@ RSpec.describe RuleForm do
         basis: :monthly, interval_months: 1, anchor_date: Date.new(2026, 12, 1)
       },
       "a one-time bill" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2026, 12, 1) },
-      "a goal" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2027, 6, 1) }
+      "a goal" => { basis: :monthly, interval_months: nil, anchor_date: Date.new(2027, 6, 1) },
+      # §12's row. `columns_of` above carries `keeps_unspent`, so this row asserts the whole trip:
+      # the box is read off the column, ticked back on, and the same four columns come out.
+      "a fund that keeps what it doesn't spend" => {
+        basis: :per_period, interval_months: nil, keeps_unspent: true
+      }
     }.each do |name, attributes|
       it "round-trips #{name}" do
         rule = create(:budget, **attributes, category: groceries, amount: 600, rule_type: :choice)
@@ -174,7 +215,8 @@ RSpec.describe RuleForm do
       rebuilt = described_class.new(user, described_class.from(rule), budget: rule)
 
       expect(rebuilt.save).to be true
-      expect(columns_of(rule.reload)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
+      expect(columns_of(rule.reload))
+        .to eq(basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: false)
       expect(rule.amount).to eq(120)
       expect(rule.steady_ask(user)).to eq(120)
     end
@@ -437,7 +479,7 @@ RSpec.describe RuleForm do
 
       expect(form.save).to be true
       expect(columns_of(rule.reload))
-        .to eq(basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1))
+        .to eq(basis: "monthly", interval_months: nil, anchor_date: Date.new(2027, 6, 1), keeps_unspent: false)
       expect(rule.claim_shape).to eq(:dated)
     end
 
@@ -448,7 +490,8 @@ RSpec.describe RuleForm do
       form = described_class.new(user, words(schedule: "per_period", amount: "200"), budget: rule)
 
       expect(form.save).to be true
-      expect(columns_of(rule.reload)).to eq(basis: "per_period", interval_months: nil, anchor_date: nil)
+      expect(columns_of(rule.reload))
+        .to eq(basis: "per_period", interval_months: nil, anchor_date: nil, keeps_unspent: false)
       expect(rule.claim_shape).to eq(:rate)
     end
 
@@ -460,7 +503,7 @@ RSpec.describe RuleForm do
 
       expect(described_class.new(user, repeating, budget: rule).save).to be true
       expect(columns_of(rule.reload))
-        .to eq(basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1))
+        .to eq(basis: "monthly", interval_months: 6, anchor_date: Date.new(2026, 12, 1), keeps_unspent: false)
       expect(rule.claim_shape).to eq(:dated)
     end
   end

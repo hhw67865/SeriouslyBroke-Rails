@@ -151,7 +151,19 @@ module HomeHelper
   # not a branch the data reaches; it is here because these words are now rendered by THREE screens
   # over rows built by three presenters, and the one that raised would be whichever built a row for
   # a rule mid-edit.
+  # ** A FUND IS ITS CADENCE PLUS ONE WORD (two-shapes spec §12): `usage · a period, keeps`. ** The
+  # suffix rather than a fourth cadence, because "keeps what it doesn't spend" is orthogonal to how
+  # often the money arrives — a fund is a per-period rule in every other sentence the app says about
+  # it (`Budget#cadence` is `:per_period`, `CadenceChange` scales it, `#steady_ask` takes its amount
+  # verbatim) — and a `monthly`-basis fund would otherwise have to choose between saying its cadence
+  # and saying that it keeps.
   def shape_schedule_words(line)
+    words = cadence_words(line)
+
+    line.fund? ? "#{words}, keeps" : words
+  end
+
+  def cadence_words(line)
     case line.rule.cadence
     when :per_period then "a period"
     when :monthly then "every month"
@@ -170,7 +182,17 @@ module HomeHelper
   # against the target for a dated one. ONE sentence for both shapes, because `ClaimLine#filled` and
   # `#denominator` are the pair that makes them one: the caller must not choose the noun, and a row
   # that printed "spent" over a target's running total would be the money screen's oldest lie.
-  def figure_words(line) = "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
+  # ** A FUND HAS NO "of", BECAUSE IT IS AIMING AT NOTHING (§12). ** `built up $806.00` and there the
+  # sentence stops: a rule that keeps what it doesn't spend has no target, so `of $0.00` would be a
+  # denominator invented for the sake of the sentence's shape — and `$806.00 of $0.00` reads as a
+  # rule $806.00 over its limit, which is the opposite of what a fund doing its job looks like. The
+  # noun is stated here for the same reason the two-shape sentence refuses one: with no second figure
+  # beside it, a bare `$806.00` in a row that prints spending everywhere else would read as spending.
+  def figure_words(line)
+    return "built up #{number_to_currency(line.filled)}" if line.fund?
+
+    "#{number_to_currency(line.filled)} of #{number_to_currency(line.denominator)}"
+  end
 
   # `paid Aug 14` / `resets Oct 1` / `Sep 17 · ready` / `Apr 2 · +$41.67` / `Sep 20 · $40.00 short` /
   # `overdue · was Aug 15`.
@@ -191,12 +213,37 @@ module HomeHelper
   #
   # THE ACCRUING ARM DROPS TO THE BARE DATE WHERE THE SHARE IS ZERO. A rule asking for nothing more
   # would otherwise advertise a `+$0.00` contribution it is not making.
+  # ** A FUND'S CLAUSE IS WHAT IT ADDS, NOT WHEN IT ENDS (§12): `+$60.00 a period`. ** It has no
+  # date to be ready or late for and no boundary to reset on, so the one thing left to say about it
+  # is that it keeps growing and by how much. The unit is spelled out — `+$41.67` alone is the DATED
+  # arm's clause, where the date beside it says what the period is — and nothing here can say it.
+  #
+  # NIL WHERE THE SHARE IS NOT POSITIVE, on the accruing arm's own rule: a skipped period would
+  # otherwise advertise a `+$0.00` contribution the rule is not making. (`#per_period` is the
+  # PRE-adjustment plan, so this is the rule's standing contribution rather than this period's
+  # accrual — the same figure the dated arm prints.)
   def when_words(line)
-    return ["paid", line.paid_on&.strftime("%b %-d")].compact.join(" ") if line.paid?
-    return "overdue · was #{line.next_due_on.strftime("%b %-d")}" if line.overdue?
+    return finished_when_clause(line) if line.paid? || line.overdue?
     return line.resets_on && "resets #{line.resets_on.strftime("%b %-d")}" if line.rate?
+    return fund_when_clause(line) if line.fund?
 
     [line.next_due_on&.strftime("%b %-d"), dated_when_clause(line)].compact.join(" · ").presence
+  end
+
+  # THE TWO ARMS ABOUT A DAY THAT HAS ALREADY DECIDED SOMETHING, split out to keep `#when_words`
+  # readable now that it answers four shapes. `#overdue?` is false of a settled rule
+  # (`ClaimCalculator#overdue?` asks `!settled?`), so the two can never both be true and the order
+  # here is the same order the cascade above read them in.
+  def finished_when_clause(line)
+    return ["paid", line.paid_on&.strftime("%b %-d")].compact.join(" ") if line.paid?
+
+    "overdue · was #{line.next_due_on.strftime("%b %-d")}"
+  end
+
+  def fund_when_clause(line)
+    return nil unless line.per_period.positive?
+
+    "+#{number_to_currency(line.per_period)} a period"
   end
 
   def dated_when_clause(line)

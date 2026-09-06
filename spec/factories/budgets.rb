@@ -43,6 +43,18 @@ FactoryBot.define do
       anchor_date { Date.new(2026, 6, 1) }
     end
 
+    # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (two-shapes spec §12) — `$X a period, keeps`.
+    # ** It is `:per_period_rate` plus one column, and that is the whole of the shape: no anchor (a
+    # dated rule never keeps — `Budget#keeps_unspent_never_dates`), no interval, and no target. The
+    # three fund traits §7 deleted wrote `carries_over` and a `target_amount` beside it; this one
+    # writes neither, because what came back is the keeping and not the ceiling.
+    trait :keeps_unspent do
+      basis { :per_period }
+      interval_months { nil }
+      anchor_date { nil }
+      keeps_unspent { true }
+    end
+
     # a savings goal or one-off bill — never rolls
     trait :one_time do
       basis { :monthly }

@@ -85,9 +85,7 @@ module BudgetPageHelper
   # building toward is its own AMOUNT with a DATE beside it, which `#budget_rule_amount` and the
   # row's due date already print. So this is the cadence words and nothing else, exactly as it was
   # before the build-up clause was added, and every figure a resetting rule printed is unchanged.
-  def budget_rule_basis_phrase(budget)
-    budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
-  end
+  def budget_rule_basis_phrase(budget) = budget.cadence == :per_period ? "per period" : budget_rule_basis(budget)
 
   # THE LIST `PATCH /budget/reorder` TAKES, with one category moved one place. `offset` is -1 for ▲
   # and +1 for ▼, and the whole list goes on the wire rather than "this category, one place up",
@@ -333,7 +331,12 @@ module BudgetPageHelper
     safe_join([tag.strong(lead), rule_preview_due_clause(preview), "."])
   end
 
+  # ** THE FUND'S CLAUSE IS INSIDE THE BOLD (§12): "Pet Care gets $60.00 every period and keeps what
+  # it doesn't spend." ** It is the same words the checkbox's own label uses, deliberately — the card
+  # is where a user checks their intention against what they ticked, and a synonym here would make
+  # them compare two sentences instead of reading one back.
   def rule_preview_schedule_words(preview)
+    return "every period and keeps what it doesn't spend" if preview.fund?
     return "every period" if preview.rate?
     return suggestion_interval_label(preview.rule.interval_months) if preview.repeating?
 
@@ -351,7 +354,12 @@ module BudgetPageHelper
   # THE DATELESS ARM IS FOR A USER WHO HAS DECLARED NO PERIOD, whose rate rule genuinely has no
   # boundary to name (`ClaimRows.period_range_for` returns nil for them). It says the fact without
   # the date rather than inventing a month nobody set.
+  # ** THE FUND'S ARM IS FIRST AND IS THE SHORTEST SENTENCE ON THE CARD (§12). ** "It builds up with
+  # no limit" is the whole of what the shape does that the other two do not: no day, no target, and
+  # nothing that empties it but spending. It is asked before `#rate?` because a fund is not a rate
+  # rule to `ClaimCalculator` and would otherwise fall to the dated arm's promise about "the day".
   def rule_preview_holding_sentence(preview)
+    return "It builds up with no limit." if preview.fund?
     return "Each period sets aside its share so the money is there on the day." unless preview.rate?
     return "Whatever's unspent resets when your next period starts." if preview.line.resets_on.blank?
 
@@ -384,8 +392,7 @@ module BudgetPageHelper
     return nil unless preview.converted_from_monthly?
 
     grid = preview.user.period_cadence.presence
-    per_period = "#{number_to_currency(preview.amount)} a period"
-    per_period = "#{per_period} on your #{grid} grid" if grid
+    per_period = ["#{number_to_currency(preview.amount)} a period", ("on your #{grid} grid" if grid)].compact.join(" ")
 
     "#{number_to_currency(preview.monthly_amount)} a month · #{per_period}"
   end

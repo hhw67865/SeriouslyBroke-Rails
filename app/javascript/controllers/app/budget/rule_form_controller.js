@@ -1,19 +1,26 @@
 import { Controller } from "@hotwired/stimulus"
 
-// THE RULE FORM'S THREE JOBS, AND NONE OF THEM IS A GATE (two-shapes spec §5).
+// THE RULE FORM'S FOUR JOBS, AND ONLY ONE OF THEM IS NOW A GATE (two-shapes spec §5 and §12).
 //
-// The server renders every control with the `hidden` state the current choice implies, renders the
-// preview card on first load, and validates whatever comes back — so a browser with no JavaScript
-// gets the whole form (the partial's `<noscript>` rule forces the blocks visible), a "Preview"
-// button that works by navigating, and a legible 422 if the answers do not hang together. What this
-// adds is that the page keeps up with the person filling it in:
+// The server renders every control with the `hidden` state the current choice implies and validates
+// whatever comes back, so a browser with no JavaScript still gets a form that SAVES and a legible
+// 422 if the answers do not hang together. What this adds is that the page keeps up with the person
+// filling it in:
 //
 //   * "By a date" reveals the due date and the "repeats" checkbox, and the checkbox reveals the
-//     interval. "Every period" hides all three.
+//     interval. "Every period" hides all three, and it is what enables the "keeps" box — a dated
+//     rule never keeps (§12), so under "By a date" the box is cleared and disabled.
 //   * A chip fills every blank it has a measurement for, and reads "✓ Using this" while the blanks
 //     still match it.
 //   * Any change re-submits the form to `BudgetsController#preview`, debounced, so the card beside
-//     it is always describing what is on screen.
+//     it is always describing what is on screen — with a brief highlight on arrival, because the
+//     card is inches from the box and a figure that changes silently is a change nobody looks for.
+//
+// ** AND THE ONE GATE: THE PREVIEW CARD ONLY EXISTS WHERE THIS CONTROLLER RUNS (§12). ** The card's
+// frame is rendered `hidden` and `connect()` is what reveals it. The "Preview" button that used to
+// make the card work without JavaScript is deleted, so a card left visible would be one nothing
+// could refresh — a confident sentence about a rule the user has since changed. No preview is the
+// honest state; the form itself is unaffected.
 //
 // ** THE PREVIEW IS NOT COMPUTED HERE, AND THAT IS THE WHOLE DESIGN (§5). ** Every figure on the
 // card is `ClaimCalculator`'s — the same reader Home and the Budget page print — so the browser's
@@ -40,6 +47,8 @@ export default class extends Controller {
     "intervalField",
     "anchorField",
     "repeatsField",
+    "keepsField",
+    "preview",
     "previewButton"
   ]
 
@@ -47,17 +56,28 @@ export default class extends Controller {
   // request rather than four, short enough that the card is not visibly behind the box.
   static DEBOUNCE_MS = 400
 
+  // HOW LONG THE REFRESHED CARD WEARS ITS RING, and it is the CSS animation's own duration
+  // (`.preview-refreshed` in `animations.css`). Two spellings of one number, so the class is taken
+  // off the element at the moment the animation ends rather than while it is still running or long
+  // after it has finished.
+  static HIGHLIGHT_MS = 600
+
   // EVERY BLANK A CHIP CAN FILL, keyed by the `data-prefill-*` attribute that carries it. The list
   // is `BudgetsController::BUDGET_FIELDS` minus the owner, which no control on this form sets — a
   // chip naming a category is naming the one the page is already about.
-  static FIELDS = ["amount", "itemId", "ruleType", "schedule", "repeats", "intervalMonths", "anchorDate"]
+  static FIELDS = ["amount", "itemId", "ruleType", "schedule", "repeats", "keeps", "intervalMonths", "anchorDate"]
 
+  // ** THE CARD IS REVEALED HERE AND NOWHERE ELSE (§12). ** Before the reveals, so the first thing
+  // the user sees is a card describing a form that has already been put into the state its answers
+  // imply. No refresh is asked for: the server rendered this card with this form.
   connect() {
+    this.revealPreview()
     if (this.hasFormTarget) this.refresh()
   }
 
   disconnect() {
     this.cancelPreview()
+    this.cancelHighlight()
   }
 
   // ONE HANDLER FOR EVERY CONTROL. The reveals and the chip states are instant — they are facts
@@ -92,6 +112,29 @@ export default class extends Controller {
     this.toggle(this.optional("anchorField"), dated)
     this.toggle(this.optional("repeatsField"), dated)
     this.toggle(this.optional("intervalField"), dated && this.repeats)
+    this.allowKeeps(!dated)
+  }
+
+  // ** THE KEEPS BOX IS DISABLED AND CLEARED UNDER "By a date", NOT HIDDEN (§12). ** Hiding it would
+  // take the one control that says what happens to unspent money off the screen on the shape where
+  // that question is most likely to be asked; disabled-and-unchecked ANSWERS it — a dated rule's
+  // build-up is defined by its date. Unticking is not cosmetic: the browser submits the state of the
+  // control, and `Budget#keeps_unspent_never_dates` refuses the pair, so a box left ticked under a
+  // date would be a 422 about a control the user cannot reach.
+  //
+  // NOTHING IS STASHED, deliberately, unlike `#toggle`'s typed inputs: the box is a two-state
+  // answer to a question this schedule does not ask, and a value silently restored on the way back
+  // would re-tick a box the user last saw empty.
+  allowKeeps(allowed) {
+    const field = this.optional("keepsField")
+    if (!field) return
+
+    const box = this.field("keeps")
+    if (!box) return
+
+    box.disabled = !allowed
+    if (!allowed) box.checked = false
+    field.classList.toggle("opacity-50", !allowed)
   }
 
   optional(name) {
@@ -210,6 +253,43 @@ export default class extends Controller {
   cancelPreview() {
     if (this.previewTimer) clearTimeout(this.previewTimer)
     this.previewTimer = null
+  }
+
+  // ** THE CARD EXISTS BECAUSE THIS RAN (§12). ** `hidden` on the frame is the server's way of
+  // saying "no JavaScript, no preview"; this is the one place it is lifted.
+  revealPreview() {
+    if (this.hasPreviewTarget) this.previewTarget.hidden = false
+  }
+
+  // ** A BRIEF RING WHEN THE SERVER'S ANSWER LANDS (§12). ** Bound to `turbo:frame-load` on the
+  // frame itself, so it fires exactly once per refresh and only on a refresh — the first render is
+  // server-side and announces nothing.
+  //
+  // THE CLASS GOES ON THE CARD INSIDE THE FRAME, which Turbo has just REPLACED, so the animation
+  // starts from nothing every time and no reflow trick is needed to restart it. The timer is only
+  // housekeeping: it takes the class off an element that will usually be replaced before it is next
+  // looked at.
+  highlight() {
+    const card = this.previewCard()
+    if (!card) return
+
+    this.cancelHighlight()
+    card.classList.add("preview-refreshed")
+    this.highlightTimer = setTimeout(() => {
+      this.highlightTimer = null
+      card.classList.remove("preview-refreshed")
+    }, this.constructor.HIGHLIGHT_MS)
+  }
+
+  cancelHighlight() {
+    if (this.highlightTimer) clearTimeout(this.highlightTimer)
+    this.highlightTimer = null
+  }
+
+  previewCard() {
+    if (!this.hasPreviewTarget) return null
+
+    return this.previewTarget.querySelector("[data-preview]") || this.previewTarget
   }
 
   // ---- reading the form ------------------------------------------------------------------------

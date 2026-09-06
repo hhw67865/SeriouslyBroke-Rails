@@ -158,6 +158,11 @@ class Budget < ApplicationRecord
   validates :rule_type, presence: true
 
   validate :must_have_a_category
+  # ** A DATED RULE NEVER KEEPS (two-shapes spec §12). ** Behind `#keeps_column?` on
+  # `#must_have_a_category`'s own reasoning: `spec/migrations/a_fund_keeps_unspent_spec.rb` rewinds
+  # the schema past the column for the length of the file, and a validator that READS a missing
+  # attribute raises instead of rejecting.
+  validate :keeps_unspent_never_dates, if: :keeps_column?
   validate :category_must_be_an_expense, if: :category_mode?
   validate :item_must_belong_to_category, if: :category_mode?
   validate :category_may_hold_one_item_less_rule, if: :category_mode?
@@ -489,6 +494,27 @@ class Budget < ApplicationRecord
   end
 
   def category_column? = has_attribute?(:category_id)
+
+  def keeps_column? = has_attribute?(:keeps_unspent)
+
+  # ** "KEEPS WHAT IT DOESN'T SPEND" IS A PER-PERIOD ANSWER, AND A DUE DATE IS THE OTHER ONE
+  # (two-shapes spec §12). ** A dated rule's unspent money is already defined by its date: the walk
+  # holds it until the day and empties it when the bill is paid. Setting both columns would give
+  # `ClaimCalculator#shape` two answers about one rule — the exact pair `#build_up_must_be_valid`
+  # refereed before `TwoShapes` dropped its columns — so the combination is refused rather than
+  # ranked.
+  #
+  # ON `:anchor_date`, WHICH IS THE COLUMN THE FORM'S "When is it needed?" RADIO WRITES:
+  # `RuleForm::BUDGET_ERROR_FIELDS` routes that attribute to `:schedule`, so the sentence lands
+  # under the control that chose the date rather than under a checkbox the form hides on that path.
+  # Unreachable from the form itself (`RuleForm#schedule_columns` writes `keeps_unspent: false` on
+  # every dated rule, and the checkbox is disabled and cleared under "By a date"); this is the answer
+  # to a hand-made POST and to any later writer that assigns the columns directly.
+  def keeps_unspent_never_dates
+    return unless keeps_unspent? && anchor_date.present?
+
+    errors.add(:anchor_date, "cannot be set on a rule that keeps what it doesn't spend")
+  end
 
   # A dated bill anchors on an item, and that item has to be an item OF the category the rule funds
   # — an item from somewhere else would date a bill against money it never drains.

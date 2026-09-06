@@ -106,7 +106,7 @@ class RulePreview
   # WHICH OF THE THREE SENTENCES §5 GIVES THE HEADLINE — and they are read off the CALCULATOR's
   # shape and the rule's own interval, never off the radio: the words have been through
   # `RuleForm`'s mapping by now and the columns are what a saved rule would carry.
-  delegate :rate?, to: :line
+  delegate :rate?, :fund?, to: :line
 
   def repeating? = line.dated? && rule.interval_months.present?
 

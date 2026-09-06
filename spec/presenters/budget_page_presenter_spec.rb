@@ -622,6 +622,21 @@ RSpec.describe BudgetPagePresenter do
       )
     end
 
+    # ** THE SAME FOUR PERIODS AS `#goal_rule`, KEEPING WHAT IT DOESN'T SPEND (two-shapes §12). **
+    # Born Jan 6 on a category funded before it, so the walk visits the same Dec 26–Jan 8, Jan 9–22,
+    # Jan 23–Feb 5 and Feb 6–19 — four periods at the plain $150, which is `4 × 150` = $600.00 with
+    # no ceiling over it.
+    def pet_care_fund
+      create(
+        :budget,
+        :keeps_unspent,
+        amount: 150,
+        created_at: today - 1.month,
+        category: holder("Pet Care"),
+        rule_type: :usage
+      )
+    end
+
     def row_for(name) = row(name).lines.sole
 
     it "carries the built-up, the planned share and the shape for an accruing rule", :aggregate_failures do
@@ -634,6 +649,45 @@ RSpec.describe BudgetPagePresenter do
         claim: BigDecimal("600"),
         target: BigDecimal("1200")
       )
+    end
+
+    # ** THE SAME FOUR PERIODS ON A FUND, AND THE DIFFERENCE IS THE TARGET (two-shapes §12). ** The
+    # rule is born Jan 6 like the goal above and the walk visits the same four periods (Dec 26–Jan 8,
+    # Jan 9–22, Jan 23–Feb 5, Feb 6–19) — but every one of them contributes the PLAIN RATE rather
+    # than a catch-up share, and nothing caps the total: `4 × 150` = **$600.00**, with **$150.00**
+    # planned again this period and NO figure it is heading toward.
+    #
+    # THE COINCIDENCE OF $600 IS THE POINT: the goal's four catch-up shares happen to equal the
+    # fund's four rates here, so the rows differ in exactly one member — the target, which is a
+    # figure for one shape and nothing at all for the other. A reader that had quietly given a fund
+    # a target of zero would pass every other assertion in this example.
+    it "carries the same built-up for a fund, with nothing to reach", :aggregate_failures do
+      pet_care_fund
+
+      expect(row_for("Pet Care")).to have_attributes(
+        shape: :fund,
+        built_up: BigDecimal("600"),
+        per_period: BigDecimal("150"),
+        claim: BigDecimal("600"),
+        target: nil,
+        denominator: nil
+      )
+      expect(row_for("Pet Care")).not_to be_bar
+    end
+
+    # ** AND THE ADJUST PANEL SPEAKS THE PER-PERIOD WORDS TO IT, WHICH IS §12'S RULING. ** A fund is
+    # an allowance that keeps: its deltas top a period up or reduce it, rather than setting money
+    # aside toward a day. The skip is offered on the same reading (`#skippable?` is `!rate?`), so
+    # what a fund gets is top up / reduce / skip.
+    it "offers a fund the per-period words and a skip", :aggregate_failures do
+      goal_rule
+      pet_care_fund
+
+      expect(row_for("Pet Care")).to be_allowance
+      expect(row_for("Pet Care")).to be_skippable
+      # THE OTHER DIRECTION, in the same render: a dated rule keeps "Set aside" / "Take back".
+      expect(row_for("Vacation")).not_to be_allowance
+      expect(row_for("Vacation")).to be_skippable
     end
 
     # ** THE SKIP IS OFFERED OFF THE ACCRUAL, NEVER OFF THE PLAN (fix round MED-2). ** A period

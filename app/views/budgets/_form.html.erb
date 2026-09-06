@@ -50,20 +50,27 @@
       breadcrumbs: breadcrumb_trail(["Budget", budget_page_path], *[category&.name].compact, last_crumb)
     ) %>
 
-<noscript>
-  <style>[data-rule-reveal][hidden] { display: block !important; }</style>
-</noscript>
-
-<div class="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start">
-  <%# ** THE CONTROLLER IS ON THE COLUMN, NOT ON THE FORM, BECAUSE THE CHIPS ARE ABOVE IT. ** A
-      Stimulus action binds only inside its controller's own element, so a "Use this" button in a
-      chip that sat OUTSIDE the form would never reach `#useChip` — measured: every blank stayed
-      empty and the chip never said it was being used. The column contains both, the form is a
-      TARGET, and every read and every submit goes through that target rather than through
-      `this.element`. The listeners live here too: `input` and `change` bubble out of the form. %>
-  <div class="lg:col-span-2 space-y-6"
-       data-controller="app--budget--rule-form"
-       data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
+<%# ** THE `<noscript>` REVEAL IS DELETED WITH THE PREVIEW BUTTON (§12). ** It forced every
+    `[data-rule-reveal]` block visible so that a browser with no JavaScript got the whole form and a
+    Preview button that worked by navigating. §12 rules that there is NO preview without JavaScript,
+    which takes the button with it — and with the button gone the rule was propping up half a
+    promise: a no-JS user still SAVES through the same server, and a shape the reveals hide is
+    refused with the message under the control that chose it, which then re-renders revealed. What
+    is lost is one round trip on that path; what is gained is that the form has exactly one story
+    about which controls are on screen. %>
+<div class="lg:grid lg:grid-cols-3 lg:gap-8 lg:items-start"
+     data-controller="app--budget--rule-form"
+     data-action="input->app--budget--rule-form#changed change->app--budget--rule-form#changed">
+  <%# ** THE CONTROLLER IS ON THE GRID, NOT ON THE FORM, BECAUSE THE CHIPS ARE ABOVE IT AND THE
+      PREVIEW IS BESIDE IT. ** A Stimulus action binds only inside its controller's own element, so
+      a "Use this" button in a chip that sat OUTSIDE the form would never reach `#useChip` —
+      measured: every blank stayed empty and the chip never said it was being used. It moved one
+      level out with §12: the preview card is a SIBLING of this column, and the controller is what
+      reveals it (`connect()`) and highlights it on every refresh, so the frame has to be inside the
+      controller's element too. The form is a TARGET, and every read and every submit goes through
+      that target rather than through `this.element`; the listeners are here because `input` and
+      `change` bubble out of the form. %>
+  <div class="lg:col-span-2 space-y-6">
     <%# ** THE CHIPS, ABOVE STEP 1 (§5). ** What the entries already suggest for this category, each
         one able to fill every blank below it. On an edit only the ones about THIS rule are here
         (`BudgetsController#chips_for`) — a chip about another rule would be a control that silently
@@ -227,6 +234,26 @@
           <p class="form-error">When it is needed <%= rule_form.errors[:schedule].to_sentence %></p>
         <% end %>
 
+        <%# ** KEEPS WHAT IT DOESN'T SPEND — THE FUND, BACK AS ONE CHECKBOX (§12). ** Henry,
+            2026-09-06: "there was no option to have it grow endlessly (no limit)". It is a detail OF
+            "Every period" and not a third option: the money still arrives every period, and the only
+            question is what the boundary does to what is left.
+
+            ** IT IS ALWAYS ON SCREEN AND DISABLED UNDER "By a date", RATHER THAN REVEALED. ** A
+            reveal would hide the one control that says what happens to unspent money on the shape
+            where the answer is most surprising; disabled-and-unchecked SAYS the answer instead — a
+            dated rule's build-up is already defined by its date. The Stimulus controller clears and
+            disables it as the radios move, and `RuleForm#keeps?` refuses it server-side on that
+            schedule whatever arrives, so the two halves agree with nothing to keep in step by hand. %>
+        <div class="pl-3 border-l-2 border-gray-100"
+             data-app--budget--rule-form-target="keepsField">
+          <%= f.input :keeps,
+              as: :boolean,
+              label: "Keeps what it doesn't spend",
+              hint: "like a fund you add to every period — it builds up with no limit",
+              input_html: { disabled: rule_form.schedule == "by_date" } %>
+        </div>
+
         <div class="space-y-4 pl-3 border-l-2 border-gray-100">
           <%# THE DATE. It rode HIDDEN beside the basis until Henry's real-use testing of 2026-08-20:
               `SuggestionEngine#next_due_on` walks the LAST PAYMENT forward by the interval, so a
@@ -312,31 +339,42 @@
             BudgetsController sends a save to. %>
         <%= link_to "Cancel", budget_page_path, class: "btn btn-secondary" %>
 
-        <%# ** THE PREVIEW'S OWN SUBMIT, AND IT IS THE NO-JAVASCRIPT PATH (§5). ** `formaction` sends
-            THIS form — every control, exactly as it would be saved — to `BudgetsController#preview`
-            instead of to the save, so the card can never be previewing a different set of answers
-            from the one on screen. `data-turbo-frame` puts the response in the preview frame; with
-            Turbo running, Stimulus presses this button for the user on every change (debounced), and
-            with no JavaScript at all pressing it renders the whole page with the card updated.
-
-            `formnovalidate`, because a preview of a HALF-FILLED form is the thing the card is for:
-            browser validation would refuse to submit exactly the states whose missing blanks it is
-            supposed to name. %>
-        <%= button_tag "Preview",
-            type: :submit,
-            name: nil,
-            class: "btn btn-secondary",
-            formaction: rule_form.persisted? ? preview_budgets_path(id: budget.id) : preview_budgets_path,
-            formmethod: :post,
-            formnovalidate: true,
-            data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
-
         <%= f.submit rule_form.persisted? ? "Update rule" : "Create rule", class: "btn btn-primary" %>
       </div>
+
+      <%# ** THE PREVIEW'S SUBMITTER, HIDDEN — THERE IS NO "Preview" BUTTON ANY MORE (§12). ** It was
+          a visible secondary button beside Cancel, and it was the no-JavaScript path: pressing it
+          navigated, and the whole page came back with the card updated. §12 deletes it. What the
+          button DID is still needed, because it is what makes the request carry exactly the fields a
+          save would carry — `formaction`, `formmethod`, `formnovalidate` and `data-turbo-frame` all
+          ride on the SUBMITTER, and `requestSubmit(submitter)` is what applies them — so the element
+          stays and only its visibility goes.
+
+          A HIDDEN BUTTON IS STILL A VALID SUBMITTER: `requestSubmit` refuses a DISABLED one and says
+          nothing about `hidden`, which only takes it out of the layout, the tab order and the
+          accessibility tree. Verified in a real browser on this form (see the task report), because
+          "still a valid submitter" is exactly the kind of claim that is true of the spec and false of
+          some engine.
+
+          `formnovalidate`, because a preview of a HALF-FILLED form is the thing the card is for:
+          browser validation would refuse to submit exactly the states whose missing blanks it is
+          supposed to name. %>
+      <%= button_tag "Preview",
+          type: :submit,
+          name: nil,
+          hidden: true,
+          tabindex: -1,
+          "aria-hidden": true,
+          formaction: rule_form.persisted? ? preview_budgets_path(id: budget.id) : preview_budgets_path,
+          formmethod: :post,
+          formnovalidate: true,
+          data: { turbo_frame: "rule_preview", "app--budget--rule-form-target": "previewButton" } %>
     <% end %>
   </div>
 
-  <%# THE PREVIEW COLUMN — sticky at ≥1024px, under the form below it (§5). %>
+  <%# THE PREVIEW COLUMN — sticky at ≥1024px, under the form below it (§5). The card inside it
+      renders `hidden` and Stimulus reveals it on connect (§12), so a browser with no JavaScript
+      gets no preview rather than a stale one it has no way to refresh. %>
   <aside class="mt-6 lg:mt-0 lg:sticky lg:top-6">
     <%= render "preview", preview: @preview %>
   </aside>

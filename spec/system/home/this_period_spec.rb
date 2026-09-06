@@ -90,6 +90,26 @@ RSpec.describe "Home This Period", type: :system do
     end
   end
 
+  # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (two-shapes §12). ** `#envelope`'s columns plus
+  # the one that says the boundary leaves the money alone — and `created_at:`, because unlike a rate
+  # rule this one WALKS: a fund the factory writes at real-now visits no period inside a `travel_to`
+  # that has gone backwards, and every figure would read zero.
+  def keeping(name, rate:, priority: 1, type: :usage, **plant)
+    born = plant.delete(:created_at) || Time.zone.local(2025, 8, 20)
+    holder(name, priority: priority, **plant).tap do |category|
+      create(:budget, :keeps_unspent, category: category, amount: rate, rule_type: type, created_at: born)
+    end
+  end
+
+  # ** THE FUND THE TWO §12 EXAMPLES SHARE, on the same fixed grid the dated ones use: ** biweekly
+  # anchored Aug 14 2026, read on Aug 20, with the category holding and the rule born on `from:` — so
+  # the walk visits every period from that day and each contributes the plain $510.
+  def a_fund_on_the_fixed_grid(from:, priority: 1)
+    user.update!(period_cadence: :biweekly, period_anchor_date: Date.new(2026, 8, 14))
+    deposit(2_000)
+    keeping("Pet Care", rate: 510, priority: priority, funded_since: from, created_at: from.to_time)
+  end
+
   # A bill that accrues toward a date (§3.2). `created_at:` is planted wherever the walk has to reach
   # back (the ruling of 2026-09-03): a rule accrues from the LATER of its category's `funded_since`
   # and its own birthday, so a rule the factory writes at real-now walks nothing inside a `travel_to`
@@ -354,6 +374,52 @@ RSpec.describe "Home This Period", type: :system do
     expect(rule_row("Vacation")).to have_no_content("overdue")
     expect(rule_row("Vacation")).to have_no_content("short")
     expect(rule_row("Vacation")).to have_css("[data-rule-bar='4']")
+  end
+
+  # ** A FUND'S ROW: WHAT IT HAS BUILT UP, WHAT IT ADDS, AND NO BAR AT ALL (two-shapes §12). **
+  # `built up $820.00 · +$510.00 a period` — three departures from every other row on this screen,
+  # and each is the shape's own:
+  #
+  #   * THE FIGURE HAS NO "of". A fund is aiming at nothing (`ClaimCalculator#target` is nil), so
+  #     there is no denominator; the noun is what stops a bare `$820.00` reading as spending in a
+  #     column where every other figure is money that went out.
+  #   * THE CLAUSE IS A CONTRIBUTION WITH ITS UNIT SPELLED OUT. There is no day to be ready for and
+  #     no boundary to reset on, so `+$510.00 a period` is the only true thing left to say — and the
+  #     dated rows' bare `+$60.00` would be missing the period a date beside it usually supplies.
+  #   * THERE IS NO BAR, because a bar is a fraction and there is nothing to be a fraction of.
+  #
+  # ** PLANTED SO THE CARRY IS VISIBLE, on a grid where nothing moves with the wall clock: ** the
+  # user is biweekly anchored Aug 14 2026, the category holds from Jul 31 and the rule is born there,
+  # so the walk visits Jul 31–Aug 13 and Aug 14–27 — TWO periods at the plain $510, less the $200
+  # spent on Aug 3. `2 × 510 − 200` = **$820.00**, which a resetting rule of the same amount would
+  # report as $510.00 on this same morning.
+  it "says what a fund has built up and what it adds, with no bar", :aggregate_failures do
+    spend(a_fund_on_the_fixed_grid(from: Date.new(2026, 7, 31)), 200, on: Date.new(2026, 8, 3))
+
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
+
+    expect(figure("Pet Care")).to have_content("built up $820.00")
+    expect(figure("Pet Care")).to have_no_content(" of ")
+    expect(when_clause("Pet Care")).to have_content("+$510.00 a period")
+    expect(rule_row("Pet Care")).to have_no_css("[data-rule-bar]")
+    expect(rule_row("Pet Care").find("[data-rule-shape]")).to have_content("usage · a period, keeps")
+  end
+
+  # AND IT DRAWS NO RUNWAY TICK, because a tick is a DAY the money is needed on and a fund has none.
+  # Asserted beside a dated rule due inside the same period, which DOES draw one — so a runway that
+  # had simply stopped drawing ticks could not pass.
+  it "puts no tick on the runway for a fund", :aggregate_failures do
+    grid_open = Date.new(2026, 8, 14)
+    a_fund_on_the_fixed_grid(from: grid_open, priority: 2)
+    accumulating(
+      "Electric", amount: 120, due: Date.new(2026, 8, 24), funded_since: grid_open, created_at: grid_open.to_time
+    )
+
+    travel_to(Date.new(2026, 8, 20)) { visit root_path }
+
+    expect(page).to have_css("[data-tick]", count: 1)
+    expect(page).to have_css("[data-tick-label='Electric']")
+    expect(page).to have_no_css("[data-tick-label='Pet Care']")
   end
 
   # ** AN ANCHOR-DATED RULE READS TOWARD ITS OWN AMOUNT (§3's shape rule). ** PLANTED on the fixed

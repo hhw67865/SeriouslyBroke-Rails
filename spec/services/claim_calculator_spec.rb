@@ -825,16 +825,197 @@ RSpec.describe ClaimCalculator, type: :model do
         .to raise_error(KeyError, /building/)
     end
 
-    # ** AND A RULE WITH NO ANCHOR IS A RATE RULE WHATEVER ELSE IS TRUE OF IT. ** The shape used to be
-    # a fact about a NEIGHBOURING record (the category's figure), then about two of the rule's own
-    # columns; it is one column now, so there is nothing left that could answer differently.
-    it "reads the shape off the anchor and nothing beside it", :aggregate_failures do
+    # ** AND A RULE WITH NO ANCHOR AND NO KEEPING IS A RATE RULE WHATEVER ELSE IS TRUE OF IT. ** The
+    # shape used to be a fact about a NEIGHBOURING record (the category's figure), then about two of
+    # the rule's own columns; it is the anchor and then `keeps_unspent`, asked in that order, and
+    # nothing else can answer.
+    it "reads the shape off the anchor and the keeping, and nothing beside them", :aggregate_failures do
       owner = create(:category, :expense, user: user, name: "Old Goal", funded_since: Date.new(2026, 1, 1))
       rule = create(:budget, :per_period_rate, category: owner, amount: 150, created_at: born)
 
       expect(calc(rule).shape).to eq(:rate)
       expect(calc(rule).target).to eq(0)
       expect(calc(rule).built_up).to eq(0)
+    end
+
+    # ** §12'S ROW — $510 a period, and it keeps what it doesn't spend. ** The third shape, read off
+    # the second column, and `#target` is NIL rather than zero: the two answers are not
+    # interchangeable, because `#claim` is the built-up here and a target of zero would tell every
+    # reader that compares the two that a working fund is over its limit.
+    it "calls an anchorless keeping rule a fund, aiming at nothing", :aggregate_failures do
+      rule = rule_for("Pet Care", :keeps_unspent, amount: 510)
+
+      expect(calc(rule).shape).to eq(:fund)
+      expect(calc(rule)).to be_fund
+      expect(calc(rule)).not_to be_rate
+      expect(calc(rule)).not_to be_dated
+      expect(calc(rule).target).to be_nil
+    end
+
+    # ** AND THE ANCHOR IS ASKED FIRST, WHICH IS WHY THE PAIR CANNOT BE AMBIGUOUS. ** The model
+    # refuses the combination outright (`Budget#keeps_unspent_never_dates`, pinned in
+    # `budget_spec`), so the ordering below can never be reached from any door the app offers — it is
+    # asserted here because "the two columns are read in an order" is the sentence `#shape` is
+    # written to, and a later reader flipping it would be changing a rule the model still refuses.
+    it "reads a dated rule as dated even if the keeping column is somehow set", :aggregate_failures do
+      rule = rule_for("Registration", amount: 600, interval_months: nil, anchor_date: Date.new(2026, 12, 1))
+      # rubocop:disable Rails/SkipsModelValidations -- the model refuses this pair; a database does not
+      rule.update_columns(keeps_unspent: true)
+      # rubocop:enable Rails/SkipsModelValidations
+
+      expect(calc(rule.reload).shape).to eq(:dated)
+      expect(calc(rule).target).to eq(600)
+    end
+  end
+
+  # ===========================================================================================
+  # §12 — THE FUND: the §3.2 walk with no target and no cap.
+  #
+  #     claim = clamp≥0 per period of Σ over the periods since the rule started
+  #                                     (amount + Σ adjustments in P) − spent in P
+  #
+  # THE GRID IS MONTHLY AND ANCHORED JAN 1 (the file's own `user`), so the periods are calendar
+  # months and every figure below can be redone by hand. The rule is born Jan 1 on a category funded
+  # Jan 1, so the walk opens in January like every other fixture in this file.
+  # ===========================================================================================
+  describe "a fund" do
+    let(:pet_care) do
+      create(:category, :expense, user: user, name: "Pet Care", funded_since: Date.new(2026, 1, 1))
+    end
+
+    let(:kibble) { create(:item, category: pet_care) }
+
+    def fund(amount: 510, category: pet_care)
+      create(:budget, :keeps_unspent, category: category, amount: amount, rule_type: :usage, created_at: born)
+    end
+
+    def calc(rule, on: Date.new(2026, 3, 3)) = described_class.new(rule, today: on)
+
+    # ** THE WALK, WITH SPENDING AND A DELTA IN IT, MARCH 3. ** Three periods — Jan, Feb, Mar — and
+    # every one of them contributes the PLAIN RATE, because a fund has no deadline to divide itself
+    # over and no ceiling to be bounded by:
+    #
+    #   Jan   built 0 + planned 510 + adj 0     = 510   − spent 200 = 310
+    #   Feb   built 310 + planned 510 + adj −150 = 670  − spent 0   = 670
+    #   Mar   built 670 + planned 510 + adj 0   = 1,180 − spent 0   = 1,180
+    #
+    # Σ = 3 × 510 − 200 spent − 150 adjusted = **$1,180.00**, which is what `#claim` answers: the
+    # built-up IS the claim, because the money's whole purpose is to still be there.
+    #
+    # ** AND MARCH ASKS THE PLAIN AMOUNT, WHICH IS THE HALF A DATED RULE WOULD GET WRONG. ** A dated
+    # rule re-plans `remaining ÷ periods left` and would raise March's share to absorb February's
+    # −$150; a fund does not, because it is not behind on anything — there is nothing it is trying to
+    # reach. `#planned_this_period` is $510.00 and `#accrued_this_period` is $510.00 with it (no
+    # delta lands in March).
+    it "carries every period's remainder and asks the plain amount again", :aggregate_failures do
+      rule = fund
+      spend(200, on: Date.new(2026, 1, 20), item: kibble)
+      adjust(rule, -150, on: Date.new(2026, 2, 10))
+
+      calculator = calc(rule)
+
+      expect(calculator.built_up).to eq(1_180)
+      expect(calculator.claim).to eq(1_180)
+      expect(calculator.planned_this_period).to eq(510)
+      expect(calculator.accrued_this_period).to eq(510)
+      expect(calculator.spent_this_period).to eq(0)
+    end
+
+    # ** NO CAP AT ANY FIGURE, WHICH IS "it builds up with no limit" SAID IN NUMBERS. ** The retired
+    # building shape had an optional ceiling and `#accrued_in` clipped every period at it; a fund has
+    # none, so the built-up runs past the rule's own amount, past ten times it, and goes on. Asserted
+    # over a long walk rather than at one figure, because "uncapped" is a claim about every period
+    # and not about the first one past the amount.
+    it "runs past its own amount and keeps going", :aggregate_failures do
+      rule = fund
+
+      expect(calc(rule, on: Date.new(2026, 1, 3)).built_up).to eq(510)
+      expect(calc(rule, on: Date.new(2026, 6, 3)).built_up).to eq(3_060)
+      expect(calc(rule, on: Date.new(2026, 12, 3)).built_up).to eq(6_120)
+      expect(calc(rule, on: Date.new(2026, 12, 3)).target).to be_nil
+    end
+
+    # ** THE CLAMP AT ZERO IS PER PERIOD, EXACTLY AS IT IS FOR EVERY OTHER WALKING SHAPE (§3.2). **
+    # A $100 fund holding $200 that is spent $350 in one period is over by $50 — read off `walk.raw`,
+    # the figure BEFORE the clamp, which is the only reader that can tell "spent it exactly" from
+    # "spent more than there was". The excess left checking, so it does not carry into the next
+    # period as a debt: February starts from zero and March holds one period's rate.
+    #
+    #   Jan   0 + 100   = 100   − 0   = 100
+    #   Feb   100 + 100 = 200   − 350 = −150 → over by $150.00, built 0
+    #   Mar   0 + 100   = 100   − 0   = 100
+    it "reads an overspend off the pre-clamp figure and starts the next period from zero", :aggregate_failures do
+      rule = fund(amount: 100)
+      spend(350, on: Date.new(2026, 2, 14), item: kibble)
+
+      february = calc(rule, on: Date.new(2026, 2, 20))
+
+      expect(february.over?).to be(true)
+      expect(february.over_by).to eq(150)
+      expect(february.built_up).to eq(0)
+      expect(february.claim).to eq(0)
+      expect(calc(rule, on: Date.new(2026, 3, 3)).built_up).to eq(100)
+    end
+
+    # ** A FUND AND A RATE RULE ON IDENTICAL INPUTS DIFFER BY THE CARRY AND BY NOTHING ELSE. ** Same
+    # amount, same grid, same spending in the same period, two categories because a category may hold
+    # only one item-less rule. What they ask of THIS period is identical — the rate is the rate — and
+    # what they are worth is not: the rate rule's January is gone, the fund's is still there.
+    #
+    #   both      planned this period  $510.00      standing ask  $510.00
+    #   rate      claim = max(0, 510 + 0 − 0)                     = $510.00
+    #   fund      claim = 3 × 510 − 200                           = $1,330.00
+    #   the carry = 1,330 − 510 = **$820.00** = two periods' rate less the $200 spent in January
+    it "differs from a rate rule of the same amount by exactly what it carried", :aggregate_failures do
+      resets = create(:category, :expense, user: user, name: "Groceries Two", funded_since: Date.new(2026, 1, 1))
+      rate = create(:budget, :per_period_rate, category: resets, amount: 510, rule_type: :usage, created_at: born)
+      keeps = fund
+      spend(200, on: Date.new(2026, 1, 20), item: kibble)
+      spend(200, on: Date.new(2026, 1, 20), item: create(:item, category: resets))
+
+      expect(calc(keeps).planned_this_period).to eq(calc(rate).planned_this_period)
+      expect(calc(keeps).standing_ask).to eq(calc(rate).standing_ask)
+      expect(calc(rate).claim).to eq(510)
+      expect(calc(keeps).claim).to eq(1_330)
+      expect(calc(keeps).claim - calc(rate).claim).to eq(820)
+    end
+
+    # ** WHAT A FUND HAS NO ANSWER TO, and every one of these is a reader some screen asks. ** There
+    # is no day it is needed on, so there is no due date, no count of periods left, no settling and
+    # no lateness — which is what keeps a fund off the runway (no tick), out of the savings band and
+    # out of the trouble strip's overdue arm.
+    it "has no date, no count and no fulfilment", :aggregate_failures do
+      calculator = calc(fund)
+
+      expect(calculator.next_due_on).to be_nil
+      expect(calculator.periods_left).to be_nil
+      expect(calculator.settled?).to be(false)
+      expect(calculator.settled_on).to be_nil
+      expect(calculator.overdue?).to be(false)
+    end
+
+    # ** THE SPAN OPENS AT THE ACCRUAL START, AS A DATED RULE'S DOES (§3.3). ** It is what
+    # `AdjustmentForm` refuses a date against, and a fund's history is exactly as long as a goal's —
+    # every period since it was written is money it still holds, so a delta dated in January has to
+    # be reachable in March.
+    it "counts adjustments from the day it started, not from this period", :aggregate_failures do
+      calculator = calc(fund)
+
+      expect(calculator.countable_span.first).to eq(Date.new(2026, 1, 1))
+      expect(calculator.countable_span.last).to eq(Date.new(2026, 3, 3))
+      expect(calculator.counts_spending_on?(Date.new(2026, 1, 20))).to be(true)
+    end
+
+    # ** WHAT IT COSTS A PERIOD IS ITS AMOUNT, WHICH IS WHY `CadenceChange` SCALES ONE. ** The
+    # keeping changes what a fund is WORTH and not what it ASKS, so `Budget#steady_ask` takes the
+    # amount verbatim on its `:per_period` branch and `Budget.steady_need` counts a fund at its rate
+    # like any other allowance.
+    it "asks its plain amount of a typical period", :aggregate_failures do
+      rule = fund
+
+      expect(calc(rule).standing_ask).to eq(510)
+      expect(rule.steady_ask(user, today: Date.new(2026, 3, 3))).to eq(510)
+      expect(rule.cadence).to eq(:per_period)
     end
   end
 

@@ -9,26 +9,33 @@
 # have not happened yet. `free = pot − Σ claims` (two-shapes §2) is the DEFINITION that replaces the
 # old `available + Σ holdings == total` partition, and it lives on `ClaimLedger`.
 #
-# TWO SHAPES, ONE CLASS, AND THE SHAPE IS READ OFF ONE COLUMN (see #shape):
+# THREE SHAPES, ONE CLASS, READ OFF TWO COLUMNS IN ORDER (see #shape):
 #
 #   RATE (§3.1)     — "$400 a period on Groceries". Use-it-or-lose-it: `max(0, rate + Σ adjustments
 #                     this period − spent this period)`, reset to the rate at every boundary, nothing
-#                     carried. The rule has no anchor.
+#                     carried. The rule has no anchor and does not keep.
 #   DATED (§3.2)    — "$5,000 every 2 years, next due Jun 1", and "$5,000 by Jun 1, 2027" — a bill
 #                     and a goal are ONE shape. Accrues toward the RULE's amount by the catch-up
 #                     formula, capped there, dropped by what is spent on its lane, and re-aimed at
 #                     the next occurrence once the bill is paid (or settled for good, where there is
 #                     no interval to roll on).
+#   FUND (§12)      — "$60 a period on Pet Care, and it keeps what it doesn't spend". The §3.2 walk
+#                     with NO target and NO cap: every period contributes the plain rate, the
+#                     adjustments dated in it apply, the period's spending comes out, and what is
+#                     left carries. `claim = Σ over the periods since the rule started
+#                     (rate + Σ adj in P) − spent in P`, clamped at zero PER PERIOD.
 #
-# ** THERE WAS A THIRD, AND IT IS RETIRED (two-shapes spec §2, Henry's ruling of 2026-09-05). **
-# The building shape was the carries-over column — the emergency fund and the savings goal — one walk with NO
-# due date to spread itself over, so its per-period accrual was its own rate and its ceiling was an
-# optional `target-amount`. The ruling: "build up / reset isn't a thing any more since nothing
-# really is holding the money — build up is just a higher target on a timeline longer than a
-# period". An emergency fund is "$10,000 by next September", which is row 5 of §2's table and is
-# this class's DATED shape with nothing added. `budgets.carries-over` and `budgets.target-amount`
-# are dropped by `TwoShapes` (§6), and the open-ended "$X a period forever toward no figure at all"
-# shape goes with them: a rule that names no day it is needed is a rule nothing can be short for.
+# ** THE THIRD ONE WAS RETIRED AND CAME BACK NARROWER, AND THE TWO RULINGS ARE NOT IN CONFLICT. **
+# The building shape was the `carries-over` column, and it meant two things at once: unspent money
+# survives the boundary, AND the rule is filling an optional `target-amount`. Henry retired it on
+# 2026-09-05 — "build up / reset isn't a thing any more since nothing really is holding the money —
+# build up is just a higher target on a timeline longer than a period" — and that ruling is about the
+# SECOND half: an emergency fund is "$10,000 by next September", which is row 5 of §2's table and is
+# this class's DATED shape with nothing added. It stands. What §12 restores on 2026-09-06 is the
+# first half alone, under a column that says only that ("I tried to set a $510 rule per period on
+# BaBay Duck but there was no option to have it grow endlessly (no limit)"): an allowance with no day
+# and no figure, which is a rule nothing can be short FOR — `#target` is nil, `#periods_left` is nil,
+# and the runway draws it no tick.
 #
 # ** THE WALK IS THE WHOLE OF §3.2, AND IT RUNS FROM `funded_since` EVERY TIME. ** Period by period,
 # from the period containing the category's funding date through the period containing `today`:
@@ -104,24 +111,48 @@ class ClaimCalculator
     @adjustments = adjustments
   end
 
-  # ** WHICH OF §3'S TWO FORMULAS THIS RULE TAKES — ONE COLUMN, AND THE QUESTION IS "IS THERE A DAY
-  # THIS MONEY IS NEEDED ON" (two-shapes spec §2). ** An anchor is a deadline; a deadline is what
-  # gives a walk something to spread itself over. Everything else is an allowance that resets with
-  # the paycheck.
+  # ** WHICH OF §3'S FORMULAS THIS RULE TAKES — TWO COLUMNS, ASKED IN ORDER (two-shapes spec §2 and
+  # §12). ** The first question is "is there a day this money is needed on": an anchor is a deadline,
+  # and a deadline is what gives a walk something to spread itself over. The second is asked only of
+  # the rules that have no day — "does what it doesn't spend survive the boundary":
   #
-  # ** IT WAS THREE ARMS AND TWO COLUMNS UNTIL THIS TASK. ** The middle one was `carries-over` —
-  # the building shape, the fund with no date — and it is retired rather than renamed: a fund IS a dated
-  # rule whose amount is its target (§2). With one column left there is no pair for
-  # `Budget#shape_must_be_valid` to referee and no way for two columns to disagree about one rule.
-  def shape = rule.anchor_date.present? ? :dated : :rate
+  #   :dated  an anchor. The catch-up walk toward the rule's own amount (§3.2).
+  #   :fund   no anchor, `keeps_unspent`. The same walk with NO target and NO cap (§12).
+  #   :rate   no anchor, resets. Use-it-or-lose-it (§3.1).
+  #
+  # ** THE MIDDLE ARM IS THE SHAPE §2 RETIRED, BACK UNDER A NEW COLUMN AND A NARROWER NAME. ** It was
+  # `carries-over`, which meant BOTH "keeps its unspent money" and "is aiming at `target-amount`", and
+  # the ruling that retired it was about the second half: a fund aiming at a figure by a day IS a
+  # dated rule. What came back is only the first half — an allowance that keeps growing, aiming at
+  # nothing — which is why `#target` is nil here rather than a ceiling, and why the pair
+  # `Budget#shape_must_be_valid` used to referee cannot return: a `keeps_unspent` rule with an anchor
+  # is refused by `Budget#keeps_unspent_never_dates`, so the two columns can never both be answered.
+  def shape
+    return :dated if rule.anchor_date.present?
+
+    rule.keeps_unspent? ? :fund : :rate
+  end
 
   def rate? = shape == :rate
 
   def dated? = shape == :dated
 
+  # ** AN ALLOWANCE THAT KEEPS WHAT IT DOESN'T SPEND (§12). ** It walks like a dated rule and asks
+  # like a rate one: every period contributes its plain rate, nothing is capped, and what is left at
+  # the boundary is still there the next morning.
+  def fund? = shape == :fund
+
+  # ** AN ALLOWANCE — MONEY THAT ARRIVES EVERY PERIOD, whether or not the boundary takes back what
+  # is left (§12's ruling). ** The question the ADJUST vocabulary splits on: an allowance's deltas
+  # top a period up or reduce it, a dated rule's set money aside toward a day. `ClaimLine#allowance?`
+  # is this same test asked of a row, off the same `#shape`, and both are read by the panel and by
+  # the flash that follows it so the button and the sentence cannot part company.
+  def allowance? = rate? || fund?
+
   # WHAT THIS RULE CLAIMS RIGHT NOW. A rate rule's claim is this period's unspent rate and nothing
   # carries; an accruing rule's claim IS its built-up, because the money's whole purpose is to still
-  # be there when the bill or the goal arrives.
+  # be there when the bill or the goal arrives — and a fund's built-up is the same figure with no
+  # ceiling over it.
   def claim = rate? ? rate_claim : built_up
 
   # WHAT THE RULE HAS ACCUMULATED (§3.2). ZERO FOR A RATE RULE, and that is the honest answer rather
@@ -176,6 +207,13 @@ class ClaimCalculator
   # THE FLOOR AT ONE PERIOD is `#periods_left_from`'s own, and it answers two shapes at once: a bill
   # due inside the period it was created in, and a user who has declared no cadence and therefore has
   # no boundaries to count. Both get the whole amount asked of one period, which is blunt and honest.
+  #
+  # ** A FUND TAKES THE RATE ARM AND NOTHING HAD TO CHANGE (§12). ** `#one_time?` reads the anchor,
+  # which a fund has none of, so it falls through to `#rate_per_period` — which is exactly right:
+  # what a rule that keeps its unspent money costs a typical period is the rate it contributes, and
+  # nothing about the keeping changes what it ASKS. That is what puts a fund in `Budget.steady_need`
+  # and in the Budget page's type bar at its plain amount, and it is why `CadenceChange` scales one
+  # like any other per-period rule.
   def standing_ask
     return rate_per_period unless one_time?
 
@@ -190,6 +228,12 @@ class ClaimCalculator
   # DID THE SPENDING EXCEED WHAT THIS RULE HAD? Read off the figure BEFORE the clamp at zero, which
   # is the only place "spent it exactly" and "spent more than there was" differ — both leave a claim
   # of zero. It is what puts a category's bar in red (§3.1) and what names an over-fulfilment (§3.2).
+  #
+  # ** A FUND READS `walk.raw` LIKE ANY OTHER WALKING SHAPE (§12), and the figure it is over is the
+  # BUILT-UP rather than the period's rate. ** A $60-a-period fund holding $806.00 that is spent
+  # $200.00 this period is not over anything; the same fund spent $900.00 is, by $34.00. That is the
+  # whole difference between an allowance that keeps and one that resets, said in the one predicate
+  # every trouble strip in the app fires on.
   def over? = rate? ? raw_rate.negative? : walk.raw.negative?
 
   # ** THIS PERIOD'S ACCRUAL LESS THIS PERIOD'S SPENDING, BEFORE THE CLAMP — THE APP'S ONE SPELLING
@@ -314,12 +358,30 @@ class ClaimCalculator
   # 1, 2027" — two-shapes spec §2), and they are the same sentence. Zero for a rate rule, which
   # accrues toward nothing.
   #
-  # ** IT IS NEVER NIL NOW, AND `#capped` WENT WITH THE NIL (§7). ** An uncapped building rule was
-  # the one shape with no ceiling — `target` was nil, `gap` was unbounded, and every reader had to
-  # ask a second predicate before it could use this figure as a bound. A dated rule is capped at its
-  # amount by definition and a rate rule never reaches the walk, so there is one answer per shape and
-  # a plain `||=` is safe: both arms are truthy BigDecimals.
-  def target = @target ||= dated? ? rule.amount.to_d : 0.to_d
+  # ** AND IT IS NIL FOR A FUND, WHICH IS THE ONE SHAPE WITH NOTHING TO REACH (§12). ** A rule that
+  # keeps what it doesn't spend is aiming at no figure at all: there is no gap, no ceiling and no
+  # fraction to draw a bar of. ZERO WOULD BE THE WRONG ANSWER and not merely a blunt one — `#claim`
+  # is `built_up`, so a target of zero says "this rule is $806.00 over a target of $0.00" to every
+  # reader that compares the two, which is what `ClaimLine#bar_state` and `#fund_short?` do.
+  #
+  # ** EVERY READER OF THIS ALREADY GUARDS ON THE SHAPE, and the guards were re-checked one by one
+  # for this task rather than assumed: ** `ClaimLine#fund_short?` / `#fund_gap` ask `dated?`;
+  # `#denominator` answers nil for a fund and `#bar?` is false there (a fund draws no bar);
+  # `HomeHelper#one_off_words` is reached only from the `:one_off` cadence; the trouble strip's two
+  # `of $target` arms are inside its OVERDUE row, which needs a `next_due_on` a fund never has; the
+  # dashboard's savings strip and `CategoryBudgetPresenter#target` are both behind
+  # `Budget#saving_toward_a_date?`, which requires an anchor; `EntryImpactPresenter#fund_target`
+  # asks `#dated?`. Inside this class the three readers that compare against it — `#planned_for`'s
+  # gap, `#accrued_in`'s cap and `#settled_by?` — are each short-circuited for a fund before they
+  # get here (see their own notes).
+  #
+  # `defined?` RATHER THAN `||=`, because nil is now a real answer and `||=` would re-derive it on
+  # every call.
+  def target
+    return @target if defined?(@target)
+
+    @target = shape_target
+  end
 
   # THE FIRST DAY WHOSE SPENDING CAN MOVE THIS CLAIM — the open of the first period the walk visits.
   # `ClaimLedger` asks every rule for this before it queries, so one statement can cover a whole
@@ -391,6 +453,15 @@ class ClaimCalculator
 
   private
 
+  # THE THREE ANSWERS `#target` MEMOISES. A dated rule's own amount, nothing at all for a fund, and
+  # zero for a rate rule — which never reaches the walk and whose zero has been the honest answer
+  # since the two shapes.
+  def shape_target
+    return rule.amount.to_d if dated?
+
+    fund? ? nil : 0.to_d
+  end
+
   def category = rule.category
 
   def user = rule.user
@@ -432,11 +503,17 @@ class ClaimCalculator
   # THE PERIOD'S ACCRUAL, CAPPED AT THE TARGET. This is the ONLY place an over-large set-aside is
   # clipped — the catch-up share is already bounded by the gap in `#planned_for`.
   #
-  # UNCONDITIONAL SINCE THE TWO SHAPES (§2): every rule that reaches this walk is dated, and a dated
-  # rule's target is its own amount. The `capped` guard that used to stand here was for the uncapped
-  # building rule, which is retired.
+  # ** AND A FUND IS NOT CAPPED, WHICH IS THE WHOLE OF WHAT "no limit" MEANS (§12). ** This is the
+  # `capped` guard that stood here before the two shapes, restored under the column that now answers
+  # the question — `keeps_unspent` rather than `carries-over`. Without it a fund would be clipped at
+  # `target`, which is nil for this shape and would raise on the comparison; with a zero there
+  # instead it would accrue nothing for ever. "It builds up with no limit" is a sentence about this
+  # line.
   def accrued_in(state, period)
-    [state.built_up + state.planned + adjustments_within(period), target].min
+    accrued = state.built_up + state.planned + adjustments_within(period)
+    return accrued if fund?
+
+    [accrued, target].min
   end
 
   def settle(state, accrued, spent)
@@ -464,7 +541,20 @@ class ClaimCalculator
   # over; every rule that reaches this walk now has one, so `due` is never nil here and the rate is
   # never what a walk plans. A goal's per-period share is `remaining ÷ periods until the date`, which
   # is what "by a date" means and is why the shape could be retired rather than replaced.
+  #
+  # ** ONE OF THE TWO CAME BACK, AND IT IS THE ONE WITH NO CEILING (§12). ** A fund plans its plain
+  # RATE, period after period, for ever — `return rate_per_period unless capped`, restored verbatim
+  # under the new column. It is the first line of the method because everything below it is about a
+  # deadline: `#settled_by?` is one-time only, `target` is nil for this shape, and `due` is nil
+  # because a fund has no anchor. The arm that did NOT come back is `[rate_per_period, gap].min` —
+  # the ceiling with no deadline — because a fund aims at no figure and there is no gap to bound it.
+  #
+  # THE RATE IS `#rate_per_period`, WHICH IS `Budget#steady_ask`: the amount for a per-period rule,
+  # the divided figure for a `monthly` one. So a fund and a rate rule of the same amount contribute
+  # the same money to a period, and the ONLY difference between them is what the boundary does to
+  # what is left.
   def planned_for(period, state, due)
+    return rate_per_period if fund?
     return 0.to_d if settled_by?(state.paid)
 
     gap = target - state.built_up
@@ -536,7 +626,8 @@ class ClaimCalculator
   # ---- the calendar --------------------------------------------------------------------------
 
   # THE PERIODS THIS CLAIM IS MADE OF. One for a rate rule — nothing before this period can move a
-  # use-it-or-lose-it figure — and the whole span from the accrual start for a dated one.
+  # use-it-or-lose-it figure — and the whole span from the accrual start for a dated one AND for a
+  # fund, whose every past period is money it still holds (§12).
   def periods
     @periods ||= rate? ? [current_period] : walk_periods
   end

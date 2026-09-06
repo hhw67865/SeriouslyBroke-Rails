@@ -203,6 +203,11 @@ RSpec.describe HomeHelper, type: :helper do
         rule: rule_double(cadence: :per_period),
         stripe_type: :usage,
         rate?: true,
+        # ** THE THIRD SHAPE'S PREDICATE, DEFAULTED TO "not a fund" (two-shapes §12). ** All three
+        # sentences below read it — `#shape_words` appends ", keeps", `#figure_words` drops the "of"
+        # and `#when_words` says what it adds — so it is on the double for `#rate?`'s own reason: it
+        # is the LINE's answer, off `ClaimCalculator#shape`, and not something a helper derives.
+        fund?: false,
         filled: 310.to_d,
         denominator: 400.to_d,
         target: 0.to_d,
@@ -276,6 +281,26 @@ RSpec.describe HomeHelper, type: :helper do
         expect(helper.shape_words(goal)).to eq("choice · $5,000.00")
       end
 
+      # ** §12: `usage · a period, keeps`. ** The cadence and then one word — a fund is a per-period
+      # rule in every other sentence the app says about it, so the suffix is what distinguishes it
+      # rather than a fourth cadence.
+      it "says a fund is a period's allowance that keeps" do
+        line = block_line(rate?: false, fund?: true, denominator: nil)
+
+        expect(helper.shape_words(line)).to eq("usage · a period, keeps")
+      end
+
+      # AND THE SUFFIX RIDES ON WHATEVER CADENCE THE RULE HAS. A `monthly`-basis fund is not a shape
+      # the form can write, but it is a legal row, and the words for it have to name both facts
+      # rather than choose between them.
+      it "keeps a monthly fund's own cadence in front of the suffix" do
+        line = block_line(
+          rule: rule_double(cadence: :monthly, interval_months: 1), rate?: false, fund?: true, denominator: nil
+        )
+
+        expect(helper.shape_words(line)).to eq("usage · every month, keeps")
+      end
+
       it "says a one-time bill as a day it happens once" do
         line = block_line(
           rule: rule_double(cadence: :one_off, bill: true),
@@ -306,6 +331,17 @@ RSpec.describe HomeHelper, type: :helper do
         # on every dated row were the widest thing in it.
         expect(helper.figure_words(line)).not_to include("built up")
       end
+
+      # ** AND A FUND HAS NO "of" AT ALL (§12), which is the one row that DOES say "built up". ** It
+      # is aiming at nothing — `ClaimCalculator#target` is nil for this shape — so there is no second
+      # figure to be a fraction of, and the noun is what stops a bare `$806.00` in a column of
+      # spending figures from reading as spending.
+      it "says what a fund has built up, with nothing to be a fraction of", :aggregate_failures do
+        line = block_line(rate?: false, fund?: true, filled: 806.to_d, denominator: nil)
+
+        expect(helper.figure_words(line)).to eq("built up $806.00")
+        expect(helper.figure_words(line)).not_to include(" of ")
+      end
     end
 
     describe "#when_words" do
@@ -319,6 +355,24 @@ RSpec.describe HomeHelper, type: :helper do
       # declared, which is `HomePresenter#period_range`'s refusal arriving on the row.
       it "says nothing about a rate rule with no period declared" do
         expect(helper.when_words(block_line)).to be_nil
+      end
+
+      # ** A FUND SAYS WHAT IT ADDS, BECAUSE IT HAS NO DAY AND NO BOUNDARY (§12). ** It is not
+      # "ready" (there is nothing to be ready for) and it does not "reset" (that is the shape it is
+      # the opposite of), so the only true clause left is the standing contribution — with its unit
+      # spelled out, because there is no date beside it to say what a period is.
+      it "says what a fund adds every period" do
+        line = block_line(rate?: false, fund?: true, denominator: nil, per_period: 510.to_d)
+
+        expect(helper.when_words(line)).to eq("+$510.00 a period")
+      end
+
+      # AND NOTHING WHERE THE SHARE IS NOT POSITIVE, on the dated arm's own rule: a `+$0.00` clause
+      # would advertise a contribution the rule is not making.
+      it "says nothing about a fund contributing nothing" do
+        line = block_line(rate?: false, fund?: true, denominator: nil, per_period: 0.to_d)
+
+        expect(helper.when_words(line)).to be_nil
       end
 
       # THE MONEY IS THERE FOR THE DAY.

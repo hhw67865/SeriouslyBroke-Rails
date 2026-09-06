@@ -39,6 +39,9 @@ class BudgetsController < ApplicationController
   #
   # `prorated` LEFT WITH THE CAP (plan 3, task 3) and has not come back: the daily ramp it fed is
   # deleted.
+  # ** `keeps` JOINED WITH THE FUND (two-shapes §12). ** It is `RuleForm`'s word for
+  # `budgets.keeps_unspent`, which is not on this list for the same reason `basis` is not: the wire
+  # carries what the screen asked, and the column is `RuleForm#schedule_columns`' answer.
   BUDGET_FIELDS = [
     :category_id,
     :item_id,
@@ -46,6 +49,7 @@ class BudgetsController < ApplicationController
     :amount,
     :schedule,
     :repeats,
+    :keeps,
     :interval_months,
     :anchor_date
   ].freeze
