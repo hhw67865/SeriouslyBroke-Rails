@@ -330,7 +330,19 @@ user.update!(period_cadence: :biweekly, period_anchor_date: today, typical_incom
 # `periods_ago[n - 1] - 1`, which is the window the engine's detectors measure in.
 periods_ago = ->(n) { today - (n * 14) }
 
-account = ->(name) { user.pools.create!(name: name, pool_type: :account) }
+# ** `opened_on` IS "THIS ACCOUNT HAS SAID WHAT IT HOLDS" (account-openings spec §3), AND THE DEMO
+# HOUSEHOLD HAS SAID IT. ** NULL there means the account still has a row in Home's "Your accounts"
+# card and is out of the money row's "Elsewhere" tile and the accounts line — the state a real user
+# is in for the five minutes of setup, and not the state a demo of a settled household should open
+# in. Thirteen periods back is the day the seeded history starts, so the record predates every entry
+# and every movement below it, exactly as `AccountOpening#opening_day` would have dated it.
+#
+# NO OPENING ENTRY GOES WITH IT, deliberately: every dollar the demo holds is a real seeded paycheck
+# or a real transfer, and an opening entry would be money invented to make a screen look right — the
+# thing the history section below says this file does not do. That is the pre-existing-account shape
+# §2 names: the record exists, its amount is nothing, and the account's first **Edit balance**
+# writes the entry it never had. Every figure `spec/seeds_spec.rb` pins is untouched by this column.
+account = ->(name) { user.pools.create!(name: name, pool_type: :account, opened_on: periods_ago.call(13)) }
 
 # EVERY HOLDER STARTED HOLDING BEFORE THE HISTORY BELOW, and that is the funding-start rule
 # (two-ledger spec §4, kept by §7) rather than decoration. A category counts its own spending only
