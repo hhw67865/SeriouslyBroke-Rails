@@ -200,14 +200,26 @@ RSpec.describe "db/seeds.rb" do
         # declaring $2,050). It had been 29 since `Streaming` (computed-claims Task 3's band): a
         # category with no holding date carrying a rule is the one shape
         # `BudgetPagePresenter#unfilled_rules` renders.
-        categories: 27,
+        #
+        # ** 28 SINCE EACH ACCOUNT SAYS WHAT IT HOLDS (account-openings §3; fix round — MED-4). ** The
+        # twenty-eighth is `Opening Balance`, auto-created by `AccountOpening` — one per user, not one
+        # per account — and it is NOT a spending category: `Category.spendable` keeps it off the
+        # Budget page, Home's unbudgeted rows and the Reports untracked band, which is why the demo's
+        # own figures below are untouched by it.
+        categories: 28,
         pools: 4,
         # 25 SINCE THE VET ITEM (the rulings of 2026-09-03). Pet Care is the demo's MIXED case — a
         # rate rule beside a dated bill — and both of those rulings land on it: a category may carry
         # only ONE rule whose lane is the whole of it, so the vet bill has to name an item, and the
         # lane PARTITION then keeps the bill's payments out of the rate rule's figure.
-        items: 25,
-        entries: 75,
+        # 26 SINCE THE OPENINGS: `Initial balance`, the one item every opening entry hangs off.
+        items: 26,
+        # 79 = 75 of history plus FOUR openings, one per account, each for $0.00 — the demo's money
+        # is all real paychecks and real transfers, so what these rows say is "this account has
+        # answered", which is the whole of what `HomePresenter#awaiting_opening?` reads. Zero is a
+        # figure only an opening entry may carry (`Entry`'s own validation), and a zero carries no
+        # movement, which is why `movements: 8` below is unchanged.
+        entries: 79,
         # 19 = the 16 the two-ledger demo carried, plus the three goals' own dated rules. It was 21
         # while five goals carried one each.
         budgets: 19,

@@ -128,16 +128,20 @@ RSpec.describe AccountOpening, type: :model do
       expect(checking.reload.opened_on).to eq(user.today)
     end
 
-    # ** ZERO IS AN ANSWER, AND IT IS WHY `pools.opened_on` EXISTS. ** `Entry` validates `amount > 0`,
-    # so an account that holds nothing has no entry to be its opening — and without the column it
-    # would be indistinguishable from an account that never answered, leaving onboarding unfinishable
-    # for anyone who opened an empty account.
-    it "records an opening of zero with no entry at all", :aggregate_failures do
+    # ** ZERO IS AN ANSWER, AND IT IS A ROW (fix round — MED-4). ** The gate on the account's card is
+    # the opening ENTRY's existence, so "this account holds nothing" has to be writable as something:
+    # a zero-amount entry, carved out of `Entry`'s `amount > 0` for this row alone. It carries NO
+    # movement — there is nothing to move, and `account_movements` refuses a zero at the database.
+    # Written as an income `Opening Balance` rather than a shortfall: nothing is short.
+    it "records an opening of zero as a zero-amount entry with no movement", :aggregate_failures do
       _opening, saved = open!(ally, "0")
 
+      entry = opening_entry_for(ally)
       expect(saved).to be(true)
       expect(ally.reload.opened_on).to eq(user.today)
-      expect(opening_entry_for(ally)).to be_nil
+      expect(entry.amount).to eq(0)
+      expect(entry.item.category.name).to eq(Category::OPENING_BALANCE_NAME)
+      expect(entry.account_movements).to be_empty
       expect(balance_of(ally)).to eq(0)
     end
 
@@ -265,19 +269,35 @@ RSpec.describe AccountOpening, type: :model do
       expect(balance_of(ally)).to eq(1000)
     end
 
-    # A CORRECTION DOWN TO WHAT THE APP ALREADY TRACKS LEAVES NO RECORD TO SHOW, and the record's
-    # existence survives it: `opened_on` stays, the entry (and its movement) go. Re-derived: Ally
-    # opened at $500, $500 was really moved in, so it shows $1,000; the user says $500 → the opening
-    # is 500 − 500 = $0.
-    it "clears the entry when the correction comes out at zero", :aggregate_failures do
+    # A CORRECTION DOWN TO WHAT THE APP ALREADY TRACKS LEAVES THE ROW STANDING AT ZERO, and its
+    # MOVEMENT is what goes — the account is fed entirely by the transfers since, so the opening
+    # itself is worth nothing. Re-derived: Ally opened at $500, $500 was really moved in, so it shows
+    # $1,000; the user says $500 → the opening is 500 − 500 = $0.
+    it "empties the record rather than deleting it when the correction comes out at zero", :aggregate_failures do
       open!(ally, "500")
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 500, date: Date.current, kind: :transfer)
 
       open!(ally, "500")
 
-      expect(opening_entry_for(ally)).to be_nil
+      entry = opening_entry_for(ally)
+      expect(entry.amount).to eq(0)
+      expect(entry.account_movements).to be_empty
+      expect(Entry.where.not(opening_account_id: nil).count).to eq(1)
       expect(ally.reload.opened_on).to be_present
       expect(balance_of(ally)).to eq(500)
+    end
+
+    # ** THE HOUSEHOLD WHOSE FIGURE THE APP ALREADY HAS RIGHT, which is the case a delete-on-zero
+    # would have made unanswerable. ** Re-derived: $2,000 of income lands in main and nothing else
+    # happens, so main shows $2,000; the user types $2,000 → the opening is $0 — and the account has
+    # ANSWERED, which is the only thing standing between them and a card that asks forever.
+    it "counts as answered when the typed figure is what the app already shows", :aggregate_failures do
+      earn(2_000)
+
+      open!(checking, "2000")
+
+      expect(opening_entry_for(checking).amount).to eq(0)
+      expect(balance_of(checking)).to eq(2_000)
     end
   end
 

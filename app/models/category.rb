@@ -4,7 +4,7 @@ class Category < ApplicationRecord
   include ModelSearchable
 
   # WHERE AN ACCOUNT'S OPENING RECORD LANDS (account-openings spec §2), and the ONE spelling of the
-  # two names — `AccountOpening` is the only writer of either, and `#opening_balance` below is the
+  # two names — `AccountOpening` is the only writer of either, and the `#opening` scope below is the
   # only reader, so a typo cannot leave the writer and the reader disagreeing about which categories
   # mean "this is what an account started with".
   #
@@ -181,7 +181,41 @@ class Category < ApplicationRecord
   # BOTH NAMES, ONE SCOPE: a reader asking "is this an opening category" never cares which sign it
   # is, and the two questions that do (which one to write into, what an existing entry means) read
   # the category's own `#income?`.
-  scope :opening_balance, -> { where("LOWER(name) IN (?)", OPENING_NAMES.map(&:downcase)) }
+  scope :opening, -> { where("LOWER(name) IN (?)", OPENING_NAMES.map(&:downcase)) }
+
+  # ** AN OPENING CATEGORY IS NOT SPENDING, AND THIS IS THE SCOPE THAT SAYS SO (fix round — MED-2). **
+  #
+  # `Opening Shortfall` is an EXPENSE category by construction — that is how a negative opening
+  # lowers the pot — so every reader that asked `.expenses` for "what this household spends on" was
+  # answering with bookkeeping. Measured leaks, all four now reading this scope instead:
+  #
+  #   * the Budget page's rule-less list (`BudgetPagePresenter#expense_categories`) offered
+  #     "Opening Shortfall" a funding rule;
+  #   * Home's "This period" unbudgeted rows (`HomePresenter#unfunded_category_rows`) printed
+  #     `Opening Shortfall · spent $400.00` — a NEW user's opening day is `today`, which is inside
+  #     the current period, so this was the first thing a first-time user saw after onboarding;
+  #   * the Reports untracked band (`DashboardPresenter#untracked_expense_categories`) listed it as
+  #     money spent outside the budget;
+  #   * the Entries screen's `?type=expenses` tab (`EntriesController#apply_type_filter`) listed the
+  #     opening ENTRY among the household's receipts — narrowed there by the marker column rather
+  #     than by this scope, because the question on that screen is about a ROW.
+  #
+  # ** THE CATEGORIES INDEX IS DELIBERATELY NOT ON THAT LIST (`#with_type` below still reads
+  # `.expenses`). ** It is the screen where a category is renamed or deleted, and renaming or
+  # deleting an opening category is the user's own escape hatch for a mistyped figure — stated at
+  # `OPENING_NAMES` above and inherited from the deleted opening-balance controller. Narrowing it
+  # would leave `Opening Shortfall` a category its owner could neither see nor remove.
+  #
+  # `.expenses` ITSELF STAYS. It is the model's own type question — the validations, the type flip,
+  # the savings-goal strip and the suggestion engine all ask it about a category rather than about a
+  # household's spending — and narrowing it would answer a different question than its name asks.
+  # See the fix-round report for the caller-by-caller list.
+  #
+  # A SUBQUERY OVER `.opening` RATHER THAN A SECOND COPY OF THE NAME TEST: the two names are stated
+  # once, in `OPENING_NAMES`, and read once, in the scope above. The inner scope is deliberately
+  # unscoped by user — an id that is not in this relation cannot be excluded by it — so composing
+  # `user.categories.spendable` narrows to the owner exactly as `.expenses` does.
+  scope :spendable, -> { expenses.where.not(id: opening.select(:id)) }
 
   # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed, and `:pool` left it with the column
   # (Task 8): the Categories index prints what a category HOLDS now, which is read off the category

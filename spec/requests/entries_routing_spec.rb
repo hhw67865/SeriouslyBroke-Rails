@@ -192,4 +192,89 @@ RSpec.describe "Entries income routing", type: :request do
       WHERE c.user_id = '#{user.id}'
     SQL
   end
+  # ** AN OPENING ENTRY'S ACCOUNT IS NOT EDITABLE FROM THE ENTRIES SCREEN (fix round — MED-1). **
+  #
+  # The select on this form is the door onto `Entry#route_income_to!`, which REWRITES the entry's
+  # transfer — and for an opening entry that transfer is half the record of what an account holds
+  # (account-openings §2). Measured before the guard: re-pointing Ally's opening at HYSA moved the
+  # $500 transfer with it, so Ally's next **Edit balance** computed `typed − balance − 500` and an
+  # Ally corrected to $1,000 showed $500, while HYSA silently held the difference.
+  #
+  # THREE PINS, AND THE THIRD IS THE ONE THAT MATTERS: the refusal is only worth anything if the
+  # account it protected still corrects to the figure the user types afterwards.
+  describe "an opening entry" do
+    let(:hysa) { create(:pool, :account, user: user, name: "HYSA") }
+
+    def open!(account, balance)
+      opening = AccountOpening.new(user, account, balance: balance)
+      raise "could not open #{account.name}" unless opening.save
+
+      Entry.find_by!(opening_account_id: account.id)
+    end
+
+    # THE VIEW HALF: no select is rendered at all, and the read-only line names the account it
+    # belongs to and where to change it. Asserted on the response body rather than in a system spec
+    # because what is under test is a SERVER decision about which control to draw.
+    it "is offered a read-only line instead of the account select", :aggregate_failures do
+      entry = open!(ally, "500")
+
+      get edit_entry_path(entry)
+
+      expect(response.body).not_to include('name="entry[destination_account_id]"')
+      expect(response.body).to include("Opening balance for Ally")
+      expect(response.body).to include(Entry::OPENING_DOOR)
+    end
+
+    # AN ORDINARY INCOME ENTRY IS UNTOUCHED BY THE GUARD, which is the other direction of the same
+    # render: the question is still asked wherever a saved category can answer it.
+    it "leaves the select on an ordinary income entry" do
+      entry = post_income(destination: ally.id)
+
+      get edit_entry_path(entry)
+
+      expect(response.body).to include('name="entry[destination_account_id]"')
+    end
+
+    # THE WIRE HALF: a stale form and a crafted POST both reach `#update`, and both are refused with
+    # the same sentence the form prints — nothing written, 422, the movement still where it was.
+    it "refuses a re-point through the wire", :aggregate_failures do
+      entry = open!(ally, "500")
+
+      patch entry_path(entry), params: { entry: { destination_account_id: hysa.id } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include("Opening balance for Ally")
+      expect(routing_for(entry.reload).sole.to_pool).to eq(ally)
+      expect(AccountLedger.new(user).balance_of(hysa)).to eq(0)
+    end
+
+    # ** AND THE CORRECTION AFTER A REFUSED RE-POINT STILL READS THE TYPED FIGURE. ** Re-derived:
+    # Ally opened at $500 and nothing has flowed through it since, so saying it holds $1,000 sets its
+    # opening to $1,000 — which is exactly what the un-guarded re-point broke, and the reason the
+    # 422 above is worth having.
+    it "still corrects to the figure the user types", :aggregate_failures do
+      entry = open!(ally, "500")
+      patch entry_path(entry), params: { entry: { destination_account_id: hysa.id } }
+
+      patch bank_account_opening_path(ally), params: { account_opening: { balance: "1000" } }
+
+      expect(AccountLedger.new(user).balance_of(ally)).to eq(1_000)
+      expect(AccountLedger.new(user).balance_of(hysa)).to eq(0)
+      expect(Entry.where.not(opening_account_id: nil).count).to eq(1)
+    end
+
+    # THE AMOUNT AND THE DATE ARE STILL EDITABLE — the guard is about the ACCOUNT alone, and an
+    # opening entry a user re-reads and re-types is an ordinary edit. (What it does NOT do is
+    # re-derive the opening from the new figure: the entry is the record, so typing $600 here makes
+    # the opening $600, exactly as saving $600 on the card would.)
+    it "still takes an ordinary edit", :aggregate_failures do
+      entry = open!(ally, "500")
+
+      patch entry_path(entry), params: { entry: { amount: "600" } }
+
+      expect(response).to redirect_to(entries_path)
+      expect(entry.reload.amount).to eq(600)
+      expect(routing_for(entry).sole.amount).to eq(600)
+    end
+  end
 end

@@ -79,6 +79,47 @@ RSpec.describe Category, type: :model do
       end
     end
 
+    # ** AN OPENING CATEGORY IS NOT SPENDING (fix round — MED-2). ** `Opening Shortfall` is an
+    # EXPENSE by construction — that is how a negative opening lowers the pot — so every screen that
+    # asked `.expenses` for "what this household spends on" was answering with bookkeeping. Both
+    # directions in one example each, because a scope that returned the wrong half would pass an
+    # assertion about membership alone.
+    describe ".opening and .spendable" do
+      let!(:opening_balance) { create(:category, :income, user: user, name: Category::OPENING_BALANCE_NAME) }
+      let!(:opening_shortfall) { create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME) }
+
+      it "answers both opening names and nothing else" do
+        expect(described_class.where(user: user).opening).to contain_exactly(opening_balance, opening_shortfall)
+      end
+
+      # CASE-INSENSITIVE, matching `Category`'s own uniqueness validation: a user who typed
+      # "opening shortfall" into the ordinary categories screen owns the same row `AccountOpening`
+      # would have found, and the two must not disagree about it.
+      it "matches a name the user typed in another case" do
+        theirs = create(:category, :expense, user: create(:user), name: "opening shortfall")
+
+        expect(described_class.opening).to include(theirs)
+      end
+
+      it "leaves both out of the spendable expenses, and keeps the real ones", :aggregate_failures do
+        expect(described_class.where(user: user).spendable)
+          .to contain_exactly(expense_category, second_expense_category)
+        expect(described_class.where(user: user).spendable).not_to include(opening_shortfall)
+      end
+
+      # ** THE CATEGORIES INDEX STILL LISTS BOTH, AND THAT IS THE RULING RATHER THAN AN OVERSIGHT
+      # (fix round — MED-2). ** `#with_type` is that screen's reader, and that screen is where a
+      # category is renamed or deleted — which is the user's own escape hatch for a mistyped opening
+      # figure, stated at `OPENING_NAMES` and inherited from the deleted opening-balance controller.
+      # Narrowing it would leave `Opening Shortfall` a category its owner could neither see nor
+      # remove. The ENTRIES screen's expenses tab is where MED-2's fourth leak was closed, by the
+      # marker column, and `spec/requests/entries_spec.rb` pins it.
+      it "still offers both to the categories index, where they can be renamed", :aggregate_failures do
+        expect(described_class.where(user: user).with_type(:expense)).to include(opening_shortfall)
+        expect(described_class.where(user: user).with_type(:income)).to include(opening_balance)
+      end
+    end
+
     # `.savings` IS GONE with the enum value (plan 3, task 5), and its absence is asserted rather
     # than left to a NoMethodError somebody reads as a typo.
     it "does not answer .savings at all" do

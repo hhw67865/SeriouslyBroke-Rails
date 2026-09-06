@@ -328,7 +328,7 @@ class BudgetPagePresenter
   # that scope is holders only, and §4's list is every expense category including the ones that have
   # never held anything.
   def expense_categories
-    @expense_categories ||= user.categories.expenses.order(:name).to_a
+    @expense_categories ||= user.categories.spendable.order(:name).to_a
   end
 
   # ** THE ROWS, THE ORDER AND THE GROUPING — `ClaimRows`, SHARED WITH HOME (this task). ** It

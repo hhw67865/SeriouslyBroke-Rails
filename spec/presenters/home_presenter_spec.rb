@@ -1092,7 +1092,13 @@ RSpec.describe HomePresenter do
     #     13. `#unbudgeted_spending_this_period` — the entry sum read for its NULL answer.
     #     14. `#unbudgeted_rows`' name-ordered fetch of the categories those ids name.
     #
-    # ** THE FIFTEENTH WAS ONBOARDING'S LATCH AND IT IS GONE (account-openings spec §3). **
+    #     15. `HomePresenter#accounts_with_openings` — which of this screen's accounts have an
+    #         opening entry, ONE `pluck` for all of them (fix round — MED-4). It is the gate
+    #         `#awaiting_opening?` reads, and it is a row rather than a column because the record is
+    #         deletable: an opening entry removed from the Entries screen has to put the question
+    #         back on the account's card, which `pools.opened_on` could not say.
+    #
+    # ** THE OLD FIFTEENTH WAS ONBOARDING'S LATCH AND IT IS GONE (account-openings spec §3). **
     # `Category.opening_balance.exists?` was a statement of its own, run once per render through
     # `#collapsed_accounts` / `#onboarding_accounts`, because "has onboarding finished" was a fact
     # about a CATEGORY. It is a fact about each account now — `pools.opened_on`, a column on rows
@@ -1105,8 +1111,12 @@ RSpec.describe HomePresenter do
     # that had opened a ledger of its own would move this number, which is what the pin is for.
     #
     # ** IT WAS NINETEEN, THEN SIXTEEN, THEN FIFTEEN, THEN FOURTEEN WITH THE BLOCKS (§3), THEN
-    # FIFTEEN AGAIN WHEN THE PIN GREW A READER (fix round 1 — LOW-1) — AND IT IS FOURTEEN NOW BECAUSE
-    # ONBOARDING'S LATCH LEFT THE QUERY LOG. ** The blocks' own saving (line 15 of the old list,
+    # FIFTEEN AGAIN WHEN THE PIN GREW A READER (fix round 1 — LOW-1), THEN FOURTEEN WHEN ONBOARDING'S
+    # LATCH LEFT THE QUERY LOG — AND IT IS FIFTEEN AGAIN BECAUSE THE GATE MOVED FROM A COLUMN THIS
+    # SCREEN HAD ALREADY LOADED ONTO A ROW IT HAD NOT (fix round — MED-4). ** That is one statement
+    # bought deliberately: the column could not tell an answered account from one whose record had
+    # been deleted underneath it, and the screen would have gone on printing a figure with nothing
+    # behind it. Still ONE statement however many accounts the user has. ** The blocks' own saving (line 15 of the old list,
     # `#holder_spending_this_period`) is real and unchanged — see the rule-less-holder example below,
     # which is what it costs there.**
     # The three that left first were `Budget.steady_need`'s own — its
@@ -1117,14 +1127,14 @@ RSpec.describe HomePresenter do
     # is `#holder_spending_this_period`, and it left because its last reader did: a per-CATEGORY
     # spending sum was what `#period_rows` printed, and a per-RULE row reads its own lane off the
     # ledger. It still runs for the one shape that needs it — see the example below.
-    it "costs fourteen statements for a whole render" do
+    it "costs fifteen statements for a whole render" do
       income(2_000)
       groceries = holder("Groceries", priority: 1)
       rate(groceries, 400)
       spend(groceries, 310)
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
 
-      expect(count_statements { read_the_screen }).to eq(14)
+      expect(count_statements { read_the_screen }).to eq(15)
     end
 
     # THE UNBUDGETED FETCH IS CONDITIONAL, and this is what says so: the same screen with nothing
@@ -1136,7 +1146,7 @@ RSpec.describe HomePresenter do
       rate(groceries, 400)
       spend(groceries, 310)
 
-      expect(count_statements { read_the_screen }).to eq(13)
+      expect(count_statements { read_the_screen }).to eq(14)
     end
 
     # ** AND THE HOLDER SUM IS CONDITIONAL TOO — THE OTHER DIRECTION OF THE STATEMENT THAT LEFT. **
@@ -1151,7 +1161,7 @@ RSpec.describe HomePresenter do
       spend(create(:category, :expense, user: user, name: "Subscriptions"), 32)
       spend(holder("Car Repairs", priority: 2), 45)
 
-      expect(count_statements { read_the_screen }).to eq(15)
+      expect(count_statements { read_the_screen }).to eq(16)
     end
   end
 
@@ -1462,6 +1472,22 @@ RSpec.describe HomePresenter do
 
       expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Books", "Car Repairs"])
       expect(presenter.unbudgeted_rows.map(&:spent)).to eq([12, 45])
+    end
+
+    # ** AN OPENING SHORTFALL IS NOT SPENDING (fix round — MED-2), AND THIS IS THE READER IT HURT
+    # MOST. ** A new user's opening day is TODAY — there is no earlier entry for it to be the day
+    # before — so the entry lands inside the current period and this list printed
+    # `Opening Shortfall · spent $400.00` as the first thing a household saw after finishing setup.
+    # Both directions on one fixture: the shortfall is out, an ordinary receipt of the same shape is
+    # in. Re-derived: $32 of Subscriptions is the only real spending, so it is the whole list.
+    it "never lists an opening shortfall as spending", :aggregate_failures do
+      shortfall = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      create(:entry, item: create(:item, category: shortfall), amount: 400, date: today)
+      spender = create(:category, :expense, user: user, name: "Subscriptions")
+      create(:entry, item: create(:item, category: spender), amount: 32, date: today)
+
+      expect(presenter.unbudgeted_rows.map { |row| row.category.name }).to eq(["Subscriptions"])
+      expect(presenter.unbudgeted_rows.sole.spent).to eq(32)
     end
 
     # ZERO-SPEND ROWS ARE ABSENT BY CONSTRUCTION — they never appear in the grouped sum — which is the
@@ -1900,7 +1926,7 @@ RSpec.describe HomePresenter do
       ally = create(:pool, :account, :opened, user: user, name: "Ally")
       create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: today, kind: :transfer)
       create(:pool, :account, user: user, name: "Fresh")
-      checking.update!(opened_on: today)
+      answered!(checking)
 
       expect(presenter.other_accounts).to eq([ally])
       expect(presenter.other_accounts_total).to eq(400)
@@ -1908,20 +1934,45 @@ RSpec.describe HomePresenter do
       expect(presenter.collapsed_accounts).to eq([ally, checking])
     end
 
+    # ** THE RECORD IS DELETABLE, AND DELETING IT PUTS THE QUESTION BACK (fix round — MED-4). ** An
+    # opening entry is an ordinary entry on the Entries screen and a user may delete it there. Gated
+    # on `pools.opened_on` the account went on reading "answered" over a record that no longer
+    # existed — its money gone from the pot with nothing on Home saying so. Gated on the row, the
+    # card asks again, and `opened_on` stays as the date the re-ask will re-use.
+    it "asks again once the opening entry is deleted", :aggregate_failures do
+      expect(AccountOpening.new(user, checking, balance: "300").save).to be(true)
+      expect(described_class.new(user: user, today: today).awaiting_opening?(checking)).to be(false)
+
+      Entry.find_by!(opening_account_id: checking.id).destroy!
+
+      expect(described_class.new(user: user, today: today).awaiting_opening?(checking)).to be(true)
+      expect(checking.reload.opened_on).to be_present
+    end
+
     # ** ONBOARDING IS ONE QUESTION PER ACCOUNT AND IT IS OVER WHEN THE LAST ONE ANSWERS (§3). **
     # Both directions on one fixture, because "is the user still setting up" is the gate the whole
     # card renders on.
     it "is finished only once every account has answered", :aggregate_failures do
       fresh = create(:pool, :account, user: user, name: "Fresh")
-      checking.update!(opened_on: today)
+      answered!(checking)
 
       expect(presenter).to be_onboarding
       expect(presenter.awaiting_opening?(fresh)).to be(true)
       expect(presenter.awaiting_opening?(checking)).to be(false)
 
-      fresh.update!(opened_on: today)
+      answered!(fresh)
 
       expect(described_class.new(user: user, today: today)).not_to be_onboarding
+    end
+
+    # ** AN ACCOUNT ANSWERS THROUGH `AccountOpening` AND NOWHERE ELSE (fix round — MED-4). ** Setting
+    # `pools.opened_on` by hand used to be enough; the gate is the opening ENTRY's own existence now,
+    # so a fixture that wrote the column alone would mint an account the app still considers
+    # unanswered. The figure is the account's CURRENT balance, so the record written is a
+    # zero-amount entry and no movement — nothing about the fixture's money changes.
+    def answered!(account)
+      opening = AccountOpening.new(user, account, balance: AccountLedger.new(user).balance_of(account))
+      raise "could not open #{account.name}: #{opening.errors.full_messages.to_sentence}" unless opening.save
     end
   end
 

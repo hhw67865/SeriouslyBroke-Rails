@@ -34,6 +34,26 @@ RSpec.describe "Entries Index - Filtering", type: :system do
       expect(page).not_to have_content("Monthly Pay")
     end
 
+    # ** AN OPENING RECORD IS NOT SPENDING, AND THE `all` TAB IS STILL WHERE IT LIVES (fix round —
+    # MED-2). ** `Opening Shortfall` is an EXPENSE category by construction — that is how a negative
+    # opening lowers the pot — so this tab listed the record of what an account started with among
+    # the household's receipts. Both directions AND both tabs in one example, because hiding the row
+    # everywhere would hide the door: deleting an opening entry is what puts the question back on
+    # the account's card (`HomePresenter#awaiting_opening?`), and `all` is where a user finds it.
+    it "keeps an opening record out of the expenses tab and in the all tab", :aggregate_failures do
+      checking = create(:pool, :account, user: user, name: "Checking")
+      opening = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      item = create(:item, category: opening, name: "Initial balance")
+      create(:entry, item: item, amount: 777, description: "Checking opening balance", opening_account: checking)
+
+      visit entries_path(type: "expenses")
+      expect(page).to have_content("Groceries")
+      expect(page).to have_no_content("Initial balance")
+
+      visit entries_path
+      expect(page).to have_content("Initial balance")
+    end
+
     it "filters to income entries only" do
       visit entries_path(type: "income")
 

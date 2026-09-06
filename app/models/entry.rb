@@ -22,8 +22,43 @@ class Entry < ApplicationRecord
   # second one. The unique index behind it is the "never a second entry" rule made structural.
   belongs_to :opening_account, class_name: "Pool", optional: true
 
-  validates :amount, presence: true, numericality: { greater_than: 0 }
+  # ** ZERO IS A FIGURE ONLY AN OPENING MAY CARRY (fix round — MED-4). ** Every other entry is money
+  # that moved and `> 0` is the whole of what makes one, with the sign carried by the category's
+  # type. An opening is not money that moved: it is the ANSWER to "what's in it right now", and
+  # "nothing" is a real answer — a fresh savings account, or a checking account whose balance the app
+  # already tracks exactly. `HomePresenter#awaiting_opening?` reads the EXISTENCE of this row (so
+  # that deleting it from the Entries screen puts the question back on the account's card), and
+  # without a zero-amount row those two households could never answer at all: they would type their
+  # figure, be told the account holds it, and find the question still there on the next render.
+  #
+  # IT COSTS NOTHING ANYWHERE ELSE. A zero adds zero to `AccountLedger`'s sums, drains no category,
+  # and carries no movement (`account_movements` has its own `amount > 0` CHECK, and
+  # `AccountOpening#write_movement` writes none for a zero). What it does is exist, which is the
+  # whole job.
+  validates :amount, presence: true, numericality: { greater_than: 0 }, unless: :opening?
+  validates :amount, presence: true, numericality: { greater_than_or_equal_to: 0 }, if: :opening?
   validates :date, presence: true
+
+  # IS THIS ROW AN ACCOUNT'S OPENING RECORD? The one question `entries.opening_account_id` answers,
+  # asked by the validation above and by `EntriesController`, which refuses to let this screen
+  # re-point such an entry at another account.
+  #
+  # `has_attribute?` FIRST, and it is the same guard `Budget#keeps_unspent_never_dates` carries for
+  # the same reason: two validations above are gated on this method, and
+  # `spec/support/schema_rewind.rb` runs whole files against a schema where the column does not
+  # exist yet — the world `spec/migrations/account_openings_spec.rb` has to plant its fixtures in.
+  # Without it, every `create(:entry)` in that world raises `NoMethodError` out of `valid?`.
+  def opening? = has_attribute?(:opening_account_id) && opening_account_id.present?
+
+  # ** THE SENTENCE THE ENTRIES SCREEN SAYS ABOUT AN OPENING ENTRY, IN TWO PIECES AND ONE PLACE
+  # (fix round — MED-1). ** The form prints it with the second half as a link to Home; the
+  # controller's refusal prints both halves as flat text. Spelled here so the read-only line a user
+  # sees and the 422 a crafted POST gets cannot drift into two different explanations of one rule.
+  OPENING_DOOR = "edit it from the account card"
+
+  def opening_line = "Opening balance for #{opening_account&.name}"
+
+  def opening_refusal = "#{opening_line} · #{OPENING_DOOR}."
 
   delegate :user, to: :item
   delegate :category, to: :item

@@ -8,6 +8,7 @@ require Rails.root.join("db/migrate/20260903010000_drop_the_distribution")
 require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 require Rails.root.join("db/migrate/20260906000000_two_shapes")
 require Rails.root.join("db/migrate/20260907000000_a_fund_keeps_unspent")
+require Rails.root.join("db/migrate/20260908000000_account_openings")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -125,6 +126,21 @@ require Rails.root.join("db/migrate/20260907000000_a_fund_keeps_unspent")
 # cost each of them an add/remove cycle of a column nothing in them plants and would leave a dead
 # entry in the list that reads as a dependency. That is `CreateAdjustments`' own paragraph, below,
 # applied to a migration on the other end of the sequence.
+#
+# ** A NINTH IS `require`d HERE AND IS ON NOBODY'S LIST EITHER, FOR THE EIGHTH'S EXACT REASON
+# (account-openings §2). ** `AccountOpenings` (2026-09-08) ADDS `pools.opened_on` and
+# `entries.opening_account_id` and backfills them from rows that already exist.
+# `spec/migrations/account_openings_spec.rb` includes this context with `described_class` — its own
+# `up` would meet its own columns — so the constant has to be loadable from here. But no `down` on
+# any list gives or takes those columns away, and no `up` on any list reads them: the migrations on
+# the list predate both columns and plant nothing that carries one. Adding it to the older specs'
+# forward lists would cost each of them an add/remove cycle for nothing and would leave a dead entry
+# reading as a dependency.
+#
+# ITS `down` IS A TRUE REVERSAL OF THE SHAPE and deliberately not of the ROWS — there are no rows of
+# its own to reverse. Everything the backfill wrote lives in the two columns it drops, so the entry
+# it adopted is an ordinary entry again and the account it answered for is unanswered again, which
+# is exactly the database this migration met.
 #
 # ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
 # It is newer than the first four and older than the fifth, so the question is live in both

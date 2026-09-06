@@ -191,7 +191,7 @@ class DashboardPresenter
   end
 
   def untracked_expense_categories
-    @untracked_expense_categories ||= @user.categories.expenses.untracked.includes(items: :entries)
+    @untracked_expense_categories ||= @user.categories.spendable.untracked.includes(items: :entries)
   end
 
   def untracked_income_categories

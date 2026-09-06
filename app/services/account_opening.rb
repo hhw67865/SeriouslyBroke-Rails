@@ -143,18 +143,28 @@ class AccountOpening
   # match ("the transfer dated the opening day from main to this account") was the alternative and it
   # is wrong on a shape users produce: a transfer the user really made on the same day matches it
   # too. A user's own transfer names no source entry, so this one cannot be confused with it.
-  def opening_movement(entry) = entry.account_movements.kind_transfer.first
+  # `sole` AND NOT `first` (fix round — LOW-1), which makes the one-row law load-bearing rather than
+  # assumed: `#write_movement` clears before it writes, so an opening entry has AT MOST one transfer
+  # by construction, and `first` on an unordered query would quietly pick one of two if that ever
+  # stopped being true — handing the correction a figure half the ledger disagreed with. The empty
+  # case is answered before it is asked, because "main's opening has no movement" is the ordinary
+  # answer rather than a violation.
+  def opening_movement(entry)
+    movements = entry.account_movements.kind_transfer.to_a
+    return if movements.empty?
 
+    movements.sole
+  end
+
+  # ** ONE ROW, ALWAYS, INCLUDING FOR ZERO (fix round — MED-4). ** It used to DESTROY the entry when
+  # the recomputed amount came out at zero and lean on `pools.opened_on` to remember that the account
+  # had answered. The gate is the entry's own existence now — so that deleting it from the Entries
+  # screen puts the question back on the account's card — and a destroyed row would have made "this
+  # account holds nothing" and "this account has never been asked" the same state. Two ordinary
+  # households live in that state: a fresh savings account, and a checking account whose balance the
+  # app already tracks to the cent. `Entry`'s own validation carves zero out for exactly this row.
   def write(amount, day)
-    entry = existing_entry
-
-    # NOTHING TO SHOW, AND THAT IS A REAL ANSWER: an account holding exactly what the app has already
-    # tracked into it has no opening left to record. `Entry` validates `amount > 0`, so the record's
-    # existence is `pools.opened_on` — set by the caller either way — and the entry (with its
-    # movement, by `dependent: :destroy`) goes.
-    return entry&.destroy! if amount.zero?
-
-    entry ||= Entry.new(opening_account: account)
+    entry = existing_entry || Entry.new(opening_account: account)
     entry.update!(item: item_for(amount), amount: amount.abs, date: day, description: "#{account.name} opening balance")
     write_movement(entry, amount, day)
   end
@@ -164,9 +174,11 @@ class AccountOpening
   # user has money in; an account stated BELOW what the app has moved into it opens negative, and the
   # transfer that says so runs account → main. Everything else is the same idiom, including clearing
   # first so a correction replaces rather than accumulates.
+  # A ZERO OPENING CARRIES NO MOVEMENT — there is nothing to move, and `account_movements` has its
+  # own `amount > 0` CHECK at the database, so writing one would be refused rather than pointless.
   def write_movement(entry, amount, day)
     entry.account_movements.kind_transfer.destroy_all
-    return if main?
+    return if main? || amount.zero?
 
     from, to = amount.positive? ? [main, account] : [account, main]
     entry.account_movements.create!(from_pool: from, to_pool: to, amount: amount.abs, date: day, kind: :transfer)
@@ -183,11 +195,14 @@ class AccountOpening
   # `find_or_create_by!` on the CASE-INSENSITIVE scope rather than on `name:`, so a user who already
   # has a category spelled "opening balance" is found rather than collided with — `Category` validates
   # its name unique case-insensitively, and a bare create would turn a saved balance into a crash.
+  # ZERO IS AN `Opening Balance`, NOT A SHORTFALL. Nothing is short: the account holds exactly what
+  # the app says it holds, and filing that under an expense named "Opening Shortfall" would put a
+  # sentence in the user's history that is not true of them.
   def category_for(amount)
-    income = amount.positive?
+    income = !amount.negative?
     name = income ? Category::OPENING_BALANCE_NAME : Category::OPENING_SHORTFALL_NAME
 
-    user.categories.opening_balance.find { |category| category.name.casecmp?(name) } ||
+    user.categories.opening.find { |category| category.name.casecmp?(name) } ||
       user.categories.create!(name: name, category_type: income ? :income : :expense, tracked: false)
   end
 

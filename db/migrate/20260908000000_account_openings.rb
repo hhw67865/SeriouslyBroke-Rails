@@ -77,6 +77,11 @@ class AccountOpenings < ActiveRecord::Migration[8.1]
       adopt_main_corrections
     end
 
+    # `p.pool_type = 0` IS THE ACCOUNT ARM, STATED (fix round — LOW-3). Both ends of every
+    # `account_movements` row are accounts today — `pools_are_accounts` holds it at the database — so
+    # the condition cannot currently exclude a row; it is here because this statement writes a column
+    # whose whole meaning is "this ACCOUNT has said what it holds", and a migration that would set it
+    # on any other kind of pool the table ever holds is a migration that means something else.
     say_with_time("marking every account a movement has funded as having answered") do
       execute(<<~SQL.squish)
         UPDATE pools p
@@ -84,14 +89,21 @@ class AccountOpenings < ActiveRecord::Migration[8.1]
           FROM (SELECT to_pool_id, MIN(date)::date AS first_day FROM account_movements GROUP BY to_pool_id) m
          WHERE p.id = m.to_pool_id
            AND p.opened_on IS NULL
+           AND p.pool_type = 0
            AND p.id NOT IN (SELECT default_account_id FROM users WHERE default_account_id IS NOT NULL)
       SQL
     end
   end
 
-  # `DISTINCT ON (u.id) … ORDER BY u.id, e.date` takes ONE entry per user — the earliest — because
-  # `entries.opening_account_id` is unique and the old category could hold more than one row (nothing
-  # stopped a user adding entries to it through the ordinary screens).
+  # `DISTINCT ON (u.id) … ORDER BY u.id, e.date, e.id` takes ONE entry per user — the earliest —
+  # because `entries.opening_account_id` is unique and the old category could hold more than one row
+  # (nothing stopped a user adding entries to it through the ordinary screens).
+  #
+  # `e.id` IS THE TIEBREAK AND IT IS NOT DECORATION (fix round — LOW-2). Two entries dated the SAME
+  # DAY leave `DISTINCT ON` free to pick either, and Postgres is entitled to pick a different one on
+  # a re-run, a replica, or a differently-planned scan — so a migration whose whole job is to adopt
+  # ONE row would have adopted an arbitrary one. Ordering by the primary key after the date makes the
+  # choice total: the earliest entry, and among equals the same one every time.
   def adopt_main_corrections
     rows = select_all(<<~SQL.squish)
       SELECT DISTINCT ON (u.id) u.default_account_id AS account_id, e.id AS entry_id, e.date::date AS day
@@ -100,7 +112,7 @@ class AccountOpenings < ActiveRecord::Migration[8.1]
         JOIN items i ON i.category_id = c.id
         JOIN entries e ON e.item_id = i.id
        WHERE u.default_account_id IS NOT NULL
-       ORDER BY u.id, e.date ASC
+       ORDER BY u.id, e.date ASC, e.id ASC
     SQL
 
     rows.each do |row|

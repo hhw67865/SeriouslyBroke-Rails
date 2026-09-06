@@ -45,7 +45,21 @@ class EntriesController < ApplicationController
   end
 
   # PATCH/PUT /entries/1
+  #
+  # ** AN OPENING ENTRY'S ACCOUNT IS NOT EDITABLE FROM THIS SCREEN (fix round — MED-1). ** The form
+  # renders no select for one (see `entries/_form.html.erb`), so the only ways this param arrives on
+  # an opening entry are a stale page and a crafted POST — and both used to be accepted.
+  # `#sync_income_routing` would call `Entry#route_income_to!`, which rewrites the entry's transfer,
+  # and that transfer is HALF the record of what an account holds: re-pointing Ally's opening at HYSA
+  # left Ally correcting against a movement that had walked away (measured: Ally corrected to $1,000
+  # afterwards showed $500, and HYSA silently gained then lost the same $500).
+  #
+  # REFUSED RATHER THAN IGNORED, and 422 rather than a redirect: a request that asked for something
+  # the app will not do should say so where the user is standing, with the same sentence the form
+  # prints in place of the select.
   def update
+    return refuse_reopening if @entry.opening? && @routing_asked
+
     if @entry.update(entry_params)
       sync_income_routing
       redirect_to previous_path, notice: "Entry was successfully updated."
@@ -135,10 +149,22 @@ class EntriesController < ApplicationController
     entries.page(params[:page])
   end
 
+  # ** THE EXPENSES TAB IS ABOUT SPENDING, AND AN OPENING RECORD IS NOT SPENDING (fix round —
+  # MED-2). ** `Opening Shortfall` is an EXPENSE category by construction — that is how a negative
+  # opening lowers the pot — so a household filtering their ledger for what they spent met a $400
+  # row that is the record of what an account started with.
+  #
+  # BY THE MARKER COLUMN, NOT BY `Category.spendable`: the question on this screen is about a ROW,
+  # and `entries.opening_account_id` answers it exactly, whichever of the two opening categories the
+  # row happens to sit in.
+  #
+  # THE `all` TAB STILL LISTS IT, deliberately and load-bearing: an opening entry is an ordinary
+  # entry a user may delete, and deleting it puts the question back on the account's card
+  # (`HomePresenter#awaiting_opening?`). A filter that hid it from every tab would hide the door.
   def apply_type_filter(entries)
     case params[:type]
     when "expenses"
-      entries.expenses
+      entries.expenses.where(opening_account_id: nil)
     when "income"
       entries.incomes
     else
@@ -202,6 +228,14 @@ class EntriesController < ApplicationController
     return @entry.route_income_to!(nil) unless @entry.category.income?
 
     @entry.route_income_to!(@routing_asked ? @destination_account : @entry.routed_account)
+  end
+
+  # THE 422 THAT SAYS WHY, IN THE FORM'S OWN WORDS (`Entry#opening_refusal` is the one spelling).
+  # Nothing is written: the entry is re-rendered exactly as it stands, so the amount, the date and
+  # the account it actually belongs to are all still true on the screen the user is looking at.
+  def refuse_reopening
+    flash.now[:alert] = @entry.opening_refusal
+    render :edit, status: :unprocessable_content
   end
 
   def set_item

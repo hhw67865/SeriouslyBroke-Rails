@@ -200,11 +200,20 @@ class HomePresenter
   # collapse is the whole point of the spec: the app asks one question per account now, and every
   # account answers it the same way, main included.
   #
-  # `pools.opened_on`, NOT A BALANCE AND NOT A CATEGORY'S EXISTENCE. A balance-based gate could not
-  # tell an account that holds nothing from one that has never been asked, and $0.00 is a real
-  # answer to "what's in it right now". The old latch (`Category.opening_balance.exists?`) was one
-  # fact for the whole USER, which cannot say anything about a particular account.
-  def awaiting_opening?(account) = account.opened_on.nil?
+  # ** THE GATE IS THE OPENING ENTRY'S OWN EXISTENCE (fix round — MED-4), NOT `pools.opened_on`. **
+  # The record is deletable: an opening entry is an ordinary entry on the Entries screen and a user
+  # may delete it there, deliberately or otherwise. Gated on the column, that deletion left the
+  # account reading "answered" over a record that no longer existed — its money gone from the pot
+  # with nothing on Home saying so and no door to put it back. Gated on the row, the account's card
+  # asks again, which is the truth about it. `pools.opened_on` stays as the DATE memory: the re-ask
+  # re-uses the day the account first opened on rather than walking it through the calendar.
+  #
+  # NOT A BALANCE, EITHER: $0.00 is a real answer to "what's in it right now", and a balance-based
+  # gate cannot tell an account holding nothing from one nobody has asked. That is why a zero opening
+  # writes a zero-amount ENTRY (`AccountOpening#write`, `Entry`'s own validation carve-out) rather
+  # than nothing at all. The old latch (`Category.opening_balance.exists?`) was one fact for the
+  # whole USER, which cannot say anything about a particular account.
+  def awaiting_opening?(account) = accounts_with_openings.exclude?(account.id)
 
   # IS THE USER STILL SETTING UP? Any account that has not said what it holds. Onboarding is complete
   # when the last one has (§3), and a user with no accounts at all is not "finished" — they are at
@@ -663,7 +672,7 @@ class HomePresenter
     spending = unbudgeted_spending_this_period
     return [] if spending.empty?
 
-    user.categories.expenses.where(id: spending.keys).order(:name)
+    user.categories.spendable.where(id: spending.keys).order(:name)
       .map { |category| UnbudgetedRow.new(category: category, spent: spending.fetch(category.id)) }
   end
 
@@ -789,6 +798,18 @@ class HomePresenter
   # `AccountLedger` here would be a second reading of the same two SUMs, free to disagree with the
   # pot the hero prints.
   def account_ledger = claim_ledger.account_ledger
+
+  # WHICH OF THIS SCREEN'S ACCOUNTS HAVE AN OPENING RECORD — ONE statement for all of them, memoised,
+  # because `#awaiting_opening?` is asked once per account by the card, once more by the accounts
+  # line and again by the money row's tile. A per-account `exists?` would be three queries per
+  # account on a screen whose whole cost is pinned to fourteen.
+  #
+  # `pluck` over the ids the screen has already loaded rather than a preload on `#accounts`: the
+  # answer is a set of ids, and instantiating each opening entry to ask whether it exists would
+  # fetch four columns to use none of them.
+  def accounts_with_openings
+    @accounts_with_openings ||= Entry.where(opening_account_id: accounts.map(&:id)).pluck(:opening_account_id).to_set
+  end
 
   # ** THE LATCH READER IS GONE (account-openings spec §3). ** `#opening_balance_recorded?` ran
   # `Category.opening_balance.exists?` — ONE fact for the whole user, which was the right shape while

@@ -173,6 +173,37 @@ RSpec.describe "Home Openings", type: :system do
     expect(account_card("Ally")).to have_field("What's in it right now", with: "500.00")
   end
 
+  # ** THE RECORD IS DELETABLE, AND THE CARD ASKS AGAIN WHEN IT GOES (fix round — MED-4). ** An
+  # opening entry is an ordinary entry on the Entries screen and a user may delete it there. Home
+  # used to go on reading the account as answered — its money gone from the pot with nothing on the
+  # screen saying so and no door to put it back. Re-derived: Ally opened at $500, so deleting the
+  # entry takes its transfer with it (`dependent: :destroy`) and Ally is back to $0 with its row
+  # returned; saying $500 again leaves ONE record, not two.
+  #
+  # THE DELETE IS MADE THROUGH THE MODEL rather than by driving the Entries screen's own button: what
+  # is under test is what HOME does about a missing record, and the Entries screen's delete is pinned
+  # where that button lives. `spec/requests/entries_routing_spec.rb` owns the other half of this
+  # entry's story — that its ACCOUNT cannot be re-pointed from that screen at all.
+  it "asks again when the opening entry is deleted, and keeps one record after", :aggregate_failures do
+    visit root_path
+    add_account("Ally", "500")
+    expect(page).to have_no_css("[data-account-row='Ally']")
+
+    Entry.find_by!(opening_account_id: user.pools.find_by!(name: "Ally").id).destroy!
+    visit root_path
+
+    expect(card).to have_css("[data-account-row='Ally']")
+
+    say_it_holds("Ally", "500")
+
+    expect(page).to have_no_css("[data-account-row='Ally']")
+    expect(page).to have_css("[data-other-accounts-total]", text: "$500.00")
+    # ONE record for Ally, and one in the whole database — Checking has not been asked yet in this
+    # example, so a second row here would be the re-ask having written a duplicate rather than the
+    # replacement it is.
+    expect(Entry.where.not(opening_account_id: nil).count).to eq(1)
+  end
+
   # ── THE NARROW BREAKPOINT ──────────────────────────────────────────────────────────────────────
   #
   # A TRUE 375px LAYOUT VIEWPORT via CDP — `money_spec.rb`'s mechanism, copied deliberately: Chrome

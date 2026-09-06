@@ -46,6 +46,24 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       expect(page).to have_content("Dining")
     end
 
+    # ** AN OPENING SHORTFALL IS NOT UNTRACKED SPENDING (fix round — MED-2). ** It is an EXPENSE
+    # category created `tracked: false` by `AccountOpening` — that is how a negative opening lowers
+    # the pot without touching this period's figures — so it landed in the untracked band and this
+    # page reported the record of what an account started with as money the household spent outside
+    # its budget. Both directions in one example: the shortfall is absent, an ordinary untracked
+    # expense beside it is present with its own figure.
+    it "keeps an opening shortfall out of the untracked breakdown", :aggregate_failures do
+      dining.update!(tracked: false)
+      shortfall = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      create(:entry, item: create(:item, category: shortfall, name: "Initial balance"), amount: 777, date: base_date + 1.day)
+
+      visit reports_path(tab: "expenses")
+
+      expect(page).to have_content("Dining")
+      expect(page).to have_no_content(Category::OPENING_SHORTFALL_NAME)
+      expect(page).to have_no_content("$777.00")
+    end
+
     it "shows only expense categories in the tracked filter" do
       create(:category, :income, user: user, name: "Salary")
       visit reports_path(tab: "expenses")

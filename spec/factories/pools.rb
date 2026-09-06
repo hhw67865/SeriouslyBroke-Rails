@@ -25,10 +25,19 @@ FactoryBot.define do
     #
     # NOT THE DEFAULT, DELIBERATELY: a freshly minted account has not answered anything, which is
     # what the onboarding examples are about and what `AccountOpening` computes its opening day for.
-    # The date is a bare marker here — the real one comes from `AccountOpening`, which is the only
-    # thing that writes an opening entry to go with it.
+    #
+    # ** IT GOES THROUGH `AccountOpening` RATHER THAN SETTING A COLUMN (fix round — MED-4). ** The
+    # gate is the opening ENTRY's existence now, so a fixture that wrote `opened_on` alone would mint
+    # an account the app still considers unanswered. The figure is the account's CURRENT balance —
+    # $0.00 for an account nothing has moved into yet, which is every account at the moment a factory
+    # mints one — so the record this writes is a zero-amount entry and NO movement: nothing about the
+    # fixture's money changes, which is what lets `other_account`-style helpers go on funding an
+    # account with a plain transfer afterwards and still assert their own planted figures.
     trait :opened do
-      opened_on { Date.current }
+      after(:create) do |pool|
+        opening = AccountOpening.new(pool.user, pool, balance: AccountLedger.new(pool.user).balance_of(pool))
+        raise "the :opened trait could not open #{pool.name}: #{opening.errors.full_messages.to_sentence}" unless opening.save
+      end
     end
 
     # THE FIRST ACCOUNT A USER GETS IS THEIR MAIN ONE, the same rule

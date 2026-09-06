@@ -449,6 +449,23 @@ health_savings = account.call("Health Savings")
 # than left to whichever account happens to sort first.
 user.update!(default_account: checking)
 
+# ** AND EACH ONE SAYS WHAT IT HOLDS (account-openings §3; fix round — MED-4). ** `opened_on` alone is
+# not the answer any more: `HomePresenter#awaiting_opening?` reads the opening ENTRY's own existence,
+# so that deleting the record from the Entries screen puts the question back on the account's card.
+# Without a record here the demo household — four accounts, six periods of history, every figure
+# settled — would open Home to a card asking what each of its accounts holds.
+#
+# ** THE FIGURE IS ZERO, WHICH IS THE TRUTH ABOUT THEM AT THIS LINE. ** Nothing has been recorded yet,
+# so `AccountOpening` computes `typed − balance` = $0 and writes a zero-amount entry and NO movement:
+# every dollar the demo ends up holding is still a real seeded paycheck or a real transfer, and every
+# figure `spec/seeds_spec.rb` pins is untouched. The entry is dated `opened_on` — thirteen periods
+# back, before the first row of history — because `AccountOpening` reads that column before computing
+# a day of its own.
+[checking, ally, side_gig, health_savings].each do |bank_account|
+  opening = AccountOpening.new(user, bank_account, balance: 0)
+  raise "could not open #{bank_account.name}: #{opening.errors.full_messages.to_sentence}" unless opening.save
+end
+
 # ---------------------------------------------------------------------------------------------
 # THE HOUSEHOLD'S BILLS AND RUNNING COSTS. Priorities 1-9, which is the order they GIVE WAY in when
 # the money runs out — read from the bottom (§4).

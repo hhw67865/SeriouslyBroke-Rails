@@ -161,6 +161,19 @@ RSpec.describe BudgetPagePresenter do
       expect(row("Aquarium")).not_to be_ruled
     end
 
+    # ** AN OPENING CATEGORY IS NOT ON THIS PAGE EITHER (fix round — MED-2). ** `Opening Shortfall`
+    # is an EXPENSE by construction — that is how a negative opening lowers the pot — so the
+    # rule-less list offered a funding rule for the record of what an account started with. Both
+    # directions in one example: the shortfall is out, an ordinary rule-less expense beside it is in.
+    it "leaves out the opening categories and keeps the ordinary rule-less ones", :aggregate_failures do
+      rate(holder("Groceries"), 400)
+      create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      create(:category, :income, user: user, name: Category::OPENING_BALANCE_NAME, tracked: false)
+      create(:category, :expense, user: user, name: "Aquarium")
+
+      expect(row_names).to eq(["Groceries", "Aquarium"])
+    end
+
     # AN INCOME CATEGORY IS NOT ON THIS PAGE AT ALL — a rule cannot claim one
     # (`Budget#category_must_be_an_expense`), so a row for it would be a row with no rule it could
     # ever hold.

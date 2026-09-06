@@ -123,16 +123,35 @@
             landed. Rebuilding the item is what makes the category select render at all on a failed
             create, so it stays; the honest fix is for that branch to stop discarding the submitted
             item, which is a change to `create` and not to this partial. %>
-        <div class="form-group mt-5"
-             data-app--entry--routing-target="field"
-             <%= "hidden" unless entry.item&.category&.income? %>>
-          <label for="entry_destination_account_id" class="form-label">Lands in</label>
-          <%= select_tag "entry[destination_account_id]",
-              options_from_collection_for_select(@accounts, :id, :name, entry_destination_account(entry)&.id),
-              id: "entry_destination_account_id",
-              class: "form-select" %>
-          <p class="form-hint">Which account did this money arrive in?</p>
-        </div>
+        <%# ** AN OPENING ENTRY IS NOT ASKED THIS QUESTION AT ALL (fix round — MED-1). ** The select
+            is the door onto `Entry#route_income_to!`, which REWRITES the entry's transfer — and for
+            an opening entry that transfer is half the record of what an account holds. Re-pointing
+            Ally's opening at HYSA left Ally's own correction computing against a movement that had
+            walked to another account: measured, an Ally corrected to $1,000 afterwards showed $500,
+            and HYSA silently lost the same $500. The account an opening belongs to is not editable
+            from this screen; it is `entries.opening_account_id`, and the door to changing what the
+            account holds is the account's own card on Home. `EntriesController#update` refuses the
+            param with this same sentence, because a stale form and a crafted POST both reach it. %>
+        <% if entry.opening? %>
+          <div class="form-group mt-5" data-opening-entry="<%= entry.opening_account.name %>">
+            <span class="form-label">Lands in</span>
+            <p class="form-hint">
+              <%= entry.opening_line %> ·
+              <%= link_to Entry::OPENING_DOOR, root_path, class: "text-status-info hover:underline" %>
+            </p>
+          </div>
+        <% else %>
+          <div class="form-group mt-5"
+               data-app--entry--routing-target="field"
+               <%= "hidden" unless entry.item&.category&.income? %>>
+            <label for="entry_destination_account_id" class="form-label">Lands in</label>
+            <%= select_tag "entry[destination_account_id]",
+                options_from_collection_for_select(@accounts, :id, :name, entry_destination_account(entry)&.id),
+                id: "entry_destination_account_id",
+                class: "form-select" %>
+            <p class="form-hint">Which account did this money arrive in?</p>
+          </div>
+        <% end %>
 
         <%# THE ONLY THING BUDGETING ADDS TO THIS FORM (§6): the envelope impact, under the amount
             field. The container is stable and the CARD inside it is replaced by the server whenever

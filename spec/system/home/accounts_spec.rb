@@ -38,8 +38,14 @@ RSpec.describe "Home Accounts", type: :system do
   # out of the collapsed set — which is correct, and is exactly what the examples about the COLLAPSED
   # set must not be measuring. It was `opening_balance_recorded!`, which closed the one-time latch by
   # minting the "Opening Balance" category; the signal is `pools.opened_on` now, per account.
+  # ** IT GOES THROUGH `AccountOpening` (fix round — MED-4). ** The gate is the opening ENTRY's own
+  # existence now — so that deleting the record from the Entries screen puts the question back — and
+  # writing `pools.opened_on` by hand would mint an account the app still considers unanswered. The
+  # figure is the account's CURRENT balance, so the record written is a zero-amount entry and no
+  # movement: nothing about this file's planted money changes.
   def answered!(account = checking)
-    account.update!(opened_on: Date.current)
+    opening = AccountOpening.new(user, account, balance: AccountLedger.new(user).balance_of(account))
+    raise "could not open #{account.name}: #{opening.errors.full_messages.to_sentence}" unless opening.save
   end
 
   # A SECOND ACCOUNT WITH MONEY IN IT. Account funding is a move on the PHYSICAL ledger (main → the
