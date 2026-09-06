@@ -73,6 +73,17 @@ RSpec.describe "Home Runway", type: :system do
     bill(category, amount: amount, due: due, item: create(:item, category: category, name: name))
   end
 
+  # TWO DATED BILLS ON ONE CATEGORY, TWO DAYS APART INSIDE THE PERIOD — the fixture behind every
+  # example about two labels sharing one rail, and three lines none of them is about.
+  def two_bills_one_period
+    utilities = holder("Utilities")
+
+    [
+      bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24)),
+      bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 26))
+    ]
+  end
+
   # THE TWO HOOKS, FOUND BY THE RULE THAT OWNS THEM. Both take the `Budget` the fixture helpers
   # return, so no example in this file can be satisfied by another rule's mark.
   # THE SCREEN, READ AT THIS FILE'S FROZEN DAY — every example travels, and an example that reads it
@@ -177,11 +188,42 @@ RSpec.describe "Home Runway", type: :system do
 
     travel_to(today) { visit root_path }
 
-    expect(tick_mark(rule)[:style]).to include("79%")
+    # THE POSITION IS THE GROUP'S NOW, NOT THE DOT'S: a tick is one element — amount, dot, name —
+    # placed once, so the words cannot be at a different percent from the mark they belong to.
+    expect(tick(rule)[:style]).to include("79%")
     expect(tick_mark(rule)["data-tick-label"]).to eq("Utilities")
     expect(tick(rule)).to have_content("$120.00").and have_content("ready")
     expect(page).to have_css("[data-due-total]", text: "$120.00 due before Aug 27")
     expect(page).to have_no_css("[data-short-list]")
+  end
+
+  # ** THE WORDS ARE ON THE RAIL, NOT IN A LIST UNDER IT (2026-09-06 layout ruling). ** They were
+  # stacked below the bar — the same ticks printed twice, once as marks and once as rows — so a
+  # reader had to match a dot to a row by eye and the panel said everything two ways. The panel is
+  # full width now and a fortnight is most of the page, so each label stands where its money is:
+  # AMOUNT ABOVE THE DOT, NAME AND STATE BELOW IT.
+  #
+  # GEOMETRY RATHER THAN CLASS NAMES, because "above" is the whole assertion and a class that
+  # stopped positioning would still render both spans in the right order in the DOM. The dot's
+  # centre is checked against both, and the two labels are checked against each other, so a group
+  # that collapsed onto one line — which is what a lost `flex-col` produces — fails.
+  it "stands each tick's words on the rail, amount above the dot and name below", :aggregate_failures do
+    deposit(1_000)
+    rule = bill_on_item(holder("Utilities"), "Electric", amount: 120, due: Date.new(2026, 8, 24))
+
+    travel_to(today) { visit root_path }
+
+    dot = tick_mark(rule).native.rect
+    amount = tick(rule).find("[data-tick-amount]").native.rect
+    name = tick(rule).find("[data-tick-name]").native.rect
+    # THE DOT IS STILL ON THE RAIL, which is what the symmetric column above and below it buys: a
+    # group that centred itself instead of its dot would drift off the bar as soon as the two labels
+    # stopped being the same height.
+    rail = find("[data-period-progress]").native.rect
+
+    expect(amount.y + amount.height).to be <= dot.y
+    expect(name.y).to be >= dot.y + dot.height
+    expect(dot.y + (dot.height / 2)).to be_within(2).of(rail.y + (rail.height / 2))
   end
 
   # ** THE MONEY IS NOT THERE, AND THE PANEL SAYS SO THREE WAYS: ** a red mark, the row's own words,
@@ -242,7 +284,7 @@ RSpec.describe "Home Runway", type: :system do
     expect(mark.x + (mark.width / 2)).to be_between(dot.x, dot.x + dot.width)
     # DRAWN AFTER THE TICK, AND ABOVE IT: the sibling combinator is document order, which is what
     # decides the paint order inside one stacking context, and `z-10` is what decides it anyway.
-    expect(page).to have_css("[data-tick-mark] ~ [data-today-mark].z-10")
+    expect(page).to have_css("[data-tick] ~ [data-today-mark].z-10")
   end
 
   # ** TWO BILLS DUE ON ONE DAY ARE TWO DOTS. ** Both fall on Aug 24, so both are placed at the same
@@ -257,7 +299,10 @@ RSpec.describe "Home Runway", type: :system do
 
     travel_to(today) { visit root_path }
 
-    expect(tick_mark(water).native.rect.x - tick_mark(electric).native.rect.x).to eq(6)
+    # WITHIN A TENTH OF A PIXEL rather than exactly 6: the dot is centred inside its tick's group
+    # now, and a group whose label is an odd number of pixels wide centres on a half pixel. The
+    # assertion is the nudge, and a `left:` that ignored it would put both dots at the same x.
+    expect(tick_mark(water).native.rect.x - tick_mark(electric).native.rect.x).to be_within(0.1).of(6)
   end
 
   # ** TWO ITEMS WITH ONE NAME, IN TWO CATEGORIES (LOW-4). ** "Electric" is an ordinary item name and
@@ -317,29 +362,34 @@ RSpec.describe "Home Runway", type: :system do
       )
     end
 
-    # ** THE TICKS KEEP THEIR WORDS AT 375 (§3), AND THE RULING IS THAT THE WORDS STACK RATHER THAN
-    # ROTATE. ** The mock labels each mark in place; two bills three days apart put their labels
-    # through each other at this width, and a label that has to be READ is worth more than one that
-    # has to be positioned. So the marks stay on the rail (with the full label in a `title`) and the
-    # words go under it, one tick per line — which is what the geometry below measures: the second
-    # tick's row sits BELOW the first rather than beside it, and neither leaves the viewport.
-    it "keeps every tick's words inside a 375px viewport, one to a line", :aggregate_failures do
+    # ** THE AMOUNT KEEPS ITS PLACE AND THE NAME MOVES INTO THE PACE BLOCK (2026-09-06 layout
+    # ruling). ** Two labels two days apart put their names through each other at 375px — that is
+    # the collision the old stacked list was avoiding — but the AMOUNT is short, it is the figure,
+    # and it is the half worth reading in place. So the amount stays above its dot and the name
+    # comes down into the pace block, where a line may wrap.
+    #
+    # THE NAME IS `invisible` RATHER THAN `hidden`, which is the one implementation fact this
+    # example has to know: the tick's column is symmetric about its dot, so taking the name's half
+    # away would drop the dot off the rail. Capybara treats `visibility: hidden` as not visible,
+    # which is exactly the assertion below, and `visible: :all` is how the geometry still reads it.
+    it "keeps the amount on the rail and moves the name into the pace line", :aggregate_failures do
       deposit(1_000)
-      utilities = holder("Utilities")
-      electric = bill_on_item(utilities, "Electric", amount: 120, due: Date.new(2026, 8, 24))
-      water = bill_on_item(utilities, "Water", amount: 30, due: Date.new(2026, 8, 26))
+      electric, water = two_bills_one_period
 
       travel_to(today) { visit root_path }
 
-      expect(tick(electric)).to have_content("$120.00")
+      # THE AMOUNT, ABOVE ITS DOT, AND STILL ON THE RAIL.
+      dot = tick_mark(electric).native.rect
+      amount = tick(electric).find("[data-tick-amount]").native.rect
+      expect(amount.y + amount.height).to be <= dot.y
 
-      first = tick(electric).native.rect
-      second = tick(water).native.rect
+      # THE NAME IS NOT READABLE ON THE RAIL, and it is not missing from the screen: both ticks say
+      # themselves in the pace block, in words, inside the viewport.
+      expect(tick(electric)).to have_no_css("[data-tick-name]")
+      expect(find("[data-pace]")).to have_content("$120.00 Electric · ready").and have_content("$30.00 Water · ready")
 
-      # THE SECOND TICK IS BELOW THE FIRST (they stack) and its right edge is inside the viewport —
-      # the two facts a row of labels along a rail fails at this width.
-      expect(second.y).to be > first.y
-      expect(second.x + second.width).to be <= 375
+      words = find("[data-tick-words='#{water.id}']").native.rect
+      expect(words.x + words.width).to be <= 375
     end
   end
 end

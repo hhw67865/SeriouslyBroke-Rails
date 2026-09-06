@@ -726,5 +726,31 @@ RSpec.describe "Home This Period", type: :system do
       expect(panel.x + panel.width).to be <= 375
       expect(amount.x + amount.width).to be <= panel.x + panel.width
     end
+
+    # ** THE HEADING TRADES THE COUNTS FOR THE FIGURE AT 375 (2026-09-06 layout ruling). ** At full
+    # width the heading names what the section holds and the claimed total sits at the right margin.
+    # A phone has no right margin to put a figure at, and "This period · 2 categories · 3 rules"
+    # fills the line on its own — so the FIGURE joins the heading (it is the answer) and the counts
+    # drop to a muted second line under it.
+    #
+    # THE GEOMETRY IS HALF THE ASSERTION, because both spellings render both facts: what changes is
+    # WHERE, and a header that kept its desktop shape would still contain every word below.
+    it "puts the claimed figure beside the heading and the counts under it at 375px", :aggregate_failures do
+      deposit(2_000)
+      second_rule(envelope("Groceries", rate: 400), "Treats", rate: 60)
+      envelope("Rent", rate: 900, priority: 2, type: :bill)
+
+      visit root_path
+
+      expect(find("[data-this-period-heading]")).to have_content("This period").and have_no_content("categories")
+      expect(find("[data-this-period-claimed]")).to have_content("$1,360.00 claimed")
+      expect(find("[data-this-period-counts]")).to have_content("2 categories · 3 rules")
+
+      heading, claimed, counts = ["heading", "claimed", "counts"].map { |hook| find("[data-this-period-#{hook}]").native.rect }
+
+      # BESIDE, then UNDER: the figure shares the heading's line and the counts start a new one.
+      expect(claimed.y).to be_within(4).of(heading.y)
+      expect(counts.y).to be > heading.y
+    end
   end
 end

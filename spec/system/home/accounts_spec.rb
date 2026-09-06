@@ -75,23 +75,26 @@ RSpec.describe "Home Accounts", type: :system do
     expect(line).to have_no_content("$77,455.13")
   end
 
-  # ** THE NAMES, AS CHIPS ON THE LINE (two-shapes §3's "below"). ** The line answered how MUCH is
-  # elsewhere and never WHERE, so a user with two accounts had to open the tray to learn which. The
-  # money column's third tile names them too — same accounts, own hook, because one hook on both
-  # would make every unscoped find ambiguous — and this pins that the two lists agree.
-  it "names the accounts on the line as well as totalling them", :aggregate_failures do
+  # ** THE NAMES ARE ON THE TILE AND NOT ON THIS LINE (2026-09-06 layout ruling). ** The chips were
+  # added here because the line said how MUCH was elsewhere and never WHERE — and the money row's
+  # third tile answers that at the top of the screen, beside the figure it is about. Printing the
+  # same names again at the foot of the page was the same list twice on one screen. So the line keeps
+  # its own job (the total, and the door to the cards behind it), the tile keeps the names, and this
+  # is the pin that they did not both keep them.
+  it "leaves the account names to the money tile and keeps the total", :aggregate_failures do
     deposit(300_000)
     other_account("Ally", 222_000)
     other_account("Vanguard", 544.87)
 
     visit root_path
 
-    expect(line).to have_css("[data-line-chip='Ally']")
-    expect(line).to have_css("[data-line-chip='Vanguard']")
+    expect(line).to have_content("$222,544.87 across 2 other accounts")
+    expect(page).to have_no_css("[data-line-chip]")
     expect(page).to have_css("[data-other-accounts] [data-account-chip='Ally']")
-    # MAIN IS NOT A CHIP, for the reason it is not in the figure: its balance is the money column's
-    # own "In checking", and naming it here would answer one question twice.
-    expect(line).to have_no_css("[data-line-chip='Checking']")
+    expect(page).to have_css("[data-other-accounts] [data-account-chip='Vanguard']")
+    # MAIN IS NOT A CHIP, for the reason it is not in the figure: its balance is the money row's own
+    # "In checking", and naming it there would answer one question twice.
+    expect(page).to have_no_css("[data-account-chip='Checking']")
   end
 
   # The singular, because "1 other accounts" is the kind of thing a reader stops trusting a screen

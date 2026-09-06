@@ -2,25 +2,46 @@
 
 <%= page_header(title: "Home", subtitle: "Where your money stands") %>
 
-<%# ANSWERS FIRST (answers-first spec §1), NOW IN TWO COLUMNS (two-shapes spec §3). Home asks four
-    questions and this is the order: the MONEY COLUMN answers "how much is in checking and how much of
+<%# ANSWERS FIRST (answers-first spec §1), IN TWO BANDS (two-shapes spec §3). Home asks four
+    questions and this is the order: the MONEY ROW answers "how much is in checking and how much of
     it is free"; the RUNWAY answers "what is coming before the period closes", which is the question
     the old period bar could only half ask; the trouble strip interrupts — and ONLY when something
     real needs a human (§5), which is why it is gated rather than rendered with an empty state; "This
     period" answers "what does each category's every rule have" (§3); and everything else demotes to
     one line (§6).
 
-    THE TWO COLUMNS ARE ONE ROW AT 1024px AND STACK BELOW IT. The money column is the narrower of the
-    two because it is three figures; the runway is a ruler and wants the width.
+    ** THE MONEY AND THE RUNWAY ARE TWO ROWS NOW, NOT TWO COLUMNS (2026-09-06 layout ruling). ** They
+    were a 1/3 + 2/3 pair, and a pair of columns can only be as short as its taller half: the money
+    column is three figures and the runway is a ruler, so the ordinary screen carried a card of dead
+    gap under the runway while the figures beside it stacked into a narrow strip. Three figures in a
+    ROW is the shape they wanted all along — nothing is subtracted from anything left to right, so
+    reading order is free — and the runway gets the full width a ruler is for.
+
+    ** THE TILES ARE THIS GRID'S OWN CHILDREN AND THERE IS NO CARD AROUND THEM. ** `_money` renders
+    three siblings (see its own note); the money region's hook rides here, on the row, because the
+    row IS the region.
+
+    ** TWO COLUMNS FROM THE NARROWEST WIDTH, NOT FROM `sm`. ** Free spans the row and the two facts
+    it is derived from halve the line beneath it — at 375 as much as at 900. Three tiles stacked is
+    most of a phone screen spent on three figures, with the runway starting below the fold, and the
+    two halves are a label and a figure each: they fit 163px, which is what the narrow example
+    measures. At `lg` the span is dropped and all three stand side by side.
+
+    THREE COLUMNS AT `lg`, TWO WHEN THERE IS NO THIRD TILE: a user who banks in one place has no
+    "other accounts" tile, and a `grid-cols-3` would leave the pair short an empty third of the
+    screen. Below `lg` that user's row is ONE column, because half a screen of white space beside a
+    lone "In checking" is the same absence drawn on a phone.
 
     THE ONBOARDING CARDS STAY TOP-LEVEL AND STAY LAST. They are the setup that has not finished, not
     an answer to any of the four questions, so they sit below the answers — but outside the accounts
     line, because a door behind a chevron is a door a first-time user does not find. %>
-<div class="space-y-6">
-  <div class="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-start">
-    <div class="lg:col-span-1"><%= render "money", presenter: @presenter %></div>
-    <div class="lg:col-span-2"><%= render "runway", presenter: @presenter %></div>
+<div class="space-y-4 lg:space-y-6">
+  <div class="grid gap-4 lg:gap-6 <%= @presenter.other_accounts.any? ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-1 lg:grid-cols-2" %>"
+       data-money>
+    <%= render "money", presenter: @presenter %>
   </div>
+
+  <%= render "runway", presenter: @presenter %>
 
   <% if @presenter.trouble? %>
     <%= render "trouble", presenter: @presenter %>

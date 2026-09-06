@@ -98,6 +98,10 @@ RSpec.describe "Home Money Column", type: :system do
     account
   end
 
+  # ONE TILE'S RECT, BY THE NAME THE ROW CALLS IT. The layout examples measure three of them against
+  # each other, and three `page.find(...).native.rect` lines say the same thing three times.
+  def tile_rect(name) = page.find("[data-tile='#{name}']").native.rect
+
   # SPENDING THAT DRAINS AVAILABLE: an expense category that has never been funded holds nothing, so
   # its receipts come out of the root (§4's start-date rule). It lowers the pot either way.
   def spend_unbudgeted(amount)
@@ -119,7 +123,7 @@ RSpec.describe "Home Money Column", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free]", text: "$600.00")
-    expect(page).to have_css("[data-free-subline]", text: "$400.00 of checking is claimed by your rules")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your rules")
     # THE WORDS THIS CARD NO LONGER SAYS, asserted rather than assumed. "Spoken for" and "set aside"
     # JOIN THE LIST IN TASK 3 and they are the whole vocabulary change: both named money that had been
     # MOVED — a distribution's remaining ask, and a holding — and nothing moves. A rule CLAIMS money
@@ -261,35 +265,43 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-free-subline]", text: "Move some in from your other accounts")
   end
 
-  # ** THE POSITIVE ARM WITH MONEY ELSEWHERE, which is where the second clause is a fact rather than
-  # an instruction. ** $2,000 in with $400 walked to Ally and a $400 rule: `free = 1,600 − 400` =
-  # $1,200, and the card says "$400.00 of checking is claimed by your rules, and $400.00 sits in 1
-  # other account". The COUNT is asserted because the clause names it and a card counting main would
-  # say two.
-  it "names what is claimed and what sits elsewhere when free is positive", :aggregate_failures do
-    ally = create(:pool, :account, user: user, name: "Ally")
+  # ** THE POSITIVE ARM WITH MONEY ELSEWHERE, AND THE TWO FACTS ARE NOW ON TWO TILES (2026-09-06
+  # layout ruling). ** $2,000 in with $400 walked to Ally and a $400 rule: `free = 1,600 − 400` =
+  # $1,200. The subline said both facts in one sentence — "$400.00 of checking is claimed by your
+  # rules, and $400.00 sits in 1 other account" — which is three lines deep on a phone and whose
+  # second half is the third tile's whole subject. So the claim stays on the free tile as the bar's
+  # caption, and "how much sits elsewhere, and where" is the tile beside it: the figure and the
+  # account's own name. THE COUNT IS STILL ASSERTED, on the tile's label, because a screen counting
+  # main would say two.
+  it "names what is claimed on the free tile and what sits elsewhere on its own", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(2_000)
-    create(:account_movement, from_pool: checking, to_pool: ally, amount: 400, date: Date.current, kind: :transfer)
+    walk_over("Ally", 400)
 
     visit root_path
 
     expect(page).to have_css("[data-in-checking]", text: "$1,600.00")
     expect(page).to have_css("[data-free]", text: "$1,200.00")
-    expect(find("[data-free-subline]")).to have_text("$400.00 of checking is claimed by your rules")
-      .and have_text("$400.00 sits in 1 other account")
+    # THE CLAUSE IS OFF THE SUBLINE, and its facts are all still on the screen — one tile to the
+    # right, where the figure they are about lives.
+    expect(find("[data-free-subline]")).to have_text("$400.00 claimed by your rules").and have_no_text("sits in")
+    expect(page).to have_css("[data-other-accounts]", text: /in 1 other account/i)
+    expect(page).to have_css("[data-other-accounts-total]", text: "$400.00")
+    expect(page).to have_css("[data-account-chip='Ally']")
   end
 
-  # The other direction on the clause, so the gate cannot be satisfied by a card that always prints
-  # it: with every dollar in checking there is no other account for anything to sit in.
+  # The other direction, so the tile cannot be satisfied by a screen that always draws it: with every
+  # dollar in checking there is no other account for anything to sit in, and nothing on the row says
+  # there is.
   it "says nothing about other accounts when the money is all in checking", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(1_000)
 
     visit root_path
 
-    expect(page).to have_css("[data-free-subline]", text: "$400.00 of checking is claimed by your rules")
-    expect(page).to have_no_css("[data-free-subline]", text: "sits in")
+    expect(page).to have_css("[data-free-subline]", text: "$400.00 claimed by your rules")
+    expect(page).to have_no_css("[data-other-accounts]")
+    within("[data-money]") { expect(page).to have_no_content("sits in") }
   end
 
   # AN OVERDRAWN SECOND ACCOUNT IS NOT SOMEWHERE MONEY SITS, which is why the gate is the TOTAL's
@@ -304,8 +316,12 @@ RSpec.describe "Home Money Column", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$1,200.00")
     expect(page).to have_css("[data-free]", text: "$1,200.00")
-    expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
-    expect(page).to have_no_css("[data-free-subline]", text: "sits in")
+    expect(page).to have_css("[data-free-subline]", text: "$0.00 claimed by your rules")
+    # THE ROW NEVER CALLS IT MONEY THAT SITS SOMEWHERE. The tile still draws — an account the user
+    # owns is an account the screen names — and what it prints is the debt, which is the honest
+    # figure. What must not appear anywhere on the row is the retired clause.
+    within("[data-money]") { expect(page).to have_no_content("sits in") }
+    expect(page).to have_css("[data-other-accounts-total]", text: "-$200.00")
   end
 
   # THE FRESH SIGNUP: money in, no rule anywhere, so `free` IS the pot to the cent and the claimed
@@ -319,7 +335,7 @@ RSpec.describe "Home Money Column", type: :system do
 
     expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
     expect(page).to have_css("[data-free]", text: "$1,000.00")
-    expect(page).to have_css("[data-free-subline]", text: "$0.00 of checking is claimed by your rules")
+    expect(page).to have_css("[data-free-subline]", text: "$0.00 claimed by your rules")
   end
 
   # ── THE NEGATIVE STATES, WHICH ARE THE SAME CARD (spec §2) ─────────────────────────────────────
@@ -500,10 +516,49 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-free]", text: "-$100.00")
   end
 
+  # ── THE ROW ITSELF (2026-09-06 layout ruling) ──────────────────────────────────────────────────
+
+  # ** THREE TILES, SIBLINGS, WITH NOTHING AROUND THEM. ** They were three bordered, padded cards
+  # inside a fourth bordered, padded card: two borders and two paddings around every figure, and at
+  # 375px a third of the first screen was the outer card's padding. The tiles ARE the cards now, the
+  # money region's hook is the grid that lays them out, and each tile is that grid's direct child —
+  # which is the assertion a re-nested layout would fail while still rendering every figure.
+  #
+  # THE OUTER CARD IS ASSERTED GONE BY ITS OWN MARKS: the region carries no border and no white
+  # ground, because it is a layout and not a surface.
+  it "draws the three tiles as siblings with no card around them", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(2_000)
+    walk_over("Ally", 300)
+
+    visit root_path
+
+    expect(page).to have_css("[data-money] > [data-tile]", count: 3)
+    expect(page).to have_css("[data-money] > [data-tile='free'] [data-free]")
+    expect(page).to have_css("[data-money] > [data-tile='checking'] [data-in-checking]")
+    expect(page).to have_css("[data-money] > [data-tile='elsewhere'][data-other-accounts]")
+    expect(page).to have_no_css("[data-money].border")
+    expect(page).to have_no_css("[data-money].bg-white")
+  end
+
+  # THE OTHER DIRECTION ON THE ROW: a user who banks in one place has two tiles, not three and not a
+  # third one drawn empty. It is the same refusal `#other_accounts` makes, measured on the row.
+  it "draws two tiles for a user with no other accounts", :aggregate_failures do
+    envelope("Groceries", 400)
+    deposit(1_000)
+
+    visit root_path
+
+    expect(page).to have_css("[data-money] > [data-tile]", count: 2)
+    expect(page).to have_css("[data-money] > [data-tile='free']")
+    expect(page).to have_css("[data-money] > [data-tile='checking']")
+  end
+
   # ── THE THIRD TILE: MONEY THAT IS NOT IN CHECKING (§3) ─────────────────────────────────────────
 
-  # THE FIGURE AND THE NAMES. The subline already says how much sits elsewhere; the tile says WHICH
-  # accounts, which the line at the foot of the page could only answer once it was opened.
+  # THE FIGURE AND THE NAMES. The subline says how much is CLAIMED; the tile says how much sits
+  # outside checking and WHICH accounts hold it — the question the line at the foot of the page could
+  # only answer once it was opened, and the one the subline's retired second clause used to half-ask.
   it "names the accounts the rest of the money sits in", :aggregate_failures do
     envelope("Groceries", 400)
     deposit(2_000)
@@ -519,6 +574,20 @@ RSpec.describe "Home Money Column", type: :system do
     expect(page).to have_css("[data-other-accounts-total]", text: "$400.00")
     expect(page).to have_css("[data-account-chip='Ally']")
     expect(page).to have_css("[data-account-chip='Vanguard']")
+  end
+
+  # ** THE CHIPS ARE ONE ROW AND THE ROW IS NOT NEGOTIABLE. ** A tile that wrapped a dozen account
+  # names would be taller than the two figures beside it and would break the row's own line — so it
+  # names three and counts the rest. The count is asserted rather than the absence alone: "+1 more"
+  # is the tile still answering "where", which a silent truncation would not.
+  it "names the first three accounts and counts the rest", :aggregate_failures do
+    deposit(5_000)
+    ["Ally", "Betterment", "Chime", "Discover"].each_with_index { |name, index| walk_over(name, 100 + index) }
+
+    visit root_path
+
+    expect(page).to have_css("[data-other-accounts] [data-account-chip]", count: 3)
+    expect(page).to have_css("[data-more-accounts]", text: "+1 more")
   end
 
   # THE OTHER DIRECTION: one account is no tile at all. "$0.00 in 0 other accounts" would be the app
@@ -571,28 +640,42 @@ RSpec.describe "Home Money Column", type: :system do
       )
     end
 
-    # ** THE TILES STACK (§3), which at this width is what "column" means: three tiles one above the
-    # other, each as wide as the card. The measurement is the tile's own rect against the one below
-    # it — two tiles side by side at 375px would share a top edge, which is exactly the layout a
-    # `grid-cols-2` that forgot its breakpoint produces.
-    it "stacks the money tiles inside a 375px viewport", :aggregate_failures do
+    # ** FREE SPANS, THE OTHER TWO HALVE THE ROW BENEATH IT (2026-09-06 layout ruling). ** Three
+    # tiles stacked one under the other is 375px of screen spent on three figures, and the runway
+    # then starts below the fold; the answer the user came for keeps the full width, and the two
+    # facts it is derived from share the next line. The geometry is the whole ruling: the free tile
+    # is above BOTH of them and as wide as the row, and the two below share a top edge and split it.
+    it "spans the free tile and halves the other two inside a 375px viewport", :aggregate_failures do
       envelope("Groceries", 400)
       deposit(1_000)
       walk_over("Vanguard", 100)
 
       visit root_path
 
-      expect(page).to have_css("[data-in-checking]", text: "$900.00")
       expect(page).to have_css("[data-free]", text: "$500.00")
 
-      checking_tile = page.find("[data-in-checking]").native.rect
-      others_tile = page.find("[data-other-accounts]").native.rect
+      free, checking, elsewhere = ["free", "checking", "elsewhere"].map { |tile| tile_rect(tile) }
 
-      expect(others_tile.y).to be > checking_tile.y
-      expect(others_tile.x + others_tile.width).to be <= 375
+      expect(checking.y).to be > free.y + free.height - 1
+      expect(elsewhere.y).to eq(checking.y)
+      expect(elsewhere.x).to be > checking.x
+      expect(elsewhere.x + elsewhere.width).to be <= 375
     end
 
-    it "fits the card and its figures inside a 375px viewport", :aggregate_failures do
+    # THE CHIPS ARE NOT DRAWN AT THIS WIDTH: three account names in half of 375px is three ellipses,
+    # and the figure is what the tile is for. The names are still a tap away, on the accounts line at
+    # the foot of the page — which is the door that survived the chips moving up to the tile.
+    it "leaves the account names off the tile at 375px", :aggregate_failures do
+      deposit(1_000)
+      walk_over("Vanguard", 100)
+
+      visit root_path
+
+      expect(page).to have_css("[data-other-accounts-total]", text: "$100.00")
+      expect(page).to have_no_css("[data-other-accounts] [data-account-chip]")
+    end
+
+    it "fits the row and its figures inside a 375px viewport", :aggregate_failures do
       envelope("Groceries", 400)
       deposit(1_000)
 
@@ -601,11 +684,11 @@ RSpec.describe "Home Money Column", type: :system do
       expect(page).to have_css("[data-in-checking]", text: "$1,000.00")
       expect(page).to have_css("[data-free]", text: "$600.00")
 
-      hero = page.find("[data-money]").native.rect
+      row = page.find("[data-money]").native.rect
       figure = page.find("[data-free]").native.rect
 
-      expect(hero.x + hero.width).to be <= 375
-      expect(figure.x + figure.width).to be <= hero.x + hero.width
+      expect(row.x + row.width).to be <= 375
+      expect(figure.x + figure.width).to be <= row.x + row.width
     end
   end
 

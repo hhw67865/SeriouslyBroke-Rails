@@ -24,18 +24,13 @@
       <% if others.any? %>
         <strong class="tabular-nums"><%= number_to_currency(presenter.other_accounts_total) %></strong>
         across <%= pluralize(others.size, "other account") %>
-        <%# THE NAMES, AS CHIPS (two-shapes spec §3's "below"). The line answered how MUCH is
-            elsewhere and never WHERE, so a user with three accounts had to open the tray to learn
-            which — and the money column's own tile names them two panels above. Same chips, same
-            chips, own hook (`data-line-chip` — the money tile's `data-account-chip` names the same
-            accounts two panels above, and one hook on both would make every unscoped find
-            ambiguous). %>
-        <span class="ml-1 inline-flex flex-wrap gap-1 align-middle">
-          <% others.each do |account| %>
-            <span class="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
-                  data-line-chip="<%= account.name %>"><%= account.name %></span>
-          <% end %>
-        </span>
+        <%# ** THE CHIPS ARE GONE FROM HERE (2026-09-06 layout ruling), AND THEY WENT UP RATHER THAN
+            AWAY. ** They were added here because the line said how MUCH was elsewhere and never
+            WHERE — and the money row's third tile now answers that at the top of the screen, in the
+            first band, beside the figure it is about. Printing the same three names again at the
+            foot of the page was the same list twice on one screen, which is the thing this whole
+            wave is undoing. What this line keeps is its own job: the total, and the door to the
+            cards behind it. `data-account-chip` on the tile is the one hook that names them. %>
       <% else %>
         <%# NOTHING IS ELSEWHERE, so there is no total to state — "$0.00 across 0 other accounts"
             would be the app inventing an absence. The line still exists, because the cards behind it

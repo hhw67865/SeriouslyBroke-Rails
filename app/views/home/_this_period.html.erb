@@ -34,14 +34,30 @@
       belongs to the runway now (`_runway.html.erb`) and this line says what the section is about.
       The claimed total is `#total_claims` — the SAME figure the money tile subtracts from checking,
       and it is Σ over these blocks by construction. %>
-  <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 pb-2">
+  <%# ** THE COUNTS TRADE PLACES WITH THE FIGURE AT 375 (2026-09-06 layout ruling). ** At full width
+      the heading names what the section holds and the claimed total sits at the right margin, which
+      is the reading order of every other header in this app. A phone has no right margin to put a
+      figure at, and "This period · 6 categories · 6 rules" fills the line on its own — so the FIGURE
+      joins the heading (it is the answer; the counts are the inventory) and the counts drop to a
+      muted second line. `justify-start` below `sm` is what puts the two beside each other rather
+      than at opposite ends of a 343px row.
+
+      ONE ELEMENT PER FACT, and the counts are the only thing said twice — once inside the heading,
+      where `[data-this-period-heading]` must carry them at full width, and once as their own line
+      below it. The claimed figure moves rather than duplicating, so `[data-this-period-claimed]` is
+      findable at either width. %>
+  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 pb-2 sm:justify-between sm:gap-x-3">
     <h3 class="text-sm font-semibold text-gray-900" data-this-period-heading>
-      This period ·
-      <%= pluralize(presenter.category_blocks.size, "category") %> ·
-      <%= pluralize(presenter.category_blocks.sum(&:rule_count), "rule") %>
+      This period<span class="hidden sm:inline"> ·
+        <%= pluralize(presenter.category_blocks.size, "category") %> ·
+        <%= pluralize(presenter.category_blocks.sum(&:rule_count), "rule") %></span>
     </h3>
     <p class="text-sm text-gray-700 tabular-nums" data-this-period-claimed>
-      <%= number_to_currency(presenter.total_claims) %> claimed
+      <span class="sm:hidden" aria-hidden="true">· </span><%= number_to_currency(presenter.total_claims) %> claimed
+    </p>
+    <p class="basis-full text-xs text-gray-500 sm:hidden" data-this-period-counts>
+      <%= pluralize(presenter.category_blocks.size, "category") %> ·
+      <%= pluralize(presenter.category_blocks.sum(&:rule_count), "rule") %>
     </p>
   </div>
 

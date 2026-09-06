@@ -206,6 +206,20 @@ module HomeHelper
     line.per_period.positive? ? "+#{number_to_currency(line.per_period)}" : nil
   end
 
+  # ** WHAT A RUNWAY TICK SAYS BESIDE ITS DOT — the name, and whether the money is there. ** Said in
+  # ONE place because the runway says it in TWO: on the rail at full width, and down in the pace
+  # block at 375 where two labels three days apart would overlap. The same tick, the same words, so
+  # the two spellings of one screen cannot disagree about whether a bill is ready.
+  #
+  # NO DATE IN IT, and that is the panel's own point: a tick's PLACE on the ruler is its day, which
+  # is the one thing a list of dated rows could not say. `#when_words` still carries the date for the
+  # rows in "This period", which have no ruler to sit on.
+  def runway_tick_words(tick)
+    state = tick.short? ? "#{number_to_currency(tick.gap)} short" : "ready"
+
+    "#{tick.label} · #{state}"
+  end
+
   # ** THE PACE, SAID ONCE FOR BOTH PANELS (§3 and §4). ** The runway's pace line and the shortfall
   # strip's remedy are the same sentence about the same figure — the strip only ever renders the
   # second arm, because it only renders while `free` is below zero — and they were written twice in
