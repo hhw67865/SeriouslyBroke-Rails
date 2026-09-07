@@ -71,12 +71,17 @@ module Dashboard
 
     delegate :period_range, :six_month_range, to: :@parent
 
+    # `Entry.spendable` — every expense the household actually spent, which is every expense but an
+    # account's opening record (fix round round 2 — item 3). These are the two scopes behind "Total
+    # Unbudgeted Spending" and "Tracked Unbudgeted Spending", and the band of rows below them is
+    # narrowed by `Category.spendable`: a total that counted a row the list could not show is a
+    # total nobody can check.
     def expenses_scope
-      @user.entries.expenses
+      @user.entries.spendable
     end
 
     def tracked_expenses_scope
-      @user.entries.expenses.tracked
+      @user.entries.spendable.tracked
     end
 
     def buffer_expenses_scope

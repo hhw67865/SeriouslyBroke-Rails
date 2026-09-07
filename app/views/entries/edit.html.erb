@@ -9,6 +9,11 @@
     ]
 ) %>
 
+<%# ** AN OPENING RECORD HAS ITS OWN FORM (fix round round 2 — items 1 and 2). ** Almost nothing
+    about it may be changed from this screen — its account, its amount, its category and its item are
+    all part of a record two rows wide that `AccountOpening` owns — and a form with no editable
+    pickers must bind none of the three Stimulus controllers `_form` does, or the first category
+    change throws "Missing target". `entries/_opening_form` states which fields survive and why. %>
 <div class="max-w-3xl mx-auto">
-  <%= render "form", entry: @entry %>
+  <%= render(@entry.opening? ? "opening_form" : "form", entry: @entry) %>
 </div>

@@ -101,9 +101,19 @@
           it was carrying: the pot rises by exactly what this account held, and `pot + Σ accounts` is
           unchanged to the penny. The sentence is only ever rendered here, on a NON-main account,
           which is precisely the population it is true of. %>
+        <%# ** AND WHAT IT WAS OPENED WITH IS THE SECOND CLAUSE (fix round round 2 — item 4). ** The
+            first sentence was the whole truth while an account could only be funded by a transfer
+            FROM main: `dependent: :destroy` takes the movements, main is on the other end of every
+            one, so the money comes back. An account that SAID what it holds also carries an opening
+            entry (`Pool has_one :opening_entry`), and that money never was main's — the opening's
+            entry and its transfer cancel on main exactly — so it leaves the ledger rather than
+            returning. Both halves are named here because a user deleting a $500 savings account
+            they opened at $500 would otherwise be promised $500 back in checking and get none.
+            `BankAccountsController#destroy` measures the pot and says the real figure afterwards. %>
         <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
-                     "so the money they moved goes back to your main account and your balances will " \
-                     "change. This action cannot be undone." %>
+                     "so the money they moved goes back to your main account — and whatever it was " \
+                     "opened with goes with it. Your balances will change. This action cannot be " \
+                     "undone." %>
         <%= button_to "Delete",
                       bank_account_path(account),
                       method: :delete,

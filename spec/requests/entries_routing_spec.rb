@@ -263,18 +263,69 @@ RSpec.describe "Entries income routing", type: :request do
       expect(Entry.where.not(opening_account_id: nil).count).to eq(1)
     end
 
-    # THE AMOUNT AND THE DATE ARE STILL EDITABLE — the guard is about the ACCOUNT alone, and an
-    # opening entry a user re-reads and re-types is an ordinary edit. (What it does NOT do is
-    # re-derive the opening from the new figure: the entry is the record, so typing $600 here makes
-    # the opening $600, exactly as saving $600 on the card would.)
-    it "still takes an ordinary edit", :aggregate_failures do
+    # ** THE AMOUNT IS NOT EDITABLE HERE EITHER (fix round round 2 — item 1), AND THE FIRST ROUND HAD
+    # IT WRONG. ** This example used to assert that $500 → $600 went through; it does not, because
+    # the entry is only HALF the record and the movement beside it was left on the old figure. One
+    # door, and it is the account's card.
+    it "refuses an amount edited from this screen", :aggregate_failures do
       entry = open!(ally, "500")
 
       patch entry_path(entry), params: { entry: { amount: "600" } }
 
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include(Entry::OPENING_DOOR)
+      expect(entry.reload.amount).to eq(500)
+      expect(routing_for(entry).sole.amount).to eq(500)
+    end
+
+    # ** ZERO WAS A 500, AND IT DESTROYED THE MOVEMENT ON THE WAY (fix round round 2 — item 1). **
+    # Zero passes `Entry`'s validation on an opening row, so the save succeeded and
+    # `#sync_income_routing` then tried to mirror it: `route_income_to!` cleared the real movement
+    # and `create!(amount: 0)` hit `account_movements_positive_amount` — an unhandled
+    # `PG::CheckViolation` AFTER the delete, leaving the account holding money nothing had moved.
+    it "refuses a zero amount without touching the movement", :aggregate_failures do
+      entry = open!(ally, "500")
+
+      patch entry_path(entry), params: { entry: { amount: "0" } }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(entry.reload.amount).to eq(500)
+      expect(routing_for(entry).sole.amount).to eq(500)
+      expect(AccountLedger.new(user).balance_of(ally)).to eq(500)
+    end
+
+    # ** A NEGATIVE OPENING'S FORM, SAVED WITH NOTHING CHANGED, USED TO DELETE ITS TRANSFER. ** Such
+    # an entry sits in the EXPENSE-typed `Opening Shortfall` category, so `#sync_income_routing`'s
+    # first line — "an entry that is not income clears its routing" — fired `route_income_to!(nil)`
+    # on every save of that form, including one that changed only the description. The transfer runs
+    # account → main for a negative opening and `AccountOpening` owns it; this screen is skipped
+    # entirely now. Re-derived: $900 moved into Ally, the user says it holds $400, so the opening is
+    # 400 − 900 = −$500 and the transfer is Ally → main for $500.
+    it "leaves a shortfall opening's transfer alone on an unchanged save", :aggregate_failures do
+      create(:account_movement, from_pool: main, to_pool: ally, amount: 900, date: Date.current, kind: :transfer)
+      entry = open!(ally, "400")
+      expect(entry.category.name).to eq(Category::OPENING_SHORTFALL_NAME)
+
+      patch entry_path(entry), params: { entry: { description: "typed a note" } }
+
       expect(response).to redirect_to(entries_path)
-      expect(entry.reload.amount).to eq(600)
-      expect(routing_for(entry).sole.amount).to eq(600)
+      movement = routing_for(entry.reload).sole
+      expect(movement.from_pool).to eq(ally)
+      expect(movement.amount).to eq(500)
+      expect(AccountLedger.new(user).balance_of(ally)).to eq(400)
+    end
+
+    # THE DATE AND THE DESCRIPTION ARE STILL EDITABLE — neither is part of the arithmetic, and an
+    # unchanged amount is not an edit, which is what lets the ordinary "open the form and press
+    # Save" through.
+    it "still takes a date edit and an unchanged amount", :aggregate_failures do
+      entry = open!(ally, "500")
+
+      patch entry_path(entry), params: { entry: { amount: "500.0", date: "2026-01-02" } }
+
+      expect(response).to redirect_to(entries_path)
+      expect(entry.reload.date.to_date).to eq(Date.new(2026, 1, 2))
+      expect(routing_for(entry).sole.amount).to eq(500)
     end
   end
 end

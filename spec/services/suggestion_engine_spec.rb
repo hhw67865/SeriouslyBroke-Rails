@@ -163,6 +163,24 @@ RSpec.describe SuggestionEngine do
       expect(suggestion.detail).to eq(water_bill_detail)
     end
 
+    # ** AN OPENING RECORD IS NOT HISTORY A DETECTOR MAY READ (fix round round 2 — item 5). ** Every
+    # opening entry a user has hangs off ONE item, `Initial balance`, so two accounts corrected
+    # downward a couple of months apart are two occurrences of one item at a regular gap — the exact
+    # shape this detector fires on. It would have proposed a funding rule for `Opening Shortfall`, a
+    # category the Budget page (narrowed by `Category.spendable`) does not even list. Excluded at
+    # `SuggestionEngine#entry_rows`, the single read every lane composes from, so the fixture below
+    # is the whole detector's population.
+    it "does not fire on an account's opening records" do
+      accounts = [create(:pool, :account, user: user, name: "Checking"), create(:pool, :account, user: user, name: "Ally")]
+      shortfall = create(:category, :opening_shortfall, user: user)
+      initial = item("Initial balance", in_category: shortfall)
+      [[Date.new(2025, 11, 15), 200], [Date.new(2026, 1, 15), 210]].each_with_index do |(on, amount), index|
+        create(:entry, item: initial, amount: amount, date: on, opening_account: accounts[index])
+      end
+
+      expect(of_kind(:dated_bill)).to be_empty
+    end
+
     it "does not fire on an item that already carries a rule" do
       claimed = claimed_item("Water", category: funded_category("Water"), amount: 210, interval_months: 3, anchor_date: Date.new(2026, 4, 15))
       spend(claimed, 200, on: Date.new(2025, 10, 15))

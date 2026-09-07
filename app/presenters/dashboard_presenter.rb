@@ -182,9 +182,13 @@ class DashboardPresenter
 
   # The entry-level half of the same line, composing into the `group_by_day`/`group_by_month`
   # scopes the charts build on.
-  def buffer_funded_expenses = @user.entries.expenses.where(categories: { funded_since: nil })
+  # `Entry.spendable`, NOT `.expenses` (fix round round 2 — item 3). The untracked BAND is narrowed
+  # by `Category.spendable` and these two lanes feed the TOTALS above it, so an opening shortfall
+  # used to sit inside "Total Unbudgeted Spending" with no row anywhere on the page to account for
+  # it — a figure a reader could not reconcile against the list beneath it.
+  def buffer_funded_expenses = @user.entries.spendable.where(categories: { funded_since: nil })
 
-  def enveloped_expenses = @user.entries.expenses.where.not(categories: { funded_since: nil })
+  def enveloped_expenses = @user.entries.spendable.where.not(categories: { funded_since: nil })
 
   def tracked_income_categories
     @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)

@@ -36,6 +36,66 @@ RSpec.describe "Entries Forms", type: :system do
     labels.each { |label| click_button(label) }
   end
 
+  # ** AN OPENING RECORD'S EDIT SCREEN IS ITS OWN FORM, AND IT BINDS NO CONTROLLERS (account-openings
+  # fix round 2 — item 2). ** `entries/_form` binds three — `app--entry--form` (the two TomSelects),
+  # `app--entry--impact` and `app--entry--routing` — and every one of them reaches for a target that
+  # is not on the page once the category, item and amount are read-only. The first draft of this fix
+  # left the routing controller bound with its `field` target gone, and changing the category threw
+  # "Missing target" into the console on a page that otherwise looked fine.
+  describe "an opening record's form", :aggregate_failures do
+    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+    def opening_entry
+      raise "the opening was refused" unless AccountOpening.new(user, checking, balance: "500").save
+
+      Entry.find_by!(opening_account_id: checking.id)
+    end
+
+    # THE CONSOLE ITSELF, which is the only place this class of failure shows: a Stimulus error stops
+    # that controller and leaves the rest of the page working, so no assertion about the DOM would
+    # ever have caught it. SEVERE only — Chrome logs its own warnings at lower levels and a spec that
+    # failed on those would fail for reasons nothing in this app can fix.
+    it "loads with no error in the browser console" do
+      entry = opening_entry
+
+      visit edit_entry_path(entry)
+      expect(page).to have_content("Opening balance")
+
+      severe = page.driver.browser.logs.get(:browser).select { |line| line.level == "SEVERE" }
+
+      expect(severe.map(&:message)).to be_empty
+    end
+
+    # WHAT THE SCREEN SAYS AND WHAT IT REFUSES TO ASK. The four read-only facts are the record; the
+    # door to changing them is the account's own card on Home.
+    it "shows the record and offers no picker for it" do
+      entry = opening_entry
+
+      visit edit_entry_path(entry)
+
+      expect(page).to have_content("Opening balance for Checking")
+      expect(page).to have_link(Entry::OPENING_DOOR, href: root_path)
+      expect(page).to have_no_select("category_id")
+      expect(page).to have_no_select("entry[destination_account_id]")
+      expect(page).to have_no_field("Amount")
+      expect(page).to have_no_css("[data-controller*='app--entry--routing']")
+    end
+
+    # AND IT IS STILL A FORM: the date and the description are editable, and saving them leaves the
+    # record's two rows exactly where they were.
+    it "still saves a description without touching the record" do
+      entry = opening_entry
+
+      visit edit_entry_path(entry)
+      fill_in "Description", with: "How I set this up"
+      click_button "Update Entry"
+
+      expect(page).to have_content("Entry was successfully updated")
+      expect(entry.reload.description).to eq("How I set this up")
+      expect(entry.amount).to eq(500)
+    end
+  end
+
   describe "New Entry Form" do
     before { visit new_entry_path }
 

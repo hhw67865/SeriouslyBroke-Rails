@@ -52,9 +52,18 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     # page reported the record of what an account started with as money the household spent outside
     # its budget. Both directions in one example: the shortfall is absent, an ordinary untracked
     # expense beside it is present with its own figure.
-    it "keeps an opening shortfall out of the untracked breakdown", :aggregate_failures do
+    # ** AND THE TOTALS ABOVE THE BAND NARROW WITH IT (fix round round 2 — item 3). ** The band was
+    # narrowed by `Category.spendable` while `Total`/`Tracked Unbudgeted Spending` still summed
+    # `entries.expenses`, so the $777 sat inside a figure with no row anywhere on the page to account
+    # for it — a total a reader cannot reconcile against the list beneath it is worse than a wrong
+    # total, because nothing on the screen says it is wrong. Re-derived: $300 Groceries + $150 Dining
+    # = $450 total, $300 tracked once Dining is untracked, and the $777 opening record is in neither.
+    it "keeps an opening shortfall out of the untracked breakdown and out of the totals", :aggregate_failures do
+      # THE ROW IS PLANTED WITH NO MARKER ON PURPOSE — an ordinary entry filed under the opening
+      # category by hand, which is the one shape where the band's NAME test and the total's ROW test
+      # can disagree. `Entry.spendable` carries both tests for exactly this fixture.
       dining.update!(tracked: false)
-      shortfall = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      shortfall = create(:category, :opening_shortfall, user: user)
       create(:entry, item: create(:item, category: shortfall, name: "Initial balance"), amount: 777, date: base_date + 1.day)
 
       visit reports_path(tab: "expenses")
@@ -62,6 +71,8 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
       expect(page).to have_content("Dining")
       expect(page).to have_no_content(Category::OPENING_SHORTFALL_NAME)
       expect(page).to have_no_content("$777.00")
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
     end
 
     it "shows only expense categories in the tracked filter" do

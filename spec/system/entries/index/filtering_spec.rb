@@ -42,7 +42,7 @@ RSpec.describe "Entries Index - Filtering", type: :system do
     # the account's card (`HomePresenter#awaiting_opening?`), and `all` is where a user finds it.
     it "keeps an opening record out of the expenses tab and in the all tab", :aggregate_failures do
       checking = create(:pool, :account, user: user, name: "Checking")
-      opening = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      opening = create(:category, :opening_shortfall, user: user)
       item = create(:item, category: opening, name: "Initial balance")
       create(:entry, item: item, amount: 777, description: "Checking opening balance", opening_account: checking)
 

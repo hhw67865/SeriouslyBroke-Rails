@@ -113,6 +113,30 @@ RSpec.describe Pool, type: :model do
       expect([main.reload.balance, ally.reload.balance]).to eq([2_250, 750])
     end
 
+    # ** AN ANSWERED ACCOUNT TAKES ITS OPENING RECORD WITH IT (fix round round 2 — item 4). **
+    # `entries.opening_account_id` is a foreign key with no `dependent` of its own, so this raised
+    # `PG::ForeignKeyViolation` — a 500 out of Home's Delete button on every account a user had
+    # finished setting up. Both halves of the record go: the entry by `has_one :opening_entry,
+    # dependent: :destroy`, and the transfer beside it through `Entry has_many :account_movements`.
+    #
+    # ** AND THE INVARIANT HOLDS ACROSS THE DELETE, which is the half a `:nullify` would have broken.
+    # ** Re-derived: Ally opens at $500 — an income entry of $500 and a transfer main → Ally of $500,
+    # which cancel on main — so destroying it leaves the pot exactly where it was and takes $500 off
+    # what the household has everywhere. That money was never main's to get back.
+    it "takes its opening record with it, and leaves the ledger square", :aggregate_failures do
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      expect(AccountOpening.new(user, ally, balance: "500").save).to be(true)
+      entry = Entry.find_by!(opening_account_id: ally.id)
+
+      expect(ally.destroy).to be_truthy
+
+      expect(Entry.exists?(entry.id)).to be(false)
+      expect(AccountMovement.count).to eq(0)
+      expect(AccountLedger.new(user).pot).to eq(3_000)
+      expect(ClaimLedger.new(user).total_money).to eq(3_000)
+    end
+
     # THE ONE ESCAPE. `User has_many :pools, dependent: :destroy` reaches main like any other pool, and
     # a refusal there would make the user undeletable — `destroyed_by_association` is what stands the
     # callback down. Asserted because the guard is invisible until it is missing.

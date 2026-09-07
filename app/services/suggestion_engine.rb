@@ -345,7 +345,13 @@ class SuggestionEngine
   # to know when an item last had one). Plucked rather than instantiated: nothing here reads an
   # Entry's behaviour, only three of its columns.
   def entry_rows
-    @entry_rows ||= Entry.expenses
+    # ** `Entry.spendable` — AN OPENING RECORD IS NOT HISTORY A DETECTOR MAY READ (fix round round 2
+    # — item 5). ** Every opening entry a user has sits on ONE item, `Initial balance`, so two
+    # accounts corrected downward a couple of months apart looked exactly like a recurring bill: two
+    # occurrences, one item, a regular gap. The engine would have proposed a funding rule for a
+    # category the Budget page (narrowed by `Category.spendable`) does not even list. Excluded HERE,
+    # at the single entry read every detector lane composes from, rather than in each detector.
+    @entry_rows ||= Entry.spendable
       .where(categories: { user_id: user.id })
       .where(date: (today - HISTORY_YEARS.years).beginning_of_day..)
       .order(:date)

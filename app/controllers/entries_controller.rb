@@ -54,11 +54,26 @@ class EntriesController < ApplicationController
   # left Ally correcting against a movement that had walked away (measured: Ally corrected to $1,000
   # afterwards showed $500, and HYSA silently gained then lost the same $500).
   #
+  # ** AND ITS AMOUNT IS NOT EDITABLE HERE EITHER (fix round round 2 — item 1). ** The amount IS the
+  # opening record: changing it has to recompute the account's transfer, and `AccountOpening` is the
+  # one object that does that. Two failures came through this door before the refusal:
+  #
+  #   * `amount: 0` passed `Entry`'s own validation (zero is legal for an opening row) and then
+  #     `#sync_income_routing` tried to mirror it — `AccountMovement`'s `amount > 0` CHECK raised a
+  #     500 AFTER `route_income_to!`'s `destroy_all` had already removed the real movement, leaving
+  #     the account holding money nothing had moved.
+  #   * any other figure rewrote the entry and left the movement on the OLD one, so the account read
+  #     one number and the ledger another.
+  #
+  # ONE DOOR, and it is the account's own card. The DATE and the DESCRIPTION are still editable here
+  # — neither is part of the arithmetic — and a save that changes NEITHER amount nor account (the
+  # ordinary "I opened the form and pressed Save") goes through untouched.
+  #
   # REFUSED RATHER THAN IGNORED, and 422 rather than a redirect: a request that asked for something
   # the app will not do should say so where the user is standing, with the same sentence the form
   # prints in place of the select.
   def update
-    return refuse_reopening if @entry.opening? && @routing_asked
+    return refuse_reopening if @entry.opening? && (@routing_asked || amount_edited?)
 
     if @entry.update(entry_params)
       sync_income_routing
@@ -164,7 +179,7 @@ class EntriesController < ApplicationController
   def apply_type_filter(entries)
     case params[:type]
     when "expenses"
-      entries.expenses.where(opening_account_id: nil)
+      entries.spendable
     when "income"
       entries.incomes
     else
@@ -215,6 +230,14 @@ class EntriesController < ApplicationController
 
   # THE ONE CALLER OF `Entry#route_income_to!`, run after a successful save of either action.
   #
+  # ** AN OPENING ENTRY IS SKIPPED OUTRIGHT (fix round round 2 — item 1), AND THAT IS THE HALF THE
+  # 422 ABOVE CANNOT COVER. ** Its transfer is owned by `AccountOpening`, which writes it in the
+  # direction the SIGN demands: main → account for money the user has, account → main for an account
+  # stated below what the app has moved into it. This method knows only the income direction, so on a
+  # negative opening — an entry in the EXPENSE-typed `Opening Shortfall` category — the first line
+  # below fired `route_income_to!(nil)` and silently deleted the account → main movement on any save
+  # of that form, including one that changed nothing but the description.
+  #
   # An entry that is NOT income clears unconditionally rather than returning early: changing a
   # paycheck's category to Groceries has to take its mirror movement with it, or main would go on
   # paying an envelope for money the app no longer thinks arrived there.
@@ -225,6 +248,7 @@ class EntriesController < ApplicationController
   # paycheck from $500 to $750 carries its mirror along. Skipping outright would leave main paying
   # out yesterday's figure forever.
   def sync_income_routing
+    return if @entry.opening?
     return @entry.route_income_to!(nil) unless @entry.category.income?
 
     @entry.route_income_to!(@routing_asked ? @destination_account : @entry.routed_account)
@@ -233,6 +257,18 @@ class EntriesController < ApplicationController
   # THE 422 THAT SAYS WHY, IN THE FORM'S OWN WORDS (`Entry#opening_refusal` is the one spelling).
   # Nothing is written: the entry is re-rendered exactly as it stands, so the amount, the date and
   # the account it actually belongs to are all still true on the screen the user is looking at.
+  # ** THE FIGURE AS SUBMITTED AGAINST THE FIGURE AS STORED. ** An UNCHANGED save is not an edit and
+  # must go through (that is the ordinary "open the form, press Save"), so the test is a comparison
+  # rather than the param's presence. `exception: false` because a blank or unparsable amount is a
+  # request the form would never make, and "cannot be read" is a change like any other here — the
+  # refusal is the honest answer rather than a 500 out of BigDecimal().
+  def amount_edited?
+    submitted = params.dig(:entry, :amount)
+    return false if submitted.blank?
+
+    BigDecimal(submitted.to_s, exception: false)&.round(2) != @entry.amount
+  end
+
   def refuse_reopening
     flash.now[:alert] = @entry.opening_refusal
     render :edit, status: :unprocessable_content

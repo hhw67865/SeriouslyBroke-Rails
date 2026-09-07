@@ -61,6 +61,51 @@ RSpec.describe Category, type: :model do
     it { is_expected.to define_enum_for(:category_type).with_values(expense: 0, income: 1) }
   end
 
+  # ** THE TWO OPENING NAMES ARE RESERVED (fix round round 2 — item 6). ** `Category.spendable` is a
+  # NAME test — it is the only thing the two opening categories have in common, one being income and
+  # the other expense — so a user renaming an ordinary category into one of them would silently drop
+  # it and its claims off the Budget page, Home's unbudgeted rows, the Reports untracked band and the
+  # Entries expenses tab, with nothing anywhere saying why. Every direction of the rule is here,
+  # because a validation that refused too much would be as bad as one that refused too little.
+  describe "the reserved opening names" do
+    let(:user) { create(:user) }
+
+    it "refuses a user-created category with either name", :aggregate_failures do
+      balance = build(:category, :expense, user: user, name: Category::OPENING_BALANCE_NAME)
+      shortfall = build(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME)
+
+      expect(balance).not_to be_valid
+      expect(balance.errors[:name].to_sentence).to include("reserved")
+      expect(shortfall).not_to be_valid
+    end
+
+    # CASE-INSENSITIVE, matching the scope that reads these names and the uniqueness rule beside it:
+    # "opening balance" hides a category from the same four screens that "Opening Balance" does.
+    it "refuses another case of the same name" do
+      expect(build(:category, :expense, user: user, name: "opening balance")).not_to be_valid
+    end
+
+    # RENAMING INTO ONE IS THE SHAPE THE RULE EXISTS FOR — the category already has its rules and its
+    # history, and the disappearance would happen on the next render with no message at all.
+    it "refuses renaming an ordinary category into one" do
+      groceries = create(:category, :expense, user: user, name: "Groceries")
+
+      expect(groceries.update(name: Category::OPENING_SHORTFALL_NAME)).to be(false)
+    end
+
+    # ** THREE THINGS IT MUST NOT REFUSE. ** `AccountOpening` writing the record (the flag), an
+    # existing opening category being saved without a name change (the categories screen's `tracked`
+    # toggle runs a full save), and the user renaming one AWAY — which is their own escape hatch for
+    # a mistyped opening figure and stays legal.
+    it "lets the record's own writer, an unchanged save and a rename away through", :aggregate_failures do
+      opening = create(:category, :opening_balance, user: user)
+
+      expect(opening).to be_persisted
+      expect(opening.update(tracked: true)).to be(true)
+      expect(opening.update(name: "Old opening figures")).to be(true)
+    end
+  end
+
   describe "scopes" do
     let(:user) { create(:user) }
     let!(:expense_category) { create(:category, category_type: :expense, user: user) }
@@ -85,8 +130,8 @@ RSpec.describe Category, type: :model do
     # directions in one example each, because a scope that returned the wrong half would pass an
     # assertion about membership alone.
     describe ".opening and .spendable" do
-      let!(:opening_balance) { create(:category, :income, user: user, name: Category::OPENING_BALANCE_NAME) }
-      let!(:opening_shortfall) { create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME) }
+      let!(:opening_balance) { create(:category, :opening_balance, user: user) }
+      let!(:opening_shortfall) { create(:category, :opening_shortfall, user: user) }
 
       it "answers both opening names and nothing else" do
         expect(described_class.where(user: user).opening).to contain_exactly(opening_balance, opening_shortfall)
@@ -96,7 +141,7 @@ RSpec.describe Category, type: :model do
       # "opening shortfall" into the ordinary categories screen owns the same row `AccountOpening`
       # would have found, and the two must not disagree about it.
       it "matches a name the user typed in another case" do
-        theirs = create(:category, :expense, user: create(:user), name: "opening shortfall")
+        theirs = create(:category, :opening_shortfall, user: create(:user), name: "opening shortfall")
 
         expect(described_class.opening).to include(theirs)
       end

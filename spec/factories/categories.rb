@@ -21,6 +21,28 @@ FactoryBot.define do
       name { Faker::Commerce.department + Faker::Number.number(digits: 2).to_s }
     end
 
+    # ** THE TWO CATEGORIES `AccountOpening` WRITES, AND THE ONLY WAY A FIXTURE MAY PLANT ONE (fix
+    # round round 2 — item 6). ** `Category#opening_names_are_reserved` refuses both names to
+    # everybody but that object — `Category.spendable` is a NAME test, so a user renaming a category
+    # into one would silently drop it and its claims off four screens — and `opening_record` is the
+    # flag that says "this IS the record", which is exactly what a fixture planting one means.
+    #
+    # `tracked: false` on both, because that is what the service writes: an opening is bookkeeping,
+    # not a fact about a period's income or spending.
+    trait :opening_balance do
+      name { Category::OPENING_BALANCE_NAME }
+      category_type { :income }
+      tracked { false }
+      opening_record { true }
+    end
+
+    trait :opening_shortfall do
+      name { Category::OPENING_SHORTFALL_NAME }
+      category_type { :expense }
+      tracked { false }
+      opening_record { true }
+    end
+
     # THE DATE THE CATEGORY STARTED HOLDING MONEY (two-ledger spec §4), and the whole of what
     # makes a category a holder: `Category#holder?` is `expense? && funded_since.present?`, and
     # `CategoryLedger::ENTRY_CATEGORY_ID` drains this category only for spending dated on or after

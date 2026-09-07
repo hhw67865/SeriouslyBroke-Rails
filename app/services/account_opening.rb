@@ -202,8 +202,14 @@ class AccountOpening
     income = !amount.negative?
     name = income ? Category::OPENING_BALANCE_NAME : Category::OPENING_SHORTFALL_NAME
 
+    # `opening_record: true` IS THE KEY TO THE RESERVED NAMES (fix round round 2 — item 6).
+    # `Category#opening_names_are_reserved` refuses these two names to everybody else, so a user
+    # cannot rename an ordinary category into one and watch it vanish from four screens; this object
+    # is the one writer that may.
     user.categories.opening.find { |category| category.name.casecmp?(name) } ||
-      user.categories.create!(name: name, category_type: income ? :income : :expense, tracked: false)
+      user.categories.create!(
+        name: name, category_type: income ? :income : :expense, tracked: false, opening_record: true
+      )
   end
 
   def item_for(amount) = category_for(amount).items.find_or_create_by!(name: "Initial balance")

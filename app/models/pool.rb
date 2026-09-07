@@ -40,6 +40,25 @@ class Pool < ApplicationRecord
            dependent: :destroy,
            inverse_of: :from_pool
 
+  # ** WHAT THIS ACCOUNT SAID IT HELD, AND IT GOES WITH THE ACCOUNT (account-openings §2; fix round
+  # round 2 — item 4). ** `entries.opening_account_id` is a foreign key with no `dependent` of its
+  # own, so deleting an answered account raised `PG::ForeignKeyViolation` out of the Delete button —
+  # a 500 on the one screen that offers it, on every account a user had finished setting up.
+  #
+  # `dependent: :destroy` AND NOT `:nullify`: an opening entry that outlived its account would be
+  # money in the ledger belonging to nothing, and the entry is HALF the record — the other half is
+  # the transfer, which follows through `Entry has_many :account_movements, dependent: :destroy`
+  # (`account_movements.source_entry_id`). Both halves go together or the physical partition drifts.
+  #
+  # WHAT THE USER'S MONEY DOES, and `BankAccountsController#destroy` says it in the flash: money the
+  # user really TRANSFERRED here goes back to main with the movements, and whatever the account was
+  # OPENED with leaves the ledger with its entry — it was never main's to get back.
+  has_one :opening_entry,
+          class_name: "Entry",
+          foreign_key: :opening_account_id,
+          dependent: :destroy,
+          inverse_of: :opening_account
+
   # ONE MEMBER, AND THE COLUMN SURVIVES THE TYPE IT ONCE DISCRIMINATED. `pool_type_account?` is
   # still asked in a dozen places — `User#default_account_is_own_account`, `AccountLedger#balance_
   # of`, every `.accounts` scope — and answering it from the column rather than deleting it keeps

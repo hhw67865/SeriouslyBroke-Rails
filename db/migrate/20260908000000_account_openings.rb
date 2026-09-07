@@ -14,10 +14,17 @@
 # ** WHY `opened_on` EXISTS AT ALL, WHEN THE ENTRY WOULD SEEM TO BE THE RECORD. ** Two reasons, and
 # either alone is enough:
 #
-#   * ZERO IS A REAL ANSWER. "What's in it right now" is $0.00 for an account a user has opened and
-#     not yet moved money into, and `Entry` validates `amount > 0` — so an opening of zero has NO
-#     entry to be, and an account that stated zero would otherwise be indistinguishable from one that
-#     never answered. Onboarding would never complete for that user.
+#   * THE OPENING DAY IS NOT THE ENTRY'S TO REMEMBER. `pools.opened_on` is read back by
+#     `AccountOpening` on every correction, and a correction may leave the record at zero — see the
+#     paragraph below — so the day has to live somewhere the arithmetic cannot move.
+#
+#   (** THE FIRST REASON THIS COLUMN CARRIED IS NO LONGER TRUE, AND IT IS RECORDED HERE BECAUSE THE
+#   TEXT SURVIVED THE CHANGE FOR ONE ROUND. ** It read: "zero is a real answer and `Entry` validates
+#   `amount > 0`, so an opening of zero has NO entry to be". `Entry` carves zero out for an opening
+#   row now — `HomePresenter#awaiting_opening?` reads the ENTRY's existence, so that deleting the
+#   record from the Entries screen puts the question back on the account's card, and "holds nothing"
+#   had to stop meaning "never asked". Every answered account has exactly one opening entry today,
+#   zero-amount ones included.)
 #   * THE OPENING DAY MUST NOT DRIFT. Spec §2: "The record's date stays the opening day." The day is
 #     `the day before the user's earliest non-opening entry, else today`, which MOVES as the user
 #     records older history — so it is computed once, at the first save, and read from this column

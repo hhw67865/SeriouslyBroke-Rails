@@ -93,15 +93,38 @@ class BankAccountsController < HomeController
   # for.
   def destroy
     account = scoped_account
+    pot_before = AccountLedger.new(current_user).pot
 
     if account.destroy
-      redirect_to root_path, notice: "#{account.name} deleted."
+      redirect_to root_path, notice: deletion_notice(account, pot_before)
     else
       redirect_to root_path, alert: account.errors[:base].to_sentence
     end
   end
 
   private
+
+  # ** WHAT HAPPENED TO THE MONEY, MEASURED RATHER THAN ASSERTED (fix round round 2 — item 4). **
+  # Deleting an account does two different things to two different kinds of money, and only one of
+  # them comes back:
+  #
+  #   MONEY THE USER REALLY TRANSFERRED HERE returns to main — `dependent: :destroy` takes the
+  #   movements and main was on the other end of every one of them, so the pot RISES by what they
+  #   moved.
+  #   WHATEVER THE ACCOUNT WAS OPENED WITH leaves the ledger with its opening entry (`Pool has_one
+  #   :opening_entry`). That money was never main's: the opening's entry and its transfer cancel on
+  #   main exactly, which is what made saving an account self-contained in the first place.
+  #
+  # So an account funded entirely by its own opening returns NOTHING and the pot does not move,
+  # while one fed by real transfers returns all of it. A flash that promised "$500 is back in
+  # checking" either way would be false half the time — so the figure is the pot's own difference,
+  # and the clause is only printed when there is something to print.
+  def deletion_notice(account, pot_before)
+    returned = (AccountLedger.new(current_user).pot - pot_before).round(2)
+    return "#{account.name} deleted." unless returned.positive?
+
+    "#{account.name} deleted — #{helpers.number_to_currency(returned)} is back in checking."
+  end
 
   # `current_user.pools.accounts`, NOT `current_user.pools`. A stranger's id is a 404 through the
   # ownership scope, as everywhere; the `.accounts` half is what keeps this controller's promise

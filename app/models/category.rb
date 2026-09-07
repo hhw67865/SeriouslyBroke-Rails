@@ -40,6 +40,10 @@ class Category < ApplicationRecord
   # form has always meant it.
   DEFAULT_COLOR = "#C9C78B"
 
+  # SET BY `AccountOpening` ALONE, and the only thing it does is let the two reserved names through
+  # `#opening_names_are_reserved`. Not a column, not permitted by any controller.
+  attr_accessor :opening_record
+
   belongs_to :user, touch: true
 
   # `belongs_to :pool` IS GONE WITH `categories.pool_id` (two-ledger spec §5, Task 8). Where a
@@ -100,6 +104,24 @@ class Category < ApplicationRecord
 
   # THE THREE PURPOSE-LEDGER COLUMNS, VALIDATED TOGETHER AND BEHIND ONE GUARD — see
   # #holding_columns_are_sane for both halves of why.
+  # ** THE TWO OPENING NAMES ARE RESERVED (fix round round 2 — item 6). ** `Category.spendable` is a
+  # NAME test — it is the only thing the two opening categories have in common, since one is income
+  # and one is expense — so a user who renamed an ordinary expense category to "Opening Balance"
+  # would silently drop it and its claims off the Budget page, Home's unbudgeted rows, the Reports
+  # untracked band and the Entries expenses tab, with no message anywhere saying why.
+  #
+  # REFUSED AT THE NAME RATHER THAN ACCEPTED AS AN EDGE, because the alternative is a category that
+  # disappears from four screens and can only be recovered by guessing the cause.
+  #
+  # `opening_record` IS HOW `AccountOpening` GETS THROUGH — an attr_accessor rather than a
+  # validation context, so the flag travels with the record it is about and no caller can set it by
+  # accident through mass assignment (it is not a column and no `params.expect` names it).
+  #
+  # THE GUARD IS ON THE NAME CHANGING, not on the row's current name: an existing opening category
+  # must still be saveable (the categories screen can toggle its `tracked` flag), and renaming one
+  # AWAY from a reserved name is the user's own escape hatch and stays legal.
+  validate :opening_names_are_reserved
+
   validate :holding_columns_are_sane
 
   # A CATEGORY THAT STOPS BEING INCOME TAKES ITS ENTRIES' MIRROR MOVEMENTS WITH IT (main-account
@@ -550,6 +572,14 @@ class Category < ApplicationRecord
   #
   # `spec/seeds_spec.rb` WAS ON THAT LIST UNTIL TASK 8 and is not any more: the seeds are
   # category-native, so there is no schema they can be replanted against but the current one.
+  def opening_names_are_reserved
+    return if opening_record
+    return unless new_record? || will_save_change_to_name?
+    return unless OPENING_NAMES.any? { |reserved| reserved.casecmp?(name.to_s) }
+
+    errors.add(:name, "is reserved for the balance an account started with")
+  end
+
   def holding_columns_are_sane
     return unless has_attribute?(:priority)
 

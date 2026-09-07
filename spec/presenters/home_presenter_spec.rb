@@ -1481,7 +1481,7 @@ RSpec.describe HomePresenter do
     # Both directions on one fixture: the shortfall is out, an ordinary receipt of the same shape is
     # in. Re-derived: $32 of Subscriptions is the only real spending, so it is the whole list.
     it "never lists an opening shortfall as spending", :aggregate_failures do
-      shortfall = create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
+      shortfall = create(:category, :opening_shortfall, user: user)
       create(:entry, item: create(:item, category: shortfall), amount: 400, date: today)
       spender = create(:category, :expense, user: user, name: "Subscriptions")
       create(:entry, item: create(:item, category: spender), amount: 32, date: today)

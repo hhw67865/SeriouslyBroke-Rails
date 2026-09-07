@@ -50,7 +50,7 @@ RSpec.describe AccountOpenings do
   # named "Opening Balance", one item, one ordinary entry dated before the user's history.
   def plant_a_correction(amount: 1_000, on: Date.new(2026, 8, 20))
     category = user.categories.find_by(name: Category::OPENING_BALANCE_NAME) ||
-               create(:category, :income, user: user, name: Category::OPENING_BALANCE_NAME, tracked: false)
+               create(:category, :opening_balance, user: user)
     item = category.items.find_by(name: "Initial balance") || create(:item, category: category, name: "Initial balance")
     create(:entry, item: item, amount: amount, date: on)
   end
@@ -187,7 +187,7 @@ RSpec.describe AccountOpenings do
     mine = plant_a_correction(amount: 1_000, on: Date.new(2026, 8, 20))
     neighbour = create(:user, timezone: "UTC")
     their_checking = create(:pool, :account, user: neighbour, name: "Checking")
-    their_category = create(:category, :income, user: neighbour, name: Category::OPENING_BALANCE_NAME, tracked: false)
+    their_category = create(:category, :opening_balance, user: neighbour)
     theirs = create(:entry, item: create(:item, category: their_category, name: "Initial balance"), amount: 90, date: Date.new(2026, 7, 1))
 
     migrate!

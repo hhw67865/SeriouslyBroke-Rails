@@ -199,6 +199,29 @@ RSpec.describe "BankAccounts", type: :request do
       expect(user.pools.find_by(name: "Ally")).to be_nil
     end
 
+    # ** DELETING AN ANSWERED ACCOUNT (fix round round 2 — item 4). ** It used to raise
+    # `PG::ForeignKeyViolation` against `entries.opening_account_id`; the record goes with the
+    # account now, both halves of it.
+    #
+    # ** AND THE FLASH TELLS THE TRUTH ABOUT THE MONEY, WHICH IS TWO DIFFERENT TRUTHS. ** An opening
+    # entry and its transfer CANCEL on main — that is what made saving an account self-contained —
+    # so an account funded entirely by its own opening returns nothing and the pot does not move. A
+    # flash promising "$500 is back in checking" would be false for exactly the accounts this fix is
+    # about. Re-derived: $3,000 of income, Ally opened at $500, pot $3,000 before and after.
+    it "deletes an answered account without promising money back", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      AccountOpening.new(user, ally, balance: "500").save
+
+      delete bank_account_path(ally)
+
+      expect(response).to redirect_to(root_path)
+      expect(flash[:notice]).to eq("Ally deleted.")
+      expect(Entry.where.not(opening_account_id: nil)).to be_empty
+      expect(AccountLedger.new(user).pot).to eq(3_000)
+    end
+
     # ** THE CRAFTED DELETE ON MAIN (final fix wave, C-1). ** Home renders no Delete button on main's
     # card, and a button is a rendering: this is the door the model's refusal is actually behind. The
     # request spec is where it belongs because what is under test is a status, a flash and an
@@ -225,6 +248,11 @@ RSpec.describe "BankAccounts", type: :request do
 
     # THE OTHER DIRECTION ON THE SAME FIXTURE: the account that is not main deletes, and the money it
     # held returns to the pot rather than vanishing — which is the sentence Home's confirm promises.
+    #
+    # ** AND THE FLASH NOW CARRIES THE FIGURE, MEASURED (fix round round 2 — item 4). ** It read
+    # "Ally deleted." for every account whatever happened to the money; the pot's own difference is
+    # what the notice states, and the example above is its other half — an account funded by its own
+    # OPENING returns nothing, because that entry and its transfer cancelled on main.
     it "deletes a non-main account and returns what it held to the pot", :aggregate_failures do
       ally = create(:pool, :account, user: user, name: "Ally")
       income = create(:category, :income, user: user, name: "Salary")
@@ -233,7 +261,7 @@ RSpec.describe "BankAccounts", type: :request do
 
       delete bank_account_path(ally)
 
-      expect(flash[:notice]).to eq("Ally deleted.")
+      expect(flash[:notice]).to eq("Ally deleted — $500.00 is back in checking.")
       expect(user.pools.find_by(name: "Ally")).to be_nil
       expect(checking.reload.balance).to eq(3_000)
     end

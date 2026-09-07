@@ -167,8 +167,8 @@ RSpec.describe BudgetPagePresenter do
     # directions in one example: the shortfall is out, an ordinary rule-less expense beside it is in.
     it "leaves out the opening categories and keeps the ordinary rule-less ones", :aggregate_failures do
       rate(holder("Groceries"), 400)
-      create(:category, :expense, user: user, name: Category::OPENING_SHORTFALL_NAME, tracked: false)
-      create(:category, :income, user: user, name: Category::OPENING_BALANCE_NAME, tracked: false)
+      create(:category, :opening_shortfall, user: user)
+      create(:category, :opening_balance, user: user)
       create(:category, :expense, user: user, name: "Aquarium")
 
       expect(row_names).to eq(["Groceries", "Aquarium"])

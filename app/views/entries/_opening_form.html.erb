@@ -1,0 +1,82 @@
+<%# ** THE EDIT SCREEN FOR AN ACCOUNT'S OPENING RECORD (account-openings §2; fix round round 2 —
+    items 1 and 2). ** An opening entry is an ordinary row in the user's history — it has to be
+    findable and deletable there, which is what puts the question back on the account's card — but
+    almost nothing about it may be CHANGED from here, because the record is two rows that have to
+    move together: the entry and the transfer `AccountOpening` writes beside it.
+
+    ** WHAT IS READ-ONLY, AND WHY EACH ONE IS. **
+
+      THE ACCOUNT — re-pointing it called `Entry#route_income_to!`, which rewrote the transfer onto
+      another account: measured, an Ally corrected to $1,000 afterwards showed $500 while HYSA
+      silently held the difference.
+      THE AMOUNT — it IS the opening figure, and changing it has to recompute the transfer.
+      `amount: 0` passed validation (zero is legal for an opening row) and then raised a 500 against
+      `account_movements`' own `amount > 0` CHECK, AFTER the real movement had been deleted.
+      THE CATEGORY AND THE ITEM — they are the app's, not the user's: `Opening Balance` or
+      `Opening Shortfall` by the sign of the figure, and one `Initial balance` item under each.
+
+    ** AND THAT IS WHY THIS IS ITS OWN PARTIAL RATHER THAN FOUR BRANCHES INSIDE `_form`. ** The big
+    form binds three Stimulus controllers — `app--entry--form` (the two TomSelects),
+    `app--entry--impact` (the envelope card) and `app--entry--routing` (the "Lands in" toggle) — and
+    every one of them reaches for a target that is not on the page once the controls above are
+    read-only. `app--entry--routing#categoryChanged` threw "Missing target" on the first branch of
+    this fix for exactly that reason. A form with no editable pickers needs no controller at all, so
+    this one binds none.
+
+    WHAT IS STILL EDITABLE: the date and the description. Neither is part of the arithmetic, and a
+    user who wants to annotate the row their setup wrote is entitled to.
+
+    Local: `entry` (the opening Entry). %>
+<%= simple_form_for(entry) do |f| %>
+  <%= f.error_notification %>
+  <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
+
+  <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6"
+       data-opening-entry="<%= entry.opening_account.name %>">
+    <div class="p-6">
+      <h2 class="text-xl font-semibold mb-4">Opening balance</h2>
+
+      <%# THE SENTENCE AND ITS DOOR — `Entry#opening_line` and `Entry::OPENING_DOOR` are the one
+          spelling, shared with the 422 `EntriesController#update` answers a crafted PATCH with. %>
+      <p class="text-sm text-gray-600 mb-5" data-opening-line>
+        <%= entry.opening_line %> ·
+        <%= link_to Entry::OPENING_DOOR, root_path, class: "text-status-info hover:underline" %>
+      </p>
+
+      <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+        <div>
+          <dt class="form-label">Category</dt>
+          <dd class="text-sm text-gray-900"><%= entry.category.name %></dd>
+        </div>
+        <div>
+          <dt class="form-label">Name</dt>
+          <dd class="text-sm text-gray-900"><%= entry.item.name %></dd>
+        </div>
+        <div>
+          <dt class="form-label">Amount</dt>
+          <dd class="text-sm text-gray-900 tabular-nums"><%= number_to_currency(entry.amount) %></dd>
+        </div>
+        <div>
+          <dt class="form-label">Lands in</dt>
+          <dd class="text-sm text-gray-900"><%= entry.opening_account.name %></dd>
+        </div>
+      </dl>
+
+      <%= f.input :date,
+          as: :string,
+          hint: "The day this account started at this figure.",
+          input_html: { type: "date", value: entry.date&.strftime("%Y-%m-%d") } %>
+
+      <%= f.input :description,
+          wrapper_html: { class: "mt-5" },
+          placeholder: "Add any notes about this record",
+          hint: "Optional details about this entry",
+          input_html: { rows: 3 } %>
+    </div>
+  </div>
+
+  <div class="flex flex-col sm:flex-row sm:justify-end gap-3">
+    <%= link_to "Cancel", (@previous_url.presence || entries_path), class: "btn btn-secondary" %>
+    <%= f.button :submit, "Update Entry" %>
+  </div>
+<% end %>
