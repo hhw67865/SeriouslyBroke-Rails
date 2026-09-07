@@ -48,12 +48,36 @@ RSpec.describe AccountOpenings do
 
   # ONBOARDING STEP 3'S ANSWER, AS `OpeningBalancesController` WROTE IT: one auto-created category
   # named "Opening Balance", one item, one ordinary entry dated before the user's history.
+  #
+  # ** THE CATEGORY IS PLANTED BY SQL, AND `tracked` IS `true` — WHICH IS WHAT MAKES IT A FAITHFUL
+  # LEGACY ROW (fix round 4). ** It used the `:opening_balance` factory trait, which carries
+  # `tracked: false` because that is what `AccountOpening` writes today — so the fixture was a
+  # PRESENT-DAY row wearing a legacy label, and the adoption spec could not have shown the hole the
+  # next migration closes. A real legacy row was written before every guard the model now carries:
+  # the name is reserved to `AccountOpening` (`#opening_names_are_reserved`), the flag is forced
+  # false on save (`#an_opening_category_is_never_tracked`), and neither existed when this row was
+  # made. `INSERT` is the only way to plant it, which is also the honest statement about it.
   def plant_a_correction(amount: 1_000, on: Date.new(2026, 8, 20))
-    category = user.categories.find_by(name: Category::OPENING_BALANCE_NAME) ||
-               create(:category, :opening_balance, user: user)
+    category = user.categories.reload.find_by(name: Category::OPENING_BALANCE_NAME) || plant_a_legacy_category
     item = category.items.find_by(name: "Initial balance") || create(:item, category: category, name: "Initial balance")
     create(:entry, item: item, amount: amount, date: on)
   end
+
+  def plant_a_legacy_category(for_user: user)
+    id = connection.select_value(
+      ActiveRecord::Base.sanitize_sql_array(
+        [
+          "INSERT INTO categories (id, name, category_type, tracked, priority, user_id, created_at, updated_at) " \
+          "VALUES (gen_random_uuid(), ?, 1, true, 0, ?, NOW(), NOW()) RETURNING id",
+          Category::OPENING_BALANCE_NAME,
+          for_user.id
+        ]
+      )
+    )
+    Category.find(id)
+  end
+
+  def tracked?(category) = connection.select_value("SELECT tracked FROM categories WHERE id = '#{category.id}'")
 
   # ONBOARDING STEP 2'S ANSWER: the ONE movement from main that gave an account its real balance.
   def plant_a_funding(account, amount: 500, on: Date.new(2026, 8, 25))
@@ -213,6 +237,29 @@ RSpec.describe AccountOpenings do
 
     expect(opened_on(ally)).to eq(Date.new(2026, 8, 25))
     expect(opened_on(hysa)).to eq(Date.new(2026, 8, 26))
+  end
+
+  # ** WHAT THIS MIGRATION DOES NOT DO, PINNED SO THE NEXT ONE HAS A REASON TO EXIST (fix round 4). **
+  # Adoption points the legacy entry at main and stops there: it never touches `categories.tracked`,
+  # so a row carrying the column's default survives ADOPTED AND TRACKED — and Reports sums its
+  # tracked bands by that flag while `Entry.earned` keeps the entry out of every figure above them.
+  # `Category#an_opening_category_is_never_tracked` cannot reach it: that guard is a
+  # `before_validation`, and nothing will save this row through the model again.
+  #
+  # BOTH MIGRATIONS IN ONE EXAMPLE, in the order a real database meets them, because the hole and its
+  # closing are one fact and an example that showed only the second would not say why it exists.
+  it "adopts a tracked legacy category and leaves the flag to the next migration", :aggregate_failures do
+    plant_a_correction
+    category = user.categories.find_by!(name: Category::OPENING_BALANCE_NAME)
+
+    migrate!
+    expect(tracked?(category)).to be(true)
+
+    untrack = UntrackOpeningCategories.new
+    untrack.suppress_messages { untrack.up }
+
+    expect(tracked?(category)).to be(false)
+    expect(adopted_entry_id).to be_present
   end
 
   # ** THE ROUND TRIP, WHICH IS WHAT THE REWIND EVERY OTHER MIGRATION SPEC DEPENDS ON IS MADE OF. **

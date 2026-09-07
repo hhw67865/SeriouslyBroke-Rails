@@ -9,6 +9,7 @@ require Rails.root.join("db/migrate/20260905010000_rules_own_the_budget")
 require Rails.root.join("db/migrate/20260906000000_two_shapes")
 require Rails.root.join("db/migrate/20260907000000_a_fund_keeps_unspent")
 require Rails.root.join("db/migrate/20260908000000_account_openings")
+require Rails.root.join("db/migrate/20260909000000_untrack_opening_categories")
 
 # THE SCHEMA A MIGRATION WAS WRITTEN FOR, REBUILT FOR THE LENGTH OF A FILE.
 #
@@ -141,6 +142,20 @@ require Rails.root.join("db/migrate/20260908000000_account_openings")
 # its own to reverse. Everything the backfill wrote lives in the two columns it drops, so the entry
 # it adopted is an ordinary entry again and the account it answered for is unanswered again, which
 # is exactly the database this migration met.
+#
+# ** A TENTH IS `require`d HERE AND IS ON NOBODY'S LIST EITHER, FOR THE EIGHTH AND NINTH'S REASON
+# (account-openings fix round 4). ** `UntrackOpeningCategories` (2026-09-09) writes ONE column on the
+# rows a legacy `Opening Balance` category left behind and adds no schema at all.
+# `spec/migrations/untrack_opening_categories_spec.rb` includes this context with `described_class`
+# for the newest-migration reason — its `up` would meet its own work — so the constant has to be
+# loadable from here. No `down` on any list gives or takes `categories.tracked` away and no `up` on
+# any list reads it, so adding it to the older specs' forward lists would leave a dead entry that
+# reads as a dependency.
+#
+# ** ITS `down` IS A NO-OP THAT SAYS SO, AND THAT IS WHAT MAKES IT SAFE HERE. ** This context runs
+# the `down` of everything it is given before every example of the files that include it; a data
+# migration whose reversal raised — which is the honest thing for most of them — would take those
+# files with it. `tracked` has no memory, so there is nothing to restore and nothing to raise about.
 #
 # ** `CreateAdjustments` (2026-09-03) IS DELIBERATELY NOT ON THAT LIST, AND THE MEASUREMENT IS WHY. **
 # It is newer than the first four and older than the fifth, so the question is live in both
