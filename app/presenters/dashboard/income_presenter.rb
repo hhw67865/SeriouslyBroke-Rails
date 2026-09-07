@@ -48,12 +48,18 @@ module Dashboard
 
     delegate :period_range, :six_month_range, to: :@parent
 
+    # ** `Entry.earned`, NOT `.incomes` (fix round 3 — R5). ** An account's opening record is an
+    # INCOME entry when the account holds money — that is how the figure enters the ledger — and a
+    # NEW user's opening day is the day before their earliest entry, which for a household setting up
+    # today is inside the current period. So "Total Income" counted the $500 somebody said was in
+    # their savings account as income they had received, on the one page whose job is what actually
+    # happened this month.
     def income_scope
-      @user.entries.incomes
+      @user.entries.earned
     end
 
     def tracked_income_scope
-      @user.entries.incomes.tracked
+      @user.entries.earned.tracked
     end
 
     def calculate_income_change

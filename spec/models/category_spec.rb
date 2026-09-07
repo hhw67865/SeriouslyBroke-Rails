@@ -93,6 +93,31 @@ RSpec.describe Category, type: :model do
       expect(groceries.update(name: Category::OPENING_SHORTFALL_NAME)).to be(false)
     end
 
+    # ** AND AN OPENING CATEGORY CANNOT BE TRACKED (fix round 3 — R6). ** The categories screen and
+    # the Reports filter both offer a Tracked toggle on every category, and ticking it put
+    # `Opening Shortfall` back into the Reports TRACKED band carrying a figure the totals beside it
+    # exclude (`Entry.spendable`) — a row that cannot be reconciled against the number above it.
+    # Forced rather than refused: the user pressed a toggle the screen offered, and there is nowhere
+    # on that screen to explain a refusal.
+    it "keeps an opening category untracked however it is saved", :aggregate_failures do
+      opening = create(:category, :opening_shortfall, user: user)
+
+      expect(opening.tracked).to be(false)
+      expect(opening.update(tracked: true)).to be(true)
+      expect(opening.reload.tracked).to be(false)
+    end
+
+    # THE OTHER DIRECTION, AND IT IS THE ESCAPE HATCH AGAIN: a category renamed away from the
+    # reserved name is an ordinary category, and the toggle works on it from the next save.
+    it "lets a renamed-away category be tracked again", :aggregate_failures do
+      opening = create(:category, :opening_shortfall, user: user)
+
+      opening.update!(name: "Old opening figures")
+
+      expect(opening.update(tracked: true)).to be(true)
+      expect(opening.reload.tracked).to be(true)
+    end
+
     # ** THREE THINGS IT MUST NOT REFUSE. ** `AccountOpening` writing the record (the flag), an
     # existing opening category being saved without a name change (the categories screen's `tracked`
     # toggle runs a full save), and the user renaming one AWAY — which is their own escape hatch for

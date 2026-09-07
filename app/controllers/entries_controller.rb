@@ -65,15 +65,23 @@ class EntriesController < ApplicationController
   #   * any other figure rewrote the entry and left the movement on the OLD one, so the account read
   #     one number and the ledger another.
   #
+  # ** AND ITS ITEM IS NOT EDITABLE EITHER, WHICH IS THE SAME RULE ABOUT THE SAME ROW (fix round 3 —
+  # R3). ** An entry's item names its CATEGORY, and the category's type is the SIGN of the money: a
+  # crafted `item_id` pointing at an expense item turned a $500 opening INCOME entry into a $500
+  # expense — a $1,000 swing in `income − expenses` — while the transfer beside it still moved $500
+  # into the account. The invariant broke, and the account's card went on reading "answered" over a
+  # record that now said the opposite of what it had. The category cannot be changed without the
+  # item, so guarding the item guards both.
+  #
   # ONE DOOR, and it is the account's own card. The DATE and the DESCRIPTION are still editable here
-  # — neither is part of the arithmetic — and a save that changes NEITHER amount nor account (the
-  # ordinary "I opened the form and pressed Save") goes through untouched.
+  # — neither is part of the arithmetic — and a save that changes NONE of the three (the ordinary "I
+  # opened the form and pressed Save") goes through untouched.
   #
   # REFUSED RATHER THAN IGNORED, and 422 rather than a redirect: a request that asked for something
   # the app will not do should say so where the user is standing, with the same sentence the form
   # prints in place of the select.
   def update
-    return refuse_reopening if @entry.opening? && (@routing_asked || amount_edited?)
+    return refuse_reopening if @entry.opening? && (@routing_asked || amount_edited? || item_edited?)
 
     if @entry.update(entry_params)
       sync_income_routing
@@ -267,6 +275,15 @@ class EntriesController < ApplicationController
     return false if submitted.blank?
 
     BigDecimal(submitted.to_s, exception: false)&.round(2) != @entry.amount
+  end
+
+  # THE ITEM AS SUBMITTED AGAINST THE ITEM AS STORED, on the same "an unchanged save is not an edit"
+  # rule as `#amount_edited?`. The opening form submits no `item_id` at all, so a value arriving here
+  # is a stale page or a crafted request either way.
+  def item_edited?
+    submitted = params.dig(:entry, :item_id)
+
+    submitted.present? && submitted != @entry.item_id
   end
 
   def refuse_reopening

@@ -129,11 +129,21 @@ RSpec.describe "Entries New Routing", type: :system do
     end
   end
 
+  # ** `Entry.sole` WAS THE PAYCHECK UNTIL EVERY ACCOUNT ANSWERED FOR ITSELF (account-openings §3;
+  # fix round 3 — R1). ** Both fixtures above are `:opened` — they have to be, or their cards do not
+  # render on Home and `#expect_home_buffers` has nothing to read — and an answered account carries a
+  # ZERO-AMOUNT opening entry, which is what `HomePresenter#awaiting_opening?` reads. So the database
+  # holds three entries here, not one, and `Entry.sole` raised `SoleRecordExceeded` before the page
+  # was ever visited. THE `sole` DISCIPLINE IS KEPT rather than swapped for `.last`: this names the
+  # one entry that is not an account's opening record, so a fixture that ever wrote a second real
+  # entry would still fail loudly here instead of picking one.
+  def the_paycheck = Entry.where(opening_account_id: nil).sole
+
   describe "editing an entry that was routed" do
     it "opens on the account the money went to" do
       record_paycheck(into: "Ally")
 
-      visit edit_entry_path(Entry.sole)
+      visit edit_entry_path(the_paycheck)
 
       expect(page).to have_select("Lands in", selected: "Ally")
     end
@@ -141,7 +151,7 @@ RSpec.describe "Entries New Routing", type: :system do
     it "moves the money when the account is changed" do
       record_paycheck(into: "Ally")
 
-      visit edit_entry_path(Entry.sole)
+      visit edit_entry_path(the_paycheck)
       select "Checking", from: "Lands in"
       click_button "Update Entry"
       expect(page).to have_content("Entry was successfully updated")

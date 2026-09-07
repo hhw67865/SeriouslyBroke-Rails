@@ -198,8 +198,12 @@ class DashboardPresenter
     @untracked_expense_categories ||= @user.categories.spendable.untracked.includes(items: :entries)
   end
 
+  # `Category.earned` — every income category but an account's opening record (fix round 3 — R5).
+  # `Opening Balance` is income by construction, so this band listed what a household said was
+  # already in its savings account beside the paychecks it received, with a figure the totals above
+  # it exclude.
   def untracked_income_categories
-    @untracked_income_categories ||= @user.categories.incomes.untracked.includes(items: :entries)
+    @untracked_income_categories ||= @user.categories.earned.untracked.includes(items: :entries)
   end
 
   def month_range

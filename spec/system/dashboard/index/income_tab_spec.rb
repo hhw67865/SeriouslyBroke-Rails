@@ -37,6 +37,31 @@ RSpec.describe "Dashboard Index - Income Tab", type: :system do
       within_stat_card("Total Income") { expect(page).to have_content("$3,000.00") }
     end
 
+    # ** AN ACCOUNT'S OPENING RECORD IS NOT INCOME THE HOUSEHOLD RECEIVED (fix round 3 — R5). ** It
+    # is an INCOME entry when the account holds money — that is how the figure enters the ledger,
+    # and `AccountLedger` must go on counting it or `pot + Σ accounts == income − expenses` breaks —
+    # but on THIS page it was $500 somebody said was in their savings account reported as money they
+    # earned. A NEW user's opening day is the day before their earliest entry, so for a household
+    # setting up today it lands inside the current period, which is exactly this card. Both
+    # directions on one fixture: the $3,000 paycheck is still there and the $500 opening is not.
+    # The opening record as `AccountOpening` writes one: the entry, its marker, and the category the
+    # service reserves for it.
+    def plant_an_opening(amount)
+      account = create(:pool, :account, user: user, name: "Checking")
+      item = create(:item, category: create(:category, :opening_balance, user: user), name: "Initial balance")
+      create(:entry, item: item, amount: amount, date: base_date + 1.day, opening_account: account)
+    end
+
+    it "leaves an account's opening record out of the income figures", :aggregate_failures do
+      plant_an_opening(500)
+
+      visit reports_path(tab: "income")
+
+      within_stat_card("Total Income") { expect(page).to have_content("$3,000.00") }
+      within_stat_card("Total Income") { expect(page).to have_no_content("$3,500.00") }
+      expect(page).to have_no_content(Category::OPENING_BALANCE_NAME)
+    end
+
     it "shows vs Last Month percentage change" do
       expect(page).to have_content("vs Last Month")
       expect(page).to have_content("+7%")

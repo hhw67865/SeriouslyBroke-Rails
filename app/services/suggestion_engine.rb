@@ -344,6 +344,14 @@ class SuggestionEngine
   # (which rolls the same rows up by category and period) and the dead-rule detector (which needs
   # to know when an item last had one). Plucked rather than instantiated: nothing here reads an
   # Entry's behaviour, only three of its columns.
+  #
+  # ** IT IS THE DETECTORS' ONLY READ, AND NOT THIS CLASS'S ONLY ONE (fix round 3 — R8). **
+  # `#category_spend` below runs a second entry query for the Budget page's "spent recently" figure.
+  # That one is deliberately left on `Entry.expenses`: it is GROUPED BY CATEGORY and every caller
+  # asks it about categories the page lists, and the page's list (`BudgetPagePresenter#expense_
+  # categories`) is narrowed by `Category.spendable` — so an opening category's rows are summed into
+  # a bucket nothing ever reads. Inert rather than exempt, and said out loud here so the next reader
+  # does not take "one query" for "one reader of entries".
   def entry_rows
     # ** `Entry.spendable` — AN OPENING RECORD IS NOT HISTORY A DETECTOR MAY READ (fix round round 2
     # — item 5). ** Every opening entry a user has sits on ONE item, `Initial balance`, so two

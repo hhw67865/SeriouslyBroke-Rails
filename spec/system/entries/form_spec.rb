@@ -55,8 +55,17 @@ RSpec.describe "Entries Forms", type: :system do
     # that controller and leaves the rest of the page working, so no assertion about the DOM would
     # ever have caught it. SEVERE only — Chrome logs its own warnings at lower levels and a spec that
     # failed on those would fail for reasons nothing in this app can fix.
+    #
+    # ** THE BUFFER IS DRAINED IMMEDIATELY BEFORE THE VISIT (fix round 3 — R4), AND THE READ IS
+    # DESTRUCTIVE, WHICH IS THE POINT. ** `logs.get(:browser)` empties what it returns, but the
+    # buffer belongs to the chromedriver SESSION and outlives Capybara's `reset_sessions!`: anything
+    # logged by a page this example did not visit — the sign-in redirect, a previous example's screen
+    # — would arrive in this example's read and be blamed on this page. Draining after the sign-in
+    # and before the visit makes the assertion about THIS page and nothing else.
     it "loads with no error in the browser console" do
       entry = opening_entry
+      visit entries_path
+      page.driver.browser.logs.get(:browser)
 
       visit edit_entry_path(entry)
       expect(page).to have_content("Opening balance")

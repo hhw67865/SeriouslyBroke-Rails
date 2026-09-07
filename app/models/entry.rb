@@ -84,10 +84,25 @@ class Entry < ApplicationRecord
   # the form offers every category). Measured on exactly that fixture: the row vanished from the
   # Reports band while its $777 stayed inside "Total Unbudgeted Spending" — a figure with nothing on
   # the page to account for it, which is the defect this scope exists to close.
-  scope :spendable,
-        lambda {
-          expenses.where(opening_account_id: nil).where.not(categories: { id: Category.opening.select(:id) })
-        }
+  # ** THE TEST ITSELF, ONCE (fix round 3 — R5): a row that is not an account's opening record. **
+  # BOTH HALVES ARE LOAD-BEARING. The marker column is the exact question — "did `AccountOpening`
+  # write this row" — but the screens these scopes feed put TOTALS above lists of CATEGORIES narrowed
+  # by `Category.spendable`, which is a NAME test, and the two disagree on one shape a user can make
+  # by hand: an ordinary entry filed under `Opening Balance` through the entry form (that category is
+  # on the categories screen and the form offers every category). Measured on exactly that fixture:
+  # the row vanished from the Reports band while its $777 stayed inside "Total Unbudgeted Spending" —
+  # a figure with nothing on the page to account for it.
+  #
+  # IT COMPOSES ONTO `expenses` OR `incomes` AND IS NOT USED ALONE: the `categories` condition needs
+  # the join those two carry.
+  scope :non_opening, -> { where(opening_account_id: nil).where.not(categories: { id: Category.opening.select(:id) }) }
+
+  # WHAT THE HOUSEHOLD ACTUALLY SPENT, AND WHAT IT ACTUALLY EARNED. `Entry.expenses` and
+  # `Entry.incomes` stay exactly as they are — `AccountLedger#entry_side` is `incomes − expenses`, and
+  # an opening entry is the row that makes an account read what its owner said it holds, so narrowing
+  # either would break `pot + Σ accounts == income − expenses`.
+  scope :spendable, -> { expenses.non_opening }
+  scope :earned, -> { incomes.non_opening }
   scope :incomes, -> { joins(item: :category).where(categories: { category_type: :income }) }
   scope :tracked, -> { where(categories: { tracked: true }) }
 

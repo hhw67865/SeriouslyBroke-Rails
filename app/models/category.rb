@@ -120,6 +120,19 @@ class Category < ApplicationRecord
   # THE GUARD IS ON THE NAME CHANGING, not on the row's current name: an existing opening category
   # must still be saveable (the categories screen can toggle its `tracked` flag), and renaming one
   # AWAY from a reserved name is the user's own escape hatch and stays legal.
+  # ** AN OPENING CATEGORY IS NEVER TRACKED, WHATEVER THE SCREEN SAYS (fix round 3 — R6). ** The
+  # categories index and the Reports filter both offer a Tracked toggle on every category, and
+  # ticking it on `Opening Shortfall` put the row back into the Reports tracked band with a figure
+  # the totals beside it exclude (`Entry.spendable`) — a row that cannot be reconciled against the
+  # number above it. `AccountOpening` writes these categories `tracked: false` and this is what keeps
+  # them that way: the flag is about whether spending counts toward a period's figures, and an
+  # opening record is not spending in any period.
+  #
+  # FORCED RATHER THAN VALIDATED, because the user did nothing wrong — they pressed a toggle the
+  # screen offered — and a refusal would have to be explained on a screen that has nowhere to say it.
+  # Renaming the category away un-reserves it and the toggle works again from the next save.
+  before_validation :an_opening_category_is_never_tracked
+
   validate :opening_names_are_reserved
 
   validate :holding_columns_are_sane
@@ -216,8 +229,9 @@ class Category < ApplicationRecord
   #   * Home's "This period" unbudgeted rows (`HomePresenter#unfunded_category_rows`) printed
   #     `Opening Shortfall · spent $400.00` — a NEW user's opening day is `today`, which is inside
   #     the current period, so this was the first thing a first-time user saw after onboarding;
-  #   * the Reports untracked band (`DashboardPresenter#untracked_expense_categories`) listed it as
-  #     money spent outside the budget;
+  #   * the Reports untracked EXPENSE band (`DashboardPresenter#untracked_expense_categories`) listed
+  #     `Opening Shortfall` as money spent outside the budget, and its untracked INCOME twin listed
+  #     `Opening Balance` as money received (`#earned` below is that half);
   #   * the Entries screen's `?type=expenses` tab (`EntriesController#apply_type_filter`) listed the
   #     opening ENTRY among the household's receipts — narrowed there by the marker column rather
   #     than by this scope, because the question on that screen is about a ROW.
@@ -238,6 +252,17 @@ class Category < ApplicationRecord
   # unscoped by user — an id that is not in this relation cannot be excluded by it — so composing
   # `user.categories.spendable` narrows to the owner exactly as `.expenses` does.
   scope :spendable, -> { expenses.where.not(id: opening.select(:id)) }
+
+  # ** AND THE INCOME SIDE HAS THE SAME BAND AND THE SAME DEFECT (fix round 3 — R5). ** `Opening
+  # Balance` is an INCOME category — that is how money an account already had enters the ledger — so
+  # the Reports income tab listed a household's opening record under UNTRACKED income beside the
+  # paychecks they actually received. `Entry.earned` narrows the FIGURES above that band; this
+  # narrows the band, and the two have to move together or the page shows a row with no figure over
+  # it (which is the mismatch the expense side was fixed for in the other direction).
+  #
+  # THE TRACKED INCOME BAND NEEDS NO NARROWING: `Category#an_opening_category_is_never_tracked`
+  # forces the flag false, so an opening category cannot appear in a `.tracked` scope at all.
+  scope :earned, -> { incomes.where.not(id: opening.select(:id)) }
 
   # `:budget` LEFT THE EXPENSE PRELOAD with the cap card it fed, and `:pool` left it with the column
   # (Task 8): the Categories index prints what a category HOLDS now, which is read off the category
@@ -572,6 +597,10 @@ class Category < ApplicationRecord
   #
   # `spec/seeds_spec.rb` WAS ON THAT LIST UNTIL TASK 8 and is not any more: the seeds are
   # category-native, so there is no schema they can be replanted against but the current one.
+  def an_opening_category_is_never_tracked
+    self.tracked = false if OPENING_NAMES.any? { |reserved| reserved.casecmp?(name.to_s) }
+  end
+
   def opening_names_are_reserved
     return if opening_record
     return unless new_record? || will_save_change_to_name?

@@ -16,7 +16,11 @@ require "rails_helper"
 # spec/requests/bank_accounts_spec.rb, where the status codes are visible.
 RSpec.describe "BankAccounts Edit", type: :system do
   let(:user) { create(:user) }
-  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # `:opened` — the account has said what it holds (account-openings §3; fix round 3 — R2). Only an
+  # account that has answered gets a CARD on Home; one that has not gets a ROW in the "Your accounts"
+  # card instead, and `[data-account-group]` is the card's hook. The rename example below is about
+  # the card, so its fixture has to be an account that has one.
+  let!(:checking) { create(:pool, :account, :opened, user: user, name: "Checking") }
 
   before { sign_in user, scope: :user }
 
@@ -35,11 +39,18 @@ RSpec.describe "BankAccounts Edit", type: :system do
       expect(page).to have_no_select("Account")
     end
 
+    # ** THE CARD IS BEHIND THE ACCOUNTS LINE, WHICH IS WHERE IT HAS BEEN SINCE ANSWERS-FIRST §6 —
+    # AND THE PIN NOW OPENS IT (fix round 3 — R2). ** Home collapses every finished account to one
+    # line and `_account.html.erb` renders inside that `<details>`; the assertion passed before this
+    # feature only because an unfinished account's card rendered top-level, and there is no such card
+    # any more. The new name is asserted in the flash AND on the card, because either alone would
+    # pass over a screen that had renamed nothing.
     it "renames the account and says so on Home" do
       fill_in "Account name", with: "Everyday Checking"
       click_button "Save account"
 
       expect(page).to have_content("Everyday Checking updated.")
+      find("[data-accounts-line]").click
       expect(page).to have_css("[data-account-group='Everyday Checking']")
       expect(checking.reload.name).to eq("Everyday Checking")
     end

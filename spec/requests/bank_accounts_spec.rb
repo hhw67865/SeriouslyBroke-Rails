@@ -222,6 +222,27 @@ RSpec.describe "BankAccounts", type: :request do
       expect(AccountLedger.new(user).pot).to eq(3_000)
     end
 
+    # ** THE MIXED CASE, WHICH IS THE ONE THE FLASH EXISTS FOR (fix round 3 — R7). ** An account can
+    # hold both kinds of money at once: what it was OPENED with (never main's — the opening's entry
+    # and its transfer cancel there) and what the user later TRANSFERRED in (main's, and returned by
+    # `dependent: :destroy`). Re-derived: $3,000 of income, Ally opened at $500 and then sent $200,
+    # so the pot is 3,000 − 200 = $2,800 and Ally holds $700. Deleting Ally returns the $200 and only
+    # the $200: the pot goes to $3,000 (+200) and `total_money` falls from $3,500 to $3,000 (−500).
+    it "returns only the transferred half of a mixed account", :aggregate_failures do
+      ally = create(:pool, :account, user: user, name: "Ally")
+      income = create(:category, :income, user: user, name: "Salary")
+      create(:entry, item: create(:item, category: income), amount: 3_000, date: Date.current)
+      AccountOpening.new(user, ally, balance: "500").save
+      create(:account_movement, from_pool: checking, to_pool: ally, amount: 200, date: Date.current)
+      expect([AccountLedger.new(user).pot, ClaimLedger.new(user).total_money]).to eq([2_800, 3_500])
+
+      delete bank_account_path(ally)
+
+      expect(flash[:notice]).to eq("Ally deleted — $200.00 is back in checking.")
+      expect(AccountLedger.new(user).pot).to eq(3_000)
+      expect(ClaimLedger.new(user).total_money).to eq(3_000)
+    end
+
     # ** THE CRAFTED DELETE ON MAIN (final fix wave, C-1). ** Home renders no Delete button on main's
     # card, and a button is a rendering: this is the door the model's refusal is actually behind. The
     # request spec is where it belongs because what is under test is a status, a flash and an

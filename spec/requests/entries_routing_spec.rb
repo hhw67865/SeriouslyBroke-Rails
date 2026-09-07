@@ -205,6 +205,22 @@ RSpec.describe "Entries income routing", type: :request do
   describe "an opening entry" do
     let(:hysa) { create(:pool, :account, user: user, name: "HYSA") }
 
+    # RAW SQL, deliberately: a second reading through the same ActiveRecord scopes would agree with
+    # the ledger by construction and pin nothing. Same pair `spec/services/account_opening_spec.rb`
+    # asserts around every write it makes.
+    def net_entries_by_sql
+      sql = <<~SQL.squish
+        SELECT COALESCE(SUM(CASE WHEN c.category_type = 1 THEN e.amount::numeric ELSE -e.amount::numeric END), 0)
+        FROM entries e
+        INNER JOIN items i ON i.id = e.item_id
+        INNER JOIN categories c ON c.id = i.category_id
+        WHERE c.user_id = '#{user.id}'
+      SQL
+      ActiveRecord::Base.connection.select_value(sql).to_d
+    end
+
+    def total_money = user.pools.accounts.sum(0.to_d) { |account| AccountLedger.new(user).balance_of(account) }
+
     def open!(account, balance)
       opening = AccountOpening.new(user, account, balance: balance)
       raise "could not open #{account.name}" unless opening.save
@@ -313,6 +329,30 @@ RSpec.describe "Entries income routing", type: :request do
       expect(movement.from_pool).to eq(ally)
       expect(movement.amount).to eq(500)
       expect(AccountLedger.new(user).balance_of(ally)).to eq(400)
+    end
+
+    # ** THE ITEM IS THE THIRD THING THIS SCREEN MAY NOT CHANGE (fix round 3 — R3), AND IT IS THE ONE
+    # THAT BROKE THE INVARIANT. ** An entry's item names its CATEGORY and the category's type is the
+    # SIGN: re-pointing a $500 opening INCOME entry at an expense item is a $1,000 swing in
+    # `income − expenses` while the transfer beside it still moves $500 into the account. Nothing on
+    # Home would say so either — the card reads "answered" off the row's existence, and the row still
+    # exists.
+    #
+    # THE INVARIANT IS ASSERTED BY RAW SQL, on both sides of the refused request: `Σ accounts` (the
+    # app's own reader) against `Σ(income − expenses)` (a second road to the same number).
+    it "refuses an item edited from this screen, and the ledger does not move", :aggregate_failures do
+      entry = open!(ally, "500")
+      groceries = create(:category, :expense, user: user, name: "Groceries")
+      their_item = create(:item, category: groceries, name: "Weekly shop")
+
+      expect { patch entry_path(entry), params: { entry: { item_id: their_item.id } } }
+        .not_to(change { net_entries_by_sql })
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.body).to include(Entry::OPENING_DOOR)
+      expect(entry.reload.item.category.name).to eq(Category::OPENING_BALANCE_NAME)
+      expect(total_money).to eq(net_entries_by_sql)
+      expect(AccountLedger.new(user).balance_of(ally)).to eq(500)
     end
 
     # THE DATE AND THE DESCRIPTION ARE STILL EDITABLE — neither is part of the arithmetic, and an
