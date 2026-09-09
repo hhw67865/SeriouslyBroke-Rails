@@ -9,12 +9,6 @@ Rails.application.routes.draw do
     root "dashboard#index", as: :authenticated_root
   end
 
-  resources :savings_pools do
-    member do
-      get :categories, to: "savings_pools/categories#index"
-      patch :categories, to: "savings_pools/categories#update"
-    end
-  end
   resources :entries, except: [:show]
   resources :items, only: [:edit, :update, :destroy]
   resources :categories do
@@ -32,8 +26,6 @@ Rails.application.routes.draw do
       patch :update_tracked
     end
   end
-  resources :budgets, only: [:new, :create, :edit, :update, :destroy]
-
   resource :settings, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode

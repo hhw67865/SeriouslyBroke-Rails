@@ -5,11 +5,11 @@ class Item < ApplicationRecord
 
   belongs_to :category, touch: true
   has_many :entries, dependent: :destroy
+  has_one :rule, dependent: :destroy
 
   normalizes :name, with: ->(name) { name.squish }
 
-  validates :name, presence: true
-  validates :name, uniqueness: { scope: :category_id, case_sensitive: false }
+  validates :name, presence: true, uniqueness: { scope: :category_id, case_sensitive: false }
 
   delegate :user, to: :category
 
@@ -17,7 +17,6 @@ class Item < ApplicationRecord
 
   scope :expenses, -> { joins(:category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(:category).where(categories: { category_type: :income }) }
-  scope :savings, -> { joins(:category).where(categories: { category_type: :savings }) }
 
   def self.merge(target:, sources:)
     transaction do

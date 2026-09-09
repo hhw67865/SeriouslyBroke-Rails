@@ -8,7 +8,8 @@ RSpec.describe "Account Navigation - Sidebar link", type: :system do
   before { sign_in user, scope: :user }
 
   it "navigates from sidebar profile block to the account page", :aggregate_failures do
-    visit root_path
+    # Starts from entries: the dashboard is rebuilt in a later plan.
+    visit entries_path
 
     within("[data-controller='shared--sidebar']") do
       click_link href: settings_path, match: :first
