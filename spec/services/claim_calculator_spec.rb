@@ -1,0 +1,149 @@
+# frozen_string_literal: true
+
+require "rails_helper"
+
+# Grid: biweekly from 2026-02-06. Today 2026-09-09 sits in Sep 4..Sep 17. Earlier periods:
+# Jul 24..Aug 6, Aug 7..Aug 20, Aug 21..Sep 3.
+RSpec.describe ClaimCalculator do
+  let(:user) { create(:user, :biweekly) }
+  let(:today) { Date.new(2026, 9, 9) }
+  let(:groceries) { create(:category, user: user, name: "Groceries") }
+  let(:bread) { create(:item, category: groceries, name: "Bread") }
+
+  def spend(amount, on:) = create(:entry, item: bread, amount: amount, date: on)
+
+  def calculator(rule) = described_class.new(rule, today: today)
+
+  describe "a rate rule" do
+    let(:rule) { create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 1, 1)) }
+
+    it "claims the amount less this period's spending, never below zero", :aggregate_failures do
+      spend(310, on: Date.new(2026, 9, 5))
+      spend(999, on: Date.new(2026, 9, 1)) # last period: does not count
+
+      expect(calculator(rule).claim).to eq(90)
+      expect(calculator(rule).spent_this_period).to eq(310)
+      expect(calculator(rule).accrued_this_period).to eq(400)
+      expect(calculator(rule).planned_this_period).to eq(400)
+      expect(calculator(rule).standing_ask).to eq(400)
+      expect(calculator(rule)).not_to be_over
+    end
+
+    it "takes adjustments this period and reports overspending", :aggregate_failures do
+      spend(310, on: Date.new(2026, 9, 5))
+      create(:adjustment, rule: rule, amount: -100, date: Date.new(2026, 9, 6))
+
+      expect(calculator(rule).claim).to eq(0)
+      expect(calculator(rule).raw_rate).to eq(-10)
+      expect(calculator(rule)).to be_over
+      expect(calculator(rule).over_by).to eq(10)
+      expect(calculator(rule).next_due_on).to be_nil
+    end
+
+    it "counts only this period, from its start or from the rule's start", :aggregate_failures do
+      expect(calculator(rule).countable_span).to eq(Date.new(2026, 9, 4)..today)
+      late = create(:rule, :rate, amount: 100, category: create(:category, user: user), starts_on: Date.new(2026, 9, 7))
+      expect(calculator(late).countable_span).to eq(Date.new(2026, 9, 7)..today)
+    end
+  end
+
+  describe "a fund rule" do
+    let(:rule) { create(:rule, :keeps_unspent, amount: 60, category: groceries, starts_on: Date.new(2026, 8, 1)) }
+
+    it "adds the amount every period and keeps what is unspent", :aggregate_failures do
+      # Periods since Aug 1: Jul 24, Aug 7, Aug 21, Sep 4 = four.
+      expect(calculator(rule).claim).to eq(240)
+      expect(calculator(rule).built_up).to eq(240)
+      expect(calculator(rule).planned_this_period).to eq(60)
+      expect(calculator(rule).standing_ask).to eq(60)
+      expect(calculator(rule).target).to be_nil
+
+      spend(100, on: Date.new(2026, 8, 25))
+      expect(calculator(rule).claim).to eq(140)
+      expect(calculator(rule).accrued_this_period).to eq(60)
+    end
+
+    it "never goes negative, and says over when spending outruns it", :aggregate_failures do
+      spend(300, on: Date.new(2026, 9, 5))
+
+      expect(calculator(rule).claim).to eq(0)
+      expect(calculator(rule)).to be_over
+      expect(calculator(rule).over_by).to eq(60)
+    end
+  end
+
+  describe "a dated one-off rule" do
+    let(:rule) { create(:rule, :bill, amount: 600, anchor_date: Date.new(2026, 10, 15), category: groceries, starts_on: Date.new(2026, 8, 1)) }
+
+    it "plans an even share per period toward the target", :aggregate_failures do
+      # Six boundaries from Jul 24 to Oct 15 (Jul 24, Aug 7, Aug 21, Sep 4, Sep 18, Oct 2): $100 a period.
+      expect(calculator(rule).standing_ask).to eq(100)
+      expect(calculator(rule).claim).to eq(400)
+      expect(calculator(rule).built_up).to eq(400)
+      expect(calculator(rule).planned_this_period).to eq(100)
+      expect(calculator(rule).periods_left).to eq(3)
+      expect(calculator(rule).next_due_on).to eq(Date.new(2026, 10, 15))
+      expect(calculator(rule).target).to eq(600)
+      expect(calculator(rule)).not_to be_overdue
+      expect(calculator(rule)).not_to be_settled
+    end
+
+    it "settles once paid", :aggregate_failures do
+      spend(600, on: Date.new(2026, 9, 5))
+
+      expect(calculator(rule)).to be_settled
+      expect(calculator(rule).settled_on).to eq(Date.new(2026, 9, 5))
+      expect(calculator(rule).claim).to eq(0)
+    end
+
+    it "is overdue past its date until paid" do
+      overdue = create(:rule, :bill, amount: 100, anchor_date: Date.new(2026, 9, 1), category: create(:category, user: user), starts_on: Date.new(2026, 8, 1))
+
+      expect(calculator(overdue)).to be_overdue
+    end
+
+    it "caps a set-aside at the target and takes it back with a negative adjustment", :aggregate_failures do
+      create(:adjustment, rule: rule, amount: 500, date: Date.new(2026, 9, 5))
+      expect(calculator(rule).claim).to eq(600)
+
+      create(:adjustment, rule: rule, amount: -500, date: Date.new(2026, 9, 6))
+      expect(calculator(rule).claim).to eq(400)
+    end
+  end
+
+  describe "a rolling rule" do
+    let(:rule) { create(:rule, :bill, amount: 180, anchor_date: Date.new(2026, 3, 1), interval_months: 6, category: groceries, starts_on: Date.new(2026, 1, 1)) }
+
+    it "advances the due date by one interval for each target paid", :aggregate_failures do
+      expect(calculator(rule).next_due_on).to eq(Date.new(2026, 3, 1))
+      expect(calculator(rule)).to be_overdue
+
+      spend(180, on: Date.new(2026, 3, 2))
+      expect(calculator(rule).next_due_on).to eq(Date.new(2026, 9, 1))
+
+      spend(180, on: Date.new(2026, 9, 2))
+      expect(calculator(rule).next_due_on).to eq(Date.new(2027, 3, 1))
+      expect(calculator(rule)).not_to be_overdue
+    end
+  end
+
+  describe "a rule that starts in the future" do
+    it "claims nothing and counts nothing yet", :aggregate_failures do
+      rule = create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 10, 1))
+
+      expect(calculator(rule).claim).to eq(0)
+      expect(calculator(rule).planned_this_period).to eq(0)
+      expect(calculator(rule).countable_span).to be_none
+    end
+  end
+
+  describe "given rows" do
+    it "uses the rows it is handed instead of querying", :aggregate_failures do
+      rule = create(:rule, :rate, amount: 400, category: groceries, starts_on: Date.new(2026, 1, 1))
+      spend(310, on: Date.new(2026, 9, 5))
+
+      handed = described_class.new(rule, today: today, spending: [[Date.new(2026, 9, 5), 50.to_d]], adjustments: [])
+      expect(handed.claim).to eq(350)
+    end
+  end
+end
