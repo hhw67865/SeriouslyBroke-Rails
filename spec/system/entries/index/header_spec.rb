@@ -21,8 +21,12 @@ RSpec.describe "Entries Index - Header", type: :system do
       visit entries_path(type: "income")
       expect(page).to have_content("Monitor your income sources and earnings")
 
+      # THE SAVINGS HEADER IS GONE (plan 3, task 5) — `SearchHelper#entry_type_config` lost the
+      # key, so a stale `?type=savings` link falls back to the "all" header rather than announcing
+      # a kind of entry that no longer exists.
       visit entries_path(type: "savings")
-      expect(page).to have_content("Record your savings deposits and contributions")
+      expect(page).to have_content("All Entries")
+      expect(page).to have_no_content("Record your savings deposits and contributions")
     end
 
     it "shows create button" do

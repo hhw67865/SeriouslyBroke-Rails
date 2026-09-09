@@ -1,6 +1,13 @@
 # frozen_string_literal: true
 
 module Dashboard
+  # SPENDING, BY THE LANE IT CAME OUT OF. See DashboardPresenter#tracked_buffer_funded_categories
+  # for the one predicate all six figures below are built on.
+  #
+  # WHAT LEFT WITH THE CAP (plan 3, task 4, decision 6): `#total_budget`, `#budget_line_data`,
+  # `#monthly_budget_rate` and `#sum_curves` — the "Budget" series drawn across the chart and the
+  # stat card beside it. Every one of them resolved `CategoryCalculator#monthly_budget_rate`, which
+  # read a category's cap, so all four answered $0.00 / `{}` for every user the app can now hold.
   class ExpensesPresenter
     include CategoriesHelper
 
@@ -9,36 +16,15 @@ module Dashboard
       @user = parent.user
     end
 
-    # === Budget chart (budgetable expenses only) ===
+    # === Chart: buffer spending, running total ===
 
     def expenses_chart_data
       @expenses_chart_data ||= compute_expenses_chart_data
     end
 
+    # Two series, not three: the first colour used to be the Budget line's.
     def expenses_chart_colors
-      [DashboardPresenter::COLORS[:dusty_teal], DashboardPresenter::COLORS[:brand], DashboardPresenter::COLORS[:terracotta]]
-    end
-
-    def budget_line_data
-      return {} if total_budget.zero?
-
-      if @parent.ytd?
-        budget_line_series(monthly_budget_rate, period_range, group: :month)
-          .transform_keys { |d| d.strftime("%b %Y") }
-      else
-        sum_curves(
-          @parent.tracked_budgetable_expense_categories.map do |cat|
-            cat.calculator(@parent.date).budget_curve
-          end
-        )
-      end
-    end
-
-    def total_budget
-      @total_budget ||= begin
-        monthly = @parent.tracked_budgetable_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
-        @parent.ytd? ? monthly * months_in_range(period_range) : monthly
-      end
+      [DashboardPresenter::COLORS[:brand], DashboardPresenter::COLORS[:terracotta]]
     end
 
     # === Totals (all expenses — used by cash-flow views) ===
@@ -51,24 +37,24 @@ module Dashboard
       @total_tracked_expenses ||= tracked_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    # === Totals (budgetable — used by the budget chart context) ===
+    # === Totals (buffer lane — spending nothing reserved money for) ===
 
-    def total_budgetable_expenses
-      @total_budgetable_expenses ||= budgetable_expenses_scope.where(date: period_range).sum(:amount)
+    def total_buffer_expenses
+      @total_buffer_expenses ||= buffer_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    def total_tracked_budgetable_expenses
-      @total_tracked_budgetable_expenses ||= tracked_budgetable_expenses_scope.where(date: period_range).sum(:amount)
+    def total_tracked_buffer_expenses
+      @total_tracked_buffer_expenses ||= tracked_buffer_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    # === Totals (pool-covered — shown separately from budget metrics) ===
+    # === Totals (envelope lane — spending funded before it happened) ===
 
-    def total_pool_covered_expenses
-      @total_pool_covered_expenses ||= pool_covered_expenses_scope.where(date: period_range).sum(:amount)
+    def total_envelope_expenses
+      @total_envelope_expenses ||= envelope_expenses_scope.where(date: period_range).sum(:amount)
     end
 
-    def total_tracked_pool_covered_expenses
-      @total_tracked_pool_covered_expenses ||= tracked_pool_covered_expenses_scope.where(date: period_range).sum(:amount)
+    def total_tracked_envelope_expenses
+      @total_tracked_envelope_expenses ||= tracked_envelope_expenses_scope.where(date: period_range).sum(:amount)
     end
 
     # === Category breakdowns ===
@@ -85,43 +71,44 @@ module Dashboard
 
     delegate :period_range, :six_month_range, to: :@parent
 
+    # `Entry.spendable` — every expense the household actually spent, which is every expense but an
+    # account's opening record (fix round round 2 — item 3). These are the two scopes behind "Total
+    # Unbudgeted Spending" and "Tracked Unbudgeted Spending", and the band of rows below them is
+    # narrowed by `Category.spendable`: a total that counted a row the list could not show is a
+    # total nobody can check.
     def expenses_scope
-      @user.entries.expenses
+      @user.entries.spendable
     end
 
     def tracked_expenses_scope
-      @user.entries.expenses.tracked
+      @user.entries.spendable.tracked
     end
 
-    def budgetable_expenses_scope
-      @user.entries.budgetable_expenses
+    def buffer_expenses_scope
+      @parent.buffer_funded_expenses
     end
 
-    def tracked_budgetable_expenses_scope
-      @user.entries.budgetable_expenses.tracked
+    def tracked_buffer_expenses_scope
+      @parent.buffer_funded_expenses.tracked
     end
 
-    def pool_covered_expenses_scope
-      @user.entries.pool_covered_expenses
+    def envelope_expenses_scope
+      @parent.enveloped_expenses
     end
 
-    def tracked_pool_covered_expenses_scope
-      @user.entries.pool_covered_expenses.tracked
-    end
-
-    def monthly_budget_rate
-      @monthly_budget_rate ||= @parent.tracked_budgetable_expense_categories.sum { |cat| cat.calculator(@parent.date).monthly_budget_rate.to_f }
+    def tracked_envelope_expenses_scope
+      @parent.enveloped_expenses.tracked
     end
 
     def compute_expenses_chart_data
-      return [] if total_budgetable_expenses.zero?
+      return [] if total_buffer_expenses.zero?
 
       @parent.ytd? ? ytd_expenses_data : monthly_expenses_data
     end
 
     def ytd_expenses_data
-      series = [{ name: "Tracked", data: monthly_running_total(tracked_budgetable_expenses_scope) }]
-      series << { name: "Total", data: monthly_running_total(budgetable_expenses_scope) } if @parent.show_total?
+      series = [{ name: "Tracked", data: monthly_running_total(tracked_buffer_expenses_scope) }]
+      series << { name: "Total", data: monthly_running_total(buffer_expenses_scope) } if @parent.show_total?
       series
     end
 
@@ -131,19 +118,13 @@ module Dashboard
     end
 
     def monthly_expenses_data
-      tracked = tracked_budgetable_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+      tracked = tracked_buffer_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
       series = [{ name: "Tracked", data: calculate_running_total(tracked) }]
       if @parent.show_total?
-        total = budgetable_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
+        total = buffer_expenses_scope.group_by_day(:date, range: period_range, default_value: 0).sum(:amount)
         series << { name: "Total", data: calculate_running_total(total) }
       end
       series
-    end
-
-    def sum_curves(curves)
-      curves.each_with_object({}) do |curve, acc|
-        curve.each { |date, val| acc[date] = (acc[date] || 0) + val }
-      end
     end
   end
 end

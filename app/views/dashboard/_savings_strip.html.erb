@@ -1,0 +1,138 @@
+<%# THE SAVINGS STRIP. Rendered by the ALL tab; its two readers are `Dashboard::OverviewPresenter`'s
+    since task 5 moved them off the deleted `Dashboard::SavingsPresenter`.
+
+    SAVINGS ARE CATEGORIES NOW (two-ledger spec §3, Task 7) — `_pools_strip` renamed with the
+    thing it draws. Each card links to the category's own page, which is where a fund's figure,
+    its target and its history all live since the Pools screens were deleted.
+
+    ** THE CLASSIFIER IS A ONE-OFF DATED RULE (two-shapes spec §2/§7): a target with a DAY on it. **
+    It was a rule whose unspent money survived the period boundary, and a figure on the CATEGORY
+    before that. "Which money is being saved" is answered by the SHAPE, and the shape that means it
+    is an anchor with no interval — a rule that REPEATS is a recurring bill rather than a thing being
+    saved toward. `Budget.saving_toward_a_date` is the one spelling.
+
+    ** THE FIGURE IS A CLAIM AND THE STRIP NAMES NO MOMENT (computed-claims §§2-3). ** It used to be
+    a HOLDING bounded at `period_range.end` — money that had been moved in by that date, less what
+    was spent — and there is no such balance any more. What a category has is what its rules claim,
+    computed from the calendar and the spending; the presenter's `#as_of` explains what bounding a
+    walk at a past month can and cannot mean, and the short of it is that the bound is
+    PERIOD-grained rather than day-grained. So nothing here says "as of", prints a date, or promises
+    a month's closing figure: the cards carry a name, a claim, a target and a bar, all of which are
+    true whichever month is selected.
+
+    ** THE NEGATIVE ARM IS GONE, NOT GATED. ** §3 clamps every claim at zero — a rate rule's at
+    `max(0, …)`, an accruing rule's into `0..target` — so no row here can carry a negative figure,
+    and the card's red "negative" badge and the total's `text-terracotta` were branches nothing
+    could reach. `home/_money.html.erb`'s rule: an unreachable branch on a money screen is a sentence
+    waiting to be believed. What the old branch was really about — spending past what a fund had —
+    is `ClaimCalculator#over?`, which Home's own rows and trouble strip report; a strip whose whole
+    subject is progress toward a target is not the place to re-derive it. %>
+<% funds = @presenter.savings_summary %>
+<% if funds.any? %>
+  <div class="mb-8" data-savings-strip>
+    <div class="mb-4">
+      <h3 class="text-lg font-medium text-gray-900">Savings</h3>
+      <p class="text-sm text-gray-500">
+        Claimed: <span class="font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_savings_balance) %></span>
+      </p>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <% funds.each do |fund| %>
+        <% target = @presenter.savings_target(fund) %>
+        <% progress = @presenter.savings_progress(fund) %>
+
+        <%# Status based purely on how much of the target the rules claim. See the header for why
+            there is no negative arm: a claim cannot be negative — and why a fund sharing its
+            category with another rule has no percentage at all (the target is a ceiling on the
+            FUND's money and the figure beside it would be the category's), so it says what it is
+            doing instead of how far along it is.
+
+            ** THE PAID ARM COMES FIRST, AND IT IS THE ONE THIS STRIP NEVER LEARNED (fix wave —
+            MED-3). ** A one-off that has been PAID has spent its fund: `#built_up` is $0.00 by
+            construction, which every other arm here reads as "barely started". A goal reached and
+            taken read `$0.00 of $5,000.00 · low` — a warning, in warning colours, at the user who
+            has just done the thing they were saving for. `ClaimLine#paid?` is the app's one answer
+            (`ClaimCalculator#settled?`, Task 3), and the card says so and draws no bar: there is
+            nothing left to be a fraction of.
+
+            ** THE WORDS (fix wave — LOW-5). ** "saving" and "funded" were the strip's own
+            vocabulary; the app's is Home's — a fund still filling is "on the way" and one that has
+            reached its target is "ready" (`HomeHelper`'s `ready`, `short`, `overdue`). %>
+        <% if fund.paid? %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "achieved" %>
+        <% elsif target.nil? %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% badge_class = "text-gray-500 bg-gray-200" %>
+          <% badge_text = "on the way" %>
+        <% elsif progress < 10 && target.positive? %>
+          <% card_class = "border-2 border-status-warning/40 bg-status-warning-light" %>
+          <% bar_class = "bg-status-warning" %>
+          <% badge_class = "text-status-warning bg-status-warning/20" %>
+          <% badge_text = "low" %>
+        <% elsif progress >= 100 %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand-dark" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "ready" %>
+        <% elsif progress >= 50 %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand-dark" %>
+          <% badge_class = "text-brand-dark bg-brand/20" %>
+          <% badge_text = "#{progress}%" %>
+        <% else %>
+          <% card_class = "border border-gray-100 bg-gray-50" %>
+          <% bar_class = "bg-brand-dark" %>
+          <% badge_class = "text-gray-500 bg-gray-200" %>
+          <% badge_text = "#{progress}%" %>
+        <% end %>
+
+        <%= link_to category_path(fund.category),
+            class: "block rounded p-4 hover:opacity-90 transition #{card_class}" do %>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-sm font-medium text-gray-900 truncate"><%= fund.category.name %></p>
+            <span class="text-xs font-medium px-2 py-0.5 rounded shrink-0 <%= badge_class %>"><%= badge_text %></span>
+          </div>
+          <%# NO TRACK WITHOUT A DENOMINATOR. `target` IS NIL WHERE THE FUND IS NOT THE CATEGORY'S
+              ONLY RULE (spec §10.5; fix wave — MED-1) — the figure beside it would be Σ every rule's
+              claim while the target is a ceiling on the fund's alone — and such a card takes exactly
+              this arm: the fund's built-up, the "on the way" badge and no track. An empty grey track
+              under a real figure reads as "nothing saved" over money that is there. A PAID one-off
+              takes it too, for the opposite reason: its fund is spent, so a track would draw an
+              empty bar under a goal that was reached. See
+              `Dashboard::OverviewPresenter#savings_summary`. %>
+          <% if target.present? && !fund.paid? %>
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
+              <div class="h-3 rounded-full <%= bar_class %>" style="width: <%= progress.clamp(0, 100) %>%"></div>
+            </div>
+          <% end %>
+          <%# THE PER-PERIOD "In / Out" ROW IS DELETED (plan 3, task 4). "In" read
+              `Pool#contribution_entries` — savings-TYPED entries — so it printed $0.00 on every
+              card while the demo's funds were visibly receiving $525 a period: a figure that
+              denies money that arrived is worse than no figure. "Out" alone is half a story. The
+              figure, the target and the progress bar stay, and all three are now `ClaimLedger`'s —
+              `Σ` of the category's rules' claims (computed-claims §3), which is the app's one
+              answer to what a category has. %>
+          <%# A PAID ONE-OFF PRINTS WHAT IT WAS FOR, NOT WHAT IS LEFT OF IT. `#built_up` is $0.00 on
+              a settled fund — the payment took it — so "of $5,000.00" beside it is the sentence
+              MED-3 was raised about. The target is what the goal WAS, and `#paid_on` is the day it
+              was met (`ClaimCalculator#settled_on`). %>
+          <div class="flex items-center justify-between text-xs text-gray-500">
+            <% if fund.paid? %>
+              <span class="font-medium"><%= number_to_currency(fund.target) %></span>
+              <span>reached<%= " #{l(fund.paid_on, format: :short)}" if fund.paid_on %></span>
+            <% else %>
+              <span class="font-medium"><%= number_to_currency(fund.built_up) %></span>
+              <% if target.present? %>
+                <span>of <%= number_to_currency(target) %></span>
+              <% else %>
+                <span>built up</span>
+              <% end %>
+            <% end %>
+          </div>
+        <% end %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

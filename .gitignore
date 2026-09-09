@@ -87,3 +87,11 @@ node_modules/
 # tasks.json
 # tasks/ 
 .claude/scheduled_tasks.lock
+
+# Superpowers scratch (SDD ledgers, brainstorm mockups)
+.superpowers/
+
+# Local prod-data dumps — real user data, never commit
+*.dir.tar.gz
+.playwright-mcp/
+*.dump

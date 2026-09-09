@@ -1,0 +1,63 @@
+<%# THE ONE QUESTION A CADENCE CHANGE ASKS (computed-claims spec §3.5). Local: `change`
+    (CadenceChange).
+
+    NOTHING HAS BEEN SAVED YET, and the panel says so in as many words. The period and the amounts
+    commit together in one transaction on whichever button is pressed — see CadenceChange#apply —
+    so there is no half-changed state to be left in and no way to close this page having moved one
+    without the other.
+
+    ONLY RULES STATED IN PERIODS ARE LISTED. A bill due every six months and a rate stated per month
+    both already mean the same thing on any grid; a rate stated PER PERIOD does not, which is the
+    whole of what there is to ask about.
+
+    THE DECLARATION RIDES ALONG AS HIDDEN FIELDS, because this is still the same submission — the
+    user typed it on the form below and it has not been written. Re-submitting it with the answer is
+    what makes the two halves one request. %>
+<section class="bg-white border border-status-info rounded" data-cadence-confirm>
+  <div class="px-6 py-4 border-b border-gray-200 bg-status-info-light">
+    <h2 class="text-sm font-semibold text-status-info">
+      Before this saves: your period is changing to <%= change.cadence.humanize.downcase %>
+    </h2>
+    <p class="mt-1 text-sm text-gray-700">
+      A year holds <%= change.periods_per_year %> of those instead of <%= change.periods_per_year_before %>,
+      so <%= pluralize(change.lines.size, "rule") %> stated per period would mean something different
+      without moving a digit. Scale them to keep what they cost you a year, or keep the numbers you
+      typed. Nothing has been saved yet.
+    </p>
+  </div>
+
+  <ul>
+    <% change.lines.each do |line| %>
+      <li class="px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4"
+          data-cadence-line="<%= budget_rule_name(line.rule) %>">
+        <span class="font-medium text-gray-900"><%= budget_rule_name(line.rule) %></span>
+        <span class="text-sm text-gray-700 flex items-baseline gap-2 shrink-0">
+          <span data-cadence-now><%= number_to_currency(line.amount) %></span>
+          <span class="text-gray-500" aria-hidden="true">→</span>
+          <span class="font-medium text-gray-900" data-cadence-scaled>
+            <%= number_to_currency(line.scaled_amount) %>
+          </span>
+          <span class="text-gray-500">a period</span>
+        </span>
+      </li>
+    <% end %>
+  </ul>
+
+  <%= form_with url: budget_page_user_path, method: :patch, class: "px-6 py-4 flex flex-wrap gap-2" do %>
+    <%# ** ONE `id` PER ELEMENT, AND THE PENDING VALUE TAKES ITS OWN (fix wave — LOW-6). **
+        `hidden_field_tag "user[period_cadence]"` derives `id="user_period_cadence"`, which is the id
+        the SELECT in `_declaration_form` below already carries — two elements, one id, on one page,
+        which is invalid HTML and makes `find_field("user_period_cadence")` a coin toss for anything
+        that looks a control up by id. The pending value is a different thing from the control the
+        user typed into, so it is named for what it is. The stale SELECT below is a separate and
+        open design question (spec §10.6 item 5): the confirm step deliberately renders `current_user`
+        unchanged, so the select still shows the OLD cadence while this panel says it is changing —
+        threading the presenter's declaration through the offer path is that fix, not this one. %>
+    <% change.declaration.each do |field, value| %>
+      <%= hidden_field_tag "user[#{field}]", value, id: "pending_#{field}" %>
+    <% end %>
+
+    <%= button_tag "Scale them", type: :submit, name: "scale", value: "1", class: "btn btn-primary" %>
+    <%= button_tag "Keep amounts", type: :submit, name: "scale", value: "0", class: "btn btn-secondary" %>
+  <% end %>
+</section>

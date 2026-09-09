@@ -1,0 +1,118 @@
+<%# FREE BELOW ZERO — THE SIGNAL (computed-claims spec §4). Local: `presenter` (HomePresenter).
+
+    Split out of `_trouble` because the strip's other three arms are one element each and this one is
+    a figure, a list and a pace — inlined, the `case` that dispatches the four kinds would be
+    unreadable and a fifth kind would be added below the wrong `end`.
+
+    ** THE STRIP MIRRORS THE HERO (two-shapes spec §2). ** It said "Your rules claim more than you
+    have" on `#short?` alone while the hero was splitting that same negative three ways, so the two
+    panels could contradict each other on the same afternoon and did. `free = pot − Σ claims` has
+    ONE cause per sign now, so both panels say the same thing for the same reason:
+
+      free < 0  → "Your rules claim $X more than checking holds", the give-way walk, the remainder
+                  if the shortfall outlasts it, the pace, and — where another account holds money —
+                  "Move some in from your other accounts."
+
+    THE WALK IS THE PRESENTER'S (`#uncovered_claims`), not this file's, and it is gated there on the
+    same `#short?` this strip renders under. It takes each claim in turn until the shortfall is
+    absorbed, so the LAST row is usually only PARTLY uncovered — "Car repair is short $120" is a
+    different sentence from "Car repair is uncovered", and only the walk can tell them apart.
+
+    THE PACE IS SAID ON BOTH ARMS, deliberately: spending less for the rest of the period lands the
+    figure at zero whichever way it got there, which is the one remedy §4 names that does not depend
+    on which cause it was.
+
+    ** NO FIX BUTTON, AND THE DOOR IS THE BUDGET PAGE. ** §4: "The remedy is spending less for the
+    rest of the period or editing/adjusting a rule." There is nothing to move money FROM — no claim is
+    money sitting anywhere — so a button offering to take $300 from Rent would be proposing an act the
+    app no longer has. %>
+<div class="px-6 py-3 border-b border-gray-100 last:border-b-0" data-shortfall>
+  <div class="flex justify-between items-baseline gap-4">
+    <%# THE HEADLINE IS THE CAUSE, AND THE BRANCH IS A PRESENTER PREDICATE. With nothing claimed at
+        all the shortfall is a plain overspend and "your rules claim more" would be false — Σ claims
+        is zero — so the second arm says what actually happened. %>
+    <span class="font-medium text-gray-900" data-shortfall-headline>
+      <% if presenter.anything_claimed? %>
+        Your rules claim <%= number_to_currency(presenter.shortfall) %> more than checking holds
+      <% else %>
+        You have spent past what you had
+      <% end %>
+    </span>
+    <span class="text-sm font-medium text-status-danger tabular-nums" data-shortfall-amount>
+      short <%= number_to_currency(presenter.shortfall) %>
+    </span>
+  </div>
+
+  <%# ** THE HERO'S SECOND CLAUSE, SAID AS AN INSTRUCTION (§2). ** Money in another account is not
+      subtracted from `free` and never was money in checking, so it is not an explanation of the
+      shortfall — it is the thing that can close it without spending less. GATED, because it is
+      false for a user whose other accounts are empty or who has none: that user reads the headline's
+      own second arm ("You have spent past what you had") and this line does not render.
+
+      THE FIGURE IS `#other_accounts_total`, THE SAME SUM THE ACCOUNTS LINE PRINTS (answers-first §6),
+      so the strip cannot claim money the line below it shows as absent. It names no account, because
+      the total spans all of them and "it is in savings" is a guess this panel cannot make. %>
+  <% if presenter.money_parked_elsewhere? %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-elsewhere>
+      <%= number_to_currency(presenter.other_accounts_total) %> of your money is sitting outside
+      checking — move some in from your other accounts.
+    </p>
+  <% end %>
+
+  <%# THE PACE. Nil for a user who has declared no period — there is no "rest of the period" to
+      spread a shortfall over — and the strip simply says one sentence fewer there.
+
+      ** IT IS `HomeHelper#pace_words` NOW, AND THE RUNWAY SAYS THE SAME SENTENCE (two-shapes §3). **
+      The runway's pace line and this remedy are one sentence about one figure; written out in two
+      views they were two chances to round it differently or to reword one of them. `#pace_line`
+      answers WHICH arm — and this strip only ever renders while `free` is below zero, so it is
+      always the second one, at the same `#per_day_pace` figure it printed before. %>
+  <% if pace = presenter.pace_line %>
+    <p class="mt-1 text-sm text-gray-700" data-shortfall-pace><%= pace_words(pace) %></p>
+  <% end %>
+
+  <%# WHO GIVES WAY, AND IN THE ORDER THE WALK ACTUALLY USES (rules-own-the-budget spec §3;
+      `HomePresenter#give_way_key`). It said "Reverse priority" and never mentioned the TYPE, which
+      is the term the walk sorts on FIRST: every `choice` rule in the app gives way before any
+      `usage` rule, and a `bill` is the last thing reached. Within a type it is the highest priority
+      NUMBER first — the reverse of fill order, the lowest number being the one that keeps its money
+      — and rules inside one category break on `Category.rule_order`. The same three words the
+      Budget page's give-way list, its ▲▼ buttons and the category form all say.
+
+      The figure is what THIS claim is short by after everything below it in the order has already
+      given way — which is why the last row in the list is usually partial and says so. Empty on the
+      two arms above that have nothing uncovered, so this renders nothing there rather than being
+      gated a second way. %>
+  <% if presenter.uncovered_claims.any? %>
+    <ul class="mt-2 space-y-1" data-uncovered>
+      <% presenter.uncovered_claims.each do |uncovered| %>
+        <li class="flex justify-between items-baseline gap-4 text-sm text-gray-600"
+            data-uncovered-claim="<%= uncovered.category.name %>">
+          <span><%= uncovered.category.name %> · <%= pool_rule_label(uncovered.line.rule) %></span>
+          <span class="tabular-nums">
+            <% if uncovered.whole? %>
+              nothing covers its <%= number_to_currency(uncovered.claim) %>
+            <% else %>
+              short <%= number_to_currency(uncovered.amount) %> of <%= number_to_currency(uncovered.claim) %>
+            <% end %>
+          </span>
+        </li>
+      <% end %>
+    </ul>
+
+    <%# ** THE PART OF THE SHORTFALL NO CLAIM ACCOUNTS FOR (fix round 1 — LOW-1). ** The walk stops
+        when it runs out of claims, so a user who has spent further than their rules ever asked for
+        read a headline of $900 over a list totalling $500. The list plus this line is the headline,
+        by construction. %>
+    <% if presenter.uncovered_remainder.positive? %>
+      <p class="mt-1 text-sm text-gray-600" data-uncovered-remainder>
+        …and <%= number_to_currency(presenter.uncovered_remainder) %> past everything the rules claim.
+      </p>
+    <% end %>
+  <% end %>
+
+  <p class="mt-2 text-sm text-gray-600">
+    <%= link_to "Change a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    if this period's plan is the thing that has to give.
+  </p>
+</div>

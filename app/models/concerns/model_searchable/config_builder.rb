@@ -20,6 +20,10 @@ module ModelSearchable
       def apply_field_type(config, options)
         if options[:type]
           config[:type] = options[:type]
+          # Carried for any explicit type that names one, not for `:scope` alone — the option is
+          # the generic "which reader answers this field", and a type that never sets it simply
+          # has no key. See SearchMethods#search_by's `:scope` branch.
+          config[:scope] = options[:scope] if options[:scope]
         elsif options[:through]
           ConfigBuilder.configure_association_type(config, options)
         else

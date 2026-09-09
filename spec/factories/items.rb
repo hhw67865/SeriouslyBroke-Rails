@@ -20,13 +20,6 @@ FactoryBot.define do
       association :category, factory: [:category, :income]
     end
 
-    trait :savings do
-      transient do
-        user { create(:user) }
-      end
-      association :category, factory: [:category, :savings]
-    end
-
     trait :with_entries do
       transient do
         entries_count { rand(2..5) }

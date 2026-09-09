@@ -1,0 +1,89 @@
+<% content_for :title, "Budget" %>
+
+<%# ** THE BUDGET PAGE IS EVERY CATEGORY, AND ONE OF THEM IS OPEN (two-shapes spec §4). **
+
+    Henry, 2026-09-05: "Expanded should just show all rules and suggestions. The new rule thing
+    should be a form we go to." So the page is three tiles and one list: a row per EXPENSE category,
+    ruled ones in give-way order and rule-less ones after, and the open one shows its rules, the
+    suggestions the engine has for it, and one button to write another.
+
+    ** FIVE PANELS DIED HERE (§7). ** `_type_overview` (its three figures are the tiles' segmented
+    bar), `_structural_check` (its three lines ARE the three tiles), `_fill_order` and
+    `_category_group` (folded into the row), `_not_filling` (every expense category is in the list
+    now, so a rule on a category that holds nothing has a row of its own rather than a band saying
+    it has none) and `_suggestions` (every suggestion is inside the category it is about). Not one
+    figure was dropped: each of them is somewhere on this page, closer to the thing it is about.
+
+    THE DECLARATION FORM SURVIVES, behind the income tile's "change" — `?declare=1`. It was
+    permanently open under a paragraph of prose, which put a three-field settings form in the middle
+    of the one screen that is about rules. %>
+<%# ** THE HEADER'S "New rule" BUTTON IS DELETED (two-shapes spec §5). ** It went to a bare
+    `/budgets/new`, whose whole purpose was the owner PICKER — a select asking which category the
+    rule was for. The form is per category now (`/budgets/new?category_id=`), titled "New rule for
+    Groceries", with that category's items in its select and that category's suggestions above step
+    1; there is nothing for a category-less door to open. The door that replaced it is inside each
+    category's own panel, one click from the rules it will sit beside, and it is the same door a
+    suggestion's "Write it →" goes through. `BudgetsController::NEW_NEEDS_A_CATEGORY` turns anyone
+    still holding the old URL back to this page and says so. %>
+<%= page_header(title: "Budget", subtitle: "The rules that claim your money") %>
+
+<div class="space-y-6">
+  <%# §3.5'S ONE QUESTION, AT THE TOP OF THE PAGE BECAUSE NOTHING BELOW IT IS TRUE YET. The
+      declaration that produced it has not been written — the panel and the form both say so — and
+      the figures underneath are still computed on the OLD period. Rendered off an ivar rather than
+      through the presenter: the presenter is this page's reading of what IS, and this is a pending
+      submission that may never become one. See BudgetPageController#offer_scaling. %>
+  <%= render "cadence_confirm", change: @cadence_change if @cadence_change %>
+
+  <%= render "tiles", presenter: @presenter %>
+
+  <%# THE FORM, ONLY WHEN ASKED FOR — or when a submission was refused, in which case it is holding
+      what the user typed and the errors, and hiding it would throw both away. %>
+  <% if @presenter.declaring? %>
+    <section class="bg-white border border-gray-200 rounded p-4 sm:px-6 sm:py-5" data-declaration>
+      <h2 class="text-sm font-semibold text-gray-900 mb-4">Your period and income</h2>
+      <%= render "declaration_form", presenter: @presenter %>
+    </section>
+  <% end %>
+
+  <% if @presenter.no_categories? %>
+    <%= render "empty" %>
+  <% else %>
+    <%# THE LIST, AND IT IS WHAT `PATCH /budget/reorder` REWRITES. The drag controller reads the
+        order back off the rows at drop; the ▲▼ on each draggable row carry the same list already
+        swapped, so the order is reachable with no JavaScript at all.
+
+        `category_list` IS THE SECOND CONTROLLER ON THE SAME ELEMENT: the expand/collapse and the
+        drag are two behaviours over one list of rows, and splitting them onto two elements would
+        mean one of them binding to a wrapper the other does not own. %>
+    <section class="space-y-2"
+             data-category-list
+             data-controller="app--budget-page--reorder app--budget-page--category-list"
+             data-action="dragover->app--budget-page--reorder#over
+                          drop->app--budget-page--reorder#drop">
+      <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1 sm:gap-4 px-1">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Your categories</h2>
+        <%# ** THE LIST IS PRIORITY ORDER AND THE COPY SAYS WHAT THAT BUYS (fix round MAJOR-1). **
+            The order on screen is the number the arrows write; the give-way order Home draws is that
+            number UNDER the rule type, which no control here can reach. So the sentence says both:
+            what dragging decides (the tie-break inside a kind), what it cannot decide (the kinds'
+            own order), and where the combined answer is shown. %>
+        <p class="text-xs text-gray-500 sm:max-w-md sm:text-right">
+          Drag to set which gives way first among rules of the same kind — choice always gives way
+          before usage, usage before bills. Home shows them in that give-way order.
+        </p>
+      </div>
+
+      <% rows = @presenter.category_rows %>
+      <% reorderable = @presenter.reorderable_rows %>
+      <% rows.each do |row| %>
+        <%= render "category_row", row: row, reorderable: reorderable, presenter: @presenter %>
+      <% end %>
+
+      <% form_data = { app__budget_page__reorder_target: "form" } %>
+      <%= form_with(url: budget_page_reorder_path, method: :patch, class: "hidden", data: form_data) do %>
+        <%# One hidden `category_ids[]` per draggable row, appended by reorder_controller at drop. %>
+      <% end %>
+    </section>
+  <% end %>
+</div>

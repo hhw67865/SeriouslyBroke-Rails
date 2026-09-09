@@ -4,9 +4,16 @@ require "rails_helper"
 
 RSpec.describe "Calendar Week - Summary", type: :system do
   let!(:user) { create(:user) }
+  # `pool: checking` EXPLICIT (main-account spec §6, fix round 2): without it this category's
+  # implicit-pool factory default mints its OWN anonymous account before `checking` is ever
+  # referenced, and the auto-main trait claims that one instead — leaving `checking` non-main for
+  # `income_category` below, which names it explicitly and needs it to be.
   let!(:expense_category) { create(:category, :expense, user: user, name: "Food") }
+  let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+  # The other end of the transfer: a SECOND ACCOUNT, because a movement now has an account on
+  # both ends (two-ledger spec §5, Task 8). It was a savings POOL sitting inside Checking.
+  let!(:savings_account) { create(:pool, :account, user: user, name: "Emergency") }
   let!(:income_category) { create(:category, :income, user: user, name: "Salary") }
-  let!(:savings_category) { create(:category, :savings, user: user, name: "Emergency") }
   let(:test_date) { Date.current }
 
   before { sign_in user, scope: :user }
@@ -18,10 +25,12 @@ RSpec.describe "Calendar Week - Summary", type: :system do
       expect(page).to have_content("Weekly Summary")
     end
 
-    it "shows all three summary cards" do
+    # TWO CARDS, NOT THREE (plan 3, task 5) — the breakdown is keyed on
+    # `CategoryTypeHelper::CATEGORY_TYPES`, and the savings key went with the enum value.
+    it "shows both summary cards", :aggregate_failures do
       expect(page).to have_content("Expenses")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
     end
   end
 
@@ -29,14 +38,13 @@ RSpec.describe "Calendar Week - Summary", type: :system do
     before do
       expense_item = create(:item, category: expense_category, name: "Groceries")
       income_item = create(:item, category: income_category, name: "Paycheck")
-      savings_item = create(:item, category: savings_category, name: "Deposit")
 
       # Create entries for different days in the same week
       week_start = test_date - test_date.wday
       create(:entry, item: expense_item, amount: 100.00, date: week_start)
       create(:entry, item: expense_item, amount: 50.00, date: week_start + 2)
       create(:entry, item: income_item, amount: 3000.00, date: week_start + 1)
-      create(:entry, item: savings_item, amount: 500.00, date: week_start + 3)
+      create(:account_movement, from_pool: checking, to_pool: savings_account, amount: 500.00, date: week_start + 3)
 
       visit calendar_week_path(date: test_date.strftime("%Y-%m-%d"))
     end
@@ -53,9 +61,13 @@ RSpec.describe "Calendar Week - Summary", type: :system do
       end
     end
 
-    it "shows correct savings total" do
+    # BOTH DIRECTIONS: the two entry totals are correct, and the week's one movement is in
+    # neither of them and has no card of its own.
+    it "leaves the movement out of every total", :aggregate_failures do
       within(".grid") do
-        expect(page).to have_content("+$500.00")
+        expect(page).to have_no_content("+$500.00")
+        expect(page).to have_content("-$150.00")
+        expect(page).to have_content("+$3,000.00")
       end
     end
   end

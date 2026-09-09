@@ -55,10 +55,6 @@ class DashboardPresenter
     @income ||= Dashboard::IncomePresenter.new(self)
   end
 
-  def savings
-    @savings ||= Dashboard::SavingsPresenter.new(self)
-  end
-
   def overview
     @overview ||= Dashboard::OverviewPresenter.new(self)
   end
@@ -68,14 +64,12 @@ class DashboardPresenter
   delegate :expenses_chart_data,
            :total_expenses,
            :total_tracked_expenses,
-           :total_budgetable_expenses,
-           :total_tracked_budgetable_expenses,
-           :total_pool_covered_expenses,
-           :total_tracked_pool_covered_expenses,
+           :total_buffer_expenses,
+           :total_tracked_buffer_expenses,
+           :total_envelope_expenses,
+           :total_tracked_envelope_expenses,
            :expense_categories_breakdown,
            :untracked_expense_categories_breakdown,
-           :total_budget,
-           :budget_line_data,
            :expenses_chart_colors,
            to: :expenses
 
@@ -90,41 +84,23 @@ class DashboardPresenter
            :income_chart_colors,
            to: :income
 
-  # === Savings Tab (delegated) ===
-
-  delegate :savings_chart_data,
-           :total_savings_contribution,
-           :total_tracked_savings_contribution,
-           :total_savings_balance,
-           :savings_categories_breakdown,
-           :untracked_savings_categories_breakdown,
-           :savings_chart_colors,
-           :flow_chart_data,
-           :flow_chart_colors,
-           :total_withdrawals,
-           :pools_summary,
-           :total_pools_balance,
-           :savings_rate,
-           to: :savings
-
   # === All/Overview Tab (delegated) ===
-
-  delegate :overview_chart_data,
-           :overview_chart_colors,
-           :net_amount,
+  #
+  # THE SAVINGS TAB'S THIRTEEN DELEGATIONS ARE GONE (plan 3, task 5) — the chart, the flow chart,
+  # the two contribution totals, the balance, the two breakdowns, the withdrawals and
+  # `#savings_rate`, all of them summing entries in a savings CATEGORY. `#savings_summary` and
+  # `#total_savings_balance` are the two that survived the tab, because the ALL tab renders the
+  # goals strip they feed; they moved to `Dashboard::OverviewPresenter` rather than dying with the
+  # class, and Task 7 renamed them off the pool they used to read.
+  delegate :net_amount,
            :expense_ratio,
-           :income_change,
-           :expenses_change,
-           :savings_contributions_total,
-           :savings_withdrawals_total,
-           :net_savings,
-           :income_remaining,
-           :budgeted_total,
-           :budget_used_percentage,
            :top_expense_categories,
-           :pool_covered_total,
-           :all_budgeted_categories_breakdown,
-           :pool_covered_categories_breakdown,
+           :buffer_categories_breakdown,
+           :envelope_categories_breakdown,
+           :savings_summary,
+           :savings_target,
+           :savings_progress,
+           :total_savings_balance,
            to: :overview
 
   # === Tracked Filter ===
@@ -157,36 +133,77 @@ class DashboardPresenter
     @all_categories_by_type ||= @user.categories.order(:name).group_by(&:category_type)
   end
 
+  # `includes(:budget)` IS GONE WITH ITS READER (plan 3, task 4). Task 3 measured the preload at
+  # 5 statements against 18 without it and kept it on that number — but the 18 were 18 queries for
+  # an answer that was nil every time, and what justified paying for them was `#total_budget`,
+  # which this task deletes. `Category has_one :budget` goes with it.
   def tracked_expense_categories
-    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(:budget, :savings_pool, items: :entries)
+    @tracked_expense_categories ||= @user.categories.expenses.tracked.includes(items: :entries)
   end
 
-  def tracked_budgetable_expense_categories
-    @tracked_budgetable_expense_categories ||= tracked_expense_categories.select(&:budgetable?)
+  # ---------------------------------------------------------------------------------------------
+  # WHICH LANE A CATEGORY SPENDS FROM — the split this page is built on, and the only split it
+  # draws.
+  #
+  # AVAILABLE: an expense category that holds no money of its own. Nothing reserves this spending —
+  # it drains AVAILABLE, money with no job yet (two-ledger spec §2).
+  # HELD: a category that has started holding money. It was allocated there before it was spent.
+  #
+  # ONE PREDICATE, AND IT IS `Category#holder?` — `expense? && funded_since.present?`, the model's
+  # own reader, the same line `AllocationCalculator` fills by, `SuggestionEngine` proposes for and
+  # `EntryImpactPresenter` draws its honest card on.
+  #
+  # IT WAS `Category#buffer_funded?`, WHICH IS A POOL READER (Task 7's re-aim). That predicate is
+  # `expense? && pool.pool_type_account?` — "points at an account" — and under the two-ledger model
+  # a category's pool says nothing about whether it holds money: the whole layer is being deleted
+  # (§5), the column is nullable again, and a category that holds its own money is precisely the
+  # one whose pool is nil. So the old reader had already inverted on the shapes this branch mints.
+  # `buffer_funded?` itself dies with the column in Task 8; this page stops reading it now.
+  #
+  # THE SQL TWIN MOVES WITH IT. The entry-level halves below were `categories.pool_id IN
+  # (accounts)`; they are `categories.funded_since IS NULL` now — `holder?` in SQL, exactly as
+  # `Category.in_fill_order` spells it. This page groups BY CATEGORY, so its rows and its totals
+  # have to answer the same question or the breakdown would not sum to the stat card above it.
+  #
+  # WHAT THIS SPLIT IS *NOT*: it is not `CategoryLedger::ENTRY_CATEGORY_ID`, which additionally
+  # gates each entry on its own DATE against `funded_since` — spending a category recorded before
+  # it started holding money drains available even though the category holds money today. That is
+  # the right rule for a BALANCE and the wrong one for this page, which is a breakdown of
+  # CATEGORIES: a category cannot be in two bands at once, and the band it belongs in is the lane
+  # it spends from now.
+  # ---------------------------------------------------------------------------------------------
+  def tracked_buffer_funded_categories
+    @tracked_buffer_funded_categories ||= tracked_expense_categories.reject(&:holder?)
   end
 
-  def tracked_pool_covered_expense_categories
-    @tracked_pool_covered_expense_categories ||= tracked_expense_categories.select(&:pool_covered?)
+  def tracked_enveloped_categories
+    @tracked_enveloped_categories ||= tracked_expense_categories.select(&:holder?)
   end
+
+  # The entry-level half of the same line, composing into the `group_by_day`/`group_by_month`
+  # scopes the charts build on.
+  # `Entry.spendable`, NOT `.expenses` (fix round round 2 — item 3). The untracked BAND is narrowed
+  # by `Category.spendable` and these two lanes feed the TOTALS above it, so an opening shortfall
+  # used to sit inside "Total Unbudgeted Spending" with no row anywhere on the page to account for
+  # it — a figure a reader could not reconcile against the list beneath it.
+  def buffer_funded_expenses = @user.entries.spendable.where(categories: { funded_since: nil })
+
+  def enveloped_expenses = @user.entries.spendable.where.not(categories: { funded_since: nil })
 
   def tracked_income_categories
     @tracked_income_categories ||= @user.categories.incomes.tracked.includes(items: :entries)
   end
 
-  def tracked_savings_categories
-    @tracked_savings_categories ||= @user.categories.savings.tracked.includes(items: :entries)
-  end
-
   def untracked_expense_categories
-    @untracked_expense_categories ||= @user.categories.expenses.untracked.includes(:budget, items: :entries)
+    @untracked_expense_categories ||= @user.categories.spendable.untracked.includes(items: :entries)
   end
 
+  # `Category.earned` — every income category but an account's opening record (fix round 3 — R5).
+  # `Opening Balance` is income by construction, so this band listed what a household said was
+  # already in its savings account beside the paychecks it received, with a figure the totals above
+  # it exclude.
   def untracked_income_categories
-    @untracked_income_categories ||= @user.categories.incomes.untracked.includes(items: :entries)
-  end
-
-  def untracked_savings_categories
-    @untracked_savings_categories ||= @user.categories.savings.untracked.includes(items: :entries)
+    @untracked_income_categories ||= @user.categories.earned.untracked.includes(items: :entries)
   end
 
   def month_range
@@ -197,30 +214,13 @@ class DashboardPresenter
     @previous_month_range ||= (@date - 1.month).all_month
   end
 
+  # A NAME AND A FIGURE, and that is the whole row now. `#enrich_with_budget` used to add
+  # `:budget`, `:budget_percentage`, `:over_budget` and `:budget_diff` off the category's cap;
+  # the cap is gone and so are the four keys and every view arm that read them (decision 6).
   def build_category_breakdown(categories)
-    results = categories.map { |category| build_category_entry(category) }
+    results = categories.map do |category|
+      { id: category.id, name: category.name, amount: category.calculator(@date, period: period).total_amount }
+    end
     results.reject { |c| c[:amount].zero? }.sort_by { |c| -c[:amount] }
-  end
-
-  private
-
-  def build_category_entry(category)
-    calc = category.calculator(@date, period: period)
-    entry = { id: category.id, name: category.name, amount: calc.total_amount }
-    enrich_with_budget(entry, category, calc)
-    entry
-  end
-
-  def enrich_with_budget(entry, category, calc)
-    return unless category.budgetable? && calc.effective_budget.to_f.positive?
-
-    pace = calc.budget_pace
-    spent = calc.total_amount
-    entry[:budget] = calc.effective_budget
-    entry[:prorated] = category.budget.prorated?
-    entry[:budget_percentage] = calc.budget_percentage
-    entry[:budget_pace] = pace
-    entry[:over_budget] = spent > pace
-    entry[:budget_diff] = (spent - pace).abs
   end
 end

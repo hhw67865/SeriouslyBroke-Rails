@@ -1,19 +1,37 @@
 <% show_total = params[:show_total] == "true" %>
-<% cache [current_user, selected_date, current_period, show_total, pace_cache_key(selected_date), :expenses_v9] do %>
+<%# THE TWO LANES SPENDING COMES OUT OF (plan 3, task 4, decision 6). The sections used to be
+    "Monthly Budget" (spending measured against a category cap) and "Pool-Covered Spending"
+    (spending "funded by your savings pools"). Neither noun survives the cutover: there are no
+    caps, and an envelope is not a savings pool. What the split actually is — and always was, once
+    Task 3 re-pointed it — is whether the category's money sat in an ENVELOPE before it was spent
+    or came straight out of an ACCOUNT.
 
-<%# === MONTHLY BUDGET SYSTEM === %>
-<%# Recurring expenses tracked against monthly budget caps %>
+    GONE WITH THE CAP: the "Budget" line drawn across the chart, the Monthly/YTD Budget stat card,
+    the per-row "$650.00 / $500.00" and "+$150.00 over" clauses, and the column total that paired
+    spending with a cap. Each read `CategoryCalculator#monthly_budget_rate`, which read
+    `budgets.category_id` — nil on every row.
+
+    "OUT OF THE BUFFER" IS "OUT OF AVAILABLE" (answers-first Home spec §3, which retires "buffer"
+    as a user-facing word). The lane is unchanged — a category holding nothing sends its every
+    entry to AVAILABLE, which is what the subtitle already said in longhand — only the noun moves.
+    The presenter's readers keep their names; the sweep is over what the screen says.
+
+    `:expenses_v12` — bumped so nothing cached under the old shape survives.
+%>
+<% cache [current_user, selected_date, current_period, show_total, :expenses_v12] do %>
+
+<%# === OUT OF AVAILABLE === %>
 <section class="mb-12">
-  <div class="border-l-4 border-brand pl-4 mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Monthly Budget</h2>
-    <p class="text-sm text-gray-500">Recurring expenses tracked against your monthly budgets</p>
+  <div class="border-l-4 border-terracotta pl-4 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">Unbudgeted</h2>
+    <p class="text-sm text-gray-500">Spending from categories with no envelope — nothing reserved this money before you spent it</p>
   </div>
 
-  <%# Budget Chart %>
+  <%# Running-total chart %>
   <div class="mb-8">
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Budgeted Spending" : "Monthly Budgeted Spending" %></h3>
-      <%= link_to root_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
+      <h3 class="text-lg font-medium text-gray-900"><%= @presenter.ytd? ? "YTD Unbudgeted Spending" : "Unbudgeted Spending" %></h3>
+      <%= link_to reports_path(tab: @tab, period: params[:period], show_total: show_total ? "false" : "true"),
           class: "inline-flex items-center gap-2 px-3 py-1 text-xs font-medium rounded border #{show_total ? "border-brand bg-brand/10 text-brand-dark" : "border-gray-300 bg-white text-gray-500 hover:bg-gray-50"} transition" do %>
         <%= heroicon show_total ? "eye-slash" : "eye", options: { class: "h-3.5 w-3.5" } %>
         <%= show_total ? "Hide Total" : "Show Total" %>
@@ -21,124 +39,84 @@
     </div>
     <div class="bg-gray-50 rounded p-4">
       <% if @presenter.expenses_chart_data.any? %>
-        <% chart_data = [] %>
-        <% if @presenter.budget_line_data.any? %>
-          <% chart_data << { name: "Budget", data: @presenter.budget_line_data } %>
-        <% end %>
-        <% chart_data += @presenter.expenses_chart_data %>
-        <%= line_chart chart_data,
+        <%= line_chart @presenter.expenses_chart_data,
             curve: false,
             points: false,
             prefix: "$ ",
             colors: @presenter.expenses_chart_colors %>
       <% else %>
-        <p class="text-gray-500 text-center py-8">No budgeted expense data <%= period_time_label %></p>
+        <p class="text-gray-500 text-center py-8">No unbudgeted spending <%= period_time_label %></p>
       <% end %>
     </div>
   </div>
 
-  <%# Budget Stats %>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+  <%# Available stats %>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Budgeted" : "Tracked Budgeted" %></p>
-      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_budgetable_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Unbudgeted Spending" : "Tracked Unbudgeted Spending" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_buffer_expenses) %></p>
     </div>
     <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Budgeted" : "Total Budgeted" %></p>
-      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_budgetable_expenses) %></p>
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Unbudgeted Spending" : "Total Unbudgeted Spending" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_buffer_expenses) %></p>
     </div>
-    <% if @presenter.total_budget.positive? %>
-      <div class="bg-gray-50 rounded p-4">
-        <p class="text-sm text-gray-500"><%= period_budget_label %></p>
-        <p class="text-2xl font-semibold text-gray-700"><%= number_to_currency(@presenter.total_budget) %></p>
-      </div>
-    <% end %>
   </div>
 
-  <%# Budgeted breakdown %>
-  <% budgeted = @presenter.all_budgeted_categories_breakdown %>
-  <% if budgeted.any? %>
+  <%# Available breakdown %>
+  <% buffer_categories = @presenter.buffer_categories_breakdown %>
+  <% if buffer_categories.any? %>
     <div class="space-y-3">
-      <% budgeted.each do |cat| %>
-        <div class="py-2 border-b border-gray-100">
-          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2 mb-1">
-            <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark truncate" %>
-            <% if cat[:budget] %>
-              <span class="font-medium text-gray-900 shrink-0 text-sm sm:text-base">
-                <%= number_to_currency(cat[:amount]) %>
-                <span class="text-gray-400 font-normal">/ <%= number_to_currency(cat[:budget]) %></span>
-              </span>
-            <% else %>
-              <span class="font-medium text-gray-900 shrink-0 text-sm sm:text-base"><%= number_to_currency(cat[:amount]) %></span>
-            <% end %>
-          </div>
-          <% if cat[:budget_percentage] %>
-            <p class="text-xs font-medium <%= cat[:over_budget] ? "text-terracotta" : "text-gray-500" %>">
-              <% if cat[:prorated] %>
-                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over pace" : "#{number_to_currency(cat[:budget_diff])} under pace" %>
-                <% if cat[:budget_pace] != cat[:budget] %>
-                  <span class="text-gray-400 font-normal">· expected today: <%= number_to_currency(cat[:budget_pace]) %></span>
-                <% end %>
-              <% else %>
-                <%= cat[:over_budget] ? "+#{number_to_currency(cat[:budget_diff])} over" : "#{number_to_currency(cat[:budget_diff])} left" %>
-              <% end %>
-            </p>
-          <% end %>
-        </div>
-      <% end %>
-    </div>
-    <% if @presenter.total_budget.positive? %>
-      <div class="mt-3 pt-3 border-t border-gray-200">
-        <div class="flex justify-between text-sm">
-          <span class="text-gray-500">Total</span>
-          <span class="font-medium text-gray-700"><%= number_to_currency(@presenter.budgeted_total) %> / <%= number_to_currency(@presenter.total_budget) %></span>
-        </div>
-      </div>
-    <% end %>
-  <% else %>
-    <p class="text-gray-500 text-sm">No budgeted expenses <%= period_time_label %></p>
-  <% end %>
-</section>
-
-<%# === SAVINGS POOL SYSTEM === %>
-<%# Irregular expenses funded by pre-saved savings pools %>
-<section class="mb-12">
-  <div class="border-l-4 border-dusty-teal pl-4 mb-6">
-    <h2 class="text-xl font-semibold text-gray-900">Pool-Covered Spending</h2>
-    <p class="text-sm text-gray-500">Irregular expenses funded by your savings pools — separate from monthly budget</p>
-  </div>
-
-  <%# Pool Stats %>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Pool Spending" : "Tracked Pool Spending" %></p>
-      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_pool_covered_expenses) %></p>
-    </div>
-    <div class="bg-gray-50 rounded p-4">
-      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Pool Spending" : "Total Pool Spending" %></p>
-      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_pool_covered_expenses) %></p>
-    </div>
-  </div>
-
-  <%# Pool-covered breakdown %>
-  <% pool_covered = @presenter.pool_covered_categories_breakdown %>
-  <% if pool_covered.any? %>
-    <div class="space-y-3">
-      <% pool_covered.each do |cat| %>
+      <% buffer_categories.each do |cat| %>
         <div class="flex items-center justify-between py-2 border-b border-gray-100 gap-2">
           <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark truncate" %>
           <span class="font-medium text-gray-900 shrink-0"><%= number_to_currency(cat[:amount]) %></span>
         </div>
       <% end %>
     </div>
-    <div class="mt-3 pt-3 border-t border-gray-200">
-      <div class="flex justify-between text-sm">
-        <span class="text-gray-500">Total</span>
-        <span class="font-medium text-gray-700"><%= number_to_currency(@presenter.pool_covered_total) %></span>
-      </div>
+  <% else %>
+    <p class="text-gray-500 text-sm">No unbudgeted spending <%= period_time_label %></p>
+  <% end %>
+</section>
+
+<%# === OUT OF AN ENVELOPE === %>
+<section class="mb-12">
+  <div class="border-l-4 border-dusty-teal pl-4 mb-6">
+    <h2 class="text-xl font-semibold text-gray-900">Out of an Envelope</h2>
+    <%# ** THE SENTENCE DESCRIBED A MOVE THAT NO LONGER HAPPENS, AND A NOUN THAT NO LONGER EXISTS
+        (fix round 2 — MED-6; computed-claims §5, two-shapes §7). ** It read "whose money was moved
+        into an envelope or a fund before it was spent": nothing is MOVED on the purpose side — a
+        category's money is `#claim`, a function of its rules and the calendar — and "fund" named the
+        retired shape, a rule whose unspent money carried over. What this section actually lists is
+        spending on categories a RULE speaks for, which is `Category#counts_spending_on?` said in
+        words. %>
+    <p class="text-sm text-gray-500">Spending on categories a rule claims money for</p>
+  </div>
+
+  <%# Envelope stats %>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Tracked Envelope Spending" : "Tracked Envelope Spending" %></p>
+      <p class="text-2xl font-semibold text-brand-dark"><%= number_to_currency(@presenter.total_tracked_envelope_expenses) %></p>
+    </div>
+    <div class="bg-gray-50 rounded p-4">
+      <p class="text-sm text-gray-500"><%= @presenter.ytd? ? "YTD Total Envelope Spending" : "Total Envelope Spending" %></p>
+      <p class="text-2xl font-semibold text-terracotta"><%= number_to_currency(@presenter.total_envelope_expenses) %></p>
+    </div>
+  </div>
+
+  <%# Envelope breakdown %>
+  <% envelope_categories = @presenter.envelope_categories_breakdown %>
+  <% if envelope_categories.any? %>
+    <div class="space-y-3">
+      <% envelope_categories.each do |cat| %>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100 gap-2">
+          <%= link_to cat[:name], category_path(cat[:id]), class: "text-gray-700 hover:text-brand-dark truncate" %>
+          <span class="font-medium text-gray-900 shrink-0"><%= number_to_currency(cat[:amount]) %></span>
+        </div>
+      <% end %>
     </div>
   <% else %>
-    <p class="text-gray-500 text-sm">No pool-covered expenses <%= period_time_label %></p>
+    <p class="text-gray-500 text-sm">No envelope spending <%= period_time_label %></p>
   <% end %>
 </section>
 

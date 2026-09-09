@@ -36,26 +36,51 @@
       ytd_path: category_path(@category, period: "ytd") %>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <% cache [@category, selected_date, current_period, pace_cache_key(selected_date)] do %>
-      <!-- Left Column -->
-      <div class="lg:col-span-2 space-y-6">
+    <%# THE CACHE COVERS THE LEFT COLUMN ONLY, and the holdings card is why.
+
+        It used to wrap both columns. Every figure inside it is derived from THIS category's own
+        entries, and `Entry belongs_to :item, touch: true` / `Item belongs_to :category, touch: true`
+        move `@category.updated_at` whenever one of those changes — so the key is sound for exactly
+        the figures it holds.
+
+        WHAT A CATEGORY CLAIMS IS NOT ONE OF THEM, and the computed model makes that SHARPER rather
+        than softer (computed-claims spec §2). A claim is a function of the rules, the CALENDAR, the
+        spending and the dated adjustments: editing a rule on /budget, writing an adjustment, and
+        simply the period rolling over all move the figure without touching this category through an
+        entry. The clock alone is enough — there is no write at all to bust a key with — so the card
+        would go on printing last period's $240.00 under a live "Rules on the Budget page" link. It
+        is outside the cache, and the left column — the spending figures the period toggle is for —
+        keeps it.
+
+        `@category.pool` IS OUT OF THE KEY (Task 7). It was there because `_summary_card` printed
+        the pool's noun and name, so a renamed pool had to bust this fragment; the summary card
+        names no pool now — nothing in this app does, for a category — and `belongs_to :pool` is a
+        dying lane the whole page has stopped reading. Keying on a column no rendered byte depends
+        on buys nothing and outlives the association.
+
+        Cheap: the right column costs two COUNTs and the five preloaded recent entries. %>
+    <!-- Left Column -->
+    <div class="lg:col-span-2 space-y-6">
+      <%# `pace_cache_key(selected_date)` left this key with the daily ramp it existed for: a
+          prorated cap's "expected by today" figure changed every day, so the key had to as well.
+          Proration is deleted (plan 3, task 3) and nothing under this cache moves with the clock. %>
+      <% cache [@category, selected_date, current_period] do %>
         <%= render "categories/_partials/show/summary_card", category: @category %>
         <%= render "categories/_partials/show/items_list", category: @category %>
-      </div>
-      
-      <!-- Right Column -->
-      <div class="space-y-6">
-        <%= render "categories/_partials/show/details_card", category: @category %>
-        
-        <% if @category.budgetable? %>
-          <%= render "categories/_partials/show/budget_card", category: @category %>
-        <% end %>
-        <% if @category.savings_pool.present? %>
-          <%= render "categories/_partials/show/savings_pool_card", category: @category %>
-        <% end %>
-        
-        <%= render "categories/_partials/show/recent_activity", category: @category %>
-      </div>
-    <% end %>
+      <% end %>
+    </div>
+
+    <!-- Right Column -->
+    <div class="space-y-6">
+      <%= render "categories/_partials/show/details_card", category: @category %>
+
+      <%# EVERY EXPENSE CATEGORY, in the two states one can be in — holding its own money, or
+          spending what's available. An income category holds nothing and gets no card. %>
+      <% if @holdings_card %>
+        <%= render "categories/_partials/show/holdings_card", presenter: @holdings_card %>
+      <% end %>
+
+      <%= render "categories/_partials/show/recent_activity", category: @category %>
+    </div>
   </div>
 </div>

@@ -20,10 +20,11 @@ RSpec.describe "Categories Edit - Form", type: :system do
       expect(page).to have_button("Update Category")
     end
 
-    it "shows category type options" do
+    # TWO TILES, NOT THREE (plan 3, task 5) — `Category.category_types` drives the loop.
+    it "shows category type options", :aggregate_failures do
       expect(page).to have_content("Expense")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
     end
 
     it "shows color selection options" do
@@ -54,15 +55,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       expect(page).to have_field("Name", with: "Salary Income")
       expect(page).to have_checked_field("category_category_type_income")
-    end
-
-    it "pre-fills savings category correctly" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, name: "Emergency Fund", user: user, savings_pool: savings_pool)
-      visit edit_category_path(savings_category)
-
-      expect(page).to have_field("Name", with: "Emergency Fund")
-      expect(page).to have_checked_field("category_category_type_savings")
     end
   end
 
@@ -138,19 +130,136 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
     it "updates multiple fields simultaneously" do
       fill_in "Name", with: "Completely Updated"
-      find("label", text: "Savings").click
+      find("label", text: "Income").click
       fill_in "Color", with: "#00FF00"
       click_button "Update Category"
 
       expect(page).to have_content("Category was successfully updated")
-      expect(page).to have_current_path(categories_path(type: "savings"))
+      expect(page).to have_current_path(categories_path(type: "income"))
 
       category.reload
       expect(category.name).to eq("Completely Updated")
-      expect(category.category_type).to eq("savings")
+      expect(category.category_type).to eq("income")
       expect(category.color).to eq("#00FF00")
     end
   end
+
+  # ── WHAT CLAIMS THIS CATEGORY (two-ledger spec §3, §4, Task 7; re-labelled onto computed claims by
+  # Task 4). `Holding since` is `Claiming since` and `Funding priority` is `Give-way order`, because
+  # nothing is held and there is no distribution to be funded first in — see
+  # `categories/_form.html.erb` for the whole of both renamings.
+  #
+  # ** TWO COLUMNS NOW (rules-own-the-budget spec §5/§7): the category-side target has left the form
+  # and the permit. ** How much a category is saving toward is a fact about a RULE, and the column
+  # this field wrote is one no claim formula has read since the shapes moved onto the rule.
+  describe "the claiming fields", :aggregate_failures do
+    let(:holder_attributes) do
+      { name: "Vacation", priority: 3, funded_since: Date.new(2026, 2, 6) }
+    end
+
+    it "pre-fills the give-way order and the claiming start, and offers no target" do
+      visit edit_category_path(create(:category, :expense, user: user, **holder_attributes))
+
+      expect(page).to have_field("Give-way order", with: "3")
+      expect(page).to have_field("Claiming since", with: "2026-02-06")
+      expect(page).to have_no_field("Target")
+    end
+
+    # ** THE FIGURE A CATEGORY USED TO CARRY IS THE RULE'S AMOUNT NOW, AND AN EDIT HERE LEAVES IT
+    # ALONE (two-shapes spec §2). ** This example planted the category's own target and asserted a
+    # save did not blank it; that column is gone, then the goal lived on a rule's separate target
+    # column, and that is gone too — a goal IS a dated rule whose amount is the figure. The question
+    # the example is really about — can this form damage a fund by saving something else? — is asked
+    # of the record that holds the fund.
+    it "leaves the goal's own figure alone", :aggregate_failures do
+      vacation = create(:category, :expense, user: user, **holder_attributes)
+      goal = create(:budget, :by_date, category: vacation, amount: 2_400, due: Date.new(2027, 6, 1))
+
+      visit edit_category_path(vacation)
+      fill_in "Name", with: "Vacation Fund"
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(goal.reload.slice(:amount, :anchor_date))
+        .to eq("amount" => 2_400, "anchor_date" => Date.new(2027, 6, 1))
+      expect(vacation.reload.name).to eq("Vacation Fund")
+    end
+
+    it "still writes the claiming start" do
+      visit edit_category_path(category)
+      fill_in "Claiming since", with: Date.new(2026, 2, 6)
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(category.reload.funded_since).to eq(Date.new(2026, 2, 6))
+    end
+  end
+
+  # ** EDITING `funded_since` MOVES A CATEGORY IN AND OUT OF THE GROUPED HALF OF THE BUDGET PAGE
+  # (Task 7's ruling, re-anchored on claims). **
+  #
+  # ** WHAT CLEARING THE DATE COSTS ON THE BUDGET PAGE IS THE DRAG HANDLE, NOT THE ROW (two-shapes
+  # spec §4). ** It used to drop the category out of the grouped list and into a "not filling" band
+  # that said why; the list is EVERY expense category now, so the row stays where it is and what it
+  # loses is the reorder — `Category.apply_fill_order` accepts only `in_fill_order.with_a_rule`, and
+  # a row with arrows the endpoint refuses would be a control whose every use fails.
+  #
+  # THE RULE DOES NOT STOP CLAIMING: `ClaimCalculator#accrual_start` falls back to the rule's own
+  # birthday, so it claims its full $400 every period. What stops is the SPENDING —
+  # `CategoryLedger::ENTRY_CATEGORY_ID` attributes an expense to its category only from
+  # `funded_since` on — which is the pair the form's hint promises, asserted on the screen that shows
+  # the consequence rather than on the record alone.
+  describe "clearing and setting the claiming start on a ruled category", :aggregate_failures do
+    let!(:groceries) do
+      create(:category, :expense, :funded, user: user, name: "Groceries", priority: 0)
+    end
+
+    before { create(:budget, :per_period_rate, category: groceries, amount: 400) }
+
+    it "takes the drag handle off the category's row" do
+      visit edit_category_path(groceries)
+      fill_in "Claiming since", with: ""
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).to be_nil
+
+      visit budget_page_path
+      expect(page).to have_css("[data-category-row='Groceries']")
+      within("[data-category-row='Groceries']") { expect(page).to have_no_button("Move Groceries up") }
+    end
+
+    it "gives the handle back when the date is set again" do
+      groceries.update!(funded_since: nil)
+
+      visit edit_category_path(groceries)
+      fill_in "Claiming since", with: Date.new(2026, 2, 6)
+      click_button "Update Category"
+
+      expect(page).to have_content("Category was successfully updated")
+      expect(groceries.reload.funded_since).to eq(Date.new(2026, 2, 6))
+
+      visit budget_page_path
+      within("[data-category-row='Groceries']") { expect(page).to have_button("Move Groceries up", disabled: true) }
+    end
+  end
+
+  # ** THE "clearing the funding start on a category holding money" GROUP IS DELETED WHOLE (three
+  # examples), WITH THE REFUSAL IT DROVE (computed-claims spec §5, Task 4). ** It asserted that
+  # `Category#money_may_not_be_stranded` rejected a cleared date while allocations still sat in the
+  # category ("can't be cleared while this category still holds $400.00"), that the clear went
+  # through once a reallocation had moved the $400 back to available, and that the field's hint
+  # warned about it before the click.
+  #
+  # NONE OF IT SURVIVES, and not because the guard was removed — because the state it guarded cannot
+  # be built. Nothing is ever MOVED into a category (§5), so a cleared date leaves nothing behind and
+  # there is nothing for a 422 to protect: the fixture is unwritable by any means and the sentences
+  # are unrenderable. What the clear DOES still do is re-read history — spending before the date
+  # counts against no rule — and that is the block above's subject.
+  #
+  # WHAT REPLACED THEM is the block above, which is now the WHOLE behaviour of clearing the date:
+  # the category stops claiming and its rules move to the Budget page's band. The form's hint says
+  # that instead of the old warning, and `categories/new/form_spec.rb` pins its wording.
 
   describe "navigation", :aggregate_failures do
     before { visit edit_category_path(category) }
@@ -192,18 +301,6 @@ RSpec.describe "Categories Edit - Form", type: :system do
 
       expect(page).to have_current_path(categories_path(type: "income"))
       expect(page).to have_content("Income Categories")
-    end
-
-    it "redirects to savings index when updating savings category" do
-      savings_pool = create(:savings_pool, user: user)
-      savings_category = create(:category, :savings, user: user, savings_pool: savings_pool)
-      visit edit_category_path(savings_category)
-
-      fill_in "Name", with: "Updated Savings"
-      click_button "Update Category"
-
-      expect(page).to have_current_path(categories_path(type: "savings"))
-      expect(page).to have_content("Savings Categories")
     end
   end
 end

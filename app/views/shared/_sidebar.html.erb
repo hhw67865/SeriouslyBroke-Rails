@@ -25,7 +25,7 @@
 
   <%# Sidebar for Desktop and Mobile %>
   <div data-shared--sidebar-target="panel"
-       class="fixed inset-y-0 left-0 z-50 w-full -translate-x-full bg-gradient-to-br from-brand to-brand-dark transition-transform duration-300 ease-in-out lg:w-64 lg:translate-x-0">
+       class="fixed inset-y-0 left-0 z-50 w-full -translate-x-full bg-gradient-to-br from-sidebar to-sidebar transition-transform duration-300 ease-in-out lg:w-64 lg:translate-x-0">
     
     <%# Sidebar Content %>
     <div class="flex h-full flex-col">
@@ -51,26 +51,48 @@
             <%= render "shared/nav_section", 
                 title: "Main",
                 links: [
-                  { name: "Dashboard", path: root_path, icon: "chart-bar" },
+                  { name: "Home", path: root_path, icon: "home" },
+                  # ** THE "Distribute" ITEM IS GONE (computed-claims spec §§5-6). ** It opened
+                  # `/distributions/new`, the screen that split a paycheck into envelopes, and
+                  # there is no such screen: a category's money is a CLAIM computed from its
+                  # rules, so there is nothing to hand out and nothing to have missed. Budget
+                  # below is what the item really pointed at all along — editing the rules IS how
+                  # the user now says where the money goes.
+                  #
+                  # THE RULES THEMSELVES, between the action that spends them and the ledger that
+                  # records what was spent — a rule is neither a report nor a category, and until
+                  # this link existed §8's page had no way in but the URL. `/budget` is a prefix
+                  # of `/budgets/:id/edit`, so a rule's own form highlights this item too, which
+                  # is right: rule editing is what this page owns.
+                  { name: "Budget", path: budget_page_path, icon: "adjustments-horizontal" },
                   { name: "Entries", path: entries_path, icon: "document-text" }
-                ] 
+                ]
             %>
             
             <%# Management Section %>
             <%= render "shared/nav_section",
                 title: "Management",
                 links: [
-                  { name: "Categories", path: categories_path, icon: "tag" },
-                  { name: "Savings Pools", path: savings_pools_path, icon: "wallet" }
+                  # THE "Pools" ITEM IS GONE (two-ledger spec §5, Task 7). It opened the savings
+                  # goals index, and a savings goal is a CATEGORY now — target, priority, funding
+                  # start and all — so Categories is the one screen for what money is for, and
+                  # this section has one link.
+                  { name: "Categories", path: categories_path, icon: "tag" }
                 ]
             %>
             
             <%# Analysis Section %>
+            <%# CALENDAR BEFORE REPORTS — spec §2's order, and the last step of the demotion.
+                §2 ends `… Calendar · Reports`, with Reports last because that is what "relocated,
+                not weakened" means: the charts answer *what happened*, a question you visit
+                deliberately, so nothing in the sidebar may sit below them and read as more
+                incidental than they are. Reports was first in this section while it was still
+                called the Dashboard and still the app's front door; it is neither now. %>
             <%= render "shared/nav_section",
                 title: "Analysis",
                 links: [
-                  { name: "Statistics", path: "#", icon: "chart-pie" },
-                  { name: "Calendar", path: calendar_path, icon: "calendar" }
+                  { name: "Calendar", path: calendar_path, icon: "calendar" },
+                  { name: "Reports", path: reports_path, icon: "chart-bar" }
                 ]
             %>
           </ul>

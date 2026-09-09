@@ -42,12 +42,20 @@
     margin-right: 1px;
   }
 
+  /* ** 40px, AND THE THREE CONTROL HEIGHTS MOVE TOGETHER OR NOT AT ALL (mobile pass, 2026-09-06).
+     ** They were 38px, which is under the 40px touch target the Budget page's own controls were
+     raised to — a page cannot be honest about tap targets while every button and every field on it
+     is two pixels short. `.form-input`/`.form-select`/`.form-textarea` and `.btn` are ONE
+     measurement in three declarations: the sacrifice page puts a field and a button on one line and
+     any drift between them shows as a step in the middle of a row. Changed here rather than with a
+     utility on each call site, because the component is where the height is decided and every
+     screen in the app reads it. */
   .form-input,
   .form-select,
   .form-textarea {
     display: block;
     width: 100%;
-    height: 38px;
+    height: 40px;
     padding: 0 12px;
     font-size: 14px;
     color: #26251f;
@@ -102,7 +110,7 @@
 
   .form-textarea {
     height: auto;
-    min-height: 38px;
+    min-height: 40px;
     padding-top: 8px;
     padding-bottom: 8px;
     line-height: 1.5;
@@ -117,9 +125,24 @@
     cursor: pointer;
   }
 
+  /* The rules form's three radio groups (rules-own-the-budget §4). Same size and same accent as the
+     checkbox beside it — the only difference is the shape, which is the one thing a radio and a
+     checkbox are supposed to differ in. */
+  .form-radio {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    accent-color: var(--color-sage-600);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* #8b897c was 3.52:1 on a white card at 12px — the hint under every field in the app, and the
+     only place several rules ("a target switches off use-it-or-lose-it") are ever stated. Same
+     warm grey, darkened to 5.2:1. */
   .form-hint {
     font-size: 12px;
-    color: #8b897c;
+    color: #6F6D61;
     margin-top: 5px;
     line-height: 1.45;
   }
@@ -159,12 +182,13 @@
   }
 
   /* ── Buttons ── */
+  /* 40px — the same measurement as the three form controls above, for the reason stated there. */
   .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    height: 38px;
+    height: 40px;
     padding: 0 16px;
     font-size: 14px;
     font-weight: 500;
@@ -173,9 +197,16 @@
     cursor: pointer;
     transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
+  /* THE SAME RING THE REST OF THE APP GETS (design review M3), and it replaces a 32%-alpha sage
+     glow that measured under 1.5:1 against a white card — a focus style you could only find if
+     you already knew where the button was. See the `:focus-visible` block in custom.css for why
+     it is a near-black ring over a white halo rather than a brand-coloured one. Stated here as
+     well as there because `.btn` is a class and would otherwise beat the zero-specificity
+     `:where()` rule with the old glow. */
   .btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(201, 199, 139, 0.32);
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px #ffffff;
   }
   .btn:disabled {
     opacity: 0.5;

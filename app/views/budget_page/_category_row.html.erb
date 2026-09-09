@@ -1,0 +1,136 @@
+<%# ** ONE CATEGORY IN THE LIST (two-shapes spec §4). ** Locals: `row` (CategoryRow), `reorderable`
+    (the draggable rows, whole, because every ▲▼ carries the entire order) and `presenter`.
+
+      ▲▼  Food & Grocery   2 rules  ●●   $1,409.00 claimed   [2 suggestions]  ⌄
+
+    ** THE HANDLE IS ON THE ROWS THE ENDPOINT ACCEPTS AND ONLY THOSE. ** `Category.apply_fill_order`
+    refuses any list but `in_fill_order.with_a_rule`, so a rule-less category — or one that is not
+    holding money yet — draws no arrows: offering them would be a control whose every use is
+    refused, with a message about the order this page had just rendered. `CategoryRow#reorderable?`
+    is the one reader.
+
+    ** `priority N` STAYS, AND IT IS NOT DECORATION. ** This is the screen where priority is SET;
+    the number is what the arrows write, what the give-way sentence on Home is about and what the
+    category form's own field says. Hidden below `md`, where the row keeps handle · name · dots ·
+    claimed and nothing else (§4). %>
+<section class="bg-white border border-gray-200 rounded"
+         data-category-row="<%= row.name %>"
+         data-category-id="<%= row.category.id %>"
+         data-app--budget-page--category-list-target="row"
+         <% if row.reorderable? %>
+           data-app--budget-page--reorder-target="row"
+           draggable="true"
+           data-action="dragstart->app--budget-page--reorder#start
+                        dragend->app--budget-page--reorder#finish"
+         <% end %>>
+  <%# ** THE ROW IS A GRID AT 375 AND A FLEX ROW ABOVE IT (mobile pass, 2026-09-06). ** It was
+      `flex-col sm:flex-row`, which stacked the row into two lines — but the ▲▼ pair rode on the
+      FIRST line with the name, and two 44px targets plus their gaps leave 145px for a category
+      name: **"Miscellaneous Expenses" was clipped by its own `truncate`**, measured, and
+      "Utilities Monthly (Phone, Housing)" worse. A name is what a row IS; it is the last thing on
+      it that may be cut.
+
+      So below `md` the arrows are a COLUMN of their own spanning both lines (stacked ▲ over ▼, which
+      is also the truer spelling of up-and-down), the chevron is a second column spanning both, and
+      the middle column gets the whole remaining width: the name and its dots on line one, what the
+      category claims and its badge on line two. The name WRAPS there rather than truncating —
+      `md:truncate` keeps the one-line ellipsis on the desktop row, where the columns are real.
+
+      ** THE BREAKPOINT IS `md` AND NOT `sm`, AND THAT IS MEASURED TOO (fix round). ** At `sm` the
+      one-line row comes back at 640px, where it has 92px of arrows, three `gap-4`s and a `truncate`
+      to spend on a name — so "Miscellaneous Expenses" clipped again from 640 to 768, which was true
+      before this pass and 8px worse after it. The two-line grid holds until 768, where the row has
+      the width the desktop layout was designed for.
+
+      ** THE GRID CLASSES ARE INERT ABOVE `md`. ** `col-start-*` and `row-span-*` say nothing in a
+      flex container, so `md:flex` restores the original row exactly, and the horizontal spacing is
+      MARGINS rather than `gap-x` — a `gap-x` would print 12px of empty first column on every
+      rule-less row, which draws no arrows at all. %>
+  <div class="grid grid-cols-[auto_1fr_auto] items-center gap-y-1 px-4 py-3
+              md:flex md:items-center md:justify-between md:gap-4">
+    <% if row.reorderable? %>
+      <div class="col-start-1 row-span-2 mr-3 md:mr-0">
+        <%= render "reorder_controls", group: row, groups: reorderable %>
+      </div>
+    <% end %>
+
+    <div class="col-start-2 row-start-1 flex items-center gap-3 min-w-0 md:flex-1">
+      <h3 class="text-sm font-semibold text-gray-900 md:truncate"><%= row.name %></h3>
+
+      <% if row.ruled? %>
+        <span class="text-xs text-gray-500 shrink-0"><%= pluralize(row.rule_count, "rule") %></span>
+
+        <%# ONE DOT PER RULE, IN ITS TYPE'S COLOUR — `HomeHelper::STRIPE_FILLS`, the same table
+            Home's stripes and the tiles' bands read, so a bill is the same colour on every screen.
+            `aria-hidden`, because the row already says how many rules there are and the open panel
+            says what kind each one is; a screen reader meeting three unlabelled dots learns
+            nothing. %>
+        <span class="flex items-center gap-1 shrink-0" aria-hidden="true" data-type-dots="<%= row.type_dots.join(" ") %>">
+          <% row.type_dots.each do |type| %>
+            <span class="h-1.5 w-1.5 rounded-full <%= type_fill(type) %>" data-type-dot="<%= type %>"></span>
+          <% end %>
+        </span>
+      <% end %>
+
+      <% if row.reorderable? %>
+        <span class="hidden md:inline text-xs text-gray-500 shrink-0">priority <%= row.priority %></span>
+      <% end %>
+    </div>
+
+    <div class="col-start-2 row-start-2 flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0 md:row-start-1">
+      <%# WHAT THE CATEGORY CLAIMS, or — where no rule claims anything — what has been spent here
+          over the suggestion engine's own window. The two are different facts and they are
+          deliberately in different registers: a claim is money spoken for, and a rule-less
+          category's spending is money already gone with nothing speaking for it. %>
+      <% if row.ruled? %>
+        <span class="text-sm tabular-nums <%= row.needs_attention? ? "text-status-danger font-medium" : "text-gray-700" %>"
+              data-category-claim>
+          <%= number_to_currency(row.claimed) %> claimed
+        </span>
+      <% else %>
+        <span class="text-sm text-gray-400" data-category-spent>
+          <%= spent_recently_words(row.spent_recently) %>
+        </span>
+      <% end %>
+
+      <%# THE BADGE, AMBER, ONLY WHEN THE ENGINE HAS SOMETHING FOR THIS CATEGORY. Not a count of
+          everything the panel found — `SuggestionEngine#by_category` partitions the list, so this
+          number and the rows inside the panel are one grouping. %>
+      <% if row.suggestions? %>
+        <span class="shrink-0 rounded bg-status-warning-light px-1.5 py-0.5 text-xs text-status-warning"
+              data-suggestion-badge="<%= row.suggestion_count %>">
+          <%= pluralize(row.suggestion_count, "suggestion") %>
+        </span>
+      <% end %>
+    </div>
+
+    <%# THE CHEVRON IS A LINK, and that is the whole no-JavaScript mechanism: it carries
+        `?open=<id>` on a closed row and bare `/budget` on the open one (see
+        `BudgetPageHelper#category_toggle_path`). `category_list_controller` intercepts it and
+        flips the panels in place. `draggable="false"` so a click on it is a click and not the
+        start of a drag on the card around it.
+
+        ** ITS OWN COLUMN AT 375, SPANNING BOTH LINES, AND 40px SQUARE THERE (mobile pass). ** It
+        measured 32×32 — the control that opens the panel, and the smallest target on the row. It
+        stays `h-8` above `sm`, where the row is one line and a pointer is doing the pressing. %>
+    <%= link_to category_toggle_path(row),
+                class: "col-start-3 row-start-1 row-span-2 ml-3 shrink-0 inline-flex h-10 w-10 items-center " \
+                       "justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-900 " \
+                       "md:ml-0 md:h-8 md:w-8",
+                draggable: "false",
+                aria: { label: category_toggle_label(row), expanded: row.open?.to_s },
+                data: { action: "app--budget-page--category-list#toggle", category_toggle: row.category.id } do %>
+      <span class="text-xs" aria-hidden="true"><%= row.open? ? "&#9652;".html_safe : "&#9662;".html_safe %></span>
+    <% end %>
+  </div>
+
+  <%# ** EVERY PANEL IS RENDERED AND THE CLOSED ONES ARE `hidden`. ** §4 asks for expand/collapse
+      with no round trip, which means the content has to be in the DOM already — and the cost of
+      that is Ruby and markup, never a query: every figure inside it comes off the page's ONE
+      `ClaimLedger` and its ONE `SuggestionEngine`, both of which have already answered for the row
+      above. `hidden` rather than a class, so Capybara and a screen reader agree with the eye about
+      what is on the page. %>
+  <div class="border-t border-gray-200" data-app--budget-page--category-list-target="panel" <%= "hidden" unless row.open? %>>
+    <%= render "category_open", row: row, presenter: presenter %>
+  </div>
+</section>

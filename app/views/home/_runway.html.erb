@@ -1,0 +1,243 @@
+<%# THE RUNWAY — this period as a line, with a mark on every day money is needed (two-shapes spec §3).
+    Local: `presenter` (HomePresenter).
+
+    ** IT IS THE PERIOD BAR'S SUCCESSOR AND IT ANSWERS A QUESTION THE BAR COULD NOT. ** The hero drew
+    "day 7 of 14" and nothing else; the four dated rules falling due inside those fourteen days were
+    scattered down the section below as clauses, so "is there anything coming?" took a scroll and a
+    subtraction. Here the period is a ruler, today is a point on it, and every day money has to BE
+    there is a point further along.
+
+    ** ONE TICK PER DATED RULE DUE INSIDE THIS PERIOD, AND THE PERIOD IS `User#period_containing`. **
+    No date arithmetic lives in this file: every position is `HomePresenter::Runway`'s own 1-based
+    day over the same `Progress` the marker is drawn from, so a tick cannot be placed on a period the
+    marker is not on. Absent entirely for a user who has declared no period — the refusal
+    `#period_progress` has always made, because a runway is a picture OF a period and a calendar
+    month nobody set would be thirty invented days.
+
+    ** THE THREE COLOURS. ** Green is ready (the money is there), red is short (it is not, and the
+    day is inside this period), and the olive — `--color-primary-dark`, the accruing colour — is the
+    RAIL: the part of the period that has not happened yet. A tick is never olive, and that is this
+    task's ruling: a rule due before the next period either has its money or does not, so "still
+    accruing" is a sentence about a rule due LATER, which is where `HomeHelper#when_words` says it.
+
+    ** THE LABELS ARE ON THE RAIL NOW, NOT IN A LIST BELOW IT (2026-09-06 layout ruling). ** They
+    were stacked under the bar — the same ticks printed twice, once as marks and once as words — on
+    the reasoning that two labels three days apart would collide at 375px. What that bought was a
+    reader having to match a dot to a row by eye, and it is the wrong trade at full width: the panel
+    spans the page now, so a fortnight is ~900px of rail and two labels have room to stand where
+    their money is. Each tick is ONE element: the amount ABOVE the dot, the name and its state BELOW,
+    both centred on the dot with `-translate-x-1/2` so the group's centre IS the day.
+
+    ** A LABEL NEVER OVERPRINTS ANOTHER, AND THE WORDS ARE NEVER LOST (fix round 2 — MED-1/2). **
+    The first cut assumed full width was room enough; it is not. Two bills on ONE day are 6px apart
+    (the dot nudge does nothing for a 96px name) and two on ADJACENT days are ~75px apart at 1440,
+    which is narrower than a name. So the tick loop carries a CLEARANCE — see it for the number and
+    where the number comes from — and a tick too close to the last LABELLED one keeps its dot and
+    goes `invisible`, held in place so the group stays symmetric about its dot and the dot stays on
+    the rail. Nothing is lost: the moment any label is suppressed, the pace block's list appears at
+    every width and says every tick's words in order. Below `sm` that list is always there and the
+    rail carries amounts only, because at ~310px of rail no two labels fit.
+
+    THE PANEL IS FULL WIDTH (see `index.html.erb`): the money is a row of tiles above it, not a
+    column beside it, and a ruler is the one shape on this screen that spends width well. %>
+<% if runway = presenter.runway %>
+  <section class="bg-white border border-gray-200 rounded p-4 lg:p-5" data-runway aria-labelledby="runway-heading">
+    <div class="flex items-baseline justify-between gap-3">
+      <h3 id="runway-heading" class="text-sm font-semibold text-gray-900">This period</h3>
+      <%# THE SAME SENTENCE THE HERO'S BAR CARRIED, and it is now printed once on this screen: the
+          section below reads its heading off the blocks, not off the calendar. %>
+      <p class="text-xs text-gray-500" data-period-days-left><%= pluralize(runway.days_left, "day") %> left</p>
+    </div>
+
+    <%# THE RAIL, INSET AND GIVEN AIR ON BOTH SIDES OF ITSELF. The horizontal padding is what a label
+        centred on a tick at 0% or 100% overhangs into; the top padding is the amount's line, and the
+        margin under the rail is the name's — both are absolutely positioned, so nothing below them
+        is pushed and the clearance has to be stated. At 375 the names are invisible and the ends'
+        dates come back up (`mt-3`). %>
+    <div class="px-4 pt-7 sm:px-6">
+      <%# The elapsed part is filled and the rest is the accruing olive; `role="progressbar"` because
+          a bar with no accessible value is decoration to a screen reader, and the days-left sentence
+          beside it is the value in words either way. The percent rides on the TRACK for
+          `_this_period`'s reason — a 0% fill has no width and cannot be found. %>
+      <div class="relative h-2 rounded-full bg-brand-dark"
+           role="progressbar"
+           aria-valuenow="<%= runway.percent %>"
+           aria-valuemin="0"
+           aria-valuemax="100"
+           aria-label="Day <%= runway.day %> of <%= runway.days %> in this period"
+           data-period-progress="<%= runway.percent %>">
+        <div class="absolute inset-y-0 left-0 rounded-full bg-gray-300" style="width: <%= runway.percent %>%;"></div>
+
+        <%# ** TWO MARKS CAN LAND ON ONE DAY, AND BOTH HAVE TO SURVIVE IT (fix round 1 — LOW-3). ** A
+            12px tick drawn at the same `left:` as the 2px today mark covers it completely, and a bill
+            due TODAY is the single most likely day for that to happen — the one afternoon the mark
+            matters most. Two nudges, and neither is a colour trick:
+
+              SAME-DAY TICKS STEP 6px EACH. `nudged_by` counts how many ticks have already been drawn
+                on this day and offsets the next by half a dot's width, so two bills due on the 24th
+                are two dots rather than one. It is a VIEW concern (pixels, not money), which is why
+                it is counted here rather than carried on `RunwayTick`.
+              TODAY IS DRAWN LAST, ABOVE, WITH A WHITE HALO. Later siblings paint over earlier ones in
+                one stacking context, so the mark is below the tick loop and takes `z-10` as well —
+                and `ring-1 ring-white` separates it from whatever colour it is standing on.
+
+            ** AND THE WORDS NEED THE SAME RULING, WHICH THE NUDGE CANNOT GIVE THEM (fix round 2 —
+            MED-1/2). ** 6px separates two DOTS; it does nothing for two ~96px names centred 6px
+            apart, which simply overprint — and so do two ticks on ADJACENT days, because a day of a
+            fortnight is about 75px of rail at 1440 and a name is wider than that. So the same pass
+            carries `last_labelled` and a CLEARANCE, and a tick closer than the clearance to the last
+            tick that KEPT its label is suppressed: its dot is drawn exactly as before, and its
+            amount and name go `invisible`.
+
+            `LABEL_CLEARANCE` IS 22 PERCENTAGE POINTS OF THE RAIL, and that is one spelling chosen
+            deliberately over a per-breakpoint one. The bound is a ~110px label; the NARROWEST rail
+            that renders labels at all is `sm` (640px viewport − 48 layout − 32 card − 2 border − 48
+            rail inset ≈ 510px), and 110 ÷ 510 ≈ 21.5%, rounded up. Measuring against the narrowest
+            means the rule is "never overprints at any width that shows a label" rather than "usually
+            fits" — it costs some labels at 1440 that would have had room, and those words are in the
+            list below, which is the trade this fix is making.
+
+            INVISIBLE, NOT HIDDEN, AND NEVER ON A SECOND ROW. `visibility: hidden` keeps the group
+            symmetric about its dot, so the dot stays on the rail (see the note on the name below);
+            alternating labels between two rows would put the words at a height that no longer says
+            which dot they belong to, which is the whole reason they came onto the rail. %>
+        <% nudged_by = Hash.new(0) %>
+        <% label_clearance = 22 %>
+        <% last_labelled = nil %>
+        <% any_suppressed = false %>
+        <% runway.ticks.each do |tick| %>
+          <% nudge = nudged_by[tick.day_index] %>
+          <% nudged_by[tick.day_index] += 1 %>
+          <% suppressed = !last_labelled.nil? && (tick.percent - last_labelled).abs < label_clearance %>
+          <% last_labelled = tick.percent unless suppressed %>
+          <% any_suppressed ||= suppressed %>
+          <%# ** KEYED ON THE RULE, LABELLED SEPARATELY (fix round 1 — LOW-4). ** Two categories may
+              each own an item called "Electric", and a hook keyed on the label answers for both — an
+              ambiguous find in a spec and, worse, two marks a reader cannot tell apart. The id is
+              the identity; the label is what it says.
+
+              ** THE GROUP IS SYMMETRIC ABOUT ITS DOT ON PURPOSE. ** Amount and name are the same
+              `leading-4` with the same `2` of margin, so the flex column's centre is the dot's
+              centre and `-translate-y-1/2` lands the dot on the rail rather than near it. That is
+              also why the name is `invisible` below `sm` and not `hidden`: hiding it would take its
+              half of the column away and drop the dot off the rail. %>
+          <div class="absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
+               style="left: calc(<%= tick.percent %>% + <%= nudge * 6 %>px);"
+               data-tick="<%= tick.line.rule.id %>"
+               data-tick-label="<%= tick.label %>">
+            <span class="mb-2 text-xs font-medium leading-4 tabular-nums whitespace-nowrap <%= "invisible" if suppressed %> <%= tick.short? ? "text-status-danger" : "text-gray-900" %>"
+                  data-tick-amount>
+              <%= number_to_currency(tick.amount) %>
+            </span>
+            <span class="h-3 w-3 shrink-0 rounded-full border border-white <%= tick.short? ? "bg-status-danger" : "bg-status-success" %>"
+                  title="<%= number_to_currency(tick.amount) %> <%= tick.label %>"
+                  data-tick-mark="<%= tick.line.rule.id %>"
+                  data-tick-label="<%= tick.label %>"></span>
+            <%# NAME · STATE. The DAY is gone from the words and it is not missing: the tick's place
+                on the ruler is the day, said in the one way a list could not say it. The state is in
+                words as well as in colour, because a colour is not a sentence and a red dot with no
+                word beside it is a screen asking to be interpreted. %>
+            <span class="invisible <%= "sm:visible" unless suppressed %> mt-2 text-xs leading-4 whitespace-nowrap <%= tick.short? ? "text-status-danger" : "text-gray-600" %>"
+                  data-tick-name>
+              <%= runway_tick_words(tick) %>
+            </span>
+          </div>
+        <% end %>
+
+        <%# TODAY, as a mark on the ruler rather than as the end of a fill: what is left of the period
+            is the thing the ticks are placed in, so the day itself has to be findable. %>
+        <span class="absolute top-1/2 z-10 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded bg-gray-900 ring-1 ring-white"
+              style="left: <%= runway.percent %>%;"
+              title="Today"
+              data-today-mark></span>
+      </div>
+
+      <%# THE PERIOD'S OWN ENDS, labelled: the ruler is meaningless without them, and "Sep 1 — Sep 30"
+          is where every tick's date gets its scale. %>
+      <div class="mt-3 sm:mt-7 flex items-baseline justify-between gap-3 text-xs text-gray-500 tabular-nums"
+           data-period-range>
+        <span><%= runway.first.strftime("%b %-d") %></span>
+        <span><%= runway.last.strftime("%b %-d") %></span>
+      </div>
+    </div>
+
+    <%# THE PACE LINE (§3), which is three sentences and never more, on ONE wrapping line:
+
+          what a day may cost from here      — both signs of `free`, `HomeHelper#pace_words`
+          what falls due before the period closes — Σ the ticks, or that nothing does
+          which of them is short, by name    — absent when none is
+
+        THE THIRD IS ABSENT RATHER THAN ZEROED: "0 rules are short" is a line that reports nothing.
+
+        ** THE SECOND IS NOT (fix wave — Task 5's minor). ** It WAS absent on a quiet period, on the
+        same reasoning — and a quiet period is the ordinary one, so the ordinary panel was a rail, a
+        pace line and two-thirds of a card of white space at 1440. "$0.00 due before Sep 30" is
+        indeed a figure pretending to be news; "Nothing is due before Sep 30" is an ANSWER, and it is
+        the answer to the question this panel exists to ask. One sentence either way, in one place,
+        so the panel has the same shape whether or not anything is coming.
+
+        ** ONE LINE RATHER THAN THREE STACKED PARAGRAPHS (2026-09-06 layout ruling), joined by the
+        middot the rest of this app separates clauses with. ** Each part is built with its own hook
+        and its own colour and then `safe_join`ed, so the separator cannot appear before a part that
+        did not render — which is what a hand-written "·" between two `if`s does on the first quiet
+        period it meets. The trailing stop is dropped from each part, because a sentence ending in
+        "." beside a "·" is two punctuations doing one job. %>
+    <div class="mt-4 border-t border-gray-100 pt-3" data-pace>
+      <%# ** THE TICKS' WORDS, WHEREVER THE RAIL CANNOT HOLD THEM. ** Below `sm` that is always: the
+          rail is ~310px and two labels two days apart go through each other, so the amount stays up
+          there (it is short, and it is the figure) and the names come down here, where a line may
+          wrap.
+
+          ** AND FROM `sm` UP, WHENEVER ANY TICK LOST ITS LABEL (fix round 2 — MED-1/2). ** The
+          clearance above suppresses a label rather than overprinting it, and a suppressed label is a
+          fact the screen has stopped saying — so the list appears at EVERY width the moment one is
+          suppressed, and it lists every tick, not only the suppressed ones. Naming just the
+          suppressed ones would read as a footnote about the odd bill out; the list is the same
+          ticks in the same order, which is a thing a reader can check the rail against.
+
+          `sm:hidden` ONLY WHEN NOTHING IS SUPPRESSED — that is the quiet period's panel, where the
+          rail says everything and a list under it would be the same words twice. %>
+      <% if runway.any_due? %>
+        <ul class="mb-2 space-y-1 <%= "sm:hidden" unless any_suppressed %>" data-tick-list>
+          <% runway.ticks.each do |tick| %>
+            <li class="text-sm text-gray-700" data-tick-words="<%= tick.line.rule.id %>">
+              <span class="font-medium tabular-nums <%= tick.short? ? "text-status-danger" : "text-gray-900" %>">
+                <%= number_to_currency(tick.amount) %>
+              </span>
+              <%= runway_tick_words(tick) %>
+            </li>
+          <% end %>
+        </ul>
+      <% end %>
+
+      <% parts = [] %>
+      <% if pace = presenter.pace_line %>
+        <% parts << tag.span(
+             pace_words(pace).delete_suffix("."),
+             class: pace.fine? ? "text-gray-700" : "text-status-danger font-medium",
+             data: { pace_line: "" }
+           ) %>
+      <% end %>
+
+      <% parts << tag.span(
+           runway.any_due? ? "#{number_to_currency(runway.due_total)} due before #{runway.last.strftime("%b %-d")}" : "Nothing is due before #{runway.last.strftime("%b %-d")}",
+           class: "text-gray-700 tabular-nums",
+           data: { due_total: "" }
+         ) %>
+
+      <%# NAMED, ONE BY ONE, because "2 rules are short" is a fact the user cannot act on. The gap is
+          `ClaimLine#fund_gap` — the same figure the trouble strip prints about the same rule. %>
+      <% if runway.short.any? %>
+        <% parts << tag.span(
+             runway.short.map { |tick| "#{tick.label} is #{number_to_currency(tick.gap)} short" }.join(", "),
+             class: "text-status-danger font-medium",
+             data: { short_list: "" }
+           ) %>
+      <% end %>
+
+      <p class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+        <%= safe_join(parts, tag.span("·", class: "text-gray-400", aria: { hidden: true })) %>
+      </p>
+    </div>
+  </section>
+<% end %>

@@ -1,0 +1,101 @@
+<%# ONE SUGGESTION: its sentence, and the control that acts on it. Local: `suggestion`
+    (SuggestionEngine::Suggestion).
+
+    The sentence is per kind (§8's table is the copy target) and lives in its own partial; what is
+    shared is the frame, the accept control and the clause every PROPOSING kind carries — what
+    accepting does to the category. It is here rather than in each kind's partial precisely so a
+    bill and a rate cannot come to describe the same act in two different ways. (A second clause
+    named the cap the acceptance would destroy; it is deleted with the cap.)
+
+    `category` IS THE PANEL THIS ROW IS IN (two-shapes spec §4), and it is a local rather than a
+    derivation because the four kinds carry their category three different ways —
+    `SuggestionEngine#category_id_for` is the one taxonomy and it is the engine's. It rides on the
+    accept link (so the form opens knowing what the rule is for) and on the Hide button's return
+    path is the controller's own.
+
+    `presenter` LEFT THE LOCALS with `#joined_pool` (two-ledger spec §5): the effect clause asked
+    the page which envelope an acceptance would join, and the engine states what accepting does on
+    the suggestion itself now, so this partial takes exactly what it renders.
+
+    `data-suggestion` is kind AND subject id: a category and a pool may share a name, and
+    `Capybara.exact` is unset, so a name-keyed row is one rename away from matching two. %>
+<%# `p-4 sm:p-5` (mobile pass, 2026-09-06): `px-6` spent 48 of 343px on margins inside a box that is
+    already inside the panel, which is inside the row's card. %>
+<article class="p-4 border-b border-gray-100 last:border-b-0 sm:px-6 sm:py-4" data-suggestion="<%= suggestion_key(suggestion) %>">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div class="text-sm text-gray-700 space-y-1">
+      <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>
+
+      <%# WHAT ACCEPTING DOES, SAID BEFORE THE CLICK.
+
+          THE RE-POINT SENTENCE IS DELETED AND THIS IS WHAT REPLACES IT (two-ledger spec §3/§4).
+          Accepting used to move the CATEGORY onto an envelope — "puts all Utilities spending in a
+          new Utilities envelope" / "joins your existing Utilities envelope" — because a rule was
+          owned by a pool and money only reached one through `categories.pool_id`. There is no
+          envelope and nothing is re-pointed: the category holds the money itself, and the whole of
+          what accepting changes besides writing the rule is `funded_since`.
+
+          THAT IS STILL WORTH A SENTENCE, and the same one the deleted clause was really about:
+          which side of the start-date rule the user's spending falls on. From `funded_since`
+          onward an entry drains the CATEGORY; before it, the entry drains what is available. So a
+          category that has never held money is being started here, and one that already holds it is
+          not — which is the state the SECOND rule in a category is in, and the honest replacement
+          for the old "joins the envelope you already have".
+
+          `detail[:starts_holding]` is the engine's own answer (it reads `funded_since`, which is
+          exactly what `BudgetProposal` stamps), so the row and the write cannot disagree. %>
+      <% if suggestion_proposes_a_rule?(suggestion) %>
+        <% subject_name = suggestion.detail[:category_name] || suggestion.subject.name %>
+        <p class="text-gray-500" data-suggestion-effect>
+          <% if suggestion.detail[:starts_holding] %>
+            Accepting this starts <%= subject_name %> counting its own spending, from today onward —
+            spending before today is money already gone.
+          <% else %>
+            <%= subject_name %> already counts its own spending; this rule adds to what it claims.
+          <% end %>
+        </p>
+      <% end %>
+    </div>
+
+    <div class="shrink-0 flex flex-wrap items-center gap-2">
+      <%= link_to suggestion_accept_label(suggestion),
+                  suggestion_accept_path(suggestion, category: category),
+                  class: "btn btn-primary whitespace-nowrap",
+                  data: { suggestion_accept: true } %>
+
+      <%# PUTTING THIS ONE DOWN (Henry's ruling of 2026-08-20). On EVERY kind, deliberately: the
+          two kinds about an existing rule are the ones a user is most likely to have already
+          decided about — a dead rule they mean to keep, a drift they are riding out — and a Hide
+          offered only on the proposing kinds would leave exactly those two nagging.
+
+          THE PAIR THE ENGINE KEYS ON goes on the wire — kind, subject type, subject id — and not
+          a rendered id of the suggestion, because a suggestion has no row and therefore no id.
+          `subject_type` is checked against `SuggestionDismissal::SUBJECT_TYPES` before the
+          controller looks anything up; see SuggestionDismissalsController for why a class name off
+          the wire is not constantized. %>
+      <%= button_to "Hide",
+                    suggestion_dismissals_path,
+                    params: {
+                      kind: suggestion.kind,
+                      subject_type: suggestion.subject.class.name,
+                      subject_id: suggestion.subject.id
+                    },
+                    class: "btn btn-secondary whitespace-nowrap",
+                    form: { draggable: "false", data: { suggestion_hide: suggestion_key(suggestion) } } %>
+
+      <% if suggestion.kind == :dead_rule %>
+        <%# THE PAGE DOES NOT DELETE — the user does. Both doors are open on the row because the
+            decision is genuinely theirs: a bill that stopped because the subscription was
+            cancelled wants the rule gone, and one that stopped because the card was replaced wants
+            it kept. Offering only "review" would hide the answer most dead rules deserve; deleting
+            on "accept" would take a rule off a money screen on one click. %>
+        <%= button_to "Delete the rule",
+                      budget_path(suggestion.subject),
+                      method: :delete,
+                      class: "btn btn-secondary whitespace-nowrap",
+                      form: { draggable: "false",
+                              data: { turbo_confirm: "Delete this rule? Nothing else about #{suggestion.detail[:item_name]} changes." } } %>
+      <% end %>
+    </div>
+  </div>
+</article>

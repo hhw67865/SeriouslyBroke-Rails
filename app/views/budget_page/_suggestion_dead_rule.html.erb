@@ -1,0 +1,29 @@
+<%# A RULE STILL FUNDING SOMETHING THAT STOPPED. Local: `suggestion`.
+
+    §8's copy target: `Netflix stopped in October, the rule is still funding it`.
+
+    THE FIGURE IS WHAT IT COSTS A PERIOD, not what the rule's column says: a $1,200 six-monthly
+    premium and a $200 per-period rate are the same sentence to a user only once both are stated
+    in the unit the money actually leaves in (`Budget#steady_ask`). The rule's own figure is
+    printed beside it, because that is the number they will see on the edit form.
+
+    ** "still CLAIMING $X a period for it", NOT "still funding it" (fix round LOW-8). ** Nothing
+    funds anything: a claim is computed and no money is moved into a category (computed-claims §5),
+    so "funding" was the moved-money vocabulary surviving in the one sentence that names what the
+    rule is doing wrong. What it is doing is holding $X of every period against an item that stopped.
+
+    THE PAGE DOES NOT DELETE. An item that stopped because the subscription was cancelled wants
+    the rule gone; one that stopped because the card was replaced wants it kept. The panel cannot
+    tell those apart from entry history, so it says what it sees and puts both doors on the row. %>
+<p>
+  <span class="font-medium text-gray-900"><%= suggestion.detail[:item_name] %></span> stopped on
+  <%= suggestion.detail[:last_seen_on].strftime("%b %-d, %Y") %> — nothing for
+  <%= pluralize(suggestion.detail[:periods_empty], "period") %> — and the rule is still claiming
+  <span class="tabular-nums"><%= number_to_currency(suggestion.amount) %></span> a period for it.
+</p>
+
+<p class="text-gray-500">
+  The rule says <%= number_to_currency(suggestion.detail[:rule_amount]) %>
+  <%= budget_rule_basis(suggestion.subject) %><% if suggestion.detail[:category_name] %>, filling <%= suggestion.detail[:category_name] %><% end %>.
+  Keep it or delete it — nothing here decides that for you.
+</p>

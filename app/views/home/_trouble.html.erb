@@ -1,0 +1,130 @@
+<%# THE TROUBLE STRIP — rendered ONLY when something real needs a human (answers-first spec §5,
+    computed-claims §4). Local: `presenter` (HomePresenter).
+
+    ** SILENCE IS THE GOOD STATE. ** The strip is absent when nothing is true, and the caller gates on
+    `HomePresenter#trouble?` so there is one gate rather than five predicates OR'd in a view.
+
+    ** THE `:undistributed` ARM IS DELETED (computed-claims §6). ** "This period hasn't been
+    distributed yet — your rules are asking for money nobody has handed out" was trouble only because
+    money had to be MOVED before a category could hold any. Claims are computed from the rules, the
+    calendar and the spending (§3), so there is nothing to hand out, nothing to have missed, and no
+    Distribute button to put here. What replaces it is the state §4 says IS worth a human: free below
+    zero, who gives way, and the pace that lands the period at zero.
+
+    ** THE FIX BUTTONS ARE DELETED WITH IT (the same §5). ** Every problem row used to offer
+    "Take $300.00 from Rent" — an ALLOCATION, a purpose-side move — and there are no purpose-side
+    moves. A claim cannot be topped up out of another claim, because neither is money sitting
+    anywhere; what changes one is a rule, a dated adjustment (§3.3) or spending less. The strip says
+    that in words and its one door is the Budget page, which is where both of those are written.
+
+    FOUR KINDS, AND EACH IS A DIFFERENT KIND OF TROUBLE RATHER THAN THE SAME ONE FOUR WAYS. The types
+    come off `HomePresenter#troubles`; a `case` on the kind is what keeps a new trigger from being
+    added to the list and forgotten in the markup. %>
+<section class="bg-white border border-gray-200 rounded" data-trouble aria-labelledby="trouble-heading">
+  <div class="px-6 py-4 border-b border-gray-200">
+    <%# The count is the heading, because the count is the news. Sentence case, not the `uppercase`
+        treatment this codebase gives short labels: that renders a whole sentence as a shout. %>
+    <h3 id="trouble-heading" class="text-sm font-semibold text-gray-900">
+      <%= pluralize(presenter.troubles.size, "thing") %> need<%= "s" if presenter.troubles.one? %> you
+    </h3>
+  </div>
+
+  <% presenter.troubles.each do |trouble| %>
+    <% case trouble.kind %>
+    <% when :overdraft %>
+      <%# A NON-MAIN ACCOUNT BELOW ZERO — the standing band's strip, with its praised copy verbatim.
+          Main is excluded by `HomePresenter#overdrawn_other_accounts`, because main's overdraft IS
+          the hero's red "In Checking" figure and its last clause is exactly true of the accounts left
+          here.
+
+          NO BUTTON, AND THAT WAS ALREADY THE RULING: an overdrawn bank account is a PHYSICAL fact,
+          and nothing on the purpose side can reach it. What went away is the button, not the debt. %>
+      <p class="px-6 py-3 border-b border-gray-100 last:border-b-0 bg-status-danger-light text-sm font-medium text-status-danger"
+         data-overdrawn-account="<%= trouble.subject.name %>">
+        <%= trouble.subject.name %> is overdrawn <%= number_to_currency(presenter.overdraft_for(trouble.subject)) %> —
+        already spent, and none of the figures above count it.
+      </p>
+
+    <% when :shortfall %>
+      <%= render "shortfall", presenter: presenter %>
+
+    <% when :over, :overdue %>
+      <%# ONE RULE THAT NEEDS A HUMAN. The line is a `ClaimLine` — the SAME object the
+          "This period" row below prints — so the two cannot describe one rule differently, which is
+          exactly what happened when the strip read a `HoldingStatus` and the section read a bar.
+
+          The category is the subject and the rule is named only where the category has more than one:
+          a single-rule category IS its rule, and printing both would be the same noun twice. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0 <%= "bg-status-danger-light" if trouble.kind == :over %>"
+           data-problem-category="<%= trouble.subject.category.name %>">
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="font-medium text-gray-900"><%= trouble.subject.category.name %></span>
+          <span class="text-sm text-status-danger font-medium" data-problem-state>
+            <%= claim_trouble_label(trouble.subject) %>
+          </span>
+        </div>
+        <%# ** THE OVERDUE ARM SAYS WHICH KIND OF OVERDUE IT IS (fix round 1 — MED-1). ** The trigger
+            is the DATE (`ClaimCalculator#overdue?`), because a bill nobody paid needs a human whether
+            or not the money for it is there — §3.2's catch-up formula fills an unpaid fund in ONE
+            period, so the WHOLE fund is the ordinary shape of an overdue bill and gating on
+            `built_up < target` silenced exactly the user who had done everything right except pay.
+            What the fund state decides is the INSTRUCTION: find $200 more, or write the cheque. %>
+        <p class="mt-1 text-sm text-gray-600" data-problem-detail>
+          <%= pool_rule_label(trouble.subject.rule) %> ·
+          <%# ** THE OVERSPEND'S TWO FIGURES ARE `HomeHelper#claim_over_detail`'s, NOT THIS VIEW'S
+              (fix round — MED). ** They were written out here as `<spent> spent of <accrued>`, and
+              `accrued` is THIS PERIOD's accrual — right for an allowance that resets and nonsense
+              for a fund, which is spent against what it HAD: a $60-a-period fund holding $806 and
+              spent $900 read "$900.00 spent of $60.00" beside "over by $34.00". The helper carries
+              both shapes; the excess clause below is the same either way, because the money left
+              checking whatever the rule was. %>
+          <% if trouble.kind == :over %>
+            <%= claim_over_detail(trouble.subject) %>
+            — the excess comes straight out of what is free.
+          <%# ** "THE FUND" IS GONE FROM BOTH ARMS (fix round 1 — MED-6). ** "fund" named the retired
+              shape — a rule whose unspent money carried over — and this row is about a DATED rule,
+              which may be a bill the user must pay or a target they are saving toward. The sentence
+              is about the MONEY either way, so it names the shortfall and the instruction and lets
+              the row's own label say what the rule is. %>
+          <% elsif trouble.subject.fund_short? %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up of
+            <%= number_to_currency(trouble.subject.target) %> —
+            <%= number_to_currency(trouble.subject.fund_gap) %> short — this needs paying.
+          <%# ** THE WHOLE-FUND ARM (two-shapes spec §2). ** Reaching here means `#fund_short?` was
+              false, so the money is all there and the instruction is to PAY it rather than to save
+              more.
+
+              ** IT ASKED `#capped` FIRST UNTIL THIS TASK, AND THE GUARD IS DELETED WITH THE SHAPE.
+              ** An UNCAPPED building rule answered `#fund_short?` false for the other reason —
+              there was no figure to be short OF — so an un-gated `of $target` printed `of ` with
+              nothing after it. That shape is retired (§7): this block is only entered on an OVERDUE
+              rule, `ClaimCalculator#overdue?` requires a `next_due_on`, and a dated rule's target
+              is its own amount. There is no second arm left to write, and the pair that IS
+              reachable is pinned in `spec/system/home/trouble_spec.rb`. %>
+          <% else %>
+            <%= number_to_currency(trouble.subject.built_up) %> built up of
+            <%= number_to_currency(trouble.subject.target) %> — it's all there — pay it and it
+            starts again.
+          <% end %>
+        </p>
+      </div>
+
+    <% when :structural %>
+      <%# §9'S PERMANENT BUTTON. It is a verdict about the SHAPE of the rules, which no amount of care
+          this period can fix — which is exactly why it belongs on a strip about things that need a
+          human rather than beside this period's cash.
+
+          `structurally_underwater?` is gated on income AND cadence together and memoised for the
+          false case too, so this costs nothing on the screens that do not render it. A recomputation
+          here could say "your budget doesn't fit your income" beside a /budget page that says it
+          fits — and the route this button opens refuses on exactly that reader. %>
+      <div class="px-6 py-3 border-b border-gray-100 last:border-b-0">
+        <%= link_to("Your budget doesn't fit your income",
+                    sacrifice_path,
+                    class: "inline-flex items-center gap-2 px-4 py-2 rounded border " \
+                           "border-status-danger text-status-danger text-sm font-medium hover:bg-status-danger-light",
+                    data: { sacrifice_link: true }) %>
+      </div>
+    <% end %>
+  <% end %>
+</section>

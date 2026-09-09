@@ -12,7 +12,7 @@
         <%= button_to toggle_theme_account_path,
             method: :patch,
             data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-6", shared__toggle_off_value: "translate-x-1" },
-            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.dark? ? "bg-brand" : "bg-gray-300"}" do %>
+            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.dark? ? "bg-brand-dark" : "bg-gray-300"}" do %>
           <span data-shared--toggle-target="thumb" class="inline-block h-4 w-4 rounded-full bg-white transition-transform <%= current_user.dark? ? "translate-x-6" : "translate-x-1" %>"></span>
         <% end %>
       </dd>
@@ -27,7 +27,7 @@
         <%= button_to toggle_ming_mode_account_path,
             method: :patch,
             data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-6", shared__toggle_off_value: "translate-x-1" },
-            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.ming_mode? ? "bg-brand" : "bg-gray-300"}" do %>
+            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.ming_mode? ? "bg-brand-dark" : "bg-gray-300"}" do %>
           <span data-shared--toggle-target="thumb" class="inline-block h-4 w-4 rounded-full bg-white transition-transform <%= current_user.ming_mode? ? "translate-x-6" : "translate-x-1" %>"></span>
         <% end %>
       </dd>

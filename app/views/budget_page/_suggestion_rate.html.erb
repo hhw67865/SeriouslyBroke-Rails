@@ -1,0 +1,26 @@
+<%# A CATEGORY THAT BEHAVES LIKE A RATE AND HOLDS NOTHING. Local: `suggestion`.
+
+    §8's copy target: `Coffee — $35 a period for 6 months, currently comes out of your buffer`.
+    THE SECOND HALF IS RE-ANCHORED (two-ledger spec §4) and says the same thing about the model
+    that replaced it — in the word that survived the sweep (answers-first Home §3), which is the
+    same word this screen's structural check uses: the category has no `funded_since`, so `CategoryLedger
+    ::ENTRY_CATEGORY_ID` sends every one of its entries to AVAILABLE. Nothing reserves this money
+    and every dollar of it lands on whatever is left over — which is the reason the suggestion
+    exists at all, and is now a literal reading of the detector's own population.
+
+    THE DIVISOR IS NAMED. `amount` is the observed total divided by the periods the category has
+    been ALIVE for, not by the periods it appeared in (a per-occurrence figure proposed as a rate
+    over-reserves by window ÷ appearances — the engine's first correction), so the sentence says
+    both counts: how many periods it showed up in, and how many it was averaged over. %>
+<p>
+  <span class="font-medium text-gray-900"><%= suggestion.subject.name %></span> —
+  <span class="tabular-nums"><%= number_to_currency(suggestion.amount) %></span> a period,
+  currently claimed by no rule.
+</p>
+
+<p class="text-gray-500">
+  <%= number_to_currency(suggestion.detail[:observed_total]) %> spent in
+  <%= suggestion.detail[:periods_present] %> of the last <%= suggestion.detail[:periods_window] %> periods,
+  first on <%= suggestion.detail[:first_seen_on].strftime("%b %-d, %Y") %>, averaged over
+  <%= pluralize(suggestion.detail[:periods_measured], "period") %>.
+</p>

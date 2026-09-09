@@ -91,6 +91,12 @@ IMMEDIATELY after implementing any front-end change:
 
 This verification ensures changes meet design standards and user requirements.
 
+**The 500px window floor below is a SPEC-suite problem, not a browser-tool one.** The Playwright MCP
+`browser_resize` (and `agent-browser`'s `set viewport`) drives Playwright's own `setViewportSize`,
+which is device-metrics emulation rather than a window resize — measured at 375: `window.innerWidth`
+375, `documentElement.clientWidth` 375, `matchMedia("(min-width: 640px)")` false. So a 375 screenshot
+needs no CDP override; only a Selenium/Capybara system spec does.
+
 ### Browser Login Credentials
 
 When accessing the website through agent-browser, use these credentials:
@@ -133,6 +139,23 @@ Always run test files one at a time, never entire directories or the full suite:
 ```bash
 bundle exec rspec spec/system/feature_name/page/section_spec.rb  # Run one file at a time
 ```
+
+### Diagnosing `InvalidSessionIdError`
+
+**There are no known environmental spec failures in this suite. Do not write `InvalidSessionIdError` off — diagnose it.** It has two causes, told apart by one question: *is the first failure the same example every run?*
+
+**Stable first failure → your spec.** An example whose last action is `click_button` / `click_link` / `click_on` must make a waiting Capybara assertion (`expect(page).to have_content(...)`, `have_current_path(...)`) **before** any model assertion. `click_*` returns as soon as the click is dispatched; `expect(model.reload.attr)` reads Postgres without waiting on the browser, so the example ends mid-request and Capybara's `reset_sessions!` navigates the renderer away underneath it. The result is `InvalidSessionIdError` with **zero assertion failures**, which then poisons the session for every example after it — so the *count* swings (22 one run, 10 the next) while the *first* failure stays put. Only the first failure is real; the rest are collateral.
+
+**Unstable first failure → a second rspec process.** Concurrent runs deadlock in DatabaseCleaner truncation and destabilise Chrome, making *any* file fail at *random* examples, including provably correct ones. Run `pgrep -f "[r]spec spec/system"` before and during any flake measurement — a neighbouring run that starts and finishes inside your window is invisible at the endpoints.
+
+Procedure: confirm the machine is quiet; run the file 3× looking only at the first failure each time; if it is stable, read that example for a missing wait; run an unrelated system spec as a control — if the control passes, the fault is in the spec.
+
+**A third cause, rarer: the wall clock.** A fixture that reads `Date.current` lazily inside `travel_to` (a lazy `let` first evaluated inside the block counts, whatever its comment claims) can land money in the wrong period and fail only during the first hours of the UTC day. Its signature: the same examples by name fail at one hour and pass at another, on commits that never touched the code path. **Re-running at the same time of day cannot distinguish a regression from the clock** — before attributing a stable-by-name failure to a commit, shift the fixture's offsets (or wait out the window) and see if it survives, and check `git diff` actually touches the failing path.
+
+### Narrow-viewport tests: Chrome floors the window at 500px
+
+**Headless Chrome refuses to make a window narrower than 500px.** `resize_to(375, 667)` and `--window-size=375,667` alike report `width=500` — measured — so every window-based spelling of a 375px test in this suite is really a 500px test wearing a 375 label, and a layout that breaks between the two passes. A true mobile layout viewport (the width CSS media queries actually read) needs CDP: `page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 375, height: 667, deviceScaleFactor: 1, mobile: false)`. The worked idiom, with the measurements behind it, is in `spec/system/home/money_spec.rb` (it was `hero_spec.rb` until the money column renamed it) — search for `setDeviceMetricsOverride`. Note also that a trailing `evaluate_script` in such an example leaves the session in a state Capybara's teardown does not survive here, which is the first cause above wearing a different last statement; prefer Selenium's own geometry (element rects) over JS for the assertion.
+
 ---
 
 ## Summary: Implementation Checklist

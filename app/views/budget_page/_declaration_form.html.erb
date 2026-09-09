@@ -1,0 +1,98 @@
+<%# THE DECLARATION: one PATCH, three fields, edited in place inside the block whose figures they
+    produce. Local: `presenter` (BudgetPagePresenter).
+
+    `presenter.declaration` and NOT `presenter.user`, and on the failure path those are two
+    different objects on purpose: the figures above are computed from the row as it stands (the
+    save was refused, so nothing was declared) while this form keeps the rejected values and the
+    errors, so a validation failure does not throw away what the user typed. See
+    BudgetPagePresenter#declaration.
+
+    `url:` is given explicitly because `simple_form_for @user` would otherwise post to
+    `/users/:id` — Devise's registration route, which asks for a current password. %>
+<%# `declare: 1` ON THE ACTION, so a refusal — or the cadence question — comes back with the form
+    still showing (two-shapes spec §4). It is hidden behind the income tile's "change" now, and
+    `BudgetPageController#build_presenter` reads the parameter off whatever request it is rendering:
+    without it, a 422 would re-render the page with the errors' own form gone and what the user
+    typed with it. %>
+<%= simple_form_for presenter.declaration,
+                    url: budget_page_user_path(declare: 1),
+                    method: :patch,
+                    html: { class: "border-t border-gray-100 pt-5 space-y-4" } do |f| %>
+  <%# Both `:base` and the field errors: the anchor validation's message lands on
+      `period_anchor_date`, and simple_form prints it under that input — but a user who submitted
+      a cadence with no anchor is looking at three fields and needs the block itself to say
+      something went wrong before they find it. %>
+  <% if presenter.declaration.errors.any? %>
+    <p class="rounded bg-status-danger-light border border-status-danger px-3 py-2 text-sm text-status-danger"
+       data-declaration-error>
+      <%= presenter.declaration.errors.full_messages.to_sentence %>
+    </p>
+  <% end %>
+
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <%# `min: 0.01`, not `min: 0`. `User` validates `greater_than: 0`, so a submitted 0 is a 422 —
+        but with `min: 0` the browser called it valid and let it through, which is the form and the
+        model disagreeing about the same field. Blank is still allowed (the validation is
+        `allow_nil`) because clearing the income back to undeclared is a legitimate move; `min`
+        constrains what a value may be, not whether there is one. %>
+    <%# TWO DECIMALS, ALWAYS (design review, nits). The column is a decimal and Rails renders one
+        as `4000.0` — a money figure with a single trailing digit, in a box whose placeholder says
+        `0.00` and whose own hint calls it an income. It read as a truncation. `number_with_
+        precision` and not `number_to_currency`: this is a `number` input, so a `$` and a thousands
+        comma would be a value the browser refuses to parse and silently blanks.
+
+        NIL STAYS NIL — an undeclared income shows an empty box, not `0.00`, because "not yet said"
+        and "nothing" are different answers and only one of them is a figure. %>
+    <%= f.input :typical_income,
+                as: :decimal,
+                label: "You typically bring in",
+                input_html: {
+                  placeholder: "0.00",
+                  step: 0.01,
+                  min: 0.01,
+                  value: number_with_precision(presenter.declaration.typical_income, precision: 2)
+                },
+                hint: "Per period, after tax. A rough figure is fine — nothing is inferred from it." %>
+
+    <%# The enum's own keys, so a cadence this app cannot compute boundaries for is unselectable.
+        Blank is offered because clearing the period back to undeclared is a legitimate move, and
+        a select with no way out would trap a user who set it by accident. %>
+    <%= f.input :period_cadence,
+                as: :select,
+                collection: User.period_cadences.keys.map { |key| [key.humanize, key] },
+                include_blank: "Not set",
+                label: "How long is a period?",
+                hint: "Weekly, every two weeks, twice a month, or monthly." %>
+
+    <%= f.input :period_anchor_date,
+                as: :date,
+                html5: true,
+                label: "A day a period starts",
+                hint: "Any one of them — the rest are counted from it. Required once you pick a period." %>
+  </div>
+
+  <%# DECISION 6, SAID TO THE USER RATHER THAN LEFT AS A SURPRISE. Every figure in this app is
+      derived, so a new cadence changes the divisor in each of them the moment it is saved — and
+      not only the forward-looking ones: the boundaries also decide where each past period began
+      and ended, so history re-buckets too. That is a large consequence for one select, and a user
+      who is not told will read the changed numbers as the app losing their data. %>
+  <%# AND THE ONE EXCEPTION, said in the same breath as the rule. Income is DECLARED per period,
+      not converted between periods: $2,400 biweekly does not become $2,400 monthly when the
+      cadence changes, it stays the number in the box while everything around it is recounted. The
+      field is right there, so a user who reads "every figure re-derives" and does not read this
+      will halve or double their real income by changing one select. %>
+  <p class="text-xs text-gray-500 max-w-2xl">
+    Changing your period re-derives every figure immediately — what each rule claims, what your
+    envelopes need next, and how your history buckets into periods. Nothing is rewritten; it is
+    all counted from these two facts. Your income is the exception: it is the figure you type, per
+    period, so change the period and check that number still reads right.
+  </p>
+
+  <%# `btn btn-primary`, the app's own component, and NOT the `bg-brand text-white` this first
+      shipped as — application.css says in so many words that white on the brand sage fails
+      contrast, which is why `.btn-primary` paints sage-700 instead. Caught at the browser: the
+      label was barely legible on the rendered button. %>
+  <%# FULL WIDTH ON A PHONE (mobile pass, 2026-09-06): a 192px button under three full-width fields
+      reads as an afterthought, and the thumb is at the bottom of the screen. %>
+  <%= f.button :submit, "Save period and income", class: "btn btn-primary w-full sm:w-auto" %>
+<% end %>

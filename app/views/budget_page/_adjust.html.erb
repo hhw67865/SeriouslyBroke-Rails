@@ -1,0 +1,151 @@
+<%# THE FIVE DOORS ONTO ONE DATED ROW (computed-claims spec §3.3). Local: `line` (`ClaimLine`).
+
+    ** THE LOCAL WAS `rule` AND IS `line` (this task's carry (b)), AND NOTHING ELSE HERE MOVED. **
+    The row this panel hangs off is `ClaimLine` now — the same object Home and the categories card
+    render — whose `#rule` is the record, so `rule.budget` became `line.rule` and the two figure
+    readers took their shared names (`#per_period` for the planned share, `#accrued` for the
+    post-adjustment one). Every hook, every button, every sentence and every bound is unchanged.
+
+    THE USER'S WORDS AND NEVER THE TABLE'S. A rate rule's envelope is TOPPED UP or REDUCED for this
+    period; an accruing rule's fund is SET ASIDE into, TAKEN BACK out of, or SKIPPED. Each of the
+    five writes the same `(rule, date, signed amount)` row, and the word "adjustment" appears
+    nowhere on this screen — it is the spec's word for the mechanism, not the app's word for the act.
+
+    ONE FORM AND ONE AMOUNT FIELD, WITH THE DIRECTION ON THE BUTTON. Two forms would ask the user to
+    read two identical inputs and choose one; a signed field would ask them to type a minus. A
+    browser submits only the button that was pressed, so `amount_sign` carries the direction and
+    `AdjustmentForm#amount` applies it to the magnitude.
+
+    SKIP CARRIES NO FIGURE AND NO DATE. It posts `skip=1` alone and the server computes
+    −`accrued_this_period` dated today, because the accrual moves the moment another delta lands and
+    a hidden field rendered before that would skip the wrong amount (fix round MED-2/NEW-3). Offered
+    only while the period is still accruing something (`Rule#skippable?`) — a fund at its target, or
+    one already skipped, accrues nothing, and a skip there would be a zero row the model refuses.
+
+    `<details>` RATHER THAN A STIMULUS CONTROLLER, the idiom `_suggestions` already uses on this
+    page: the whole interaction is "open this", the browser has it, and there is no JavaScript here
+    for a Turbo navigation to break.
+
+    `open` RIDES ON BOTH FORM ACTIONS so a REFUSED submission comes back with this category still
+    expanded — `AdjustmentsController` inherits the Budget page's `#refuse`, which re-renders the
+    page, and a 422 whose error message sits above a closed panel is a refusal the user cannot see
+    the cause of. The successful path is the controller's own redirect.
+
+    `draggable="false"` IS LOAD-BEARING. The `<section data-category-row>` this sits inside is
+    `draggable="true"` for the reorder, and a text input inside a draggable ancestor loses its
+    selection to the drag in Chrome — the whole panel opts out so the fields behave like fields. %>
+<%# ** THE SUMMARY IS A FULL-WIDTH BUTTON AT 375 (mobile pass, 2026-09-06), IN THE SAME SKIN AS THE
+    `Edit` LINK IT SITS UNDER — and the skin is literally one string, `RULE_ACTION_CLASSES` on
+    `BudgetPageHelper`, rather than two copies with a comment swearing they match (fix round — M2).
+    It measured 41×20.
+
+    `inline-block` STAYS the display at every width and is load-bearing: a `<summary>` whose display
+    is `list-item` draws a disclosure triangle, and `block` would bring it back — the width comes
+    from `w-full`, not from the display. %>
+<details class="mt-2" draggable="false" data-adjust="<%= budget_rule_name(line.rule) %>">
+  <summary class="<%= rule_action_classes("cursor-pointer text-sm sm:text-left") %>">Adjust</summary>
+
+  <%# `max-w-xl` (design pass at 1440): the panel is two short fields and three buttons, and left to
+      the row's full width it stretched to the far edge of a 1440px card with two-thirds of it
+      empty — a form that looks like it is missing something. It still fills a 375px viewport. %>
+  <div class="mt-2 max-w-xl rounded border border-gray-200 bg-gray-50 px-3 py-3 space-y-3">
+    <%# THE PLANNED FIGURE, ALWAYS SAID BEFORE IT IS CHANGED. On a rate rule it is what the envelope
+        gets this period; on an accruing one it is what the fund is putting away this period, and it
+        is also exactly what Skip takes back — so the button below can name its own amount. %>
+    <p class="text-xs text-gray-600" data-adjust-planned>
+      <%= number_to_currency(line.per_period) %>
+      <%= line.rate? ? "planned this period" : "going in this period" %>
+    </p>
+
+    <%= form_with url: adjustments_path(open: line.category.id), method: :post, class: "space-y-2" do %>
+      <%= hidden_field_tag :rule_id, line.rule.id %>
+
+      <div class="flex flex-wrap items-end gap-2">
+        <%# IDS ARE KEYED ON THE RULE, because this partial renders once per row and a repeated `id`
+            makes every label on the page point at the first row's input. %>
+        <div>
+          <%= label_tag "adjust-amount-#{line.rule.id}", "How much", class: "block text-xs text-gray-600 mb-1" %>
+          <%= number_field_tag :amount,
+                               nil,
+                               id: "adjust-amount-#{line.rule.id}",
+                               step: 0.01,
+                               min: 0.01,
+                               required: true,
+                               placeholder: "0.00",
+                               class: "form-input w-28" %>
+        </div>
+
+        <%# LEFT BLANK ON PURPOSE, and the hint says so. "Today" has exactly one spelling in this
+            app — the controller's, read in the owner's zone — and a value rendered here would be a
+            second one, free to disagree with it on a page left open overnight.
+
+            BOUNDED BY THE ROW'S OWN SPAN (fix round 2, NEW-5). `AdjustmentForm` refuses a date the
+            rule's walk cannot count, and that 422 stays the law — a browser's `min`/`max` is not a
+            guard, since nothing stops a hand-built request. What it is is the user meeting the
+            bound before the refusal instead of after it, off the SAME `countable_span` the writer
+            reads, so the field cannot offer a day the door then rejects. %>
+        <div>
+          <%= label_tag "adjust-date-#{line.rule.id}", "On", class: "block text-xs text-gray-600 mb-1" %>
+          <%= date_field_tag :date,
+                             nil,
+                             id: "adjust-date-#{line.rule.id}",
+                             min: line.countable_span.first,
+                             max: line.countable_span.last,
+                             class: "form-input" %>
+        </div>
+      </div>
+
+      <%# THE TWO DIRECTIONS SHARE THE LINE AT 375 (mobile pass): `flex-wrap` left them at their
+          label widths — 95 and 100 of 283 — so two thirds of the row under the fields was empty
+          while each button was smaller than the finger pressing it. `flex-1` splits the row; above
+          `sm` they go back to their own widths. %>
+      <div class="flex flex-wrap gap-2">
+        <%# ** THE WORDS SPLIT ON `#allowance?` AND NOT ON `#rate?` (two-shapes §12's ruling). ** A
+            fund arrives every period and is spent from every period, so its deltas are a period
+            being topped up or reduced rather than money set aside toward a day — even though it
+            WALKS like a dated rule, which is what the hint below splits on instead. %>
+        <%= button_tag line.allowance? ? "Top up this period" : "Set aside",
+                       type: :submit,
+                       name: "amount_sign",
+                       value: "1",
+                       class: "btn btn-primary flex-1 sm:flex-none" %>
+        <%= button_tag line.allowance? ? "Reduce this period" : "Take back",
+                       type: :submit,
+                       name: "amount_sign",
+                       value: "-1",
+                       class: "btn btn-secondary flex-1 sm:flex-none" %>
+      </div>
+
+      <%# WHERE THIS RULE COUNTS, IN ITS OWN SHAPE'S WORDS (fix round 2, NEW-5). "It only changes
+          this period" was true of an envelope and FALSE of a fund: §3.2's walk sums every delta
+          from the day the rule was written, so a date months back is counted and the sentence told
+          the user it would not be. The two clauses are the same two `AdjustmentForm#reach_clause`
+          refuses in, said before the refusal rather than after it, and the date beside the accruing
+          one is `countable_span`'s own open — the same value the field's `min` carries. %>
+      <p class="text-xs text-gray-500" data-adjust-hint>
+        Today unless you pick a day.
+        <% if line.rate? %>
+          This period only, up to today.
+        <% else %>
+          Counts from <%= line.countable_span.first.strftime("%b %-d") %> to today.
+        <% end %>
+      </p>
+    <% end %>
+
+    <% if line.skippable? %>
+      <%= form_with url: adjustments_path(open: line.category.id), method: :post do %>
+        <%= hidden_field_tag :rule_id, line.rule.id %>
+        <%= hidden_field_tag :skip, "1" %>
+        <%# THE BUTTON NAMES WHAT IT WILL WRITE, WHICH IS −ACCRUED AND NOT −PLANNED (fix round
+            MED-2): a skip leaves the period accruing nothing, so on a period already topped up by
+            $50 it takes back $200 and says so. The line above says what the RULE plans and the
+            list in the row below says what has already been done to it — three figures answering
+            three questions, each labelled. %>
+        <%= button_tag "Skip this period (−#{number_to_currency(line.accrued)})",
+                       type: :submit,
+                       class: "btn btn-secondary w-full sm:w-auto",
+                       data: { adjust_skip: true } %>
+      <% end %>
+    <% end %>
+  </div>
+</details>

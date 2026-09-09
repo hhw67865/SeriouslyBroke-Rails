@@ -1,0 +1,155 @@
+<%# THE §6 IMPACT CARD. Local: `impact` — an EntryImpactPresenter, or nil before a category is
+    chosen. Rendered under the amount field on new AND edit, and re-rendered by the server whenever
+    the category changes (EntriesController#impact).
+
+    THE SPEC'S MOCKUP IS THE TARGET AND THE WHOLE OF IT:
+
+        Groceries envelope
+        $240  →  $185 left                     until Feb 19
+        ▓▓▓▓▓▓░░░░░░
+
+    NO STATUS VOCABULARY ANYWHERE ON IT (plan decision 1) — no "behind", no "on track", no band of
+    colour standing in for one, and no rule schedule: the one date printed is the period's own
+    closing edge, never an occurrence's due date. What is printed is a name, two figures, a date and
+    a bar.
+
+    THE WORDS ARE HOME'S (answers-first §3, computed-claims §2): claimed, free, spent, of. A claim
+    is money a rule speaks for where it sits — nothing was moved to put it there — so "available",
+    "distribute", "allocation" and "buffer" appear nowhere in the COPY this card renders.
+
+    "buffer" DOES SURVIVE TWICE, AS A NAME RATHER THAN AS A WORD (fix round 1 — L1): the overdraw
+    line below carries `data-app--entry--impact-target="buffer"` and `data-figure="buffer"`, which
+    are `impact_controller.js`'s handle and this suite's selector. Nothing renders either, and the
+    sentence they hang on names free money; the note at that element carries why the hook keeps the
+    old name.
+
+    EVERY FIGURE IS SERVER-RENDERED AND CORRECT ON ARRIVAL. The Stimulus controller re-reads the two
+    `data-` figures below while the user types and rewrites only the right-hand figure, the bar and
+    the overdraw half; a user with JavaScript off sees the card for the amount the form was rendered
+    with, which on edit is the entry's own. %>
+<% if impact&.render? %>
+  <% if impact.unbudgeted? %>
+    <%# THE HONEST CARD (plan decision 2). ONE shape lands here now: a category whose claim this
+        receipt cannot move, so the money comes straight out of FREE — `total − Σ claims`, the money
+        no rule has spoken for (computed-claims §2). It covers both a category that has never been
+        funded and a funded one asked about a day BEFORE its `funded_since`, which is
+        `Category#counts_spending_on?`, the app's one Ruby mirror of the ledger's own rule.
+
+        IT USED TO BE TWO SHAPES said as one sentence — no pool at all, and a pool that IS an
+        account — because an account was where the money nothing claimed sat, and nothing reserved money
+        sitting in one. The pool has gone and the date has arrived: a category can carry rules and
+        still leave THIS receipt to free money.
+
+        ** THE COPY IS REWRITTEN AND THE TWO SENTENCES IT REPLACES WERE BOTH FALSE NOW. ** "Not
+        holding money yet" described a balance that had been moved in, and no category holds money
+        under §3 — the funded ones included. "It comes out of what's available" named a recorded
+        pot of money nothing claimed, and `available` is gone with the partition (§§5-6): what is left
+        over is FREE, and it is computed rather than held. The words are Home's — claimed, free —
+        so a user reading this card and the hero on the same afternoon is reading one app.
+
+        IT POINTS AT THE BUDGET PAGE, which is where the rule that gives a category a claim is
+        written, and where the rate suggestion makes the same offer to exactly this population. %>
+    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
+         data-impact-card="unbudgeted">
+      <p class="text-sm font-medium text-gray-900" data-figure="headline">
+        Nothing claims this yet — this spending isn't budgeted.
+      </p>
+      <p class="mt-1 text-sm text-gray-600">
+        It comes straight out of what's free.
+        <%= link_to "Give it a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+      </p>
+    </div>
+  <% else %>
+    <%# `data-balance` and `data-denominator` in plain, undelimited digits (DigitsHelper.digits),
+        because `parseFloat` is what reads them and it stops at the first character it does not
+        understand: a $1,500.00 balance delimited would reach the browser as "1,500.00" and be read
+        as one dollar fifty.
+
+        `data-direction` IS GONE (plan 3, task 5). It carried +1 for a savings category and -1 for
+        everything else, so the browser never had to decide which way money moves. There is one
+        direction now — every card here describes spending, which subtracts — so the attribute would
+        be the constant -1 on every render, and a constant handed to the browser is a decision
+        nobody is making. `EntryImpactPresenter#balance_after` and `impact_controller.js` subtract. %>
+    <div class="mt-4 rounded border border-gray-200 bg-gray-50 p-4"
+         data-impact-card="<%= impact.noun %>"
+         data-app--entry--impact-target="figures"
+         data-balance="<%= impact.balance_param %>"
+         data-denominator="<%= impact.denominator_param %>">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <p class="text-sm font-medium text-gray-900" data-figure="envelope">
+          <%= impact.holding.name %> <%= impact.noun %>
+        </p>
+        <%# Omitted outright for a user who has declared no period — see #period_ends_on. A date
+            invented from the calendar month would state a boundary they never set. %>
+        <% if impact.period_ends_on.present? %>
+          <p class="text-sm text-gray-500" data-figure="period-end">
+            until <%= impact.period_ends_on.strftime("%b %-d") %>
+          </p>
+        <% end %>
+      </div>
+
+      <p class="mt-1 text-base tabular-nums text-gray-900">
+        <span data-figure="balance"><%= number_to_currency(impact.balance) %></span>
+        <span class="text-gray-400" aria-hidden="true">→</span>
+        <span class="font-semibold <%= "text-status-danger" if impact.overdrawn? %>"
+              data-app--entry--impact-target="after"
+              data-figure="balance-after"><%= number_to_currency(impact.balance_after) %></span>
+        <%# A FUND SAYS WHAT IT IS FILLING; AN ENVELOPE SAYS WHAT IS LEFT IN IT. Both are the same
+            two figures with the same arrow — only the trailing phrase differs.
+
+            ** THREE ARMS, BECAUSE A FUND'S TARGET IS WITHHELD BESIDE A SIBLING RULE (spec §10.5;
+            fix wave — MED-1). ** The figure on the left is the whole CATEGORY's claim, so "of
+            $2,400.00" against a fund sharing its category with a bill measures one against the
+            other. What is still true there is that the figure IS money built up, which is the same
+            sentence Home's row says (`$450.00 built up`, no "of").
+
+            (The other way this arm used to be reached was an UNCAPPED fund, which named no figure at
+            all; that shape is retired — two-shapes §7.) %>
+        <% if impact.fund_target.present? %>
+          <span class="text-sm text-gray-600" data-figure="target">of <%= number_to_currency(impact.fund_target) %></span>
+        <% elsif impact.fund? %>
+          <span class="text-sm text-gray-600" data-figure="target">built up</span>
+        <% else %>
+          <span class="text-sm text-gray-600">left</span>
+        <% end %>
+      </p>
+
+      <%# The bar carries no colour vocabulary: one brand fill on a grey track, at
+          balance-after ÷ what the envelope is for, clamped 0..1. An overdrawn envelope simply has
+          no bar left — the figure above says so, signed and in red, which is the same way the
+          account header prints a negative balance. %>
+      <%# OMITTED ENTIRELY when the envelope has no rules on it (see #bar?): an empty track drawn
+          beside "$240.00 left" would say "nothing left" an inch under a figure saying otherwise. %>
+      <% if impact.bar? %>
+        <div class="mt-2 h-2 w-full overflow-hidden rounded bg-gray-200">
+          <div class="h-full rounded bg-brand-dark"
+               data-app--entry--impact-target="bar"
+               data-figure="bar"
+               style="width: <%= impact.bar_percent %>%"></div>
+        </div>
+      <% end %>
+
+      <%# §6: "Overdrawing shows the envelope going negative and says the buffer can cover it" —
+          and under the computed model the sentence is a fact about ARITHMETIC rather than about a
+          second pot. §3.1: overspending drives the claim to zero and the excess reduces FREE
+          directly. So the money does not come out of a buffer that covers the difference; it comes
+          out of the money nothing has claimed, which is what free IS. The old copy named
+          "available", a recorded balance that no longer exists (§§5-6).
+
+          `buffer` IN THE TARGET AND THE HOOK IS THE JAVASCRIPT'S NAME, NOT THE COPY, and it stays:
+          `impact_controller.js` toggles this element by that name, the controller is not this
+          task's to edit, and a hook rename is a rename in two files for no user-visible gain.
+
+          BOTH STATES ARE RENDERED BY THE SERVER and the browser only toggles `hidden`, so the
+          sentence a user sees after typing is the same one the server would have printed for the
+          same figure — there is no second author of this copy. Nothing blocks: the button below
+          stays live and changes only its words. %>
+      <p class="mt-2 text-sm text-status-danger"
+         data-app--entry--impact-target="buffer"
+         data-figure="buffer"
+         <%= "hidden" unless impact.overdrawn? %>>
+        This <%= impact.noun %> goes over — the difference comes straight out of what's free.
+      </p>
+    </div>
+  <% end %>
+<% end %>

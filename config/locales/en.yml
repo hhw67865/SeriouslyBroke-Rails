@@ -29,3 +29,11 @@
 
 en:
   hello: "Hello world"
+
+  # ── THE POOL RESTRICT BLOCK IS DELETED (two-ledger spec §5, Task 8), and with it the 25-line
+  # comment that explained which two associations it spoke for. It customised Rails'
+  # `restrict_dependent_destroy` sentence for `Pool`, whose `#child_pools` and `#categories` were
+  # both `dependent: :restrict_with_error`. Neither association exists: nothing nests inside an
+  # account and no category points at one, so `Pool` restricts nothing and Rails has no refusal
+  # here left to word. The `pool` attribute names went with it — "envelopes and goals" was the
+  # product's word for `child_pools`, and there are none.

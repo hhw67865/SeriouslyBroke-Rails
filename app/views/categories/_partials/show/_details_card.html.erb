@@ -11,7 +11,7 @@
     <div class="py-3 flex justify-between">
       <dt class="text-sm font-medium text-gray-500">Color</dt>
       <dd class="text-sm text-gray-900 flex items-center">
-        <span class="w-4 h-4 rounded mr-2" style="background-color: <%= category.color || "#C9C78B" %>;"></span>
+        <span class="w-4 h-4 rounded mr-2" style="background-color: <%= category.display_color %>;"></span>
         <%= category.color || "Default" %>
       </dd>
     </div>
@@ -22,7 +22,7 @@
         <%= button_to toggle_tracked_category_path(category),
             method: :patch,
             data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-6", shared__toggle_off_value: "translate-x-1" },
-            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{category.tracked? ? "bg-brand" : "bg-gray-300"}" do %>
+            class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{category.tracked? ? "bg-brand-dark" : "bg-gray-300"}" do %>
           <span data-shared--toggle-target="thumb" class="inline-block h-4 w-4 rounded-full bg-white transition-transform <%= category.tracked? ? "translate-x-6" : "translate-x-1" %>"></span>
         <% end %>
       </dd>

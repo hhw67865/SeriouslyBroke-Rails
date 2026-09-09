@@ -1,17 +1,26 @@
 # frozen_string_literal: true
 
+# WHAT WENT WITH THE CAP ERA (plan 3, task 4, decision 6), each grepped callerless over
+# `app lib db/seeds.rb config` after the change:
+#
+# * `#period_budget_label` — "Monthly Budget" / "YTD Budget", the label on the two stat cards that
+#   printed the sum of a user's category caps.
+# * `#budget_line_series` — the flat/accumulating "Budget" line drawn across the expenses chart.
+# * `#months_in_range` — a monthly cap multiplied out across a YTD range, and nothing else.
+# * `#budget_status` / `#budget_status_color` — "On track" / "Over budget" / "Budget exceeded" off
+#   a percentage-of-cap. These went callerless one task earlier, when the category page's capped
+#   arm was deleted; they are swept up here with the family they belonged to.
+#
+# AND WHAT WENT WITH THE SAVINGS CATEGORY (task 5): `#savings_evolution_series`, the running-total
+# line on the category page's savings arm — one reader, deleted with that arm — and
+# `#period_amount_label`'s `:savings` case, which returned "Monthly Contribution".
 module CategoriesHelper
   # Period-aware label helpers to reduce view conditionals
-  def period_budget_label
-    current_period == :ytd ? "YTD Budget" : "Monthly Budget"
-  end
-
   def period_amount_label(category_type)
     prefix = current_period == :ytd ? "YTD" : "Monthly"
     case category_type.to_sym
     when :expense then "#{prefix} Budget"
     when :income then "#{prefix} Income"
-    when :savings then "#{prefix} Contribution"
     end
   end
 
@@ -27,77 +36,11 @@ module CategoriesHelper
     current_period == :ytd ? "this year" : "this month"
   end
 
-  def budget_status(percentage)
-    case percentage
-    when (111..) then "Budget exceeded"
-    when (101..110) then "Over budget"
-    else "On track"
-    end
-  end
-
-  def budget_status_color(percentage)
-    case percentage
-    when (111..) then "bg-status-danger"
-    when (101..110) then "bg-status-warning"
-    else "bg-brand"
-    end
-  end
-
-  # Cache-key component for views that render prorated budget pace.
-  # Returns Date.current when the selected month includes today or is in the
-  # future (so the daily ramp value changes), nil otherwise.
-  def pace_cache_key(selected_date)
-    selected_date.end_of_month >= Date.current ? Date.current : nil
-  end
-
-  # Calculate number of months in a date range (inclusive)
-  def months_in_range(range)
-    first_date = range.first
-    last_date = range.last
-    ((last_date.year - first_date.year) * 12) + (last_date.month - first_date.month) + 1
-  end
-
   def calculate_running_total(data_hash)
     total = 0
     data_hash.each_with_object({}) do |(date, amount), result|
       total += amount
       result[date] = total
-    end
-  end
-
-  def budget_line_series(amount, range, group: :day)
-    if group == :month
-      # For YTD view, show accumulated budget per month
-      current_date = range.begin.beginning_of_month
-      end_date = range.end
-      accumulated = 0
-      result = {}
-
-      while current_date <= end_date
-        accumulated += amount
-        result[current_date] = accumulated
-        current_date = current_date.next_month
-      end
-
-      result
-    else
-      # Daily view - flat line at budget amount
-      range.index_with { amount }
-    end
-  end
-
-  def savings_evolution_series(category, range)
-    # Calculate total savings before the start of the range
-    initial_balance = category.entries.where(date: ...range.begin).sum(:amount)
-
-    # Get monthly sums within the range (Groupdate handles ordering with range option)
-    monthly_data = category.entries.group_by_month(:date, range: range, default_value: 0).sum(:amount)
-
-    # Accumulate
-    current_total = initial_balance
-    monthly_data.each_with_object({}) do |(date, amount), result|
-      current_total += amount
-      result[date] = current_total
     end
   end
 end

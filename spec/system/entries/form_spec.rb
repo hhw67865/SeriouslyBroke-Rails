@@ -36,6 +36,75 @@ RSpec.describe "Entries Forms", type: :system do
     labels.each { |label| click_button(label) }
   end
 
+  # ** AN OPENING RECORD'S EDIT SCREEN IS ITS OWN FORM, AND IT BINDS NO CONTROLLERS (account-openings
+  # fix round 2 — item 2). ** `entries/_form` binds three — `app--entry--form` (the two TomSelects),
+  # `app--entry--impact` and `app--entry--routing` — and every one of them reaches for a target that
+  # is not on the page once the category, item and amount are read-only. The first draft of this fix
+  # left the routing controller bound with its `field` target gone, and changing the category threw
+  # "Missing target" into the console on a page that otherwise looked fine.
+  describe "an opening record's form", :aggregate_failures do
+    let!(:checking) { create(:pool, :account, user: user, name: "Checking") }
+
+    def opening_entry
+      raise "the opening was refused" unless AccountOpening.new(user, checking, balance: "500").save
+
+      Entry.find_by!(opening_account_id: checking.id)
+    end
+
+    # THE CONSOLE ITSELF, which is the only place this class of failure shows: a Stimulus error stops
+    # that controller and leaves the rest of the page working, so no assertion about the DOM would
+    # ever have caught it. SEVERE only — Chrome logs its own warnings at lower levels and a spec that
+    # failed on those would fail for reasons nothing in this app can fix.
+    #
+    # ** THE BUFFER IS DRAINED IMMEDIATELY BEFORE THE VISIT (fix round 3 — R4), AND THE READ IS
+    # DESTRUCTIVE, WHICH IS THE POINT. ** `logs.get(:browser)` empties what it returns, but the
+    # buffer belongs to the chromedriver SESSION and outlives Capybara's `reset_sessions!`: anything
+    # logged by a page this example did not visit — the sign-in redirect, a previous example's screen
+    # — would arrive in this example's read and be blamed on this page. Draining after the sign-in
+    # and before the visit makes the assertion about THIS page and nothing else.
+    it "loads with no error in the browser console" do
+      entry = opening_entry
+      visit entries_path
+      page.driver.browser.logs.get(:browser)
+
+      visit edit_entry_path(entry)
+      expect(page).to have_content("Opening balance")
+
+      severe = page.driver.browser.logs.get(:browser).select { |line| line.level == "SEVERE" }
+
+      expect(severe.map(&:message)).to be_empty
+    end
+
+    # WHAT THE SCREEN SAYS AND WHAT IT REFUSES TO ASK. The four read-only facts are the record; the
+    # door to changing them is the account's own card on Home.
+    it "shows the record and offers no picker for it" do
+      entry = opening_entry
+
+      visit edit_entry_path(entry)
+
+      expect(page).to have_content("Opening balance for Checking")
+      expect(page).to have_link(Entry::OPENING_DOOR, href: root_path)
+      expect(page).to have_no_select("category_id")
+      expect(page).to have_no_select("entry[destination_account_id]")
+      expect(page).to have_no_field("Amount")
+      expect(page).to have_no_css("[data-controller*='app--entry--routing']")
+    end
+
+    # AND IT IS STILL A FORM: the date and the description are editable, and saving them leaves the
+    # record's two rows exactly where they were.
+    it "still saves a description without touching the record" do
+      entry = opening_entry
+
+      visit edit_entry_path(entry)
+      fill_in "Description", with: "How I set this up"
+      click_button "Update Entry"
+
+      expect(page).to have_content("Entry was successfully updated")
+      expect(entry.reload.description).to eq("How I set this up")
+      expect(entry.amount).to eq(500)
+    end
+  end
+
   describe "New Entry Form" do
     before { visit new_entry_path }
 
@@ -68,16 +137,15 @@ RSpec.describe "Entries Forms", type: :system do
         expect(page).to have_select("category_id", selected: "Select a category")
       end
 
-      it "groups categories by type" do
-        create(:category, user: user, name: "Vacation Fund", category_type: :savings)
-
+      # TWO GROUPS, NOT THREE (plan 3, task 5) — the picker's optgroups are the category types.
+      it "groups categories by type", :aggregate_failures do
         visit new_entry_path
         find("#category_id-ts-control").click
 
         within("#category_id-ts-dropdown") do
           expect(page).to have_css(".optgroup-header", text: /expenses/i)
           expect(page).to have_css(".optgroup-header", text: /incomes/i)
-          expect(page).to have_css(".optgroup-header", text: /savings/i)
+          expect(page).to have_no_css(".optgroup-header", text: /savings/i)
         end
       end
 

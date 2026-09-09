@@ -1,0 +1,58 @@
+<%# ▲▼ — the give-way order without JavaScript. Locals: `group`, `groups`.
+
+    TWO PLAIN FORMS, not two Stimulus actions, and that is the point of them: each button already
+    carries the whole order as hidden `category_ids[]` fields, so the reorder works with scripting
+    off and is testable without synthesising drag events. reorder_controller does the same thing
+    from the DOM when a card is dropped; both submit one shape to one endpoint.
+
+    Named, not just glyphed: `Capybara.enable_aria_label` is on, and "Move Groceries up" is also
+    what a screen reader has to hear — a button whose only text is ▲ says nothing about what
+    moves or where.
+
+    ** WHAT THE ARROWS SET IS THE TIE-BREAK INSIDE A TYPE (rules-own-the-budget spec §3), which is
+    what the instruction above the list says — see `show.html.erb`, which carries that sentence since
+    `_fill_order.html.erb` was folded into the row. The type itself is set on the rule, not here —
+    every choice rule gives way before any usage rule whatever these arrows say — so moving a card
+    changes the order among rules of the SAME kind. The title below says as much, because a control
+    whose effect a user has to infer from a paragraph is a control they will infer wrongly.
+
+    ** AND THE LIST IS DRAWN IN THE ORDER THESE BUTTONS WRITE (fix round MAJOR-1). ** For one commit
+    it was drawn in give-way order, type first, and these arrows could not reach the first key at
+    all: moving a card produced the same order under a flash saying it had changed, and moved a
+    different category's priority.
+
+    THE LIST BAKED IN HERE IS AS OLD AS THE PAGE, and that is the accepted cost of the two
+    builders: a button pressed after a rule was added or deleted in another tab submits a set
+    that is no longer the user's `in_fill_order.with_a_rule` set, and `Category.apply_fill_order`
+    refuses it whole. The stale press writes nothing and says to reload, which is the same answer
+    a stale drag gets — no half-order is reachable from either. %>
+<%# THE TARGET IS 44px SQUARE AND THE DISABLED STATE IS VISIBLE (design review M4).
+
+    It was `px-1 text-xs` — a control roughly 18×16, which is under half the 44px minimum and sits
+    a few pixels from its twin, on the one screen in this app that asks a user to press the same
+    button repeatedly. The glyph stays small; the BOX grew, which is the whole fix.
+
+    DISABLED WAS `text-gray-200` ON WHITE — 1.2:1, invisible. A disabled control still has to be
+    findable: a user who cannot see the top card's ▲ cannot tell "already first" from "the arrows
+    stopped working". Grey-500 on a grey-100 fill is 4.2:1, and the FILL rather than a paler glyph
+    is what tells it apart from the enabled state, so neither reading depends on colour alone. %>
+<%# ** STACKED AT 375, SIDE BY SIDE ABOVE IT (mobile pass, 2026-09-06). ** Two 44px targets in a row
+    are 92px of a 343px card, and that width came out of the category's NAME — see the marker on
+    `_category_row`. A column of ▲ over ▼ is 44px wide, spans the row's two lines, and is the
+    direction the arrows mean anyway. %>
+<span class="flex flex-col items-center gap-1 shrink-0 md:flex-row">
+  <% { -1 => ["▲", "up"], 1 => ["▼", "down"] }.each do |offset, (glyph, direction)| %>
+    <%= button_to glyph,
+                  budget_page_reorder_path,
+                  method: :patch,
+                  params: { category_ids: reordered_category_ids(groups, group, offset) },
+                  disabled: reorder_edge?(groups, group, offset),
+                  form_class: "inline-block leading-none",
+                  aria: { label: "Move #{group.category.name} #{direction}" },
+                  title: "Move #{group.category.name} #{direction} — within each type, the highest number gives way first",
+                  class: "inline-flex h-11 w-11 items-center justify-center text-xs rounded " \
+                         "border border-gray-200 text-gray-700 transition-colors " \
+                         "enabled:hover:text-gray-900 enabled:hover:border-gray-400 " \
+                         "disabled:bg-gray-100 disabled:text-gray-500 disabled:border-gray-200" %>
+  <% end %>
+</span>

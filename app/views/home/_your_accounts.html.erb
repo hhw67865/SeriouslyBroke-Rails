@@ -1,0 +1,69 @@
+<%# ** "YOUR ACCOUNTS" — ONE CARD, ONE QUESTION PER ACCOUNT (account-openings spec §3). ** It was
+    `_new_account.html.erb`, the add-account card, and it has absorbed the two onboarding steps that
+    used to follow it: `_fund_account.html.erb` (a movement from main per account) and
+    `_opening_balance.html.erb` (the one-time main correction) are DELETED. Henry, 2026-09-06:
+
+      > "Not many people are going to know how much TOTAL money they have and then divide it all off.
+      > Instead they just want to put in what their accounts are currently worth. The fact you have
+      > to get the ordering exactly right is bad user experience."
+
+    So the card is a LIST OF ROWS — every account that has not yet said what it holds, each with its
+    own field and its own Save — and the order they are saved in changes nothing (`AccountOpening`
+    makes every save self-contained). The rows disappear one by one; when the last one goes the card
+    is the add row alone, and onboarding is over without anything having announced itself.
+
+    ADDING AN ACCOUNT ASKS BOTH THINGS AT ONCE, because for the user they are one act: a name and
+    what is in it. The balance is optional — "I don't know yet" is a real answer and leaves the
+    account a row of its own above.
+
+    Locals: `presenter` (HomePresenter), `bank_account` (an unsaved account-type Pool, or the
+    rejected one with its errors when BankAccountsController re-renders this screen at 422),
+    `balance` (the figure typed into the add row when that 422 was about the balance rather than the
+    name). %>
+<section class="bg-white border border-gray-200 rounded" aria-labelledby="your-accounts-heading"
+         data-accounts-onboarding>
+  <div class="px-6 py-3 border-b border-gray-200">
+    <h3 id="your-accounts-heading" class="text-sm font-semibold text-gray-900">Your accounts</h3>
+  </div>
+
+  <%# THE ROWS, ONE PER UNANSWERED ACCOUNT. `#onboarding_accounts` is the one place the split between
+      "still to answer" and "finished" is made, so an account cannot both hold a row here and render
+      its card inside the accounts line below. %>
+  <% presenter.onboarding_accounts.each do |account| %>
+    <div class="border-b border-gray-200">
+      <%= render "opening_row",
+          account: account,
+          name: account.name,
+          url: bank_account_opening_path(account),
+          method: :post,
+          value: presenter.rejected_opening_for(account)&.typed,
+          data: { account_row: account.name } %>
+    </div>
+  <% end %>
+
+  <%= simple_form_for bank_account, as: :bank_account, url: bank_accounts_path do |f| %>
+    <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
+      <div class="flex-1">
+        <%= f.input :name,
+            label: "Account name",
+            placeholder: "e.g., Ally Savings",
+            hint: "Add every account your income reaches." %>
+      </div>
+      <div class="flex-1">
+        <%# NO `min` ON THIS ONE, and it is the only field on the screen without one: the FIRST
+            account a user adds becomes their main account, and an overdrawn checking account is a
+            fact (spec §4). `AccountOpening` refuses a negative for anyone else. %>
+        <%= f.input :balance,
+            as: :decimal,
+            label: "What's in it right now",
+            placeholder: "0.00",
+            required: false,
+            input_html: { step: 0.01, value: balance },
+            hint: "Optional — you can say later." %>
+      </div>
+      <div class="sm:pt-7">
+        <%= f.button :submit, "Add an account", class: "btn btn-primary" %>
+      </div>
+    </div>
+  <% end %>
+</section>

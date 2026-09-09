@@ -1,43 +1,86 @@
 <%= simple_form_for(category) do |f| %>
-  <%= f.error_notification %>
-  <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
+  <%# ONE MESSAGE BLOCK, WHERE THERE WERE TWO (design review H3). This used to render
+      `f.error_notification` and then a SECOND notification carrying the `:base` sentence — two
+      identical red panels stacked, the top one saying "please review the problems below" and the
+      one below it naming a rule the user had not broken. A user reading downwards met the vaguer
+      of the two first and the wrong one second.
+
+      THE BASE ERRORS ARE THE MESSAGE WHEN THERE ARE ANY, because a `:base` error is by definition
+      the one thing on this form with no field of its own to print under — and the generic pointer
+      otherwise, because every remaining error IS printed under its own control (including
+      `category_type`, whose tiles now take the red border below). %>
+  <% if category.errors.any? %>
+    <% summary = category.errors[:base].presence&.to_sentence ||
+                 "Please fix the highlighted fields and try again." %>
+    <%= f.error_notification message: summary %>
+  <% end %>
 
   <div data-controller="app--category--form">
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
         <h2 class="text-xl font-semibold mb-4">Basic Information</h2>
         
-        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation Fund" %>
+        <%# "Vacation Fund" WAS THE RETIRED NOUN IN A PLACEHOLDER (fix round 2 — MED-6). A fund is a
+            RULE with an amount and a day, not a kind of category, and a form that suggests naming a
+            category after one is teaching the shape this task deleted. %>
+        <%= f.input :name, placeholder: "e.g. Groceries, Salary, Vacation" %>
 
         <div class="space-y-2 mt-5">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <%# TWO TYPES, TWO TILES (plan 3, task 5). `Category.category_types` drives the loop, so
+              the savings tile disappeared with the enum value; the grid closes at two rather than
+              leaving a third of the row empty.
+
+              THE TILES SAY WHICH ONE IS CHOSEN, AND SAY WHEN NEITHER IS (design review H2). Three
+              things were missing and all three are the same defect — a control the eye cannot
+              read the state of:
+
+                * CHECKED. The ring was `border-brand`, the brand sage, which is 1.39:1 against a
+                  white card: a 2px border nobody can see is not a selection indicator.
+                  `border-brand-dark` is the same olive four steps down and reads at a glance.
+                * FOCUSED. The real radio is `sr-only`, so a keyboard user tabbing through this
+                  form moved between two tiles with nothing on screen changing at all. The ring is
+                  drawn on the tile by custom.css's `.sr-only:focus-visible + .category-type-option`
+                  — the tile is the input's next sibling, which is why the two must stay adjacent.
+                * INVALID. A blank type printed its message under the grid and left the grid
+                  itself looking untouched, so the sentence pointed at nothing.
+
+              `category-type-icon` AND `category-type-text` ARE LOAD-BEARING CLASSES, not styling.
+              form_controller.js reaches for them with `querySelector` when a tile is clicked;
+              without them its icon and label updates found nothing and half the checked treatment
+              was applied by Ruby on first render and never again. Measured in the browser. %>
+          <% type_invalid = category.errors[:category_type].any? %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <% Category.category_types.keys.each do |type| %>
               <div>
                 <label class="cursor-pointer flex flex-col">
                   <div class="relative">
-                    <%= f.radio_button :category_type, 
-type, 
-                                      class: "sr-only", 
-                                      data: { 
+                    <%= f.radio_button :category_type,
+type,
+                                      class: "sr-only",
+                                      data: {
                                         action: "change->app--category--form#selectCategoryType"
                                       } %>
                     <div class="w-full border-2 rounded p-4 transition-all flex flex-col items-center category-type-option
-                              <%= f.object.category_type == type ? "border-brand bg-brand-light" : "border-gray-200 hover:border-gray-300" %>"
+                              <%= if f.object.category_type == type
+                                    "border-brand-dark bg-brand-light"
+                                  elsif type_invalid
+                                    "border-status-danger hover:border-gray-300"
+                                  else
+                                    "border-gray-200 hover:border-gray-300"
+                                  end %>"
                         data-type="<%= type %>"
                         data-app--category--form-target="categoryTypeOption">
-                      <div class="w-10 h-10 rounded-md flex items-center justify-center mb-2 
-                                <%= f.object.category_type == type ? "bg-brand" : "bg-gray-200" %>"
+                      <div class="category-type-icon w-10 h-10 rounded flex items-center justify-center mb-2
+                                <%= f.object.category_type == type ? "bg-brand-dark" : "bg-gray-200" %>"
                            data-app--category--form-target="categoryTypeIcon">
                         <% case type %>
                         <% when "expense" %>
                           <%= heroicon "arrow-trending-down", options: { class: "h-5 w-5 text-white" } %>
                         <% when "income" %>
                           <%= heroicon "arrow-trending-up", options: { class: "h-5 w-5 text-white" } %>
-                        <% when "savings" %>
-                          <%= heroicon "banknotes", options: { class: "h-5 w-5 text-white" } %>
                         <% end %>
                       </div>
-                      <span class="text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"
+                      <span class="category-type-text text-sm font-medium <%= f.object.category_type == type ? "text-gray-900" : "text-gray-700" %>"
                             data-app--category--form-target="categoryTypeText">
                         <%= type.capitalize %>
                       </span>
@@ -47,9 +90,109 @@ type,
               </div>
             <% end %>
           </div>
-          <% if category.errors[:category_type].any? %>
-            <p class="form-error"><%= category.errors[:category_type].first %></p>
+          <% if type_invalid %>
+            <p class="form-error">Category type <%= category.errors[:category_type].first %></p>
           <% end %>
+        </div>
+
+      </div>
+    </div>
+
+    <%# WHAT CLAIMS THIS CATEGORY'S MONEY (computed-claims spec §2-§4). This block REPLACES the pool
+        picker — "Where this money lives", a grouped select over every pool the user owned — which
+        is gone with the layer it named.
+
+        ** TWO COLUMNS NOW, WHERE THERE WERE THREE (rules-own-the-budget spec §5/§7). ** Nothing is
+        held any more (§5), so this section is not about money put somewhere: it is about WHEN a
+        category's rules start claiming, and WHO gives way when the claims outrun the money. The
+        third — the category's own target — is gone, because how much a category is saving toward is
+        a fact about a RULE and is set on the rules form; the tombstone below carries the whole
+        argument.
+
+        BOTH ARE USER-EDITABLE, which §4 requires of `funded_since` and which `priority` has always
+        needed: it was seed data with no writer in the app until the Budget page's drag handle.
+
+        THEY ARE SHOWN FOR EVERY TYPE, not just expenses, for the reason the pool picker was: the
+        type is switched CLIENT-SIDE on this same form, so fields that appeared and vanished under
+        the user would be worse than the legible 422 `Category#holding_columns_are_sane` gives for
+        a funding start on an income category. %>
+    <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
+      <div class="p-6">
+        <h2 class="text-xl font-semibold mb-4">Claiming money</h2>
+
+        <p class="text-sm text-gray-500 mb-5" data-holding-intro>
+          An expense category's rules start claiming money once it has a funding start. Until then
+          nothing claims its spending, and that spending comes straight out of what's free to spend.
+        </p>
+
+        <%# ** THE TARGET FIELD IS DELETED (rules-own-the-budget spec §5/§7). ** It wrote the
+            CATEGORY's own target column, and the hint below it promised that a figure here switched
+            the category's undated rules from use-it-or-lose-it to an accrual that carries. That
+            promise stopped being true the moment the shapes moved onto the rule, and the column is
+            dropped: a category target changed no claim, no bar and no figure — a control that wrote
+            a column nothing read, with a sentence beside it saying otherwise.
+
+            WHERE IT WENT: the rules form's "When is it needed?" radio and the Due date it reveals
+            (two-shapes §5), which is the same question asked of the record that answers it. A goal
+            is a rule with an amount and a day; it is not a kind of category, and this form is name,
+            colour, type and give-way order. The rule-side pair that briefly held the figure — a
+            carry-over flag and a separate target — is dropped too, by `TwoShapes` (§6). %>
+
+        <%# ** PRIORITY IS THE GIVE-WAY ORDER NOW (§4). ** It used to name a position in the
+            distribution waterfall — "lower is funded first" — and there is no distribution to be
+            first in (§6). What survives is the harder half of the same idea: when Σ claims outruns
+            the user's money, `free` goes below zero, and Home's trouble strip walks
+            `HomePresenter#uncovered_claims` in REVERSE priority order, naming the claims nothing
+            covers. So the highest number gives way first and the lowest is the last one standing,
+            which is the same ranking read from the other end.
+
+            ** THE TYPE DECIDES BEFORE THIS NUMBER DOES (rules-own-the-budget spec §3). ** Every
+            rule carries one — bill, usage, choice — and `HomePresenter#give_way_order` sorts on it
+            FIRST, so every choice rule in the app gives way before any usage rule whatever the
+            priorities say. What this column ranks is the categories WITHIN a type, which is the
+            half a single number could ever have answered honestly.
+
+            THE TIE-BREAK IS UNCHANGED and still worth saying: a number typed in this box may tie
+            with another category's, and the LATER name gives way first. The Budget page's drag
+            handle (`Category.apply_fill_order`) is the other writer of this column.
+
+            ** THE DIRECTION IS SAID WITH THE NUMBER, HERE AND ON THE BUDGET PAGE ALIKE (fix round 1
+            — LOW-11). ** That page's instruction used to say "lower rules give way first", which
+            means a lower NUMBER here and a lower CARD there — opposite directions in one word. One
+            phrasing on both, and it is this one, because the number is what both controls write. %>
+        <div class="mt-5">
+          <%= f.input :priority,
+              as: :integer,
+              label: "Give-way order",
+              input_html: { min: 0, step: 1 },
+              hint: "Who gives way when your rules claim more than you have. A rule's type goes " \
+                    "first — choice, then usage, then bills — and within each type, the highest " \
+                    "number gives way first, so a lower number is the one that keeps its money. " \
+                    "Ties are broken by name. You can also drag the order on the Budget page." %>
+        </div>
+
+        <%# ** THE FUNDING START, AND IT ANCHORS BOTH HALVES OF THE CLAIM (§3.2). ** It is
+            `ClaimCalculator#accrual_start`'s first term — the period the accrual walk opens in, so
+            no rule ever accrues retroactively — and it is the date `Entry.draining` compares every
+            receipt against, so spending before it counts against no rule at all. Changing it
+            therefore re-reads history in BOTH directions, which is what the hint has always said
+            and is now true of two sums rather than one.
+
+            THE REFUSAL THE OLD HINT WARNED ABOUT IS GONE with the money it protected.
+            `Category#money_may_not_be_stranded` rejected a cleared date while the category still
+            HELD allocations, because they would sit where no reader could see them. Nothing is
+            held, and a category with no funding start claims exactly zero by the formula — so
+            clearing this field strands nothing and the form refuses nothing. What it does do is
+            stated instead, because it is the consequence a user meets otherwise. %>
+        <div class="mt-5">
+          <%= f.input :funded_since,
+              as: :date,
+              html5: true,
+              label: "Claiming since",
+              hint: "The day this category's rules start claiming. They build up from this date " \
+                    "onward and never before it, and spending here counts against them from this " \
+                    "date onward — so changing it moves history in both directions. Clear it and " \
+                    "the category claims nothing at all." %>
         </div>
       </div>
     </div>
@@ -71,9 +214,11 @@ color,
                                     data: { 
                                       action: "change->app--category--form#selectColor"
                                     } %>
-                  <div class="h-10 w-10 rounded-md border-2 transition-all
+                  <%# The swatch is the input's next sibling — custom.css draws the keyboard ring
+                      on it, the same arrangement as the type tiles above. %>
+                  <div class="h-10 w-10 rounded border-2 border-gray-200 transition-all
                             <%= f.object.color == color ? "ring-2 ring-offset-2 ring-gray-700" : "hover:opacity-90" %>"
-                       data-color="<%= color %>" 
+                       data-color="<%= color %>"
                        data-app--category--form-target="colorOption"
                        style="background-color: <%= color %>;"></div>
                 </label>
@@ -84,13 +229,15 @@ color,
           <div class="mt-3 text-center">
             <span class="inline-flex items-center gap-2">
               <span class="text-sm font-medium text-gray-700">Selected:</span>
-              <span 
+              <%# `#display_color`, not `color ||` — see Category::DEFAULT_COLOR for why the
+                  difference is a blank chip rather than a nicety. %>
+              <span
                 class="h-6 w-6 rounded inline-block border"
                 data-app--category--form-target="selectedColorPreview"
-                style="background-color: <%= f.object.color || "#C9C78B" %>;">
+                style="background-color: <%= f.object.display_color %>;">
               </span>
               <code class="text-sm bg-gray-100 px-2 py-1 rounded" data-app--category--form-target="selectedColorCode">
-                <%= f.object.color || "#C9C78B" %>
+                <%= f.object.display_color %>
               </code>
             </span>
           </div>

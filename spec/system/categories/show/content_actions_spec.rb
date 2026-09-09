@@ -10,10 +10,11 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
   describe "expense category", :aggregate_failures do
     let!(:category) { create(:category, category_type: "expense", user: user, name: "Food") }
 
-    before do
-      create(:budget, category: category, amount: 1000)
-      visit category_path(category)
-    end
+    # The cap this planted (`create(:budget, category: …)`) is deleted with the shape, and the
+    # summary card's "Monthly Budget" arm went with it: the card says what the category spent and
+    # what that spending counts against (computed-claims Task 4 — its own rules' claims, or nothing
+    # at all, in which case it comes straight out of what's free to spend).
+    before { visit category_path(category) }
 
     it "shows key sections and expense summary" do
       expect(page).to have_content("Food")
@@ -22,7 +23,8 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
       expect(page).to have_content("Items This Month")
       expect(page).to have_content("Details")
       expect(page).to have_content("Recent Activity")
-      expect(page).to have_content("Monthly Budget")
+      expect(page).to have_content("Spent this month")
+      expect(page).to have_no_content("Monthly Budget")
     end
 
     it "navigates with Edit button" do
@@ -71,19 +73,27 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
     end
   end
 
-  describe "savings category", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Main Pool") }
-    let!(:category) { create(:category, category_type: "savings", user: user, name: "Emergency Fund", savings_pool: pool) }
+  # A FUND IS A CATEGORY WITH A RULE SAVING TOWARD A DAY (two-shapes spec §2). This described a
+  # category POINTING AT a savings pool — the shape the pool layer made possible — and the pool is
+  # gone. The claim worth keeping is the noun one, and the noun itself has moved twice: "goal" named
+  # a kind of CATEGORY, then a rule whose unspent money built up, and it is a rule with a DATE now.
+  # So the fixture plants the rule, not a figure on the record.
+  describe "a category saving toward a day", :aggregate_failures do
+    let!(:category) do
+      create(:category, :expense, :funded, user: user, name: "Emergency Fund").tap do |fund|
+        create(:budget, :by_date, category: fund, amount: 2_000)
+      end
+    end
 
     before { visit category_path(category) }
 
-    it "shows key sections and savings summary" do
+    it "shows key sections and the fund's one noun" do
       expect(page).to have_content("Emergency Fund")
-      expect(page).to have_content("Savings category details and management")
+      expect(page).to have_content("Expense category details and management")
       expect(page).to have_content("Summary")
-      expect(page).to have_content("Monthly Contribution")
-      expect(page).to have_content("Savings Pool")
-      expect(page).to have_content("Main Pool")
+      expect(page).to have_content("Fund")
+      expect(page).to have_no_content("Savings Pool")
+      expect(page).to have_no_content("Goal")
     end
 
     it "navigates with Edit button" do
@@ -96,7 +106,7 @@ RSpec.describe "Categories Show - Content & Actions", type: :system do
 
       accept_confirm { click_button "Delete" }
 
-      expect(page).to have_current_path(categories_path(type: "savings"))
+      expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content("Category was successfully deleted")
       expect(page).not_to have_content(category.name)
       expect(Category.exists?(category.id)).to be(false)

@@ -18,7 +18,7 @@ This document serves as a comprehensive reference for how tests should be writte
 The system test structure mirrors your web application's pages. Each **web page** gets its own folder, then we divide tests by **page sections** to keep them focused and manageable.
 
 **Grouping Strategy:**
-- **By Model/Feature**: `categories/`, `items/`, `savings_pools/` 
+- **By Model/Feature**: `categories/`, `items/`, `pools/` 
 - **By App Section**: `dashboard/`, `reports/`, `admin/`
 - **Special Cases**: `authentication/` (can be single file if simple)
 
@@ -1151,7 +1151,7 @@ describe "search with type filtering" do
   before do
     # Background data that won't be directly referenced
     create(:category, name: "Freelance Tools", category_type: "expense", user: user)
-    create(:category, name: "Freelance Savings", category_type: "savings", user: user)
+    create(:category, name: "Freelance Tooling", category_type: "expense", user: user)
     
     visit categories_path(type: "income")
   end
@@ -1168,23 +1168,23 @@ end
 
 **✅ Good: Background Data in before Block**
 ```ruby
-describe "search by category" do
+describe "search by name" do
   # ✅ Main subjects are referenced by name
-  let!(:emergency_fund) { create(:savings_pool, user: user, name: "Emergency Fund") }
-  let!(:vacation_fund) { create(:savings_pool, user: user, name: "Vacation Fund") }
-  
+  let!(:emergency_fund) { create(:category, :expense, :funded, user: user, name: "Emergency Fund") }
+  let!(:vacation_fund) { create(:category, :expense, :funded, user: user, name: "Vacation Fund") }
+
   before do
     # ✅ Background data not referenced by variable name
-    create(:category, user: user, name: "Home Savings", savings_pool: emergency_fund)
-    create(:category, user: user, name: "Travel Budget", savings_pool: vacation_fund)
-    visit savings_pools_path
+    create(:item, category: emergency_fund, name: "Home Savings")
+    create(:item, category: vacation_fund, name: "Travel Budget")
+    visit categories_path(type: "expense")
   end
-  
-  it "finds savings pools by category name" do
-    fill_in "q", with: "Home"
+
+  it "finds savings categories by name" do
+    fill_in "q", with: "Emergency"
     find("input[name='q']").send_keys(:return)
-    
-    # Using the let! objects, not the category variables
+
+    # Using the let! objects, not the item variables
     expect(page).to have_content(emergency_fund.name)
     expect(page).not_to have_content(vacation_fund.name)
   end
@@ -1210,9 +1210,9 @@ end
 **❌ Avoid: Setup Data as let! When Not Referenced**
 ```ruby
 describe "search by category" do
-  let!(:emergency_fund) { create(:savings_pool, name: "Emergency Fund") }
-  let!(:home_category) { create(:category, name: "Home Savings", savings_pool: emergency_fund) }
-  let!(:travel_category) { create(:category, name: "Travel Budget", savings_pool: vacation_fund) }
+  let!(:emergency_fund) { create(:pool, name: "Emergency Fund") }
+  let!(:home_category) { create(:category, name: "Home Savings", pool: emergency_fund) }
+  let!(:travel_category) { create(:category, name: "Travel Budget", pool: vacation_fund) }
   
   # ❌ home_category and travel_category are never referenced by name
   

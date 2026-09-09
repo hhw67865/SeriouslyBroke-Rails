@@ -75,14 +75,12 @@ RSpec.describe Item, type: :model do
     let(:categories) do
       {
         expense: create(:category, category_type: :expense, user: user),
-        income: create(:category, category_type: :income, user: user),
-        savings: create(:category, category_type: :savings, user: user, savings_pool: create(:savings_pool, user: user))
+        income: create(:category, category_type: :income, user: user)
       }
     end
 
     let!(:expense_item) { create(:item, category: categories[:expense]) }
     let!(:income_item) { create(:item, category: categories[:income]) }
-    let!(:savings_item) { create(:item, category: categories[:savings]) }
 
     describe ".expenses" do
       it "returns only items from expense categories" do
@@ -96,10 +94,8 @@ RSpec.describe Item, type: :model do
       end
     end
 
-    describe ".savings" do
-      it "returns only items from savings categories" do
-        expect(described_class.savings).to contain_exactly(savings_item)
-      end
+    it "does not answer .savings at all" do
+      expect(described_class).not_to respond_to(:savings)
     end
   end
 end

@@ -1,0 +1,202 @@
+<%# ** ONE CATEGORY, EXPANDED (two-shapes spec §4). ** Locals: `row` (CategoryRow), `presenter`.
+
+    Henry, 2026-09-05: "Expanded should just show all rules and suggestions. The new rule thing
+    should be a form we go to." Three things, in that order — the rules table, what the entries
+    suggest for THIS category, and one button to write another rule.
+
+    ** THE RULES TABLE IS `ClaimLine`, WHICH IS HOME'S OWN ROW (this task's carry (b)). ** It used
+    to be `BudgetPagePresenter::Rule` rendered through `#claim_figure`/`#claim_schedule`, a second
+    set of words for one fact — this row said `$450.00 built up of $1,200.00 · next due Mar 1` where
+    Home said `$450.00 of $1,200.00 · Mar 1 · +$200.00`. One row type, one vocabulary
+    (`shape_words` / `figure_words` / `when_words`), three screens.
+
+    THE STICKER IS GONE FROM THE ROW and the shape clause carries what it was for. It printed
+    `$1,200.00 every 6 months` beside the claim's own figure, which on a dated rule repeated the
+    target inside the same sentence; `bill · every 6 months` says the schedule without saying the
+    money twice, and the Edit form is one click away for the declaration itself. %>
+<div class="p-4 space-y-5" data-category-panel="<%= row.name %>">
+  <% if row.ruled? %>
+    <div data-rules-table>
+      <%# THE HEADER ROW IS THE TABLE'S ONLY LABELS, and it is hidden below `sm` with the bar: at
+          375 the row is stripe · name · figure · when, which reads without headings. %>
+      <div class="hidden sm:flex items-baseline gap-3 px-1 pb-1 text-xs uppercase tracking-wide text-gray-400">
+        <span class="flex-1">Rule</span>
+        <span class="w-40 text-right">Now</span>
+        <span class="w-28">Progress</span>
+        <span class="w-40">When</span>
+        <span class="w-24 text-right">&nbsp;</span>
+      </div>
+
+      <ul class="divide-y divide-gray-100 border-t border-gray-100">
+        <% row.lines.each do |line| %>
+          <%# ** THE HOOK IS `budget_rule_name` AND THE VISIBLE NAME IS `ClaimLine#name`, AND THEY
+              DIFFER ON ONE SHAPE ON PURPOSE. ** What the row SAYS about an item-less rule is
+              "Whole category" (§4 — the lane it pays for, in the rule form's own words); what a
+              selector needs is something that tells two of them apart, and every item-less rule in
+              the app would answer to that one string. `budget_rule_name` is the item's name or the
+              category's, which is unique per row and is the SAME key `_adjust` stamps on its own
+              panel — so the two hooks on one row name one thing. %>
+          <li class="py-3" data-rule="<%= budget_rule_name(line.rule) %>">
+            <div class="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+              <div class="flex items-baseline gap-2 min-w-0 flex-1">
+                <%# THE STRIPE IS THE RULE'S TYPE, never the category's: a category may carry a bill
+                    beside a choice and they give way at opposite ends of the walk. `aria-hidden`,
+                    because the same fact is the first word of the shape clause underneath. %>
+                <span class="w-1 self-stretch shrink-0 rounded <%= stripe_fill(line) %>" aria-hidden="true"></span>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-900 truncate"><%= line.name %></p>
+                  <p class="text-xs <%= type_text_class(line) %>" data-rule-shape><%= shape_words(line) %></p>
+                </div>
+              </div>
+
+              <%# THE FIGURE, red where the spending has passed what the rule had. `over?` is the
+                  pre-clamp reader and the only one that can tell "spent it exactly" from "spent
+                  more than there was". %>
+              <p class="text-sm tabular-nums sm:w-40 sm:text-right <%= line.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                 data-rule-figure>
+                <%= figure_words(line) %>
+              </p>
+
+              <%# THE BAR, AND IT IS THE ONE THING 375 DROPS (§4). The percent rides on the TRACK: a
+                  0% fill has no width, so Capybara cannot see it, and a hook there would be
+                  unassertable on exactly the row a bar most needs pinning. %>
+              <div class="hidden sm:block sm:w-28">
+                <% if line.bar? %>
+                  <div class="h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                       role="progressbar"
+                       aria-valuenow="<%= line.percent %>"
+                       aria-valuemin="0"
+                       aria-valuemax="100"
+                       aria-label="<%= row.name %> · <%= line.name %>"
+                       data-rule-bar="<%= line.percent %>"
+                       data-rule-bar-state="<%= line.bar_state %>">
+                    <div class="h-1.5 rounded-full <%= bar_fill(line) %>" style="width: <%= line.percent %>%;"></div>
+                  </div>
+                <% end %>
+              </div>
+
+              <%# WHEN: one clause, and which one is `HomeHelper#when_words` — the same string Home
+                  prints about this rule. A rate rule in a period with no boundary declared has
+                  nothing to say and renders no element at all. %>
+              <p class="text-xs sm:w-40 <%= line.trouble? || line.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
+                 data-rule-when>
+                <%= when_words(line) %>
+              </p>
+
+              <p class="flex items-baseline gap-3 shrink-0 sm:w-24 sm:justify-end text-sm">
+                <%# THE ADJUST SUMMARY IS RENDERED BY `_adjust` ITSELF (it is a `<details>`), so this
+                    column holds only Edit — the panel opens inline UNDER the row, which is where a
+                    form about one rule belongs and where it has always opened.
+
+                    ** A FULL-WIDTH BUTTON AT 375 AND AN UNDERLINED LINK ABOVE IT (mobile pass,
+                    2026-09-06). ** `Edit` measured **25×20**: a four-letter word as the only door
+                    onto a rule's declaration, on the screen where a finger is doing the pressing.
+                    `_adjust`'s summary wears the SAME skin because the two sit one under the other,
+                    and the skin is `BudgetPageHelper::RULE_ACTION_CLASSES` — ONE string that both
+                    read, not two that a comment claims are equal. They were two, and the copy here
+                    had lost `sm:hover:text-brand` (fix round — M2). All that differs is what is
+                    passed below: the side each aligns to above `sm`. %>
+                <%= link_to "Edit",
+                            edit_budget_path(line.rule),
+                            class: rule_action_classes("mt-1 sm:mt-0 sm:text-right sm:underline") %>
+              </p>
+            </div>
+
+            <%= render "adjust", line: line %>
+
+            <%# WHAT WAS ALREADY DONE TO THIS PERIOD, in date order, each with the door back out. The
+                claim above already counts every one of them — the list is what makes that figure
+                explicable rather than merely asserted, which is the whole argument for a dated delta
+                over a silent override. Silent when there are none. %>
+            <% if line.adjustments.any? %>
+              <ul class="mt-2 space-y-1" data-rule-changes>
+                <% line.adjustments.each do |change| %>
+                  <li class="flex items-baseline gap-2 text-xs text-gray-600" data-change="<%= change.id %>">
+                    <span class="text-gray-500"><%= change.local_day.strftime("%b %-d") %></span>
+                    <%# SIGNED, and `number_to_currency` prints a leading minus for a take-back —
+                        which is the whole vocabulary of this table said in one character. %>
+                    <span class="<%= change.amount.negative? ? "text-status-danger" : "text-gray-900" %>" data-change-amount>
+                      <%= number_to_currency(change.amount) %>
+                    </span>
+                    <%= button_to "Remove",
+                                  adjustment_path(change, open: row.category.id),
+                                  method: :delete,
+                                  form: { draggable: "false" },
+                                  class: "text-brand-dark hover:text-brand underline" %>
+                  </li>
+                <% end %>
+              </ul>
+            <% end %>
+          </li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%# ** WHAT THE ENTRIES SUGGEST, FOR THIS CATEGORY ONLY (§4). ** The panel used to be one
+      page-wide list with an index strip across the top of it, because on the demo it ran to about
+      5,000px; inside the category it is about, it is two or three rows and needs no navigation at
+      all. The rows themselves are the same four partials, unchanged. %>
+  <% suggestions = presenter.suggestions_for(row.category) %>
+  <% hidden = presenter.hidden_suggestions_for(row.category) %>
+
+  <%# ** AT 375 THE BOX BECOMES A BAND (mobile pass, 2026-09-06). ** A bordered card, inside the
+      panel, inside the row's own card is three frames around one sentence — Home's ruling of the
+      same night was no boxes in boxes. `-mx-4` takes it out to the panel's own edges and the side
+      borders and the rounding come off with it, so what is left is a ruled band; above `sm`, where
+      there is width to spare for a frame, it is the card it was. %>
+  <% if suggestions.any? %>
+    <div class="-mx-4 border-y border-gray-200 sm:mx-0 sm:rounded sm:border" data-suggestions="<%= row.name %>">
+      <div class="px-4 py-2 border-b border-gray-100 bg-gray-50">
+        <h4 class="text-xs font-semibold tracking-wide text-gray-500">Your entries suggest</h4>
+      </div>
+      <% suggestions.each do |suggestion| %>
+        <%= render "budget_page/suggestion", suggestion: suggestion, category: row.category %>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# WHERE THE HIDDEN ONES WENT (Henry's ruling of 2026-08-20). The panel's foot moved into the
+      category with the panel: hiding is the USER's act, one row at a time, and it is never a
+      deletion — every hidden row is still listed, with a Show button, wherever its own category is.
+      COLLAPSED, NOT ABSENT, and the COUNT is in the summary because the count is the part that has
+      to be true whether or not anyone opens it. %>
+  <% if hidden.any? %>
+    <details class="-mx-4 border-y border-gray-200 sm:mx-0 sm:rounded sm:border"
+             data-hidden-suggestions="<%= row.name %>">
+      <summary class="px-4 py-3 text-xs text-gray-500 cursor-pointer hover:text-gray-700 sm:py-2">
+        <%= pluralize(hidden.size, "hidden suggestion") %>
+      </summary>
+      <% hidden.each do |row_hidden| %>
+        <article class="px-4 py-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
+                 data-hidden-suggestion="<%= suggestion_key(row_hidden.suggestion) %>">
+          <div class="text-sm text-gray-500 space-y-1">
+            <%= render "budget_page/suggestion_#{row_hidden.suggestion.kind}", suggestion: row_hidden.suggestion %>
+          </div>
+          <div class="shrink-0">
+            <%# THE ROW'S OWN ID, not the pair the Hide button carried: this is a record now, and
+                `destroy` finds it through `current_user.suggestion_dismissals`. %>
+            <%= button_to "Show",
+                          suggestion_dismissal_path(row_hidden.dismissal),
+                          method: :delete,
+                          form: { draggable: "false" },
+                          class: "btn btn-secondary w-full whitespace-nowrap sm:w-auto" %>
+          </div>
+        </article>
+      <% end %>
+    </details>
+  <% end %>
+
+  <%# ** ONE BUTTON, AND THE FORM IS ITS OWN PAGE (§4/§5). ** It carries the category, so the form
+      opens knowing what the rule is for and the user never picks an owner out of a select. It is now
+      the ONLY door onto a new rule: the header's category-less "New rule" button is deleted with
+      the picker it existed to open (see `show.html.erb`), because a form titled "New rule for
+      Groceries" has nothing to say when nobody has said Groceries. %>
+  <div>
+    <%= link_to "+ New rule for #{row.name}",
+                new_budget_path(category_id: row.category.id),
+                class: "btn btn-secondary w-full sm:w-auto",
+                draggable: "false",
+                data: { new_rule_for: row.category.id } %>
+  </div>
+</div>

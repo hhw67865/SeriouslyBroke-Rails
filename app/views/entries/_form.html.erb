@@ -2,7 +2,21 @@
   <%= f.error_notification %>
   <%= f.error_notification message: f.object.errors[:base].to_sentence if f.object.errors[:base].present? %>
   <%= hidden_field_tag :previous_url, @previous_url if @previous_url.present? %>
-  <div>
+  <%# THE §6 IMPACT CARD'S CONTROLLER SPANS THE WHOLE FORM, because the three things overdrawing
+      changes are not in one place: the figure and the sentence are in the card, and the submit
+      button's words are down in the form actions. `entry-id` is what lets the card exclude THIS
+      entry's own amount on edit — the ledger has already counted it, and the card must show the
+      world as if the entry were being decided now. Blank on a new entry. %>
+  <%# THE SECOND CONTROLLER ON THIS SPAN IS THE §4 ROUTING SELECT'S, and it shares the span for the
+      same reason: "the user picked a category" is announced ONCE, by `app--entry--form`, and both
+      of the things that follow the category — the impact card and the "Lands in" select's very
+      existence — listen to that one announcement rather than to the select itself. %>
+  <div data-controller="app--entry--impact app--entry--routing"
+       data-action="entry:categoryChanged->app--entry--impact#categoryChanged
+                    entry:categoryChanged->app--entry--routing#categoryChanged"
+       data-app--entry--impact-url-value="<%= impact_entries_path %>"
+       data-app--entry--impact-entry-id-value="<%= entry.id %>"
+       data-app--entry--routing-income-ids-value="<%= @categories.select(&:income?).map(&:id).to_json %>">
     <%# Transaction Details Section %>
     <div class="bg-white shadow-sm rounded overflow-hidden border border-gray-100 mb-6">
       <div class="p-6">
@@ -63,7 +77,11 @@
                     placeholder: "0.00",
                     autocomplete: "off",
                     class: "form-input pr-10 #{"form-input-error" if entry.errors[:amount].any?}",
-                    data: { shared__calculator_pad_target: "input" } %>
+                    data: {
+                      shared__calculator_pad_target: "input",
+                      app__entry__impact_target: "amount",
+                      action: "input->app--entry--impact#recompute change->app--entry--impact#recompute"
+                    } %>
                 <%= render "shared/calculator_pad_toggle" %>
               </div>
             <% end %>
@@ -76,11 +94,63 @@
               hint: "When did this transaction occur?",
               input_html: {
                 type: "date",
-                value: entry.date&.strftime("%Y-%m-%d") || Date.current.strftime("%Y-%m-%d")
+                value: entry.date&.strftime("%Y-%m-%d") || current_user.today.strftime("%Y-%m-%d")
               } %>
         </div>
 
-        <%= f.input :description, wrapper_html: { class: "mt-5" },
+        <%# INCOME ROUTING (main-account spec §4): "Recording income asks which account it lands in."
+            THE ENTRY ITSELF ALWAYS LANDS IN MAIN — this select does not move it. What it records is
+            that the money did not STAY there, and the server answers it with one mirroring
+            movement main → the chosen account (`Entry#route_income_to!`).
+
+            INCOME ONLY, AND HIDDEN RATHER THAN ABSENT. An expense has no account to arrive in, so
+            the question is meaningless on one; but the field is rendered on every form and merely
+            hidden, because the category can change to income without a page load and no new form
+            is fetched when it does. It IS submitted while hidden — harmlessly:
+            `EntriesController#sync_income_routing` refuses to route anything that is not income, so
+            the ignoring happens where the write does rather than in the markup.
+
+            THE SERVER OPENS IT VISIBLE ON AN INCOME EDIT and hidden everywhere else, so a user with
+            JavaScript off is asked the question wherever a saved category can answer it.
+
+            A REJECTED CREATE IS THE ONE CASE THE SERVER CANNOT OPEN CORRECTLY, and it is worth
+            naming rather than hiding: `EntriesController#create`'s failure branch calls
+            `@entry.build_item`, which REPLACES the item the submission named with a blank one, so
+            `entry.item&.category` is nil by the time this line asks and the field re-renders hidden
+            even though the user had picked an income category. The category picker comes back empty
+            on that render too — the two are the same fact — so what the user meets is a form asking
+            for a category again, not a form that has silently forgotten where their paycheck
+            landed. Rebuilding the item is what makes the category select render at all on a failed
+            create, so it stays; the honest fix is for that branch to stop discarding the submitted
+            item, which is a change to `create` and not to this partial. %>
+        <%# ** AN OPENING ENTRY NEVER REACHES THIS PARTIAL (fix round round 2 — item 2). ** The
+            "Lands in" select is the door onto `Entry#route_income_to!`, which REWRITES the entry's
+            transfer — and for an opening entry that transfer is half the record of what an account
+            holds. Its branch used to live here, rendering a read-only line in place of the select;
+            it moved to `entries/_opening_form.html.erb`, because the CATEGORY and the AMOUNT are
+            read-only on such an entry too, and a form with those pickers gone must bind none of
+            this one's three Stimulus controllers. `entries/edit.html.erb` chooses between them, and
+            `EntriesController#update` refuses the params either form could never send. %>
+        <div class="form-group mt-5"
+             data-app--entry--routing-target="field"
+             <%= "hidden" unless entry.item&.category&.income? %>>
+          <label for="entry_destination_account_id" class="form-label">Lands in</label>
+          <%= select_tag "entry[destination_account_id]",
+              options_from_collection_for_select(@accounts, :id, :name, entry_destination_account(entry)&.id),
+              id: "entry_destination_account_id",
+              class: "form-select" %>
+          <p class="form-hint">Which account did this money arrive in?</p>
+        </div>
+
+        <%# THE ONLY THING BUDGETING ADDS TO THIS FORM (§6): the envelope impact, under the amount
+            field. The container is stable and the CARD inside it is replaced by the server whenever
+            the category changes — the envelope is derived from the category, never picked. %>
+        <div data-app--entry--impact-target="card">
+          <%= render "entries/impact", impact: entry_impact(entry) %>
+        </div>
+
+        <%= f.input :description, 
+wrapper_html: { class: "mt-5" },
             placeholder: "Add any notes about this transaction",
             hint: "Optional details about this entry",
             input_html: { rows: 3 } %>
@@ -95,8 +165,23 @@
           (@previous_url.presence || entries_path),
           class: "btn btn-secondary" %>
 
+      <%# §6: "Nothing blocks. Overdrawing shows the envelope going negative and says the buffer can
+          cover it. The button reads 'Save anyway'." — the sentence itself says "available" now
+          (answers-first Home spec §3); the ruling is quoted as it was written.
+
+          BOTH LABELS COME DOWN FROM THE SERVER and the browser only chooses between them, so the
+          words on the button are never JavaScript's invention. The server also opens on the right
+          one: an edit whose own amount already overdraws its envelope reads "Save anyway" before a
+          single keystroke. The button is never disabled — the whole ruling is that this warns and
+          never blocks. %>
+      <% default_label = entry.persisted? ? "Update Entry" : "Create Entry" %>
       <%= f.button :submit,
-          entry.persisted? ? "Update Entry" : "Create Entry" %>
+          entry_impact(entry).overdrawn? ? "Save anyway" : default_label,
+          data: {
+            app__entry__impact_target: "submit",
+            default_label: default_label,
+            overdrawn_label: "Save anyway"
+          } %>
     </div>
   </div>
 <% end %>

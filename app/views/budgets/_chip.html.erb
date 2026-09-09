@@ -1,0 +1,62 @@
+<%# ** ONE SUGGESTION, AS A CHIP THAT FILLS THE BLANKS (two-shapes spec §5). ** Local: `suggestion`.
+
+    §5: "Suggestions as chips above step 1 when the category has any; clicking one fills every blank
+    (Stimulus, values carried as data attributes — the server still validates); the chip reads
+    '✓ Using this' while the blanks match it."
+
+    ** THE SENTENCE IS THE PANEL'S OWN, RENDERED BY THE PANEL'S OWN PARTIAL. ** A chip is a headline
+    and a detail line, which is exactly what `budget_page/_suggestion_<kind>` is — so the copy is not
+    written twice and a chip cannot come to describe a measurement differently from the row on the
+    Budget page that sent the user here. What differs is only what the control DOES: on that page it
+    is a link to this form, and on this form it is the form filling itself in.
+
+    ** THE VALUES RIDE AS `data-prefill-*` AND THE SERVER STILL VALIDATES. ** Every key is one of
+    `BudgetsController::BUDGET_FIELDS`, in the unit the form's own controls are in — the engine
+    measures per-period money and the amount box holds per-period money on both rate shapes since
+    the read-back divides (fix round 1's ruling) — so filling a blank from a chip is the same act as
+    typing what the panel just said. Nothing is written: the user still presses the button, and the
+    preview re-renders from the server in between.
+
+    ** A CHIP WITH NOTHING TO FILL HAS NO BUTTON, DELIBERATELY. ** A dead-rule suggestion's payload
+    is the rule's own id and nothing else — the panel refuses to decide between keeping and deleting
+    (`_suggestion_dead_rule`), and there is no figure it could put in a blank. Its sentence is why the
+    user is on this form; the decision stays theirs. %>
+<%# ** EVERY VALUE IS A STRING BEFORE IT REACHES `data:`, AND THAT IS NOT TIDINESS (measured). **
+    `TagBuilder#prefix_tag_option` JSON-encodes anything that is not a String, a Symbol or a
+    BigDecimal — so a `Date` arrived in the attribute as `"2026-09-06"` WITH ITS QUOTES, and setting
+    a date input to that string is setting it to nothing: the Due field stayed empty on every chip
+    click, and the chip then read "Use this" for ever because its own value could never match the
+    blank it had just failed to fill. `#to_s` is the same rendering the form's own inputs carry. %>
+<%# ** AND THE AMOUNT IS RENDERED AS MONEY, NOT AS A `BigDecimal#to_s` (fix wave — Task 5's minor).
+    ** `122.0` is what `to_s` gives, so clicking a chip filled the box with a figure no user would
+    type and none of this app's other controls hold — the edit form's own box opens at `"120.0"`'s
+    two-decimal twin and the panel's sentence beside the chip says `$122.00`. Two decimals is what
+    the input's `step: 0.01` is for and what the sentence promised. `to_d` first, because the value
+    may already be a string by the time a caller hands it over. %>
+<% prefill = suggestion.prefill[:budget].to_h.transform_values(&:to_s) %>
+<% prefill[:amount] = format("%.2f", prefill[:amount].to_d) if prefill[:amount].present? %>
+<%= tag.article class: "rounded border border-gray-200 bg-gray-50 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3",
+                data: prefill.transform_keys { |field| :"prefill_#{field}" }
+                        .merge(chip: suggestion_key(suggestion)) do %>
+  <div class="text-sm text-gray-700 space-y-1">
+    <%= render "budget_page/suggestion_#{suggestion.kind}", suggestion: suggestion %>
+  </div>
+
+  <% if prefill.any? %>
+    <div class="shrink-0">
+      <%# FULL WIDTH AT 375 (mobile pass, 2026-09-06). Under the chip's own two sentences an 88px
+          button reads as a footnote to them rather than the thing that fills the form in, and it is
+          the one control on the card.
+          THE TWO LABELS ARE THE SERVER'S, on the button, exactly as the entry form's submit carries
+          both of its own: the controller chooses between two strings this app wrote rather than
+          composing a third in JavaScript. `type="button"`, because a chip must never submit the
+          form it is filling in. %>
+      <button type="button"
+              class="btn btn-secondary w-full whitespace-nowrap sm:w-auto"
+              data-action="app--budget--rule-form#useChip"
+              data-chip-button
+              data-default-label="Use this"
+              data-using-label="✓ Using this">Use this</button>
+    </div>
+  <% end %>
+<% end %>

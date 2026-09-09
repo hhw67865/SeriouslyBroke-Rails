@@ -1,0 +1,19 @@
+<%# THE ONE USER THIS PAGE HAS NOTHING TO DRAW: no expense category at all.
+
+    ** THE GATE MOVED FROM "no rules" TO "no categories" (two-shapes spec §4). ** The list is every
+    expense category now, so a user with three categories and no rules is not empty — they have
+    three rows, each with a "+ New rule for <category>" button inside it, which is exactly the
+    screen this frame used to stand in for. What is left is the user with nowhere to put a rule, and
+    the honest thing to offer them is a category.
+
+    A frame rather than a blank page: an empty screen reads as something that failed to load. %>
+<section class="bg-white border border-gray-200 rounded px-6 py-8 text-center" data-budget-empty>
+  <h3 class="text-sm font-semibold text-gray-900">No spending categories yet</h3>
+  <p class="mt-2 text-sm text-gray-500 max-w-xl mx-auto">
+    A rule claims part of every period's income for one category, so a category comes first — make
+    one and it appears here, in the order they give way.
+  </p>
+  <p class="mt-4">
+    <%= link_to "Add a category", new_category_path, class: "btn btn-primary" %>
+  </p>
+</section>

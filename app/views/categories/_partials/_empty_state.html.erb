@@ -6,8 +6,6 @@
         <%= heroicon "arrow-trending-down", options: { class: "h-6 w-6 text-gray-400" } %>
       <% when "income" %>
         <%= heroicon "arrow-trending-up", options: { class: "h-6 w-6 text-gray-400" } %>
-      <% when "savings" %>
-        <%= heroicon "banknotes", options: { class: "h-6 w-6 text-gray-400" } %>
       <% else %>
         <%= heroicon "tag", options: { class: "h-6 w-6 text-gray-400" } %>
       <% end %>
@@ -19,13 +17,11 @@
         Get started by creating your first expense category.
       <% when "income" %>
         Track your income sources by creating income categories.
-      <% when "savings" %>
-        Start saving by creating a savings category.
       <% else %>
         Get started by creating a new category.
       <% end %>
     </p>
-    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-2 px-4 py-2 rounded bg-brand text-white text-sm font-medium hover:bg-brand-dark shadow-sm transition" do %>
+    <%= link_to new_category_path(type: @type), class: "mt-6 inline-flex items-center gap-2 px-4 py-2 rounded bg-brand-dark text-white text-sm font-medium hover:bg-brand-darker shadow-sm transition" do %>
       <%= heroicon "plus", options: { class: "h-4 w-4" } %>
       <span>New <%= @type.singularize.titleize %> Category</span>
     <% end %>

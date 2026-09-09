@@ -12,7 +12,7 @@ This document describes the elegant searchable system implemented in the Serious
 **Key Features**:
 - `searchable` class method for field configuration
 - Automatic SQL generation for different field types
-- Support for direct fields, associations, nested associations, and dates
+- Support for direct fields, associations, nested associations, dates, and model scopes
 - Stores configuration in `_searchable_fields` class attribute
 
 **DSL Examples**:
@@ -21,6 +21,7 @@ searchable :description, label: "Description"                    # Direct column
 searchable :date, type: :date, label: "Date"                    # Date field with special parsing
 searchable :item, through: :item, column: :name, label: "Item"  # Single association
 searchable :category, through: [:item, :category], column: :name, label: "Category" # Nested association
+searchable :owner, type: :scope, scope: :owned_by_named, label: "Owner"      # Model scope
 ```
 
 **Generated Methods**:
@@ -224,6 +225,37 @@ searchable :category, through: [:item, :category], column: :name
 searchable :date, type: :date
 # Handles: Date parsing, range queries, partial date matching
 ```
+
+### Scope Search — a lane `through:` cannot spell
+```ruby
+searchable :owner, type: :scope, scope: :owned_by_named, label: "Owner"
+# Delegates to Model.owned_by_named(query), which returns a relation
+```
+
+`through:` builds a chain of `joins`, so it can only ever follow associations declared on the
+model. A field whose lane is a **SQL expression** rather than a foreign key — a `COALESCE` over
+two columns, a computed column, a union — has no `through:` that describes it.
+
+`type: :scope` names a scope on the model instead, and `search_by` calls it with the query. The
+expression then lives beside the model's other readers of the same rule, where the next person
+changing that rule will see it, and this concern stays ignorant of what any one model's lanes mean.
+
+**THE FIELD THIS TYPE WAS BUILT FOR IS GONE, AND THE TYPE IS NOT.** `Entry`'s `:pool` field was the
+reason it exists: every balance resolved an entry through `COALESCE(entries.pool_id,
+categories.pool_id)`, while a `through: [:item, :category, :pool]` search walked the second half of
+that `COALESCE` with the first half dropped — so an entry carrying an override was found under the
+lane it had overridden away from. The scope reused the ledger's own constant rather than restating
+it. The two-ledger drop (Task 8) deleted `entries.pool_id`, the constant and the scope together, so
+there is no live `type: :scope` field in the app today; the example above is written generically for
+that reason. The type stays because the SHAPE recurs the moment a lane is an expression rather than
+a foreign key, and the alternative — a search that agrees with a balance only by hand — is the
+defect it was added to close.
+
+Contract:
+- the scope takes exactly one argument, the query string, and returns a relation;
+- `scope:` is `fetch`-ed, so `type: :scope` without it raises rather than searching nothing;
+- inside the scope, `self` is the current relation, so it composes onto whatever the caller had
+  already filtered — exactly as the join-based branches do.
 
 ## Extension Points
 

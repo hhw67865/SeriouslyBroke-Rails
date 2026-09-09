@@ -8,7 +8,6 @@ RSpec.describe "Categories Index - Header", type: :system do
   before do
     create_list(:category, 2, :income, user: user)
     create_list(:category, 2, :expense, user: user)
-    create_list(:category, 1, :savings, user: user)
     sign_in user, scope: :user
   end
 
@@ -29,12 +28,16 @@ RSpec.describe "Categories Index - Header", type: :system do
       expect(page).to have_link("New Expense Category")
     end
 
-    it "shows correct content for savings categories" do
+    # A STALE `?type=savings` LANDS ON EXPENSES, HEADING AND ALL (plan 3, task 5). This used to
+    # reach `Category.with_type`'s three-armed case, come back NIL and 500 inside `apply_search`;
+    # `CategoriesController` checks the parameter against the enum now, so the page opens on its own
+    # default rather than heading a list of expenses "Savings Categories".
+    it "sends a stale savings bookmark to the expense page", :aggregate_failures do
       visit categories_path(type: "savings")
 
-      expect(page).to have_content("Savings Categories")
-      expect(page).to have_content("Organize your savings pools and track progress")
-      expect(page).to have_link("New Saving Category")
+      expect(page).to have_content("Expense Categories")
+      expect(page).to have_no_content("Savings Categories")
+      expect(page).to have_link("New Expense Category")
     end
   end
 

@@ -34,6 +34,17 @@ export default class extends Controller {
           // User selected existing category - fetch its items
           this.fetchItemsForCategory(value)
         }
+
+        // THE ONE CATEGORY-CHANGE HOOK ON THIS FORM, ANNOUNCED (spec §6). The envelope is derived
+        // from the category and never picked, so the impact card has to follow this select — and
+        // it follows it from HERE rather than by listening to the select itself, because a second
+        // listener would be a second description of "the user picked a category", free to disagree
+        // with this one about when that happened (TomSelect's own `change` on the hidden original
+        // fires on paths this callback does not, clearing included).
+        //
+        // An event rather than a direct call: this controller owns the item list and knows nothing
+        // about envelopes, and it should stay that way.
+        this.dispatch("categoryChanged", { detail: { categoryId: value }, prefix: "entry" })
       }
     })
   }

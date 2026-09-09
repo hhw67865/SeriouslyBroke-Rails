@@ -16,9 +16,36 @@ module ModelSearchable
         field_config = searchable_field_config(field.to_sym)
         return all unless field_config
 
+        search_by_config(field_config, query)
+      end
+
+      private
+
+      # THE TYPE DISPATCH, split from #search_by rather than nested in it: the two guard clauses
+      # above plus a fifth branch here put the one method past rubocop's cyclomatic limit, and the
+      # two answer different questions anyway — that one is "is this field searchable at all", this
+      # one is "which reader answers it".
+      def search_by_config(field_config, query)
         case field_config[:type]
         when :date
           search_by_date(field_config[:column], query)
+        when :scope
+          # THE ESCAPE HATCH FOR A LANE THE DSL CANNOT SPELL. `through:` builds a chain of
+          # `joins`, which can only ever follow associations declared on the model — so a field
+          # whose lane is a SQL expression rather than a foreign key (a COALESCE over two
+          # columns, a computed column, a union) had no way in but a second search path beside
+          # this one.
+          #
+          # It resolves to a scope on the model rather than to SQL written here on purpose: the
+          # expression belongs beside the model's other readers of the same rule, where the next
+          # person changing that rule will see it, and this concern stays ignorant of what any
+          # one model's lanes mean. `fetch`, so a field declared `type: :scope` with no `scope:`
+          # raises here rather than silently searching nothing.
+          #
+          # `self` is the model class inside the relation's `scoping` block, so the scope
+          # composes onto whatever the caller had already filtered — exactly as the join-based
+          # branches below do.
+          public_send(field_config.fetch(:scope), query)
         when :association
           SearchMethods.search_by_association(self, field_config, query)
         when :nested_association
@@ -27,8 +54,6 @@ module ModelSearchable
           SearchMethods.search_by_direct(self, field_config[:column], query)
         end
       end
-
-      private
 
       def search_by_date(column, query)
         SearchMethods.search_by_date(self, column, query)

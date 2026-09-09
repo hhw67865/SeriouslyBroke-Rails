@@ -1,0 +1,158 @@
+<%# ONE ACCOUNT, AND NOTHING INSIDE IT (two-ledger spec §2). See the UI design spec §4.3.
+    Locals: `presenter` (HomePresenter), `account` (a Pool of type account).
+
+    THE POOLS NESTED HERE ARE GONE (Task 6). An account used to hold its envelopes, so this section
+    rendered `presenter.pools_for(account)` beneath the header; a category lives nowhere and holds
+    its own money, so an account has exactly one thing to say — what the bank says — and the
+    categories band above says the rest.
+
+    The header carries `balance_of`, which for MAIN is the pot. It was `current_buffer_for`, and the
+    figure moved with the model: that reader answered an account's cash NET of the envelopes housed
+    in it, and there is no such remainder now. What the distribute screen calls AVAILABLE is the
+    money no category has claimed, on the other ledger entirely, so one noun over the two quantities
+    would have been a lie on both. (The noun itself is retired app-wide — answers-first Home §3.)
+
+    THE ` · target $2,000.00` CLAUSE IS DELETED (Task 7). It printed `pools.target-amount`, a
+    marker for the cash an account was meant to keep spare, and the concept goes with the pool
+    screens: two-ledger §2 gives accounts no target semantics — money with no job is FREE, and
+    computed claims makes that a derived figure (`ClaimLedger#free`) rather than anything an
+    account could aim at — the last reader of it was deleted with the distribution, the plan's T8
+    drops the column, and the account form that set it is now name-only. A number nothing can
+    change and nothing reads is worse than no number.
+
+    RENAME AND DELETE LIVE HERE NOW, because Home IS the accounts index: `pools/index` and
+    `pools/show` carried those two buttons and both screens are deleted. %>
+<% balance = presenter.balance_of(account) %>
+<section class="bg-white border border-gray-200 rounded" data-account-group="<%= account.name %>">
+  <%# ONE HEADER ROW, NOT TWO (design review H9). The name and the balance sat in one strip and
+      Rename/Delete in a second one below it, which on a funded account with nothing else to say
+      rendered as an empty band of white between two borders — a card whose BODY was a pair of
+      links. The two doors are housekeeping, so they belong beside the name, not under the money.
+
+      IT STACKS BELOW `sm`: on a 375px screen the name, the balance and two controls cannot share a
+      line, and the balance is the figure that must not be the thing that wraps. %>
+  <div class="px-6 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 sm:gap-4">
+    <%# `flex-wrap` AND NO `truncate` (measured at 375px). Truncating the name put "Ev…" beside a
+        full-length "Main account — everything flows through it": the app abbreviated the one word
+        the user typed in order to keep a sentence it wrote itself. The note wraps to its own line
+        below `sm` instead, and the name is never shortened. %>
+    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
+      <%# Not the `uppercase` eyebrow this codebase gives short labels like "Current Balance": an
+          account name is a proper noun the user typed, and rendering "Ally Savings" as ALLY SAVINGS
+          shouts a name back at them. %>
+      <h3 class="text-sm font-semibold text-gray-900"><%= account.name %></h3>
+      <%# ** MAIN HAS NO DELETE BUTTON (final fix wave, C-1). ** `Pool#main_account_is_not_deletable`
+        is the refusal and this is the affordance agreeing with it: main is on one side of every
+        AccountMovement the app writes, so destroying it would take the whole physical ledger with
+        it — the model halts, and a button that always ends in a red flash is worse than no button.
+
+        THE LABEL RATHER THAN A DISABLED BUTTON, because the absence is a fact about the account
+        rather than a state it might leave: main is main until the user changes it, and changing it
+        is a future affordance this app does not have yet. The screen says which account this is,
+        which is also the only place Home names the role at all. %>
+      <% if presenter.main?(account) %>
+        <span class="text-xs font-medium text-gray-500" data-account-main="<%= account.name %>">
+          Main account — everything flows through it
+        </span>
+      <% end %>
+    </div>
+
+    <div class="flex items-baseline gap-4 shrink-0">
+      <%# An overdraft is the loudest thing in the app and this is the row that owns the number, so
+          it says so here too rather than leaving the standing band's sentence as the only place a
+          negative balance is visible. %>
+      <span class="text-sm <%= balance.negative? ? "text-status-danger font-medium" : "text-gray-700" %>">
+        balance now <strong><%= number_to_currency(balance) %></strong>
+      </span>
+
+      <%# THE TWO DOORS AN ACCOUNT STILL HAS — and MAIN has only one of them. Deliberately quiet —
+          this screen is about money, and a rename is housekeeping — but present, because deleting
+          them with the Pools screens would have left a user no way to correct a typo in a bank name.
+
+          RENAME IS `text-brand`, WHICH IS NOW A READABLE OLIVE (design review H9/B2). It measured
+          1.75:1 against this white card while it painted `--color-primary`; the token now resolves
+          to #63612F, 6.4:1, with the hover one step darker again.
+
+          DELETE IS TERTIARY UNTIL YOU REACH FOR IT. It was permanently red — the loudest colour in
+          the app, spent on the rarest and most destructive act, sitting at the same weight as a
+          rename on every account on the page. Grey at rest, red on hover and on focus, which is
+          where the warning is actually wanted. %>
+      <%= link_to "Rename",
+                  edit_bank_account_path(account),
+                  class: "text-xs font-medium text-brand hover:text-brand-dark",
+                  data: { account_edit: account.name } %>
+
+      <% unless presenter.main?(account) %>
+      <%# ** THE CONFIRM SAYS WHAT DELETING AN ACCOUNT ACTUALLY DOES (fix round 1, MED-1; narrowed by
+          Task 8; re-verified in the final fix wave). ** Its first draft carried the ENVELOPE sentence
+          off the deleted `PoolsHelper#pool_delete_confirmation` — "its movements and any categories
+          pointing at it move to your main account" — and every clause of it was false of an account.
+
+          ONE FACT NOW, WHERE THERE WERE TWO, because the second stopped being true when the pool
+          layer went: no category points at an account any more (`categories.pool_id` is dropped), so
+          the "the delete is refused instead" clause described a refusal nothing can raise. What is
+          left is the whole of what happens: `dependent: :destroy` on `movements_in`/`movements_out`
+          deletes the account's transfers.
+
+          "GOES BACK TO YOUR MAIN ACCOUNT" IS TRUE, CHECKED AGAINST THE WRITERS RATHER THAN ASSUMED.
+          Both of them — `Entry#route_income_to!` and `AccountOpening#write_movement` — put
+          `user.default_account` on one end, so main is on the OTHER side of every movement
+          this account has. Deleting them subtracts nothing from main and restores each `moves out`
+          it was carrying: the pot rises by exactly what this account held, and `pot + Σ accounts` is
+          unchanged to the penny. The sentence is only ever rendered here, on a NON-main account,
+          which is precisely the population it is true of. %>
+        <%# ** AND WHAT IT WAS OPENED WITH IS THE SECOND CLAUSE (fix round round 2 — item 4). ** The
+            first sentence was the whole truth while an account could only be funded by a transfer
+            FROM main: `dependent: :destroy` takes the movements, main is on the other end of every
+            one, so the money comes back. An account that SAID what it holds also carries an opening
+            entry (`Pool has_one :opening_entry`), and that money never was main's — the opening's
+            entry and its transfer cancel on main exactly — so it leaves the ledger rather than
+            returning. Both halves are named here because a user deleting a $500 savings account
+            they opened at $500 would otherwise be promised $500 back in checking and get none.
+            `BankAccountsController#destroy` measures the pot and says the real figure afterwards. %>
+        <% confirm = "Delete #{account.name}? The movements into and out of it are deleted with it, " \
+                     "so the money they moved goes back to your main account — and whatever it was " \
+                     "opened with goes with it. Your balances will change. This action cannot be " \
+                     "undone." %>
+        <%= button_to "Delete",
+                      bank_account_path(account),
+                      method: :delete,
+                      class: "text-xs font-medium text-gray-500 hover:text-status-danger " \
+                             "focus-visible:text-status-danger transition-colors",
+                      form: { class: "inline-block leading-none", data: { turbo_confirm: confirm } },
+                      data: { account_delete: account.name } %>
+      <% end %>
+    </div>
+  </div>
+
+  <%# ** EDIT BALANCE (account-openings spec §3): the account says what it holds again. ** The two
+      onboarding cards that used to render here are DELETED — `_fund_account` (step 2's movement from
+      main) and `_opening_balance` (step 3's one-time main correction) — and this is what replaced
+      them BOTH: one door, on every account, open forever rather than latched after one use.
+
+      IT REWRITES THE ACCOUNT'S OPENING RECORD RATHER THAN ADDING TO IT (§2, Henry: "Corrections
+      should be done on the same initial entry"), and the field opens on TODAY'S balance because that
+      is the figure the user is being asked to confirm or correct — `AccountOpening` subtracts
+      everything that has flowed through since, so what they type is what this card shows afterwards.
+
+      `<details>`/`<summary>` RATHER THAN A STIMULUS CONTROLLER — the house idiom, stated where the
+      same choice was made in `_accounts_line.html.erb` and `budget_page/_suggestions.html.erb`: the
+      whole interaction is "show me the form", it needs no JavaScript and it survives a Turbo
+      navigation. The link IS the summary.
+
+      A CARD ONLY RENDERS HERE ONCE ITS ACCOUNT HAS AN OPENING RECORD (`#collapsed_accounts`), so
+      this is always a correction and never a first answer — the first answer is a row in the "Your
+      accounts" card, which is the same form. %>
+  <details class="border-t border-gray-200" data-edit-balance="<%= account.name %>">
+    <summary class="px-6 py-3 text-xs font-medium text-brand hover:text-brand-dark cursor-pointer">
+      Edit balance
+    </summary>
+    <%= render "opening_row",
+        account: account,
+        name: nil,
+        url: bank_account_opening_path(account),
+        method: :patch,
+        value: presenter.balance_field_for(account),
+        data: { account_balance_form: account.name } %>
+  </details>
+</section>

@@ -14,42 +14,70 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     let!(:dining) { create(:category, :expense, user: user, name: "Dining") }
     let!(:dining_item) { create(:item, category: dining, name: "Restaurants") }
 
+    # THE STAT CARDS ARE NAMED FOR THE LANE NOW (plan 3, task 4): both categories point at an
+    # ACCOUNT (the factory's default), so both spend out of available. The FIGURES are untouched —
+    # they are entry sums, which is what this file is actually about.
     before do
-      create(:budget, category: groceries, amount: 800)
-      create(:budget, category: dining, amount: 200)
       create(:entry, item: groceries_item, amount: 300.00, date: base_date + 1.day)
       create(:entry, item: dining_item, amount: 150.00, date: base_date + 2.days)
     end
 
     it "shows all expenses as tracked by default" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$1,000.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
     end
 
-    it "reduces tracked total and budget when a budgeted category is untracked" do
+    it "reduces the tracked total when a category is untracked" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "shows untracked category separately in breakdown" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       expect(page).to have_content("Groceries")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
       expect(page).to have_content("Dining")
     end
 
+    # ** AN OPENING SHORTFALL IS NOT UNTRACKED SPENDING (fix round — MED-2). ** It is an EXPENSE
+    # category created `tracked: false` by `AccountOpening` — that is how a negative opening lowers
+    # the pot without touching this period's figures — so it landed in the untracked band and this
+    # page reported the record of what an account started with as money the household spent outside
+    # its budget. Both directions in one example: the shortfall is absent, an ordinary untracked
+    # expense beside it is present with its own figure.
+    # ** AND THE TOTALS ABOVE THE BAND NARROW WITH IT (fix round round 2 — item 3). ** The band was
+    # narrowed by `Category.spendable` while `Total`/`Tracked Unbudgeted Spending` still summed
+    # `entries.expenses`, so the $777 sat inside a figure with no row anywhere on the page to account
+    # for it — a total a reader cannot reconcile against the list beneath it is worse than a wrong
+    # total, because nothing on the screen says it is wrong. Re-derived: $300 Groceries + $150 Dining
+    # = $450 total, $300 tracked once Dining is untracked, and the $777 opening record is in neither.
+    it "keeps an opening shortfall out of the untracked breakdown and out of the totals", :aggregate_failures do
+      # THE ROW IS PLANTED WITH NO MARKER ON PURPOSE — an ordinary entry filed under the opening
+      # category by hand, which is the one shape where the band's NAME test and the total's ROW test
+      # can disagree. `Entry.spendable` carries both tests for exactly this fixture.
+      dining.update!(tracked: false)
+      shortfall = create(:category, :opening_shortfall, user: user)
+      create(:entry, item: create(:item, category: shortfall, name: "Initial balance"), amount: 777, date: base_date + 1.day)
+
+      visit reports_path(tab: "expenses")
+
+      expect(page).to have_content("Dining")
+      expect(page).to have_no_content(Category::OPENING_SHORTFALL_NAME)
+      expect(page).to have_no_content("$777.00")
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
+    end
+
     it "shows only expense categories in the tracked filter" do
       create(:category, :income, user: user, name: "Salary")
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       open_tracked_filter
       expect(page).to have_content("Groceries")
@@ -58,34 +86,33 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
 
     it "toggles a category via the filter popover" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
       apply_tracked
 
       expect(page).to have_content("$300.00") # wait for page reload
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$300.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
-      within_stat_card("Monthly Budget") { expect(page).to have_content("$800.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$300.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
     end
 
     it "applies multiple toggle changes in a single submission" do
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
       open_tracked_filter
       toggle_tracked("Dining")
       toggle_tracked("Groceries")
       apply_tracked
 
       expect(page).to have_content("$0.00")
-      within_stat_card("Tracked Budgeted") { expect(page).to have_content("$0.00") }
-      within_stat_card("Total Budgeted") { expect(page).to have_content("$450.00") }
+      within_stat_card("Tracked Unbudgeted Spending") { expect(page).to have_content("$0.00") }
+      within_stat_card("Total Unbudgeted Spending") { expect(page).to have_content("$450.00") }
       expect(groceries.reload).not_to be_tracked
       expect(dining.reload).not_to be_tracked
     end
 
     it "shows untracked count badge" do
       dining.update!(tracked: false)
-      visit root_path(tab: "expenses")
+      visit reports_path(tab: "expenses")
 
       expect(find("summary")).to have_content("1")
     end
@@ -104,7 +131,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "reduces tracked income total when a category is untracked" do
       freelance.update!(tracked: false)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       within_stat_card("Tracked Income") { expect(page).to have_content("$5,000.00") }
       within_stat_card("Total Income") { expect(page).to have_content("$6,000.00") }
@@ -112,7 +139,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows untracked category separately in breakdown" do
       freelance.update!(tracked: false)
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       expect(page).to have_content("Salary")
       expect(page).to have_css("p.uppercase", text: /untracked/i)
@@ -121,7 +148,7 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
 
     it "shows only income categories in the tracked filter" do
       create(:category, :expense, user: user, name: "Groceries")
-      visit root_path(tab: "income")
+      visit reports_path(tab: "income")
 
       open_tracked_filter
       expect(page).to have_content("Salary")
@@ -130,50 +157,26 @@ RSpec.describe "Dashboard Index - Tracked Filter", type: :system do
     end
   end
 
-  describe "savings tab", :aggregate_failures do
-    let!(:emergency_pool) { create(:savings_pool, user: user, name: "Emergency") }
-    let!(:emergency) { create(:category, :savings, user: user, name: "Emergency Fund", savings_pool: emergency_pool) }
-    let!(:emergency_item) { create(:item, category: emergency, name: "Monthly Transfer") }
-    let!(:vacation_pool) { create(:savings_pool, user: user, name: "Vacation") }
-    let!(:vacation) { create(:category, :savings, user: user, name: "Vacation Fund", savings_pool: vacation_pool) }
-    let!(:vacation_item) { create(:item, category: vacation, name: "Deposit") }
-
-    before do
-      create(:entry, item: emergency_item, amount: 500.00, date: base_date + 1.day)
-      create(:entry, item: vacation_item, amount: 200.00, date: base_date + 2.days)
-    end
-
-    it "reduces tracked savings totals when a category is untracked" do
-      vacation.update!(tracked: false)
-      visit root_path(tab: "savings")
-
-      within_stat_card("Contributed") { expect(page).to have_content("$500.00") }
-    end
-
-    it "shows untracked category separately in breakdown" do
-      vacation.update!(tracked: false)
-      visit root_path(tab: "savings")
-
-      expect(page).to have_content("Emergency Fund")
-      expect(page).to have_css("p.uppercase", text: /untracked/i)
-      expect(page).to have_content("Vacation Fund")
-    end
-
-    it "shows only savings categories in the tracked filter" do
-      create(:category, :expense, user: user, name: "Groceries")
-      visit root_path(tab: "savings")
-
-      open_tracked_filter
-      expect(page).to have_content("Emergency Fund")
-      expect(page).to have_content("Vacation Fund")
-      expect(page).not_to have_content("Groceries")
-    end
-  end
+  # THE "savings tab" DESCRIBE IS DELETED WITH THE TAB (plan 3, task 5). Its three examples pinned
+  # the tracked filter over savings CATEGORIES — a Contributed stat card, an untracked breakdown
+  # row, and a filter list containing only savings categories. None of those three things exists:
+  # the tab, its four partials and `Dashboard::SavingsPresenter` are gone, and so is the type the
+  # filter was filtering. The expenses and income tabs above keep the same claims over the types
+  # that survive.
 
   private
 
+  # THE STAT CARD'S OWN LABEL. Scoped to the card's <p> rather than matched page-wide: a section
+  # HEADING can carry the same words, and a page-wide dollar assertion passes and fails for
+  # unrelated reasons the day any other figure moves.
+  #
+  # The three "Monthly Budget" card negatives that stood beside these figures are deleted with the
+  # card (plan 3, task 4) — `spec/system/dashboard/index/expenses_tab_spec.rb` holds the one
+  # page-wide negative that says the cap vocabulary is gone.
+  def stat_card_label = "div.bg-gray-50 p.text-sm"
+
   def within_stat_card(label, &)
-    card = find("div.md\\:grid-cols-3 > div", text: label)
+    card = find(stat_card_label, text: label, exact_text: true).ancestor("div.bg-gray-50")
     within(card, &)
   end
 

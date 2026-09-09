@@ -5,6 +5,7 @@ class Item < ApplicationRecord
 
   belongs_to :category, touch: true
   has_many :entries, dependent: :destroy
+  has_one :budget, dependent: :nullify
 
   normalizes :name, with: ->(name) { name.squish }
 
@@ -17,7 +18,6 @@ class Item < ApplicationRecord
 
   scope :expenses, -> { joins(:category).where(categories: { category_type: :expense }) }
   scope :incomes, -> { joins(:category).where(categories: { category_type: :income }) }
-  scope :savings, -> { joins(:category).where(categories: { category_type: :savings }) }
 
   def self.merge(target:, sources:)
     transaction do

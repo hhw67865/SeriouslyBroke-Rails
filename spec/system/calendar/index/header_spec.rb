@@ -15,18 +15,20 @@ RSpec.describe "Calendar Index - Header", type: :system do
       expect(page).to have_content(Date.current.strftime("%B %Y"))
     end
 
-    it "displays legend with all entry types" do
+    # TWO TYPES IN THE LEGEND (plan 3, task 5) — it is `CategoryTypeHelper::CATEGORY_TYPES`, and
+    # the savings row went with the enum value.
+    it "displays legend with all entry types", :aggregate_failures do
       expect(page).to have_content("Expense")
       expect(page).to have_content("Income")
-      expect(page).to have_content("Savings")
+      expect(page).to have_no_content("Savings")
     end
   end
 
   describe "legend color indicators", :aggregate_failures do
-    it "shows colored swatches for each type" do
+    it "shows colored swatches for each type", :aggregate_failures do
       expect(page).to have_css(".calendar-legend__swatch.bg-status-danger")
       expect(page).to have_css(".calendar-legend__swatch.bg-status-success")
-      expect(page).to have_css(".calendar-legend__swatch.bg-brand-dark")
+      expect(page).to have_no_css(".calendar-legend__swatch.bg-brand-dark")
     end
   end
 end

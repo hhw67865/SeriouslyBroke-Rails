@@ -50,10 +50,6 @@
             class: "py-4 px-1 border-b-2 font-medium text-sm #{"border-brand text-brand" if @current_type == "income"} #{"border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300" unless @current_type == "income"} transition-colors duration-200" do %>
           Income
         <% end %>
-        <%= link_to entries_path(type: "savings"), 
-            class: "py-4 px-1 border-b-2 font-medium text-sm #{"border-brand text-brand" if @current_type == "savings"} #{"border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300" unless @current_type == "savings"} transition-colors duration-200" do %>
-          Savings
-        <% end %>
       </nav>
     </div>
   </div>

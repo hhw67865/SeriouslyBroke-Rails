@@ -35,12 +35,12 @@ export default class extends Controller {
 
     // Reset all options to default state
     this.categoryTypeOptionTargets.forEach(option => {
-      option.classList.remove('border-brand', 'bg-brand-light')
+      option.classList.remove('border-brand-dark', 'bg-brand-light')
       option.classList.add('border-gray-200')
     })
     
     this.categoryTypeIconTargets.forEach(icon => {
-      icon.classList.remove('bg-brand')
+      icon.classList.remove('bg-brand-dark')
       icon.classList.add('bg-gray-200')
     })
     
@@ -53,12 +53,12 @@ export default class extends Controller {
     const selectedOption = this.element.querySelector(`.category-type-option[data-type="${selectedValue}"]`)
     if (selectedOption) {
       selectedOption.classList.remove('border-gray-200')
-      selectedOption.classList.add('border-brand', 'bg-brand-light')
+      selectedOption.classList.add('border-brand-dark', 'bg-brand-light')
       
       const icon = selectedOption.querySelector('.category-type-icon')
       if (icon) {
         icon.classList.remove('bg-gray-200')
-        icon.classList.add('bg-brand')
+        icon.classList.add('bg-brand-dark')
       }
       
       const text = selectedOption.querySelector('.category-type-text')

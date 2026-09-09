@@ -18,15 +18,18 @@ RSpec.describe "Categories Index - Cards", type: :system do
     sign_in user, scope: :user
   end
 
-  describe "expense card shows correct monthly budget and links to show", :aggregate_failures do
+  # THE CARD'S CAP ARM IS DELETED (plan 3, task 3), its POOL LINE with it (Task 7), and its HOLDING
+  # line with the moved money (computed-claims spec §5, Task 4). The card printed "Pool: Checking",
+  # then a `HoldingCalculator#balance`; it prints what the category's rules CLAIM now, or — where no
+  # rule claims it — that its spending comes straight out of what's free to spend. There is no
+  # `available` to come out of: `free` is a DEFINITION (`min(pot, total − Σ claims)`, §2) rather than
+  # a pot. The spending figures and the month navigation are unchanged.
+  describe "expense card shows the period's spending and links to show", :aggregate_failures do
     let!(:expense_category) { create(:category, category_type: "expense", user: user, name: "Food") }
     let!(:groceries_item) { create(:item, category: expense_category, name: "Groceries") }
     let!(:dining_item) { create(:item, category: expense_category, name: "Dining") }
 
     before do
-      # Create budget for expense category
-      create(:budget, category: expense_category, amount: 1000)
-
       # Month A entries (total 150)
       create(:entry, item: groceries_item, amount: 100, date: base_date + 2.days)
       create(:entry, item: dining_item, amount: 50, date: base_date + 10.days)
@@ -40,11 +43,10 @@ RSpec.describe "Categories Index - Cards", type: :system do
       visit categories_path(type: "expense", month: base_date.month, year: base_date.year)
     end
 
-    it "displays correct monthly budget, percentage, and top items for selected month" do
-      # Budget totals and percentage
+    it "displays the period's spending, its lane and the top items for selected month" do
       expect(page).to have_content(currency(150))
-      expect(page).to have_content("/ #{currency(1000)}")
-      expect(page).to have_content("15% used")
+      expect(page).to have_content("Nothing claims this — comes out of what's free to spend")
+      expect(page).to have_no_content("% used")
 
       # Top items with amounts (expense shows negative sign)
       expect(page).to have_content("Groceries")
@@ -52,26 +54,30 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content("-#{currency(100)}")
       expect(page).to have_content("-#{currency(50)}")
 
-      find("div.group.cursor-pointer", text: expense_category.name).click
+      # `click_link`, WHERE THIS USED TO BE `find("div.group.cursor-pointer").click` (design review
+      # B1). The card was a `<div onclick="window.location=…">` — no href, no tab stop, no focus
+      # ring, nothing for a screen reader — and the selector was the assertion agreeing with it: it
+      # could only pass against markup a keyboard user cannot reach. The card is an `<a>` now, so
+      # the spec asks Capybara for a LINK, which is a claim about the affordance and not about the
+      # class attribute it happens to carry.
+      click_link expense_category.name
       expect(page).to have_current_path(category_path(expense_category))
     end
 
-    it "updates budget info when navigating to next month via navbar and keeps type" do
+    it "updates the spending when navigating to next month via navbar and keeps type" do
       find("button[title='Next month']").click
 
       expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content(currency(300))
-      expect(page).to have_content("30% used")
       expect(page).to have_content("-#{currency(200)}")
       expect(page).to have_content("-#{currency(100)}")
     end
 
-    it "updates budget info when navigating to previous month via navbar" do
+    it "updates the spending when navigating to previous month via navbar" do
       find("button[title='Previous month']").click
 
       expect(page).to have_current_path(categories_path(type: "expense"))
       expect(page).to have_content(currency(120))
-      expect(page).to have_content("12% used")
     end
   end
 
@@ -104,7 +110,7 @@ RSpec.describe "Categories Index - Cards", type: :system do
       expect(page).to have_content("+#{currency(500)}")
       expect(page).to have_content("+#{currency(250)}")
 
-      find("div.group.cursor-pointer", text: income_category.name).click
+      click_link income_category.name
       expect(page).to have_current_path(category_path(income_category))
     end
 
@@ -117,45 +123,171 @@ RSpec.describe "Categories Index - Cards", type: :system do
     end
   end
 
-  describe "savings card shows correct monthly contribution and links to show", :aggregate_failures do
-    let!(:pool) { create(:savings_pool, user: user, name: "Main Pool") }
-    let!(:savings_category) { create(:category, category_type: "savings", user: user, savings_pool: pool, name: "Emergency Fund") }
-    let!(:transfer_item) { create(:item, category: savings_category, name: "Transfer") }
-    let!(:rollover_item) { create(:item, category: savings_category, name: "Rollover") }
+  # THE SAVINGS CARD IS BACK, AS A CATEGORY (two-ledger spec §3, Task 7), AND ITS FIGURE IS A CLAIM
+  # (computed-claims spec §2, Task 4). It was deleted with the savings TYPE in plan 3 task 5 — its
+  # two examples read a "Monthly Contribution" figure and a "Savings Pool: Main Pool" line off a card
+  # arm that no longer existed — and savings now live here, on the screen that replaced the Pools
+  # index. The classifier is `Budget.saving_toward_a_date` (two-shapes spec §2) — the item-less
+  # rule whose unspent money carries — the same reader the show page's holdings card and the entry
+  # form's impact card ask. It replaced `Category#saving_toward_a_target?`, a question about a figure
+  # on the CATEGORY that no claim formula has read since the shapes moved onto the rule.
+  #
+  # ** BOTH FIXTURES USED TO BE ALLOCATIONS AND ARE NOW RULES. ** Nothing moves on the purpose side
+  # (§5), so the $500 that was moved into Vacation and the $400 moved into Groceries are written the
+  # way the model actually puts money there — a rule that accrues, and a rate rule — and both figures
+  # are re-derived below. The 25% is deliberately the SAME 25% the allocation version asserted: the
+  # reading of a goal against its target did not change, only what the numerator is made of.
+  describe "what a card says about the money the category claims", :aggregate_failures do
+    # ** THE PERIOD IS DECLARED FOR THIS BLOCK, AND IT IS THE GRID THE FALLBACK ALREADY USED
+    # (two-shapes §2). ** A goal is a DATED rule now, and `ClaimCalculator#periods_left_from` counts
+    # `User#period_boundaries` — which is EMPTY for an undeclared user, so the catch-up floors at one
+    # period and asks the whole target in the first one. Monthly anchored the 1st is exactly the
+    # calendar month `User#period_containing` falls back to, so every other figure in this block is
+    # untouched and the goal below has a real number of periods to spread itself over.
+    before { user.update!(period_cadence: :monthly, period_anchor_date: Date.current.beginning_of_month) }
 
-    before do
-      # Month A entries (total 250)
-      create(:entry, item: transfer_item, amount: 200, date: base_date + 7.days)
-      create(:entry, item: rollover_item, amount: 50, date: base_date + 14.days)
-      # Month B entries (total 300)
-      create(:entry, item: transfer_item, amount: 200, date: next_date + 1.day)
-      create(:entry, item: rollover_item, amount: 100, date: next_date + 8.days)
+    # PLANTED: a $2,000 goal due at the close of the FOURTH month from this one, funded a year back
+    # but written today, so the accrual walk opens in the current period and visits exactly one.
+    # Four boundaries remain, so `planned = 2,000 ÷ 4` = **$500.00**, nothing is spent, the claim is
+    # $500.00 and the bar is `(500 ÷ 2,000 × 100).round` = **25** — the same figures the retired
+    # `min(rate 500, gap 2,000)` shape produced.
+    it "shows a fund's claim and its progress toward the rule's target" do
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
+      goal_on(vacation)
 
-      visit categories_path(type: "savings", month: base_date.month, year: base_date.year)
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Claimed")
+      expect(page).to have_content(currency(500))
+      expect(page).to have_css("[data-building-progress]")
+      expect(page).to have_content("25% of #{currency(2_000)}")
     end
 
-    it "displays correct monthly contribution, savings pool, and top items for selected month" do
-      expect(page).to have_content(currency(250))
-
-      # Shows associated savings pool
-      expect(page).to have_content("Savings Pool: Main Pool")
-
-      # Top items with amounts (savings shows plain amounts)
-      expect(page).to have_content("Transfer")
-      expect(page).to have_content("Rollover")
-      expect(page).to have_content(currency(200))
-      expect(page).to have_content(currency(50))
-
-      find("div.group.cursor-pointer", text: savings_category.name).click
-      expect(page).to have_current_path(category_path(savings_category))
+    # ** A FUND WITH A SIBLING RULE PRINTS NO CEILING (spec §10.5; fix wave — MED-1). ** `Claimed` is
+    # Σ EVERY rule's claim and the target is a ceiling on the FUND's built-up alone, so `25% of
+    # $2,000.00` measured one against the other: the card said a $2,000 fund was a quarter of the way
+    # there while counting a second rule's money into the numerator. The entry form's impact card had
+    # this guard since §10.5 and this card did not.
+    #
+    # PLANTED: the example above's fund — $500 a period toward $2,000, one walked period, **$500.00**
+    # built up — plus an item-backed **$100.00**-a-period rate rule with nothing spent against it
+    # (§3.1: `max(0, 100 + 0 − 0)`). `Claimed` is their sum, **$600.00**, and the fund's own figure is
+    # still $500 — which is exactly why no ceiling can be printed beside the $600.
+    #
+    # THE SIBLING IS A RATE RULE AND NOT THE §10.5 EXAMPLE'S DATED BILL: this file's user declares no
+    # period, so the walk falls back to the calendar month and a dated rule's catch-up would depend
+    # on which day of the month the suite ran (CLAUDE.md's third flake cause). What the gate reads is
+    # that a SECOND rule exists, and a rate rule is the cheapest honest way to say so.
+    # THE GOAL, WITH ITS HORIZON DERIVED: the last day of the fourth month from this one leaves four
+    # boundaries from this period's open, so §3.2 asks `2,000 ÷ 4` = $500 in each of them.
+    def goal_on(category)
+      create(
+        :budget,
+        category: category,
+        amount: 2_000,
+        basis: :monthly,
+        interval_months: nil,
+        anchor_date: (Date.current.beginning_of_month + 4.months) - 1.day
+      )
     end
 
-    it "updates savings info when navigating to next month via navbar" do
-      find("button[title='Next month']").click
+    def vacation_fund_beside_a_second_rule
+      vacation = create(:category, :expense, :funded, user: user, name: "Vacation")
+      goal_on(vacation)
+      create(
+        :budget,
+        :per_period_rate,
+        category: vacation,
+        item: create(:item, category: vacation, name: "Flights"),
+        amount: 100
+      )
+    end
 
-      expect(page).to have_content(currency(300))
-      expect(page).to have_content(currency(200))
-      expect(page).to have_content(currency(100))
+    it "draws no bar for a fund that is not the whole category", :aggregate_failures do
+      vacation_fund_beside_a_second_rule
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Claimed")
+      expect(page).to have_content(currency(600))
+      expect(page).to have_no_css("[data-building-progress]")
+      expect(page).to have_no_content("of #{currency(2_000)}")
+    end
+
+    # ** A RULE THAT REPEATS IS A RECURRING BILL AND NOT A FUND (two-shapes §2). ** It accrues by
+    # exactly the same walk as the goal above, and this card draws no track for it: the water rates
+    # every six months are not something being saved toward, which is the one clause
+    # `Budget.saving_toward_a_date` can draw and the retired classifier could not — a building rule
+    # had no date to repeat on.
+    #
+    # ** IT REPLACES "shows an uncapped fund's claim and no bar" (§7), ** which planted the fund that
+    # named no ceiling: `planned` was the plain rate with no `gap` to bound it, the claim was $500 and
+    # there was nothing for a bar to be a fraction of. That shape is gone; this is the surviving way
+    # for an ACCRUING category to have no track.
+    #
+    # PLANTED: $2,400 every six months, first due at the close of the fourth month from this one, so
+    # four boundaries remain and `planned = 2,400 ÷ 4` = **$600.00** in the one period walked.
+    # THE SAME HORIZON AS THE GOAL ABOVE, so the only difference between the two cards is the
+    # interval — which is exactly the clause under test.
+    def repeating_bill_on(category)
+      create(
+        :budget,
+        category: category,
+        amount: 2_400,
+        basis: :monthly,
+        interval_months: 6,
+        anchor_date: (Date.current.beginning_of_month + 4.months) - 1.day
+      )
+    end
+
+    it "shows a repeating bill's claim and no bar", :aggregate_failures do
+      repeating_bill_on(create(:category, :expense, :funded, user: user, name: "Emergency"))
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content(currency(600))
+      expect(page).to have_no_css("[data-building-progress]")
+    end
+
+    # ** THE OTHER DIRECTION, AND IT IS THE ONE THE OLD CLASSIFIER GOT WRONG. ** A figure on the
+    # CATEGORY beside a rule whose money RESETS drew a bar against a number no formula reads. The
+    # shape decides now, and this shape is an envelope — the category-side target column is dropped,
+    # so there is no second number for a classifier to be tempted by.
+    it "draws no bar for a resetting rule", :aggregate_failures do
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content(currency(400))
+      expect(page).to have_no_css("[data-building-progress]")
+    end
+
+    # An envelope claims money too — it just has no target for a bar to be a fraction of.
+    #
+    # PLANTED (§3.1): `max(0, rate + Σ adjustments − spent)` = `max(0, 400 + 0 − 0)` = **$400.00**.
+    it "shows an envelope's claim and no bar" do
+      groceries = create(:category, :expense, :funded, user: user, name: "Groceries")
+      create(:budget, :per_period_rate, category: groceries, amount: 400)
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Claimed")
+      expect(page).to have_content(currency(400))
+      expect(page).to have_no_css("[data-building-progress]")
+    end
+
+    # ** AND A HOLDER WITH NO RULE CLAIMS NOTHING (§3.3: every claim comes from a rule). ** Under the
+    # moved-money model this card would have shown whatever had been allocated in; a category with a
+    # funding date and no rule now has a claim of exactly zero however much has been spent on it, and
+    # the card says so rather than leaving the line off.
+    it "shows a claim of nothing for a holder with no rule" do
+      create(:category, :expense, :funded, user: user, name: "Cushion")
+
+      visit categories_path(type: "expense")
+
+      expect(page).to have_content("Claimed")
+      expect(page).to have_content(currency(0))
     end
   end
 end

@@ -1,0 +1,58 @@
+<%# THE ACCOUNTS, DEMOTED TO ONE LINE (answers-first spec §6). Local: `presenter` (HomePresenter).
+
+    ** WHAT THE LINE ANSWERS AND WHAT THE EXPANSION IS FOR, because they are two different jobs. **
+    The line answers "how much of my money is somewhere other than checking" — main is deliberately
+    out of the figure, because main's balance IS the hero's "In Checking" number and printing it
+    again here would answer one question twice. The expansion is the accounts INDEX: Home carries
+    rename and delete since `pools/index` and `pools/show` were deleted, so every finished account's
+    card has to stay reachable, main's included.
+
+    `<details>`/`<summary>` RATHER THAN A STIMULUS CONTROLLER — the house idiom, and
+    `budget_page/_suggestions.html.erb` states its reason where the same choice was made: the whole
+    interaction is "show me the rest", it needs no JavaScript, and it survives a Turbo navigation.
+    The SUMMARY carries the figure, always visible, because the figure is the answer.
+
+    ONBOARDING IS NOT IN HERE. An account still awaiting its funding card, and main still awaiting
+    its opening balance, render top-level (see `index.html.erb`) — a door behind a chevron is a door
+    a first-time user does not find. `HomePresenter#collapsed_accounts` is the one place that split
+    is made, so the two lists cannot both claim an account and render its card twice. %>
+<% accounts = presenter.collapsed_accounts %>
+<% others = presenter.other_accounts %>
+<% if accounts.any? %>
+  <details class="bg-white border border-gray-200 rounded" data-accounts>
+    <summary class="px-6 py-3 text-sm text-gray-700 cursor-pointer hover:text-gray-900" data-accounts-line>
+      <% if others.any? %>
+        <strong class="tabular-nums"><%= number_to_currency(presenter.other_accounts_total) %></strong>
+        across <%= pluralize(others.size, "other account") %>
+        <%# ** THE CHIPS ARE GONE FROM HERE (2026-09-06 layout ruling), AND THEY WENT UP RATHER THAN
+            AWAY. ** They were added here because the line said how MUCH was elsewhere and never
+            WHERE — and the money row's third tile now answers that at the top of the screen, in the
+            first band, beside the figure it is about. Printing the same three names again at the
+            foot of the page was the same list twice on one screen, which is the thing this whole
+            wave is undoing. What this line keeps is its own job: the total, and the door to the
+            cards behind it. `data-account-chip` on the tile is the one hook that names them. %>
+      <% else %>
+        <%# NOTHING IS ELSEWHERE, so there is no figure to state — "$0.00 across 0 other accounts"
+            would be the app inventing an absence. The line still exists, because the cards behind it
+            do and this is the only door to them.
+
+            "ACCOUNT DETAILS", NOT "YOUR ACCOUNTS" (account-openings spec §3): that is the heading of
+            the card below, and one screen saying the same three words twice about two different
+            things reads as one thing rendered twice. This line is the door to the finished accounts'
+            cards; the card below is where an account is added and where it says what it holds. %>
+        Account details
+      <% end %>
+    </summary>
+
+    <%# A TRAY RATHER THAN A CONTINUATION OF THE CARD: `_account` renders its own bordered section,
+        so the expansion is given a recessed ground to sit them on instead of a second set of
+        borders butted against this one. %>
+    <div class="border-t border-gray-200 bg-gray-50 p-3 space-y-3">
+      <%# TODAY'S ACCOUNT CARDS, UNCHANGED. `_account` is the same partial it was — the balance the
+          bank says, the main-account note, rename and (off main) delete. %>
+      <% accounts.each do |account| %>
+        <%= render "account", presenter: presenter, account: account %>
+      <% end %>
+    </div>
+  </details>
+<% end %>

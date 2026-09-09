@@ -7,6 +7,10 @@ FactoryBot.define do
     category_type { :expense }
     association :user
 
+    # `pool` IS GONE WITH `categories.pool_id` (two-ledger spec §5, Task 8). A category does not
+    # name a lane any more — it holds its own money from `funded_since` on, and spending before
+    # that drains available.
+
     trait :income do
       category_type { :income }
       name { Faker::Job.field + Faker::Number.number(digits: 2).to_s }
@@ -17,11 +21,44 @@ FactoryBot.define do
       name { Faker::Commerce.department + Faker::Number.number(digits: 2).to_s }
     end
 
-    trait :savings do
-      category_type { :savings }
-      name { "Savings for #{Faker::Commerce.product_name} + Faker::Number.number(digits: 2).to_s" }
-      association :savings_pool
+    # ** THE TWO CATEGORIES `AccountOpening` WRITES, AND THE ONLY WAY A FIXTURE MAY PLANT ONE (fix
+    # round round 2 — item 6). ** `Category#opening_names_are_reserved` refuses both names to
+    # everybody but that object — `Category.spendable` is a NAME test, so a user renaming a category
+    # into one would silently drop it and its claims off four screens — and `opening_record` is the
+    # flag that says "this IS the record", which is exactly what a fixture planting one means.
+    #
+    # `tracked: false` on both, because that is what the service writes: an opening is bookkeeping,
+    # not a fact about a period's income or spending.
+    trait :opening_balance do
+      name { Category::OPENING_BALANCE_NAME }
+      category_type { :income }
+      tracked { false }
+      opening_record { true }
     end
+
+    trait :opening_shortfall do
+      name { Category::OPENING_SHORTFALL_NAME }
+      category_type { :expense }
+      tracked { false }
+      opening_record { true }
+    end
+
+    # THE DATE THE CATEGORY STARTED HOLDING MONEY (two-ledger spec §4), and the whole of what
+    # makes a category a holder: `Category#holder?` is `expense? && funded_since.present?`, and
+    # `CategoryLedger::ENTRY_CATEGORY_ID` drains this category only for spending dated on or after
+    # it. A year back, so an entry dated "today" or "last month" in any fixture counts against the
+    # category without the fixture having to say a date twice.
+    trait :funded do
+      funded_since { 1.year.ago.to_date }
+    end
+
+    # ** `:savings` IS GONE WITH THE CATEGORY-SIDE TARGET COLUMN (rules-own-the-budget spec §7). **
+    # It was `funded` plus a figure, on the era's reading that a goal is a KIND OF CATEGORY. A goal
+    # is a rule saving toward a day now (two-shapes §2 row 5), so the trait's second half has no
+    # column to write and its first half is `:funded` verbatim — a trait that is a synonym for
+    # another one is a second name for one shape, which is how two fixtures come to mean different
+    # things by the same word. Its call sites read `:funded` and reach for
+    # `create(:budget, :by_date, …)` where the goal itself is the subject.
 
     trait :with_items_and_entries do
       transient do

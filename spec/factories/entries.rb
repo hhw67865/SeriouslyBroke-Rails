@@ -21,13 +21,6 @@ FactoryBot.define do
       association :item, factory: [:item, :income]
     end
 
-    trait :savings do
-      transient do
-        user { create(:user) }
-      end
-      association :item, factory: [:item, :savings]
-    end
-
     trait :last_month do
       date { 1.month.ago }
     end

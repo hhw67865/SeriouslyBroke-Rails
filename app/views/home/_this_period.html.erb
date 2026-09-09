@@ -1,0 +1,167 @@
+<%# "THIS PERIOD" — ONE BLOCK PER CATEGORY, ONE ROW PER RULE (two-shapes spec §3).
+    Local: `presenter` (HomePresenter).
+
+    ** THE RULING THIS SECTION IS BUILT ON (Henry, 2026-09-05): "almost all categories will have
+    multiple rules, so we need to base the UI knowing this." ** It was a flat list of category rows
+    with the second and third rule indented under the first, which reads as a category with
+    footnotes. A category is a BLOCK now: a header that says how many rules it carries and what they
+    claim between them, and a row per rule that says what shape it is, what it has, and when.
+
+    ** THE ORDER IS `#give_way_order` GROUPED BACK, AND IT IS THE ONLY SORT ON THE SCREEN. ** A
+    block sits where its first-giving-way rule sits, and its rows sit where each of theirs does. The
+    strip above walks THESE blocks (`HomePresenter#trouble_lines` is `#category_blocks` flattened
+    and filtered, fix wave — MED-1), so the two panels cannot rank one category two ways: they are
+    one list, read twice. See `ClaimRows#give_way_order` for what the key is.
+
+    ** EVERY FIGURE IS A CLAIM, off the page's ONE `ClaimLedger`. ** Nothing is allocated into a
+    category (computed-claims §5); each row comes off one `ClaimCalculator` and says the sentence its
+    shape gives it:
+
+      RATE      usage · a period          $310.00 of $400.00     resets Oct 1
+      DATED     bill · every 12 months    $26.50 of $26.50       Sep 17 · ready
+      DATED     choice · $5,000.00 by Jun 1, 2027   $283.33 of $5,000.00   Apr 2 · +$41.67
+      NO RULE   spent $32.00              — the fact, no bar, no pressure
+
+    THE WORDS ARE THE USER'S: spent, of, claimed, ready, short, overdue. "Set aside", "goal", "fund"
+    and "builds up" are not here — nothing moves and nothing holds money.
+
+    AT 375 (§3): one column, and the rows drop their bars. The bar is the least of what a row says —
+    the figure beside it is the same fact in numbers — and it is the first thing to cost more width
+    than it earns. %>
+<section data-this-period>
+  <%# THE HEADING IS THE SECTION'S OWN ARITHMETIC AND NOT THE CALENDAR'S. "N days left" used to live
+      here as well as under the hero's bar, printed by two panels that could disagree; the period
+      belongs to the runway now (`_runway.html.erb`) and this line says what the section is about.
+      The claimed total is `#total_claims` — the SAME figure the money tile subtracts from checking,
+      and it is Σ over these blocks by construction. %>
+  <%# ** THE COUNTS TRADE PLACES WITH THE FIGURE AT 375 (2026-09-06 layout ruling). ** At full width
+      the heading names what the section holds and the claimed total sits at the right margin, which
+      is the reading order of every other header in this app. A phone has no right margin to put a
+      figure at, and "This period · 6 categories · 6 rules" fills the line on its own — so the FIGURE
+      joins the heading (it is the answer; the counts are the inventory) and the counts drop to a
+      muted second line. `justify-start` below `sm` is what puts the two beside each other rather
+      than at opposite ends of a 343px row.
+
+      ONE ELEMENT PER FACT, and the counts are the only thing said twice — once inside the heading,
+      where `[data-this-period-heading]` must carry them at full width, and once as their own line
+      below it. The claimed figure moves rather than duplicating, so `[data-this-period-claimed]` is
+      findable at either width. %>
+  <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 pb-2 sm:justify-between sm:gap-x-3">
+    <h3 class="text-sm font-semibold text-gray-900" data-this-period-heading>
+      This period<span class="hidden sm:inline"> ·
+        <%= pluralize(presenter.category_blocks.size, "category") %> ·
+        <%= pluralize(presenter.category_blocks.sum(&:rule_count), "rule") %></span>
+    </h3>
+    <p class="text-sm text-gray-700 tabular-nums" data-this-period-claimed>
+      <span class="sm:hidden" aria-hidden="true">· </span><%= number_to_currency(presenter.total_claims) %> claimed
+    </p>
+    <p class="basis-full text-xs text-gray-500 sm:hidden" data-this-period-counts>
+      <%= pluralize(presenter.category_blocks.size, "category") %> ·
+      <%= pluralize(presenter.category_blocks.sum(&:rule_count), "rule") %>
+    </p>
+  </div>
+
+  <%# TWO COLUMNS FROM 1024px, ONE BELOW (§3). `items-start` so a two-rule block beside a five-rule
+      one keeps its own height instead of stretching to match. %>
+  <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
+    <% presenter.category_blocks.each do |block| %>
+      <div class="bg-white border border-gray-200 rounded overflow-hidden" data-category-block="<%= block.name %>">
+        <%# THE HEADER TINTS WHEN ANY ROW IS OVER, SHORT OR OVERDUE (§3) — `CategoryBlock#trouble?`,
+            which is deliberately WIDER than the trouble strip's own two triggers. See that method:
+            a bill due in nine days with a third of its money missing is not yet a thing that needs a
+            human, and it is exactly what a header tint is for. %>
+        <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 py-2 border-b border-gray-200 <%= block.trouble? ? "bg-status-danger-light" : "bg-gray-50" %>"
+             data-block-header>
+          <div class="flex items-baseline gap-2">
+            <h4 class="text-sm font-semibold text-gray-900"><%= block.name %></h4>
+            <span class="text-xs text-gray-500"><%= pluralize(block.rule_count, "rule") %></span>
+          </div>
+          <span class="text-sm text-gray-700 tabular-nums" data-block-claimed>
+            <%= number_to_currency(block.claimed) %> claimed
+          </span>
+        </div>
+
+        <% block.rows.each do |row| %>
+          <%# `data-rule-row` IS NAMED BY THE LANE, NOT BY THE CATEGORY: a block may carry two rules
+              and both would answer to the category's name. `ClaimLine#name` is the item's or
+              "Whole category". %>
+          <div class="flex gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0"
+               data-rule-row="<%= row.name %>">
+            <%# THE STRIPE IS THE RULE'S TYPE (rules-own-the-budget §3), which is a fact about the
+                RULE and not about its category: a category may carry a bill beside a choice, and
+                they give way at opposite ends of the walk. `aria-hidden`, because the same fact is
+                the first word of the shape clause below — a screen reader would otherwise meet it
+                twice. %>
+            <span class="w-1 shrink-0 rounded <%= stripe_fill(row) %>" aria-hidden="true"></span>
+
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-3">
+                <p class="text-sm font-medium text-gray-900 truncate"><%= row.name %></p>
+                <%# THE FIGURE (§3.4), red when the spending has passed what the rule had. `over?` is
+                    the pre-clamp reader and the only one that can tell "spent it exactly" from
+                    "spent more than there was". %>
+                <p class="text-sm tabular-nums <%= row.over? ? "text-status-danger font-medium" : "text-gray-700" %>"
+                   data-rule-figure>
+                  <%= figure_words(row) %>
+                </p>
+              </div>
+
+              <p class="mt-0.5 text-xs <%= type_text_class(row) %>" data-rule-shape><%= shape_words(row) %></p>
+
+              <%# THE BAR, AND IT IS THE ONE THING 375px DROPS (§3). The percent rides on the TRACK:
+                  a 0% fill has no width, so Capybara cannot see it, and a hook there would be
+                  unassertable on exactly the row a bar most needs pinning — the one nobody has spent
+                  from. Green when it has arrived, red when it is over or short, olive while it is
+                  still filling. %>
+              <% if row.bar? %>
+                <div class="mt-1.5 hidden sm:block h-1.5 bg-gray-200 rounded-full overflow-hidden"
+                     role="progressbar"
+                     aria-valuenow="<%= row.percent %>"
+                     aria-valuemin="0"
+                     aria-valuemax="100"
+                     aria-label="<%= block.name %> · <%= row.name %>"
+                     data-rule-bar="<%= row.percent %>"
+                     data-rule-bar-state="<%= row.bar_state %>">
+                  <div class="h-1.5 rounded-full <%= bar_fill(row) %>"
+                       style="width: <%= row.percent %>%;"
+                       data-rule-fill></div>
+                </div>
+              <% end %>
+
+              <%# WHEN: one clause, and which one is `HomeHelper#when_words`. A rate rule in a period
+                  with no boundary declared has nothing to say and renders no element at all. %>
+              <% if when_clause = when_words(row) %>
+                <p class="mt-1 text-xs <%= row.trouble? || row.short? ? "text-status-danger font-medium" : "text-gray-500" %>"
+                   data-rule-when>
+                  <%= when_clause %>
+                </p>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <%# A CATEGORY NO RULE CLAIMS, WITH SPENDING THIS PERIOD (answers-first §4): the fact, no bar, no
+        pressure. Nothing claims these receipts, so a denominator would be inventing the pressure
+        rather than reporting it. Zero-spend ones are absent by construction — the Categories page
+        remains the full index. %>
+    <% presenter.unbudgeted_rows.each do |row| %>
+      <div class="bg-white border border-gray-200 rounded px-4 py-3 flex items-baseline justify-between gap-3"
+           data-unbudgeted-row="<%= row.category.name %>">
+        <span class="text-sm font-medium text-gray-900"><%= row.category.name %></span>
+        <span class="text-sm text-gray-700 tabular-nums">spent <%= number_to_currency(row.spent) %></span>
+      </div>
+    <% end %>
+  </div>
+
+  <%# Said plainly rather than left as an empty card: a blank panel on a money screen reads as
+      something that failed to load. The door is the Budget page, which is where a rule — the thing
+      that gives a category a claim — is written. %>
+  <% if presenter.category_blocks.empty? && presenter.unbudgeted_rows.empty? %>
+    <p class="bg-white border border-gray-200 rounded px-4 py-3 text-sm text-gray-500">
+      Nothing is budgeted yet, and nothing has been spent this period.
+      <%= link_to "Give a category a rule on the Budget page", budget_page_path, class: "text-status-info hover:underline" %>
+    </p>
+  <% end %>
+</section>

@@ -1,0 +1,56 @@
+<%# ** ONE ROW: AN ACCOUNT, WHAT IS IN IT, AND SAVE (account-openings spec §3). ** The same form in
+    both places it is asked for — a row in the "Your accounts" card for an account that has not said
+    yet, and the **Edit balance** row on a finished account's own card — because they are the same
+    act a day apart: `AccountOpening` writes the record the first time and rewrites it every time
+    after, so a second spelling of this form would be a second door to one object.
+
+    THE FIELD IS THE ONLY QUESTION THE APP ASKS ABOUT AN ACCOUNT. Not "how much do you want to move
+    here", not "what should main be corrected to" — both of those were onboarding steps of their own
+    and both are deleted. Henry, 2026-09-06: "they just want to put in what their accounts are
+    currently worth."
+
+    Locals: `account` (the Pool this row is about), `url` and `method` (create for a first answer,
+    update for a correction — `AccountOpeningsController` treats them identically), `value` (what the
+    field opens on: today's balance on a correction, the refused figure after a 422, blank on a first
+    answer), `name` (the account's name, shown in the card where the row is the only thing naming it
+    and nil under a card header that already does), `data` (the caller's own hook).
+
+    `simple_form_for :account_opening` ON A SYMBOL, not on the AccountOpening object: the refusals
+    this door can produce are about the FIGURE — unparsable, or negative off main — and both are
+    stated once, in the flash, over a page that re-renders every row. An object-backed form would
+    print the same sentence twice on the one row and nothing on the others. %>
+<%= simple_form_for :account_opening, url: url, method: method, html: { data: data } do |f| %>
+  <%# STACKED BELOW `sm`, one line from `sm` up — the same shape every other inline form on this
+      screen uses. `sm:pb-2` sits the name on the input's own baseline rather than at the top of a
+      hint that may wrap; `sm:pt-7` drops the button to that line by the label's height. %>
+  <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
+    <% if name.present? %>
+      <div class="sm:w-1/3 sm:pt-7 text-sm font-semibold text-gray-900 truncate" title="<%= name %>">
+        <%= name %>
+      </div>
+    <% end %>
+    <div class="flex-1">
+      <%# ** THE FIELD'S id CARRIES THE ACCOUNT'S (measured in the browser, three rows on one card).
+          ** `simple_form_for :account_opening` names every input `account_opening_balance`, and this
+          partial renders once per unanswered account — so the card shipped three inputs with ONE id
+          between them, every `<label for>` pointing at the first. Clicking the third row's label put
+          the cursor in the first row's box. The label follows the input rather than the attribute. %>
+      <% field_id = "account_opening_balance_#{account.id}" %>
+      <%# `min` ON EVERY ACCOUNT BUT MAIN, which is `AccountOpening`'s own rule drawn on the control:
+          a mirror cannot be overdrawn by construction, while an overdrawn checking account is a fact
+          (spec §4). The server refuses it either way — `config.browser_validations` is off app-wide
+          and a bare POST bypasses the browser entirely — so this is a hint, not the guard. %>
+      <%= f.input :balance,
+          as: :decimal,
+          label: "What's in it right now",
+          placeholder: "0.00",
+          required: false,
+          label_html: { for: field_id },
+          input_html: { id: field_id, step: 0.01, value: value, **(account.main? ? {} : { min: 0 }) },
+          hint: "What your bank shows for this account today." %>
+    </div>
+    <div class="sm:pt-7">
+      <%= f.button :submit, "Save", class: "btn btn-primary" %>
+    </div>
+  </div>
+<% end %>

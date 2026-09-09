@@ -20,8 +20,44 @@
     next_year = current_year
   end
 
-  # Preserve existing query params for form redirects
-  base_params = request.query_parameters.deep_dup.symbolize_keys.except(:month, :year)
+  # Preserve existing query params for form redirects — SCALARS ONLY.
+  #
+  # These ride along as `hidden_field key, value: value`, which writes ONE box holding the value's
+  # #to_s. A NESTED PARAM THEREFORE DOES NOT SURVIVE: a hash arrives on the other side as the single
+  # scalar `<key>=<the hash, inspected>`, which is a string no controller can read back as the hash
+  # it was. The screen that proved it is deleted (Task 4 took the Distribute page and its
+  # `overrides[<pool id>]` hash with it), so this filter now guards no caller in particular — and it
+  # is kept for that reason rather than in spite of it: it is a fact about `hidden_field`, and the
+  # next screen to hang a nested parameter off a URL will not suspect a shared partial.
+  #
+  # Dropping them is also the right BEHAVIOUR, not just the safe one: a month arrow moves to a
+  # different period, whose rows are different rows, so an edit carried across it would name rows
+  # that no longer exist. Dropped deliberately here rather than mangled into something a guard
+  # downstream has to catch.
+  #
+  # EVERY HIDDEN FIELD BELOW IS RENDERED `id: nil`, AND THAT IS A CORRECTNESS FIX RATHER THAN
+  # TIDINESS. `f.hidden_field :amount` writes `id="amount"` as well as the name, and this partial
+  # renders FOUR such forms on every page — two here, twice over, because _sidebar renders both the
+  # `sidebar` and the `mobile` variant. So `month` and `year` already appeared four times as ids on
+  # every page in the app, and each preserved query parameter appeared four more.
+  #
+  # That is invalid HTML on its own, and it is a live trap for any screen naming a form field after
+  # its own query parameter: `label for=` and `document.getElementById` both resolve to the FIRST
+  # match in the document, which is one of these hidden inputs, not the box the user types in.
+  # MEASURED, on the reallocation screen this branch has since deleted — `getElementById("amount")`
+  # returned `<input type="hidden" name="amount" value="300">` rather than its number field, and
+  # every system example passed either way because Capybara filters invisible elements and happened
+  # to land on the right one. The screen is gone and the trap is not: `amount`, `date` and
+  # `category_id` are all query parameters somewhere in this app and all form field names elsewhere.
+  #
+  # Fixed HERE and generically rather than by renaming the fields on each screen that trips on it,
+  # for the same reason the nested-param guard above was made generic rather than written against
+  # the one caller that hit it: the next screen to hit this will not suspect a shared partial. These
+  # inputs are pure form payload — nothing in the app targets them by id (no CSS, no JavaScript, no
+  # label, no spec), and a form field needs a name to be submitted, never an id.
+  base_params = request.query_parameters.deep_dup.symbolize_keys
+                       .except(:month, :year)
+                       .select { |_key, value| value.is_a?(String) }
   
   # Style variant: 'sidebar' for desktop sidebar, 'mobile' for mobile header
   variant = local_assigns[:variant] || "sidebar"
@@ -31,7 +67,7 @@
   
   # Professional arrow buttons (rectangular, high-contrast)
   button_classes = if variant == "sidebar"
-    "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-brand border border-brand hover:bg-brand hover:text-white shadow-sm transition"
+    "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-brand border border-brand hover:bg-brand-dark hover:text-white shadow-sm transition"
                    else
     "inline-flex items-center justify-center px-2.5 py-2 rounded bg-white text-gray-800 border border-gray-300 hover:bg-gray-100 shadow-sm transition"
   end
@@ -45,9 +81,9 @@
 
   # Grouped control styling (single widget look)
   group_classes = if variant == "sidebar"
-    "flex w-full items-stretch rounded-md border-2 border-brand bg-white shadow-sm"
+    "flex w-full items-stretch rounded border-2 border-brand bg-white shadow-sm"
                   else
-    "inline-flex items-stretch rounded-md border border-gray-300 bg-white shadow-sm"
+    "inline-flex items-stretch rounded border border-gray-300 bg-white shadow-sm"
   end
 
   # Base button within group
@@ -67,11 +103,11 @@
     <!-- Previous Month (left segment) -->
     <%= form_with url: request.path, method: :get, local: true, class: "m-0 inline" do |f| %>
       <% base_params.each do |key, value| %>
-        <%= f.hidden_field key, value: value %>
+        <%= f.hidden_field key, value: value, id: nil %>
       <% end %>
-      <%= f.hidden_field :month, value: prev_month %>
-      <%= f.hidden_field :year, value: prev_year %>
-      <button type="submit" class="<%= btn_group_base %> rounded-l-md border-r <%= divider_class %> border-0 cursor-pointer" title="Previous month">
+      <%= f.hidden_field :month, value: prev_month, id: nil %>
+      <%= f.hidden_field :year, value: prev_year, id: nil %>
+      <button type="submit" class="<%= btn_group_base %> rounded-l border-r <%= divider_class %> border-0 cursor-pointer" title="Previous month">
         <%= heroicon "chevron-left", options: { class: "w-5 h-5" } %>
       </button>
     <% end %>
@@ -84,11 +120,11 @@
     <!-- Next Month (right segment) -->
     <%= form_with url: request.path, method: :get, local: true, class: "m-0 inline" do |f| %>
       <% base_params.each do |key, value| %>
-        <%= f.hidden_field key, value: value %>
+        <%= f.hidden_field key, value: value, id: nil %>
       <% end %>
-      <%= f.hidden_field :month, value: next_month %>
-      <%= f.hidden_field :year, value: next_year %>
-      <button type="submit" class="<%= btn_group_base %> rounded-r-md border-l <%= divider_class %> border-0 cursor-pointer" title="Next month">
+      <%= f.hidden_field :month, value: next_month, id: nil %>
+      <%= f.hidden_field :year, value: next_year, id: nil %>
+      <button type="submit" class="<%= btn_group_base %> rounded-r border-l <%= divider_class %> border-0 cursor-pointer" title="Next month">
         <%= heroicon "chevron-right", options: { class: "w-5 h-5" } %>
       </button>
     <% end %>

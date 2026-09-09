@@ -1,0 +1,26 @@
+<%# A DATED BILL NOBODY HAS WRITTEN A RULE FOR. Local: `suggestion`.
+
+    §8's copy target: `$600 in Mar and Sep → every 6 months, next Mar 1`. The lead is the BILL —
+    what leaves the account, on what schedule, next when — and the per-period cost is the second
+    line, because that is the figure the panel is ORDERED by and the one the structural check will
+    add this rule to.
+
+    THE GUESSED ROW IS GONE, AND SO IS THE BRANCH THAT SAID SO (answers-first Home spec §7). A
+    single-occurrence item used to be proposed with an interval nothing measured, and this partial
+    disclaimed it in its own second line — "one payment is not a schedule, so every 12 months is a
+    guess. That makes $50.00 a period a guess too." Three of the demo's ten bills were one-off
+    purchases wearing that annual interval. The engine no longer proposes them at all — see
+    `SuggestionEngine::BILL_MIN_OCCURRENCES` — so every row here is measured, the second line says
+    what was measured, and `detail[:guessed]` does not exist to branch on. %>
+<p>
+  <span class="font-medium text-gray-900"><%= suggestion.subject.name %></span> —
+  <span class="tabular-nums"><%= number_to_currency(suggestion.amount) %></span>
+  <%= suggestion_interval_label(suggestion.detail[:interval_months]) %>,
+  next due <%= suggestion.detail[:due_on].strftime("%b %-d, %Y") %>.
+</p>
+
+<p class="text-gray-500">
+  Paid <%= pluralize(suggestion.detail[:occurrences], "time") %>, last on
+  <%= suggestion.detail[:last_seen_on].strftime("%b %-d, %Y") %>.
+  Costs <%= number_to_currency(suggestion.detail[:per_period_cost]) %> a period.
+</p>
