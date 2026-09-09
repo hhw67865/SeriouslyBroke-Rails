@@ -12,7 +12,7 @@ RSpec.describe "Capybaras Overlay", type: :system do
   describe "ming mode on" do
     it "renders the capybara layer" do
       user.update!(ming_mode: true)
-      visit account_path
+      visit settings_path
 
       expect(page).to have_css("#capybara-layer", visible: :all)
     end
@@ -20,7 +20,7 @@ RSpec.describe "Capybaras Overlay", type: :system do
 
   describe "ming mode off" do
     it "does not render the capybara layer" do
-      visit account_path
+      visit settings_path
 
       expect(page).to have_no_css("#capybara-layer", visible: :all)
     end

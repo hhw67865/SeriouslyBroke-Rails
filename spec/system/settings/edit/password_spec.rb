@@ -37,7 +37,7 @@ RSpec.describe "Account Edit - Password", type: :system do
       fill_in "Current password", with: "password123"
       click_button "Save Changes"
 
-      expect(page).to have_current_path(account_path)
+      expect(page).to have_current_path(settings_path)
       expect(user.reload.valid_password?("newpassword1")).to be true
     end
   end

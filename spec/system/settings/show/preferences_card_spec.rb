@@ -7,7 +7,7 @@ RSpec.describe "Account Show - Preferences Card", type: :system do
 
   before do
     sign_in user, scope: :user
-    visit account_path
+    visit settings_path
   end
 
   describe "theme toggle", :aggregate_failures do
@@ -22,7 +22,7 @@ RSpec.describe "Account Show - Preferences Card", type: :system do
 
     it "flips dark back to light when clicked" do
       user.update!(theme: :dark)
-      visit account_path
+      visit settings_path
 
       find("dt", text: "Theme").ancestor(".py-3").find("button").click
 
@@ -42,7 +42,7 @@ RSpec.describe "Account Show - Preferences Card", type: :system do
 
     it "flips on back to off when clicked" do
       user.update!(ming_mode: true)
-      visit account_path
+      visit settings_path
 
       find("dt", text: "Ming Mode").ancestor(".py-3").find("button").click
 

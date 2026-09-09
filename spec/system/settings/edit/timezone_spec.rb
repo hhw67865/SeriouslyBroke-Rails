@@ -15,7 +15,7 @@ RSpec.describe "Account Edit - Timezone", type: :system do
       select "(GMT-08:00) Pacific Time (US & Canada)", from: "Timezone"
       click_button "Save Changes"
 
-      expect(page).to have_current_path(account_path)
+      expect(page).to have_current_path(settings_path)
       expect(user.reload.timezone).to eq("America/Los_Angeles")
     end
   end

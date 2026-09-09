@@ -15,7 +15,7 @@ RSpec.describe "Account Edit - Name", type: :system do
       fill_in "Name", with: "New Name"
       click_button "Save Changes"
 
-      expect(page).to have_current_path(account_path)
+      expect(page).to have_current_path(settings_path)
       expect(user.reload.name).to eq("New Name")
     end
   end

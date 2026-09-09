@@ -37,7 +37,7 @@ RSpec.describe "Account Edit - Email", type: :system do
       fill_in "Current password", with: "password123"
       click_button "Save Changes"
 
-      expect(page).to have_current_path(account_path)
+      expect(page).to have_current_path(settings_path)
       expect(user.reload.email).to eq("new@example.com")
     end
   end

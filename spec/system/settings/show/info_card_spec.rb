@@ -8,7 +8,7 @@ RSpec.describe "Account Show - Info Card", type: :system do
   before { sign_in user, scope: :user }
 
   describe "account information", :aggregate_failures do
-    before { visit account_path }
+    before { visit settings_path }
 
     it "renders the Account page with the user's name and email" do
       expect(page).to have_content("Account")
@@ -26,14 +26,14 @@ RSpec.describe "Account Show - Info Card", type: :system do
   describe "timezone display", :aggregate_failures do
     it "shows the user's timezone when set" do
       user.update!(timezone: "America/New_York")
-      visit account_path
+      visit settings_path
 
       expect(page).to have_content("Timezone")
       expect(page).to have_content("Eastern Time (US & Canada)")
     end
 
     it "shows a not-set notice when the user has no timezone" do
-      visit account_path
+      visit settings_path
 
       expect(page).to have_content("Not set (defaults to UTC)")
     end

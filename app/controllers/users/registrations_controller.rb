@@ -25,7 +25,7 @@ module Users
     end
 
     def after_update_path_for(_resource)
-      account_path
+      settings_path
     end
 
     private

@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 Capybara.default_max_wait_time = 5
-# Let finders match aria-label so icon-only buttons are clickable by name
+# Let finders match aria-label so icon-only buttons are clickable by name.
 Capybara.enable_aria_label = true
 
-# Headless Chrome driver
 Capybara.register_driver :selenium_chrome_headless do |app|
   options = Selenium::WebDriver::Chrome::Options.new
   options.add_argument("--headless=new")
@@ -12,12 +11,12 @@ Capybara.register_driver :selenium_chrome_headless do |app|
   options.add_argument("--disable-gpu")
   options.add_argument("--disable-dev-shm-usage")
   options.add_argument("--window-size=1400,1400")
+  options.add_option("goog:loggingPrefs", { browser: "ALL" })
 
   Capybara::Selenium::Driver.new(app, browser: :chrome, options:)
 end
 
 Capybara.javascript_driver = :selenium_chrome_headless
-Capybara.default_driver = :selenium_chrome_headless
 
 module CapybaraHelpers
   def wait_until
@@ -27,12 +26,10 @@ module CapybaraHelpers
   end
 end
 
+# Rack::Test unless an example says :js. One Chrome per process: Capybara resets the session
+# between examples, and restarting the browser cost a second per example.
 RSpec.configure do |config|
   config.include CapybaraHelpers, type: :system
-  config.before(:each, type: :system) do
-    driven_by(:selenium_chrome_headless)
-  end
-  config.after(:each, type: :system) do
-    Capybara.current_session.driver.quit
-  end
+  config.before(:each, type: :system) { driven_by(:rack_test) }
+  config.before(:each, :js, type: :system) { driven_by(:selenium_chrome_headless) }
 end

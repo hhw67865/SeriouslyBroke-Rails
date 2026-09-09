@@ -9,7 +9,7 @@
         <span class="block text-xs font-normal text-gray-400 mt-0.5">Light or dark appearance</span>
       </dt>
       <dd>
-        <%= button_to toggle_theme_account_path,
+        <%= button_to toggle_theme_settings_path,
             method: :patch,
             data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-6", shared__toggle_off_value: "translate-x-1" },
             class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.dark? ? "bg-brand" : "bg-gray-300"}" do %>
@@ -24,7 +24,7 @@
         <span class="block text-xs font-normal text-gray-400 mt-0.5">Personalized UI quirks</span>
       </dt>
       <dd>
-        <%= button_to toggle_ming_mode_account_path,
+        <%= button_to toggle_ming_mode_settings_path,
             method: :patch,
             data: { controller: "shared--toggle", action: "click->shared--toggle#toggle", shared__toggle_on_value: "translate-x-6", shared__toggle_off_value: "translate-x-1" },
             class: "relative inline-flex h-6 w-11 items-center rounded-full transition-colors #{current_user.ming_mode? ? "bg-brand" : "bg-gray-300"}" do %>

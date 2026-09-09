@@ -11,10 +11,10 @@ RSpec.describe "Account Navigation - Sidebar link", type: :system do
     visit root_path
 
     within("[data-controller='shared--sidebar']") do
-      click_link href: account_path, match: :first
+      click_link href: settings_path, match: :first
     end
 
-    expect(page).to have_current_path(account_path)
+    expect(page).to have_current_path(settings_path)
     expect(page).to have_content("Account Information")
   end
 end

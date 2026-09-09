@@ -34,7 +34,7 @@ Rails.application.routes.draw do
   end
   resources :budgets, only: [:new, :create, :edit, :update, :destroy]
 
-  resource :account, only: [:show] do
+  resource :settings, only: [:show] do
     patch :toggle_theme
     patch :toggle_ming_mode
   end
