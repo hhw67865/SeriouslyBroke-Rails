@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_10_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pgcrypto"
@@ -44,13 +44,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
     t.string "name", null: false
     t.integer "priority", default: 0, null: false
     t.boolean "regular", default: true, null: false
-    t.uuid "savings_pool_id"
     t.boolean "tracked", default: true, null: false
     t.datetime "updated_at", null: false
     t.uuid "user_id", null: false
     t.index "user_id, lower((name)::text)", name: "index_categories_on_user_id_and_lower_name", unique: true
-    t.index ["savings_pool_id"], name: "index_categories_on_savings_pool_id"
     t.index ["user_id"], name: "index_categories_on_user_id"
+    t.check_constraint "category_type = ANY (ARRAY[0, 1])", name: "categories_two_types"
     t.check_constraint "priority >= 0", name: "categories_priority_non_negative"
   end
 
@@ -58,8 +57,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
     t.uuid "account_id"
     t.money "amount", scale: 2, null: false
     t.datetime "created_at", null: false
-    t.datetime "date", null: false
-    t.date "day"
+    t.date "date", null: false
     t.text "description"
     t.uuid "item_id", null: false
     t.datetime "updated_at", null: false
@@ -85,9 +83,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
     t.integer "interval_months"
     t.uuid "item_id"
     t.boolean "keeps_unspent", default: false, null: false
-    t.boolean "prorated", default: false, null: false
     t.integer "rule_type", default: 1, null: false
-    t.date "starts_on"
+    t.date "starts_on", null: false
     t.datetime "updated_at", null: false
     t.index ["category_id"], name: "index_rules_on_category_id"
     t.index ["category_id"], name: "index_rules_one_item_less_per_category", unique: true, where: "(item_id IS NULL)"
@@ -96,16 +93,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
     t.check_constraint "amount > 0::money", name: "rules_positive_amount"
     t.check_constraint "interval_months IS NULL OR anchor_date IS NOT NULL", name: "rules_interval_needs_a_date"
     t.check_constraint "interval_months IS NULL OR interval_months > 0", name: "rules_positive_interval"
-  end
-
-  create_table "savings_pools", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "name", null: false
-    t.date "start_date"
-    t.money "target_amount", scale: 2
-    t.datetime "updated_at", null: false
-    t.uuid "user_id", null: false
-    t.index ["user_id"], name: "index_savings_pools_on_user_id"
   end
 
   create_table "transfers", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -149,14 +136,12 @@ ActiveRecord::Schema[8.1].define(version: 2026_09_10_000000) do
 
   add_foreign_key "accounts", "users"
   add_foreign_key "adjustments", "rules"
-  add_foreign_key "categories", "savings_pools"
   add_foreign_key "categories", "users"
   add_foreign_key "entries", "accounts"
   add_foreign_key "entries", "items"
   add_foreign_key "items", "categories"
   add_foreign_key "rules", "categories"
   add_foreign_key "rules", "items"
-  add_foreign_key "savings_pools", "users"
   add_foreign_key "transfers", "accounts", column: "from_account_id"
   add_foreign_key "transfers", "accounts", column: "to_account_id"
   add_foreign_key "users", "accounts", column: "main_account_id", on_delete: :nullify

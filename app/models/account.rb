@@ -28,6 +28,13 @@ class Account < ApplicationRecord
 
   def main? = user.main_account_id == id
 
+  def balance = AccountLedger.new(user).balance_of(self)
+
+  # Moves the opening balance so that the balance today equals the typed figure. Nothing else moves.
+  def correct_balance(typed)
+    update(opening_balance: opening_balance.to_d + (BigDecimal(typed.to_s) - balance))
+  end
+
   private
 
   def main_is_not_deletable
