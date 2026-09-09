@@ -45,7 +45,9 @@ Database constraints, each mirrored by a model validation:
 - users: `period_anchor_date` required when `period_cadence` is set (model only).
 
 Model-level rules that cannot be a constraint: an account, a transfer's two accounts, an entry's
-account, a rule's category and item, and a user's main account all belong to the same user. An
+account, a rule's category and item, and a user's main account all belong to the same user (the
+main account carries a plain foreign key that nullifies on delete; the ownership check is the
+model's). An
 item's rule belongs to the item's category. Only expense categories carry rules. `regular` means
 something only on income categories. An expense entry has no account (it leaves main); an income
 entry may name an account, and no account means main. Main is not deletable while it is main.
