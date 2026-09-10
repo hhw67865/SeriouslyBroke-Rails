@@ -115,6 +115,68 @@ RSpec.describe "Rule form", type: :system do
     expect(rule.reload.amount).to eq(450)
   end
 
+  # Step 1's select became a history table: one row per item, an "everything else" row, and a row
+  # that names a new item.
+  describe "the item picker" do
+    let!(:bread) { create(:item, category: groceries, name: "Bread") }
+
+    it "shows an item's history and checks everything else by default", :aggregate_failures do
+      # On a period's own opening day, so the walk counts it as a whole complete period.
+      create(:entry, item: bread, amount: 12, date: Date.new(2026, 7, 24))
+
+      open_form
+
+      expect(page).to have_css("label", text: "Bread")
+      expect(page).to have_field("rule_item_everything", checked: true)
+      expect(page).to have_content("12.00")
+    end
+
+    it "disables a ruled item's radio and tags it", :aggregate_failures do
+      create(:rule, :rate, category: groceries, item: bread, amount: 50, starts_on: Date.new(2026, 1, 1))
+
+      open_form
+
+      expect(page).to have_field("rule_item_#{bread.id}", disabled: true)
+      expect(page).to have_content("has its own rule · Usage")
+    end
+
+    it "writes the rule for the item picked", :aggregate_failures do
+      open_form
+
+      choose "rule_item_#{bread.id}"
+      fill_in "Amount", with: "40"
+      choose "Usage"
+      click_button "Create rule"
+
+      expect(page).to have_content("Rule was successfully created.")
+      expect(written.item).to eq(bread)
+    end
+
+    it "names a new item and creates it along with the rule", :aggregate_failures do
+      open_form
+
+      choose "rule_item_new"
+      fill_in "rule_new_item_name", with: "Cereal"
+      fill_in "Amount", with: "40"
+      choose "Usage"
+      click_button "Create rule"
+
+      expect(page).to have_content("Rule was successfully created.")
+      expect(written.item.name).to eq("Cereal")
+      expect(groceries.items.pluck(:name)).to include("Cereal")
+    end
+
+    it "names the sentence's subject after the chosen row", :aggregate_failures, :js do
+      open_form
+
+      expect(page).to have_css("[data-app--budget--rule-form-target='subjectName']", text: "Everything else in Groceries")
+
+      choose "rule_item_#{bread.id}"
+
+      expect(page).to have_css("[data-app--budget--rule-form-target='subjectName']", text: "Bread")
+    end
+  end
+
   # The card is the server's, refreshed into a Turbo Frame as the blanks change, and it exists only
   # where the controller runs — the frame is rendered `hidden` and `connect()` is what lifts it.
   describe "the preview card", :js do

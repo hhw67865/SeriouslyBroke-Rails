@@ -37,7 +37,83 @@
       <section class="bg-white shadow-sm rounded border border-gray-100 p-4 space-y-3 sm:p-6" data-step="1">
         <h2 class="text-sm font-semibold text-gray-900">1. What is this rule for, and how much?</h2>
 
-        <%# `for` is bound to the select in one span, so the only break is between the clauses. %>
+        <p class="form-hint">
+          Per period, over the last three complete periods. Pick what this rule pays for, or name a new item.
+        </p>
+
+        <% history = @history %>
+        <% money = ->(amount) { amount.present? && !amount.zero? ? number_to_currency(amount, unit: "") : "—" } %>
+        <% everything = history.everything_else %>
+        <% picker_rows = [{
+             kind: :everything, dom_id: "rule_item_everything", value: "", name: "Everything else in #{category.name}",
+             caption: everything.ruled_by ? "already has a rule" : "the items below that have no rule of their own",
+             disabled: everything.ruled_by.present?, amounts: everything.amounts, average: everything.average,
+             checked: rule_form.item_id.blank?
+           }] %>
+        <% history.rows.each do |row| %>
+          <% picker_rows << {
+               kind: :item, dom_id: "rule_item_#{row.item.id}", value: row.item.id, name: row.item.name,
+               caption: (row.ruled_by ? "has its own rule · #{row.ruled_by.rule_type.capitalize}" : nil),
+               disabled: row.ruled_by.present?, amounts: row.amounts, average: row.average,
+               checked: rule_form.item_id.to_s == row.item.id.to_s
+             } %>
+        <% end %>
+        <% picker_rows << {
+             kind: :new, dom_id: "rule_item_new", value: "new", name: "the new item", caption: nil,
+             disabled: false, amounts: [], average: nil, checked: rule_form.item_id == "new"
+           } %>
+        <% selected_name = picker_rows.find { |row| row[:checked] }&.fetch(:name) || category.name %>
+
+        <%# Rows of flex divs, not <table>: a <label> can then wrap each one whole. %>
+        <div class="border border-gray-200 rounded overflow-hidden">
+          <div class="flex items-center gap-3 px-3 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            <span class="flex-1">Pays for</span>
+            <% history.periods.each do |period| %>
+              <span class="hidden sm:block w-20 text-right"><%= period.first.strftime("%b %-d") %></span>
+            <% end %>
+            <span class="w-20 text-right"><%= history.periods.any? ? "Avg" : "no history yet" %></span>
+          </div>
+
+          <div class="divide-y divide-gray-100">
+            <% picker_rows.each do |row| %>
+              <label class="flex items-center gap-3 px-3 py-2.5 <%= row[:disabled] ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50" %>">
+                <%= f.radio_button :item_id, row[:value],
+                    id: row[:dom_id],
+                    class: "form-radio",
+                    disabled: row[:disabled],
+                    checked: row[:checked],
+                    data: { "app--budget--rule-form-target": "subject", subject_name: row[:name] } %>
+
+                <span class="flex-1 min-w-0">
+                  <% if row[:kind] == :new %>
+                    <%= f.text_field :new_item_name,
+                        placeholder: "name the item",
+                        class: "form-input h-8 max-w-xs",
+                        data: { "app--budget--rule-form-target": "newItemName" } %>
+                  <% else %>
+                    <span class="block text-sm text-gray-900 truncate"><%= row[:name] %></span>
+                    <% if row[:caption].present? %>
+                      <span class="block text-xs <%= row[:disabled] ? "text-gray-400" : "text-gray-500" %> truncate"><%= row[:caption] %></span>
+                    <% end %>
+                  <% end %>
+                </span>
+
+                <% if row[:kind] == :new %>
+                  <% history.periods.size.times do %>
+                    <span class="hidden sm:block w-20" aria-hidden="true"></span>
+                  <% end %>
+                  <span class="w-20 text-right text-sm text-gray-500">no history</span>
+                <% else %>
+                  <% history.periods.each_index do |i| %>
+                    <span class="hidden sm:block w-20 text-right text-sm tabular-nums text-gray-600"><%= money.call(row[:amounts][i]) %></span>
+                  <% end %>
+                  <span class="w-20 text-right text-sm font-medium tabular-nums text-gray-900"><%= money.call(row[:average]) %></span>
+                <% end %>
+              </label>
+            <% end %>
+          </div>
+        </div>
+
         <div class="flex flex-wrap items-center gap-2 text-sm text-gray-700">
           <span>Set aside</span>
           <%= f.label :amount, "Amount", class: "sr-only" %>
@@ -50,23 +126,8 @@
                 min: 0,
                 data: { "app--budget--rule-form-target": "amount" } %>
           </span>
-          <span class="flex w-full items-center gap-2 sm:w-auto">
-            <span>for</span>
-            <%= f.label :item_id, "Pays", class: "sr-only" %>
-            <%= f.select :item_id,
-                options_from_collection_for_select(category ? category.items.order(:name) : [], :id, :name, rule_form.item_id),
-                { include_blank: "the whole category" },
-                class: "form-select w-full sm:w-auto",
-                data: { "app--budget--rule-form-target": "item" } %>
-          </span>
+          <span>a period for <span class="font-medium text-gray-900" data-app--budget--rule-form-target="subjectName"><%= selected_name %></span></span>
         </div>
-
-        <p class="form-hint">
-          <%= rule_amount_hint(rule) %>
-          <% if category %>
-            "The whole category" means anything in <%= category.name %> no other rule pays.
-          <% end %>
-        </p>
 
         <%# Where the rule's own history begins: counting the spending before it would open the
             rule already overspent. %>

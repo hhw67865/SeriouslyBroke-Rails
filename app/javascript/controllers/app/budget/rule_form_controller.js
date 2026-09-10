@@ -6,7 +6,9 @@ export default class extends Controller {
   static targets = [
     "form",
     "amount",
-    "item",
+    "subject",
+    "subjectName",
+    "newItemName",
     "intervalField",
     "anchorField",
     "repeatsField",
@@ -33,15 +35,36 @@ export default class extends Controller {
     this.cancelHighlight()
   }
 
-  // One handler for every control. The reveals are instant — they are facts about what is already
-  // on screen — and the preview is debounced, because it is a request.
-  changed() {
+  // One handler for every control. The reveals and the item picker are instant — they are facts
+  // about what is already on screen — and the preview is debounced, because it is a request.
+  changed(event) {
     this.refresh()
+    this.selectNewRowIfTyped(event)
+    this.syncSubjectName()
     this.schedulePreview()
   }
 
   refresh() {
     this.revealFields()
+  }
+
+  // ---- the item picker --------------------------------------------------------------------------
+
+  // Typing a name is choosing "a new item": the field's own radio need not be clicked first.
+  selectNewRowIfTyped(event) {
+    if (!this.hasNewItemNameTarget || event?.target !== this.newItemNameTarget) return
+
+    const row = this.subjectTargets.find((radio) => radio.value === "new")
+    if (row) row.checked = true
+  }
+
+  // The sentence names whichever row is checked, off the row's own label rather than the value —
+  // "new" and a blank item id both need a name a raw value could not carry.
+  syncSubjectName() {
+    if (!this.hasSubjectNameTarget) return
+
+    const checked = this.subjectTargets.find((radio) => radio.checked)
+    if (checked) this.subjectNameTarget.textContent = checked.dataset.subjectName
   }
 
   // ---- the reveals -----------------------------------------------------------------------------

@@ -66,4 +66,29 @@ RSpec.describe RuleForm do
     expect(rule.reload.amount).to eq(200)
     expect(edited).to be_persisted
   end
+
+  it "creates the item and the rule together when the item is named new", :aggregate_failures do
+    new_item = form({ category_id: groceries.id, rule_type: "usage", amount: "40", schedule: "per_period", item_id: "new", new_item_name: "Cereal" })
+
+    expect(new_item.save).to be(true)
+    expect(new_item.rule.item).to have_attributes(name: "Cereal", category_id: groceries.id)
+    expect(groceries.items.sole.name).to eq("Cereal")
+  end
+
+  it "refuses a new item with no name, on item_id", :aggregate_failures do
+    blank_name = form({ category_id: groceries.id, rule_type: "usage", amount: "40", schedule: "per_period", item_id: "new", new_item_name: "" })
+
+    expect(blank_name.save).to be(false)
+    expect(blank_name.errors[:item_id]).to include("needs a name for the new item")
+    expect(Item.count).to eq(0)
+  end
+
+  it "refuses a new item's name that clashes, with the item's own uniqueness message", :aggregate_failures do
+    create(:item, category: groceries, name: "Cereal")
+    clash = form({ category_id: groceries.id, rule_type: "usage", amount: "40", schedule: "per_period", item_id: "new", new_item_name: "Cereal" })
+
+    expect(clash.save).to be(false)
+    expect(clash.errors[:item_id]).to include("has already been taken")
+    expect(groceries.items.count).to eq(1)
+  end
 end

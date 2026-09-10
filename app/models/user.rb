@@ -61,7 +61,28 @@ class User < ApplicationRecord
     opened_on..(next_boundary - 1)
   end
 
+  # The last `limit` complete periods before today's, oldest first, that begin on or after this
+  # user's first entry.
+  def complete_periods(limit, today: self.today)
+    first = entries.minimum(:date)
+    return [] if first.nil?
+
+    walk_periods_back(previous_period(today), limit, first)
+  end
+
   private
+
+  # Walks backward from `cursor`, collecting periods that begin on or after `first`, oldest last.
+  def walk_periods_back(cursor, limit, first)
+    ranges = []
+    while ranges.size < limit && cursor.first >= first
+      ranges.unshift(cursor)
+      cursor = previous_period(cursor.first)
+    end
+    ranges
+  end
+
+  def previous_period(date) = period_containing(period_containing(date).first - 1)
 
   def strided_dates(stride, from, to)
     steps = ((from - period_anchor_date).to_i / stride.to_f).ceil

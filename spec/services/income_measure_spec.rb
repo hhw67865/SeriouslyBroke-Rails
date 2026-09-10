@@ -41,14 +41,12 @@ RSpec.describe IncomeMeasure do
     end
   end
 
+  # The period walk itself is proven on User#complete_periods; this only proves IncomeMeasure
+  # hands it the PROBE (which may be unsaved, carrying a typed cadence), not the saved user.
   it "walks the probe's own typed cadence, not the saved user's", :aggregate_failures do
-    # Saved user is biweekly; the probe types a monthly cadence, so the grid it walks is anchored
-    # on the 15th, not Feb 6 — the saved user's own periods never come into it.
     probe = User.find(user.id)
     probe.assign_attributes(period_cadence: "monthly", period_anchor_date: Date.new(2026, 1, 15))
 
-    # The first entry sits ON the older period's opening boundary — a period that only STARTS
-    # after the first entry would not be complete history, so the walk stops one short of it.
     earn(2_000, on: Date.new(2026, 6, 15))
     earn(2_400, on: Date.new(2026, 7, 20))
 

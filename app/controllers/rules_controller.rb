@@ -74,6 +74,7 @@ class RulesController < ApplicationController
   def prepare_page
     @category = @rule_form.rule.category
     @preview = RulePreview.new(@rule_form, user: current_user)
+    @history = CategoryHistoryPresenter.new(@category, today: current_user.today, rule: @rule_form.rule) if @category
   end
 
   def prefill
@@ -84,10 +85,11 @@ class RulesController < ApplicationController
   def rule_params = scoped(params.expect(rule: RuleForm::FIELDS).to_h.symbolize_keys)
   def update_params = scoped(params.expect(rule: RuleForm::FIELDS - [:category_id]).to_h.symbolize_keys)
 
-  # Ids are looked up through current_user so a foreign id 404s instead of writing.
+  # Ids are looked up through current_user so a foreign id 404s instead of writing. "new" names an
+  # item not yet made, so it is never a lookup.
   def scoped(words)
     words[:category_id] = current_user.categories.find(words[:category_id]).id if words[:category_id].present?
-    words[:item_id] = current_user.items.find(words[:item_id]).id if words[:item_id].present?
+    words[:item_id] = current_user.items.find(words[:item_id]).id if words[:item_id].present? && words[:item_id] != "new"
     words
   end
 end

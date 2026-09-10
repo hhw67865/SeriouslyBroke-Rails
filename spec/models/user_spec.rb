@@ -70,6 +70,41 @@ RSpec.describe User do
     end
   end
 
+  describe "#complete_periods" do
+    let(:user) { create(:user, :biweekly) }
+    let(:today) { Date.new(2026, 9, 9) }
+
+    def earn(amount, on:) = create(:entry, item: create(:item, category: create(:category, user: user)), amount: amount, date: on)
+
+    it "returns the last N complete periods, oldest first" do
+      earn(1_000, on: Date.new(2026, 8, 7))
+      earn(1_500, on: Date.new(2026, 8, 25))
+
+      expect(user.complete_periods(2, today: today)).to eq(
+        [Date.new(2026, 8, 7)..Date.new(2026, 8, 20), Date.new(2026, 8, 21)..Date.new(2026, 9, 3)]
+      )
+    end
+
+    it "is empty with no entries at all" do
+      expect(user.complete_periods(2, today: today)).to eq([])
+    end
+
+    # The first entry sits ON the older period's opening boundary — a period that only STARTS
+    # after the first entry would not be complete history, so the walk stops one short of it. This
+    # also proves the walk uses THIS user's own cadence, not some other grid.
+    it "stops at the period the first entry opens, on whatever cadence is set" do
+      user.period_cadence = "monthly"
+      user.period_anchor_date = Date.new(2026, 1, 15)
+
+      earn(2_000, on: Date.new(2026, 6, 15))
+      earn(2_400, on: Date.new(2026, 7, 20))
+
+      expect(user.complete_periods(2, today: today)).to eq(
+        [Date.new(2026, 6, 15)..Date.new(2026, 7, 14), Date.new(2026, 7, 15)..Date.new(2026, 8, 14)]
+      )
+    end
+  end
+
   describe "#toggle_theme!" do
     it "flips between light and dark" do
       user = create(:user)

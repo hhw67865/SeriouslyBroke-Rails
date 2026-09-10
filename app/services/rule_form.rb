@@ -7,7 +7,7 @@ class RuleForm
 
   SCHEDULES = ["per_period", "by_date"].freeze
   DEFAULT_SCHEDULE = "per_period"
-  FIELDS = [:category_id, :item_id, :rule_type, :amount, :schedule, :repeats, :keeps, :interval_months, :anchor_date, :starts_on].freeze
+  FIELDS = [:category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :repeats, :keeps, :interval_months, :anchor_date, :starts_on].freeze
   RULE_ERROR_FIELDS = {
     interval_months: :schedule,
     anchor_date: :schedule,
@@ -19,7 +19,7 @@ class RuleForm
   }.freeze
 
   attr_reader :user, :rule, :anchor_date, :starts_on
-  attr_accessor :category_id, :item_id, :rule_type, :amount, :schedule, :interval_months
+  attr_accessor :category_id, :item_id, :new_item_name, :rule_type, :amount, :schedule, :interval_months
   attr_writer :repeats, :keeps
 
   def initialize(user, params = {}, rule: nil)
@@ -46,7 +46,7 @@ class RuleForm
   end
 
   def save
-    return false unless choices_are_coherent?
+    return false unless choices_are_coherent? && new_item_ready?
 
     rule.save.tap { |written| carry_rule_errors unless written }
   end
@@ -81,8 +81,18 @@ class RuleForm
   end
 
   def apply_to_rule
-    rule.assign_attributes(category_id: category_id.presence, item_id: item_id.presence, amount: amount, starts_on: starts_on, **schedule_columns)
+    rule.assign_attributes(category_id: category_id.presence, amount: amount, starts_on: starts_on, **schedule_columns)
+    assign_item
     rule.rule_type = rule_type if rule_type_known?
+  end
+
+  # A new item is unsaved, so rule.item_id stays nil until the rule (and it) are saved.
+  def assign_item
+    if item_id == "new"
+      rule.item = rule.category&.items&.build(name: new_item_name)
+    else
+      rule.item_id = item_id.presence
+    end
   end
 
   def schedule_columns
@@ -92,6 +102,29 @@ class RuleForm
   end
 
   def rule_type_known? = rule_type.blank? || Rule.rule_types.key?(rule_type)
+
+  # A new item's own errors (chiefly its uniqueness) land on :item_id, the field it stands in for.
+  def new_item_ready?
+    return true unless item_id == "new"
+    return false unless new_item_named?
+    return true if rule.item&.valid?
+
+    surface_new_item_errors
+    false
+  end
+
+  def new_item_named?
+    return true if new_item_name.present?
+
+    errors.add(:item_id, "needs a name for the new item")
+    false
+  end
+
+  def surface_new_item_errors
+    return errors.add(:item_id, "needs a category before it can be named") if rule.item.blank?
+
+    rule.item.errors.each { |error| errors.add(:item_id, error.message) }
+  end
 
   def choices_are_coherent?
     errors.clear
